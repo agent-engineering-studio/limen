@@ -2,9 +2,10 @@
 
 > AI multi-factor landslide-risk monitoring for the Italian territory.
 > Pilot: **Puglia + Basilicata**. Current state: **Phase 0 + Phase 1 +
-> Phase 2 + Phase 3 + Phase 4** (scaffold + data layer + external
+> Phase 2 + Phase 3 + Phase 4 + Phase 5** (scaffold + data layer + external
 > integrations + static bootstrap + deterministic scoring engine V1
-> + MAF agents & workflow). See `README.md` for full context.
+> + MAF agents & workflow + FastAPI host with APScheduler + OTel).
+> See `README.md` for full context.
 
 ---
 
@@ -44,6 +45,9 @@
 | LLM precedence | `LLM__PROVIDER` override > `ANTHROPIC_API_KEY` > `OPENAI_API_KEY` > Foundry creds > Ollama. Resolver: `limen.agents.llm_factory.resolve_llm_factory`. A cloud key always wins over Ollama unless explicitly overridden. |
 | LLM is non-authoritative | ChatAgents (RiskAnalyst, Briefing) only *reformulate* the deterministic scoring engine's numeric output. **Never** alter `score` / `breakdown`. An invariance test (`test_llm_does_not_change_numeric_breakdown`) enforces this. |
 | Agents prompts in `*.it.md` | Prompt files live next to the agent in `src/limen/agents/chat_agents/prompts/`. Loaded with `importlib.resources`. Never inline a long prompt in Python source. |
+| API has no business logic | Endpoints under `src/limen/api/endpoints/` only call the Phase-4 workflow or the Phase-1 repos. New behaviour goes in `agents/` or `core/`, never in route handlers. |
+| DI not globals | Everything routes need is in `AppDependencies` injected via FastAPI `Depends()`. No `from limen.x import _GLOBAL_THING` inside endpoints. |
+| APScheduler not pg_cron | Periodic jobs (hourly monitoring, weekly ISPRA sync, cache cleanup when configured) run in-process via APScheduler so the same code works on Neon. |
 
 ---
 
@@ -117,6 +121,8 @@ uv run limen backtest           # replay historical window; §2.5 hit rate / FAR
                                 # (env knobs: LIMEN_BACKTEST_AOI / START / END / HIGH_LEVEL)
 uv run limen monitor-once       # run the MAF workflow once for an AOI
                                 # (env knobs: LIMEN_MONITOR_AOI / CELL_LIMIT)
+uv run limen serve              # start the FastAPI server on API__HOST:API__PORT (default :8080)
+                                # /docs , /redoc , /health , /ready , /api/...
 make test                   # unit + integration (testcontainers)
 make test-unit              # fast, no Docker
 make lint                   # ruff check
@@ -145,6 +151,14 @@ src/limen/
 │   │                    # persist_result, alert_dispatch (logging stub)
 │   ├── chat_agents/     # RiskAnalyst + Briefing (+ Italian prompts in *.it.md)
 │   └── workflows/       # build_landslide_workflow + escalation_workflow placeholder
+├── api/
+│   ├── main.py          # FastAPI app factory + lifespan
+│   ├── dependencies.py  # AppDependencies + typed Depends() providers
+│   ├── schemas.py       # Pydantic request/response DTOs
+│   ├── endpoints/       # health/ready, aoi, monitor, risk, alerts, tiles
+│   └── jobs/            # APScheduler: hourly_monitoring, weekly_idrogeo_sync,
+│                        # cache_cleanup, registration
+├── observability/       # OTel tracing setup + custom metric instruments
 ├── core/
 │   ├── abstractions/    # external-source Protocols (OpenMeteo, IdroGeo, Ingv, Effis)
 │   ├── features/        # CellFeatureBundle assembler (single V1+V2 path)
@@ -182,7 +196,6 @@ tests/{unit,integration}
 Do not start implementing — these land in later prompts and have explicit
 extension points already:
 
-- FastAPI gateway + APScheduler hourly job — Phase 5.
 - Frontend (map-first SPA with pg_tileserv) — Phase 6.
 - Notifications, IoT ingestion, ML/MLOps — Phase 7+.
 - V2 ML engine — drop-in replacement of `MultiFactorScoringEngine` that
