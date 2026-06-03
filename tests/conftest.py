@@ -108,9 +108,7 @@ async def reset_db(pg_pool: asyncpg.Pool) -> AsyncIterator[None]:
     ]
     async with acquire() as conn:
         with contextlib.suppress(Exception):
-            await conn.execute(
-                f"TRUNCATE {', '.join(tables)} RESTART IDENTITY CASCADE"
-            )
+            await conn.execute(f"TRUNCATE {', '.join(tables)} RESTART IDENTITY CASCADE")
     yield
 
 

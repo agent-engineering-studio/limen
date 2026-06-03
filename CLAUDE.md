@@ -2,8 +2,9 @@
 
 > AI multi-factor landslide-risk monitoring for the Italian territory.
 > Pilot: **Puglia + Basilicata**. Current state: **Phase 0 + Phase 1 +
-> Phase 2** (scaffold + data layer + external integrations + static
-> bootstrap). See `README.md` for full context.
+> Phase 2 + Phase 3** (scaffold + data layer + external integrations +
+> static bootstrap + deterministic scoring engine V1). See `README.md`
+> for full context.
 
 ---
 
@@ -38,6 +39,8 @@
 | External HTTP | All outbound calls go through `limen.integrations._http` (shared `httpx.AsyncClient` + tenacity policy: 4 attempts, exp backoff cap 60 s, retries on transport errors + 5xx/429). |
 | Degradation | Read-only operations that miss external sources return a *neutral result* (`None`, `[]`, `{}`) and log `integration.degraded` — they MUST NOT raise. Writes do raise. |
 | Idempotency (sync jobs) | Compute SHA-256 over canonical-JSON of the fetched payloads, look up `dataset_versions(source, dataset, version)`. If the version exists, **skip all writes**. |
+| Scoring engine purity | `MultiFactorScoringEngine.score(bundle) -> RiskScore` is a *pure* function: no DB, no network, no LLM. Assembling the bundle is a separate concern. |
+| Magic numbers | All weights, thresholds, sigmoid/decay params, and class cutoffs live in `src/limen/config/regional_thresholds.yaml`. Validated by `RegionalThresholds` Pydantic schema at load. There are **no hard-coded constants** in scoring code — tests prove it via YAML override. |
 
 ---
 
@@ -106,6 +109,9 @@ make up-dev                 # docker compose: Postgres 16 + PostGIS 3.5 + pg_cro
 make seed                   # apply migrations + load Puglia/Basilicata AOIs + 1 km grid
 make migrate                # apply pending SQL migrations only
 uv run limen bootstrap-static   # one-shot fill of cell_static_factors (IFFI density + PAI)
+uv run limen calibrate          # precompute s_static + per-AOI norm stats; S vs ISPRA gate
+uv run limen backtest           # replay historical window; §2.5 hit rate / FAR / lead time
+                            # (env knobs: LIMEN_BACKTEST_AOI / START / END / HIGH_LEVEL)
 make test                   # unit + integration (testcontainers)
 make test-unit              # fast, no Docker
 make lint                   # ruff check
@@ -128,6 +134,8 @@ src/limen/
 ├── config/              # pydantic-settings (DB, OBJECT_STORE, LLM, SCHEDULER)
 ├── core/
 │   ├── abstractions/    # external-source Protocols (OpenMeteo, IdroGeo, Ingv, Effis)
+│   ├── models/          # risk DTOs (RiskLevel, CellFeatureBundle, RiskScore, …)
+│   ├── scoring/         # deterministic V1 engine + Caine / API / seismic / post-fire
 │   ├── logging.py
 │   ├── scheduling.py    # APScheduler (Neon path)
 │   └── llm_resolver.py
@@ -160,10 +168,13 @@ tests/{unit,integration}
 Do not start implementing — these land in later prompts and have explicit
 extension points already:
 
-- Scoring engine (`s_static` combination, `regional_thresholds.yaml`) — Phase 3.
-- MAF (Multi-Agent Framework) executors + workflow — Phase 4.
+- MAF (Multi-Agent Framework) executors + workflow + LLM-driven Risk/Briefing
+  agents — Phase 4. The scoring engine is **pure**; MAF is what assembles the
+  `CellFeatureBundle` from DB/cache/integrations.
 - FastAPI gateway + frontend (map-first SPA) — Phase 5–6.
 - Notifications, IoT ingestion, ML/MLOps — Phase 7+.
+- V2 ML engine — drop-in replacement of `MultiFactorScoringEngine` that
+  consumes the same `CellFeatureBundle`.
 - DEM derivatives (TINITALY → slope/aspect/curvature/TWI), CORINE, ISPRA Carta Geologica
   vettoriale: `cell_static_factors` columns stay NULL until the raster/vector ingest
   pipeline lands. The bootstrap pipeline already logs `static_bootstrap.skip` for each.

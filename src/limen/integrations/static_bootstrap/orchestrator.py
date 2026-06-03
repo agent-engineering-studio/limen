@@ -150,8 +150,7 @@ async def bootstrap_static_for_aoi(aoi_id: str) -> dict[str, int]:
         aoi_id=aoi_id,
         component="lithology",
         note=(
-            "ISPRA geological map ingest pending; "
-            "lithology/litho_weight/dist_faults_m remain NULL"
+            "ISPRA geological map ingest pending; lithology/litho_weight/dist_faults_m remain NULL"
         ),
     )
 

@@ -17,9 +17,16 @@ explanation, with a Postgres+PostGIS data layer that is portable between
 local Docker, Neon (serverless), and any managed PostgreSQL.
 
 This repository currently contains **Phase 0 (scaffolding) + Phase 1 (data
-layer) + Phase 2 (external integrations + static-feature bootstrap)**.
-Later phases add the scoring engine, MAF agents + workflow, a FastAPI
-gateway, a map-first frontend, notifications, IoT ingestion, and ML/MLOps.
+layer) + Phase 2 (external integrations + static-feature bootstrap) +
+Phase 3 (deterministic V1 scoring engine + calibrate / backtest CLIs)**.
+Later phases add the MAF agents + workflow, a FastAPI gateway, a
+map-first frontend, notifications, IoT ingestion, and the V2 ML engine.
+
+The V1 engine is a **pure**, interpretable, weighted-linear combination
+(§2.4 of the project doc) reading every weight, threshold, and class
+cutoff from [`src/limen/config/regional_thresholds.yaml`](./src/limen/config/regional_thresholds.yaml).
+No magic numbers in the scoring code. No LLM. No I/O. The same
+`CellFeatureBundle` interface will accept the V2 ML drop-in later.
 
 | Source | What we ingest | Cadence | Implementation |
 |---|---|---|---|
@@ -28,6 +35,9 @@ gateway, a map-first frontend, notifications, IoT ingestion, and ML/MLOps.
 | **INGV** | FDSN events (mag ≥ 3.5, last 7 d, AOI bbox); ShakeMap `grid.xml` raster | event-driven poll | `integrations/ingv/` + `seismic_repo` + `ObjectStore` |
 | **EFFIS** | burnt-area perimeters; dNBR (when programmatic — currently manual data request, marked TODO) | weekly batch | `integrations/effis/` |
 | **Static bootstrap** | `iffi_density_500`, `distance_to_iffi_m`, `pai_class_norm` per cell — set-based PostGIS SQL | one-shot CLI | `integrations/static_bootstrap/` + `limen bootstrap-static` |
+| **Scoring engine (V1)** | Caine I/D excess, API sigmoid, post-fire window, seismic decay, weighted aggregator + 5-class | pure (no I/O) | `core/scoring/` + `MultiFactorScoringEngine` |
+| **Calibrate** | Per-AOI min/max norm stats; precompute `s_static`; **S vs ISPRA correlation gate (≥ 0.85)** | one-shot | `limen calibrate` + `reports/calibrate_<aoi>.md` |
+| **Backtest** | Replay any historical window with Open-Meteo ERA5 + IFFI truth set → hit rate / FAR / lead time vs §2.5 targets | one-shot | `limen backtest` + `reports/backtest_*.md` + `data/notebooks/02_backtest_oct2018.ipynb` |
 
 ---
 
@@ -117,6 +127,8 @@ integration tests you also need Docker.
 make up-dev                          # Postgres 16 + PostGIS 3.5 + pg_cron + pgvector
 make seed                            # migrations + Puglia/Basilicata AOIs + ~60k 1 km cells
 uv run limen bootstrap-static        # IFFI density / distance + PAI normalised class
+uv run limen calibrate               # s_static + per-AOI norm stats; S vs ISPRA gate
+uv run limen backtest                # §2.5 metrics report for Oct 2018 (default window)
 ```
 
 #### Option B — Neon (serverless Postgres)
@@ -289,8 +301,6 @@ container.
 The following land in **later prompts**, each behind clean extension points
 already in this repo:
 
-- **Scoring engine** (Phase 3): deterministic, explainable multi-factor
-  combiner with `regional_thresholds.yaml`.
 - **MAF (Multi-Agent Framework)** executors and workflow (Phase 4):
   ingestion → scoring → explanation → notification, with caching, retries,
   and per-step observability.
