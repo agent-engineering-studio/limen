@@ -85,14 +85,31 @@ async def pg_pool(postgres_container: str) -> AsyncIterator[asyncpg.Pool]:
 
 @pytest.fixture()
 async def reset_db(pg_pool: asyncpg.Pool) -> AsyncIterator[None]:
-    """Truncate test-mutated tables before each test that needs isolation."""
+    """Truncate test-mutated tables before each test that needs isolation.
+
+    Listed explicitly (not `\\dt` discovery) so the fixture documents which
+    tables are part of the test contract. CASCADE handles FKs.
+    """
     from limen.data.db import acquire
 
+    tables = [
+        "app_cache",
+        "risk_assessments",
+        "susceptibility",
+        "cell_static_factors",
+        "grid_cells",
+        "aoi",
+        "iffi_landslides",
+        "pai_hazard",
+        "seismic_events",
+        "fire_perimeters",
+        "raster_refs",
+        "dataset_versions",
+    ]
     async with acquire() as conn:
         with contextlib.suppress(Exception):
             await conn.execute(
-                "TRUNCATE app_cache, risk_assessments, susceptibility, "
-                "cell_static_factors, grid_cells, aoi RESTART IDENTITY CASCADE"
+                f"TRUNCATE {', '.join(tables)} RESTART IDENTITY CASCADE"
             )
     yield
 
