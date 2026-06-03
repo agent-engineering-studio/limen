@@ -22,8 +22,9 @@ Phase 3 (deterministic V1 scoring engine + calibrate / backtest CLIs) +
 Phase 4 (MAF agents & workflow: 10 custom executors, RiskAnalyst /
 Briefing ChatAgents, `limen monitor-once` runner) + Phase 5 (FastAPI
 host, APScheduler periodic jobs, OpenTelemetry observability, multi-stage
-Docker image)**. Later phases add a map-first frontend, real notification
-channels, IoT ingestion, and the V2 ML engine.
+Docker image) + Phase 6 (pg_tileserv + `mv_latest_risk` materialized view
++ Vite/React/MapLibre public read-only map)**. Later phases add real
+notification channels, IoT ingestion, and the V2 ML engine.
 
 The V1 engine is a **pure**, interpretable, weighted-linear combination
 (§2.4 of the project doc) reading every weight, threshold, and class
@@ -46,6 +47,8 @@ No magic numbers in the scoring code. No LLM. No I/O. The same
 | **HTTP API** | `/health` + `/ready` (gated on pool & migrations), `POST /api/monitor/{aoi}` runs the workflow, `GET /api/aoi/{id}/risk/latest`, `GET /api/cell/{id}/breakdown`, `GET /api/aoi`, `GET /api/alerts`, `/api/tiles/...` (pg_tileserv redirect), OpenAPI at `/docs` and `/redoc` | FastAPI / uvicorn | `api/` + `limen serve` |
 | **Periodic jobs** | Hourly MAF workflow run, weekly ISPRA IdroGEO sync, cache cleanup (when `SCHEDULER__CACHE_CLEANUP=apscheduler`) | APScheduler in-process | `api/jobs/` |
 | **Observability** | OpenTelemetry tracing (FastAPI / asyncpg / httpx instrumentors, OTLP HTTP exporter) + custom Counters/Histograms (`landslide.risk.score`, `landslide.alert.dispatched`, `openmeteo.api.duration`, `idrogeo.cache.hits`, `workflow.executor.duration`) | optional OTLP backend | `observability/` |
+| **Vector tiles** | `mv_latest_risk` materialized view (grid_cells ⨝ latest risk_assessments per cell), refreshed by `refresh_mv_latest_risk()` at the end of every PersistResult; served by **pg_tileserv** | refresh per monitoring cycle | migration `007_map_views.sql` + `data/repos/map_views_repo.py` |
+| **Frontend** | Vite + TS + React + **MapLibre GL JS** SPA: `RiskMap` (vector tiles, 5-class colour palette), `LegendPanel` (labels + ranges, not colour-only), `AlertList`, `CellPopup` (S/M/E/F/H + Italian briefing), `TimelineSlider`. Strict TS, ESLint clean, Vitest tests for `api-client` + `RiskMap` + `LegendPanel`. | public, read-only | `frontend/` |
 
 ---
 
@@ -139,13 +142,16 @@ uv run limen calibrate               # s_static + per-AOI norm stats; S vs ISPRA
 uv run limen backtest                # §2.5 metrics report for Oct 2018 (default window)
 uv run limen monitor-once            # full MAF workflow once per AOI
 uv run limen serve                   # FastAPI on :8080 — /docs, /api/...
+( cd frontend && npm install && npm run dev )  # Vite on :5173
 ```
 
-For a containerised full demo (Postgres + PostGIS + Limen API):
+For a containerised full demo (Postgres + PostGIS + Limen API + pg_tileserv):
 
 ```bash
 docker compose -f infra/docker/docker-compose.demo.yml up -d --build
 # API → http://localhost:8080/docs    Postgres → 5432
+# pg_tileserv → http://localhost:7800
+# add `--profile frontend` to also bring up the Vite dev server on :5173.
 ```
 
 #### Option B — Neon (serverless Postgres)

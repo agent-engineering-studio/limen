@@ -2,9 +2,10 @@
 
 > AI multi-factor landslide-risk monitoring for the Italian territory.
 > Pilot: **Puglia + Basilicata**. Current state: **Phase 0 + Phase 1 +
-> Phase 2 + Phase 3 + Phase 4 + Phase 5** (scaffold + data layer + external
-> integrations + static bootstrap + deterministic scoring engine V1
-> + MAF agents & workflow + FastAPI host with APScheduler + OTel).
+> Phase 2 + Phase 3 + Phase 4 + Phase 5 + Phase 6** (scaffold + data layer
+> + external integrations + static bootstrap + deterministic scoring
+> engine V1 + MAF agents & workflow + FastAPI host with APScheduler +
+> OTel + pg_tileserv + Vite/React/MapLibre frontend).
 > See `README.md` for full context.
 
 ---
@@ -48,6 +49,9 @@
 | API has no business logic | Endpoints under `src/limen/api/endpoints/` only call the Phase-4 workflow or the Phase-1 repos. New behaviour goes in `agents/` or `core/`, never in route handlers. |
 | DI not globals | Everything routes need is in `AppDependencies` injected via FastAPI `Depends()`. No `from limen.x import _GLOBAL_THING` inside endpoints. |
 | APScheduler not pg_cron | Periodic jobs (hourly monitoring, weekly ISPRA sync, cache cleanup when configured) run in-process via APScheduler so the same code works on Neon. |
+| Frontend = Vite (no Next.js) | Phase 6 ships a public read-only map. Vite + React + MapLibre is the right surface; Next.js adds an unneeded Node server / RSC overhead. When auth lands (deferred §1.6), add `@clerk/clerk-react` to the same SPA — Clerk works with Vite natively. |
+| Tile pipeline | `mv_latest_risk` materialised view joining `grid_cells` + latest per-cell `risk_assessments`. **Always refresh via `refresh_mv_latest_risk()`** (PersistResult executor calls it). Never `REFRESH MATERIALIZED VIEW mv_latest_risk` directly. |
+| Risk palette = ColorBrewer YlOrRd, **not colour-only** | The 5-class legend pairs every colour with the Italian label and the score range. Don't introduce green/red without checking WCAG-AA contrast and a colourblind simulator. |
 
 ---
 
@@ -123,6 +127,13 @@ uv run limen monitor-once       # run the MAF workflow once for an AOI
                                 # (env knobs: LIMEN_MONITOR_AOI / CELL_LIMIT)
 uv run limen serve              # start the FastAPI server on API__HOST:API__PORT (default :8080)
                                 # /docs , /redoc , /health , /ready , /api/...
+
+# Frontend (separate npm workspace under ./frontend)
+( cd frontend && npm install )    # one-shot bootstrap
+( cd frontend && npm run dev )    # Vite dev server on :5173
+( cd frontend && npm test )       # Vitest + Testing Library
+( cd frontend && npm run lint )   # ESLint
+( cd frontend && npm run build )  # static dist/ for nginx / FastAPI mount
 make test                   # unit + integration (testcontainers)
 make test-unit              # fast, no Docker
 make lint                   # ruff check
@@ -159,6 +170,15 @@ src/limen/
 │   └── jobs/            # APScheduler: hourly_monitoring, weekly_idrogeo_sync,
 │                        # cache_cleanup, registration
 ├── observability/       # OTel tracing setup + custom metric instruments
+
+frontend/                # Vite + TypeScript + React + MapLibre SPA
+├── src/
+│   ├── App.tsx
+│   ├── components/      # RiskMap, LegendPanel, AlertList, CellPopup, TimelineSlider
+│   ├── lib/             # api-client, risk-colors, env
+│   ├── types.ts         # mirrors the FastAPI Pydantic DTOs
+│   └── __tests__/       # Vitest + Testing Library
+└── eslint.config.js | tsconfig.json | vite.config.ts | vitest.config.ts
 ├── core/
 │   ├── abstractions/    # external-source Protocols (OpenMeteo, IdroGeo, Ingv, Effis)
 │   ├── features/        # CellFeatureBundle assembler (single V1+V2 path)
@@ -196,7 +216,8 @@ tests/{unit,integration}
 Do not start implementing — these land in later prompts and have explicit
 extension points already:
 
-- Frontend (map-first SPA with pg_tileserv) — Phase 6.
+- Real Telegram / MQTT / Email notification channels — Phase 7
+  (`alert_dispatch` stays a logging stub until then).
 - Notifications, IoT ingestion, ML/MLOps — Phase 7+.
 - V2 ML engine — drop-in replacement of `MultiFactorScoringEngine` that
   consumes the same `CellFeatureBundle`.
