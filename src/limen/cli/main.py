@@ -6,6 +6,7 @@ Usage:
     limen bootstrap-static   Populate cell_static_factors (one-shot) for every seeded AOI.
     limen calibrate          Precompute s_static + per-AOI norm stats; run S vs ISPRA gate.
     limen backtest           Replay a historical window and emit a §2.5 metrics report.
+    limen monitor-once       Run the MAF landslide workflow once for an AOI.
     limen --help             Show this help.
 """
 
@@ -22,6 +23,7 @@ from limen.cli.backtest import run as _run_backtest
 from limen.cli.bootstrap_static import run as _run_bootstrap_static
 from limen.cli.calibrate import run as _run_calibrate
 from limen.cli.migrate import run as _run_migrate
+from limen.cli.monitor_once import run as _run_monitor_once
 from limen.cli.seed import run as _run_seed
 from limen.config.settings import get_settings
 from limen.core.logging import configure_logging
@@ -51,6 +53,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "backtest",
         help="replay a historical window and write a §2.5 metrics report",
     )
+    sub.add_parser(
+        "monitor-once",
+        help="run the MAF workflow once (set LIMEN_MONITOR_AOI to target a single AOI)",
+    )
     return parser
 
 
@@ -66,6 +72,7 @@ def main(argv: list[str] | None = None) -> int:
         "bootstrap-static": _run_bootstrap_static,
         "calibrate": _run_calibrate,
         "backtest": _run_backtest,
+        "monitor-once": _run_monitor_once,
     }
     runner = runners[args.command]
     try:
