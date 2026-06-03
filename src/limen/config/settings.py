@@ -80,13 +80,21 @@ class ObjectStoreSettings(BaseSettings):
 
 
 class LLMModels(BaseSettings):
-    """Per-role model mapping. Populated lazily from env (LLM__MODELS__*)."""
+    """Per-role model mapping. Populated lazily from env (``LLM__MODELS__*``).
+
+    The defaults below assume Anthropic Claude is the primary provider. The
+    per-provider concrete factories translate role names to provider-specific
+    model ids when a different provider is selected (e.g. Ollama uses
+    ``qwen2.5:32b`` regardless of role unless overridden).
+    """
 
     model_config = SettingsConfigDict(extra="allow")
 
     orchestrator: str = "claude-opus-4-7"
     scorer: str = "claude-sonnet-4-6"
     summarizer: str = "claude-haiku-4-5"
+    risk_analyst: str = "claude-haiku-4-5"
+    briefing: str = "claude-sonnet-4-6"
 
 
 class LLMSettings(BaseSettings):
@@ -136,12 +144,22 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_json: bool = False
 
+    # Workflow toggles
+    # `enable_insitu` gates the conditional IoT (sensor_fetch) edge in the
+    # MAF workflow. V1 default = False (no IoT). V1.5 will flip this when
+    # the real sensor ingestion lands.
+    enable_insitu: bool = False
+
     # Provider credentials are read as *top-level* env vars (no nesting) so the
     # canonical names from each vendor's SDK keep working unchanged.
     anthropic_api_key: SecretStr | None = None
     openai_api_key: SecretStr | None = None
     foundry_endpoint: str | None = None
     foundry_api_key: SecretStr | None = None
+    azure_ai_endpoint: str | None = None
+    azure_ai_api_key: SecretStr | None = None
+    anthropic_foundry_endpoint: str | None = None
+    anthropic_foundry_api_key: SecretStr | None = None
 
 
 @lru_cache(maxsize=1)
