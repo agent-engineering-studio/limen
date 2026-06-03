@@ -1,0 +1,38 @@
+# Local-dev stack for Limen.
+#
+# Just Postgres 16 + PostGIS 3.5 (+ pg_cron + pgvector). All other Limen
+# services run on the host via `uv run …` while we iterate.
+#
+# If you want to point Limen at Neon instead, do NOT start this compose
+# stack — just set DB__CONNECTION_STRING in your .env to the Neon DSN
+# (sslmode=require) and SCHEDULER__CACHE_CLEANUP=apscheduler.
+
+name: limen
+
+services:
+  postgres:
+    build:
+      context: ../postgres
+      dockerfile: Dockerfile.db
+    image: limen/postgres:16-3.5
+    container_name: limen-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: limen
+      POSTGRES_PASSWORD: limen
+      POSTGRES_DB: limen
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - limen-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U limen -d limen"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  limen-pgdata:
+    name: limen-pgdata

@@ -1,0 +1,32 @@
+{
+  "type": "FeatureCollection",
+  "name": "basilicata_aoi_placeholder",
+  "crs": { "type": "name", "properties": { "name": "EPSG:4326" } },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "it-basilicata",
+        "name": "Basilicata",
+        "kind": "region",
+        "iso_3166_2": "IT-77",
+        "note": "PLACEHOLDER POLYGON — coarse outline. TODO: replace with official ISTAT regional boundary."
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [
+          [
+            [
+              [15.40, 41.10],
+              [16.80, 40.85],
+              [16.85, 40.05],
+              [15.95, 39.90],
+              [15.33, 40.10],
+              [15.40, 41.10]
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

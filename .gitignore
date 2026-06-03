@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+*.egg
+dist/
+build/
+
+# uv / venv
+.venv/
+.venv.*/
+uv.lock.bak
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# Runtime / data
+data_runtime/
+object_store_root/
+*.log
+
+# Docker volumes
+infra/docker/volumes/
+
+# Generated docs
+docs/_build/

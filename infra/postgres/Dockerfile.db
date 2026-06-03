@@ -1,0 +1,28 @@
+# Limen — local development database image.
+#
+# Postgres 16 + PostGIS 3.5 + pg_cron + pgvector.
+#
+# NOTE: pg_cron is OPTIONAL. The Limen migrations and scheduling code work
+# identically without it (e.g. on Neon, which does not support pg_cron). In
+# that case the in-process APScheduler runs the cache cleanup job — see
+# `SCHEDULER__CACHE_CLEANUP=apscheduler`.
+FROM postgis/postgis:16-3.5
+
+ARG PG_MAJOR=16
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        "postgresql-${PG_MAJOR}-cron" \
+        "postgresql-${PG_MAJOR}-pgvector" \
+    && rm -rf /var/lib/apt/lists/*
+
+# pg_cron must be preloaded; the database it manages is configurable.
+COPY 10-pg_cron.conf /etc/postgresql/conf.d/10-pg_cron.conf
+
+# The official postgres image reads any *.sh / *.sql in this directory
+# during first-boot initialisation.
+COPY initdb/ /docker-entrypoint-initdb.d/
+
+CMD ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", \
+     "-c", "shared_preload_libraries=pg_cron", \
+     "-c", "cron.database_name=limen"]

@@ -1,0 +1,33 @@
+{
+  "type": "FeatureCollection",
+  "name": "puglia_aoi_placeholder",
+  "crs": { "type": "name", "properties": { "name": "EPSG:4326" } },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "it-puglia",
+        "name": "Puglia",
+        "kind": "region",
+        "iso_3166_2": "IT-75",
+        "note": "PLACEHOLDER POLYGON — coarse outline. TODO: replace with official ISTAT regional boundary."
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [
+          [
+            [
+              [15.20, 41.80],
+              [16.80, 41.95],
+              [18.45, 40.10],
+              [17.30, 39.85],
+              [16.00, 39.92],
+              [14.95, 40.85],
+              [15.20, 41.80]
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}
