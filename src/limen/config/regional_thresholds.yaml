@@ -1,0 +1,131 @@
+# Regional thresholds & deterministic-scoring parameters for Limen V1.
+#
+# This file is the SINGLE SOURCE OF TRUTH for every numeric knob in the
+# deterministic scoring engine. The engine reads it via
+# `limen.core.scoring.regional_thresholds.load_regional_thresholds` and
+# validates it through the matching Pydantic schema. Changing a value
+# here changes engine output; there are no hard-coded constants in the
+# scoring code (one of the acceptance criteria).
+#
+# References (per project doc §2.4 / §2.5):
+#   * Caine 1980 — Power-law rainfall I/D threshold for shallow landslides
+#   * Brunetti et al. 2010, Peruccacci et al. 2017 — Italian regional
+#     calibration of Caine parameters
+#   * Melillo et al. 2018 — Rainfall-event reconstruction
+#   * Kohler & Linsley 1951 — Antecedent precipitation index decay
+
+model_version: "limen-deterministic-v1"
+
+# Top-level component weights for the final risk = sum(w_i · component_i).
+weights:
+  static:    0.35   # w_S
+  meteo:     0.40   # w_M
+  seismic:   0.15   # w_E
+  fire:      0.07   # w_F
+  hydrology: 0.03   # w_H (always 0 in V1; reserved for V1.5+)
+
+# Sub-weights inside S(c) (static, time-invariant).
+static:
+  weights:
+    susc_ispra:      0.30
+    iffi_density:    0.25
+    slope:           0.20
+    pai:             0.15
+    litho_weight:    0.10
+  # Slope (degrees) is normalised by a piecewise-linear ramp from 0° to a
+  # cap value; above the cap, the term saturates at 1.
+  slope_saturation_deg: 45.0
+
+# Sub-weights inside M(c, t) (meteo, time-varying).
+meteo:
+  weights:
+    caine:           0.45
+    api:             0.30
+    soil:            0.25
+
+# Caine power law I = α · D^(-β). Per macroregion (Italy).
+# Brunetti et al. 2010 reports α ≈ 7.7, β ≈ 0.39 nation-wide; Peruccacci
+# et al. 2017 refines per climatic macroregion. Values below are the
+# defaults we ship; calibration jobs can override on a per-AOI basis.
+caine:
+  # Event reconstruction (Melillo 2018-inspired): hours of no-rain that
+  # break an "event" into two events; minimum total mm to qualify as an
+  # event.
+  event_reconstruction:
+    no_rain_break_hours: 6
+    min_event_mm:        2.0
+  # I-units: mm/h; D-units: h.
+  macroregions:
+    italy_default:
+      alpha: 7.700
+      beta:  0.390
+    southern_italy:        # Peruccacci 2017 Cluster D
+      alpha: 8.600
+      beta:  0.440
+    central_italy:
+      alpha: 7.250
+      beta:  0.380
+    northern_italy:
+      alpha: 6.800
+      beta:  0.310
+
+# Antecedent Precipitation Index parameters.
+# Kohler-Linsley: API_t = k · API_{t-1} + P_t (we approximate with a
+# rolling sum at horizons 30/60/90 d). The factor is a logistic transform
+# of the standardised anomaly vs the per-cell monthly baseline.
+api:
+  horizon_days:      30
+  decay_k:           0.95
+  sigmoid_sigma_mm:  60.0    # σ_API for the standardised anomaly
+  baseline:
+    # When per-cell baseline isn't available yet (Phase 3 has no
+    # climatology pipeline), fall back to this scalar in mm. Replace
+    # in a later prompt with cell+month climatology.
+    fallback_mm:     80.0
+
+soil:
+  # Soil-moisture factor: sigmoid centred at sm_50 with steepness k.
+  # Source values are m³/m³ from Open-Meteo (0..1 range).
+  sigmoid_center:    0.30
+  sigmoid_steepness: 12.0
+
+# Seismic decay.
+seismic:
+  tau_days:           2.0
+  min_magnitude:      3.5
+  lookback_days:      7
+  pga_threshold_g:    0.05      # 0.05 g threshold per §2.4
+  pga_scale_g:        0.05      # σ in the sigmoid
+
+# Post-fire window.
+post_fire:
+  peak_months:        6.0
+  curve_denominator: 50.0
+  window_months_max: 24.0
+
+# Final classification cutoffs. Inclusive lower bound, exclusive upper
+# bound, except for the final class which is inclusive on both sides.
+classes:
+  none:      [0.00, 0.15]
+  low:       [0.15, 0.35]
+  moderate:  [0.35, 0.55]
+  high:      [0.55, 0.75]
+  very_high: [0.75, 1.00]
+
+# Target annual class-frequency distribution (§2.5). The calibration
+# CLI emits a report comparing achieved frequencies against this target
+# so analysts can tune weights.
+target_distribution:
+  none:      0.700
+  low:       0.200
+  moderate:  0.070
+  high:      0.025
+  very_high: 0.005
+
+# Calibration gate (§2.5 step 2).
+calibration:
+  s_vs_ispra_correlation_min: 0.85
+  backtest:
+    hit_rate_min:            0.70
+    far_max:                 0.30
+    lead_time_hours_min:     18.0
