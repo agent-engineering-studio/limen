@@ -2,9 +2,9 @@
 
 > AI multi-factor landslide-risk monitoring for the Italian territory.
 > Pilot: **Puglia + Basilicata**. Current state: **Phase 0 + Phase 1 +
-> Phase 2 + Phase 3** (scaffold + data layer + external integrations +
-> static bootstrap + deterministic scoring engine V1). See `README.md`
-> for full context.
+> Phase 2 + Phase 3 + Phase 4** (scaffold + data layer + external
+> integrations + static bootstrap + deterministic scoring engine V1
+> + MAF agents & workflow). See `README.md` for full context.
 
 ---
 
@@ -41,6 +41,9 @@
 | Idempotency (sync jobs) | Compute SHA-256 over canonical-JSON of the fetched payloads, look up `dataset_versions(source, dataset, version)`. If the version exists, **skip all writes**. |
 | Scoring engine purity | `MultiFactorScoringEngine.score(bundle) -> RiskScore` is a *pure* function: no DB, no network, no LLM. Assembling the bundle is a separate concern. |
 | Magic numbers | All weights, thresholds, sigmoid/decay params, and class cutoffs live in `src/limen/config/regional_thresholds.yaml`. Validated by `RegionalThresholds` Pydantic schema at load. There are **no hard-coded constants** in scoring code — tests prove it via YAML override. |
+| LLM precedence | `LLM__PROVIDER` override > `ANTHROPIC_API_KEY` > `OPENAI_API_KEY` > Foundry creds > Ollama. Resolver: `limen.agents.llm_factory.resolve_llm_factory`. A cloud key always wins over Ollama unless explicitly overridden. |
+| LLM is non-authoritative | ChatAgents (RiskAnalyst, Briefing) only *reformulate* the deterministic scoring engine's numeric output. **Never** alter `score` / `breakdown`. An invariance test (`test_llm_does_not_change_numeric_breakdown`) enforces this. |
+| Agents prompts in `*.it.md` | Prompt files live next to the agent in `src/limen/agents/chat_agents/prompts/`. Loaded with `importlib.resources`. Never inline a long prompt in Python source. |
 
 ---
 
@@ -111,7 +114,9 @@ make migrate                # apply pending SQL migrations only
 uv run limen bootstrap-static   # one-shot fill of cell_static_factors (IFFI density + PAI)
 uv run limen calibrate          # precompute s_static + per-AOI norm stats; S vs ISPRA gate
 uv run limen backtest           # replay historical window; §2.5 hit rate / FAR / lead time
-                            # (env knobs: LIMEN_BACKTEST_AOI / START / END / HIGH_LEVEL)
+                                # (env knobs: LIMEN_BACKTEST_AOI / START / END / HIGH_LEVEL)
+uv run limen monitor-once       # run the MAF workflow once for an AOI
+                                # (env knobs: LIMEN_MONITOR_AOI / CELL_LIMIT)
 make test                   # unit + integration (testcontainers)
 make test-unit              # fast, no Docker
 make lint                   # ruff check
@@ -132,9 +137,18 @@ no arm64 manifest). Override with `LIMEN_TEST_POSTGIS_IMAGE`.
 src/limen/
 ├── cli/                 # `limen` entry point + subcommands (migrate, seed, bootstrap-static)
 ├── config/              # pydantic-settings (DB, OBJECT_STORE, LLM, SCHEDULER)
+├── agents/
+│   ├── llm_factory/     # ChatClient Protocol + Anthropic/OpenAI/Foundry/Ollama + Stub + resolver
+│   ├── workflow_runtime/# MAF-shaped shim: Executor, @handler, WorkflowBuilder
+│   ├── executors/       # area_resolver, static_factors, meteo_fetch, seismic_check,
+│   │                    # fire_check, sensor_fetch (stub), risk_scoring, escalation_gate,
+│   │                    # persist_result, alert_dispatch (logging stub)
+│   ├── chat_agents/     # RiskAnalyst + Briefing (+ Italian prompts in *.it.md)
+│   └── workflows/       # build_landslide_workflow + escalation_workflow placeholder
 ├── core/
 │   ├── abstractions/    # external-source Protocols (OpenMeteo, IdroGeo, Ingv, Effis)
-│   ├── models/          # risk DTOs (RiskLevel, CellFeatureBundle, RiskScore, …)
+│   ├── features/        # CellFeatureBundle assembler (single V1+V2 path)
+│   ├── models/          # risk DTOs + MonitoringContext + Assessment
 │   ├── scoring/         # deterministic V1 engine + Caine / API / seismic / post-fire
 │   ├── logging.py
 │   ├── scheduling.py    # APScheduler (Neon path)
@@ -168,10 +182,8 @@ tests/{unit,integration}
 Do not start implementing — these land in later prompts and have explicit
 extension points already:
 
-- MAF (Multi-Agent Framework) executors + workflow + LLM-driven Risk/Briefing
-  agents — Phase 4. The scoring engine is **pure**; MAF is what assembles the
-  `CellFeatureBundle` from DB/cache/integrations.
-- FastAPI gateway + frontend (map-first SPA) — Phase 5–6.
+- FastAPI gateway + APScheduler hourly job — Phase 5.
+- Frontend (map-first SPA with pg_tileserv) — Phase 6.
 - Notifications, IoT ingestion, ML/MLOps — Phase 7+.
 - V2 ML engine — drop-in replacement of `MultiFactorScoringEngine` that
   consumes the same `CellFeatureBundle`.
