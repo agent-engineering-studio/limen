@@ -74,9 +74,7 @@ async def pg_pool(postgres_container: str) -> AsyncIterator[asyncpg.Pool]:
     from limen.data.migrate import run_migrations
 
     await db_mod.close_pool()
-    settings = DBSettings(
-        connection_string=postgres_container, pool_min_size=1, pool_max_size=4
-    )
+    settings = DBSettings(connection_string=postgres_container, pool_min_size=1, pool_max_size=4)
     pool = await db_mod.init_pool(settings)
     await run_migrations()
     try:

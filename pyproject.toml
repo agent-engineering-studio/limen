@@ -46,12 +46,11 @@ dev = [
     "ruff>=0.7",
     "mypy>=1.13",
     "pre-commit>=4.0",
-    "testcontainers[postgresql]>=4.8",
+    "testcontainers>=4.8",
     "respx>=0.21",
 ]
 storage = [
     "boto3>=1.35",
-    "azure-storage-blob>=12.23",
 ]
 
 [build-system]
@@ -114,7 +113,6 @@ module = [
     "asyncpg.*",
     "boto3.*",
     "botocore.*",
-    "azure.*",
 ]
 ignore_missing_imports = true
 

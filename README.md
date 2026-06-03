@@ -46,7 +46,7 @@ frontend, notifications, IoT ingestion, and ML/MLOps.
 | **Engine-agnostic PostgreSQL 16 + PostGIS** (no Supabase, no BaaS, no ORM) | Same SQL, same code path on local Docker, Neon, RDS, Cloud SQL, or self-hosted. Only `DB__CONNECTION_STRING` changes. |
 | **`asyncpg` + custom PostGIS codec** | Geometries flow as Shapely objects, no `ST_AsBinary`/`ST_GeomFromWKB` boilerplate, no ORM session lock-in. |
 | **`pg_cron` is optional** | Neon doesn't support it. The in-process **APScheduler** runs the same periodic jobs when the extension is absent. Pick with `SCHEDULER__CACHE_CLEANUP={pg_cron,apscheduler}`. |
-| **Object storage behind a Protocol** (`filesystem` / `s3` / `azure_blob`) | Raster bytes never go in the DB. PostGIS stores references (path + bbox + CRS + checksum) only. |
+| **Object storage behind a Protocol** (`filesystem` / `s3`) | Raster bytes never go in the DB. PostGIS stores references (path + bbox + CRS + checksum) only. The `s3` backend targets any S3-compatible endpoint (MinIO sidecar, Aruba Cloud Object Storage, R2, B2) via `OBJECT_STORE__ENDPOINT_URL` — not just AWS. |
 | **Plain-SQL migrations** | No Alembic, no Django ORM. A 60-line runner with a `schema_migrations` table + checksums. Identical behaviour on every Postgres. |
 | **Pydantic v2 + `structlog`** | Strict typed configuration and structured logs without rolling our own. |
 | **`uv` + `src/` layout** | Fast, lockfile-first dependency management. The package can't import its own test code by accident. |
@@ -76,7 +76,10 @@ frontend, notifications, IoT ingestion, and ML/MLOps.
                                   ▲
                 ObjectStore Protocol (DB stores only refs)
                 ┌─────────────────┴─────────────────┐
-                │ filesystem │   S3   │ Azure Blob  │
+                │ filesystem │ S3-compatible        │
+                │            │ (MinIO, Aruba OS,    │
+                │            │  R2, B2 — via        │
+                │            │  endpoint_url)       │
                 └────────────────────────────────────┘
 ```
 
@@ -165,7 +168,7 @@ src/limen/
     │   ├── 002_core_tables.sql      # aoi, grid_cells, iffi, pai, risk, …
     │   ├── 003_cache_table.sql      # app_cache + pg_cron job (when available)
     │   └── 004_raster_refs.sql      # raster references (paths + bbox + checksum)
-    ├── object_store/   # filesystem | s3 | azure_blob behind a Protocol
+    ├── object_store/   # filesystem | s3-compatible behind a Protocol
     ├── caching/        # PostgresCache (DistributedCache Protocol)
     ├── repos/          # aoi_repo, grid_repo (+ iffi, susceptibility, assessment stubs)
     └── seed/
@@ -192,10 +195,9 @@ via `limen.config.settings.Settings`. Nested fields use `__` as delimiter.
 | `DB__CONNECTION_STRING` | `postgresql://limen:limen@localhost:5432/limen` | PostgreSQL DSN. Add `?sslmode=require` for Neon. |
 | `DB__POOL_MIN_SIZE` / `DB__POOL_MAX_SIZE` | `2` / `20` | asyncpg pool sizing. |
 | `DB__STATEMENT_CACHE_SIZE` | `1024` | asyncpg prepared-statement cache. Set `0` on PgBouncer (transaction pool). |
-| `OBJECT_STORE__BACKEND` | `filesystem` | `filesystem`, `s3`, or `azure_blob`. |
+| `OBJECT_STORE__BACKEND` | `filesystem` | `filesystem` or `s3`. |
 | `OBJECT_STORE__ROOT` | `./object_store_root` | Filesystem root. |
-| `OBJECT_STORE__BUCKET` / `__PREFIX` / `__REGION` / `__ENDPOINT_URL` / `__ACCESS_KEY_ID` / `__SECRET_ACCESS_KEY` | _empty_ | S3 settings. |
-| `OBJECT_STORE__CONTAINER` / `__CONNECTION_STRING` | _empty_ | Azure Blob settings. |
+| `OBJECT_STORE__BUCKET` / `__PREFIX` / `__REGION` / `__ENDPOINT_URL` / `__ACCESS_KEY_ID` / `__SECRET_ACCESS_KEY` | _empty_ | S3-compatible settings. Set `__ENDPOINT_URL` for MinIO, Aruba Cloud Object Storage, R2, B2. |
 | `SCHEDULER__CACHE_CLEANUP` | `apscheduler` | `pg_cron` or `apscheduler`. **Use APScheduler on Neon.** |
 | `SCHEDULER__CACHE_CLEANUP_INTERVAL_SECONDS` | `300` | APScheduler tick. |
 | `LLM__PROVIDER` | _empty_ | Optional override: `anthropic` / `openai` / `foundry` / `ollama`. |

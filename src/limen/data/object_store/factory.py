@@ -20,8 +20,9 @@ def build_object_store(settings: ObjectStoreSettings | None = None) -> ObjectSto
 
     Backends:
         * ``filesystem`` — :class:`FilesystemObjectStore` (default).
-        * ``s3``         — :class:`S3ObjectStore` (requires `storage` group).
-        * ``azure_blob`` — :class:`AzureBlobObjectStore` (requires `storage`).
+        * ``s3``         — :class:`S3ObjectStore`, targeting any S3-compatible
+          endpoint (MinIO, Aruba Cloud Object Storage, R2, B2). Requires the
+          optional ``storage`` dependency group.
     """
     cfg = settings or get_settings().object_store
 
@@ -40,19 +41,6 @@ def build_object_store(settings: ObjectStoreSettings | None = None) -> ObjectSto
             endpoint_url=cfg.endpoint_url,
             access_key_id=cfg.access_key_id,
             secret_access_key=cfg.secret_access_key,
-        )
-
-    if cfg.backend is ObjectStoreBackend.AZURE_BLOB:
-        if not cfg.container:
-            raise ValueError("OBJECT_STORE__CONTAINER is required when backend=azure_blob")
-        if cfg.connection_string is None:
-            raise ValueError("OBJECT_STORE__CONNECTION_STRING is required when backend=azure_blob")
-        from limen.data.object_store.azure_blob import AzureBlobObjectStore
-
-        return AzureBlobObjectStore(
-            container=cfg.container,
-            connection_string=cfg.connection_string,
-            prefix=cfg.prefix,
         )
 
     raise ValueError(f"Unknown object-store backend: {cfg.backend!r}")

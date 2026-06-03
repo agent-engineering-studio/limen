@@ -4,8 +4,9 @@ Loaded from environment variables (and optional `.env`) via pydantic-settings.
 All nested fields use ``__`` as delimiter, e.g. ``DB__CONNECTION_STRING``.
 
 The settings are intentionally engine-agnostic: switching between local
-PostgreSQL+PostGIS, Neon, S3, or Azure Blob requires *only* environment
-changes, never code changes.
+PostgreSQL+PostGIS, Neon, a filesystem object store, or any S3-compatible
+endpoint (MinIO, Aruba Cloud Object Storage, R2, B2) requires *only*
+environment changes, never code changes.
 """
 
 from __future__ import annotations
@@ -22,7 +23,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class ObjectStoreBackend(StrEnum):
     FILESYSTEM = "filesystem"
     S3 = "s3"
-    AZURE_BLOB = "azure_blob"
 
 
 class SchedulerBackend(StrEnum):
@@ -59,24 +59,24 @@ class DBSettings(BaseSettings):
 
 
 class ObjectStoreSettings(BaseSettings):
-    """Object-storage settings (backend-agnostic)."""
+    """Object-storage settings (backend-agnostic).
+
+    The S3 fields target any S3-compatible endpoint via ``endpoint_url`` —
+    MinIO, Aruba Cloud Object Storage, R2, B2 — not just AWS S3.
+    """
 
     model_config = SettingsConfigDict(extra="ignore")
 
     backend: ObjectStoreBackend = ObjectStoreBackend.FILESYSTEM
     root: Path = Path("./object_store_root")
 
-    # S3
+    # S3-compatible
     bucket: str | None = None
     prefix: str = ""
     region: str | None = None
     endpoint_url: str | None = None
     access_key_id: SecretStr | None = None
     secret_access_key: SecretStr | None = None
-
-    # Azure Blob
-    container: str | None = None
-    connection_string: SecretStr | None = None
 
 
 class LLMModels(BaseSettings):
