@@ -71,7 +71,10 @@ async def count_cells() -> int:
 async def get_for_cell(cell_id: str) -> CellSusceptibility | None:
     async with acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT cell_id, score, class, model_version, inputs FROM susceptibility WHERE cell_id = $1",
+            """
+            SELECT cell_id, score, class, model_version, inputs
+            FROM susceptibility WHERE cell_id = $1
+            """,
             cell_id,
         )
     if row is None:
