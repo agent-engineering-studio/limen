@@ -123,6 +123,27 @@ class SchedulerSettings(BaseSettings):
 
     cache_cleanup: SchedulerBackend = SchedulerBackend.APSCHEDULER
     cache_cleanup_interval_seconds: int = Field(default=300, ge=10)
+    # Run the MAF workflow for every active AOI every N minutes.
+    hourly_monitoring_minutes: int = Field(default=60, ge=5)
+    # Run the ISPRA IdroGEO sync every N hours.
+    weekly_idrogeo_hours: int = Field(default=24 * 7, ge=1)
+    enable_hourly_monitoring: bool = True
+    enable_weekly_idrogeo: bool = True
+
+
+class ApiSettings(BaseSettings):
+    """FastAPI server + CORS + OTel exporter settings."""
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    host: str = "0.0.0.0"
+    port: int = Field(default=8080, ge=1, le=65535)
+    # Default CORS is permissive because Phase 5 is intentionally
+    # auth-less and serves a public map. Tighten in production via env.
+    cors_origins: list[str] = Field(default_factory=lambda: ["*"])
+    pg_tileserv_url: str | None = None
+    otel_otlp_endpoint: str | None = None
+    otel_service_name: str = "limen-api"
 
 
 class Settings(BaseSettings):
@@ -140,6 +161,7 @@ class Settings(BaseSettings):
     object_store: ObjectStoreSettings = Field(default_factory=ObjectStoreSettings)
     llm: LLMSettings = Field(default_factory=LLMSettings)
     scheduler: SchedulerSettings = Field(default_factory=SchedulerSettings)
+    api: ApiSettings = Field(default_factory=ApiSettings)
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_json: bool = False
