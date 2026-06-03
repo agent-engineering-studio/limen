@@ -1,10 +1,12 @@
 """``limen`` console entry point — subcommand dispatcher.
 
 Usage:
-    limen migrate           Apply pending SQL migrations.
-    limen seed              Apply migrations and seed Puglia/Basilicata AOIs + grids.
-    limen bootstrap-static  Populate cell_static_factors (one-shot) for every seeded AOI.
-    limen --help            Show this help.
+    limen migrate            Apply pending SQL migrations.
+    limen seed               Apply migrations and seed Puglia/Basilicata AOIs + grids.
+    limen bootstrap-static   Populate cell_static_factors (one-shot) for every seeded AOI.
+    limen calibrate          Precompute s_static + per-AOI norm stats; run S vs ISPRA gate.
+    limen backtest           Replay a historical window and emit a §2.5 metrics report.
+    limen --help             Show this help.
 """
 
 from __future__ import annotations
@@ -16,7 +18,9 @@ from collections.abc import Callable, Coroutine
 from typing import Any
 
 from limen import __version__
+from limen.cli.backtest import run as _run_backtest
 from limen.cli.bootstrap_static import run as _run_bootstrap_static
+from limen.cli.calibrate import run as _run_calibrate
 from limen.cli.migrate import run as _run_migrate
 from limen.cli.seed import run as _run_seed
 from limen.config.settings import get_settings
@@ -39,6 +43,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "bootstrap-static",
         help="populate cell_static_factors (IFFI density, distance, PAI) for every seeded AOI",
     )
+    sub.add_parser(
+        "calibrate",
+        help="precompute s_static + per-AOI norm stats; emit calibration report",
+    )
+    sub.add_parser(
+        "backtest",
+        help="replay a historical window and write a §2.5 metrics report",
+    )
     return parser
 
 
@@ -52,6 +64,8 @@ def main(argv: list[str] | None = None) -> int:
         "migrate": _run_migrate,
         "seed": _run_seed,
         "bootstrap-static": _run_bootstrap_static,
+        "calibrate": _run_calibrate,
+        "backtest": _run_backtest,
     }
     runner = runners[args.command]
     try:
