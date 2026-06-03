@@ -83,6 +83,21 @@ class PersistResultExecutor(Executor):
                 if row is not None:
                     last_id = int(row["id"])
 
+        # Best-effort refresh of the map's materialized view so the
+        # frontend sees the new scores immediately. Failure here MUST
+        # NOT block the workflow — the matview can also be refreshed by
+        # a periodic job or by the operator.
+        try:
+            from limen.data.repos.map_views_repo import refresh_latest_risk
+
+            await refresh_latest_risk()
+        except Exception as exc:
+            log.warning(
+                "executor.persist_result.refresh_failed",
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+
         log.info(
             "executor.persist_result",
             aoi_id=ctx.aoi_id,

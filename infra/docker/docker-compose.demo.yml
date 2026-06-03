@@ -54,6 +54,7 @@ services:
       OBJECT_STORE__ROOT: /var/lib/limen/objects
       SCHEDULER__CACHE_CLEANUP: apscheduler
       API__HOST: 0.0.0.0
+      API__PG_TILESERV_URL: http://pg_tileserv:7800
       API__PORT: "8080"
       LOG_JSON: "true"
       # Optional LLM credentials — when unset, the resolver falls back
@@ -72,8 +73,59 @@ services:
       retries: 10
       start_period: 20s
 
+  pg_tileserv:
+    # Phase 6 — vector tile server pointed at the same Postgres+PostGIS.
+    # The frontend talks to `${VITE_API_URL}/api/tiles/...`, the FastAPI
+    # /api/tiles endpoint 307-redirects here. To target Neon or any
+    # other PG, point CrunchyData/pg_tileserv at it via DATABASE_URL.
+    image: ghcr.io/crunchydata/pg_tileserv:latest
+    container_name: limen-pg-tileserv
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://limen:limen@postgres:5432/limen?sslmode=disable
+      # Read-only; pg_tileserv auto-discovers tables/functions allowed
+      # by the role's permissions. Restrict in production by creating
+      # a dedicated `tile_reader` role.
+      TS_HTTPHOST: "0.0.0.0"
+      TS_HTTPPORT: "7800"
+    ports:
+      - "7800:7800"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7800/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  frontend:
+    # Phase 6 — Vite dev server. In production, build with
+    # `npm run build` and either copy `dist/` into the api image
+    # (FastAPI can serve it statically — see README) or front it with
+    # nginx; this service is a convenience for local iteration.
+    image: node:22-bookworm-slim
+    container_name: limen-frontend
+    working_dir: /app
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      VITE_API_URL: http://localhost:8080
+      VITE_TILESERV_URL: http://localhost:7800
+    command: ["sh", "-c", "npm ci --no-audit --no-fund && npm run dev -- --host 0.0.0.0 --port 5173"]
+    volumes:
+      - ../../frontend:/app
+      - frontend-node-modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    profiles: ["frontend"]  # opt-in: `docker compose --profile frontend up`
+
 volumes:
   limen-pgdata:
     name: limen-pgdata
   limen-objects:
     name: limen-objects
+  frontend-node-modules:
+    name: limen-frontend-node-modules
