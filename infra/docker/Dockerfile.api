@@ -1,0 +1,77 @@
+# Limen API — multi-stage uv build (§3.12)
+#
+# Builds in a tiny image with uv + system deps for GeoPandas/Rasterio,
+# then runs from a slim Python base. The runtime image carries the
+# resolved virtualenv (no uv at runtime) for a small footprint.
+
+# ---------------------------------------------------------------------------
+# Stage 1 — builder
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim AS builder
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_PREFERENCE=only-system \
+    UV_NO_PROGRESS=1
+
+# System deps required by GeoPandas / Shapely / Rasterio / asyncpg build.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        gcc \
+        libgdal-dev \
+        gdal-bin \
+        libgeos-dev \
+        libproj-dev \
+        proj-bin \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:0.5.7 /uv /usr/local/bin/uv
+
+WORKDIR /app
+
+# Resolve and lock the runtime dependency set into /app/.venv.
+COPY pyproject.toml uv.lock README.md ./
+COPY src ./src
+RUN uv sync --frozen --no-dev --no-editable
+
+# ---------------------------------------------------------------------------
+# Stage 2 — runtime
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/app/.venv/bin:$PATH" \
+    API__HOST=0.0.0.0 \
+    API__PORT=8080 \
+    LOG_JSON=true
+
+# Minimal system libs for the geospatial stack at runtime.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libgdal32 \
+        libgeos-c1v5 \
+        libproj25 \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system limen \
+    && useradd --system --gid limen --create-home --home-dir /home/limen limen
+
+WORKDIR /app
+
+# Copy the resolved virtualenv and project sources from the builder.
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/src /app/src
+COPY --from=builder /app/pyproject.toml /app/pyproject.toml
+
+USER limen
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=5 \
+    CMD python -c "import urllib.request, sys; \
+                    sys.exit(0 if urllib.request.urlopen('http://localhost:8080/ready', timeout=3).status == 200 else 1)"
+
+CMD ["limen", "serve"]

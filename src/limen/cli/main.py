@@ -7,6 +7,7 @@ Usage:
     limen calibrate          Precompute s_static + per-AOI norm stats; run S vs ISPRA gate.
     limen backtest           Replay a historical window and emit a §2.5 metrics report.
     limen monitor-once       Run the MAF landslide workflow once for an AOI.
+    limen serve              Start the FastAPI HTTP server (uvicorn on :8080).
     limen --help             Show this help.
 """
 
@@ -25,6 +26,7 @@ from limen.cli.calibrate import run as _run_calibrate
 from limen.cli.migrate import run as _run_migrate
 from limen.cli.monitor_once import run as _run_monitor_once
 from limen.cli.seed import run as _run_seed
+from limen.cli.server import run as _run_server
 from limen.config.settings import get_settings
 from limen.core.logging import configure_logging
 
@@ -57,6 +59,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "monitor-once",
         help="run the MAF workflow once (set LIMEN_MONITOR_AOI to target a single AOI)",
     )
+    sub.add_parser(
+        "serve",
+        help="start the FastAPI HTTP server (uvicorn on API__HOST:API__PORT, default :8080)",
+    )
     return parser
 
 
@@ -73,6 +79,7 @@ def main(argv: list[str] | None = None) -> int:
         "calibrate": _run_calibrate,
         "backtest": _run_backtest,
         "monitor-once": _run_monitor_once,
+        "serve": _run_server,
     }
     runner = runners[args.command]
     try:

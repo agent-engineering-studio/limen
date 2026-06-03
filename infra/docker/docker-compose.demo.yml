@@ -1,0 +1,79 @@
+# Full demo stack: Postgres + PostGIS + Limen API.
+#
+# Brings up the database and the FastAPI app in a single command:
+#
+#     docker compose -f infra/docker/docker-compose.demo.yml up -d --build
+#
+# The API points at the local Postgres by default. To target Neon
+# instead, override DB__CONNECTION_STRING (and keep
+# SCHEDULER__CACHE_CLEANUP=apscheduler) — no other change needed:
+#
+#     DB__CONNECTION_STRING="postgresql://...neon.tech/...?sslmode=require" \
+#     docker compose -f infra/docker/docker-compose.demo.yml up -d --build api
+
+name: limen-demo
+
+services:
+  postgres:
+    build:
+      context: ../postgres
+      dockerfile: Dockerfile.db
+    image: limen/postgres:16-3.5
+    container_name: limen-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: limen
+      POSTGRES_PASSWORD: limen
+      POSTGRES_DB: limen
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - limen-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U limen -d limen"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.api
+    image: limen/api:0.1
+    container_name: limen-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Override these via the shell to point at Neon or a managed PG.
+      DB__CONNECTION_STRING: postgresql://limen:limen@postgres:5432/limen
+      OBJECT_STORE__BACKEND: filesystem
+      OBJECT_STORE__ROOT: /var/lib/limen/objects
+      SCHEDULER__CACHE_CLEANUP: apscheduler
+      API__HOST: 0.0.0.0
+      API__PORT: "8080"
+      LOG_JSON: "true"
+      # Optional LLM credentials — when unset, the resolver falls back
+      # to Ollama at LLM__OLLAMA_BASE_URL (which is not exposed by this
+      # compose file in V1).
+      # ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      # OPENAI_API_KEY:    ${OPENAI_API_KEY}
+    ports:
+      - "8080:8080"
+    volumes:
+      - limen-objects:/var/lib/limen/objects
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/ready', timeout=3).status==200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+volumes:
+  limen-pgdata:
+    name: limen-pgdata
+  limen-objects:
+    name: limen-objects
