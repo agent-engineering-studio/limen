@@ -17,9 +17,17 @@ explanation, with a Postgres+PostGIS data layer that is portable between
 local Docker, Neon (serverless), and any managed PostgreSQL.
 
 This repository currently contains **Phase 0 (scaffolding) + Phase 1 (data
-layer)**. Later phases add integrations (Open-Meteo, ISPRA IdroGEO, INGV,
-EFFIS), the scoring engine, MAF agents, a FastAPI gateway, a map-first
-frontend, notifications, IoT ingestion, and ML/MLOps.
+layer) + Phase 2 (external integrations + static-feature bootstrap)**.
+Later phases add the scoring engine, MAF agents + workflow, a FastAPI
+gateway, a map-first frontend, notifications, IoT ingestion, and ML/MLOps.
+
+| Source | What we ingest | Cadence | Implementation |
+|---|---|---|---|
+| **Open-Meteo** | hourly precip, soil moisture 0–7 / 7–28 cm, snowfall, snow depth (forecast); cumulated precip 30/60/90 d (ERA5 archive) | live, cache 30 min | `integrations/openmeteo/` + `CachedOpenMeteoClient` |
+| **ISPRA IdroGEO** | IFFI (points/polys/lines), PAI hazard, susceptibility | weekly batch | `integrations/idrogeo/` + idempotent `sync_job` keyed by content hash |
+| **INGV** | FDSN events (mag ≥ 3.5, last 7 d, AOI bbox); ShakeMap `grid.xml` raster | event-driven poll | `integrations/ingv/` + `seismic_repo` + `ObjectStore` |
+| **EFFIS** | burnt-area perimeters; dNBR (when programmatic — currently manual data request, marked TODO) | weekly batch | `integrations/effis/` |
+| **Static bootstrap** | `iffi_density_500`, `distance_to_iffi_m`, `pai_class_norm` per cell — set-based PostGIS SQL | one-shot CLI | `integrations/static_bootstrap/` + `limen bootstrap-static` |
 
 ---
 
@@ -106,8 +114,9 @@ integration tests you also need Docker.
 #### Option A — local Docker (default)
 
 ```bash
-make up-dev      # Postgres 16 + PostGIS 3.5 + pg_cron + pgvector
-make seed        # migrations + Puglia/Basilicata AOIs + ~60k 1 km cells
+make up-dev                          # Postgres 16 + PostGIS 3.5 + pg_cron + pgvector
+make seed                            # migrations + Puglia/Basilicata AOIs + ~60k 1 km cells
+uv run limen bootstrap-static        # IFFI density / distance + PAI normalised class
 ```
 
 #### Option B — Neon (serverless Postgres)
@@ -280,19 +289,23 @@ container.
 The following land in **later prompts**, each behind clean extension points
 already in this repo:
 
-- **External integrations**: Open-Meteo (weather), ISPRA IdroGEO (IFFI),
-  INGV (seismicity), EFFIS (drought / wildfire context).
-- **Scoring engine**: deterministic, explainable multi-factor combiner.
-- **MAF (Multi-Agent Framework)** executors and workflow: ingestion →
-  scoring → explanation → notification, with caching, retries, and
-  per-step observability.
-- **FastAPI gateway**: REST + tile endpoints, OpenAPI schema.
-- **Frontend**: map-first SPA with risk overlays, time controls, and
-  explainability drill-downs.
-- **Notifications**: alerting on score-crossing events.
-- **IoT ingestion**: real-time sensor streams into `cell_static_factors`.
-- **ML / MLOps**: trainable susceptibility model, model registry,
+- **Scoring engine** (Phase 3): deterministic, explainable multi-factor
+  combiner with `regional_thresholds.yaml`.
+- **MAF (Multi-Agent Framework)** executors and workflow (Phase 4):
+  ingestion → scoring → explanation → notification, with caching, retries,
+  and per-step observability.
+- **FastAPI gateway** (Phase 5): REST + tile endpoints, OpenAPI schema.
+- **Frontend** (Phase 6): map-first SPA with risk overlays, time controls,
+  and explainability drill-downs.
+- **Notifications** (Phase 7): alerting on score-crossing events.
+- **IoT ingestion** (V1.5): real-time sensor streams.
+- **ML / MLOps** (V2): trainable susceptibility model, model registry,
   drift monitoring.
+- **DEM / CORINE / ISPRA Carta Geologica ingest** to fill the currently-NULL
+  `cell_static_factors` columns (`slope_deg`, `aspect_deg`, `curvature`,
+  `twi`, `elevation_m`, `landuse_code`, `lithology`, `litho_weight`,
+  `dist_faults_m`). The static-bootstrap pipeline already logs
+  `static_bootstrap.skip` for each missing component.
 
 ---
 

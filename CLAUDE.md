@@ -1,9 +1,9 @@
 # Limen — Claude Code project guide
 
 > AI multi-factor landslide-risk monitoring for the Italian territory.
-> Pilot: **Puglia + Basilicata**. Current state: **Phase 0 + Phase 1**
-> (project scaffolding + engine-agnostic data layer). See `README.md`
-> for full context.
+> Pilot: **Puglia + Basilicata**. Current state: **Phase 0 + Phase 1 +
+> Phase 2** (scaffold + data layer + external integrations + static
+> bootstrap). See `README.md` for full context.
 
 ---
 
@@ -35,6 +35,9 @@
 | Logging | `structlog.get_logger(__name__)` via `limen.core.logging.get_logger`. **Never `print`.** |
 | Geometry CRS | All geometries stored in EPSG:4326. Compute distances/areas in EPSG:3035 (LAEA Europe). |
 | Quality gates | `ruff check` + `ruff format` clean, `mypy --strict` clean, `pytest` green before commit. |
+| External HTTP | All outbound calls go through `limen.integrations._http` (shared `httpx.AsyncClient` + tenacity policy: 4 attempts, exp backoff cap 60 s, retries on transport errors + 5xx/429). |
+| Degradation | Read-only operations that miss external sources return a *neutral result* (`None`, `[]`, `{}`) and log `integration.degraded` — they MUST NOT raise. Writes do raise. |
+| Idempotency (sync jobs) | Compute SHA-256 over canonical-JSON of the fetched payloads, look up `dataset_versions(source, dataset, version)`. If the version exists, **skip all writes**. |
 
 ---
 
@@ -98,16 +101,17 @@ before reaching for raw bash:
 ## Common commands
 
 ```bash
-make install           # uv sync --all-groups
-make up-dev            # docker compose: Postgres 16 + PostGIS 3.5 + pg_cron + pgvector
-make seed              # apply migrations + load Puglia/Basilicata AOIs + 1 km grid
-make migrate           # apply pending SQL migrations only
-make test              # unit + integration (testcontainers)
-make test-unit         # fast, no Docker
-make lint              # ruff check
-make format            # ruff format
-make typecheck         # mypy --strict on src/
-make check             # lint + typecheck + test
+make install                # uv sync --all-groups
+make up-dev                 # docker compose: Postgres 16 + PostGIS 3.5 + pg_cron + pgvector
+make seed                   # apply migrations + load Puglia/Basilicata AOIs + 1 km grid
+make migrate                # apply pending SQL migrations only
+uv run limen bootstrap-static   # one-shot fill of cell_static_factors (IFFI density + PAI)
+make test                   # unit + integration (testcontainers)
+make test-unit              # fast, no Docker
+make lint                   # ruff check
+make format                 # ruff format
+make typecheck              # mypy --strict on src/
+make check                  # lint + typecheck + test
 ```
 
 **Apple Silicon note**: integration tests auto-pick
@@ -120,20 +124,32 @@ no arm64 manifest). Override with `LIMEN_TEST_POSTGIS_IMAGE`.
 
 ```
 src/limen/
-├── cli/             # `limen` entry point + subcommands
-├── config/          # pydantic-settings (DB, OBJECT_STORE, LLM, SCHEDULER)
-├── core/            # logging, scheduling (APScheduler), llm_resolver stub
+├── cli/                 # `limen` entry point + subcommands (migrate, seed, bootstrap-static)
+├── config/              # pydantic-settings (DB, OBJECT_STORE, LLM, SCHEDULER)
+├── core/
+│   ├── abstractions/    # external-source Protocols (OpenMeteo, IdroGeo, Ingv, Effis)
+│   ├── logging.py
+│   ├── scheduling.py    # APScheduler (Neon path)
+│   └── llm_resolver.py
+├── integrations/
+│   ├── _http.py             # shared httpx client + tenacity policy + degrade_gracefully
+│   ├── openmeteo/           # forecast + ERA5 archive + CachedOpenMeteoClient wrapper
+│   ├── idrogeo/             # ISPRA WFS client + parsers + idempotent sync_job
+│   ├── ingv/                # FDSN events + ShakeMap grid + sync_job
+│   ├── effis/               # Copernicus EFFIS fire perimeters + sync_job
+│   └── static_bootstrap/    # cell_static_factors orchestrator (PostGIS-only)
 └── data/
     ├── db.py            # asyncpg pool + PostGIS codec
     ├── migrate.py       # idempotent SQL migrations runner
     ├── migrations/      # NNN_*.sql, immutable once applied
     ├── object_store/    # ObjectStore Protocol + filesystem | s3
-    ├── caching/         # PostgresCache (DistributedCache Protocol)
-    ├── repos/           # aoi, grid (+ iffi/susceptibility/assessment stubs)
+    ├── caching/         # PostgresCache + CachedOpenMeteoClient
+    ├── repos/           # aoi, grid, iffi, pai, susceptibility, seismic, fire,
+    │                    # raster_refs, dataset_versions, cell_static_factors
     └── seed/            # Puglia + Basilicata placeholder GeoJSON + loader
 
-infra/postgres/         # Dockerfile.db + pg_cron config + initdb SQL
-infra/docker/           # docker-compose.dev.yml
+infra/postgres/          # Dockerfile.db + pg_cron config + initdb SQL
+infra/docker/            # docker-compose.dev.yml
 tests/{unit,integration}
 ```
 
@@ -144,10 +160,13 @@ tests/{unit,integration}
 Do not start implementing — these land in later prompts and have explicit
 extension points already:
 
-- External integrations: Open-Meteo, ISPRA IdroGEO, INGV, EFFIS.
-- Scoring engine + MAF (Multi-Agent Framework) workflow.
-- FastAPI gateway + frontend (map-first SPA).
-- Notifications, IoT ingestion, ML/MLOps.
+- Scoring engine (`s_static` combination, `regional_thresholds.yaml`) — Phase 3.
+- MAF (Multi-Agent Framework) executors + workflow — Phase 4.
+- FastAPI gateway + frontend (map-first SPA) — Phase 5–6.
+- Notifications, IoT ingestion, ML/MLOps — Phase 7+.
+- DEM derivatives (TINITALY → slope/aspect/curvature/TWI), CORINE, ISPRA Carta Geologica
+  vettoriale: `cell_static_factors` columns stay NULL until the raster/vector ingest
+  pipeline lands. The bootstrap pipeline already logs `static_bootstrap.skip` for each.
 
 If asked to "make it work end-to-end", clarify which phase the user wants
 to advance.
