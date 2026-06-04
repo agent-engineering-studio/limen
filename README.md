@@ -9,6 +9,62 @@
 [![ruff](https://img.shields.io/badge/lint-ruff-261230)](https://github.com/astral-sh/ruff)
 [![mypy --strict](https://img.shields.io/badge/typed-mypy%20--strict-blue)](http://mypy-lang.org/)
 
+## 🇮🇹 Avvio rapido
+
+Limen unisce **morfologia, geologia, umidità del suolo, piogge,
+sismicità e archivi storici** per stimare il rischio frana per ogni
+cella di un'AOI italiana. Stack: Python 3.12 + FastAPI + PostgreSQL +
+PostGIS, frontend Vite + MapLibre, notifiche multi-canale.
+
+```bash
+git clone https://github.com/agent-engineering-studio/limen.git
+cd limen
+uv sync --all-groups
+make up-dev                 # Postgres 16 + PostGIS 3.5 in Docker (oppure usa Neon)
+uv run limen seed           # AOI di Puglia + Basilicata + griglia 1 km²
+uv run limen bootstrap-static
+uv run limen serve          # FastAPI su http://localhost:8080/docs
+( cd frontend && npm ci && npm run dev )   # mappa su http://localhost:5173
+```
+
+Su **Neon** (dev/test serverless): impostare `DB__CONNECTION_STRING`
+con `?sslmode=require` e `SCHEDULER__CACHE_CLEANUP=apscheduler`,
+nient'altro. Su **Aruba VPS** (produzione): `docker compose -f
+infra/docker/docker-compose.demo.yml up -d --build`. Provider LLM
+risolto per precedenza `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` →
+credenziali Foundry → Ollama; nessuna chiave configurata ⇒ fallback
+locale Ollama.
+
+## 🇬🇧 English quickstart
+
+Limen ("threshold" in Latin) fuses morphology, geology, soil moisture,
+rainfall, seismicity and historical inventories into a per-cell
+landslide-risk score for any Italian AOI. Stack: Python 3.12 + FastAPI
++ PostgreSQL + PostGIS, Vite + MapLibre frontend, multi-channel alerts.
+
+```bash
+git clone https://github.com/agent-engineering-studio/limen.git
+cd limen
+uv sync --all-groups
+make up-dev                 # local Postgres+PostGIS (or point at Neon instead)
+uv run limen seed           # Puglia + Basilicata AOIs + 1 km² grid
+uv run limen bootstrap-static
+uv run limen serve          # FastAPI at http://localhost:8080/docs
+( cd frontend && npm ci && npm run dev )   # map at http://localhost:5173
+```
+
+On **Neon** (serverless dev/test): set `DB__CONNECTION_STRING` with
+`?sslmode=require` and `SCHEDULER__CACHE_CLEANUP=apscheduler`, nothing
+else. On **Aruba VPS** (production): `docker compose -f
+infra/docker/docker-compose.demo.yml up -d --build`. LLM provider is
+resolved by precedence `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` →
+Foundry creds → Ollama; no key set ⇒ local Ollama fallback.
+
+For the deep dive see [`docs/architecture.md`](./docs/architecture.md),
+[`docs/api.md`](./docs/api.md),
+[`docs/deployment.md`](./docs/deployment.md), and
+[`docs/runbook.md`](./docs/runbook.md).
+
 Limen ("threshold" in Latin) fuses **morphology, geology, soil moisture,
 rainfall, seismicity and historical inventories** to produce a per-cell
 landslide-risk score for any AOI in Italy. The system is built around a
@@ -371,6 +427,36 @@ What's next, in deliberate scope:
   component.
 
 ---
+
+## Attribution & open-data licenses
+
+Limen consumes the following open datasets — attribution is required
+when the rendered map / briefings are published:
+
+* **ISPRA IdroGEO** (IFFI inventory, PAI hazard, susceptibility) —
+  © ISPRA / Italian Authorities, CC-BY 4.0 unless otherwise noted on
+  the individual layers. https://idrogeo.isprambiente.it
+* **Copernicus Open-Meteo / ECMWF ERA5** — Open-Meteo terms allow free
+  commercial use with attribution; ERA5 is provided under the
+  Copernicus license. https://open-meteo.com /
+  https://cds.climate.copernicus.eu
+* **INGV** (FDSN event service, ShakeMap) — CC-BY 4.0.
+  https://terremoti.ingv.it
+* **EFFIS** (burnt-area perimeters, dNBR) — Copernicus EFFIS terms,
+  attribution required. https://forest-fire.emergency.copernicus.eu
+* **OpenStreetMap** (basemap raster tiles) — ODbL.
+  https://www.openstreetmap.org/copyright
+
+Render the attribution string on the public map and in every operator
+briefing.
+
+## Contributing & security
+
+* [`CONTRIBUTING.md`](./CONTRIBUTING.md) — dev setup, commit style,
+  gate before pushing.
+* [`SECURITY.md`](./SECURITY.md) — private disclosure path.
+* [`CHANGELOG.md`](./CHANGELOG.md) — versioned history (Keep a
+  Changelog).
 
 ## License
 
