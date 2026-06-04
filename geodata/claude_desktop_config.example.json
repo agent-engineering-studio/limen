@@ -1,0 +1,23 @@
+{
+  "_comment": "Drop this into Claude Desktop's settings.json under `mcpServers`.",
+  "_comment_paths": "Replace the absolute paths with where you check this repo out + the geodata DSN of your VPS.",
+  "mcpServers": {
+    "ispra-geo": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/limen",
+        "run",
+        "limen",
+        "geodata",
+        "mcp",
+        "--transport",
+        "stdio"
+      ],
+      "env": {
+        "GEODATA_DB_DSN": "postgresql://geodata:geodata@vps.example.com:55432/geodata",
+        "MCP_ADMIN_TOKEN": "set-a-real-token-here-or-leave-unset-to-disable-refresh"
+      }
+    }
+  }
+}

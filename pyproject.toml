@@ -184,6 +184,13 @@ module = [
 ]
 ignore_missing_imports = true
 
+# The MCP server binds FastMCP decorators. FastMCP ships in the optional
+# `[mcp]` extra and supplies its own types at runtime — we run a separate
+# type-check job there. Locally the strict decorator rule is relaxed.
+[[tool.mypy.overrides]]
+module = "geodata.mcp.server"
+disallow_untyped_decorators = false
+
 # ---------------------------------------------------------------------------
 # pytest
 # ---------------------------------------------------------------------------
