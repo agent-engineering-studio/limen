@@ -1,0 +1,98 @@
+name: deploy-aruba
+
+# Manual workflow that ships the latest API image to the Aruba VPS via
+# SSH + docker compose. Gated by the GitHub Environment `aruba-prod`
+# whose protection rules (required reviewers, secrets) are configured
+# in the repo settings.
+#
+# Required secrets / environment vars (in the `aruba-prod` environment):
+#   ARUBA_SSH_HOST           — VPS IP or hostname
+#   ARUBA_SSH_USER           — deploy user (member of docker group)
+#   ARUBA_SSH_PRIVATE_KEY    — SSH private key with access to the VPS
+#   ARUBA_COMPOSE_PATH       — absolute path on the VPS to docker-compose.demo.yml
+#                              (or whichever compose file the deploy uses)
+#   ARUBA_IMAGE_TAG          — optional image tag override (default: latest)
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (default: latest)"
+        required: false
+        default: latest
+      service:
+        description: "Compose service to update (api / pg_tileserv / mosquitto / all)"
+        required: false
+        default: api
+
+concurrency:
+  group: deploy-aruba
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment: aruba-prod
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: tag
+        run: |
+          tag="${{ github.event.inputs.image_tag }}"
+          tag="${tag:-${{ secrets.ARUBA_IMAGE_TAG }}}"
+          tag="${tag:-latest}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "Deploying image tag: ${tag}"
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.ARUBA_SSH_PRIVATE_KEY }}
+
+      - name: Add VPS host to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ secrets.ARUBA_SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Pull + restart on the VPS
+        env:
+          ARUBA_SSH_USER: ${{ secrets.ARUBA_SSH_USER }}
+          ARUBA_SSH_HOST: ${{ secrets.ARUBA_SSH_HOST }}
+          ARUBA_COMPOSE_PATH: ${{ secrets.ARUBA_COMPOSE_PATH }}
+          IMAGE_TAG: ${{ steps.tag.outputs.tag }}
+          SERVICE: ${{ github.event.inputs.service }}
+        run: |
+          ssh -o StrictHostKeyChecking=yes "${ARUBA_SSH_USER}@${ARUBA_SSH_HOST}" bash -se <<'REMOTE'
+          set -euo pipefail
+          cd "$(dirname "${ARUBA_COMPOSE_PATH}")"
+          compose_file="$(basename "${ARUBA_COMPOSE_PATH}")"
+
+          export LIMEN_API_IMAGE="ghcr.io/agent-engineering-studio/limen-api:${IMAGE_TAG}"
+          echo "[aruba] pulling ${LIMEN_API_IMAGE}"
+          docker pull "${LIMEN_API_IMAGE}"
+
+          if [ "${SERVICE}" = "all" ]; then
+            docker compose -f "${compose_file}" up -d
+          else
+            docker compose -f "${compose_file}" up -d --force-recreate "${SERVICE}"
+          fi
+
+          echo "[aruba] post-deploy status:"
+          docker compose -f "${compose_file}" ps
+          REMOTE
+
+      - name: Smoke probe via SSH (curl /ready)
+        env:
+          ARUBA_SSH_USER: ${{ secrets.ARUBA_SSH_USER }}
+          ARUBA_SSH_HOST: ${{ secrets.ARUBA_SSH_HOST }}
+        run: |
+          ssh "${ARUBA_SSH_USER}@${ARUBA_SSH_HOST}" \
+            'for i in $(seq 1 20); do \
+               if curl -sf http://localhost:8080/ready > /dev/null; then \
+                 echo "ready"; exit 0; \
+               fi; \
+               sleep 3; \
+             done; \
+             echo "/ready never returned 200"; exit 1'

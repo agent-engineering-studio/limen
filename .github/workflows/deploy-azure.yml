@@ -1,0 +1,81 @@
+name: deploy-azure
+
+# Documented Azure alternative: ship the API image to Azure Container
+# Registry (ACR) and roll a Container App revision. Manual gate.
+#
+# Required secrets / vars (in the `azure-prod` environment):
+#   AZURE_CREDENTIALS               — JSON output of `az ad sp create-for-rbac --sdk-auth`
+#   AZURE_RESOURCE_GROUP            — RG that hosts the Container App
+#   AZURE_CONTAINER_APP             — Container App name
+#   AZURE_REGISTRY                  — ACR login server (e.g. limen.azurecr.io)
+#   AZURE_REGISTRY_USERNAME         — ACR username
+#   AZURE_REGISTRY_PASSWORD         — ACR password / token
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to roll out (default: latest)"
+        required: false
+        default: latest
+
+concurrency:
+  group: deploy-azure
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment: azure-prod
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to ACR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.AZURE_REGISTRY }}
+          username: ${{ secrets.AZURE_REGISTRY_USERNAME }}
+          password: ${{ secrets.AZURE_REGISTRY_PASSWORD }}
+
+      - name: Build + push the API image to ACR
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/Dockerfile.api
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ secrets.AZURE_REGISTRY }}/limen-api:${{ github.event.inputs.image_tag }}
+            ${{ secrets.AZURE_REGISTRY }}/limen-api:sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Roll the Container App revision
+        run: |
+          az containerapp update \
+            --name "${{ secrets.AZURE_CONTAINER_APP }}" \
+            --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+            --image "${{ secrets.AZURE_REGISTRY }}/limen-api:${{ github.event.inputs.image_tag }}" \
+            --revision-suffix "sha-$(echo ${{ github.sha }} | cut -c1-8)"
+
+      - name: Wait until the new revision is healthy
+        run: |
+          for i in $(seq 1 24); do
+            state=$(az containerapp show \
+              --name "${{ secrets.AZURE_CONTAINER_APP }}" \
+              --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+              --query "properties.latestRevisionStatus" -o tsv)
+            echo "[azure] revision status: ${state}"
+            if [ "${state}" = "Running" ]; then exit 0; fi
+            sleep 10
+          done
+          echo "[azure] new revision never reached Running state"
+          exit 1

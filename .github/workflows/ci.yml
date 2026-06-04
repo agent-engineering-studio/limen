@@ -1,0 +1,145 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel superseded runs on the same branch so PR pushes don't pile up.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Backend — lint + type-check + tests with coverage gate ≥ 80 %.
+  # ---------------------------------------------------------------------------
+  backend:
+    name: backend (lint + mypy + pytest, cov ≥ 80%)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      UV_NO_PROGRESS: "1"
+      UV_LINK_MODE: copy
+    services:
+      # testcontainers spins its own PG, but we expose docker.sock for it.
+      # No extra service container needed.
+      noop:
+        image: busybox
+        options: --entrypoint /bin/true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.5.13"
+          enable-cache: true
+
+      - name: Install Python + deps
+        run: |
+          uv python install 3.12
+          uv sync --all-groups
+
+      - name: Ruff (lint)
+        run: uv run ruff check src tests
+
+      - name: Ruff (format check)
+        run: uv run ruff format --check src tests
+
+      - name: mypy --strict
+        run: uv run mypy
+
+      - name: pytest with coverage gate
+        run: uv run pytest --cov=limen --cov-report=term-missing -q
+
+  # ---------------------------------------------------------------------------
+  # Frontend — ESLint + Vitest + production build.
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: frontend (lint + vitest + build)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: npm ci
+        run: npm ci --no-audit --no-fund
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Vitest
+        run: npm test
+
+      - name: Vite build
+        run: npm run build
+
+  # ---------------------------------------------------------------------------
+  # API Docker image — buildx + GHCR push on main + tags.
+  # ---------------------------------------------------------------------------
+  docker:
+    name: docker (Dockerfile.api)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    needs: [backend, frontend]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Compute tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/limen-api
+          tags: |
+            type=sha,prefix=sha-
+            type=ref,event=branch
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build (+ push on main)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/Dockerfile.api
+          platforms: linux/amd64
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test — `limen serve` is the default CMD
+        if: github.event_name != 'push'
+        # Sanity-check the locally-built image: it should print the help.
+        run: |
+          docker buildx build \
+            --file infra/docker/Dockerfile.api \
+            --tag limen-api:ci \
+            --load \
+            .
+          docker run --rm limen-api:ci limen --version
