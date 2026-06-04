@@ -66,6 +66,10 @@ class StaticFactors(_Frozen):
     litho_weight: float | None = Field(default=None, ge=0.0, le=1.0)
     landuse_code: str | None = None
     pai_class_norm: float | None = Field(default=None, ge=0.0, le=1.0)
+    # Phase 12+ — ISPRA Mosaicatura Idraulica, mapped onto the same
+    # AA/P1..P4 ladder as PAI. NULL = unknown; the engine treats unknown
+    # as H = 0 (V1 baseline behaviour).
+    flood_hazard_norm: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class RainfallSample(_Frozen):

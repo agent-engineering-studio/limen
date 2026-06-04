@@ -124,9 +124,8 @@ def test_shipped_manifest_loads() -> None:
     assert "iffi_basilicata_piff_poly" in enabled
     # Dizionari JSONs must be enabled (the MCP iffi_query decodes via them).
     assert "iffi_dizionari_cause" in enabled
-    # Idraulica is shipped but disabled in V1.
-    by_name = {d.name: d for d in manifest.datasets}
-    assert by_name["idraulica"].enabled is False
+    # Phase 12+: idraulica is now enabled — feeds the engine's H component.
+    assert "idraulica" in enabled
 
 
 def test_shipped_manifest_every_url_is_official() -> None:

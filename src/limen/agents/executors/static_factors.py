@@ -18,6 +18,7 @@ SELECT c.cell_id,
        c.litho_weight, c.dist_faults_m,
        c.distance_to_iffi_m, c.iffi_density_500,
        c.pai_class_norm,
+       c.flood_hazard_norm,
        s.score AS susc_ispra
 FROM cell_static_factors c
 JOIN grid_cells g ON g.id = c.cell_id
@@ -59,6 +60,9 @@ class StaticFactorsExecutor(Executor):
                 landuse_code=r["landuse_code"],
                 pai_class_norm=(
                     float(r["pai_class_norm"]) if r["pai_class_norm"] is not None else None
+                ),
+                flood_hazard_norm=(
+                    float(r["flood_hazard_norm"]) if r["flood_hazard_norm"] is not None else None
                 ),
             )
 

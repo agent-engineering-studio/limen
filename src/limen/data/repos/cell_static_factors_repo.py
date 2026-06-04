@@ -34,6 +34,9 @@ class CellStaticFactors:
     distance_to_iffi_m: float | None = None
     iffi_density_500: float | None = None
     pai_class_norm: float | None = None
+    # Phase 12+: flood hazard from the ISPRA Mosaicatura Idraulica.
+    flood_hazard_class: str | None = None
+    flood_hazard_norm: float | None = None
     extras: dict[str, Any] | None = None
 
 
@@ -51,9 +54,10 @@ async def upsert_many(items: Iterable[CellStaticFactors]) -> int:
                     cell_id, slope_deg, aspect_deg, elevation_m, twi, curvature,
                     lithology, land_cover, landuse_code, litho_weight,
                     dist_faults_m, distance_to_iffi_m, iffi_density_500,
-                    pai_class_norm, extras
+                    pai_class_norm, flood_hazard_class, flood_hazard_norm, extras
                 ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                    $14, $15, $16, $17::jsonb
                 )
                 ON CONFLICT (cell_id) DO UPDATE
                 SET slope_deg    = COALESCE(EXCLUDED.slope_deg,
@@ -82,6 +86,10 @@ async def upsert_many(items: Iterable[CellStaticFactors]) -> int:
                                                 cell_static_factors.iffi_density_500),
                     pai_class_norm = COALESCE(EXCLUDED.pai_class_norm,
                                               cell_static_factors.pai_class_norm),
+                    flood_hazard_class = COALESCE(EXCLUDED.flood_hazard_class,
+                                                  cell_static_factors.flood_hazard_class),
+                    flood_hazard_norm  = COALESCE(EXCLUDED.flood_hazard_norm,
+                                                  cell_static_factors.flood_hazard_norm),
                     extras       = cell_static_factors.extras || EXCLUDED.extras,
                     updated_at   = now()
                 """,
@@ -99,6 +107,8 @@ async def upsert_many(items: Iterable[CellStaticFactors]) -> int:
                 it.distance_to_iffi_m,
                 it.iffi_density_500,
                 it.pai_class_norm,
+                it.flood_hazard_class,
+                it.flood_hazard_norm,
                 extras_json,
             )
     log.info("cell_static_factors.upsert_many", count=len(items_list))
@@ -118,7 +128,7 @@ async def get_for_cell(cell_id: str) -> CellStaticFactors | None:
             SELECT cell_id, slope_deg, aspect_deg, elevation_m, twi, curvature,
                    lithology, land_cover, landuse_code, litho_weight,
                    dist_faults_m, distance_to_iffi_m, iffi_density_500,
-                   pai_class_norm, extras
+                   pai_class_norm, flood_hazard_class, flood_hazard_norm, extras
             FROM cell_static_factors WHERE cell_id = $1
             """,
             cell_id,
@@ -143,5 +153,7 @@ async def get_for_cell(cell_id: str) -> CellStaticFactors | None:
         distance_to_iffi_m=row["distance_to_iffi_m"],
         iffi_density_500=row["iffi_density_500"],
         pai_class_norm=row["pai_class_norm"],
+        flood_hazard_class=row["flood_hazard_class"],
+        flood_hazard_norm=row["flood_hazard_norm"],
         extras=extras or {},
     )

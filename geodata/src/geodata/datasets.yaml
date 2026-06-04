@@ -30,10 +30,11 @@ datasets:
     url: https://idrogeo.isprambiente.it/opendata/wms/Mosaicatura_ISPRA_2020_aree_pericolosita_idraulica.zip
     format: shapefile-zip
     target: idraulica_hazard
-    enabled: false
+    enabled: true
     license: "CC-BY-4.0 (ISPRA IdroGEO, Mosaicatura 2020)"
-    # Imported but unused in V1 (out of landslide scope). The same
-    # pipeline will feed a future flood module.
+    # Phase 12+ — drives the deterministic engine's `H` (hydrology)
+    # component via `limen geodata export-features`. The AA/P1..P4
+    # ladder is the same as PAI, so the class normaliser is shared.
 
   # ---------------------------------------------------------------------
   # IFFI inventory — per region + geometry (Puglia + Basilicata pilot).

@@ -22,8 +22,9 @@ def test_filter_keeps_only_enabled_by_default() -> None:
     out = _filter_specs(manifest.datasets, only=None, region=None)
     names = {d.name for d in out}
     assert "pai_frane" in names
-    # idraulica is shipped disabled.
-    assert "idraulica" not in names
+    # All pilot datasets are enabled — idraulica was flipped to true in
+    # Phase 12+ to feed the engine's `H` (hydrology) component.
+    assert "idraulica" in names
 
 
 def test_filter_only_restricts_to_named_datasets() -> None:

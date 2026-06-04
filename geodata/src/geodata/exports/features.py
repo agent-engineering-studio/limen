@@ -51,6 +51,8 @@ class CellFeatureRow:
     pai_class_norm: float | None
     iffi_density_500: float | None
     distance_to_iffi_m: float | None
+    flood_hazard_class: str | None = None
+    flood_hazard_norm: float | None = None
 
 
 async def _operational_cells(op: asyncpg.Connection) -> list[tuple[str, str]]:
@@ -71,6 +73,14 @@ pai_intersect AS (
     FROM pai_landslide_hazard p, cell
     WHERE ST_Intersects(p.geom, cell.geom)
 ),
+flood_intersect AS (
+    -- Mirror of pai_intersect on the idraulica mosaic. The ladder is
+    -- the same AA/P1..P4 ISPRA convention, so the same class normaliser
+    -- (max_pai_norm) can be reused upstream.
+    SELECT i.hazard_class
+    FROM idraulica_hazard i, cell
+    WHERE ST_Intersects(i.geom, cell.geom)
+),
 buffer AS (
     -- 500 m buffer around the centroid using the geography type so the
     -- distance respects the WGS84 ellipsoid.
@@ -87,9 +97,10 @@ iffi_distance AS (
     FROM iffi_landslides i, cell_centroid c
 )
 SELECT
-    (SELECT array_agg(hazard_class) FROM pai_intersect) AS pai_classes,
-    (SELECT n FROM iffi_count)                          AS iffi_n,
-    (SELECT m FROM iffi_distance)                       AS iffi_distance_m
+    (SELECT array_agg(hazard_class) FROM pai_intersect)   AS pai_classes,
+    (SELECT array_agg(hazard_class) FROM flood_intersect) AS flood_classes,
+    (SELECT n FROM iffi_count)                            AS iffi_n,
+    (SELECT m FROM iffi_distance)                         AS iffi_distance_m
 """
 
 
@@ -105,6 +116,21 @@ def max_pai_norm(classes: list[str]) -> float | None:
     return best
 
 
+def most_severe_class(classes: list[str]) -> str | None:
+    """Pick the most-severe AA/P1..P4 label, ignoring unknown values."""
+    best: str | None = None
+    best_norm: float | None = None
+    for cls in classes:
+        key = str(cls).strip().upper()
+        norm = PAI_CLASS_NORMS.get(key)
+        if norm is None:
+            continue
+        if best_norm is None or norm > best_norm:
+            best_norm = norm
+            best = key
+    return best
+
+
 def iffi_density(*, count: int) -> float | None:
     if count <= 0:
         return None
@@ -116,6 +142,7 @@ async def _compute_features(
 ) -> CellFeatureRow:
     row = await geo.fetchrow(_GEO_FEATURE_SQL, cell_wkt)
     pai_classes = (row["pai_classes"] if row else None) or []
+    flood_classes = (row["flood_classes"] if row else None) or []
     iffi_n = int(row["iffi_n"] or 0) if row else 0
     return CellFeatureRow(
         cell_id=cell_id,
@@ -124,15 +151,18 @@ async def _compute_features(
         distance_to_iffi_m=(
             float(row["iffi_distance_m"]) if row and row["iffi_distance_m"] is not None else None
         ),
+        flood_hazard_class=most_severe_class(list(flood_classes)),
+        flood_hazard_norm=max_pai_norm(list(flood_classes)),
     )
 
 
 _UPSERT_OPERATIONAL_SQL = """
 INSERT INTO cell_static_factors (
     cell_id, pai_class_norm, iffi_density_500, distance_to_iffi_m,
+    flood_hazard_class, flood_hazard_norm,
     extras, updated_at
 )
-VALUES ($1, $2, $3, $4, '{}'::jsonb, now())
+VALUES ($1, $2, $3, $4, $5, $6, '{}'::jsonb, now())
 ON CONFLICT (cell_id) DO UPDATE
 SET pai_class_norm     = COALESCE(EXCLUDED.pai_class_norm,
                                   cell_static_factors.pai_class_norm),
@@ -140,6 +170,10 @@ SET pai_class_norm     = COALESCE(EXCLUDED.pai_class_norm,
                                   cell_static_factors.iffi_density_500),
     distance_to_iffi_m = COALESCE(EXCLUDED.distance_to_iffi_m,
                                   cell_static_factors.distance_to_iffi_m),
+    flood_hazard_class = COALESCE(EXCLUDED.flood_hazard_class,
+                                  cell_static_factors.flood_hazard_class),
+    flood_hazard_norm  = COALESCE(EXCLUDED.flood_hazard_norm,
+                                  cell_static_factors.flood_hazard_norm),
     updated_at         = now()
 """
 
@@ -167,6 +201,8 @@ async def export_cell_features(*, operational_dsn: str) -> int:
                         features.pai_class_norm,
                         features.iffi_density_500,
                         features.distance_to_iffi_m,
+                        features.flood_hazard_class,
+                        features.flood_hazard_norm,
                     )
                     written += 1
                 except Exception as exc:
@@ -194,4 +230,5 @@ __all__ = [
     "export_cell_features",
     "iffi_density",
     "max_pai_norm",
+    "most_severe_class",
 ]

@@ -13,8 +13,9 @@ The aggregation is the §2.4 weighted linear combination:
     risk = w_S · S + w_M · M + w_E · E + w_F · F + w_H · H
 
 with five-class classification using the cutoffs in
-:class:`ClassCutoffs`. ``H = 0`` in V1 (hydrology component arrives in
-V1.5+).
+:class:`ClassCutoffs`. ``H`` is the ISPRA Mosaicatura Idraulica flood
+class (Phase 12+); cells without a populated ``flood_hazard_norm``
+keep the V1 baseline ``H = 0``.
 """
 
 from __future__ import annotations
@@ -220,8 +221,16 @@ class MultiFactorScoringEngine:
             seismic=self._t.seismic,
         )
         f = post_fire_factor(bundle.dynamic.months_since_fire, post_fire=self._t.post_fire)
-        # H is always 0 in V1 (hydrology component lands V1.5+).
-        h = 0.0
+        # H (hydrology) is the ISPRA Mosaicatura Idraulica per-cell
+        # flood-hazard class, mapped through the same AA/P1..P4 ladder
+        # as PAI. NULL ⇒ keeps the V1 baseline `h = 0` so behaviour is
+        # byte-identical for operational DBs not yet exported from
+        # the geodata stack.
+        h = (
+            _clamp01(bundle.static.flood_hazard_norm)
+            if bundle.static.flood_hazard_norm is not None
+            else 0.0
+        )
 
         k_value, k_breakdown = compute_kinematic(
             bundle.dynamic.sensor_features,
