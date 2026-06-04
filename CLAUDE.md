@@ -1,15 +1,14 @@
 # Limen — Claude Code project guide
 
 > AI multi-factor landslide-risk monitoring for the Italian territory.
-> Pilot: **Puglia + Basilicata**. Current state: **V2 — ML engine
-> available, V1 still champion** — V1 prototype (Phases 0–8) +
-> V1.5 in-situ IoT (Phase 9) + Phase 10: scoring-engine Protocol,
-> training pipeline (Optuna + LightGBM + isotonic + SHAP + MLflow),
-> champion-challenger shadow mode, EGMS InSAR aggregates, ONNX-served
-> DL rainfall sub-model, drift monitoring + retraining triggers.
-> The deterministic V1 engine is still the production champion until
-> a ML challenger clears the promotion gate.
-> See `README.md` and `docs/ml.md` for full context.
+> Pilot: **Puglia + Basilicata**. Current state: **V2.x — KG grounding
+> available** — V1 prototype (Phases 0–8) + V1.5 in-situ IoT (Phase 9)
+> + V2 ML stack (Phase 10) + Phase 11: advisory knowledge-graph
+> grounding via the team's `knowledge-graph` sidecar. The
+> deterministic V1 engine is still the production champion, ML is
+> available as a drop-in challenger, and the KG layer enriches the
+> Italian briefing with citations without ever touching numeric scores.
+> See `README.md`, `docs/ml.md` and `docs/grounding.md`.
 
 ---
 
@@ -63,6 +62,9 @@
 | Shadow never mutates state | `ShadowChallengerExecutor` writes to `model_runs` only; `cell_results` / `assessment` / alerts remain authoritative to the champion. Persistence failures in the shadow are swallowed. |
 | No spatial leakage | Training uses spatial-block CV (round-robin partition over a coarse degree grid). Random splits are forbidden — the feature store assigns `split_block` at extraction time. |
 | Promotion gate is operator-driven | `limen train` sets a `promoted` MLflow tag; transitioning the model version to a stage is a manual `mlflow models transition-stage` call. Auto-promotion is forbidden. |
+| KG is advisory only | The knowledge-graph sidecar enriches briefings with citations; it NEVER alters numeric scoring. `BriefingAgent` launches the KG task concurrently with the LLM and accepts an empty result on any failure. KG-down ⇒ briefing still emits, scores unchanged. |
+| KG short timeout | `KG__TIMEOUT_SECONDS` (default 3s) is the per-call ceiling. `GroundingService.ground()` wraps it in a defensive `asyncio.wait_for`; an unhealthy sidecar can never extend the briefing's total wall time. |
+| KG cache by (region, mechanism) | Same `(region, mechanism)` inside the TTL ⇒ same cached citations; different `top_k` requests reuse the cached set sliced client-side. Empty results are cached too, so an un-ingested sidecar doesn't generate repeat traffic. |
 
 ---
 

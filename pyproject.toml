@@ -214,6 +214,10 @@ omit = [
     "*/api/jobs/iot_partition_rollover.py",
     "*/cli/train.py",
     "*/cli/sync_egms.py",
+    # KG ingestion talks to a sidecar over HTTP — covered by the CLI
+    # integration job, not by the local unit suite.
+    "*/cli/ingest_kb.py",
+    "*/knowledge/ingest.py",
 ]
 
 [tool.coverage.report]

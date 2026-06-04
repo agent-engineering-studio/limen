@@ -6,6 +6,64 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0-v2.x] — 2026-06-04 — KG grounding (V2.x)
+
+Phase 11 — adds the **advisory** knowledge-graph grounding layer. The
+deterministic V1 engine and the V2 ML champion's numeric outputs are
+NEVER affected; this layer only enriches the Italian briefing with
+citations drawn from the team's `knowledge-graph` sidecar.
+
+### Added
+
+* `KgSettings` — off by default. Knobs: `enabled`, `base_url`,
+  `thread_id` (default `landslide-kb`), `timeout_seconds` (default 3s),
+  `cache_ttl_seconds`, optional bearer token, `top_k`.
+* `limen.knowledge.ontology` — landslide-domain ontology (§2.8):
+  Paper / Author / RainfallThreshold / TriggerMechanism / LandslideType
+  / Lithology / Region / Area / HistoricalEvent / NormativePlan and the
+  six relations (DEFINES_THRESHOLD / VALID_FOR_REGION / TRIGGERED_BY /
+  DOCUMENTED_IN / OCCURRED_IN / SUPPORTS_PARAMETER). Versioned bundle
+  shipped to the sidecar at ingest time.
+* `limen.knowledge.schema` — narrow Pydantic v2 payloads for
+  `POST /ingest` (`IngestDocument`, `IngestRequest`) and `POST /query`
+  (`GroundingQuery`, `Passage`, `GroundingResult`). `extra=forbid` so
+  sidecar API drift surfaces as a validation error, not silent breakage.
+* `limen.knowledge.ingest` + `limen ingest-kb` CLI — offline-batch
+  loader walking a corpus directory (suffix-to-kind mapping for paper /
+  PAI / ISPRA / IFFI event / past briefings), idempotent via the
+  sidecar's natural-key dedup + Limen's `dataset_versions` content hash.
+* `limen.agents.grounding.kg_client.KgClient` — REST wrapper over
+  `POST /query`; every failure path returns an empty result.
+* `limen.agents.grounding.service.GroundingService` —
+  `(region, mechanism)` cache layer over `app_cache`. Different
+  `top_k` requests reuse the same cached set sliced client-side.
+  Empty results are cached so an un-ingested sidecar doesn't generate
+  repeat traffic.
+* `limen.agents.grounding.format.format_citations` — deterministic
+  Markdown citation block in Italian appended *after* the 250-word
+  narrative (citations sit outside the word count).
+* `BriefingAgent` accepts an optional `grounding: GroundingService`:
+  launches the KG task **concurrently** with the LLM call so total
+  latency stays at `max(LLM, kg.timeout_seconds)`; cancels the task
+  on any LLM failure; splices citations onto every success / trim /
+  retry return path.
+* `WorkflowDeps.grounding_service` + `AppDependencies.grounding_service`
+  + lifespan wiring — KG service is built only when `kg.enabled`.
+* `infra/docker/docker-compose.demo.yml` — new `kg` profile + LLM
+  provider coherence env-threading (§3.7).
+* `docs/grounding.md` + `.env.example` `KG__*` block.
+
+### Tests
+
+* +20 unit (KG client happy-path / 5xx / timeout / decode error / top_k
+  cap / query payload shape; service cache key stability across top_k
+  and case-insensitive region; cache hit on second identical query;
+  empty result cached; different mechanism misses separately; briefing
+  without grounding has no citations; briefing with grounding up has
+  citations; KG timeout doesn't leak into critical path (<1s); KG
+  disabled bypasses entirely; briefing without analysis skips KG; KG
+  failure during LLM-fail path doesn't block fallback).
+
 ## [0.3.0-v2] — 2026-06-04 — ML engine & MLOps (V2)
 
 Phase 10 — adds the V2 ML engine, training pipeline, EGMS InSAR
