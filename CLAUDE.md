@@ -1,14 +1,15 @@
 # Limen — Claude Code project guide
 
 > AI multi-factor landslide-risk monitoring for the Italian territory.
-> Pilot: **Puglia + Basilicata**. Current state: **V2.x — KG grounding
+> Pilot: **Puglia + Basilicata**. Current state: **Geo-Data Service
 > available** — V1 prototype (Phases 0–8) + V1.5 in-situ IoT (Phase 9)
-> + V2 ML stack (Phase 10) + Phase 11: advisory knowledge-graph
-> grounding via the team's `knowledge-graph` sidecar. The
-> deterministic V1 engine is still the production champion, ML is
-> available as a drop-in challenger, and the KG layer enriches the
-> Italian briefing with citations without ever touching numeric scores.
-> See `README.md`, `docs/ml.md` and `docs/grounding.md`.
+> + V2 ML stack (Phase 10) + KG grounding (Phase 11) + Phase 12:
+> opt-in `geodata` compose profile with its own PostGIS, ISPRA dataset
+> ingestion, per-cell-feature export to the operational DB, PMTiles
+> for the map, and the `ispra-geo` MCP server. The deterministic V1
+> engine is still the production champion; everything new stays out
+> of the hourly critical path. See `README.md`, `docs/ml.md`,
+> `docs/grounding.md`, and `docs/geodata.md`.
 
 ---
 
@@ -65,6 +66,12 @@
 | KG is advisory only | The knowledge-graph sidecar enriches briefings with citations; it NEVER alters numeric scoring. `BriefingAgent` launches the KG task concurrently with the LLM and accepts an empty result on any failure. KG-down ⇒ briefing still emits, scores unchanged. |
 | KG short timeout | `KG__TIMEOUT_SECONDS` (default 3s) is the per-call ceiling. `GroundingService.ground()` wraps it in a defensive `asyncio.wait_for`; an unhealthy sidecar can never extend the briefing's total wall time. |
 | KG cache by (region, mechanism) | Same `(region, mechanism)` inside the TTL ⇒ same cached citations; different `top_k` requests reuse the cached set sliced client-side. Empty results are cached too, so an un-ingested sidecar doesn't generate repeat traffic. |
+| Geodata is VPS-only | The `geodata` compose profile runs **only** on the Aruba VPS / dedicated host — never on Neon, never on the operational API process. Activate explicitly: `docker compose --profile geodata up`. |
+| Geodata image carries no data | The Docker image bundles Python + GDAL/PROJ + tippecanoe + the code. Datasets land in the named PostGIS volume at first `limen geodata init`. Verify with `docker image inspect` — image size ≪ data size. |
+| Geodata never in critical path | The operational API reads pre-computed numeric per-cell features. `limen geodata export-features` ships those across with one upsert per cell. The MCP server is for agents; nothing in the hourly scoring path waits on it. |
+| Geodata is self-contained | `geodata/` is a uv workspace member designed to be extracted into a standalone repo with one `mv`. Nothing in `geodata.*` imports from `limen.*`; Prompt-2 parsers are duplicated in `geodata/parsers.py`. |
+| Geodata URLs are official | The manifest schema refuses any URL outside `https://idrogeo.isprambiente.it/` by construction. To add a dataset, edit `datasets.yaml` (single source of truth) — no code change required. |
+| MCP refresh is admin-only | The `refresh` tool requires `MCP_ADMIN_TOKEN`. Env var **unset** = refresh disabled (fail-closed). |
 
 ---
 

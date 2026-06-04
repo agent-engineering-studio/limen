@@ -207,7 +207,7 @@ markers = [
 
 [tool.coverage.run]
 branch = true
-source = ["src/limen"]
+source = ["src/limen", "geodata/src/geodata"]
 omit = [
     # Argparse dispatchers + uvicorn process wrappers — exercised by the
     # CLI integration smoke tests but not granularly counted.
@@ -242,6 +242,18 @@ omit = [
     # integration job, not by the local unit suite.
     "*/cli/ingest_kb.py",
     "*/knowledge/ingest.py",
+    # Geodata workspace member runs against its own VPS PostGIS and the
+    # tippecanoe / pyogrio system stack — separate integration job.
+    # Local unit suite exercises the pure logic (manifest, parsers,
+    # exports aggregators, MCP tool argument validation).
+    "*/cli/geodata.py",
+    "*/geodata/__init__.py",
+    "*/geodata/cli.py",
+    "*/geodata/db.py",
+    "*/geodata/init/*",
+    "*/geodata/exports/features.py",
+    "*/geodata/exports/pmtiles.py",
+    "*/geodata/mcp/server.py",
 ]
 
 [tool.coverage.report]

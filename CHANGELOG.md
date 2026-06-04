@@ -6,6 +6,74 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0-geodata] — 2026-06-04 — Geo-Data Service + ispra-geo MCP (Phase 12)
+
+Phase 12 — adds the **opt-in** `geodata` compose profile per
+§3.3.4-ter. Dedicated VPS-only stack that downloads heavy ISPRA
+datasets into its own PostGIS volume and serves them three ways:
+per-cell features for the operational DB (Neon stays light), PMTiles
+for the map (zero DB load at view time), and an `ispra-geo` MCP
+server for agents (read-only + admin-guarded refresh). Never on
+Neon, never in the hourly critical path.
+
+### Added
+
+* New top-level workspace member `geodata/` (`limen-geodata` 0.1.0)
+  — self-contained Python package, designed to be extractable into
+  a standalone repo with a one-directory move (`from geodata.* import`
+  never depends on `limen.*`).
+* `geodata.manifest` — Pydantic v2 schema that refuses any URL
+  outside `https://idrogeo.isprambiente.it/` by construction, plus
+  the shipped `datasets.yaml` covering the national PAI mosaic,
+  per-region IFFI ZIPs (Puglia + Basilicata × line/poly/aree/dgpv),
+  the IFFI Dizionari JSONs, and the disabled flood `idraulica` entry.
+* `geodata.init` — streaming downloader (httpx + tenacity, retries
+  5xx/429/transport, no full file in memory), `safe_unzip` (refuses
+  path-traversal + absolute paths + symlinks), format-specific
+  pyogrio importers (PAI / IFFI shapefiles + Dizionari JSONs), and
+  a runner with `--only` / `--region` / `--force` / `--dry-run`.
+  Per-dataset failures never abort the others.
+* `geodata.db` — own PostGIS DDL (`dataset_versions`,
+  `pai_landslide_hazard`, `idraulica_hazard`, `iffi_landslides`,
+  `iffi_lookup_*`) + idempotent schema bootstrap + skip-if-unchanged
+  checksum lookup.
+* `geodata.exports.features` — `limen geodata export-features --to
+  <dsn>` upserts `pai_class_norm` + `iffi_density_500` +
+  `distance_to_iffi_m` into the operational `cell_static_factors`.
+  Only numeric columns cross the wire; Neon stays light.
+* `geodata.exports.pmtiles` — `limen geodata make-pmtiles` streams
+  GeoJSON FeatureCollections (asyncpg cursor with prefetch) and
+  shells out to `tippecanoe` for `.pmtiles` per layer.
+* `geodata.mcp` — `ispra-geo` FastMCP server with five tools:
+  `hazard_at`, `iffi_query` (decodes `movement_type` via the
+  Dizionario), `pai_summary` (km² area via geodesic), `dataset_status`,
+  and admin-token-guarded `refresh`. `stdio` + `http` transports.
+* `limen geodata` nested CLI dispatcher (`list / init / export-features
+  / make-pmtiles / mcp`). Lazy-imports `geodata.*` so the main CLI
+  doesn't pull pyogrio / fastmcp.
+* `geodata/Dockerfile` — small image (no data baked in) carrying
+  Python + GDAL/PROJ + tippecanoe.
+* `infra/docker/docker-compose.geodata.yml` — `geodata` profile with
+  `geodata-db` (port 55432), `geodata-init` (one-shot), `ispra-geo-mcp`
+  (HTTP 8765). Resource limits + healthchecks + opt-in profile.
+* `geodata/claude_desktop_config.example.json` — drop-in Claude
+  Desktop entry pointing at `limen geodata mcp --transport stdio`.
+* `docs/geodata.md` — full operator guide.
+
+### Tests
+
+* +72 unit: manifest schema (unofficial-URL refusal, duplicate-name
+  guard, region filter, name pattern), parser aliasing + PAI class
+  normalisation + defensive shape, downloader streaming + 5xx retry
+  + safe-unzip path-traversal / absolute-path / directory entries,
+  runner filter (only / region / combined / dry-run / no-target),
+  export feature aggregation (PAI ladder monotonicity, most-severe
+  selector, IFFI density saturation, GeoJSON feature serialisation),
+  MCP tools (lat/lon range, lon/lat ordering, region normalisation,
+  Dizionario JOIN, SQL shape, admin-token gate truth table, refresh
+  permission errors). 279 unit total green; mypy --strict clean;
+  ruff clean.
+
 ## [0.4.0-v2.x] — 2026-06-04 — KG grounding (V2.x)
 
 Phase 11 — adds the **advisory** knowledge-graph grounding layer. The

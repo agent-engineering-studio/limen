@@ -1,0 +1,121 @@
+# Limen — Geo-Data Service stack (§3.3.4-ter).
+#
+# This file is OPT-IN: it activates only when invoked with the
+# `geodata` profile, so the default dev / demo compose runs never
+# start it. Deploy it ONLY on the Aruba VPS (or any single host) —
+# never on Neon.
+#
+#   docker compose -f infra/docker/docker-compose.geodata.yml \
+#     --profile geodata up -d
+#
+# Services:
+#
+#   geodata-db        — dedicated Postgres+PostGIS for the ISPRA data.
+#                       Named volume `limen-geodata-pgdata`.
+#   geodata-init      — one-shot job that runs `limen geodata init`.
+#                       Re-running is a no-op when checksums match.
+#   ispra-geo-mcp     — FastMCP server (`ispra-geo`) exposed on HTTP.
+#                       Read-only except for the admin-token-guarded
+#                       `refresh` tool.
+#
+# Optional output volume `limen-geodata-pmtiles` is shared with the
+# main API / nginx / Caddy so the static .pmtiles produced by
+# `limen geodata make-pmtiles` are served without DB load at view time.
+
+name: limen-geodata
+
+services:
+
+  geodata-db:
+    build:
+      context: ../postgres
+      dockerfile: Dockerfile.db
+    image: limen/postgres:16-3.5
+    container_name: limen-geodata-db
+    restart: unless-stopped
+    profiles: ["geodata"]
+    environment:
+      POSTGRES_USER: geodata
+      POSTGRES_PASSWORD: geodata
+      POSTGRES_DB: geodata
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      # Bind to a non-default port to avoid collision with the
+      # operational Postgres on the same host.
+      - "55432:5432"
+    volumes:
+      - limen-geodata-pgdata:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U geodata -d geodata"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  geodata-init:
+    build:
+      context: ../..
+      dockerfile: geodata/Dockerfile
+    image: limen/geodata:0.1
+    container_name: limen-geodata-init
+    restart: "no"
+    profiles: ["geodata"]
+    depends_on:
+      geodata-db:
+        condition: service_healthy
+    environment:
+      GEODATA_DB_DSN: postgresql://geodata:geodata@geodata-db:5432/geodata
+      GEODATA_GEOJSON_DIR: /var/lib/geodata/geojson
+      GEODATA_PMTILES_DIR: /var/lib/geodata/pmtiles
+      LOG_JSON: "true"
+    command: ["geodata", "init"]
+    volumes:
+      - limen-geodata-pmtiles:/var/lib/geodata/pmtiles
+      - limen-geodata-geojson:/var/lib/geodata/geojson
+    deploy:
+      resources:
+        limits:
+          memory: 1500m
+
+  ispra-geo-mcp:
+    build:
+      context: ../..
+      dockerfile: geodata/Dockerfile
+    image: limen/geodata:0.1
+    container_name: limen-ispra-geo-mcp
+    restart: unless-stopped
+    profiles: ["geodata"]
+    depends_on:
+      geodata-db:
+        condition: service_healthy
+    environment:
+      GEODATA_DB_DSN: postgresql://geodata:geodata@geodata-db:5432/geodata
+      # Set this to enable the `refresh` MCP tool. Leave UNSET to keep
+      # refresh disabled (read-only deployment).
+      MCP_ADMIN_TOKEN: ${MCP_ADMIN_TOKEN:-}
+      LOG_JSON: "true"
+    command: ["geodata", "mcp", "--transport", "http"]
+    ports:
+      - "8765:8765"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8765/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+volumes:
+  limen-geodata-pgdata:
+    name: limen-geodata-pgdata
+  limen-geodata-pmtiles:
+    name: limen-geodata-pmtiles
+  limen-geodata-geojson:
+    name: limen-geodata-geojson
