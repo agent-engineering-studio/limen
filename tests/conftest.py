@@ -127,3 +127,67 @@ async def clean_cache(pg_pool: asyncpg.Pool) -> AsyncIterator[None]:
         with contextlib.suppress(Exception):
             await conn.execute("TRUNCATE app_cache")
     yield
+
+
+# ---------------------------------------------------------------------------
+# Geo-Data Service (Phase 12) — separate PostGIS container.
+#
+# The geodata stack runs on its own DB on the VPS (port 55432 in
+# production); locally we spin up a second testcontainers Postgres so the
+# two schemas never collide. The `geodata_conn` fixture truncates the
+# geodata tables on entry, so individual tests get a clean slate without
+# rebuilding the schema.
+# ---------------------------------------------------------------------------
+_GEODATA_TABLES = (
+    "dataset_versions",
+    "pai_landslide_hazard",
+    "idraulica_hazard",
+    "iffi_landslides",
+    "iffi_lookup_causes",
+    "iffi_lookup_movements",
+    "iffi_lookup_lithology",
+)
+
+
+@pytest.fixture(scope="session")
+def geodata_postgres_container() -> Iterator[str]:
+    """Second Postgres+PostGIS testcontainer dedicated to the geodata service."""
+    pytest.importorskip("testcontainers.postgres")
+    from testcontainers.postgres import PostgresContainer
+
+    container = PostgresContainer(
+        image=POSTGIS_IMAGE, username="geodata", password="geodata", dbname="geodata"
+    )
+    container.start()
+    try:
+        dsn = container.get_connection_url()
+        dsn = dsn.replace("postgresql+psycopg2://", "postgresql://")
+        dsn = dsn.replace("postgresql+psycopg://", "postgresql://")
+        yield dsn
+    finally:
+        container.stop()
+
+
+@pytest.fixture()
+async def geodata_conn(
+    geodata_postgres_container: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> AsyncIterator[asyncpg.Connection]:
+    """Yield a clean asyncpg connection to the geodata container.
+
+    Ensures the schema exists, truncates every geodata table, and rewires
+    ``GEODATA_DB_DSN`` so ``geodata.db.connect()`` reaches the same
+    container in the same test.
+    """
+    import asyncpg as _asyncpg
+
+    from geodata.db import GEODATA_DSN_ENV, ensure_schema
+
+    monkeypatch.setenv(GEODATA_DSN_ENV, geodata_postgres_container)
+    conn = await _asyncpg.connect(geodata_postgres_container)
+    try:
+        await ensure_schema(conn)
+        await conn.execute(f"TRUNCATE {', '.join(_GEODATA_TABLES)} RESTART IDENTITY CASCADE")
+        yield conn
+    finally:
+        await conn.close()

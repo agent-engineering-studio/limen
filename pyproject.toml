@@ -71,6 +71,13 @@ dev = [
 storage = [
     "boto3>=1.35",
 ]
+mcp = [
+    # FastMCP — required to actually run the `ispra-geo` MCP server in
+    # `geodata/`. The geodata workspace member also declares this in its
+    # own optional-deps, but `uv sync --extra mcp` reads from this root
+    # pyproject when building the geodata Docker image.
+    "fastmcp>=0.4",
+]
 ml = [
     "lightgbm>=4.5",
     "scikit-learn>=1.5",

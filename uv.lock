@@ -2079,6 +2079,9 @@ dl = [
     { name = "onnx" },
     { name = "torch" },
 ]
+mcp = [
+    { name = "fastmcp" },
+]
 ml = [
     { name = "lightgbm" },
     { name = "mlflow" },
@@ -2137,6 +2140,7 @@ dl = [
     { name = "onnx", specifier = ">=1.17" },
     { name = "torch", specifier = ">=2.4" },
 ]
+mcp = [{ name = "fastmcp", specifier = ">=0.4" }]
 ml = [
     { name = "lightgbm", specifier = ">=4.5" },
     { name = "mlflow", specifier = ">=2.16" },
