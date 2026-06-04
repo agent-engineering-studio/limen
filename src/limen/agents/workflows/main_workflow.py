@@ -32,14 +32,17 @@ from limen.agents.executors import (
     RiskScoringExecutor,
     SeismicCheckExecutor,
     SensorFetchExecutor,
+    ShadowChallengerExecutor,
     StaticFactorsExecutor,
 )
 from limen.agents.llm_factory.base import LlmClientFactory
 from limen.agents.workflow_runtime.builder import Workflow, WorkflowBuilder
 from limen.agents.workflow_runtime.executor import Executor, handler
-from limen.config.settings import Settings, get_settings
+from limen.config.settings import ScoringMode, Settings, get_settings
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
+from limen.core.scoring.base import ScoringEngine
+from limen.core.scoring.resolver import resolve_challenger, resolve_scoring_engine
 from limen.notifications.dispatcher import NotificationDispatcher
 
 log = get_logger(__name__)
@@ -54,6 +57,13 @@ class WorkflowDeps:
     notification_dispatcher: NotificationDispatcher | None = None
     """Optional :class:`NotificationDispatcher`. When ``None`` the alert
     executor falls back to logging only (V1 stub behaviour)."""
+    scoring_engine: ScoringEngine | None = None
+    """V2 — when set, the workflow's authoritative scoring uses this
+    instance. When ``None`` we resolve from settings (V1 default)."""
+    challenger_engine: ScoringEngine | None = None
+    """V2 — shadow challenger. When set and ``settings.scoring.mode`` is
+    ``shadow``, the workflow runs it in parallel and logs to ``model_runs``
+    without touching ``cell_results``/``assessment``."""
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +142,11 @@ def build_landslide_workflow(
     )
     settings = deps.settings
 
+    champion = deps.scoring_engine or resolve_scoring_engine(settings=settings)
+    challenger = deps.challenger_engine
+    if challenger is None and settings.scoring.mode is ScoringMode.SHADOW:
+        challenger = resolve_challenger(settings=settings)
+
     builder = (
         WorkflowBuilder("limen-landslide-v1")
         .add(AreaResolverExecutor(cell_limit=cell_limit))
@@ -148,9 +163,14 @@ def build_landslide_workflow(
     sensor = SensorFetchExecutor()
     builder = builder.add_if(lambda ctx: bool(getattr(ctx, "enable_insitu", False)), sensor)
 
+    builder = builder.add(RiskScoringExecutor(engine=champion))
+    if challenger is not None:
+        # The shadow executor runs AFTER the champion has computed
+        # cell_results — it sees the same bundles but never touches the
+        # authoritative state. Persisting to model_runs is best-effort.
+        builder = builder.add(ShadowChallengerExecutor(challenger))
     builder = (
-        builder.add(RiskScoringExecutor())
-        .add(EscalationGateExecutor())
+        builder.add(EscalationGateExecutor())
         .add(RiskAnalystNode(deps.llm_factory))
         .add(BriefingNode(deps.llm_factory))
         .add(PersistResultExecutor())
@@ -162,6 +182,9 @@ def build_landslide_workflow(
         steps=builder.build().step_count,
         enable_insitu=settings.enable_insitu,
         llm_provider=deps.llm_factory.provider,
+        scoring_engine=type(champion).__name__,
+        scoring_mode=settings.scoring.mode.value,
+        challenger=type(challenger).__name__ if challenger is not None else None,
     )
     return builder.build()
 

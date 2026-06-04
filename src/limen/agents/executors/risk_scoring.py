@@ -19,6 +19,7 @@ from limen.core.models.context import (
     MonitoringContext,
 )
 from limen.core.models.risk import RiskLevel
+from limen.core.scoring.base import ScoringEngine
 from limen.core.scoring.engine import MultiFactorScoringEngine
 from limen.core.scoring.regional_thresholds import (
     RegionalThresholds,
@@ -46,12 +47,17 @@ class RiskScoringExecutor(Executor):
         self,
         *,
         thresholds: RegionalThresholds | None = None,
+        engine: ScoringEngine | None = None,
         top_k: int = 10,
         macroregion: str = "italy_default",
     ) -> None:
         super().__init__(name="RiskScoring")
         self._thresholds = thresholds or load_regional_thresholds()
-        self._engine = MultiFactorScoringEngine(self._thresholds)
+        # ``engine`` lets the workflow inject the resolver-selected engine
+        # (V1 by default, V2 ML when promoted). Without an injection we
+        # fall back to the deterministic engine — the V1 champion stays
+        # the only behaviour any consumer sees by default.
+        self._engine: ScoringEngine = engine or MultiFactorScoringEngine(self._thresholds)
         self._top_k = top_k
         self._macroregion = macroregion
 

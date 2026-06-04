@@ -15,6 +15,7 @@ from limen.agents.executors.persist_result import PersistResultExecutor
 from limen.agents.executors.risk_scoring import RiskScoringExecutor
 from limen.agents.executors.seismic_check import SeismicCheckExecutor
 from limen.agents.executors.sensor_fetch import SensorFetchExecutor
+from limen.agents.executors.shadow_challenger import ShadowChallengerExecutor
 from limen.agents.executors.static_factors import StaticFactorsExecutor
 
 __all__ = [
@@ -27,5 +28,6 @@ __all__ = [
     "RiskScoringExecutor",
     "SeismicCheckExecutor",
     "SensorFetchExecutor",
+    "ShadowChallengerExecutor",
     "StaticFactorsExecutor",
 ]

@@ -18,11 +18,13 @@ from fastapi import Depends, Request
 
 from limen.agents.llm_factory.base import LlmClientFactory
 from limen.config.settings import Settings, get_settings
+from limen.core.scoring.base import ScoringEngine
 from limen.core.scoring.engine import MultiFactorScoringEngine
 from limen.core.scoring.regional_thresholds import (
     RegionalThresholds,
     load_regional_thresholds,
 )
+from limen.core.scoring.resolver import resolve_challenger, resolve_scoring_engine
 from limen.data.caching.postgres_cache import DistributedCache, PostgresCache
 from limen.data.object_store import ObjectStore, build_object_store
 from limen.notifications.dispatcher import (
@@ -48,6 +50,11 @@ class AppDependencies:
     thresholds: RegionalThresholds
     engine: MultiFactorScoringEngine
     notification_dispatcher: NotificationDispatcher
+    # V2 — the resolved engine (V1 by default, V2 when promoted) + the
+    # shadow challenger. The workflow injects both into its scoring
+    # executors via the settings-driven resolver.
+    scoring_engine: ScoringEngine | None = None
+    challenger_engine: ScoringEngine | None = None
 
     @classmethod
     async def build(
@@ -74,6 +81,11 @@ class AppDependencies:
         factory = llm_factory or resolve_llm_factory(s)
         thresholds = load_regional_thresholds()
         dispatcher = notification_dispatcher or build_default_dispatcher(s.notifications)
+        # The resolver returns the V1 engine on any failure — the V2 ML
+        # engine is opt-in via SCORING__ENGINE=ml AND a successfully
+        # registered MLflow model.
+        champion = resolve_scoring_engine(settings=s, thresholds=thresholds)
+        challenger = resolve_challenger(settings=s, thresholds=thresholds)
 
         return cls(
             settings=s,
@@ -84,6 +96,8 @@ class AppDependencies:
             thresholds=thresholds,
             engine=MultiFactorScoringEngine(thresholds),
             notification_dispatcher=dispatcher,
+            scoring_engine=champion,
+            challenger_engine=challenger,
         )
 
     def build_workflow(self, *, cell_limit: int | None = None) -> Workflow:
@@ -98,6 +112,8 @@ class AppDependencies:
                 llm_factory=self.llm_factory,
                 settings=self.settings,
                 notification_dispatcher=self.notification_dispatcher,
+                scoring_engine=self.scoring_engine,
+                challenger_engine=self.challenger_engine,
             ),
             cell_limit=cell_limit,
         )
