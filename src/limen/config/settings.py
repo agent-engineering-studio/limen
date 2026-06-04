@@ -337,6 +337,34 @@ class MonitoringSettings(BaseSettings):
     enable_drift_monitoring: bool = False
 
 
+class KgSettings(BaseSettings):
+    """Knowledge-graph sidecar (V2.x advisory grounding).
+
+    Off by default. The deterministic scoring path runs unchanged when
+    the KG is disabled; with it enabled, the BriefingAgent calls the
+    sidecar via :mod:`limen.agents.grounding.kg_client` with a short
+    timeout and caches results in ``app_cache``. KG failures NEVER
+    block the workflow and NEVER alter numeric scores.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    enabled: bool = False
+    # REST endpoint of the knowledge-graph FastAPI service (the project's
+    # sidecar). MCP is also supported via the same transport layer.
+    base_url: str = "http://localhost:8000"
+    # Stable thread id under which the landslide corpus is ingested.
+    thread_id: str = "landslide-kb"
+    # Short timeout — the briefing must NEVER stall on KG latency.
+    timeout_seconds: float = Field(default=3.0, gt=0.0, le=30.0)
+    # How long a (region, mechanism) grounding result stays cached.
+    cache_ttl_seconds: int = Field(default=3600, ge=60, le=86_400)
+    # Optional bearer token for the KG sidecar (None ⇒ unauthenticated).
+    api_token: SecretStr | None = None
+    # Top-K passages to ask for; the BriefingAgent surfaces the first N.
+    top_k: int = Field(default=4, ge=1, le=20)
+
+
 class AlertSettings(BaseSettings):
     """Alert-dispatch rules used by the AlertDispatchExecutor."""
 
@@ -376,6 +404,7 @@ class Settings(BaseSettings):
     training: TrainingSettings = Field(default_factory=TrainingSettings)
     egms: EgmsSettings = Field(default_factory=EgmsSettings)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
+    kg: KgSettings = Field(default_factory=KgSettings)
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_json: bool = False
