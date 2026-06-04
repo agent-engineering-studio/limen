@@ -1,0 +1,16 @@
+apiVersion: 1
+
+# Limen's curated dashboards land here at boot. Anything dropped into
+# the dashboards directory becomes a separate dashboard automatically.
+
+providers:
+  - name: limen
+    orgId: 1
+    folder: Limen
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      path: /otel-lgtm/grafana/dashboards
+      foldersFromFilesStructure: false

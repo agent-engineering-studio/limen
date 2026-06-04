@@ -1,0 +1,41 @@
+# Limen observability stack (Phase 8) — Grafana LGTM bundle.
+#
+# A single `grafana/otel-lgtm` container ships Grafana + Loki +
+# Tempo + Mimir/Prometheus + an OpenTelemetry collector listening on
+# the standard OTLP HTTP port (4318) and OTLP gRPC port (4317). The
+# Limen API points OTEL_EXPORTER_OTLP_ENDPOINT at this stack.
+#
+# Run alongside the demo stack:
+#   docker compose \
+#     -f infra/docker/docker-compose.demo.yml \
+#     -f infra/docker/docker-compose.observability.yml \
+#     up -d --build
+
+name: limen-observability
+
+services:
+  observability:
+    image: grafana/otel-lgtm:0.8.4
+    container_name: limen-otel-lgtm
+    restart: unless-stopped
+    ports:
+      - "3000:3000"   # Grafana UI
+      - "4317:4317"   # OTLP gRPC ingress
+      - "4318:4318"   # OTLP HTTP ingress
+    volumes:
+      # Datasources + dashboards provisioned as code so a fresh container
+      # boots with everything in place.
+      - ../observability/grafana/provisioning:/otel-lgtm/grafana/conf/provisioning:ro
+      - ../observability/grafana/dashboards:/otel-lgtm/grafana/dashboards:ro
+    environment:
+      # Grafana auth — defaults to anonymous viewer for the local demo.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_PASSWORD: limen
+      GF_DEFAULT_INSTANCE_NAME: limen-demo
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s

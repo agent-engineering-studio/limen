@@ -1,0 +1,101 @@
+{
+  "title": "Limen — risk metrics (§3.9)",
+  "uid": "limen-risk-metrics",
+  "schemaVersion": 39,
+  "timezone": "browser",
+  "tags": ["limen", "risk", "otel"],
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Per-cell risk score (P95 / P50 / max)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "limen-prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "min": 0, "max": 1 }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum(rate(landslide_risk_score_bucket[5m])) by (le))",
+          "legendFormat": "P95"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.5, sum(rate(landslide_risk_score_bucket[5m])) by (le))",
+          "legendFormat": "P50"
+        },
+        {
+          "refId": "C",
+          "expr": "max_over_time(landslide_risk_score_max[5m])",
+          "legendFormat": "max"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Alerts dispatched (per channel)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "limen-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (channels_succeeded) (rate(landslide_alert_dispatched_total[5m]))",
+          "legendFormat": "{{channels_succeeded}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Open-Meteo call duration (P95)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "limen-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum(rate(openmeteo_api_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P95"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.5, sum(rate(openmeteo_api_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P50"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "ISPRA IdroGEO sync cache hits",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 8, "w": 6, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "limen-prometheus" },
+      "options": { "reduceOptions": { "calcs": ["sum"] }, "graphMode": "area" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(idrogeo_cache_hits_total[1h]))"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Workflow executor duration (P95 by node)",
+      "type": "timeseries",
+      "gridPos": { "x": 18, "y": 8, "w": 6, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "limen-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, executor) (rate(workflow_executor_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{executor}}"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+apiVersion: 1
+
+# All three datasources point at the in-container LGTM backends. The
+# `grafana/otel-lgtm` image exposes them on localhost — Grafana inside
+# the same container reaches them via 127.0.0.1.
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: limen-prometheus
+    access: proxy
+    url: http://localhost:9090
+    isDefault: true
+    editable: false
+
+  - name: Tempo
+    type: tempo
+    uid: limen-tempo
+    access: proxy
+    url: http://localhost:3200
+    editable: false
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: limen-loki
+        tags: [{ key: "service.name", value: "service_name" }]
+        spanStartTimeShift: -1h
+        spanEndTimeShift: 1h
+      serviceMap:
+        datasourceUid: limen-prometheus
+      nodeGraph:
+        enabled: true
+
+  - name: Loki
+    type: loki
+    uid: limen-loki
+    access: proxy
+    url: http://localhost:3100
+    editable: false
+    jsonData:
+      derivedFields:
+        - datasourceUid: limen-tempo
+          matcherRegex: "trace_id=([A-Fa-f0-9]+)"
+          name: TraceID
+          url: "$${__value.raw}"

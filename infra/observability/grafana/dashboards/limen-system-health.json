@@ -1,0 +1,86 @@
+{
+  "title": "Limen — system health",
+  "uid": "limen-system-health",
+  "schemaVersion": 39,
+  "timezone": "browser",
+  "tags": ["limen", "ops"],
+  "time": { "from": "now-3h", "to": "now" },
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "asyncpg connections in use",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "limen-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(asyncpg_connections_acquired)",
+          "legendFormat": "acquired"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(asyncpg_connections_idle)",
+          "legendFormat": "idle"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "HTTP request rate (status class)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "limen-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (http_status_code) (rate(http_server_requests_total[5m]))",
+          "legendFormat": "{{http_status_code}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "APScheduler job runs",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 7, "w": 8, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "limen-prometheus" },
+      "options": { "reduceOptions": { "calcs": ["sum"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(workflow_executor_duration_seconds_count[1h]))"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Recent alerts (cell-hours above threshold)",
+      "type": "stat",
+      "gridPos": { "x": 8, "y": 7, "w": 8, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "limen-prometheus" },
+      "options": { "reduceOptions": { "calcs": ["sum"] }, "graphMode": "area" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(landslide_alert_dispatched_total[24h]))"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Latest API logs",
+      "type": "logs",
+      "gridPos": { "x": 16, "y": 7, "w": 8, "h": 12 },
+      "datasource": { "type": "loki", "uid": "limen-loki" },
+      "options": { "wrapLogMessage": true, "showTime": true },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service_name=\"limen-api\"} |~ \"level=(warning|error)\""
+        }
+      ]
+    }
+  ]
+}
