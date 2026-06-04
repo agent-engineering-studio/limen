@@ -146,6 +146,78 @@ class ApiSettings(BaseSettings):
     otel_service_name: str = "limen-api"
 
 
+class TelegramChannelSettings(BaseSettings):
+    """Telegram bot config. Disabled when ``bot_token`` is empty."""
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    bot_token: SecretStr | None = None
+    chat_id: str | None = None
+    parse_mode: Literal["HTML", "MarkdownV2"] = "HTML"
+    disable_web_page_preview: bool = True
+    api_base_url: str = "https://api.telegram.org"
+
+
+class MqttChannelSettings(BaseSettings):
+    """MQTT publisher config. Disabled when ``broker_host`` is empty."""
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    broker_host: str | None = None
+    broker_port: int = Field(default=1883, ge=1, le=65535)
+    topic: str = "limen/alerts"
+    username: str | None = None
+    password: SecretStr | None = None
+    tls: bool = False
+    qos: Literal[0, 1, 2] = 1
+    client_id: str = "limen-notifier"
+
+
+class EmailChannelSettings(BaseSettings):
+    """SMTP email config. Disabled when ``smtp_host`` or recipients are empty."""
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    smtp_host: str | None = None
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    username: str | None = None
+    password: SecretStr | None = None
+    from_address: str | None = None
+    recipients: list[str] = Field(default_factory=list)
+    use_starttls: bool = True
+    use_tls: bool = False
+    timeout_seconds: float = Field(default=15.0, gt=0)
+
+
+class NotificationsSettings(BaseSettings):
+    """Top-level notifications block — enabled channels + per-channel config."""
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    # When the list is empty no channels are constructed; the workflow
+    # logs alerts as if `alert_dispatch` were still the V1 stub.
+    enabled_channels: list[Literal["telegram", "mqtt", "email"]] = Field(default_factory=list)
+    telegram: TelegramChannelSettings = Field(default_factory=TelegramChannelSettings)
+    mqtt: MqttChannelSettings = Field(default_factory=MqttChannelSettings)
+    email: EmailChannelSettings = Field(default_factory=EmailChannelSettings)
+
+
+class AlertSettings(BaseSettings):
+    """Alert-dispatch rules used by the AlertDispatchExecutor."""
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    # Minimum :class:`RiskLevel` to dispatch. Stored as a string so
+    # operators can override via env without importing the enum.
+    min_level: Literal["Low", "Moderate", "High", "VeryHigh"] = "High"
+    # Window during which a repeat alert for the same cell is suppressed.
+    dedup_window_minutes: int = Field(default=180, ge=0)
+    # How many top-priority cells to mention explicitly in the payload.
+    top_k: int = Field(default=5, ge=1, le=50)
+    # Public map base URL used to build deep links inside the payload.
+    map_base_url: str = "http://localhost:5173"
+
+
 class Settings(BaseSettings):
     """Top-level application settings."""
 
@@ -162,6 +234,8 @@ class Settings(BaseSettings):
     llm: LLMSettings = Field(default_factory=LLMSettings)
     scheduler: SchedulerSettings = Field(default_factory=SchedulerSettings)
     api: ApiSettings = Field(default_factory=ApiSettings)
+    notifications: NotificationsSettings = Field(default_factory=NotificationsSettings)
+    alert: AlertSettings = Field(default_factory=AlertSettings)
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_json: bool = False
