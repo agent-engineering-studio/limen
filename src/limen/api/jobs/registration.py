@@ -14,6 +14,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from limen.api.dependencies import AppDependencies
 from limen.api.jobs.cache_cleanup import run_cache_cleanup_job
 from limen.api.jobs.drift_monitor import run_drift_monitor_job
+from limen.api.jobs.geodata_export import run_geodata_export_job
 from limen.api.jobs.hourly_monitoring import run_hourly_monitoring
 from limen.api.jobs.iot_partition_rollover import run_iot_partition_rollover_job
 from limen.api.jobs.iot_rollup import run_iot_rollup_job
@@ -29,6 +30,7 @@ JOB_CACHE_CLEANUP = "limen-cache-cleanup"
 JOB_IOT_ROLLUP = "limen-iot-rollup"
 JOB_IOT_PARTITION_ROLLOVER = "limen-iot-partition-rollover"
 JOB_DRIFT_MONITOR = "limen-drift-monitor"
+JOB_GEODATA_EXPORT = "limen-geodata-export"
 
 
 async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> list[str]:
@@ -123,6 +125,21 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
             "scheduler.registered",
             job=JOB_DRIFT_MONITOR,
             interval_hours=deps.settings.monitoring.drift_check_hours,
+        )
+
+    if deps.settings.geodata.enable_periodic_export:
+        await scheduler.add_schedule(
+            run_geodata_export_job,
+            args=(deps,),
+            trigger=IntervalTrigger(hours=deps.settings.geodata.export_features_hours),
+            id=JOB_GEODATA_EXPORT,
+            conflict_policy=ConflictPolicy.replace,
+        )
+        registered.append(JOB_GEODATA_EXPORT)
+        log.info(
+            "scheduler.registered",
+            job=JOB_GEODATA_EXPORT,
+            interval_hours=deps.settings.geodata.export_features_hours,
         )
 
     return registered

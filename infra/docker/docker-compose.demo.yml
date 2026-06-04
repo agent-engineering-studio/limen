@@ -150,6 +150,11 @@ services:
     environment:
       VITE_API_URL: http://localhost:8080
       VITE_TILESERV_URL: http://localhost:7800
+      # Phase 12 — optional static PMTiles served by the geodata stack.
+      # Leave unset to keep the overlays hidden. Production deploys the
+      # files behind nginx / Caddy from `$GEODATA_PMTILES_DIR`.
+      VITE_PAI_PMTILES_URL: ${VITE_PAI_PMTILES_URL:-}
+      VITE_IFFI_PMTILES_URL: ${VITE_IFFI_PMTILES_URL:-}
     command: ["sh", "-c", "npm ci --no-audit --no-fund && npm run dev -- --host 0.0.0.0 --port 5173"]
     volumes:
       - ../../frontend:/app

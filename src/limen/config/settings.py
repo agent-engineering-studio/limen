@@ -337,6 +337,27 @@ class MonitoringSettings(BaseSettings):
     enable_drift_monitoring: bool = False
 
 
+class GeodataSettings(BaseSettings):
+    """Hooks into the V2 Geo-Data Service (§3.3.4-ter).
+
+    The geodata stack itself runs in its own compose profile — these
+    settings only control when the *operational* API refreshes its
+    per-cell static factors against the geodata PostGIS via
+    ``limen geodata export-features``.
+
+    Default off: the geodata profile is opt-in, so the operational API
+    never assumes it's running.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    enable_periodic_export: bool = False
+    """When true, the scheduler runs ``export_cell_features`` periodically."""
+    export_features_hours: int = Field(default=168, ge=1)
+    """Cadence (hours). 168 = weekly. The PAI + IFFI datasets refresh
+    yearly at most — daily would be wasteful."""
+
+
 class KgSettings(BaseSettings):
     """Knowledge-graph sidecar (V2.x advisory grounding).
 
@@ -405,6 +426,7 @@ class Settings(BaseSettings):
     egms: EgmsSettings = Field(default_factory=EgmsSettings)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
     kg: KgSettings = Field(default_factory=KgSettings)
+    geodata: GeodataSettings = Field(default_factory=GeodataSettings)
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_json: bool = False

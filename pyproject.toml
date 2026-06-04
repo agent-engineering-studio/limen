@@ -222,8 +222,6 @@ omit = [
     "*/cli/server.py",
     # Pure Protocol/type definitions — no runtime path.
     "*/core/abstractions/external.py",
-    # V1 placeholder (intentionally empty), will land with V1.5+.
-    "*/agents/workflows/escalation_workflow.py",
     # FastAPI production lifespan / built-in factory entrypoints —
     # covered via the test-injected lifespan in test_api*.
     "*/api/main.py",

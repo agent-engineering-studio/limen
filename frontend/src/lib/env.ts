@@ -10,6 +10,11 @@ interface ViteEnv {
   readonly VITE_DEFAULT_LON?: string;
   readonly VITE_DEFAULT_LAT?: string;
   readonly VITE_DEFAULT_ZOOM?: string;
+  /** URL of the static `pai_landslide_hazard.pmtiles` produced by
+   * `limen geodata make-pmtiles`. When unset the layer is not added. */
+  readonly VITE_PAI_PMTILES_URL?: string;
+  /** URL of the static `iffi_landslides.pmtiles`. Same opt-in semantics. */
+  readonly VITE_IFFI_PMTILES_URL?: string;
 }
 
 const env: ViteEnv =
@@ -36,4 +41,8 @@ export const config = {
   defaultLon: num(env.VITE_DEFAULT_LON, 16.6),
   defaultLat: num(env.VITE_DEFAULT_LAT, 40.5),
   defaultZoom: num(env.VITE_DEFAULT_ZOOM, 7),
+  // Phase 12 — optional static PMTiles produced by
+  // `limen geodata make-pmtiles`. When unset the layers are not added.
+  paiPmtilesUrl: env.VITE_PAI_PMTILES_URL,
+  iffiPmtilesUrl: env.VITE_IFFI_PMTILES_URL,
 } as const;
