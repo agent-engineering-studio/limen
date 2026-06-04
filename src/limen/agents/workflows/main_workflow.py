@@ -40,6 +40,7 @@ from limen.agents.workflow_runtime.executor import Executor, handler
 from limen.config.settings import Settings, get_settings
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
+from limen.notifications.dispatcher import NotificationDispatcher
 
 log = get_logger(__name__)
 
@@ -50,6 +51,9 @@ class WorkflowDeps:
 
     llm_factory: LlmClientFactory
     settings: Settings
+    notification_dispatcher: NotificationDispatcher | None = None
+    """Optional :class:`NotificationDispatcher`. When ``None`` the alert
+    executor falls back to logging only (V1 stub behaviour)."""
 
 
 # ---------------------------------------------------------------------------
@@ -150,7 +154,7 @@ def build_landslide_workflow(
         .add(RiskAnalystNode(deps.llm_factory))
         .add(BriefingNode(deps.llm_factory))
         .add(PersistResultExecutor())
-        .add(AlertDispatchExecutor())
+        .add(AlertDispatchExecutor(deps.notification_dispatcher))
     )
     log.info(
         "workflow.built",

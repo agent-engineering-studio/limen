@@ -55,6 +55,14 @@ services:
       SCHEDULER__CACHE_CLEANUP: apscheduler
       API__HOST: 0.0.0.0
       API__PG_TILESERV_URL: http://pg_tileserv:7800
+      # Notifications — listing a channel here enables it; channels
+      # whose creds are missing degrade to a no-op rather than erroring.
+      # NOTIFICATIONS__ENABLED_CHANNELS: '["mqtt"]'
+      NOTIFICATIONS__MQTT__BROKER_HOST: mosquitto
+      NOTIFICATIONS__MQTT__BROKER_PORT: "1883"
+      NOTIFICATIONS__MQTT__TOPIC: limen/alerts
+      ALERT__MIN_LEVEL: High
+      ALERT__DEDUP_WINDOW_MINUTES: "180"
       API__PORT: "8080"
       LOG_JSON: "true"
       # Optional LLM credentials — when unset, the resolver falls back
@@ -72,6 +80,26 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
+
+  mosquitto:
+    # Phase 7 — local MQTT broker for the alert pipeline. The API
+    # publishes to ``${NOTIFICATIONS__MQTT__BROKER_HOST}`` (default
+    # mosquitto:1883); enable the channel by listing "mqtt" in
+    # NOTIFICATIONS__ENABLED_CHANNELS. The default mosquitto.conf
+    # below allows anonymous connections — fine for local demos,
+    # tighten for production.
+    image: eclipse-mosquitto:2.0
+    container_name: limen-mosquitto
+    restart: unless-stopped
+    command: ["mosquitto", "-c", "/mosquitto-no-auth.conf"]
+    ports:
+      - "1883:1883"
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h 127.0.0.1 -t healthz -E -W 2 || exit 0"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   pg_tileserv:
     # Phase 6 — vector tile server pointed at the same Postgres+PostGIS.

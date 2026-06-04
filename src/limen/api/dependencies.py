@@ -25,6 +25,10 @@ from limen.core.scoring.regional_thresholds import (
 )
 from limen.data.caching.postgres_cache import DistributedCache, PostgresCache
 from limen.data.object_store import ObjectStore, build_object_store
+from limen.notifications.dispatcher import (
+    NotificationDispatcher,
+    build_default_dispatcher,
+)
 
 if TYPE_CHECKING:
     import asyncpg
@@ -43,6 +47,7 @@ class AppDependencies:
     llm_factory: LlmClientFactory
     thresholds: RegionalThresholds
     engine: MultiFactorScoringEngine
+    notification_dispatcher: NotificationDispatcher
 
     @classmethod
     async def build(
@@ -51,11 +56,14 @@ class AppDependencies:
         pool: asyncpg.Pool,
         settings: Settings | None = None,
         llm_factory: LlmClientFactory | None = None,
+        notification_dispatcher: NotificationDispatcher | None = None,
     ) -> AppDependencies:
         """Construct the container around an already-initialised pool.
 
         ``llm_factory`` defaults to the env-resolved factory; tests pass
-        :class:`StubLlmClientFactory` instead.
+        :class:`StubLlmClientFactory` instead. ``notification_dispatcher``
+        defaults to one wired from :class:`NotificationsSettings`; tests
+        pass a stub dispatcher with no real channels.
         """
         # Late imports keep `import limen.api.dependencies` cheap and
         # avoid pulling the agents subsystem unless we're actually
@@ -65,6 +73,7 @@ class AppDependencies:
         s = settings or get_settings()
         factory = llm_factory or resolve_llm_factory(s)
         thresholds = load_regional_thresholds()
+        dispatcher = notification_dispatcher or build_default_dispatcher(s.notifications)
 
         return cls(
             settings=s,
@@ -74,6 +83,7 @@ class AppDependencies:
             llm_factory=factory,
             thresholds=thresholds,
             engine=MultiFactorScoringEngine(thresholds),
+            notification_dispatcher=dispatcher,
         )
 
     def build_workflow(self, *, cell_limit: int | None = None) -> Workflow:
@@ -84,7 +94,11 @@ class AppDependencies:
         )
 
         return build_landslide_workflow(
-            WorkflowDeps(llm_factory=self.llm_factory, settings=self.settings),
+            WorkflowDeps(
+                llm_factory=self.llm_factory,
+                settings=self.settings,
+                notification_dispatcher=self.notification_dispatcher,
+            ),
             cell_limit=cell_limit,
         )
 
