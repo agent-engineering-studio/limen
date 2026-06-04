@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING
 from limen.agents.llm_factory.base import (
     ChatClient,
     ChatMessage,
-    LlmClientFactory,
     LlmFactoryError,
 )
 from limen.core.logging import get_logger
@@ -26,22 +25,24 @@ log = get_logger(__name__)
 
 
 @dataclass
-class OpenAIChatClient(ChatClient):
+class OpenAIChatClient:  # Implements the ChatClient Protocol structurally
     api_key: SecretStr
     model: str
     base_url: str | None = None
 
     def __post_init__(self) -> None:
         try:
-            from openai import AsyncOpenAI  # type: ignore[import-not-found]
+            from openai import AsyncOpenAI
         except ImportError as e:  # pragma: no cover
             raise LlmFactoryError(
                 "OpenAI factory requires the 'agents' dependency group: `uv sync --group agents`."
             ) from e
-        kwargs: dict[str, object] = {"api_key": self.api_key.get_secret_value()}
         if self.base_url:
-            kwargs["base_url"] = self.base_url
-        self._client = AsyncOpenAI(**kwargs)
+            self._client = AsyncOpenAI(
+                api_key=self.api_key.get_secret_value(), base_url=self.base_url
+            )
+        else:
+            self._client = AsyncOpenAI(api_key=self.api_key.get_secret_value())
 
     async def chat(
         self,
@@ -51,8 +52,10 @@ class OpenAIChatClient(ChatClient):
         max_tokens: int | None = None,
         response_format: str = "text",
     ) -> str:
+        from typing import Any
+
         log.debug("openai.chat", model=self.model, n_messages=len(messages))
-        kwargs: dict[str, object] = {
+        kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": [{"role": m.role, "content": m.content} for m in messages],
             "temperature": temperature,
@@ -67,7 +70,7 @@ class OpenAIChatClient(ChatClient):
 
 
 @dataclass
-class OpenAIFactory(LlmClientFactory):
+class OpenAIFactory:  # Implements the LlmClientFactory Protocol structurally
     api_key: SecretStr
     role_models: dict[str, str]
     provider: str = "openai"

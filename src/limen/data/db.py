@@ -113,6 +113,27 @@ def get_pool() -> asyncpg.Pool:
 
 
 @asynccontextmanager
+async def lifespan_pool(
+    settings: DBSettings | None = None,
+) -> AsyncIterator[asyncpg.Pool]:
+    """Open the pool, yield it, close it only if *we* opened it.
+
+    Ownership-aware: if a caller (typically the FastAPI lifespan or a
+    test fixture) has already initialised the global pool, this helper
+    treats the pool as borrowed and leaves it open on exit. Standalone
+    CLI runners that nest this context get the open/close pair they
+    expect.
+    """
+    owned = _pool is None
+    pool = await init_pool(settings)
+    try:
+        yield pool
+    finally:
+        if owned:
+            await close_pool()
+
+
+@asynccontextmanager
 async def acquire() -> AsyncIterator[asyncpg.Connection]:
     """Acquire a connection from the global pool as an async context manager."""
     pool = get_pool()

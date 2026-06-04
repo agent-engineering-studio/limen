@@ -59,6 +59,11 @@ dev = [
     "pre-commit>=4.0",
     "testcontainers>=4.8",
     "respx>=0.21",
+    # LLM SDKs needed only to exercise the concrete LlmClientFactory
+    # construction paths in tests. Runtime deployment installs them
+    # via the optional `storage`/`agents` route per provider.
+    "anthropic>=0.40",
+    "openai>=1.55",
 ]
 storage = [
     "boto3>=1.35",
@@ -155,7 +160,27 @@ markers = [
 [tool.coverage.run]
 branch = true
 source = ["src/limen"]
+omit = [
+    # Argparse dispatchers + uvicorn process wrappers — exercised by the
+    # CLI integration smoke tests but not granularly counted.
+    "*/cli/main.py",
+    "*/cli/server.py",
+    # Pure Protocol/type definitions — no runtime path.
+    "*/core/abstractions/external.py",
+    # V1 placeholder (intentionally empty), will land with V1.5+.
+    "*/agents/workflows/escalation_workflow.py",
+    # FastAPI production lifespan / built-in factory entrypoints —
+    # covered via the test-injected lifespan in test_api*.
+    "*/api/main.py",
+]
 
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
+fail_under = 80
+exclude_also = [
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "# pragma: no cover",
+]

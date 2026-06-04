@@ -32,7 +32,7 @@ from limen.core.logging import get_logger
 from limen.core.models.risk import CellFeatureBundle, DynamicInputs, StaticFactors
 from limen.core.scoring.engine import MultiFactorScoringEngine
 from limen.core.scoring.regional_thresholds import load_regional_thresholds
-from limen.data.db import acquire, close_pool, init_pool
+from limen.data.db import acquire, lifespan_pool
 from limen.data.migrate import run_migrations
 from limen.data.repos.aoi_repo import list_aoi_ids
 from limen.data.repos.norm_stats_repo import NormStat
@@ -280,8 +280,7 @@ async def run() -> int:
     """
     strict = os.getenv("LIMEN_CALIBRATE_STRICT", "").strip().lower() in {"1", "true", "yes"}
 
-    await init_pool()
-    try:
+    async with lifespan_pool():
         await run_migrations()
         aois = await list_aoi_ids()
         if not aois:
@@ -310,8 +309,6 @@ async def run() -> int:
                 )
                 exit_code = 1
         return exit_code
-    finally:
-        await close_pool()
 
 
 def main() -> int:

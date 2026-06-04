@@ -48,7 +48,7 @@ from limen.core.models.risk import (
 )
 from limen.core.scoring.engine import MultiFactorScoringEngine
 from limen.core.scoring.regional_thresholds import load_regional_thresholds
-from limen.data.db import acquire, close_pool, init_pool
+from limen.data.db import acquire, lifespan_pool
 from limen.data.migrate import run_migrations
 from limen.data.repos.aoi_repo import get_aoi, list_aoi_ids
 from limen.integrations._http import SharedHttpClient
@@ -360,57 +360,56 @@ async def run() -> int:
     alert_level = _parse_level("LIMEN_BACKTEST_HIGH_LEVEL", RiskLevel.High)
     single_aoi = os.getenv("LIMEN_BACKTEST_AOI")
 
-    await init_pool()
     try:
-        await run_migrations()
-        thresholds = load_regional_thresholds()
-        aois = [single_aoi] if single_aoi else await list_aoi_ids()
-        if not aois:
-            log.warning("backtest.no_aois", note="run `limen seed` first")
-            return 0
+        async with lifespan_pool():
+            await run_migrations()
+            thresholds = load_regional_thresholds()
+            aois = [single_aoi] if single_aoi else await list_aoi_ids()
+            if not aois:
+                log.warning("backtest.no_aois", note="run `limen seed` first")
+                return 0
 
-        for aoi_id in aois:
-            aoi = await get_aoi(aoi_id)
-            if aoi is None:
-                log.warning("backtest.aoi.missing", aoi_id=aoi_id)
-                continue
-            bbox = tuple(aoi.bbox.bounds)
-            assert len(bbox) == 4
+            for aoi_id in aois:
+                aoi = await get_aoi(aoi_id)
+                if aoi is None:
+                    log.warning("backtest.aoi.missing", aoi_id=aoi_id)
+                    continue
+                bbox = tuple(aoi.bbox.bounds)
+                assert len(bbox) == 4
 
-            cells = await _fetch_static_factors(aoi_id)
-            truth = await _fetch_truth_events(aoi_id, start=start, end=end)
-            rainfall = await _fetch_rainfall_for_window(
-                aoi_id=aoi_id, bbox=bbox, start=start, end=end
-            )
-            log.info(
-                "backtest.aoi.loaded",
-                aoi_id=aoi_id,
-                cells=len(cells),
-                truth_events=len(truth),
-                rainfall_samples=len(rainfall),
-            )
+                cells = await _fetch_static_factors(aoi_id)
+                truth = await _fetch_truth_events(aoi_id, start=start, end=end)
+                rainfall = await _fetch_rainfall_for_window(
+                    aoi_id=aoi_id, bbox=bbox, start=start, end=end
+                )
+                log.info(
+                    "backtest.aoi.loaded",
+                    aoi_id=aoi_id,
+                    cells=len(cells),
+                    truth_events=len(truth),
+                    rainfall_samples=len(rainfall),
+                )
 
-            metrics = _evaluate(
-                aoi_id=aoi_id,
-                cells=cells,
-                truth=truth,
-                rainfall=rainfall,
-                start=start,
-                end=end,
-                alert_level=alert_level,
-                lead_min_hours=thresholds.calibration.backtest.lead_time_hours_min,
-            )
-            log.info(
-                "backtest.aoi.done",
-                aoi_id=metrics.aoi_id,
-                hit_rate=metrics.hit_rate,
-                far=metrics.far,
-                mean_lead_hours=metrics.mean_lead_hours,
-                report=str(metrics.report_path),
-            )
+                metrics = _evaluate(
+                    aoi_id=aoi_id,
+                    cells=cells,
+                    truth=truth,
+                    rainfall=rainfall,
+                    start=start,
+                    end=end,
+                    alert_level=alert_level,
+                    lead_min_hours=thresholds.calibration.backtest.lead_time_hours_min,
+                )
+                log.info(
+                    "backtest.aoi.done",
+                    aoi_id=metrics.aoi_id,
+                    hit_rate=metrics.hit_rate,
+                    far=metrics.far,
+                    mean_lead_hours=metrics.mean_lead_hours,
+                    report=str(metrics.report_path),
+                )
     finally:
         await SharedHttpClient.aclose()
-        await close_pool()
     return 0
 
 

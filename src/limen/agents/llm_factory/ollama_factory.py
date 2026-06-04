@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from limen.agents.llm_factory.base import ChatClient, ChatMessage, LlmClientFactory
+from limen.agents.llm_factory.base import ChatClient, ChatMessage
 from limen.core.logging import get_logger
 from limen.integrations._http import SharedHttpClient, fetch_with_retry
 
@@ -19,7 +19,7 @@ log = get_logger(__name__)
 
 
 @dataclass
-class OllamaChatClient(ChatClient):
+class OllamaChatClient:  # Implements the ChatClient Protocol structurally
     base_url: str
     model: str
 
@@ -54,7 +54,7 @@ class OllamaChatClient(ChatClient):
 
 
 @dataclass
-class OllamaFactory(LlmClientFactory):
+class OllamaFactory:  # Implements the LlmClientFactory Protocol structurally
     """Per-role :class:`ChatClient` builder for Ollama."""
 
     base_url: str

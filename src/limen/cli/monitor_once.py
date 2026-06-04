@@ -22,7 +22,7 @@ from limen.agents.workflows.main_workflow import (
 from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
-from limen.data.db import close_pool, init_pool
+from limen.data.db import lifespan_pool
 from limen.data.migrate import run_migrations
 from limen.data.repos.aoi_repo import list_aoi_ids
 from limen.integrations._http import SharedHttpClient
@@ -59,21 +59,20 @@ async def run() -> int:
     settings = get_settings()
     deps = WorkflowDeps(llm_factory=resolve_llm_factory(settings), settings=settings)
 
-    await init_pool()
     try:
-        await run_migrations()
-        if requested_aoi:
-            aois = [requested_aoi]
-        else:
-            aois = await list_aoi_ids()
-        if not aois:
-            log.warning("monitor_once.no_aois", note="run `limen seed` first")
-            return 0
-        for aoi_id in aois:
-            await _run_for_aoi(aoi_id=aoi_id, deps=deps, cell_limit=cell_limit)
+        async with lifespan_pool():
+            await run_migrations()
+            if requested_aoi:
+                aois = [requested_aoi]
+            else:
+                aois = await list_aoi_ids()
+            if not aois:
+                log.warning("monitor_once.no_aois", note="run `limen seed` first")
+                return 0
+            for aoi_id in aois:
+                await _run_for_aoi(aoi_id=aoi_id, deps=deps, cell_limit=cell_limit)
     finally:
         await SharedHttpClient.aclose()
-        await close_pool()
     return 0
 
 

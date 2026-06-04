@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from limen.core.logging import get_logger
-from limen.data.db import close_pool, init_pool
+from limen.data.db import lifespan_pool
 from limen.data.migrate import run_migrations
 from limen.data.repos.aoi_repo import upsert_aoi
 from limen.data.repos.grid_repo import count_grid_cells, generate_and_store_grid
@@ -13,8 +13,7 @@ log = get_logger(__name__)
 
 
 async def run() -> int:
-    await init_pool()
-    try:
+    async with lifespan_pool():
         applied = await run_migrations()
         log.info("seed.migrations.applied", files=applied, count=len(applied))
 
@@ -35,8 +34,6 @@ async def run() -> int:
                 cells_inserted=inserted,
                 cells_total=total,
             )
-    finally:
-        await close_pool()
 
     log.info("seed.done")
     return 0

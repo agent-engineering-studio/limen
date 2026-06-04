@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING
 from limen.agents.llm_factory.base import (
     ChatClient,
     ChatMessage,
-    LlmClientFactory,
     LlmFactoryError,
 )
 from limen.core.logging import get_logger
@@ -27,13 +26,13 @@ log = get_logger(__name__)
 
 
 @dataclass
-class AnthropicChatClient(ChatClient):
+class AnthropicChatClient:  # Implements the ChatClient Protocol structurally
     api_key: SecretStr
     model: str
 
     def __post_init__(self) -> None:
         try:
-            from anthropic import AsyncAnthropic  # type: ignore[import-not-found]
+            from anthropic import AsyncAnthropic
         except ImportError as e:  # pragma: no cover - covered by factory error
             raise LlmFactoryError(
                 "Anthropic factory requires the 'agents' dependency group: "
@@ -49,6 +48,8 @@ class AnthropicChatClient(ChatClient):
         max_tokens: int | None = None,
         response_format: str = "text",  # noqa: ARG002 — Anthropic uses tool-use for JSON
     ) -> str:
+        from typing import Any
+
         # Anthropic's API takes system prompt separately from the message list.
         system_parts = [m.content for m in messages if m.role == "system"]
         body = [
@@ -56,14 +57,16 @@ class AnthropicChatClient(ChatClient):
             for m in messages
             if m.role != "system"
         ]
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "messages": body,
+            "temperature": temperature,
+            "max_tokens": max_tokens or 1024,
+        }
+        if system_parts:
+            kwargs["system"] = "\n\n".join(system_parts)
         log.debug("anthropic.chat", model=self.model, n_messages=len(messages))
-        response = await self._client.messages.create(
-            model=self.model,
-            system="\n\n".join(system_parts) if system_parts else None,
-            messages=body,
-            temperature=temperature,
-            max_tokens=max_tokens or 1024,
-        )
+        response = await self._client.messages.create(**kwargs)
         # response.content is a list of blocks; concatenate text blocks only.
         parts: list[str] = []
         for block in response.content:
@@ -74,7 +77,7 @@ class AnthropicChatClient(ChatClient):
 
 
 @dataclass
-class AnthropicFactory(LlmClientFactory):
+class AnthropicFactory:  # Implements the LlmClientFactory Protocol structurally
     api_key: SecretStr
     role_models: dict[str, str]
     provider: str = "anthropic"

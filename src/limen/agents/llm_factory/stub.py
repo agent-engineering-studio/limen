@@ -17,7 +17,7 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
-from limen.agents.llm_factory.base import ChatClient, ChatMessage, LlmClientFactory
+from limen.agents.llm_factory.base import ChatClient, ChatMessage
 
 _DEFAULT_RISK_ANALYSIS_JSON = json.dumps(
     {
@@ -75,7 +75,7 @@ def _detect_role(messages: Sequence[ChatMessage]) -> str | None:
 
 
 @dataclass
-class StubChatClient(ChatClient):
+class StubChatClient:  # Implements the ChatClient Protocol structurally
     """Returns canned responses; never reaches the network.
 
     ``calls`` records every request for inspection in tests.
@@ -106,7 +106,7 @@ class StubChatClient(ChatClient):
 
 
 @dataclass
-class StubLlmClientFactory(LlmClientFactory):
+class StubLlmClientFactory:  # Implements the LlmClientFactory Protocol structurally
     """Constructs (and caches) a :class:`StubChatClient` per role."""
 
     provider: str = "stub"
