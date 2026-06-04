@@ -1,0 +1,120 @@
+# ISPRA IdroGEO dataset manifest — Limen Geo-Data Service.
+#
+# Single source of truth: adding a dataset = adding an entry here, no
+# code change required. The schema is validated by `geodata.manifest`
+# (Pydantic v2, strict).
+#
+# Source restriction: every URL MUST start with
+# https://idrogeo.isprambiente.it/ — the manifest loader refuses
+# anything else by construction, so the deployment can never be
+# pointed at an unofficial mirror.
+#
+# Per-region IFFI ZIPs use the IdroGEO open-data naming convention:
+# `iffi_{regione}_{layer}.zip`. Replace `{regione}` with the lowercase
+# Italian region name when populating new entries.
+
+version: "2026-06-04"
+
+datasets:
+  # ---------------------------------------------------------------------
+  # National mosaics
+  # ---------------------------------------------------------------------
+  - name: pai_frane
+    url: https://idrogeo.isprambiente.it/opendata/wms/Mosaicatura_ISPRA_2020_2021_aree_pericolosita_frana_PAI.zip
+    format: shapefile-zip
+    target: pai_landslide_hazard
+    enabled: true
+    license: "CC-BY-4.0 (ISPRA IdroGEO, Mosaicatura PAI 2020-2021)"
+
+  - name: idraulica
+    url: https://idrogeo.isprambiente.it/opendata/wms/Mosaicatura_ISPRA_2020_aree_pericolosita_idraulica.zip
+    format: shapefile-zip
+    target: idraulica_hazard
+    enabled: false
+    license: "CC-BY-4.0 (ISPRA IdroGEO, Mosaicatura 2020)"
+    # Imported but unused in V1 (out of landslide scope). The same
+    # pipeline will feed a future flood module.
+
+  # ---------------------------------------------------------------------
+  # IFFI inventory — per region + geometry (Puglia + Basilicata pilot).
+  # Add additional regions by replicating these stanzas with the right
+  # URL slug; the importer is parametric on `region`.
+  # ---------------------------------------------------------------------
+  - name: iffi_puglia_piff_line
+    url: https://idrogeo.isprambiente.it/opendata/iffi/puglia/iffi_puglia_piff_line.zip
+    format: shapefile-zip
+    target: iffi_landslides
+    region: puglia
+    enabled: true
+
+  - name: iffi_puglia_piff_poly
+    url: https://idrogeo.isprambiente.it/opendata/iffi/puglia/iffi_puglia_piff_poly.zip
+    format: shapefile-zip
+    target: iffi_landslides
+    region: puglia
+    enabled: true
+
+  - name: iffi_puglia_aree_poly
+    url: https://idrogeo.isprambiente.it/opendata/iffi/puglia/iffi_puglia_aree_poly.zip
+    format: shapefile-zip
+    target: iffi_landslides
+    region: puglia
+    enabled: true
+
+  - name: iffi_puglia_dgpv_poly
+    url: https://idrogeo.isprambiente.it/opendata/iffi/puglia/iffi_puglia_dgpv_poly.zip
+    format: shapefile-zip
+    target: iffi_landslides
+    region: puglia
+    enabled: true
+
+  - name: iffi_basilicata_piff_line
+    url: https://idrogeo.isprambiente.it/opendata/iffi/basilicata/iffi_basilicata_piff_line.zip
+    format: shapefile-zip
+    target: iffi_landslides
+    region: basilicata
+    enabled: true
+
+  - name: iffi_basilicata_piff_poly
+    url: https://idrogeo.isprambiente.it/opendata/iffi/basilicata/iffi_basilicata_piff_poly.zip
+    format: shapefile-zip
+    target: iffi_landslides
+    region: basilicata
+    enabled: true
+
+  - name: iffi_basilicata_aree_poly
+    url: https://idrogeo.isprambiente.it/opendata/iffi/basilicata/iffi_basilicata_aree_poly.zip
+    format: shapefile-zip
+    target: iffi_landslides
+    region: basilicata
+    enabled: true
+
+  - name: iffi_basilicata_dgpv_poly
+    url: https://idrogeo.isprambiente.it/opendata/iffi/basilicata/iffi_basilicata_dgpv_poly.zip
+    format: shapefile-zip
+    target: iffi_landslides
+    region: basilicata
+    enabled: true
+
+  # ---------------------------------------------------------------------
+  # IFFI lookup dictionaries (JSON). Decoded into iffi_lookup_* tables
+  # so MCP tool responses surface human-readable causes / lithology /
+  # movement-type strings instead of opaque codes.
+  # ---------------------------------------------------------------------
+  - name: iffi_dizionari_cause
+    url: https://idrogeo.isprambiente.it/opendata/iffi/dizionari/cause.json
+    format: json
+    target: iffi_lookup_causes
+    enabled: true
+
+  - name: iffi_dizionari_movimento
+    url: https://idrogeo.isprambiente.it/opendata/iffi/dizionari/movimento.json
+    format: json
+    target: iffi_lookup_movements
+    enabled: true
+
+  - name: iffi_dizionari_litologia
+    url: https://idrogeo.isprambiente.it/opendata/iffi/dizionari/litologia.json
+    format: json
+    target: iffi_lookup_lithology
+    enabled: true

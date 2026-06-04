@@ -64,6 +64,9 @@ dev = [
     # via the optional `storage`/`agents` route per provider.
     "anthropic>=0.40",
     "openai>=1.55",
+    # Workspace member — installed editable so `geodata.*` is importable
+    # from the test harness without a separate `uv pip install -e`.
+    "limen-geodata",
 ]
 storage = [
     "boto3>=1.35",
@@ -87,13 +90,25 @@ dl = [
 requires = ["uv_build>=0.11.16,<0.12.0"]
 build-backend = "uv_build"
 
+# Workspace — geodata/ is a sibling Python package installable as
+# `limen-geodata` and importable as `geodata.*`. The layout is locked
+# by §3.3.4-ter so the package is extractable into a standalone repo
+# without refactoring; the main `limen` package never imports from
+# `geodata.*` outside the optional `limen geodata` CLI subcommand
+# (lazy-imported so the geodata deps stay optional at runtime).
+[tool.uv.workspace]
+members = ["geodata"]
+
+[tool.uv.sources]
+limen-geodata = { workspace = true }
+
 # ---------------------------------------------------------------------------
 # Ruff
 # ---------------------------------------------------------------------------
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["src", "tests"]
+src = ["src", "tests", "geodata/src"]
 
 [tool.ruff.lint]
 select = [
@@ -132,10 +147,10 @@ line-ending = "lf"
 strict = true
 python_version = "3.12"
 plugins = ["pydantic.mypy"]
-mypy_path = "src"
+mypy_path = ["src", "geodata/src"]
 namespace_packages = true
 explicit_package_bases = true
-files = ["src"]
+files = ["src", "geodata/src"]
 warn_unused_ignores = true
 warn_redundant_casts = true
 
@@ -164,6 +179,8 @@ module = [
     "torch.*",
     "numpy.*",
     "pandas.*",
+    "pyogrio.*",
+    "fastmcp.*",
 ]
 ignore_missing_imports = true
 

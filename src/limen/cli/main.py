@@ -24,6 +24,8 @@ from limen import __version__
 from limen.cli.backtest import run as _run_backtest
 from limen.cli.bootstrap_static import run as _run_bootstrap_static
 from limen.cli.calibrate import run as _run_calibrate
+from limen.cli.geodata import build_subparser as _build_geodata_subparser
+from limen.cli.geodata import run as _run_geodata
 from limen.cli.ingest_kb import run as _run_ingest_kb
 from limen.cli.migrate import run as _run_migrate
 from limen.cli.monitor_once import run as _run_monitor_once
@@ -79,6 +81,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "ingest-kb",
         help="push the local corpus (papers + PAI + ISPRA + briefings) to the KG sidecar",
     )
+    # ``limen geodata <subcommand>`` — nested dispatcher for the
+    # Geo-Data Service (§3.3.4-ter). The implementation lives in the
+    # `geodata` workspace package; imports are lazy so the geodata
+    # optional deps stay out of the main CLI's runtime.
+    _build_geodata_subparser(sub)
     return parser
 
 
@@ -100,6 +107,11 @@ def main(argv: list[str] | None = None) -> int:
         "sync-egms": _run_sync_egms,
         "ingest-kb": _run_ingest_kb,
     }
+    if args.command == "geodata":
+        try:
+            return asyncio.run(_run_geodata(args))
+        except KeyboardInterrupt:  # pragma: no cover
+            return 130
     runner = runners[args.command]
     try:
         return asyncio.run(runner())

@@ -1,0 +1,35 @@
+[project]
+name = "limen-geodata"
+version = "0.1.0"
+description = "Limen Geo-Data Service — ISPRA dataset ingestion + per-cell features + PMTiles + MCP server."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "Giuseppe Zileni", email = "giuseppe.zileni@hevolus.it" },
+]
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.9",
+    "pydantic-settings>=2.5",
+    "structlog>=24.4",
+    "httpx>=0.27",
+    "tenacity>=9.0",
+    "pyyaml>=6.0",
+    "shapely>=2.0",
+    "pyogrio>=0.10",
+    "asyncpg>=0.30",
+]
+
+[project.optional-dependencies]
+mcp = [
+    "fastmcp>=0.4",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.16,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "geodata"
+module-root = "src"
+
