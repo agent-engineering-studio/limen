@@ -16,15 +16,16 @@ Multi-Agent Framework (MAF) that orchestrates ingestion → scoring →
 explanation, with a Postgres+PostGIS data layer that is portable between
 local Docker, Neon (serverless), and any managed PostgreSQL.
 
-This repository currently contains **Phase 0 (scaffolding) + Phase 1 (data
-layer) + Phase 2 (external integrations + static-feature bootstrap) +
-Phase 3 (deterministic V1 scoring engine + calibrate / backtest CLIs) +
-Phase 4 (MAF agents & workflow: 10 custom executors, RiskAnalyst /
-Briefing ChatAgents, `limen monitor-once` runner) + Phase 5 (FastAPI
-host, APScheduler periodic jobs, OpenTelemetry observability, multi-stage
-Docker image) + Phase 6 (pg_tileserv + `mv_latest_risk` materialized view
-+ Vite/React/MapLibre public read-only map)**. Later phases add real
-notification channels, IoT ingestion, and the V2 ML engine.
+This repository implements the **complete Limen V1 prototype** — Phases
+0 through 7: scaffolding, data layer, external integrations, static
+bootstrap, deterministic scoring engine, MAF agents & workflow,
+FastAPI host with APScheduler & OpenTelemetry, pg_tileserv +
+`mv_latest_risk` matview + Vite/React/MapLibre public map, and a
+multi-channel alert dispatcher (Telegram / MQTT / Email).
+
+Later milestones add IoT ingestion (V1.5), an ML scoring engine (V2),
+knowledge-graph grounding (V2.x), and Clerk-backed authentication —
+see [memory `production-stack`](.claude/projects/-Users-gzileni-Git-limen/memory/production_stack.md).
 
 The V1 engine is a **pure**, interpretable, weighted-linear combination
 (§2.4 of the project doc) reading every weight, threshold, and class
@@ -49,6 +50,7 @@ No magic numbers in the scoring code. No LLM. No I/O. The same
 | **Observability** | OpenTelemetry tracing (FastAPI / asyncpg / httpx instrumentors, OTLP HTTP exporter) + custom Counters/Histograms (`landslide.risk.score`, `landslide.alert.dispatched`, `openmeteo.api.duration`, `idrogeo.cache.hits`, `workflow.executor.duration`) | optional OTLP backend | `observability/` |
 | **Vector tiles** | `mv_latest_risk` materialized view (grid_cells ⨝ latest risk_assessments per cell), refreshed by `refresh_mv_latest_risk()` at the end of every PersistResult; served by **pg_tileserv** | refresh per monitoring cycle | migration `007_map_views.sql` + `data/repos/map_views_repo.py` |
 | **Frontend** | Vite + TS + React + **MapLibre GL JS** SPA: `RiskMap` (vector tiles, 5-class colour palette), `LegendPanel` (labels + ranges, not colour-only), `AlertList`, `CellPopup` (S/M/E/F/H + Italian briefing), `TimelineSlider`. Strict TS, ESLint clean, Vitest tests for `api-client` + `RiskMap` + `LegendPanel`. | public, read-only | `frontend/` |
+| **Notifications (Phase 7)** | `NotificationChannel` Protocol + three channels: **Telegram** (Bot API via httpx + tenacity), **MQTT** (`aiomqtt`, QoS 1), **Email** (`aiosmtplib`, multipart HTML+text). `NotificationDispatcher` runs them in parallel with per-channel exception isolation (one channel raising can never abort the others). Dedup window on `alert_dispatches`; priority weighted by exposure (population/buildings/infrastructure) when known. Emits the `landslide.alert.dispatched` OTel counter. | per workflow tick, ≥ `ALERT__MIN_LEVEL` | `notifications/` + `agents/executors/alert_dispatch.py` |
 
 ---
 
@@ -319,22 +321,54 @@ container.
 
 ---
 
-## Roadmap (out of scope for this phase)
+## V1 acceptance — what "complete" means
 
-The following land in **later prompts**, each behind clean extension points
-already in this repo:
+The prototype is V1-complete when the following loop runs end-to-end on
+either a local Docker stack or a Neon branch by changing only
+`DB__CONNECTION_STRING` + `OBJECT_STORE__*` + LLM keys:
 
-- **Frontend** (Phase 6): map-first SPA with risk overlays, time controls,
-  and explainability drill-downs.
-- **Notifications** (Phase 7): alerting on score-crossing events.
-- **IoT ingestion** (V1.5): real-time sensor streams.
-- **ML / MLOps** (V2): trainable susceptibility model, model registry,
-  drift monitoring.
-- **DEM / CORINE / ISPRA Carta Geologica ingest** to fill the currently-NULL
-  `cell_static_factors` columns (`slope_deg`, `aspect_deg`, `curvature`,
-  `twi`, `elevation_m`, `landuse_code`, `lithology`, `litho_weight`,
-  `dist_faults_m`). The static-bootstrap pipeline already logs
-  `static_bootstrap.skip` for each missing component.
+1. `make up-dev && uv run limen seed && uv run limen bootstrap-static`
+   populates Postgres+PostGIS with Puglia + Basilicata AOIs and the
+   per-cell static factors achievable in V1 (IFFI density / PAI / dist).
+2. `uv run limen serve` boots FastAPI with `/health`, `/ready`, `/api/*`,
+   `/api/tiles`, `/docs`. APScheduler starts the hourly monitoring +
+   weekly ISPRA + cache-cleanup jobs in-process.
+3. `POST /api/monitor/{aoi}` returns a full `RiskAssessment` with
+   `score`, 5-part breakdown and an Italian briefing in ≤ 15 s using
+   the stubbed LLM (or a real provider via the resolver precedence).
+4. Frontend (`cd frontend && npm run dev`) at `http://localhost:5173`
+   renders the 5-class MapLibre heatmap from `mv_latest_risk` via
+   pg_tileserv, with `LegendPanel`, `AlertList`, `CellPopup` and
+   `TimelineSlider` wired to the FastAPI typed client.
+5. `uv run limen backtest` on the Oct 2018 Southern-Italy storm flags
+   the affected cells as High / VeryHigh inside the 18-hour lead-time
+   target, with the §2.5 metric report under `./reports/`.
+6. Cells crossing `ALERT__MIN_LEVEL` (default `High`) trigger
+   `AlertDispatchExecutor`: payload built deterministically, fanned out
+   in parallel to every configured channel; repeat alerts within the
+   dedup window are suppressed; outcomes persisted to
+   `alert_dispatches` and the `landslide.alert.dispatched` OTel
+   counter is incremented.
+
+## Roadmap
+
+What's next, in deliberate scope:
+
+- **IoT ingestion** (V1.5): real-time sensor streams + component K;
+  the `SensorFetchExecutor` is already wired as a no-op stub.
+- **ML / MLOps** (V2): trainable susceptibility model + model
+  registry + drift monitoring; the assembler hands the same
+  `CellFeatureBundle` to either engine.
+- **Knowledge-graph grounding** of the Italian briefing (V2.x).
+- **Authentication via Clerk** (`@clerk/clerk-react` on the same Vite
+  SPA + Clerk JWT validation in FastAPI). Deferred per §1.6; see
+  memory `production-stack`.
+- **DEM / CORINE / ISPRA Carta Geologica ingest** to fill the
+  currently-NULL `cell_static_factors` columns (`slope_deg`,
+  `aspect_deg`, `curvature`, `twi`, `elevation_m`, `landuse_code`,
+  `lithology`, `litho_weight`, `dist_faults_m`). The static-bootstrap
+  pipeline already logs `static_bootstrap.skip` for each missing
+  component.
 
 ---
 

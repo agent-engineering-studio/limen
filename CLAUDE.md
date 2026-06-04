@@ -1,11 +1,11 @@
 # Limen — Claude Code project guide
 
 > AI multi-factor landslide-risk monitoring for the Italian territory.
-> Pilot: **Puglia + Basilicata**. Current state: **Phase 0 + Phase 1 +
-> Phase 2 + Phase 3 + Phase 4 + Phase 5 + Phase 6** (scaffold + data layer
-> + external integrations + static bootstrap + deterministic scoring
-> engine V1 + MAF agents & workflow + FastAPI host with APScheduler +
-> OTel + pg_tileserv + Vite/React/MapLibre frontend).
+> Pilot: **Puglia + Basilicata**. Current state: **V1 prototype complete**
+> — Phases 0 through 7 (scaffold + data layer + external integrations +
+> static bootstrap + deterministic scoring engine V1 + MAF agents &
+> workflow + FastAPI host with APScheduler + OTel + pg_tileserv +
+> Vite/React/MapLibre frontend + multi-channel notifications).
 > See `README.md` for full context.
 
 ---
@@ -52,6 +52,9 @@
 | Frontend = Vite (no Next.js) | Phase 6 ships a public read-only map. Vite + React + MapLibre is the right surface; Next.js adds an unneeded Node server / RSC overhead. When auth lands (deferred §1.6), add `@clerk/clerk-react` to the same SPA — Clerk works with Vite natively. |
 | Tile pipeline | `mv_latest_risk` materialised view joining `grid_cells` + latest per-cell `risk_assessments`. **Always refresh via `refresh_mv_latest_risk()`** (PersistResult executor calls it). Never `REFRESH MATERIALIZED VIEW mv_latest_risk` directly. |
 | Risk palette = ColorBrewer YlOrRd, **not colour-only** | The 5-class legend pairs every colour with the Italian label and the score range. Don't introduce green/red without checking WCAG-AA contrast and a colourblind simulator. |
+| Notifications = Strategy + safe gather | New channels implement `NotificationChannel` (see `notifications/base.py`). The dispatcher MUST run them via `asyncio.gather` with a `_send_safe` wrapper — one channel raising can NEVER abort the others or the workflow. |
+| Alerts never invent figures | `AlertPayload.summary_it` is built deterministically from the AggregateAssessment. No LLM in the alert path. |
+| Dedup is mandatory | Every dispatch path consults `alert_dispatches` via `cells_dispatched_within`. Repeat alerts for the same cell inside the window are suppressed. |
 
 ---
 
@@ -169,6 +172,7 @@ src/limen/
 │   ├── endpoints/       # health/ready, aoi, monitor, risk, alerts, tiles
 │   └── jobs/            # APScheduler: hourly_monitoring, weekly_idrogeo_sync,
 │                        # cache_cleanup, registration
+├── notifications/       # NotificationChannel Protocol + AlertPayload + Telegram/MQTT/Email + dispatcher
 ├── observability/       # OTel tracing setup + custom metric instruments
 
 frontend/                # Vite + TypeScript + React + MapLibre SPA
@@ -216,8 +220,12 @@ tests/{unit,integration}
 Do not start implementing — these land in later prompts and have explicit
 extension points already:
 
-- Real Telegram / MQTT / Email notification channels — Phase 7
-  (`alert_dispatch` stays a logging stub until then).
+- IoT in-situ sensor ingestion + component K — V1.5.
+- V2 ML scoring engine (drop-in replacement of
+  `MultiFactorScoringEngine` consuming the same `CellFeatureBundle`).
+- Knowledge-graph grounding of the briefing — V2.x.
+- Authentication via Clerk (`@clerk/clerk-react` on the same Vite SPA) —
+  see memory `production-stack`, deferred per §1.6.
 - Notifications, IoT ingestion, ML/MLOps — Phase 7+.
 - V2 ML engine — drop-in replacement of `MultiFactorScoringEngine` that
   consumes the same `CellFeatureBundle`.
