@@ -6,6 +6,58 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-v2] — 2026-06-04 — ML engine & MLOps (V2)
+
+Phase 10 — adds the V2 ML engine, training pipeline, EGMS InSAR
+features, DL sub-model, and drift monitoring **alongside** V1. The
+deterministic engine remains the champion until a ML challenger
+beats the V1 baseline on spatial-block CV + the §2.5 backtest.
+
+### Added
+
+* `ScoringEngine` Protocol — V1 + V2 share the same bundle→RiskScore
+  surface (runtime-checkable). Engine selected via
+  `SCORING__ENGINE=deterministic|ml`; failures fall back to V1.
+* `SCORING__MODE=champion_only|shadow` champion-challenger toggle.
+  `ShadowChallengerExecutor` runs the other engine in parallel, writes
+  predictions to `model_runs`, and **never** mutates `cell_results`.
+* Migration `010_ml_tables.sql` — `training_samples` (point-in-time
+  correct features + `split_block` for spatial-block CV),
+  `cell_insar_features` (EGMS aggregates), `model_runs` (challenger
+  predictions).
+* `limen.ml.feature_store` — IFFI-positive + balanced background
+  sampler, coarse spatial-block grid, deterministic round-robin
+  CV partition (no leakage by construction).
+* `limen.ml.train` (`limen train`) — Optuna TPE over LightGBM hyperparams
+  (objective = AUC-PR), spatial-block CV, isotonic calibration on
+  out-of-fold predictions, SHAP TreeExplainer, full MLflow tracking
+  + Model Registry registration. Promotion gate enforces auc_pr_min /
+  brier_max / hit_rate_min / far_max / lead_time_hours_min AND requires
+  the ML AUC-PR to beat the V1 baseline AUC-PR on the same partition.
+* `limen.core.scoring.ml_engine.MLScoringEngine` — drop-in V2 engine
+  loaded from MLflow.
+* `limen.integrations.egms` (`limen sync-egms`) — Copernicus EGMS
+  scatterer fetch + per-cell aggregation into `cell_insar_features`.
+* `limen.ml.dl` — 1D-CNN over a 1-week hourly rainfall window, trained
+  offline (PyTorch) and served via ONNX runtime.
+* `limen.ml.monitoring` — PSI, KS, prediction drift, RetrainingTrigger.
+  APScheduler job `limen-drift-monitor` (gated by
+  `MONITORING__ENABLE_DRIFT_MONITORING`).
+* Optional dependency groups: `ml` (lightgbm, mlflow, optuna, shap,
+  scikit-learn, onnxruntime, numpy, pandas) and `dl` (torch, onnx).
+* `docs/ml.md` — pipeline + promotion gate + champion-challenger +
+  storage.
+
+### Tests
+
+* +35 unit tests across Stages A–F: Protocol satisfaction + resolver
+  fallback, spatial-block CV correctness + balance, dataset packing,
+  promotion-gate truth table, shadow-executor cell_results invariance
+  and persistence-failure suppression, EGMS aggregation (median
+  robustness, period envelopes, point→cell join), DL pad/trim and
+  neutral fallback, PSI/KS/prediction-drift correctness +
+  RetrainingTrigger fan-out.
+
 ## [0.2.0-v1.5] — 2026-06-04 — In-situ IoT (V1.5)
 
 Adds a hybrid MQTT + SensorThings ingestion path and a new kinematic

@@ -1,13 +1,15 @@
 # Limen — Claude Code project guide
 
 > AI multi-factor landslide-risk monitoring for the Italian territory.
-> Pilot: **Puglia + Basilicata**. Current state: **V1.5 — in-situ IoT
-> active** — V1 prototype (Phases 0–8) plus Phase 9: hybrid MQTT +
-> SensorThings ingestion, kinematic component K (Fukuzono +
-> velocity/acceleration), measured-over-modeled override on M, and
-> hard-escalation alarms. Gated by `enable_insitu`; with it off, the
-> system is byte-for-byte the V1 behaviour.
-> See `README.md` for full context.
+> Pilot: **Puglia + Basilicata**. Current state: **V2 — ML engine
+> available, V1 still champion** — V1 prototype (Phases 0–8) +
+> V1.5 in-situ IoT (Phase 9) + Phase 10: scoring-engine Protocol,
+> training pipeline (Optuna + LightGBM + isotonic + SHAP + MLflow),
+> champion-challenger shadow mode, EGMS InSAR aggregates, ONNX-served
+> DL rainfall sub-model, drift monitoring + retraining triggers.
+> The deterministic V1 engine is still the production champion until
+> a ML challenger clears the promotion gate.
+> See `README.md` and `docs/ml.md` for full context.
 
 ---
 
@@ -56,6 +58,11 @@
 | Notifications = Strategy + safe gather | New channels implement `NotificationChannel` (see `notifications/base.py`). The dispatcher MUST run them via `asyncio.gather` with a `_send_safe` wrapper — one channel raising can NEVER abort the others or the workflow. |
 | Alerts never invent figures | `AlertPayload.summary_it` is built deterministically from the AggregateAssessment. No LLM in the alert path. |
 | Dedup is mandatory | Every dispatch path consults `alert_dispatches` via `cells_dispatched_within`. Repeat alerts for the same cell inside the window are suppressed. |
+| V1 stays the baseline | The deterministic engine is **never removed** or weakened. It is the production champion until a ML challenger beats it on spatial-block CV + the §2.5 backtest (promotion gate in `limen.ml.train`). |
+| Engine selection through Protocol | The workflow holds a `ScoringEngine` Protocol, never a concrete class. `SCORING__ENGINE=deterministic|ml` swaps engines without touching the workflow / API. |
+| Shadow never mutates state | `ShadowChallengerExecutor` writes to `model_runs` only; `cell_results` / `assessment` / alerts remain authoritative to the champion. Persistence failures in the shadow are swallowed. |
+| No spatial leakage | Training uses spatial-block CV (round-robin partition over a coarse degree grid). Random splits are forbidden — the feature store assigns `split_block` at extraction time. |
+| Promotion gate is operator-driven | `limen train` sets a `promoted` MLflow tag; transitioning the model version to a stage is a manual `mlflow models transition-stage` call. Auto-promotion is forbidden. |
 
 ---
 

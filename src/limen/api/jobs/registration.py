@@ -13,6 +13,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from limen.api.dependencies import AppDependencies
 from limen.api.jobs.cache_cleanup import run_cache_cleanup_job
+from limen.api.jobs.drift_monitor import run_drift_monitor_job
 from limen.api.jobs.hourly_monitoring import run_hourly_monitoring
 from limen.api.jobs.iot_partition_rollover import run_iot_partition_rollover_job
 from limen.api.jobs.iot_rollup import run_iot_rollup_job
@@ -27,6 +28,7 @@ JOB_WEEKLY_IDROGEO = "limen-weekly-idrogeo"
 JOB_CACHE_CLEANUP = "limen-cache-cleanup"
 JOB_IOT_ROLLUP = "limen-iot-rollup"
 JOB_IOT_PARTITION_ROLLOVER = "limen-iot-partition-rollover"
+JOB_DRIFT_MONITOR = "limen-drift-monitor"
 
 
 async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> list[str]:
@@ -106,6 +108,21 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
             "scheduler.registered",
             job=JOB_IOT_PARTITION_ROLLOVER,
             cron="day 02 02:00",
+        )
+
+    if deps.settings.monitoring.enable_drift_monitoring:
+        await scheduler.add_schedule(
+            run_drift_monitor_job,
+            args=(deps,),
+            trigger=IntervalTrigger(hours=deps.settings.monitoring.drift_check_hours),
+            id=JOB_DRIFT_MONITOR,
+            conflict_policy=ConflictPolicy.replace,
+        )
+        registered.append(JOB_DRIFT_MONITOR)
+        log.info(
+            "scheduler.registered",
+            job=JOB_DRIFT_MONITOR,
+            interval_hours=deps.settings.monitoring.drift_check_hours,
         )
 
     return registered

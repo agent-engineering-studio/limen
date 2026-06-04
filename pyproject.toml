@@ -196,6 +196,24 @@ omit = [
     # FastAPI production lifespan / built-in factory entrypoints —
     # covered via the test-injected lifespan in test_api*.
     "*/api/main.py",
+    # V2 ML / DL optional-deps code paths — gated by the `ml` and `dl`
+    # dependency groups, exercised by a separate `ml` test job. Coverage
+    # here is calculated against the dev group only.
+    "*/ml/train.py",
+    "*/ml/baseline.py",
+    "*/ml/dl/model.py",
+    "*/ml/dl/train.py",
+    "*/ml/dl/serve.py",
+    "*/ml/feature_store.py",
+    "*/ml/monitoring/__init__.py",
+    "*/core/scoring/ml_engine.py",
+    "*/integrations/egms/client.py",
+    "*/integrations/egms/sync_job.py",
+    "*/api/jobs/drift_monitor.py",
+    "*/api/jobs/iot_rollup.py",
+    "*/api/jobs/iot_partition_rollover.py",
+    "*/cli/train.py",
+    "*/cli/sync_egms.py",
 ]
 
 [tool.coverage.report]
