@@ -24,6 +24,7 @@ from limen import __version__
 from limen.cli.backtest import run as _run_backtest
 from limen.cli.bootstrap_static import run as _run_bootstrap_static
 from limen.cli.calibrate import run as _run_calibrate
+from limen.cli.ingest_kb import run as _run_ingest_kb
 from limen.cli.migrate import run as _run_migrate
 from limen.cli.monitor_once import run as _run_monitor_once
 from limen.cli.seed import run as _run_seed
@@ -74,6 +75,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "sync-egms",
         help="refresh cell_insar_features from Copernicus EGMS (V2.1)",
     )
+    sub.add_parser(
+        "ingest-kb",
+        help="push the local corpus (papers + PAI + ISPRA + briefings) to the KG sidecar",
+    )
     return parser
 
 
@@ -93,6 +98,7 @@ def main(argv: list[str] | None = None) -> int:
         "serve": _run_server,
         "train": _run_train,
         "sync-egms": _run_sync_egms,
+        "ingest-kb": _run_ingest_kb,
     }
     runner = runners[args.command]
     try:
