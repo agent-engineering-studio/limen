@@ -70,6 +70,14 @@ services:
       # compose file in V1).
       # ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       # OPENAI_API_KEY:    ${OPENAI_API_KEY}
+      # V2.x — KG advisory grounding. OFF by default. Enable by setting
+      # KG__ENABLED=true and pointing KG__BASE_URL at the sidecar service
+      # under the `kg` profile (or an external host).
+      KG__ENABLED: "false"
+      KG__BASE_URL: http://knowledge-graph:8000
+      KG__THREAD_ID: landslide-kb
+      KG__TIMEOUT_SECONDS: "3.0"
+      KG__CACHE_TTL_SECONDS: "3600"
     ports:
       - "8080:8080"
     volumes:
@@ -149,6 +157,35 @@ services:
     ports:
       - "5173:5173"
     profiles: ["frontend"]  # opt-in: `docker compose --profile frontend up`
+
+  knowledge-graph:
+    # V2.x — advisory knowledge-graph sidecar (Neo4j + Redis + Ollama +
+    # FastAPI + MCP). Opt-in via `docker compose --profile kg up`. The
+    # actual image is owned by the team's `knowledge-graph` repository;
+    # this entry only sketches the port + LLM-coherence env. Production
+    # deployments should pin a tagged image and run it inside the same
+    # EU-region network as the Limen API.
+    #
+    # IMPORTANT: this sidecar is **advisory only**. Limen's deterministic
+    # scoring loop runs unchanged when this service is unavailable.
+    image: ghcr.io/agent-engineering-studio/knowledge-graph:latest
+    container_name: limen-knowledge-graph
+    restart: unless-stopped
+    environment:
+      # Provider coherence — the sidecar uses the same LLM the rest of
+      # Limen does (resolver order: Anthropic → OpenAI → Foundry → Ollama).
+      # On Aruba prod this typically resolves to a local Ollama; on dev
+      # it can be Anthropic/OpenAI via the host's env.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OLLAMA_BASE_URL: ${LLM__OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      NEO4J_URI: ${KG_NEO4J_URI:-bolt://neo4j:7687}
+      REDIS_URL: ${KG_REDIS_URL:-redis://redis:6379/0}
+    ports:
+      - "8001:8000"
+    profiles: ["kg"]
+    # No healthcheck wired — the sidecar is advisory; nothing in Limen's
+    # critical path waits on it.
 
 volumes:
   limen-pgdata:
