@@ -129,30 +129,41 @@ async def bootstrap_static_for_aoi(aoi_id: str) -> dict[str, int]:
         await conn.execute(_DISTANCE_TO_IFFI_SQL, aoi_id, _DISTANCE_CAP_M)
         await conn.execute(_PAI_CLASS_SQL, aoi_id)
 
-    # TODO(Phase 3): DEM derivatives (slope / aspect / curvature / TWI / elevation)
-    # via TINITALY 10 m tiles → ObjectStore COG → rasterio zonal stats.
-    log.warning(
-        "static_bootstrap.skip",
-        aoi_id=aoi_id,
-        component="dem_derivatives",
-        note="DEM tiles + zonal stats not yet implemented; slope/aspect/twi remain NULL",
-    )
-    # TODO(Phase 3): CORINE dominant land cover per cell.
-    log.warning(
-        "static_bootstrap.skip",
-        aoi_id=aoi_id,
-        component="corine_landuse",
-        note="CORINE ingest pending; landuse_code remains NULL",
-    )
-    # TODO(Phase 3): ISPRA Carta Geologica vettoriale → lithology + dist_faults.
-    log.warning(
-        "static_bootstrap.skip",
-        aoi_id=aoi_id,
-        component="lithology",
-        note=(
-            "ISPRA geological map ingest pending; lithology/litho_weight/dist_faults_m remain NULL"
-        ),
-    )
+    # DEM derivatives — runs when LIMEN_DEM_RASTER points at a GeoTIFF
+    # (e.g. TINITALY 10 m). With the env var unset the step is a clean
+    # no-op + structured log; the AOI keeps progressing.
+    from limen.integrations.dem import sync_dem_for_aois
+
+    dem_written = await sync_dem_for_aois(aoi_ids=[aoi_id])
+    if dem_written:
+        log.info(
+            "static_bootstrap.dem_done",
+            aoi_id=aoi_id,
+            rows_written=dem_written,
+        )
+    # CORINE Land Cover — runs when LIMEN_CORINE_RASTER points at a
+    # categorical GeoTIFF (e.g. CLC2018 100 m mosaic).
+    from limen.integrations.corine import sync_corine_for_aois
+
+    corine_written = await sync_corine_for_aois(aoi_ids=[aoi_id])
+    if corine_written:
+        log.info(
+            "static_bootstrap.corine_done",
+            aoi_id=aoi_id,
+            rows_written=corine_written,
+        )
+
+    # ISPRA Carta Geologica — vector shapefile + faults; runs when
+    # LIMEN_GEOLOGICAL_SHAPEFILE points at a polygon file.
+    from limen.integrations.geological import sync_geological_for_aois
+
+    geo_written = await sync_geological_for_aois(aoi_ids=[aoi_id])
+    if geo_written:
+        log.info(
+            "static_bootstrap.geological_done",
+            aoi_id=aoi_id,
+            rows_written=geo_written,
+        )
 
     total = await count_factors()
     log.info("static_bootstrap.done", aoi_id=aoi_id, factor_rows=total)

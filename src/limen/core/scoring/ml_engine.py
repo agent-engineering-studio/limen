@@ -148,37 +148,45 @@ class MLScoringEngine(ScoringEngine):
     # ScoringEngine interface
     # ------------------------------------------------------------------
     def score(self, bundle: CellFeatureBundle) -> RiskScore:
-        """Predict the cell's probability and convert it into a RiskScore.
+        """Predict the cell's calibrated probability + component breakdown.
 
-        Stage C will wire the real LightGBM predict + calibrator path
-        here. For now we expose a numerically-honest *stub* that asks
-        the loaded booster for ``predict(features_row)`` if it
-        supports it, and otherwise returns a zero baseline. This keeps
-        the Protocol contract testable end-to-end without a trained
-        model.
+        The SHAP explainer (when present) attributes the booster's
+        prediction across feature groups → S / M / E / F / H / K. The
+        per-feature contributions are normalised so the six components
+        sum to the cell's calibrated probability (operator-readable),
+        capped to [0, 1] each. Missing SHAP explainer falls back to the
+        feature-row magnitudes — operators see *something* meaningful
+        even on a degraded install.
         """
         feature_row = _bundle_to_feature_row(bundle, names=self._artefacts.feature_names)
         prob = _predict(self._artefacts, feature_row)
         prob_calibrated = _calibrate(self._artefacts, prob)
         level_str = _classify(prob_calibrated, self._t.classes)
-        # The SHAP-backed breakdown lands in Stage C; the placeholder
-        # echoes the raw inputs so the workflow's downstream nodes can
-        # still see *something* meaningful.
+
+        attribution = _component_attribution(
+            self._artefacts,
+            feature_row=feature_row,
+            total=prob_calibrated,
+        )
         breakdown = ComponentBreakdown(
-            s=_clamp01(prob_calibrated),
-            m=0.0,
-            e=0.0,
-            f=0.0,
-            h=0.0,
+            s=attribution["S"],
+            m=attribution["M"],
+            e=attribution["E"],
+            f=attribution["F"],
+            h=attribution["H"],
+            k=attribution["K"],
             static_terms=StaticBreakdown(
                 susc_ispra=_clamp01(bundle.static.susc_ispra),
-                iffi_density=0.0,
+                iffi_density=_clamp01_scaled(bundle.static.iffi_density_500, 3.0),
                 slope=_clamp01_scaled(bundle.static.slope_deg, 45.0),
                 pai=_clamp01(bundle.static.pai_class_norm),
                 litho_weight=_clamp01(bundle.static.litho_weight),
             ),
             meteo_terms=MeteoBreakdown(
-                caine_excess=0.0, caine_norm=0.0, api_factor=0.5, soil_factor=0.5
+                caine_excess=0.0,
+                caine_norm=0.0,
+                api_factor=0.5,
+                soil_factor=0.5,
             ),
         )
         from limen.core.models.risk import RiskLevel
@@ -288,6 +296,104 @@ def _try_load_feature_names(run_id: str) -> list[str] | None:
         return [str(x) for x in json.loads(Path(local_path).read_text())]
     except Exception:
         return None
+
+
+# ---------------------------------------------------------------------------
+# SHAP-backed component attribution
+# ---------------------------------------------------------------------------
+
+# Feature-name prefix → component letter mapping. The dataset module ships
+# every feature under one of these prefixes; the booster trained on those
+# names so the explainer's contributions can be re-attributed deterministically.
+_COMPONENT_BY_PREFIX: dict[str, str] = {
+    "static.": "S",
+    "insar.": "S",
+    "meteo.": "M",
+    "rainfall.": "M",
+    "api.": "M",
+    "soil.": "M",
+    "caine.": "M",
+    "seismic.": "E",
+    "fire.": "F",
+    "post_fire.": "F",
+    "hydrology.": "H",
+    "kinematic.": "K",
+    "displacement.": "K",
+    "velocity.": "K",
+}
+
+
+def _component_for(feature_name: str) -> str:
+    """Map a feature name to its component letter (defaults to ``S``)."""
+    for prefix, comp in _COMPONENT_BY_PREFIX.items():
+        if feature_name.startswith(prefix):
+            return comp
+    return "S"
+
+
+def _shap_contributions(artefacts: _MLArtefacts, row: list[float]) -> list[float] | None:
+    """Try the SHAP explainer; return per-feature contributions or None."""
+    explainer: Any = artefacts.explainer
+    if explainer is None:
+        return None
+    try:
+        import numpy as np
+
+        arr = np.asarray([row], dtype=float)
+        # shap.TreeExplainer.shap_values returns either an (n_samples,
+        # n_features) array for binary models or a length-2 list for
+        # the LightGBM binary classifier (one per class). We want the
+        # positive-class contributions.
+        values = explainer.shap_values(arr)
+        if isinstance(values, list):
+            values = values[-1]
+        # Drop the leading sample axis.
+        per_feature = np.asarray(values).reshape(-1)
+        return [float(v) for v in per_feature.tolist()]
+    except Exception as exc:  # pragma: no cover — degrade silently
+        log.debug("ml.shap.failed", error=str(exc))
+        return None
+
+
+def _component_attribution(
+    artefacts: _MLArtefacts,
+    *,
+    feature_row: list[float],
+    total: float,
+) -> dict[str, float]:
+    """Return ``{S, M, E, F, H, K}`` summing (approximately) to ``total``.
+
+    Two paths:
+
+    1. SHAP available → contributions are signed; we take absolute
+       magnitudes per feature, group by component prefix, then
+       re-normalise so the six components sum to ``total``.
+    2. SHAP missing → fall back to the raw feature magnitudes (already
+       clamped upstream). The sum still re-normalises to ``total`` so
+       downstream consumers see a coherent breakdown.
+    """
+    names = list(artefacts.feature_names)
+    if not names or len(feature_row) != len(names):
+        # Resolver fallback: no feature schema. Attribute the whole
+        # score to the static component — the safest neutral choice.
+        return {"S": _clamp01(total), "M": 0.0, "E": 0.0, "F": 0.0, "H": 0.0, "K": 0.0}
+
+    contributions = _shap_contributions(artefacts, feature_row)
+    if contributions is None or len(contributions) != len(names):
+        contributions = [abs(float(v)) for v in feature_row]
+    else:
+        contributions = [abs(v) for v in contributions]
+
+    by_component: dict[str, float] = dict.fromkeys(("S", "M", "E", "F", "H", "K"), 0.0)
+    for name, value in zip(names, contributions, strict=True):
+        by_component[_component_for(name)] += float(value)
+
+    total_mass = sum(by_component.values())
+    target = _clamp01(total)
+    if total_mass <= 0.0 or target <= 0.0:
+        return dict.fromkeys(by_component, 0.0)
+    scale = target / total_mass
+    return {c: _clamp01(v * scale) for c, v in by_component.items()}
 
 
 __all__ = ["MLScoringEngine", "MLScoringEngineLoadError"]
