@@ -28,6 +28,7 @@ from limen.cli.migrate import run as _run_migrate
 from limen.cli.monitor_once import run as _run_monitor_once
 from limen.cli.seed import run as _run_seed
 from limen.cli.server import run as _run_server
+from limen.cli.sync_egms import run as _run_sync_egms
 from limen.cli.train import run as _run_train
 from limen.config.settings import get_settings
 from limen.core.logging import configure_logging
@@ -69,6 +70,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "train",
         help="extract training samples and train the V2 ML model (LightGBM + MLflow)",
     )
+    sub.add_parser(
+        "sync-egms",
+        help="refresh cell_insar_features from Copernicus EGMS (V2.1)",
+    )
     return parser
 
 
@@ -87,6 +92,7 @@ def main(argv: list[str] | None = None) -> int:
         "monitor-once": _run_monitor_once,
         "serve": _run_server,
         "train": _run_train,
+        "sync-egms": _run_sync_egms,
     }
     runner = runners[args.command]
     try:
