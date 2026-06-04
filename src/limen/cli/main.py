@@ -8,6 +8,7 @@ Usage:
     limen backtest           Replay a historical window and emit a §2.5 metrics report.
     limen monitor-once       Run the MAF landslide workflow once for an AOI.
     limen serve              Start the FastAPI HTTP server (uvicorn on :8080).
+    limen train              Extract training samples and train the V2 ML model (MLflow).
     limen --help             Show this help.
 """
 
@@ -27,6 +28,7 @@ from limen.cli.migrate import run as _run_migrate
 from limen.cli.monitor_once import run as _run_monitor_once
 from limen.cli.seed import run as _run_seed
 from limen.cli.server import run as _run_server
+from limen.cli.train import run as _run_train
 from limen.config.settings import get_settings
 from limen.core.logging import configure_logging
 
@@ -63,6 +65,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "serve",
         help="start the FastAPI HTTP server (uvicorn on API__HOST:API__PORT, default :8080)",
     )
+    sub.add_parser(
+        "train",
+        help="extract training samples and train the V2 ML model (LightGBM + MLflow)",
+    )
     return parser
 
 
@@ -80,6 +86,7 @@ def main(argv: list[str] | None = None) -> int:
         "backtest": _run_backtest,
         "monitor-once": _run_monitor_once,
         "serve": _run_server,
+        "train": _run_train,
     }
     runner = runners[args.command]
     try:

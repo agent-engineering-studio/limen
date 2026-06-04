@@ -1,0 +1,67 @@
+"""Honest metrics for the training pipeline + the promotion gate.
+
+* :func:`auc_pr` — area under the precision-recall curve (the §2.6
+  primary objective). Robust to the heavy class imbalance landslide
+  datasets have.
+* :func:`brier_score` — squared error on the calibrated probability.
+  Sanity-checks calibration.
+* :func:`hit_rate_far` — operational §2.5 metrics at a fixed threshold.
+* :func:`mean_lead_time_hours` — operational §2.5 lead time given
+  per-sample valuation times and event times.
+
+The functions use numpy at runtime; the imports are local so the
+package can be imported without numpy installed.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from datetime import datetime
+from typing import Any
+
+
+def auc_pr(y_true: Any, y_prob: Any) -> float:
+    """Area under the precision-recall curve."""
+    from sklearn.metrics import average_precision_score
+
+    return float(average_precision_score(y_true, y_prob))
+
+
+def brier_score(y_true: Any, y_prob: Any) -> float:
+    from sklearn.metrics import brier_score_loss
+
+    return float(brier_score_loss(y_true, y_prob))
+
+
+def hit_rate_far(y_true: Any, y_prob: Any, *, threshold: float) -> tuple[float, float]:
+    """Operational hit-rate + false-alarm-rate at the given probability cutoff."""
+    import numpy as np
+
+    yt = np.asarray(y_true, dtype=int)
+    yp = (np.asarray(y_prob, dtype=float) >= threshold).astype(int)
+    tp = int(((yp == 1) & (yt == 1)).sum())
+    fp = int(((yp == 1) & (yt == 0)).sum())
+    fn = int(((yp == 0) & (yt == 1)).sum())
+    hit_rate = tp / (tp + fn) if (tp + fn) else 0.0
+    far = fp / (fp + tp) if (fp + tp) else 0.0
+    return float(hit_rate), float(far)
+
+
+def mean_lead_time_hours(
+    valuation_times: Sequence[datetime],
+    event_times: Sequence[datetime],
+    *,
+    hits: Sequence[bool],
+) -> float:
+    """Mean (event - valuation) for hit samples, in hours."""
+    deltas: list[float] = []
+    for vt, et, hit in zip(valuation_times, event_times, hits, strict=True):
+        if not hit:
+            continue
+        delta = (et - vt).total_seconds() / 3600.0
+        if delta > 0:
+            deltas.append(delta)
+    return sum(deltas) / len(deltas) if deltas else 0.0
+
+
+__all__ = ["auc_pr", "brier_score", "hit_rate_far", "mean_lead_time_hours"]

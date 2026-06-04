@@ -1,0 +1,75 @@
+"""Convert ``training_samples`` rows into the (X, y, group) arrays.
+
+Heavy deps (numpy + pandas) are imported lazily so plain code paths
+can ``import limen.ml.dataset`` without the `ml` group installed.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+from limen.data.repos.training_samples_repo import TrainingSample
+
+# Order matters — the booster's feature_names list is persisted to MLflow
+# so the live engine projects bundles onto the same vector.
+CANONICAL_FEATURES: tuple[str, ...] = (
+    "static.susc_ispra",
+    "static.iffi_density_500",
+    "static.distance_to_iffi_m",
+    "static.slope_deg",
+    "static.twi",
+    "static.curvature",
+    "static.litho_weight",
+    "static.pai_class_norm",
+    "insar.velocity_mmy",
+    "insar.accel_mmy2",
+    "insar.scatterer_count",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class TrainingMatrix:
+    """X, y, groups (spatial block) + the ordered feature schema."""
+
+    feature_names: tuple[str, ...]
+    X: Any  # np.ndarray
+    y: Any  # np.ndarray
+    groups: tuple[str, ...]
+
+
+def _flatten(features: dict[str, Any]) -> dict[str, float]:
+    flat: dict[str, float] = {}
+    for top, child in features.items():
+        if isinstance(child, dict):
+            for k, v in child.items():
+                if v is None:
+                    flat[f"{top}.{k}"] = 0.0
+                else:
+                    flat[f"{top}.{k}"] = float(v)
+    return flat
+
+
+def to_matrix(samples: list[TrainingSample]) -> TrainingMatrix:
+    """Stack samples into the canonical ordered matrix."""
+    import numpy as np
+
+    rows: list[list[float]] = []
+    labels: list[int] = []
+    groups: list[str] = []
+    for s in samples:
+        flat = _flatten(s.features)
+        rows.append([flat.get(name, 0.0) for name in CANONICAL_FEATURES])
+        labels.append(int(s.label))
+        groups.append(s.split_block)
+    matrix_x = np.array(rows, dtype=float)
+    labels_y = np.array(labels, dtype=int)
+    return TrainingMatrix(
+        feature_names=CANONICAL_FEATURES,
+        X=matrix_x,
+        y=labels_y,
+        groups=tuple(groups),
+    )
+
+
+__all__ = ["CANONICAL_FEATURES", "TrainingMatrix", "to_matrix"]
