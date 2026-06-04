@@ -1,15 +1,17 @@
 # Limen — Claude Code project guide
 
 > AI multi-factor landslide-risk monitoring for the Italian territory.
-> Pilot: **Puglia + Basilicata**. Current state: **Geo-Data Service
-> available** — V1 prototype (Phases 0–8) + V1.5 in-situ IoT (Phase 9)
-> + V2 ML stack (Phase 10) + KG grounding (Phase 11) + Phase 12:
-> opt-in `geodata` compose profile with its own PostGIS, ISPRA dataset
-> ingestion, per-cell-feature export to the operational DB, PMTiles
-> for the map, and the `ispra-geo` MCP server. The deterministic V1
-> engine is still the production champion; everything new stays out
-> of the hourly critical path. See `README.md`, `docs/ml.md`,
-> `docs/grounding.md`, and `docs/geodata.md`.
+> Pilot: **Puglia + Basilicata**. Current state: **implementation
+> complete (0.6.0-impl-complete) — entering formal testing**.
+> V1 prototype (Phases 0–8) + V1.5 in-situ IoT (Phase 9) + V2 ML
+> stack (Phase 10) + KG grounding (Phase 11) + Geo-Data Service
+> (Phase 12) + Flood / DEM / CORINE / Geological / SHAP-backed ML
+> component breakdown / EFFIS bulk fallback / official ISTAT seed
+> AOIs / static PMTiles overlays. Every scoring component
+> (S/M/E/F/H/K) has at least one tested opt-in data-feed pipeline;
+> the deterministic V1 engine remains the production champion.
+> Next session opens the formal test cycle. See `README.md`,
+> `docs/ml.md`, `docs/grounding.md`, `docs/geodata.md`.
 
 ---
 

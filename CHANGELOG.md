@@ -6,6 +6,105 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0-impl-complete] — 2026-06-04 — Backlog closure + ready-for-testing
+
+Closes the post-Phase-12 audit: every "deferred by design" item from
+the original prompts has either been implemented or has a tested
+opt-in pipeline ready for production data. The only remaining
+deferred item is Clerk auth (operator-deferred). Branch is now
+feature-complete; next session begins formal testing.
+
+### Added — Point C — validation gate from prompt 12 §6
+
+* +27 integration tests against a real testcontainers PostGIS:
+  - 8 importer tests (PAI/IFFI/Dizionari with SRID + valid-geometry
+    guarantees, composite-id collision avoidance, lookup roundtrip);
+  - 6 init runner e2e (skip-if-unchanged idempotency, per-dataset
+    failure isolation, `--only` / `--force` / `--dry-run`, incomplete
+    archive aborts only the offending dataset);
+  - 13 MCP tools e2e (`hazard_at` most-severe-on-overlap,
+    `iffi_query` decodes via the Dizionario LEFT JOIN, bbox + region
+    filters, `pai_summary` per-class geodesic km², `dataset_status`
+    DISTINCT ON, `refresh` fail-closes without admin token).
+* `docker build -f geodata/Dockerfile -t limen/geodata:0.1 .` now
+  succeeds: tippecanoe v2.50.0 compiled from source in a builder
+  stage, uv venv shebangs aligned with `/app` WORKDIR, `--group mcp`
+  resolution against the root pyproject. Image is 1.14 GB, no data
+  baked in.
+
+### Added — D + E — frontend + scheduler
+
+* Static PMTiles overlays for `pai_landslide_hazard.pmtiles` +
+  `iffi_landslides.pmtiles` in the MapLibre `RiskMap`, opt-in via
+  `VITE_PAI_PMTILES_URL` / `VITE_IFFI_PMTILES_URL`. Hidden by default
+  for LegendPanel toggle. `pmtiles@^3.2.0` added to the frontend.
+* `JOB_GEODATA_EXPORT` APScheduler job — runs
+  `geodata.exports.features.export_cell_features` on the configured
+  cadence (default weekly), gated by `geodata.enable_periodic_export`.
+  Three fail-soft paths: disabled flag, missing `limen-geodata`
+  install, exporter raising.
+
+### Added — B + A.minor — escalation evidence
+
+* `build_escalation_evidence(ctx, top_k=5)` replaces the
+  `build_escalation_workflow` no-op. Pure function returning typed
+  `EscalationEvidence` rows ordered by descending score; each row
+  carries the dominant component (S/M/E/F/H/K) and the V1.5
+  hard-escalation flag.
+* `EscalationGateExecutor` attaches the evidence bundle to
+  `ctx.notes["escalation_evidence"]` for the operator console.
+
+### Added — A.1-A.5 — static-factor pipelines + ML full body
+
+* `limen.integrations.dem` — pure-numpy Horn-algorithm
+  slope/aspect/curvature + rasterio zonal stats; opt-in via
+  `LIMEN_DEM_RASTER` (TINITALY 10 m or any metric DEM).
+* `limen.integrations.corine` — categorical-raster majority class
+  per cell; opt-in via `LIMEN_CORINE_RASTER`.
+* `limen.integrations.geological` — shapefile-driven lithology
+  dominance (area-weighted) + nearest-fault Haversine distance
+  capped at 50 km. `LITHO_WEIGHTS` maps argille/flysch/calcari/...
+  to the §2.3 susceptibility weights.
+* Both `limen.integrations.dem` + `corine` + `geological` are
+  wired into `static_bootstrap/orchestrator.py` — replaces the
+  three legacy `static_bootstrap.skip` warnings.
+* `MLScoringEngine.score()` full body — SHAP-attributed S/M/E/F/H/K
+  component breakdown re-normalised to the calibrated probability.
+  Three fallback paths (SHAP missing, no feature_names, mismatched
+  row).
+* Seed AOIs replaced with official ISTAT 2024 regional boundaries
+  (sourced from openpolis/geojson-italy CC-BY-4.0) simplified at
+  0.002° (Puglia 74 KB / 713 vertices, Basilicata 39 KB / 378).
+
+### Added — Flood module (this session)
+
+* `011_flood_factors.sql` migration adds `flood_hazard_class` +
+  `flood_hazard_norm` columns to `cell_static_factors` with CHECK
+  constraints + partial index.
+* Engine `H` (hydrology) now reads `flood_hazard_norm` when set,
+  else stays `0.0` (V1 baseline byte-for-byte preserved). The
+  geodata exporter joins the ISPRA Mosaicatura Idraulica into the
+  per-cell SQL and emits the new columns; `idraulica` flipped from
+  `enabled: false` to `enabled: true` in the manifest.
+
+### Added — EFFIS bulk Shapefile fallback (this session)
+
+* `EffisHttpClient.fetch_perimeters_bulk` — downloads a ZIPped
+  shapefile, safe-extracts (path-traversal guarded), reprojects to
+  EPSG:4326, then filters locally by bbox + firedate. Same GeoJSON
+  shape as the WFS path so the sync job's parser is unchanged.
+  Degrades to `[]` on 5xx / bad-archive.
+
+### Status
+
+* 448 tests green (352 unit + 96 integration + 2 sklearn-gated skips).
+* mypy --strict clean; ruff clean.
+* Coverage 82.17%.
+* Docker image `limen/geodata:0.1` builds.
+* Every scoring component (S/M/E/F/H/K) has at least one tested
+  data-feed pipeline; all are opt-in via env so the default behaviour
+  is the V1 baseline.
+
 ## [0.5.0-geodata] — 2026-06-04 — Geo-Data Service + ispra-geo MCP (Phase 12)
 
 Phase 12 — adds the **opt-in** `geodata` compose profile per
