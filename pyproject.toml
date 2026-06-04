@@ -68,6 +68,20 @@ dev = [
 storage = [
     "boto3>=1.35",
 ]
+ml = [
+    "lightgbm>=4.5",
+    "scikit-learn>=1.5",
+    "mlflow>=2.16",
+    "optuna>=4.0",
+    "shap>=0.46",
+    "onnxruntime>=1.20",
+    "numpy>=2.1",
+    "pandas>=2.2",
+]
+dl = [
+    "torch>=2.4",
+    "onnx>=1.17",
+]
 
 [build-system]
 requires = ["uv_build>=0.11.16,<0.12.0"]
@@ -140,6 +154,16 @@ module = [
     "opentelemetry.*",
     "aiomqtt.*",
     "aiosmtplib.*",
+    "lightgbm.*",
+    "sklearn.*",
+    "mlflow.*",
+    "optuna.*",
+    "shap.*",
+    "onnxruntime.*",
+    "onnx.*",
+    "torch.*",
+    "numpy.*",
+    "pandas.*",
 ]
 ignore_missing_imports = true
 

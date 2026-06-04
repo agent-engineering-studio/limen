@@ -37,6 +37,31 @@ class LLMProvider(StrEnum):
     OLLAMA = "ollama"
 
 
+class ScoringEngineKind(StrEnum):
+    """Which scoring engine drives the workflow's authoritative numbers.
+
+    The V1 ``deterministic`` engine remains the default and the champion
+    that drives alerts. ``ml`` swaps it for the V2 :class:`MLScoringEngine`
+    once a model has been promoted.
+    """
+
+    DETERMINISTIC = "deterministic"
+    ML = "ml"
+
+
+class ScoringMode(StrEnum):
+    """Champion-challenger mode for the workflow.
+
+    * ``champion_only`` — only the configured engine runs.
+    * ``shadow`` — the deterministic engine remains champion (its scores
+      drive alerts + persistence), and the ML engine runs in parallel
+      with its predictions logged for evaluation only.
+    """
+
+    CHAMPION_ONLY = "champion_only"
+    SHADOW = "shadow"
+
+
 class DBSettings(BaseSettings):
     """PostgreSQL / PostGIS connection settings."""
 
@@ -243,6 +268,75 @@ class IotSettings(BaseSettings):
     partition_window_months: int = Field(default=6, ge=1, le=24)
 
 
+class ScoringSettings(BaseSettings):
+    """Selects the scoring engine + champion-challenger mode (V2)."""
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    engine: ScoringEngineKind = ScoringEngineKind.DETERMINISTIC
+    mode: ScoringMode = ScoringMode.CHAMPION_ONLY
+    # MLflow tracking — file:// for the dev default, postgresql:// for prod
+    # (the project's Postgres can host the MLflow backend, avoiding a
+    # separate database). Artifacts go to the ObjectStore root by default.
+    mlflow_tracking_uri: str = "file:./mlruns"
+    mlflow_experiment: str = "limen-landslide"
+    mlflow_registered_model: str = "limen-landslide-ml"
+    mlflow_model_stage: Literal["Staging", "Production", "Archived"] = "Production"
+    # Promotion gate — the ML model is blocked from champion until it
+    # clears these floors on the same backtest the V1 baseline ran on.
+    promotion_auc_pr_min: float = Field(default=0.55, ge=0.0, le=1.0)
+    promotion_brier_max: float = Field(default=0.20, ge=0.0, le=1.0)
+    promotion_hit_rate_min: float = Field(default=0.70, ge=0.0, le=1.0)
+    promotion_far_max: float = Field(default=0.30, ge=0.0, le=1.0)
+    promotion_lead_time_hours_min: float = Field(default=18.0, ge=0.0)
+
+
+class TrainingSettings(BaseSettings):
+    """Feature-store + training pipeline knobs (V2)."""
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    # Background (negative) sample density — multiplier over positive count.
+    background_ratio: float = Field(default=5.0, gt=0.0)
+    # Spatial-block grid edge (degrees) — coarse enough that nearby cells
+    # don't end up in different folds. 0.5° ≈ 50 km in southern Italy.
+    spatial_block_deg: float = Field(default=0.5, gt=0.0, le=2.0)
+    spatial_cv_folds: int = Field(default=5, ge=2, le=10)
+    # Optuna search.
+    optuna_trials: int = Field(default=50, ge=1, le=2000)
+    optuna_timeout_seconds: int = Field(default=900, ge=10)
+    seed: int = Field(default=42, ge=0)
+
+
+class EgmsSettings(BaseSettings):
+    """Copernicus EGMS InSAR product fetch (V2.1)."""
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    # The public download portal is auth-gated; production deployments
+    # set this to an internal mirror or an authenticated proxy. With it
+    # empty the integration degrades gracefully (logs and returns 0).
+    base_url: str = "https://egms.land.copernicus.eu/api/v1"
+    product: Literal["L2a_calibrated", "L3_ortho"] = "L3_ortho"
+    # Cadence is yearly (EGMS releases ~ once per year); the rollover job
+    # only fetches when the registered dataset_version is older than this.
+    refresh_days: int = Field(default=180, ge=1)
+
+
+class MonitoringSettings(BaseSettings):
+    """Drift + retraining monitor cadence + thresholds (V2)."""
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    psi_warn: float = Field(default=0.1, ge=0.0)
+    psi_alert: float = Field(default=0.25, ge=0.0)
+    ks_alert: float = Field(default=0.2, ge=0.0)
+    prediction_drift_alert: float = Field(default=0.15, ge=0.0)
+    # APScheduler cadence — coarse, drift checks aren't a hot path.
+    drift_check_hours: int = Field(default=24, ge=1)
+    enable_drift_monitoring: bool = False
+
+
 class AlertSettings(BaseSettings):
     """Alert-dispatch rules used by the AlertDispatchExecutor."""
 
@@ -278,6 +372,10 @@ class Settings(BaseSettings):
     notifications: NotificationsSettings = Field(default_factory=NotificationsSettings)
     alert: AlertSettings = Field(default_factory=AlertSettings)
     iot: IotSettings = Field(default_factory=IotSettings)
+    scoring: ScoringSettings = Field(default_factory=ScoringSettings)
+    training: TrainingSettings = Field(default_factory=TrainingSettings)
+    egms: EgmsSettings = Field(default_factory=EgmsSettings)
+    monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_json: bool = False
