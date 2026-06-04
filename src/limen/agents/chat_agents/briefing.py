@@ -16,13 +16,17 @@ Behaviour:
 
 from __future__ import annotations
 
+import asyncio
 import re
 from importlib import resources
 
 from limen.agents.chat_agents.risk_analyst import RiskAnalysis
+from limen.agents.grounding.format import format_citations
+from limen.agents.grounding.service import GroundingService
 from limen.agents.llm_factory.base import ChatClient, ChatMessage
 from limen.core.logging import get_logger
 from limen.core.models.context import AggregateAssessment
+from limen.knowledge.schema import GroundingQuery, GroundingResult
 
 log = get_logger(__name__)
 
@@ -88,13 +92,26 @@ def _fallback_briefing(assessment: AggregateAssessment) -> str:
 
 
 class BriefingAgent:
-    """Generates the 150-250 word Italian narrative briefing."""
+    """Generates the 150-250 word Italian narrative briefing.
+
+    V2.x: when a :class:`GroundingService` is injected, the agent runs
+    an advisory KG lookup *in parallel* with the LLM call. The grounding
+    result is best-effort — a failure / timeout simply means the
+    briefing ships without citations. Numeric scoring outputs are
+    NEVER altered by this path.
+    """
 
     role_name = "Briefing"
 
-    def __init__(self, client: ChatClient) -> None:
+    def __init__(
+        self,
+        client: ChatClient,
+        *,
+        grounding: GroundingService | None = None,
+    ) -> None:
         self._client = client
         self._system_prompt = _load_system_prompt()
+        self._grounding = grounding
 
     def _user_message(
         self,
@@ -133,6 +150,17 @@ class BriefingAgent:
             ChatMessage(role="user", content=self._user_message(assessment, analysis)),
         ]
 
+        # Kick off the advisory KG lookup CONCURRENTLY so its latency
+        # overlaps with the LLM call — it can never extend total budget
+        # beyond max(LLM, kg.timeout_seconds). Failures here are
+        # swallowed downstream when we render citations.
+        grounding_task: asyncio.Task[GroundingResult] | None = None
+        if self._grounding is not None and analysis is not None:
+            grounding_task = asyncio.create_task(
+                self._run_grounding(assessment=assessment, analysis=analysis),
+                name="briefing-grounding",
+            )
+
         try:
             text = await self._client.chat(messages)
         except Exception as exc:
@@ -141,15 +169,17 @@ class BriefingAgent:
                 error=str(exc),
                 error_type=type(exc).__name__,
             )
+            if grounding_task is not None:
+                grounding_task.cancel()
             return _fallback_briefing(assessment)
 
         words = count_words(text)
         log.info("briefing.length", words=words)
 
         if MIN_WORDS <= words <= MAX_WORDS:
-            return text
+            return await self._append_citations(text, grounding_task)
         if words > MAX_WORDS:
-            return trim_to_max(text, MAX_WORDS)
+            return await self._append_citations(trim_to_max(text, MAX_WORDS), grounding_task)
 
         # Too short → one regeneration with explicit instruction.
         log.info("briefing.regenerate", reason="too_short", words=words)
@@ -168,12 +198,78 @@ class BriefingAgent:
             )
         except Exception as exc:
             log.warning("briefing.retry_error", error=str(exc))
+            if grounding_task is not None:
+                grounding_task.cancel()
             return _fallback_briefing(assessment)
 
         retry_words = count_words(retry)
         log.info("briefing.length.retry", words=retry_words)
         if MIN_WORDS <= retry_words <= MAX_WORDS:
-            return retry
+            return await self._append_citations(retry, grounding_task)
         if retry_words > MAX_WORDS:
-            return trim_to_max(retry, MAX_WORDS)
+            return await self._append_citations(trim_to_max(retry, MAX_WORDS), grounding_task)
+        if grounding_task is not None:
+            grounding_task.cancel()
         return _fallback_briefing(assessment)
+
+    # ------------------------------------------------------------------
+    # KG grounding — advisory, never authoritative.
+    # ------------------------------------------------------------------
+    async def _run_grounding(
+        self,
+        *,
+        assessment: AggregateAssessment,
+        analysis: RiskAnalysis,
+    ) -> GroundingResult:
+        """Best-effort KG query. Returns empty result on any failure."""
+        if self._grounding is None:
+            return GroundingResult(
+                query=GroundingQuery(region=assessment.aoi_id, mechanism=analysis.driver),
+                passages=(),
+            )
+        query = GroundingQuery(
+            region=assessment.aoi_id,
+            mechanism=analysis.driver,
+            top_k=self._grounding.settings.top_k,
+        )
+        try:
+            return await self._grounding.ground(query)
+        except Exception as exc:
+            log.warning(
+                "briefing.grounding_error",
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            return GroundingResult(query=query, passages=())
+
+    async def _append_citations(
+        self,
+        narrative: str,
+        grounding_task: asyncio.Task[GroundingResult] | None,
+    ) -> str:
+        """Wait briefly for the KG task, then splice citations in.
+
+        The await is bounded: the task's own internal timeout (set by
+        :class:`GroundingService`) already caps the wait. We accept the
+        result here even if it's empty — that's the "no citations"
+        branch.
+        """
+        if grounding_task is None:
+            return narrative
+        try:
+            result = await grounding_task
+        except asyncio.CancelledError:
+            return narrative
+        except Exception as exc:
+            log.warning(
+                "briefing.grounding_task_error",
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            return narrative
+        block = format_citations(result)
+        if not block:
+            log.info("briefing.grounding.no_citations")
+            return narrative
+        log.info("briefing.grounding.cited", passages=len(result.passages))
+        return f"{narrative}\n\n{block}"

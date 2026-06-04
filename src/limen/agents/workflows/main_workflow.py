@@ -35,6 +35,7 @@ from limen.agents.executors import (
     ShadowChallengerExecutor,
     StaticFactorsExecutor,
 )
+from limen.agents.grounding.service import GroundingService
 from limen.agents.llm_factory.base import LlmClientFactory
 from limen.agents.workflow_runtime.builder import Workflow, WorkflowBuilder
 from limen.agents.workflow_runtime.executor import Executor, handler
@@ -64,6 +65,10 @@ class WorkflowDeps:
     """V2 — shadow challenger. When set and ``settings.scoring.mode`` is
     ``shadow``, the workflow runs it in parallel and logs to ``model_runs``
     without touching ``cell_results``/``assessment``."""
+    grounding_service: GroundingService | None = None
+    """V2.x — KG advisory grounding. When set and ``settings.kg.enabled``
+    is true, the BriefingAgent runs a short-timeout async KG lookup and
+    appends citations. Failures degrade silently."""
 
 
 # ---------------------------------------------------------------------------
@@ -99,9 +104,14 @@ class RiskAnalystNode(Executor):
 class BriefingNode(Executor):
     """Executor wrapper around :class:`BriefingAgent`."""
 
-    def __init__(self, llm_factory: LlmClientFactory) -> None:
+    def __init__(
+        self,
+        llm_factory: LlmClientFactory,
+        *,
+        grounding: GroundingService | None = None,
+    ) -> None:
         super().__init__(name="Briefing")
-        self._agent = BriefingAgent(llm_factory.create("Briefing"))
+        self._agent = BriefingAgent(llm_factory.create("Briefing"), grounding=grounding)
 
     @handler
     async def run(self, ctx: MonitoringContext) -> MonitoringContext:
@@ -172,7 +182,7 @@ def build_landslide_workflow(
     builder = (
         builder.add(EscalationGateExecutor())
         .add(RiskAnalystNode(deps.llm_factory))
-        .add(BriefingNode(deps.llm_factory))
+        .add(BriefingNode(deps.llm_factory, grounding=deps.grounding_service))
         .add(PersistResultExecutor())
         .add(AlertDispatchExecutor(deps.notification_dispatcher))
     )
@@ -185,6 +195,7 @@ def build_landslide_workflow(
         scoring_engine=type(champion).__name__,
         scoring_mode=settings.scoring.mode.value,
         challenger=type(challenger).__name__ if challenger is not None else None,
+        kg_enabled=settings.kg.enabled,
     )
     return builder.build()
 

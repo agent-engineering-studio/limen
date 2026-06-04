@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Depends, Request
 
+from limen.agents.grounding.service import GroundingService
 from limen.agents.llm_factory.base import LlmClientFactory
 from limen.config.settings import Settings, get_settings
 from limen.core.scoring.base import ScoringEngine
@@ -55,6 +56,8 @@ class AppDependencies:
     # executors via the settings-driven resolver.
     scoring_engine: ScoringEngine | None = None
     challenger_engine: ScoringEngine | None = None
+    # V2.x — KG grounding service, only constructed when `kg.enabled` is true.
+    grounding_service: GroundingService | None = None
 
     @classmethod
     async def build(
@@ -86,11 +89,13 @@ class AppDependencies:
         # registered MLflow model.
         champion = resolve_scoring_engine(settings=s, thresholds=thresholds)
         challenger = resolve_challenger(settings=s, thresholds=thresholds)
+        cache = PostgresCache()
+        grounding = GroundingService(settings=s.kg, cache=cache) if s.kg.enabled else None
 
         return cls(
             settings=s,
             pool=pool,
-            cache=PostgresCache(),
+            cache=cache,
             object_store=build_object_store(s.object_store),
             llm_factory=factory,
             thresholds=thresholds,
@@ -98,6 +103,7 @@ class AppDependencies:
             notification_dispatcher=dispatcher,
             scoring_engine=champion,
             challenger_engine=challenger,
+            grounding_service=grounding,
         )
 
     def build_workflow(self, *, cell_limit: int | None = None) -> Workflow:
@@ -114,6 +120,7 @@ class AppDependencies:
                 notification_dispatcher=self.notification_dispatcher,
                 scoring_engine=self.scoring_engine,
                 challenger_engine=self.challenger_engine,
+                grounding_service=self.grounding_service,
             ),
             cell_limit=cell_limit,
         )
