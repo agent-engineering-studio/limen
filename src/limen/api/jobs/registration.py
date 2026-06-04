@@ -14,6 +14,8 @@ from apscheduler.triggers.interval import IntervalTrigger
 from limen.api.dependencies import AppDependencies
 from limen.api.jobs.cache_cleanup import run_cache_cleanup_job
 from limen.api.jobs.hourly_monitoring import run_hourly_monitoring
+from limen.api.jobs.iot_partition_rollover import run_iot_partition_rollover_job
+from limen.api.jobs.iot_rollup import run_iot_rollup_job
 from limen.api.jobs.weekly_idrogeo_sync import run_weekly_idrogeo_sync
 from limen.config.settings import SchedulerBackend
 from limen.core.logging import get_logger
@@ -23,6 +25,8 @@ log = get_logger(__name__)
 JOB_HOURLY_MONITORING = "limen-hourly-monitoring"
 JOB_WEEKLY_IDROGEO = "limen-weekly-idrogeo"
 JOB_CACHE_CLEANUP = "limen-cache-cleanup"
+JOB_IOT_ROLLUP = "limen-iot-rollup"
+JOB_IOT_PARTITION_ROLLOVER = "limen-iot-partition-rollover"
 
 
 async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> list[str]:
@@ -73,6 +77,35 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
             "scheduler.registered",
             job=JOB_CACHE_CLEANUP,
             interval_seconds=cfg.cache_cleanup_interval_seconds,
+        )
+
+    if deps.settings.enable_insitu:
+        await scheduler.add_schedule(
+            run_iot_rollup_job,
+            args=(deps,),
+            trigger=IntervalTrigger(minutes=deps.settings.iot.rollup_minutes),
+            id=JOB_IOT_ROLLUP,
+            conflict_policy=ConflictPolicy.replace,
+        )
+        registered.append(JOB_IOT_ROLLUP)
+        log.info(
+            "scheduler.registered",
+            job=JOB_IOT_ROLLUP,
+            interval_minutes=deps.settings.iot.rollup_minutes,
+        )
+
+        await scheduler.add_schedule(
+            run_iot_partition_rollover_job,
+            args=(deps,),
+            trigger=CronTrigger(day=2, hour=2, minute=0),
+            id=JOB_IOT_PARTITION_ROLLOVER,
+            conflict_policy=ConflictPolicy.replace,
+        )
+        registered.append(JOB_IOT_PARTITION_ROLLOVER)
+        log.info(
+            "scheduler.registered",
+            job=JOB_IOT_PARTITION_ROLLOVER,
+            cron="day 02 02:00",
         )
 
     return registered

@@ -156,6 +156,22 @@ class PostFireBlock(_StrictModel):
     window_months_max: float = Field(..., gt=0.0)
 
 
+class KinematicWeights(_StrictModel):
+    """Per-cell weight K takes when monitored (renormalizes the others)."""
+
+    k: float = Field(..., ge=0.0, le=1.0)
+
+
+class KinematicBlock(_StrictModel):
+    """V1.5 K component — displacement velocity / Fukuzono inverse-velocity."""
+
+    v_threshold_mmd: float = Field(..., gt=0.0)
+    sigma_v: float = Field(..., gt=0.0)
+    acceleration_alarm_mmd2: float = Field(..., gt=0.0)
+    inverse_velocity_alarm: float = Field(..., gt=0.0)
+    weights: KinematicWeights
+
+
 class ClassRange(_StrictModel):
     """Closed-open ``[lo, hi)`` interval; the final class is closed-closed."""
 
@@ -216,6 +232,9 @@ class RegionalThresholds(_StrictModel):
     soil: SoilBlock
     seismic: SeismicBlock
     post_fire: PostFireBlock
+    # V1.5: optional. Older YAMLs without a `kinematic` block still
+    # validate; K simply stays inactive everywhere.
+    kinematic: KinematicBlock | None = None
     classes: ClassCutoffs
     target_distribution: TargetDistribution
     calibration: CalibrationBlock

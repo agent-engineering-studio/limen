@@ -103,6 +103,19 @@ post_fire:
   curve_denominator: 50.0
   window_months_max: 24.0
 
+# V1.5 — Kinematic component K (per §2.9). Only contributes when a
+# calibrated displacement sensor is present in the bundle's
+# `sensor_features`. Defaults are conservative literature values for
+# slow-moving landslides; per-site calibration via per-cell metadata
+# can override at runtime.
+kinematic:
+  v_threshold_mmd:        5.0     # mm / day — velocity at sigmoid centre
+  sigma_v:                3.0     # mm / day — sigmoid steepness
+  acceleration_alarm_mmd2: 2.0    # mm / day² — hard escalation
+  inverse_velocity_alarm:  0.10   # days / mm — Fukuzono failure proxy
+  weights:
+    k:                    0.20    # share of the final score when K is active
+
 # Final classification cutoffs. Inclusive lower bound, exclusive upper
 # bound, except for the final class which is inclusive on both sides.
 classes:

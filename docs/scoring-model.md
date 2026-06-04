@@ -15,9 +15,16 @@ combination:
 risk(c, t) = w_S · S(c) + w_M · M(c, t) + w_E · E(t) + w_F · F(t) + w_H · H
 ```
 
-`H = 0` in V1 (hydrology lands in V1.5). Top-level weights default to
+`H = 0` in V1 (hydrology lands later). Top-level weights default to
 `(w_S, w_M, w_E, w_F, w_H) = (0.35, 0.40, 0.15, 0.07, 0.03)` and MUST
 sum to 1.0 — the Pydantic loader enforces this.
+
+V1.5 additionally activates a kinematic component **K** on cells with
+in-situ sensor coverage (displacement velocity + Fukuzono
+inverse-velocity); on those monitored cells the formula renormalises to
+`risk = w_K · K + (1 - w_K) · (V1 sum)` with `w_K` from the YAML's
+`kinematic.weights.k` (default 0.20). On unmonitored cells K stays 0
+and the formula reduces to the V1 weighted sum. See `docs/iot.md`.
 
 ### S — static component
 

@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from limen.core.models.risk import (
     CellFeatureBundle,
     ComponentBreakdown,
+    KinematicBreakdown,
     MeteoBreakdown,
     RiskLevel,
     RiskScore,
@@ -32,6 +33,7 @@ from limen.core.models.risk import (
 )
 from limen.core.scoring.api import api_factor
 from limen.core.scoring.caine import compute_caine
+from limen.core.scoring.kinematic import compute_kinematic
 from limen.core.scoring.post_fire import post_fire_factor
 from limen.core.scoring.regional_thresholds import (
     ClassCutoffs,
@@ -165,6 +167,27 @@ class MultiFactorScoringEngine:
         )
         soil_f = _soil_sigmoid(bundle.dynamic.soil_moisture_0_7, soil=self._t.soil)
 
+        # V1.5 — measured-over-modeled override (§2.9). When the cell
+        # carries in-situ readings, they replace the Open-Meteo / soil
+        # estimates for the duration of this scoring call. The list of
+        # overridden inputs is recorded on the breakdown for auditability.
+        overrides: list[str] = []
+        sensor = bundle.dynamic.sensor_features
+        if sensor is not None:
+            if sensor.rainfall_mm is not None:
+                caine_norm = _clamp01(
+                    sensor.rainfall_mm / max(self._t.caine.event_reconstruction.min_event_mm, 1e-6)
+                )
+                overrides.append("caine")
+            if sensor.pore_pressure_kpa is not None:
+                # Treat pore pressure as a direct API proxy normalised by
+                # the YAML's sigma so behaviour matches the modeled path.
+                api_f = _clamp01(sensor.pore_pressure_kpa / self._t.api.sigmoid_sigma_mm)
+                overrides.append("api")
+            if sensor.soil_moisture is not None:
+                soil_f = _soil_sigmoid(sensor.soil_moisture, soil=self._t.soil)
+                overrides.append("soil")
+
         m = w.caine * caine_norm + w.api * api_f + w.soil * soil_f
         return _MeteoAggregate(
             m=_clamp01(m),
@@ -173,6 +196,7 @@ class MultiFactorScoringEngine:
                 caine_norm=caine_norm,
                 api_factor=api_f,
                 soil_factor=soil_f,
+                measured_overrides=tuple(overrides),
             ),
         )
 
@@ -180,7 +204,14 @@ class MultiFactorScoringEngine:
     # Public API
     # ------------------------------------------------------------------
     def score(self, bundle: CellFeatureBundle) -> RiskScore:
-        """Score one cell at one moment. Pure, deterministic."""
+        """Score one cell at one moment. Pure, deterministic.
+
+        V1.5: when the bundle carries a :class:`SensorFeatures` *and*
+        a YAML kinematic block is configured, K is computed and the
+        top-level weights are renormalised so ``w_K + (scaled S/M/E/F/H)
+        = 1``. With no sensor features (or no YAML block), the score is
+        byte-for-byte identical to V1.
+        """
         static = self._static(bundle)
         meteo = self._meteo(bundle)
         _pga, e = compute_seismic(
@@ -192,10 +223,40 @@ class MultiFactorScoringEngine:
         # H is always 0 in V1 (hydrology component lands V1.5+).
         h = 0.0
 
-        w = self._t.weights
-        total = (
-            w.static * static.s + w.meteo * meteo.m + w.seismic * e + w.fire * f + w.hydrology * h
+        k_value, k_breakdown = compute_kinematic(
+            bundle.dynamic.sensor_features,
+            kinematic=self._t.kinematic,
         )
+
+        w = self._t.weights
+        kinematic_block = self._t.kinematic
+        monitored = (
+            kinematic_block is not None
+            and bundle.dynamic.sensor_features is not None
+            and bundle.dynamic.sensor_features.has_kinematic_signal
+        )
+        if monitored and kinematic_block is not None:
+            w_k = kinematic_block.weights.k
+            remaining = 1.0 - w_k
+            total = w_k * k_value + remaining * (
+                w.static * static.s
+                + w.meteo * meteo.m
+                + w.seismic * e
+                + w.fire * f
+                + w.hydrology * h
+            )
+        else:
+            # Pure V1 path — K is zero, weights untouched.
+            k_breakdown = (
+                k_breakdown if bundle.dynamic.sensor_features is not None else KinematicBreakdown()
+            )
+            total = (
+                w.static * static.s
+                + w.meteo * meteo.m
+                + w.seismic * e
+                + w.fire * f
+                + w.hydrology * h
+            )
         score_val = _clamp01(total)
 
         return RiskScore(
@@ -207,10 +268,14 @@ class MultiFactorScoringEngine:
                 e=e,
                 f=f,
                 h=h,
+                k=k_value if monitored else 0.0,
                 static_terms=static.breakdown,
                 meteo_terms=meteo.breakdown,
+                kinematic_terms=k_breakdown if monitored else None,
             ),
             model_version=self._t.model_version,
+            monitored=monitored,
+            hard_escalation=k_breakdown.hard_escalation if monitored else False,
         )
 
 

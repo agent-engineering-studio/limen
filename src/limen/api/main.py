@@ -34,6 +34,7 @@ from limen.core.logging import configure_logging, get_logger
 from limen.data.db import close_pool, init_pool
 from limen.data.migrate import run_migrations
 from limen.integrations._http import SharedHttpClient
+from limen.integrations.iot.mqtt_ingestor import MqttIngestor
 from limen.observability.tracing import setup_tracing
 
 if TYPE_CHECKING:
@@ -59,11 +60,24 @@ async def _lifespan_default(app: FastAPI) -> AsyncIterator[None]:
     await scheduler.__aenter__()
     await register_jobs(scheduler, deps)
     await scheduler.start_in_background()
+
+    ingestor: MqttIngestor | None = None
+    if settings.enable_insitu:
+        sigma_v = (
+            deps.thresholds.kinematic.sigma_v if deps.thresholds.kinematic is not None else None
+        )
+        ingestor = MqttIngestor(settings.iot, sigma_v=sigma_v)
+        await ingestor.start()
+        log.info("api.lifespan.iot.started")
+    app.state.iot_ingestor = ingestor
     log.info("api.lifespan.started")
 
     try:
         yield
     finally:
+        if ingestor is not None:
+            with contextlib.suppress(Exception):
+                await ingestor.stop()
         with contextlib.suppress(Exception):
             await scheduler.stop()
         with contextlib.suppress(Exception):

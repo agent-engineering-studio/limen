@@ -20,12 +20,14 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from limen.core.models.risk import (
+    KinematicBreakdown,
     MeteoBreakdown,
     RiskLevel,
     SeismicHistoryEvent,
     StaticBreakdown,
     StaticFactors,
 )
+from limen.core.models.sensor import SensorFeatures
 
 
 class CellRiskRecord(BaseModel):
@@ -43,6 +45,11 @@ class CellRiskRecord(BaseModel):
     e: float = Field(..., ge=0.0, le=1.0)
     f: float = Field(..., ge=0.0, le=1.0)
     h: float = Field(..., ge=0.0, le=1.0)
+    # V1.5 — present only on monitored cells (in-situ regime).
+    k: float = Field(default=0.0, ge=0.0, le=1.0)
+    kinematic_terms: KinematicBreakdown | None = None
+    monitored: bool = False
+    hard_escalation: bool = False
 
 
 class RiskAnalysisDTO(BaseModel):
@@ -97,6 +104,8 @@ class MonitoringContext(BaseModel):
     seismic_events: Sequence[SeismicHistoryEvent] = Field(default_factory=tuple)
     months_since_fire: float | None = None
     sensor_payload: dict[str, Any] | None = None
+    # V1.5 — populated by SensorFetchExecutor when enable_insitu=True.
+    sensor_features_by_cell: dict[str, SensorFeatures] = Field(default_factory=dict)
 
     # Outputs
     cell_results: list[CellRiskRecord] = Field(default_factory=list)

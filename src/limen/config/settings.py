@@ -202,6 +202,47 @@ class NotificationsSettings(BaseSettings):
     email: EmailChannelSettings = Field(default_factory=EmailChannelSettings)
 
 
+class IotSettings(BaseSettings):
+    """V1.5 in-situ ingestion knobs.
+
+    The whole subsystem is gated by :attr:`Settings.enable_insitu`.
+    With it off the ingestor never starts, the rollup job never runs,
+    and the engine's K component is dormant — the scores are byte-for-
+    byte identical to the pure V1 path.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    # MQTT broker for the ingestor. Defaults to the demo Mosquitto.
+    broker_host: str = "localhost"
+    broker_port: int = Field(default=1883, ge=1, le=65535)
+    broker_tls: bool = False
+    username: str | None = None
+    password: SecretStr | None = None
+    client_id: str = "limen-iot-ingestor"
+
+    # Topic taxonomy: limen/v1/{region}/{site}/{thing}/{datastream}/obs
+    topic_root: str = "limen/v1"
+    subscribe_pattern: str = "limen/v1/+/+/+/+/obs"
+    lwt_pattern: str = "limen/v1/+/+/+/status"
+
+    # QC range checks per ObservedProperty.
+    qc_rainfall_range: tuple[float, float] = (0.0, 200.0)
+    qc_pore_pressure_range: tuple[float, float] = (0.0, 1000.0)
+    qc_soil_moisture_range: tuple[float, float] = (0.0, 1.0)
+    qc_displacement_range: tuple[float, float] = (-50000.0, 50000.0)
+    qc_velocity_range: tuple[float, float] = (-2000.0, 2000.0)
+    qc_acceleration_range: tuple[float, float] = (-2000.0, 2000.0)
+    spike_step_factor: float = Field(default=5.0, gt=0.0)
+    flatline_window_minutes: int = Field(default=120, ge=5)
+    flatline_min_samples: int = Field(default=12, ge=2)
+    gap_threshold_minutes: int = Field(default=60, ge=1)
+
+    # Rollup + partition rollover cadence.
+    rollup_minutes: int = Field(default=10, ge=1)
+    partition_window_months: int = Field(default=6, ge=1, le=24)
+
+
 class AlertSettings(BaseSettings):
     """Alert-dispatch rules used by the AlertDispatchExecutor."""
 
@@ -236,6 +277,7 @@ class Settings(BaseSettings):
     api: ApiSettings = Field(default_factory=ApiSettings)
     notifications: NotificationsSettings = Field(default_factory=NotificationsSettings)
     alert: AlertSettings = Field(default_factory=AlertSettings)
+    iot: IotSettings = Field(default_factory=IotSettings)
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_json: bool = False

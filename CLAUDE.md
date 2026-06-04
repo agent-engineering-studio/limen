@@ -1,11 +1,12 @@
 # Limen — Claude Code project guide
 
 > AI multi-factor landslide-risk monitoring for the Italian territory.
-> Pilot: **Puglia + Basilicata**. Current state: **V1 prototype complete**
-> — Phases 0 through 7 (scaffold + data layer + external integrations +
-> static bootstrap + deterministic scoring engine V1 + MAF agents &
-> workflow + FastAPI host with APScheduler + OTel + pg_tileserv +
-> Vite/React/MapLibre frontend + multi-channel notifications).
+> Pilot: **Puglia + Basilicata**. Current state: **V1.5 — in-situ IoT
+> active** — V1 prototype (Phases 0–8) plus Phase 9: hybrid MQTT +
+> SensorThings ingestion, kinematic component K (Fukuzono +
+> velocity/acceleration), measured-over-modeled override on M, and
+> hard-escalation alarms. Gated by `enable_insitu`; with it off, the
+> system is byte-for-byte the V1 behaviour.
 > See `README.md` for full context.
 
 ---
@@ -220,15 +221,12 @@ tests/{unit,integration}
 Do not start implementing — these land in later prompts and have explicit
 extension points already:
 
-- IoT in-situ sensor ingestion + component K — V1.5.
 - V2 ML scoring engine (drop-in replacement of
   `MultiFactorScoringEngine` consuming the same `CellFeatureBundle`).
 - Knowledge-graph grounding of the briefing — V2.x.
 - Authentication via Clerk (`@clerk/clerk-react` on the same Vite SPA) —
   see memory `production-stack`, deferred per §1.6.
-- Notifications, IoT ingestion, ML/MLOps — Phase 7+.
-- V2 ML engine — drop-in replacement of `MultiFactorScoringEngine` that
-  consumes the same `CellFeatureBundle`.
+- ML/MLOps for V2 — out of scope for V1.5.
 - DEM derivatives (TINITALY → slope/aspect/curvature/TWI), CORINE, ISPRA Carta Geologica
   vettoriale: `cell_static_factors` columns stay NULL until the raster/vector ingest
   pipeline lands. The bootstrap pipeline already logs `static_bootstrap.skip` for each.

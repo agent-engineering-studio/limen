@@ -149,16 +149,28 @@ async def test_full_workflow_runs_end_to_end(reset_db: None) -> None:
     assert int(n) == len(out.cell_ids)
 
 
-async def test_enable_insitu_inserts_no_op_sensor_step(reset_db: None) -> None:
-    """With the IoT branch on, the workflow still completes; sensor stub fires."""
+async def test_enable_insitu_inserts_sensor_fetch_step(reset_db: None) -> None:
+    """With the IoT branch on, the workflow still completes.
+
+    V1.5 — the executor now actually reads ``sensor_features_hourly``.
+    On an unseeded DB it finds no features (empty dict), the engine
+    runs the pure V1 path, and downstream nodes (briefing, persist)
+    behave exactly like the V1 case.
+    """
     aoi_id = "e2e-bari-insitu"
     await _seed_minimal_aoi(aoi_id)
     out = await _run_workflow(aoi_id=aoi_id, enable_insitu=True)
 
     assert out.sensor_payload is not None
-    assert out.sensor_payload.get("stub") is True
+    assert out.sensor_payload.get("source") == "sensor_features_hourly"
+    assert out.sensor_payload.get("cells_with_features") == 0
+    assert out.sensor_features_by_cell == {}
     assert out.assessment is not None
     assert out.assessment.briefing_it is not None
+    # Invariance: with no in-situ rows, every cell is unmonitored and
+    # hard_escalation stays false.
+    assert all(not r.monitored for r in out.cell_results)
+    assert all(not r.hard_escalation for r in out.cell_results)
 
 
 async def test_llm_does_not_change_numeric_breakdown(reset_db: None) -> None:

@@ -10,12 +10,14 @@ from limen.core.models.risk import (
     CellFeatureBundle,
     ComponentBreakdown,
     DynamicInputs,
+    KinematicBreakdown,
     RainfallSeries,
     RiskLevel,
     RiskScore,
     SeismicHistoryEvent,
     StaticFactors,
 )
+from limen.core.models.sensor import SensorFeatures
 
 __all__ = [
     "AggregateAssessment",
@@ -23,11 +25,13 @@ __all__ = [
     "CellRiskRecord",
     "ComponentBreakdown",
     "DynamicInputs",
+    "KinematicBreakdown",
     "MonitoringContext",
     "RainfallSeries",
     "RiskAnalysisDTO",
     "RiskLevel",
     "RiskScore",
     "SeismicHistoryEvent",
+    "SensorFeatures",
     "StaticFactors",
 ]

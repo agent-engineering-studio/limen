@@ -151,9 +151,18 @@ class AlertDispatchExecutor(Executor):
         alert_settings = self._settings(None)
         threshold = _resolve_threshold(alert_settings.min_level)
 
-        above_threshold: list[CellRiskRecord] = [
-            r for r in ctx.cell_results if level_at_least(r.level, threshold)
-        ]
+        # V1.5 — hard-escalation cells (acceleration ≥ alarm OR inverse-velocity
+        # ≤ alarm) bypass the level threshold entirely. The kinematic regime
+        # is a precursor signal the operator should see regardless of the
+        # current aggregate level.
+        seen: set[str] = set()
+        above_threshold: list[CellRiskRecord] = []
+        for r in ctx.cell_results:
+            if r.cell_id in seen:
+                continue
+            if level_at_least(r.level, threshold) or r.hard_escalation:
+                above_threshold.append(r)
+                seen.add(r.cell_id)
         if not above_threshold:
             log.info(
                 "alert_dispatch.below_threshold",

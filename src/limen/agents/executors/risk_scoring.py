@@ -73,6 +73,10 @@ class RiskScoringExecutor(Executor):
                     e=scored.breakdown.e,
                     f=scored.breakdown.f,
                     h=scored.breakdown.h,
+                    k=scored.breakdown.k,
+                    kinematic_terms=scored.breakdown.kinematic_terms,
+                    monitored=scored.monitored,
+                    hard_escalation=scored.hard_escalation,
                 )
             )
 

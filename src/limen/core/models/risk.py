@@ -19,6 +19,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from limen.core.models.sensor import SensorFeatures
+
 
 class RiskLevel(StrEnum):
     """Five-class classification used by the V1 engine.
@@ -103,6 +105,9 @@ class DynamicInputs(_Frozen):
     soil_moisture_0_7: float | None = Field(default=None, ge=0.0, le=1.0)
     seismic_history: tuple[SeismicHistoryEvent, ...] = ()
     months_since_fire: float | None = Field(default=None, ge=0.0)
+    # V1.5 — per-cell in-situ aggregate. Absent on cells without sensors;
+    # the engine then runs the pure V1 path for that cell.
+    sensor_features: SensorFeatures | None = None
 
 
 class CellFeatureBundle(_Frozen):
@@ -140,13 +145,29 @@ class MeteoBreakdown(_Frozen):
     caine_norm: float = Field(..., ge=0.0, le=1.0)
     api_factor: float = Field(..., ge=0.0, le=1.0)
     soil_factor: float = Field(..., ge=0.0, le=1.0)
+    # V1.5: which inputs came from in-situ sensors (vs Open-Meteo).
+    # Empty tuple on the pure V1 path.
+    measured_overrides: tuple[str, ...] = ()
+
+
+class KinematicBreakdown(_Frozen):
+    """Sub-terms for the V1.5 K component (zero when no sensor coverage)."""
+
+    velocity_mmd: float | None = None
+    acceleration_mmd2: float | None = None
+    inverse_velocity: float | None = None
+    velocity_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    acceleration_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    hard_escalation: bool = False
 
 
 class ComponentBreakdown(_Frozen):
-    """All five components + their normalised inputs, for auditability.
+    """All components + their normalised inputs, for auditability.
 
-    Sub-terms are the value of each normalised input *before* weighting:
-    a geologist can recombine them with alternative weights if needed.
+    V1 ships five components (S/M/E/F/H, ``k`` always 0). V1.5 activates
+    K on monitored cells and renormalises the others — but the same DTO
+    shape carries both regimes so downstream consumers (ChatAgents,
+    persistence, frontend) stay backwards-compatible.
     """
 
     s: float = Field(..., ge=0.0, le=1.0)
@@ -154,9 +175,11 @@ class ComponentBreakdown(_Frozen):
     e: float = Field(..., ge=0.0, le=1.0)
     f: float = Field(..., ge=0.0, le=1.0)
     h: float = Field(..., ge=0.0, le=1.0)
+    k: float = Field(default=0.0, ge=0.0, le=1.0)
 
     static_terms: StaticBreakdown
     meteo_terms: MeteoBreakdown
+    kinematic_terms: KinematicBreakdown | None = None
 
 
 class RiskScore(_Frozen):
@@ -166,6 +189,12 @@ class RiskScore(_Frozen):
     level: RiskLevel
     breakdown: ComponentBreakdown
     model_version: str
+    # V1.5 — operator-facing hint that the engine took the in-situ path
+    # for this cell (raised confidence + the M' override + K active).
+    monitored: bool = False
+    # V1.5 — set by the engine when acceleration ≥ alarm. The
+    # AlertDispatch executor uses this to bypass the threshold gate.
+    hard_escalation: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return self.model_dump(mode="json")
@@ -175,12 +204,14 @@ __all__: Sequence[str] = (
     "CellFeatureBundle",
     "ComponentBreakdown",
     "DynamicInputs",
+    "KinematicBreakdown",
     "MeteoBreakdown",
     "RainfallSample",
     "RainfallSeries",
     "RiskLevel",
     "RiskScore",
     "SeismicHistoryEvent",
+    "SensorFeatures",
     "StaticBreakdown",
     "StaticFactors",
 )

@@ -6,6 +6,56 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0-v1.5] — 2026-06-04 — In-situ IoT (V1.5)
+
+Adds a hybrid MQTT + SensorThings ingestion path and a new kinematic
+component K so the deterministic engine can consume directly-measured
+rainfall / pore pressure / soil moisture / displacement on
+sensored cells. Gated by `enable_insitu`; with it off the system is
+byte-for-byte the V1 behaviour (`test_invariance_no_sensors_matches_v1`
+proves this).
+
+### Added
+
+* Migration `009_sensor_tables.sql` — `sensor_devices`, the
+  partitioned `sensor_observations`, `sensor_features_hourly`, and the
+  `ensure_sensor_partition_for_month()` helper.
+* `limen.integrations.iot` — SensorThings-aligned `Observation`
+  schema, `run_qc()` pipeline (range / spike / flatline / gap / unit),
+  partition rollover helper, `MqttIngestor` (`aiomqtt` subscriber on
+  `limen/v1/+/+/+/+/obs` with the LWT pattern), and `run_hourly_rollup`.
+* Three sensor repos: `sensor_devices_repo`, `sensor_observations_repo`,
+  `sensor_features_hourly_repo`.
+* `compute_kinematic()` + the engine's regime renormalization
+  (`w_K + (1 - w_K) * pure_V1_sum`).
+* Measured-over-modeled override on M (Caine, API, soil) with the
+  overridden inputs recorded on `MeteoBreakdown.measured_overrides`.
+* Hard-escalation flag on `RiskScore` and `CellRiskRecord` — set by
+  the engine on acceleration / inverse-velocity alarm, propagated
+  through `EscalationGateExecutor`, and consumed by
+  `AlertDispatchExecutor` to bypass the `min_level` threshold.
+* Two new APScheduler jobs (gated by `enable_insitu`):
+  `limen-iot-rollup` (every `iot.rollup_minutes`) and
+  `limen-iot-partition-rollover` (monthly).
+* `IotSettings` env block + a YAML `kinematic:` block (optional —
+  older YAMLs without it still validate, with K stuck at 0).
+* `docs/iot.md` — pipeline + storage + QC + configuration overview.
+
+### Changed
+
+* `SensorFetchExecutor` now reads `sensor_features_hourly` for real
+  (V1 was a logging stub).
+* The risk endpoint normalises `measured_overrides` back to a tuple
+  when reading persisted assessments.
+
+### Tests
+
+* +33 unit tests covering schemas, QC, ingestor handler pipeline,
+  kinematic monotonicity, hard-escalation, measured override, and the
+  V1=V1.5(disabled) invariance.
+* +2 integration tests (repos + rollup) against the testcontainers
+  Postgres+PostGIS.
+
 ## [0.1.0] — 2026-06-04 — V1 prototype
 
 The complete V1 prototype: data layer + integrations + scoring + MAF

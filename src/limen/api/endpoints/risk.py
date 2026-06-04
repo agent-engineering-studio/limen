@@ -35,7 +35,10 @@ def _coerce_json(value: Any) -> dict[str, Any]:
 def _record_from_row(row: Any) -> CellRiskRecord:
     factors = _coerce_json(row["factors"])
     static_terms = factors.get("static_terms") or {}
-    meteo_terms = factors.get("meteo_terms") or {}
+    meteo_terms = dict(factors.get("meteo_terms") or {})
+    # measured_overrides round-trips through JSON as a list; the DTO is a tuple.
+    if "measured_overrides" in meteo_terms:
+        meteo_terms["measured_overrides"] = tuple(meteo_terms["measured_overrides"])
     return CellRiskRecord(
         cell_id=str(row["cell_id"]),
         score=float(row["score"]),

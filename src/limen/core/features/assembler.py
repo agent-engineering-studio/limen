@@ -67,6 +67,7 @@ def assemble_bundles(
             soil_moisture_0_7=ctx.soil_moisture_0_7,
             seismic_history=seismic,
             months_since_fire=ctx.months_since_fire,
+            sensor_features=ctx.sensor_features_by_cell.get(cell_id),
         )
         bundles.append(
             CellFeatureBundle(
