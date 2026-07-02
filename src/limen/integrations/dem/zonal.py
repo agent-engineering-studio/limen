@@ -10,6 +10,7 @@ whatever projection it ships with (TINITALY is in ETRS89 / UTM 32N).
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -33,6 +34,11 @@ class CellDemStats:
     aspect_deg: float | None
     curvature: float | None
     pixel_count: int
+
+
+def _finite_or_none(value: float) -> float | None:
+    """Map NaN/inf aggregates to None so they persist as SQL NULL, not NaN."""
+    return value if math.isfinite(value) else None
 
 
 def _reproject_geom(geom: BaseGeometry, *, src_crs: Any, dst_crs: Any) -> BaseGeometry:
@@ -118,22 +124,22 @@ def compute_cell_stats(
                 out.append(_empty_stats(cell_id))
                 continue
 
-            elev_mean = float(np.nanmean(arr))
             slope_arr = slope_deg(arr, cellsize=cellsize)
-            slope_mean = float(np.nanmean(slope_arr))
             aspect_arr = aspect_deg(arr, cellsize=cellsize)
             aspect_valid = aspect_arr[(aspect_arr >= 0.0) & ~np.isnan(aspect_arr)]
             aspect_median = float(np.median(aspect_valid)) if aspect_valid.size else None
             curv_arr = curvature(arr, cellsize=cellsize)
-            curv_mean = float(np.nanmean(curv_arr))
 
+            # nanmean over an all-NaN slice yields NaN (e.g. cells whose only
+            # valid pixels are isolated, so the gradient is undefined). Store
+            # NULL, never NaN, so downstream scoring never sees a poison value.
             out.append(
                 CellDemStats(
                     cell_id=cell_id,
-                    elevation_m=elev_mean,
-                    slope_deg=slope_mean,
+                    elevation_m=_finite_or_none(float(np.nanmean(arr))),
+                    slope_deg=_finite_or_none(float(np.nanmean(slope_arr))),
                     aspect_deg=aspect_median,
-                    curvature=curv_mean,
+                    curvature=_finite_or_none(float(np.nanmean(curv_arr))),
                     pixel_count=n_valid,
                 )
             )

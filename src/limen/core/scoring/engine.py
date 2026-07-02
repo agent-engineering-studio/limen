@@ -52,6 +52,8 @@ _CAINE_LOG_EXCESS_CAP = 1.0
 
 
 def _clamp01(x: float) -> float:
+    if x != x:  # NaN — never let a poison value propagate into the score
+        return 0.0
     if x < 0.0:
         return 0.0
     if x > 1.0:
