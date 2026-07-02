@@ -1,19 +1,38 @@
 # Limen — developer Makefile
 
 UV ?= uv
+
+# Base PostGIS image for the built db image. Upstream postgis/postgis lacks an
+# arm64 manifest, so on Apple Silicon default to the multi-arch imresamu image.
+ifeq ($(shell uname -m),arm64)
+POSTGIS_BASE ?= imresamu/postgis:16-3.5
+else
+POSTGIS_BASE ?= postgis/postgis:16-3.5
+endif
+export POSTGIS_BASE
 COMPOSE_DEV  := infra/docker/docker-compose.dev.yml
 COMPOSE_DEMO := infra/docker/docker-compose.demo.yml
 COMPOSE_OBS  := infra/docker/docker-compose.observability.yml
+COMPOSE_GEOSERVER := infra/docker/docker-compose.geoserver.yml
+# Unified stack: operational services + GeoServer, one project, one network.
+COMPOSE_ALL  := -f $(COMPOSE_DEMO) -f $(COMPOSE_GEOSERVER) -p limen
+UP_PROFILES  := --profile geoserver --profile frontend
 
 .PHONY: help install \
+        up down \
         up-dev down-dev logs migrate seed bootstrap-static calibrate backtest serve \
         demo demo-down demo-walkthrough \
         observability observability-down \
+        geoserver-up geoserver-down geoserver-init geoserver-logs geoserver-sync dtm-vrt \
         test test-unit test-integration test-frontend \
         lint format typecheck check clean
 
 help:
 	@echo "Limen — common developer targets"
+	@echo ""
+	@echo "Full stack (one command)"
+	@echo "  make up                 start operational + GeoServer stack, seed + geoserver-sync (idempotent)"
+	@echo "  make down               tear down the full stack"
 	@echo ""
 	@echo "Backend setup"
 	@echo "  make install            install runtime + dev deps via uv"
@@ -35,6 +54,12 @@ help:
 	@echo "  make observability      bring up Grafana LGTM (alongside demo)"
 	@echo "  make observability-down stop the observability stack"
 	@echo ""
+	@echo "GeoServer vector-data layer (opt-in, mcp-geo-server)"
+	@echo "  make geoserver-up       GeoServer + PostGIS + web UI + MCP agent + bootstrap"
+	@echo "  make geoserver-init     (re)load shapefiles into PostGIS + publish + style"
+	@echo "  make geoserver-logs     tail the GeoServer stack logs"
+	@echo "  make geoserver-down     tear down the GeoServer stack (keep volumes)"
+	@echo ""
 	@echo "Quality"
 	@echo "  make test               backend pytest"
 	@echo "  make test-unit          unit tests only (no Docker)"
@@ -45,6 +70,32 @@ help:
 	@echo "  make typecheck          mypy --strict"
 	@echo "  make check              lint + typecheck + tests"
 	@echo "  make clean              caches + build artefacts"
+
+# ---------------------------------------------------------------------------
+# Full stack (operational + GeoServer) — one command, idempotent data refresh
+# ---------------------------------------------------------------------------
+up:
+	docker compose $(COMPOSE_ALL) $(UP_PROFILES) up -d --build
+	@echo "[up] waiting for the API to become ready…"
+	@for i in $$(seq 1 40); do \
+	  docker compose $(COMPOSE_ALL) exec -T api python -c \
+	    "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/ready', timeout=2).status==200 else 1)" \
+	    >/dev/null 2>&1 && break; \
+	  sleep 3; \
+	done
+	@echo "[up] idempotent data refresh: seed (AOIs + grid) + geoserver-sync (IFFI + PAI)"
+	docker compose $(COMPOSE_ALL) exec -T api limen seed
+	docker compose $(COMPOSE_ALL) exec -T api limen geoserver-sync
+	@echo ""
+	@echo "[up] Stack ready:"
+	@echo "   API      http://localhost:8080/docs      Frontend  http://localhost:5173"
+	@echo "   GeoServer http://localhost:8081/geoserver Web UI    http://localhost:8000"
+	@echo ""
+	@echo "[up] One-off: per-cell static factors incl. DTM slope (~40 min on the 5 m DTM),"
+	@echo "     run on the HOST so it reads the DTM + .env:  make bootstrap-static"
+
+down:
+	docker compose $(COMPOSE_ALL) $(UP_PROFILES) down
 
 # ---------------------------------------------------------------------------
 # Backend
@@ -111,6 +162,31 @@ observability:
 
 observability-down:
 	docker compose -f $(COMPOSE_DEMO) -f $(COMPOSE_OBS) down
+
+# ---------------------------------------------------------------------------
+# GeoServer vector-data layer (opt-in — mcp-geo-server integration)
+# ---------------------------------------------------------------------------
+geoserver-up:
+	docker compose -f $(COMPOSE_GEOSERVER) --profile geoserver up -d
+
+geoserver-init:
+	docker compose -f $(COMPOSE_GEOSERVER) --profile geoserver run --rm geoserver-init
+
+geoserver-logs:
+	docker compose -f $(COMPOSE_GEOSERVER) --profile geoserver logs -f
+
+geoserver-down:
+	docker compose -f $(COMPOSE_GEOSERVER) --profile geoserver down
+
+# DTM tiles live in the /data folder shared with the GeoServer container.
+GEOSERVER_DTM_DIR ?= ../mcp-geoserver/data/dtm
+
+geoserver-sync:                # load IFFI + PAI from GeoServer PostGIS into the operational DB
+	$(UV) run limen geoserver-sync
+
+dtm-vrt:                       # build a virtual mosaic over the 5 m DTM tiles (needs host GDAL)
+	gdalbuildvrt $(GEOSERVER_DTM_DIR)/dtm5m.vrt $(GEOSERVER_DTM_DIR)/*.tif
+	@echo "Built $(GEOSERVER_DTM_DIR)/dtm5m.vrt — set LIMEN_DEM_RASTER to this path."
 
 # ---------------------------------------------------------------------------
 # Quality

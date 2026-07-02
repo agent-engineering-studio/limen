@@ -6,7 +6,8 @@
 # identically without it (e.g. on Neon, which does not support pg_cron). In
 # that case the in-process APScheduler runs the cache cleanup job — see
 # `SCHEDULER__CACHE_CLEANUP=apscheduler`.
-FROM postgis/postgis:16-3.5
+ARG POSTGIS_BASE=postgis/postgis:16-3.5
+FROM ${POSTGIS_BASE}
 
 ARG PG_MAJOR=16
 
@@ -23,6 +24,6 @@ COPY 10-pg_cron.conf /etc/postgresql/conf.d/10-pg_cron.conf
 # during first-boot initialisation.
 COPY initdb/ /docker-entrypoint-initdb.d/
 
-CMD ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", \
+CMD ["postgres", \
      "-c", "shared_preload_libraries=pg_cron", \
      "-c", "cron.database_name=limen"]

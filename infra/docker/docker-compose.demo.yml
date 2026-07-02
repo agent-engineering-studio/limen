@@ -18,6 +18,10 @@ services:
     build:
       context: ../postgres
       dockerfile: Dockerfile.db
+      args:
+        # Upstream postgis/postgis has no arm64 manifest; the Makefile passes
+        # the multi-arch imresamu image on Apple Silicon. Default keeps amd64.
+        POSTGIS_BASE: ${POSTGIS_BASE:-postgis/postgis:16-3.5}
     image: limen/postgres:16-3.5
     container_name: limen-postgres
     restart: unless-stopped
@@ -78,10 +82,37 @@ services:
       KG__THREAD_ID: landslide-kb
       KG__TIMEOUT_SECONDS: "3.0"
       KG__CACHE_TTL_SECONDS: "3600"
+      # GeoServer PostGIS as the authoritative ISPRA static-data source.
+      # Resolves by service name on the merged `make up` network. Uses an
+      # API_-prefixed override so the host-side GEOSERVER_SOURCE__DB_DSN in
+      # .env (localhost:55433, for host `uv run`) never leaks in here.
+      GEOSERVER_SOURCE__DB_DSN: ${API_GEOSERVER_SOURCE_DSN:-postgresql://gis:gis@geoserver-postgis:5432/gis}
+      # DTM path INSIDE the container (the shared /data folder is mounted
+      # below). Distinct from the host-side LIMEN_DEM_RASTER so a host path
+      # never leaks into the container. Empty ⇒ in-container DEM step is a
+      # no-op; the heavy DTM slope bootstrap normally runs on the host.
+      # Set API_DEM_RASTER=/data/HRDTM5m.tif to enable it in-container.
+      LIMEN_DEM_RASTER: ${API_DEM_RASTER:-}
+      # LLM backend — host Ollama | Ollama Cloud | Anthropic (see .env).
+      #   host Ollama:  LLM__OLLAMA_BASE_URL=http://host.docker.internal:11434
+      #   Ollama Cloud: LLM__OLLAMA_BASE_URL=https://ollama.com + LLM__OLLAMA_API_KEY
+      #   Claude:       ANTHROPIC_API_KEY (or LLM__PROVIDER=anthropic)
+      LLM__PROVIDER: ${LLM__PROVIDER:-}
+      # Host-Ollama URL differs host vs container, so use an API_-prefixed
+      # override (defaults to host.docker.internal). Ollama Cloud / Anthropic
+      # need no such split — the key/base are identical everywhere.
+      LLM__OLLAMA_BASE_URL: ${API_LLM_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      LLM__OLLAMA_API_KEY: ${LLM__OLLAMA_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    extra_hosts:
+      # So host.docker.internal (host Ollama) resolves on Linux too.
+      - "host.docker.internal:host-gateway"
     ports:
       - "8080:8080"
     volumes:
       - limen-objects:/var/lib/limen/objects
+      # DTM / shared vector data (read-only). Same folder GeoServer serves.
+      - ${GEOSERVER_SHAPEFILE_DIR:-../../../mcp-geoserver/data}:/data:ro
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/ready', timeout=3).status==200 else 1)\""]
       interval: 15s
@@ -114,7 +145,8 @@ services:
     # The frontend talks to `${VITE_API_URL}/api/tiles/...`, the FastAPI
     # /api/tiles endpoint 307-redirects here. To target Neon or any
     # other PG, point CrunchyData/pg_tileserv at it via DATABASE_URL.
-    image: ghcr.io/crunchydata/pg_tileserv:latest
+    # Official community image (the GHCR CrunchyData ref is no longer public).
+    image: docker.io/pramsey/pg_tileserv:latest
     container_name: limen-pg-tileserv
     restart: unless-stopped
     depends_on:

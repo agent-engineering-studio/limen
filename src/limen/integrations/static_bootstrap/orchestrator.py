@@ -121,6 +121,16 @@ async def bootstrap_static_for_aoi(aoi_id: str) -> dict[str, int]:
     if aoi is None:
         raise ValueError(f"AOI not found: {aoi_id!r}")
 
+    # GeoServer PostGIS is the authoritative source of the ISPRA landslide
+    # inventory + PAI hazard. When GEOSERVER_SOURCE__DB_DSN is set, refresh
+    # iffi_landslides / pai_hazard from it before the per-cell aggregation;
+    # otherwise this is a clean no-op and the existing tables are used as-is.
+    from limen.integrations.geoserver_source import sync_geoserver_source_for_aoi
+
+    gs_counts = await sync_geoserver_source_for_aoi(aoi_id)
+    if gs_counts["iffi"] or gs_counts["pai"]:
+        log.info("static_bootstrap.geoserver_source", aoi_id=aoi_id, **gs_counts)
+
     async with acquire() as conn, conn.transaction():
         result_seed = await conn.execute(_SEED_CELLS_SQL, aoi_id)
         log.info("static_bootstrap.seed_cells", aoi_id=aoi_id, result=result_seed)

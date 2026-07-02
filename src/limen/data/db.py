@@ -65,6 +65,15 @@ async def _register_postgis(conn: asyncpg.Connection) -> None:
     )
 
 
+async def register_postgis(conn: asyncpg.Connection) -> None:
+    """Register the PostGIS geometry codec on a standalone connection.
+
+    Public entry point for connections opened outside the global pool (e.g.
+    the GeoServer-source loader talking to the mcp-geo-server PostGIS).
+    """
+    await _register_postgis(conn)
+
+
 _pool: asyncpg.Pool | None = None
 
 

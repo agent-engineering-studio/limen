@@ -68,9 +68,11 @@ def _build_foundry(settings: Settings) -> FoundryFactory:
 
 
 def _build_ollama(settings: Settings) -> OllamaFactory:
+    key = settings.llm.ollama_api_key
     return OllamaFactory(
         base_url=settings.llm.ollama_base_url,
         role_models=_role_models(settings),
+        api_key=key.get_secret_value() if key is not None else None,
     )
 
 

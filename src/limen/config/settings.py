@@ -16,7 +16,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -137,8 +137,21 @@ class LLMSettings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     provider: LLMProvider | None = None
+
+    @field_validator("provider", mode="before")
+    @classmethod
+    def _blank_provider_is_none(cls, v: object) -> object:
+        # An empty env var (LLM__PROVIDER=) means "auto-detect", not an
+        # invalid enum — coerce blanks to None at the boundary.
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return v
+
     models: LLMModels = Field(default_factory=LLMModels)
+    # Host Ollama (no auth) → http://localhost:11434 (or host.docker.internal
+    # from a container). Ollama Cloud → https://ollama.com with ollama_api_key.
     ollama_base_url: str = "http://localhost:11434"
+    ollama_api_key: SecretStr | None = None
 
 
 class SchedulerSettings(BaseSettings):
@@ -358,6 +371,26 @@ class GeodataSettings(BaseSettings):
     yearly at most — daily would be wasteful."""
 
 
+class GeoServerSourceSettings(BaseSettings):
+    """GeoServer PostGIS as the authoritative source of ISPRA static data.
+
+    When ``db_dsn`` is set, ``limen geoserver-sync`` (and the
+    ``bootstrap-static`` path) load the IFFI landslide inventory and the
+    PAI hazard mosaic from the GeoServer-backed PostGIS into the
+    operational ``iffi_landslides`` / ``pai_hazard`` tables, replacing the
+    IdroGeo WFS ingest as the source. Off by default (DSN unset) so the
+    operational API never assumes the GeoServer stack is running.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    # DSN of the GeoServer PostGIS (the mcp-geo-server stack, port 55433 on
+    # the same host). None ⇒ the loader is a clean no-op.
+    db_dsn: str | None = None
+    # PostGIS schema holding the published feature tables.
+    schema_name: str = "public"
+
+
 class KgSettings(BaseSettings):
     """Knowledge-graph sidecar (V2.x advisory grounding).
 
@@ -427,6 +460,9 @@ class Settings(BaseSettings):
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
     kg: KgSettings = Field(default_factory=KgSettings)
     geodata: GeodataSettings = Field(default_factory=GeodataSettings)
+    geoserver_source: GeoServerSourceSettings = Field(
+        default_factory=GeoServerSourceSettings
+    )
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_json: bool = False

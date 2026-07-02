@@ -216,7 +216,9 @@ class BacktestTargets(_StrictModel):
 
 
 class CalibrationBlock(_StrictModel):
-    s_vs_ispra_correlation_min: float = Field(..., ge=0.0, le=1.0)
+    # None disables the S↔ISPRA correlation gate (susceptibility is no longer
+    # a scoring input once GeoServer is the static-data source).
+    s_vs_ispra_correlation_min: float | None = Field(default=None, ge=0.0, le=1.0)
     backtest: BacktestTargets
 
 

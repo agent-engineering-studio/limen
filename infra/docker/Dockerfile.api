@@ -7,7 +7,9 @@
 # ---------------------------------------------------------------------------
 # Stage 1 — builder
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim AS builder
+# Pinned to bookworm: on trixie the runtime lib package names change
+# (libgdal32→libgdal36, libgeos-c1v5→libgeos-c1t64), breaking the runtime stage.
+FROM python:3.12-slim-bookworm AS builder
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -39,7 +41,7 @@ RUN uv sync --frozen --no-dev --no-editable
 # ---------------------------------------------------------------------------
 # Stage 2 — runtime
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim AS runtime
+FROM python:3.12-slim-bookworm AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

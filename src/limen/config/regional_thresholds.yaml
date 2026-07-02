@@ -25,12 +25,16 @@ weights:
   hydrology: 0.03   # w_H (always 0 in V1; reserved for V1.5+)
 
 # Sub-weights inside S(c) (static, time-invariant).
+# GeoServer is the authoritative source for the static inputs (IFFI landslide
+# inventory + PAI hazard) and the DTM feeds `slope`. ISPRA susceptibility is
+# no longer an input (not served by GeoServer), so `susc_ispra` is 0 and its
+# former 0.30 weight is redistributed proportionally onto IFFI + slope + PAI.
 static:
   weights:
-    susc_ispra:      0.30
-    iffi_density:    0.25
-    slope:           0.20
-    pai:             0.15
+    susc_ispra:      0.00
+    iffi_density:    0.375
+    slope:           0.30
+    pai:             0.225
     litho_weight:    0.10
   # Slope (degrees) is normalised by a piecewise-linear ramp from 0° to a
   # cap value; above the cap, the term saturates at 1.
@@ -136,8 +140,11 @@ target_distribution:
   very_high: 0.005
 
 # Calibration gate (§2.5 step 2).
+# DISABLED: with ISPRA susceptibility removed from S (GeoServer does not serve
+# it), the S↔ISPRA correlation gate is no longer measurable. `null` turns it
+# off; the §2.5 backtest below remains the acceptance criterion.
 calibration:
-  s_vs_ispra_correlation_min: 0.85
+  s_vs_ispra_correlation_min: null
   backtest:
     hit_rate_min:            0.70
     far_max:                 0.30

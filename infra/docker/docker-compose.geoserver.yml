@@ -1,0 +1,206 @@
+# Limen — GeoServer vector-data layer (mcp-geo-server integration).
+#
+# OPT-IN: activates only under the `geoserver` profile, so the default
+# dev / demo runs never start it. Serves Limen's vector geographic data
+# (ISPRA landslide/hazard shapefiles) as OGC WMS/WFS through GeoServer,
+# plus a natural-language MCP agent and a chat+map web UI.
+#
+#   docker compose -f infra/docker/docker-compose.geoserver.yml \
+#     --profile geoserver up -d
+#
+# Self-contained like the `geodata` stack: a DEDICATED Postgres+PostGIS
+# holds the vector layers, isolated from Limen's operational DB. The
+# application images are pulled PRE-BUILT from GHCR (multi-arch: native
+# arm64 on Apple Silicon, amd64 on the Aruba VPS) — no cross-repo build
+# context inside Limen.
+#
+# Ports are remapped to coexist with the Limen stack on the same host:
+#   geoserver-postgis  -> 55433  (limen-postgres=5432, geodata-db=55432)
+#   geoserver          -> 8081   (limen-api=8080)
+#   geoserver-webui    -> 8000
+#   geoserver-mcp      -> 9000   (streamable-HTTP /mcp)
+#
+# Data bootstrap: the geoserver-init one-shot loads EVERY shapefile under
+# ${GEOSERVER_SHAPEFILE_DIR} (default: the sibling mcp-geoserver repo's
+# ./data) into PostGIS and publishes each as a GeoServer layer. Idempotent.
+# Point GEOSERVER_SHAPEFILE_DIR at a subset (e.g. Puglia+Basilicata only)
+# for a faster first test.
+#
+# LLM for the agent = HOST Ollama (host.docker.internal:11434), matching
+# Limen's Aruba-prod preference. Run `ollama serve` + pull the model first.
+# Override GEO_LLM_PROVIDER=anthropic (needs ANTHROPIC_API_KEY) if desired.
+
+name: limen-geoserver
+
+x-geoserver-app-image: &geoserver-app-image
+  image: ${GEOSERVER_APP_IMAGE:-ghcr.io/agent-engineering-studio/mcp-geo-server:latest}
+x-geoserver-bootstrap-image: &geoserver-bootstrap-image
+  image: ${GEOSERVER_BOOTSTRAP_IMAGE:-ghcr.io/agent-engineering-studio/mcp-geo-server:bootstrap}
+
+services:
+
+  geoserver-postgis:
+    # Multi-arch by default (imresamu publishes amd64 + arm64) so it runs
+    # native on Apple Silicon. Dedicated to the vector layers.
+    image: ${GEOSERVER_POSTGIS_IMAGE:-imresamu/postgis:16-3.4}
+    container_name: limen-geoserver-postgis
+    restart: unless-stopped
+    profiles: ["geoserver"]
+    environment:
+      POSTGRES_DB: gis
+      POSTGRES_USER: gis
+      POSTGRES_PASSWORD: gis
+    ports:
+      - "55433:5432"
+    volumes:
+      - limen-geoserver-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gis -d gis"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  geoserver:
+    image: ${GEOSERVER_IMAGE:-kartoza/geoserver:2.28.0}
+    container_name: limen-geoserver
+    restart: unless-stopped
+    profiles: ["geoserver"]
+    depends_on:
+      geoserver-postgis:
+        condition: service_healthy
+    environment:
+      GEOSERVER_ADMIN_USER: ${GEOSERVER_ADMIN_USER:-admin}
+      GEOSERVER_ADMIN_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD:-geoserver}
+      GEOSERVER_DATA_DIR: ${GEOSERVER_DATA_DIR:-/opt/geoserver/data_dir}
+      CORS_ENABLED: "true"
+    ports:
+      - "8081:8080"
+    volumes:
+      - limen-geoserver-gsdata:${GEOSERVER_DATA_DIR:-/opt/geoserver/data_dir}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf -o /dev/null http://localhost:8080/geoserver/web/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  # One-shot data initialiser: loads EVERY shapefile under the mounted data
+  # dir into PostGIS and publishes each as a GeoServer layer, then exits.
+  # Idempotent — safe to leave in the stack; re-running skips what exists.
+  geoserver-init:
+    <<: *geoserver-bootstrap-image
+    container_name: limen-geoserver-init
+    restart: "no"
+    profiles: ["geoserver"]
+    depends_on:
+      geoserver-postgis:
+        condition: service_healthy
+      geoserver:
+        condition: service_started
+    environment:
+      GEOSERVER_URL: http://geoserver:8080/geoserver
+      GEOSERVER_USER: ${GEOSERVER_ADMIN_USER:-admin}
+      GEOSERVER_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD:-geoserver}
+      GEOSERVER_DEFAULT_SRS: EPSG:4326
+      POSTGIS_HOST: geoserver-postgis
+      POSTGIS_PORT: "5432"
+      POSTGIS_DB: gis
+      POSTGIS_USER: gis
+      POSTGIS_PASSWORD: gis
+      GEO_INIT_ENABLE: ${GEO_INIT_ENABLE:-true}
+      GEO_INIT_DATA_DIR: /data
+      GEO_INIT_WORKSPACE: ${GEO_INIT_WORKSPACE:-ispra}
+      GEO_INIT_DATASTORE: ${GEO_INIT_DATASTORE:-ispra_pg}
+      GEO_INIT_TARGET_SRS: ${GEO_INIT_TARGET_SRS:-EPSG:4326}
+      GEO_INIT_SOURCE_SRS: ${GEO_INIT_SOURCE_SRS:-}
+      GEO_INIT_FORCE: ${GEO_INIT_FORCE:-false}
+      GEO_INIT_SHAPE_ENCODING: ${GEO_INIT_SHAPE_ENCODING:-ISO-8859-1}
+      GEO_INIT_STYLES: ${GEO_INIT_STYLES:-true}
+      GEO_STYLES_CONFIG: ${GEO_STYLES_CONFIG:-/data/styles.yml}
+    volumes:
+      - ${GEOSERVER_SHAPEFILE_DIR:-../../../mcp-geoserver/data}:/data:ro
+
+  # Chat + map web UI (FastAPI + Leaflet) — also proxies WMS same-origin.
+  geoserver-webui:
+    <<: *geoserver-bootstrap-image
+    container_name: limen-geoserver-webui
+    restart: unless-stopped
+    profiles: ["geoserver"]
+    command: ["sh", "-c", "uvicorn webui.app:app --host 0.0.0.0 --port $${WEBUI_PORT}"]
+    depends_on:
+      geoserver:
+        condition: service_started
+    environment:
+      GEOSERVER_URL: http://geoserver:8080/geoserver
+      # Browser-facing URL — must match the host-exposed GeoServer port.
+      GEOSERVER_PUBLIC_URL: ${GEOSERVER_PUBLIC_URL:-http://localhost:8081/geoserver}
+      GEOSERVER_USER: ${GEOSERVER_ADMIN_USER:-admin}
+      GEOSERVER_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD:-geoserver}
+      GEOSERVER_DEFAULT_SRS: EPSG:4326
+      WEBUI_PORT: "8000"
+      GEO_MAP_OUTPUT_DIR: /app/maps
+      POSTGIS_HOST: geoserver-postgis
+      POSTGIS_PORT: "5432"
+      POSTGIS_DB: gis
+      POSTGIS_USER: gis
+      POSTGIS_PASSWORD: gis
+      GEO_UPLOAD_WORKSPACE: ${GEO_UPLOAD_WORKSPACE:-uploads}
+      GEO_UPLOAD_DATASTORE: ${GEO_UPLOAD_DATASTORE:-uploads_pg}
+      GEO_LLM_PROVIDER: ${GEO_LLM_PROVIDER:-ollama}
+      OLLAMA_HOST: ${GEO_OLLAMA_HOST:-http://host.docker.internal:11434}
+      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5}
+      OLLAMA_CLOUD_HOST: ${OLLAMA_CLOUD_HOST:-https://ollama.com}
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+    extra_hosts:
+      # So host.docker.internal resolves on Linux (Aruba VPS) too.
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8000:8000"
+
+  # Intelligent MCP server: GeoServer agent over streamable-HTTP at :9000/mcp.
+  geoserver-mcp:
+    <<: *geoserver-app-image
+    container_name: limen-geoserver-mcp
+    restart: unless-stopped
+    profiles: ["geoserver"]
+    command: ["python", "-m", "mcp_geo_server.server"]
+    depends_on:
+      geoserver:
+        condition: service_started
+    environment:
+      GEOSERVER_URL: http://geoserver:8080/geoserver
+      GEOSERVER_USER: ${GEOSERVER_ADMIN_USER:-admin}
+      GEOSERVER_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD:-geoserver}
+      GEOSERVER_DEFAULT_SRS: EPSG:4326
+      GEO_LLM_PROVIDER: ${GEO_LLM_PROVIDER:-ollama}
+      OLLAMA_HOST: ${GEO_OLLAMA_HOST:-http://host.docker.internal:11434}
+      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5}
+      OLLAMA_CLOUD_HOST: ${OLLAMA_CLOUD_HOST:-https://ollama.com}
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+      GEO_MCP_TRANSPORT: http
+      GEO_MCP_HOST: 0.0.0.0
+      GEO_MCP_PORT: "9000"
+      GEO_ALLOW_DESTRUCTIVE: ${GEO_ALLOW_DESTRUCTIVE:-false}
+      GEO_MAP_OUTPUT_DIR: /app/maps
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "9000:9000"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import socket; socket.create_connection(('127.0.0.1', 9000), timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  limen-geoserver-pgdata:
+    name: limen-geoserver-pgdata
+  limen-geoserver-gsdata:
+    name: limen-geoserver-gsdata

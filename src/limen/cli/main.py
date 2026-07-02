@@ -26,6 +26,7 @@ from limen.cli.bootstrap_static import run as _run_bootstrap_static
 from limen.cli.calibrate import run as _run_calibrate
 from limen.cli.geodata import build_subparser as _build_geodata_subparser
 from limen.cli.geodata import run as _run_geodata
+from limen.cli.geoserver_sync import run as _run_geoserver_sync
 from limen.cli.ingest_kb import run as _run_ingest_kb
 from limen.cli.migrate import run as _run_migrate
 from limen.cli.monitor_once import run as _run_monitor_once
@@ -78,6 +79,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="refresh cell_insar_features from Copernicus EGMS (V2.1)",
     )
     sub.add_parser(
+        "geoserver-sync",
+        help="load ISPRA IFFI + PAI from GeoServer PostGIS (GEOSERVER_SOURCE__DB_DSN)",
+    )
+    sub.add_parser(
         "ingest-kb",
         help="push the local corpus (papers + PAI + ISPRA + briefings) to the KG sidecar",
     )
@@ -89,9 +94,25 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _load_dotenv() -> None:
+    """Populate os.environ from .env for os.getenv-based knobs.
+
+    pydantic-settings reads .env for the Settings model, but plain
+    ``os.getenv`` calls (e.g. LIMEN_DEM_RASTER in the DEM/CORINE/geological
+    sync jobs) do not. ``override=False`` keeps real env vars (Docker,
+    shell) authoritative over the file.
+    """
+    try:
+        from dotenv import load_dotenv
+    except ImportError:  # pragma: no cover — python-dotenv ships with pydantic-settings
+        return
+    load_dotenv(override=False)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
 
+    _load_dotenv()
     settings = get_settings()
     configure_logging(level=settings.log_level, json_output=settings.log_json)
 
@@ -106,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
         "train": _run_train,
         "sync-egms": _run_sync_egms,
         "ingest-kb": _run_ingest_kb,
+        "geoserver-sync": _run_geoserver_sync,
     }
     if args.command == "geodata":
         try:

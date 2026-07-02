@@ -197,12 +197,15 @@ async def _calibrate_aoi(aoi_id: str, *, strict: bool) -> _AoiCalibration:
     )
 
     susc_rows = len(susc_list)
+    gate_min = thresholds.calibration.s_vs_ispra_correlation_min
     correlation: float | None = None
-    correlation_ok = False
+    # gate_min is None ⇒ the S↔ISPRA gate is disabled (susceptibility dropped
+    # from S). Treat it as passing so the calibration run never fails on it.
+    correlation_ok = gate_min is None
     if susc_rows >= 3:
         correlation = _pearson(s_list, susc_list)
-        if correlation is not None:
-            correlation_ok = correlation >= thresholds.calibration.s_vs_ispra_correlation_min
+        if correlation is not None and gate_min is not None:
+            correlation_ok = correlation >= gate_min
 
     if susc_rows < 3 and strict:
         raise RuntimeError(

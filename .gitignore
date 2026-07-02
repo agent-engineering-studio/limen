@@ -40,6 +40,10 @@ data_runtime/
 object_store_root/
 *.log
 
+# Local geodata drop (ISPRA shapefiles + DTM raster, shared with GeoServer).
+# Multi-GB, never committed; fetched/copied locally per host.
+/data/
+
 # Docker volumes
 infra/docker/volumes/
 
