@@ -69,9 +69,12 @@ def _build_foundry(settings: Settings) -> FoundryFactory:
 
 def _build_ollama(settings: Settings) -> OllamaFactory:
     key = settings.llm.ollama_api_key
+    # Ignore the per-role map (Claude ids Ollama can't serve) and use the
+    # single configured Ollama model for every role.
     return OllamaFactory(
         base_url=settings.llm.ollama_base_url,
-        role_models=_role_models(settings),
+        role_models={},
+        default_model=settings.llm.ollama_model,
         api_key=key.get_secret_value() if key is not None else None,
     )
 

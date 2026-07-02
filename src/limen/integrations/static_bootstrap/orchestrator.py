@@ -28,6 +28,11 @@ _BUFFER_DEG_500M_AT_41N = 500.0 / 111_320.0  # ≈ 0.00449
 # this the cell is "not near any landslide" and we record this cap.
 _DISTANCE_CAP_M = 50_000.0
 
+# Per-statement timeout (s) for the batch spatial aggregations. Well above
+# the pool's operational default; a one-shot bootstrap over the full grid
+# and the national PAI mosaic can legitimately take minutes.
+_BOOTSTRAP_STMT_TIMEOUT_S = 900.0
+
 
 # ---------------------------------------------------------------------------
 # SQL helpers
@@ -38,21 +43,19 @@ SELECT id FROM grid_cells WHERE aoi_id = $1
 ON CONFLICT (cell_id) DO NOTHING
 """
 
-# Count IFFI features within a 500 m buffer around each cell's centroid.
-# We project both sides to EPSG:3035 (metric) for the buffer + distance
-# calculations — gives "actual" 500 m everywhere on the Italian
-# peninsula.
+# Count IFFI features within ~500 m of each cell's centroid. We stay in
+# EPSG:4326 and match in degrees ($2) so the GiST index on iffi_landslides
+# (iffi_geom_gix) accelerates ST_DWithin — wrapping both sides in
+# ST_Transform (metric) would force a full seq scan (O(cells x features)),
+# which times out on real IFFI volumes. ~500 m ≈ 0.0045° at Italian
+# latitudes; a density proxy that saturates at 3 tolerates the ~10 % error.
 _IFFI_DENSITY_SQL = """
 WITH counts AS (
     SELECT g.id AS cell_id,
            COUNT(i.id)::double precision AS iffi_count
     FROM grid_cells g
     LEFT JOIN iffi_landslides i
-      ON ST_DWithin(
-           ST_Transform(g.centroid, 3035),
-           ST_Transform(i.geom,     3035),
-           500.0
-         )
+      ON ST_DWithin(g.centroid, i.geom, $2)
     WHERE g.aoi_id = $1
     GROUP BY g.id
 )
@@ -63,21 +66,20 @@ FROM counts
 WHERE c.cell_id = counts.cell_id
 """
 
-# Nearest-IFFI distance per cell (metric, projected). Capped at 50 km so
-# AOIs without any IFFI within reasonable range get a finite value
-# instead of NULL.
+# Nearest-IFFI distance per cell (metres). Uses the KNN ``<->`` operator so
+# the GiST index returns the single nearest feature per cell (index scan),
+# then ST_Distance over geography gives the true metric distance for just
+# that one. Capped at 50 km ($2) so cells with no nearby IFFI get a finite
+# value instead of NULL.
 _DISTANCE_TO_IFFI_SQL = """
 WITH d AS (
     SELECT g.id AS cell_id,
            LEAST(
              COALESCE(
-               (SELECT MIN(
-                  ST_Distance(
-                    ST_Transform(g.centroid, 3035),
-                    ST_Transform(i.geom,     3035)
-                  )
-                )
-                FROM iffi_landslides i),
+               (SELECT ST_Distance(g.centroid::geography, i.geom::geography)
+                FROM iffi_landslides i
+                ORDER BY g.centroid <-> i.geom
+                LIMIT 1),
                $2::double precision
              ),
              $2::double precision
@@ -135,9 +137,15 @@ async def bootstrap_static_for_aoi(aoi_id: str) -> dict[str, int]:
         result_seed = await conn.execute(_SEED_CELLS_SQL, aoi_id)
         log.info("static_bootstrap.seed_cells", aoi_id=aoi_id, result=result_seed)
 
-        await conn.execute(_IFFI_DENSITY_SQL, aoi_id)
-        await conn.execute(_DISTANCE_TO_IFFI_SQL, aoi_id, _DISTANCE_CAP_M)
-        await conn.execute(_PAI_CLASS_SQL, aoi_id)
+        # Batch spatial aggregation over large ISPRA volumes — override the
+        # pool's default per-statement timeout so these can run to completion.
+        await conn.execute(
+            _IFFI_DENSITY_SQL, aoi_id, _BUFFER_DEG_500M_AT_41N, timeout=_BOOTSTRAP_STMT_TIMEOUT_S
+        )
+        await conn.execute(
+            _DISTANCE_TO_IFFI_SQL, aoi_id, _DISTANCE_CAP_M, timeout=_BOOTSTRAP_STMT_TIMEOUT_S
+        )
+        await conn.execute(_PAI_CLASS_SQL, aoi_id, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
 
     # DEM derivatives — runs when LIMEN_DEM_RASTER points at a GeoTIFF
     # (e.g. TINITALY 10 m). With the env var unset the step is a clean

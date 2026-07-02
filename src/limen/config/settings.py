@@ -152,6 +152,9 @@ class LLMSettings(BaseSettings):
     # from a container). Ollama Cloud → https://ollama.com with ollama_api_key.
     ollama_base_url: str = "http://localhost:11434"
     ollama_api_key: SecretStr | None = None
+    # Single Ollama model used for every agent role (the per-role defaults are
+    # Claude ids, which Ollama can't serve). Override per host/cloud.
+    ollama_model: str = "qwen2.5"
 
 
 class SchedulerSettings(BaseSettings):
