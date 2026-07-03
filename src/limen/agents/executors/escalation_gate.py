@@ -14,7 +14,6 @@ The gate stays a pass-through on the authoritative numbers — it only
 from __future__ import annotations
 
 from limen.agents.workflow_runtime.executor import Executor, handler
-from limen.agents.workflows.escalation_workflow import build_escalation_evidence
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
 
@@ -30,6 +29,11 @@ class EscalationGateExecutor(Executor):
 
     @handler
     async def run(self, ctx: MonitoringContext) -> MonitoringContext:
+        # Deferred import: escalation_gate is imported at executors-package
+        # init, while workflows/__init__ → main_workflow imports back from
+        # executors. Importing here (call time) breaks that module-load cycle.
+        from limen.agents.workflows.escalation_workflow import build_escalation_evidence
+
         high = ctx.assessment.cells_high_or_above if ctx.assessment else 0
         hard_cells = [r.cell_id for r in ctx.cell_results if r.hard_escalation]
         evidence = build_escalation_evidence(ctx, top_k=self._evidence_top_k)
