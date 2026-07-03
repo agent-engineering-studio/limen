@@ -1,7 +1,8 @@
 # Limen
 
-> **AI multi-factor landslide-risk monitoring for the Italian territory.**
-> Pilot regions: **Puglia + Basilicata**.
+> **Monitoraggio AI multi-fattore del rischio frana per il territorio italiano.**
+> **Copertura nazionale — tutte le 20 regioni ISTAT** su griglia 1 km²
+> (~312k celle); validato sul pilota Puglia + Basilicata.
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green.svg)](./LICENSE)
@@ -9,455 +10,204 @@
 [![ruff](https://img.shields.io/badge/lint-ruff-261230)](https://github.com/astral-sh/ruff)
 [![mypy --strict](https://img.shields.io/badge/typed-mypy%20--strict-blue)](http://mypy-lang.org/)
 
-## 🇮🇹 Avvio rapido
+Limen ("soglia" in latino) unisce **morfologia, geologia, umidità del
+suolo, piogge, sismicità, incendi e archivi storici** in un punteggio di
+rischio frana per ogni cella di un'area italiana. Stack: Python 3.12 +
+FastAPI + PostgreSQL 16 + PostGIS, frontend Vite + React + MapLibre,
+notifiche multi-canale. Il sistema è costruito attorno a un Multi-Agent
+Framework (MAF) che orchestra ingestione → scoring → spiegazione, con un
+data layer portabile tra Docker locale, Neon (serverless) e qualsiasi
+PostgreSQL gestito.
 
-Limen unisce **morfologia, geologia, umidità del suolo, piogge,
-sismicità e archivi storici** per stimare il rischio frana per ogni
-cella di un'AOI italiana. Stack: Python 3.12 + FastAPI + PostgreSQL +
-PostGIS, frontend Vite + MapLibre, notifiche multi-canale.
+## Avvio rapido
 
 ```bash
 git clone https://github.com/agent-engineering-studio/limen.git
 cd limen
 uv sync --all-groups
-make up-dev                 # Postgres 16 + PostGIS 3.5 in Docker (oppure usa Neon)
-uv run limen seed           # AOI di Puglia + Basilicata + griglia 1 km²
-uv run limen bootstrap-static
+make up                     # Postgres+PostGIS + GeoServer (mcp-geoserver) + frontend
+make init                   # migrate → seed 20 regioni → ITALICA → bootstrap → calibrate
 uv run limen serve          # FastAPI su http://localhost:8080/docs
 ( cd frontend && npm ci && npm run dev )   # mappa su http://localhost:5173
 ```
 
-Su **Neon** (dev/test serverless): impostare `DB__CONNECTION_STRING`
-con `?sslmode=require` e `SCHEDULER__CACHE_CLEANUP=apscheduler`,
-nient'altro. Su **Aruba VPS** (produzione): `docker compose -f
-infra/docker/docker-compose.demo.yml up -d --build`. Provider LLM
-risolto per precedenza `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` →
-credenziali Foundry → Ollama; nessuna chiave configurata ⇒ fallback
-locale Ollama.
+`make init` è idempotente e ricostruisce tutti i dati su una macchina
+nuova: applica le migrazioni, semina le 20 regioni ISTAT (griglia 1 km²),
+scarica il catalogo eventi frana **e-ITALICA** da Zenodo (truth set del
+backtest §2.5), popola i fattori statici per cella (IFFI + PAI dal
+PostGIS di GeoServer + slope da DTM) e calibra `s_static`.
 
-## 🇬🇧 English quickstart
+Su **Neon** (dev/test serverless): impostare `DB__CONNECTION_STRING` con
+`?sslmode=require` e `SCHEDULER__CACHE_CLEANUP=apscheduler`, nient'altro
+— `pg_cron` viene saltato e l'APScheduler in-process prende in carico i
+job periodici. In **produzione** (host Docker self-hosted, nessun cloud
+provider): `docker compose -f infra/docker/docker-compose.demo.yml up -d
+--build`. Provider LLM risolto per precedenza `LLM__PROVIDER` >
+`ANTHROPIC_API_KEY` > `OPENAI_API_KEY` > credenziali Foundry > Ollama;
+in locale/produzione si usa **Ollama** (host, modello qwen).
 
-Limen ("threshold" in Latin) fuses morphology, geology, soil moisture,
-rainfall, seismicity and historical inventories into a per-cell
-landslide-risk score for any Italian AOI. Stack: Python 3.12 + FastAPI
-+ PostgreSQL + PostGIS, Vite + MapLibre frontend, multi-channel alerts.
-
-```bash
-git clone https://github.com/agent-engineering-studio/limen.git
-cd limen
-uv sync --all-groups
-make up-dev                 # local Postgres+PostGIS (or point at Neon instead)
-uv run limen seed           # Puglia + Basilicata AOIs + 1 km² grid
-uv run limen bootstrap-static
-uv run limen serve          # FastAPI at http://localhost:8080/docs
-( cd frontend && npm ci && npm run dev )   # map at http://localhost:5173
-```
-
-On **Neon** (serverless dev/test): set `DB__CONNECTION_STRING` with
-`?sslmode=require` and `SCHEDULER__CACHE_CLEANUP=apscheduler`, nothing
-else. On **Aruba VPS** (production): `docker compose -f
-infra/docker/docker-compose.demo.yml up -d --build`. LLM provider is
-resolved by precedence `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` →
-Foundry creds → Ollama; no key set ⇒ local Ollama fallback.
-
-For the deep dive see [`docs/architecture.md`](./docs/architecture.md),
+Approfondimenti: [`docs/architecture.md`](./docs/architecture.md),
 [`docs/api.md`](./docs/api.md),
-[`docs/deployment.md`](./docs/deployment.md), and
+[`docs/deployment.md`](./docs/deployment.md),
+[`docs/scoring-model.md`](./docs/scoring-model.md),
 [`docs/runbook.md`](./docs/runbook.md).
 
-Limen ("threshold" in Latin) fuses **morphology, geology, soil moisture,
-rainfall, seismicity and historical inventories** to produce a per-cell
-landslide-risk score for any AOI in Italy. The system is built around a
-Multi-Agent Framework (MAF) that orchestrates ingestion → scoring →
-explanation, with a Postgres+PostGIS data layer that is portable between
-local Docker, Neon (serverless), and any managed PostgreSQL.
+Il motore V1 è una combinazione lineare pesata **pura** e interpretabile
+(§2.4 del project doc) che legge ogni peso, soglia e cutoff di classe da
+[`src/limen/config/regional_thresholds.yaml`](./src/limen/config/regional_thresholds.yaml).
+Nessuna costante cablata nel codice di scoring. Nessun LLM. Nessun I/O.
+La stessa interfaccia `CellFeatureBundle` accetta anche il motore ML V2.
 
-This repository implements the **complete Limen V1 prototype** — Phases
-0 through 7: scaffolding, data layer, external integrations, static
-bootstrap, deterministic scoring engine, MAF agents & workflow,
-FastAPI host with APScheduler & OpenTelemetry, pg_tileserv +
-`mv_latest_risk` matview + Vite/React/MapLibre public map, and a
-multi-channel alert dispatcher (Telegram / MQTT / Email).
+---
 
-Later milestones add IoT ingestion (V1.5), an ML scoring engine (V2),
-knowledge-graph grounding (V2.x), and Clerk-backed authentication —
-see [memory `production-stack`](.claude/projects/-Users-gzileni-Git-limen/memory/production_stack.md).
+## Componenti e sorgenti
 
-The V1 engine is a **pure**, interpretable, weighted-linear combination
-(§2.4 of the project doc) reading every weight, threshold, and class
-cutoff from [`src/limen/config/regional_thresholds.yaml`](./src/limen/config/regional_thresholds.yaml).
-No magic numbers in the scoring code. No LLM. No I/O. The same
-`CellFeatureBundle` interface will accept the V2 ML drop-in later.
-
-| Source | What we ingest | Cadence | Implementation |
+| Sorgente | Cosa ingeriamo | Cadenza | Implementazione |
 |---|---|---|---|
-| **Open-Meteo** | hourly precip, soil moisture 0–7 / 7–28 cm, snowfall, snow depth (forecast); cumulated precip 30/60/90 d (ERA5 archive) | live, cache 30 min | `integrations/openmeteo/` + `CachedOpenMeteoClient` |
-| **ISPRA IdroGEO** | IFFI (points/polys/lines), PAI hazard, susceptibility | weekly batch | `integrations/idrogeo/` + idempotent `sync_job` keyed by content hash |
-| **INGV** | FDSN events (mag ≥ 3.5, last 7 d, AOI bbox); ShakeMap `grid.xml` raster | event-driven poll | `integrations/ingv/` + `seismic_repo` + `ObjectStore` |
-| **EFFIS** | burnt-area perimeters; dNBR (when programmatic — currently manual data request, marked TODO) | weekly batch | `integrations/effis/` |
-| **Static bootstrap** | `iffi_density_500`, `distance_to_iffi_m`, `pai_class_norm` per cell — set-based PostGIS SQL | one-shot CLI | `integrations/static_bootstrap/` + `limen bootstrap-static` |
-| **Scoring engine (V1)** | Caine I/D excess, API sigmoid, post-fire window, seismic decay, weighted aggregator + 5-class | pure (no I/O) | `core/scoring/` + `MultiFactorScoringEngine` |
-| **Calibrate** | Per-AOI min/max norm stats; precompute `s_static`; **S vs ISPRA correlation gate (≥ 0.85)** | one-shot | `limen calibrate` + `reports/calibrate_<aoi>.md` |
-| **Backtest** | Replay any historical window with Open-Meteo ERA5 + IFFI truth set → hit rate / FAR / lead time vs §2.5 targets | one-shot | `limen backtest` + `reports/backtest_*.md` + `data/notebooks/02_backtest_oct2018.ipynb` |
-| **MAF workflow (V1)** | AreaResolver → StaticFactors → MeteoFetch → SeismicCheck → FireCheck → \[SensorFetch?\] → RiskScoring → EscalationGate → RiskAnalyst → Briefing → PersistResult → AlertDispatch | one-shot CLI | `agents/` + `limen monitor-once` |
-| **LLM providers** | Anthropic > OpenAI > Foundry > Ollama (resolved by env precedence; cloud key always wins over Ollama). Briefing in Italian (150–250 parole). RiskAnalyst returns strictly-typed JSON. | resolved at startup | `agents/llm_factory/resolve_llm_factory` |
-| **HTTP API** | `/health` + `/ready` (gated on pool & migrations), `POST /api/monitor/{aoi}` runs the workflow, `GET /api/aoi/{id}/risk/latest`, `GET /api/cell/{id}/breakdown`, `GET /api/aoi`, `GET /api/alerts`, `/api/tiles/...` (pg_tileserv redirect), OpenAPI at `/docs` and `/redoc` | FastAPI / uvicorn | `api/` + `limen serve` |
-| **Periodic jobs** | Hourly MAF workflow run, weekly ISPRA IdroGEO sync, cache cleanup (when `SCHEDULER__CACHE_CLEANUP=apscheduler`) | APScheduler in-process | `api/jobs/` |
-| **Observability** | OpenTelemetry tracing (FastAPI / asyncpg / httpx instrumentors, OTLP HTTP exporter) + custom Counters/Histograms (`landslide.risk.score`, `landslide.alert.dispatched`, `openmeteo.api.duration`, `idrogeo.cache.hits`, `workflow.executor.duration`) | optional OTLP backend | `observability/` |
-| **Vector tiles** | `mv_latest_risk` materialized view (grid_cells ⨝ latest risk_assessments per cell), refreshed by `refresh_mv_latest_risk()` at the end of every PersistResult; served by **pg_tileserv** | refresh per monitoring cycle | migration `007_map_views.sql` + `data/repos/map_views_repo.py` |
-| **Frontend** | Vite + TS + React + **MapLibre GL JS** SPA: `RiskMap` (vector tiles, 5-class colour palette), `LegendPanel` (labels + ranges, not colour-only), `AlertList`, `CellPopup` (S/M/E/F/H + Italian briefing), `TimelineSlider`. Strict TS, ESLint clean, Vitest tests for `api-client` + `RiskMap` + `LegendPanel`. | public, read-only | `frontend/` |
-| **Notifications (Phase 7)** | `NotificationChannel` Protocol + three channels: **Telegram** (Bot API via httpx + tenacity), **MQTT** (`aiomqtt`, QoS 1), **Email** (`aiosmtplib`, multipart HTML+text). `NotificationDispatcher` runs them in parallel with per-channel exception isolation (one channel raising can never abort the others). Dedup window on `alert_dispatches`; priority weighted by exposure (population/buildings/infrastructure) when known. Emits the `landslide.alert.dispatched` OTel counter. | per workflow tick, ≥ `ALERT__MIN_LEVEL` | `notifications/` + `agents/executors/alert_dispatch.py` |
+| **Open-Meteo** | precip oraria, umidità del suolo 0–7 / 7–28 cm, neve (forecast); precip cumulata (archivio) | live, cache 30 min | `integrations/openmeteo/` + `CachedOpenMeteoClient` |
+| **ISPRA (PostGIS di GeoServer)** | inventario IFFI (frane/aree/dgpv, tutte le regioni), mosaico PAI frana; il mosaico idraulica alimenta il componente `H` | all'init / settimanale | `integrations/geoserver_source/` legge il PostGIS di mcp-geoserver |
+| **INGV** | eventi FDSN (mag ≥ 3.5, ultimi 7 g, bbox AOI); griglia ShakeMap | poll event-driven | `integrations/ingv/` + `seismic_repo` + `ObjectStore` |
+| **EFFIS** | perimetri aree bruciate; fallback bulk Shapefile | batch settimanale | `integrations/effis/` |
+| **Bootstrap statico** | per cella: `iffi_density_500` (entro 500 m dalla cella), `distance_to_iffi_m`, `pai_class_norm`, `slope_deg` (DTM) — SQL PostGIS set-based | one-shot CLI | `integrations/static_bootstrap/` + `limen bootstrap-static` |
+| **Motore di scoring (V1)** | soglia Caine I/D (ri-tarata su ITALICA), API sigmoide, finestra post-incendio, decadimento sismico, aggregatore pesato + 5 classi | puro (no I/O) | `core/scoring/` + `MultiFactorScoringEngine` |
+| **Calibrate** | stat di normalizzazione per-AOI; precompute `s_static` | one-shot | `limen calibrate` + `reports/calibrate_<aoi>.md` |
+| **Ingest eventi** | catalogo **e-ITALICA** (frane innescate da pioggia, datate, tutta Italia) — truth set del backtest | one-shot, auto-download Zenodo | `limen ingest-events` |
+| **Backtest** | replay di una finestra storica con pioggia antecedente **CERRA** (5.5 km) + truth set e-ITALICA → hit rate / FAR / lead time vs target §2.5 | one-shot | `limen backtest` + `reports/backtest_*.md` |
+| **Workflow MAF (V1)** | AreaResolver → StaticFactors → MeteoFetch → SeismicCheck → FireCheck → \[SensorFetch?\] → RiskScoring → EscalationGate → RiskAnalyst → Briefing → PersistResult → AlertDispatch | one-shot CLI | `agents/` + `limen monitor-once` |
+| **Provider LLM** | precedenza `LLM__PROVIDER` > Anthropic > OpenAI > Foundry > Ollama; il resolver salta i provider cloud senza SDK e cade su Ollama (solo httpx). Briefing in italiano; RiskAnalyst restituisce JSON tipizzato. | risolto all'avvio | `agents/llm_factory/resolve_llm_factory` |
+| **API HTTP** | `/health` + `/ready`, `POST /api/monitor/{aoi}`, `GET /api/aoi/{id}/risk/latest`, `GET /api/cell/{id}/breakdown`, `GET /api/aoi`, `GET /api/alerts`, `/api/tiles/...`, OpenAPI su `/docs` e `/redoc` | FastAPI / uvicorn | `api/` + `limen serve` |
+| **Job periodici** | workflow MAF orario, sync ISPRA settimanale, cache cleanup | APScheduler in-process | `api/jobs/` |
+| **Vector tiles** | matview `mv_latest_risk` (grid_cells ⨝ ultimo risk_assessment per cella), rinfrescata da `refresh_mv_latest_risk()`; servita da **pg_tileserv** | per ciclo di monitoraggio | migrazione `007_map_views.sql` |
+| **Frontend** | SPA Vite + TS + React + **MapLibre GL JS**: `RiskMap` (vector tiles, palette 5 classi ColorBrewer YlOrRd), `LegendPanel` (etichette + range, non solo colore), `AlertList`, `CellPopup`, `TimelineSlider`; overlay PMTiles PAI/IFFI opt-in | pubblico, read-only | `frontend/` |
+| **Notifiche** | Protocol `NotificationChannel` + Telegram / MQTT / Email; dispatcher in parallelo con isolamento eccezioni per canale; dedup su `alert_dispatches` | per tick del workflow | `notifications/` |
 
 ---
 
-## Table of contents
+## Perché queste scelte
 
-- [Why these decisions](#why-these-decisions)
-- [Architecture (current phase)](#architecture-current-phase)
-- [Quickstart](#quickstart)
-- [Project layout](#project-layout)
-- [Configuration reference](#configuration-reference)
-- [Database schema highlights](#database-schema-highlights)
-- [LLM provider precedence](#llm-provider-precedence)
-- [Testing](#testing)
-- [Quality gates](#quality-gates)
-- [Roadmap (out of scope for this phase)](#roadmap-out-of-scope-for-this-phase)
-- [License](#license)
-
----
-
-## Why these decisions
-
-| Decision | Rationale |
-|----------|-----------|
-| **Engine-agnostic PostgreSQL 16 + PostGIS** (no Supabase, no BaaS, no ORM) | Same SQL, same code path on local Docker, Neon, RDS, Cloud SQL, or self-hosted. Only `DB__CONNECTION_STRING` changes. |
-| **`asyncpg` + custom PostGIS codec** | Geometries flow as Shapely objects, no `ST_AsBinary`/`ST_GeomFromWKB` boilerplate, no ORM session lock-in. |
-| **`pg_cron` is optional** | Neon doesn't support it. The in-process **APScheduler** runs the same periodic jobs when the extension is absent. Pick with `SCHEDULER__CACHE_CLEANUP={pg_cron,apscheduler}`. |
-| **Object storage behind a Protocol** (`filesystem` / `s3`) | Raster bytes never go in the DB. PostGIS stores references (path + bbox + CRS + checksum) only. The `s3` backend targets any S3-compatible endpoint (MinIO sidecar, Aruba Cloud Object Storage, R2, B2) via `OBJECT_STORE__ENDPOINT_URL` — not just AWS. |
-| **Plain-SQL migrations** | No Alembic, no Django ORM. A 60-line runner with a `schema_migrations` table + checksums. Identical behaviour on every Postgres. |
-| **Pydantic v2 + `structlog`** | Strict typed configuration and structured logs without rolling our own. |
-| **`uv` + `src/` layout** | Fast, lockfile-first dependency management. The package can't import its own test code by accident. |
+| Decisione | Motivazione |
+|-----------|-------------|
+| **PostgreSQL 16 + PostGIS engine-agnostic** (no Supabase, no BaaS, no ORM) | Stesso SQL e stesso codice su Docker locale, Neon o self-hosted. Cambia solo `DB__CONNECTION_STRING`. |
+| **`asyncpg` + codec PostGIS custom** | Le geometrie viaggiano come oggetti Shapely, niente boilerplate WKB, niente lock-in di sessione ORM. |
+| **`pg_cron` opzionale** | Neon non lo supporta. L'**APScheduler** in-process esegue gli stessi job periodici quando l'estensione manca. |
+| **Object storage dietro Protocol** (`filesystem` / `s3`) | I byte raster non vanno mai nel DB. PostGIS memorizza solo riferimenti (path + bbox + CRS + checksum). Il backend `s3` punta a qualsiasi endpoint S3-compatibile (MinIO, R2, B2) via `OBJECT_STORE__ENDPOINT_URL` — mai SDK cloud. |
+| **Migrazioni SQL semplici** | Niente Alembic, niente ORM. Un runner con tabella `schema_migrations` + checksum. Comportamento identico su ogni Postgres. |
+| **Pydantic v2 + `structlog`** | Configurazione tipizzata e log strutturati senza reinventare. |
+| **`uv` + layout `src/`** | Gestione dipendenze lockfile-first; il pacchetto non può importare per errore il proprio codice di test. |
+| **GeoServer come sorgente dati generica** | mcp-geoserver pubblica gli opendata ISPRA nel suo PostGIS; la semantica ISPRA vive solo nel loader Limen, non nell'MCP (che resta generico). |
 
 ---
 
-## Architecture (current phase)
+## Calibrazione e validazione (§2.5)
 
-```
-                       ┌──────────────────────┐
-                       │ limen CLI            │
-                       │  migrate / seed      │
-                       └──────────┬───────────┘
-                                  │ asyncpg + PostGIS codec
-                ┌─────────────────┴─────────────────┐
-                │  PostgreSQL 16 + PostGIS 3.5      │
-                │  ─ aoi, grid_cells, susceptibility│
-                │  ─ iffi_landslides, pai_hazard    │
-                │  ─ risk_assessments               │
-                │  ─ raster_refs, app_cache         │
-                │  ─ schema_migrations              │
-                │                                   │
-                │  pg_cron jobs (when available)    │
-                │      ⇅ falls back to ⇅            │
-                │  APScheduler (in-process)         │
-                └───────────────────────────────────┘
-                                  ▲
-                ObjectStore Protocol (DB stores only refs)
-                ┌─────────────────┴─────────────────┐
-                │ filesystem │ S3-compatible        │
-                │            │ (MinIO, Aruba OS,    │
-                │            │  R2, B2 — via        │
-                │            │  endpoint_url)       │
-                └────────────────────────────────────┘
-```
+Il ciclo di test formale ha tarato il motore sui dati reali:
 
-The data layer is **identical between local Docker and Neon**. Only
-`DB__CONNECTION_STRING` (and `SCHEDULER__CACHE_CLEANUP=apscheduler` on
-Neon) differ. The grid generator reprojects to EPSG:3035 (LAEA Europe) so
-that 1 km cells are actually 1 km, then writes them back in EPSG:4326.
+- **Soglia Caine I/D** ri-derivata dal catalogo **e-ITALICA** (5974 coppie
+  intensità-durata misurate da pluviometri), inviluppo inferiore T5 per
+  macroregione. La soglia storica lasciava il 36% delle frane reali sotto
+  soglia; ora ~95% sono sopra soglia.
+- **Sorgente pioggia**: **CERRA** (5.5 km) al posto di ERA5 (~28 km), che
+  non risolve la pioggia convettiva locale.
+- **Densità IFFI** contata entro 500 m dalla cella (non dal centroide).
+- **Saturazione densità** in YAML (`static.iffi_density_saturation`),
+  bilanciata su ITALICA (recall vs precisione).
+
+Validazione su ground-truth (pioggia pluviometro reale): ~63–77% delle
+frane reali raggiungono ≥Moderate; backtest end-to-end su una finestra
+scatenante con hit-rate e lead-time entro i target §2.5. Il FAR resta
+limitato dall'incompletezza del catalogo eventi, non dal motore.
 
 ---
 
-## Quickstart
+## Configurazione
 
-### 1. Install
+Caricata da variabili d'ambiente (e `.env` opzionale) via
+`limen.config.settings.Settings`. I campi annidati usano `__` come
+delimitatore.
+
+| Variabile | Default | Note |
+|-----------|---------|------|
+| `DB__CONNECTION_STRING` | `postgresql://limen:limen@localhost:5432/limen` | DSN PostgreSQL. Aggiungi `?sslmode=require` per Neon. |
+| `OBJECT_STORE__BACKEND` | `filesystem` | `filesystem` o `s3`. |
+| `OBJECT_STORE__ENDPOINT_URL` | _vuoto_ | Endpoint S3-compatibile (MinIO, R2, B2). |
+| `SCHEDULER__CACHE_CLEANUP` | `apscheduler` | `pg_cron` o `apscheduler`. **Usa APScheduler su Neon.** |
+| `LLM__PROVIDER` | _vuoto_ | Override: `anthropic` / `openai` / `foundry` / `ollama`. |
+| `LLM__OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama host (da container: `host.docker.internal`). |
+| `LLM__OLLAMA_MODEL` | `qwen2.5` | Modello Ollama (es. `qwen3.6:latest`). |
+| `GEOSERVER_SOURCE__DB_DSN` | _vuoto_ | DSN del PostGIS di mcp-geoserver (IFFI + PAI). |
+| `LIMEN_DEM_RASTER` | _vuoto_ | GeoTIFF DTM per lo slope (opt-in). |
+| `LIMEN_ITALICA_CSV` | _vuoto_ | CSV e-ITALICA locale; se assente, auto-download da Zenodo. |
+| `LOG_LEVEL` / `LOG_JSON` | `INFO` / `false` | Livello + output JSON dei log structlog. |
+
+Vedi [`.env.example`](./.env.example) per l'elenco completo con esempi.
+
+---
+
+## Schema database (highlights)
+
+`aoi`, `grid_cells`, `cell_static_factors`, `iffi_landslides`,
+`pai_hazard`, `landslide_events` (catalogo eventi datati),
+`risk_assessments`, `norm_stats`, `raster_refs`, `app_cache`,
+`alert_dispatches`, `seismic_events`, `fire_perimeters`, tabelle sensori,
+`schema_migrations`. Tutte le geometrie in EPSG:4326; distanze/aree
+calcolate in EPSG:3035 (LAEA Europe). Migrazioni SQL immutabili in
+`src/limen/data/migrations/NNN_*.sql`.
+
+---
+
+## Testing e quality gates
 
 ```bash
-make install     # = uv sync --all-groups
+make test                  # unit + integration (testcontainers)
+make test-unit             # veloce, senza Docker
+make check                 # lint + typecheck + test
+make lint                  # ruff check
+make format                # ruff format
+make typecheck             # mypy --strict su src/ (esegui dopo `uv sync --all-groups`)
 ```
 
-Requires Python 3.12+ and [uv](https://github.com/astral-sh/uv). For
-integration tests you also need Docker.
-
-### 2. Pick your Postgres
-
-#### Option A — local Docker (default)
-
-```bash
-make up-dev                          # Postgres 16 + PostGIS 3.5 + pg_cron + pgvector
-make seed                            # migrations + Puglia/Basilicata AOIs + ~60k 1 km cells
-uv run limen bootstrap-static        # IFFI density / distance + PAI normalised class
-uv run limen calibrate               # s_static + per-AOI norm stats; S vs ISPRA gate
-uv run limen backtest                # §2.5 metrics report for Oct 2018 (default window)
-uv run limen monitor-once            # full MAF workflow once per AOI
-uv run limen serve                   # FastAPI on :8080 — /docs, /api/...
-( cd frontend && npm install && npm run dev )  # Vite on :5173
-```
-
-For a containerised full demo (Postgres + PostGIS + Limen API + pg_tileserv):
-
-```bash
-docker compose -f infra/docker/docker-compose.demo.yml up -d --build
-# API → http://localhost:8080/docs    Postgres → 5432
-# pg_tileserv → http://localhost:7800
-# add `--profile frontend` to also bring up the Vite dev server on :5173.
-```
-
-#### Option B — Neon (serverless Postgres)
-
-1. Create a Neon project and branch.
-2. Put in `.env`:
-
-   ```env
-   DB__CONNECTION_STRING=postgresql://user:password@ep-xxxx.aws.neon.tech/limen?sslmode=require
-   SCHEDULER__CACHE_CLEANUP=apscheduler
-   ```
-
-3. Run the same command — **no code change required**:
-
-   ```bash
-   uv run limen seed
-   ```
-
-   The `pg_cron` extension is silently skipped (it doesn't exist on Neon),
-   and the in-process APScheduler takes over the periodic jobs.
-
-#### Option C — Apple Silicon dev
-
-The official `postgis/postgis` image does not currently publish an arm64
-manifest. The integration tests automatically pick
-[`imresamu/postgis-arm64`](https://hub.docker.com/r/imresamu/postgis-arm64).
-Override with `LIMEN_TEST_POSTGIS_IMAGE` if you prefer a different one.
-
-### 3. Run tests
-
-```bash
-make test                  # unit + integration
-make test-unit             # fast: no Docker required
-make test-integration      # spins up Postgres+PostGIS via testcontainers
-```
+Gate prima di ogni commit: `ruff check` + `ruff format` puliti,
+`mypy --strict` pulito, `pytest` verde. Su Apple Silicon i test di
+integrazione usano automaticamente `imresamu/postgis-arm64`
+(override con `LIMEN_TEST_POSTGIS_IMAGE`).
 
 ---
-
-## Project layout
-
-```
-src/limen/
-├── cli/                # `limen` console script
-│   ├── main.py         # dispatcher
-│   ├── migrate.py      # `limen migrate`
-│   └── seed.py         # `limen seed`
-├── config/
-│   └── settings.py     # pydantic-settings (DB, OBJECT_STORE, LLM, SCHEDULER)
-├── core/
-│   ├── logging.py      # structlog configuration
-│   ├── scheduling.py   # APScheduler (Neon path)
-│   └── llm_resolver.py # provider precedence resolver (stub for later phases)
-└── data/
-    ├── db.py           # asyncpg pool + PostGIS hex-EWKB codec
-    ├── migrate.py      # idempotent SQL migrations runner (schema_migrations)
-    ├── migrations/
-    │   ├── 001_extensions.sql       # postgis (req), pgvector (opt), pg_cron (opt)
-    │   ├── 002_core_tables.sql      # aoi, grid_cells, iffi, pai, risk, …
-    │   ├── 003_cache_table.sql      # app_cache + pg_cron job (when available)
-    │   └── 004_raster_refs.sql      # raster references (paths + bbox + checksum)
-    ├── object_store/   # filesystem | s3-compatible behind a Protocol
-    ├── caching/        # PostgresCache (DistributedCache Protocol)
-    ├── repos/          # aoi_repo, grid_repo (+ iffi, susceptibility, assessment stubs)
-    └── seed/
-        ├── puglia_aoi.geojson       # placeholder coarse outline (TODO: ISTAT)
-        ├── basilicata_aoi.geojson   # placeholder coarse outline (TODO: ISTAT)
-        └── loader.py
-infra/
-├── postgres/Dockerfile.db          # postgis/postgis:16-3.5 + pg_cron + pgvector
-└── docker/docker-compose.dev.yml
-tests/
-├── unit/                            # config, LLM resolver, FS store, seed loader
-└── integration/                     # PostgresCache TTL + p95<10ms + repos + idempotency
-```
-
----
-
-## Configuration reference
-
-Configuration is loaded from environment variables (and optional `.env`)
-via `limen.config.settings.Settings`. Nested fields use `__` as delimiter.
-
-| Variable | Default | Notes |
-|----------|---------|-------|
-| `DB__CONNECTION_STRING` | `postgresql://limen:limen@localhost:5432/limen` | PostgreSQL DSN. Add `?sslmode=require` for Neon. |
-| `DB__POOL_MIN_SIZE` / `DB__POOL_MAX_SIZE` | `2` / `20` | asyncpg pool sizing. |
-| `DB__STATEMENT_CACHE_SIZE` | `1024` | asyncpg prepared-statement cache. Set `0` on PgBouncer (transaction pool). |
-| `OBJECT_STORE__BACKEND` | `filesystem` | `filesystem` or `s3`. |
-| `OBJECT_STORE__ROOT` | `./object_store_root` | Filesystem root. |
-| `OBJECT_STORE__BUCKET` / `__PREFIX` / `__REGION` / `__ENDPOINT_URL` / `__ACCESS_KEY_ID` / `__SECRET_ACCESS_KEY` | _empty_ | S3-compatible settings. Set `__ENDPOINT_URL` for MinIO, Aruba Cloud Object Storage, R2, B2. |
-| `SCHEDULER__CACHE_CLEANUP` | `apscheduler` | `pg_cron` or `apscheduler`. **Use APScheduler on Neon.** |
-| `SCHEDULER__CACHE_CLEANUP_INTERVAL_SECONDS` | `300` | APScheduler tick. |
-| `LLM__PROVIDER` | _empty_ | Optional override: `anthropic` / `openai` / `foundry` / `ollama`. |
-| `LLM__OLLAMA_BASE_URL` | `http://localhost:11434` | Local LLM fallback. |
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `FOUNDRY_ENDPOINT` + `FOUNDRY_API_KEY` | _empty_ | Auto-detected (see [LLM provider precedence](#llm-provider-precedence)). |
-| `LOG_LEVEL` | `INFO` | structlog log level. |
-| `LOG_JSON` | `false` | Set `true` in production for JSON logs. |
-
-See [`.env.example`](./.env.example) for the canonical reference.
-
----
-
-## Database schema highlights
-
-All geometries are stored in **EPSG:4326**. Distances/areas are computed by
-re-projecting to a metric CRS in application code (EPSG:3035 for Italy).
-
-| Table | Purpose |
-|-------|---------|
-| `dataset_versions` | Single registry of external dataset versions (IFFI, PAI, climate reanalyses…). Other tables reference this for reproducibility. |
-| `aoi` | Areas of Interest (regions, municipalities, project polygons). `bbox` is generated. GiST on `geom` and `bbox`. |
-| `grid_cells` | 1 km² discretisation per AOI. Deterministic ID = `<aoi_id>|<row>|<col>`. Centroid generated. GiST on geom and centroid. |
-| `iffi_landslides` | ISPRA Inventario dei Fenomeni Franosi in Italia. |
-| `pai_hazard` | Piano di Assetto Idrogeologico hazard polygons. |
-| `susceptibility` | Pre-computed per-cell susceptibility (0..1 + class). |
-| `cell_static_factors` | Per-cell slope, aspect, elevation, TWI, lithology, land cover, distance-to-IFFI… |
-| `risk_assessments` | Output of the scoring engine + MAF agents (horizon + score + factors + explanation + dataset versions). |
-| `raster_refs` | References to raster bytes living in the ObjectStore (path + bbox + CRS + checksum). |
-| `app_cache` | UNLOGGED key/value JSONB cache with TTL. Cleaned up by `pg_cron` or APScheduler. |
-| `schema_migrations` | Applied-migrations registry with SHA-256 checksums (idempotency guard). |
-
----
-
-## LLM provider precedence
-
-For phases that actually use LLMs (scoring explanations, MAF agents) the
-provider is resolved by `limen.core.llm_resolver.resolve_provider`:
-
-1. `LLM__PROVIDER` override → wins unconditionally.
-2. `ANTHROPIC_API_KEY` present → **Anthropic**.
-3. `OPENAI_API_KEY` present → **OpenAI**.
-4. `FOUNDRY_ENDPOINT` + `FOUNDRY_API_KEY` present → **Microsoft Foundry**.
-5. Otherwise → **Ollama** (local fallback at `LLM__OLLAMA_BASE_URL`).
-
-A cloud key always wins over Ollama unless `LLM__PROVIDER=ollama` is set
-explicitly.
-
----
-
-## Testing
-
-```bash
-make test-unit          # 14 tests, no Docker, < 1s
-make test-integration   # 8 tests, needs Docker, ~5s once the image is cached
-make test               # all 22
-```
-
-Integration tests spin up a real PostgreSQL+PostGIS via `testcontainers`,
-apply the migrations, exercise the AOI + grid repositories on a tiny
-~5 km × 5 km polygon near Bari, assert migrations are idempotent, and
-verify that `PostgresCache.get_json` has **p95 < 10 ms** on the local
-container.
-
----
-
-## Quality gates
-
-| Tool | Where |
-|------|-------|
-| `ruff check` / `ruff format` | `make lint`, `make format` |
-| `mypy --strict` | `make typecheck` — all of `src/` |
-| `pytest -q` | `make test` — unit + integration |
-| `pre-commit` | end-of-file-fixer, trailing-whitespace, ruff, mypy |
-| Conventional commits | enforced by convention, not tooling |
-
----
-
-## V1 acceptance — what "complete" means
-
-The prototype is V1-complete when the following loop runs end-to-end on
-either a local Docker stack or a Neon branch by changing only
-`DB__CONNECTION_STRING` + `OBJECT_STORE__*` + LLM keys:
-
-1. `make up-dev && uv run limen seed && uv run limen bootstrap-static`
-   populates Postgres+PostGIS with Puglia + Basilicata AOIs and the
-   per-cell static factors achievable in V1 (IFFI density / PAI / dist).
-2. `uv run limen serve` boots FastAPI with `/health`, `/ready`, `/api/*`,
-   `/api/tiles`, `/docs`. APScheduler starts the hourly monitoring +
-   weekly ISPRA + cache-cleanup jobs in-process.
-3. `POST /api/monitor/{aoi}` returns a full `RiskAssessment` with
-   `score`, 5-part breakdown and an Italian briefing in ≤ 15 s using
-   the stubbed LLM (or a real provider via the resolver precedence).
-4. Frontend (`cd frontend && npm run dev`) at `http://localhost:5173`
-   renders the 5-class MapLibre heatmap from `mv_latest_risk` via
-   pg_tileserv, with `LegendPanel`, `AlertList`, `CellPopup` and
-   `TimelineSlider` wired to the FastAPI typed client.
-5. `uv run limen backtest` on the Oct 2018 Southern-Italy storm flags
-   the affected cells as High / VeryHigh inside the 18-hour lead-time
-   target, with the §2.5 metric report under `./reports/`.
-6. Cells crossing `ALERT__MIN_LEVEL` (default `High`) trigger
-   `AlertDispatchExecutor`: payload built deterministically, fanned out
-   in parallel to every configured channel; repeat alerts within the
-   dedup window are suppressed; outcomes persisted to
-   `alert_dispatches` and the `landslide.alert.dispatched` OTel
-   counter is incremented.
 
 ## Roadmap
 
-What's next, in deliberate scope:
-
-- **IoT ingestion** (V1.5): real-time sensor streams + component K;
-  the `SensorFetchExecutor` is already wired as a no-op stub.
-- **ML / MLOps** (V2): trainable susceptibility model + model
-  registry + drift monitoring; the assembler hands the same
-  `CellFeatureBundle` to either engine.
-- **Knowledge-graph grounding** of the Italian briefing (V2.x).
-- **Authentication via Clerk** (`@clerk/clerk-react` on the same Vite
-  SPA + Clerk JWT validation in FastAPI). Deferred per §1.6; see
-  memory `production-stack`.
-- **DEM / CORINE / ISPRA Carta Geologica ingest** to fill the
-  currently-NULL `cell_static_factors` columns (`slope_deg`,
-  `aspect_deg`, `curvature`, `twi`, `elevation_m`, `landuse_code`,
-  `lithology`, `litho_weight`, `dist_faults_m`). The static-bootstrap
-  pipeline already logs `static_bootstrap.skip` for each missing
-  component.
+- **Attivazione H (idraulica)** dal PostGIS di GeoServer: caricare il
+  mosaico idraulica ISPRA + estendere il loader (peso 0.03, completezza).
+- **Autenticazione Clerk** (`@clerk/clerk-react` sulla stessa SPA Vite +
+  validazione JWT in FastAPI) — unico item deferito; vedi memoria
+  `production-stack`.
 
 ---
 
-## Attribution & open-data licenses
+## Attribuzione & licenze open
 
-Limen consumes the following open datasets — attribution is required
-when the rendered map / briefings are published:
+Limen usa i seguenti dataset aperti — l'attribuzione è obbligatoria
+quando la mappa / i briefing vengono pubblicati:
 
-* **ISPRA IdroGEO** (IFFI inventory, PAI hazard, susceptibility) —
-  © ISPRA / Italian Authorities, CC-BY 4.0 unless otherwise noted on
-  the individual layers. https://idrogeo.isprambiente.it
-* **Copernicus Open-Meteo / ECMWF ERA5** — Open-Meteo terms allow free
-  commercial use with attribution; ERA5 is provided under the
-  Copernicus license. https://open-meteo.com /
-  https://cds.climate.copernicus.eu
-* **INGV** (FDSN event service, ShakeMap) — CC-BY 4.0.
+* **ISPRA IdroGEO** (inventario IFFI, mosaici PAI frana e idraulica) —
+  © ISPRA / Autorità italiane, CC-BY 4.0. https://idrogeo.isprambiente.it
+* **e-ITALICA** (catalogo frane innescate da pioggia, CNR-IRPI) —
+  CC-BY 4.0, Zenodo DOI 10.5281/zenodo.14204473.
+* **Copernicus** (Open-Meteo, ERA5, **CERRA** reanalisi regionale) —
+  licenza Copernicus, uso libero con attribuzione. https://open-meteo.com
+* **INGV** (servizio eventi FDSN, ShakeMap) — CC-BY 4.0.
   https://terremoti.ingv.it
-* **EFFIS** (burnt-area perimeters, dNBR) — Copernicus EFFIS terms,
-  attribution required. https://forest-fire.emergency.copernicus.eu
-* **OpenStreetMap** (basemap raster tiles) — ODbL.
-  https://www.openstreetmap.org/copyright
+* **EFFIS** (perimetri aree bruciate) — termini Copernicus EFFIS.
+* **ISTAT** (confini amministrativi 2023) — CC-BY 4.0.
+* **OpenStreetMap** (basemap) — ODbL.
 
-Render the attribution string on the public map and in every operator
-briefing.
+---
 
-## Contributing & security
+## Contributi & sicurezza
 
-* [`CONTRIBUTING.md`](./CONTRIBUTING.md) — dev setup, commit style,
-  gate before pushing.
-* [`SECURITY.md`](./SECURITY.md) — private disclosure path.
-* [`CHANGELOG.md`](./CHANGELOG.md) — versioned history (Keep a
-  Changelog).
+* [`CONTRIBUTING.md`](./CONTRIBUTING.md) — setup dev, stile commit, gate.
+* [`SECURITY.md`](./SECURITY.md) — canale di disclosure privato.
+* [`CHANGELOG.md`](./CHANGELOG.md) — storico versionato (Keep a Changelog).
 
-## License
+## Licenza
 
-Apache-2.0 — see [LICENSE](./LICENSE).
+Apache-2.0 — vedi [LICENSE](./LICENSE).
