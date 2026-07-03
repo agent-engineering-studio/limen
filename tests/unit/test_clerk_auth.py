@@ -38,7 +38,10 @@ def test_auth_enabled_bad_token_401() -> None:
             require_user(
                 _request({"Authorization": "Bearer not.a.jwt"}),
                 _settings(
-                    clerk={"enabled": True, "jwks_url": "https://example.test/.well-known/jwks.json"}
+                    clerk={
+                        "enabled": True,
+                        "jwks_url": "https://example.test/.well-known/jwks.json",
+                    }
                 ),
             )
         )

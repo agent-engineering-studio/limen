@@ -52,9 +52,7 @@ def _verify(token: str, settings: Settings) -> dict[str, Any]:
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
     if clerk.authorized_parties and claims.get("azp") not in clerk.authorized_parties:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized party"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized party")
     return claims
 
 
