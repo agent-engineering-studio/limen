@@ -67,16 +67,12 @@ def _norm_slope(slope_deg: float | None, saturation_deg: float) -> float:
     return _clamp01(slope_deg / saturation_deg)
 
 
-def _norm_iffi_density(density: float | None) -> float:
-    """``iffi_density_500`` saturates at ~3 features per 500 m buffer.
-
-    The figure is empirical (Italian Apennines pilot); calibration may
-    refine it via per-AOI ``norm_stats``. For pure-engine use without
-    calibration, this default keeps results sensible.
-    """
-    if density is None or density <= 0:
+def _norm_iffi_density(density: float | None, saturation: float) -> float:
+    """``iffi_density_500`` scaled to [0, 1], saturating at ``saturation``
+    features per cell (``static.iffi_density_saturation`` in the YAML)."""
+    if density is None or density <= 0 or saturation <= 0:
         return 0.0
-    return _clamp01(density / 3.0)
+    return _clamp01(density / saturation)
 
 
 def _norm_caine(excess: float) -> float:
@@ -132,7 +128,7 @@ class MultiFactorScoringEngine:
         sf = bundle.static
 
         susc = _clamp01(sf.susc_ispra) if sf.susc_ispra is not None else 0.0
-        iffi = _norm_iffi_density(sf.iffi_density_500)
+        iffi = _norm_iffi_density(sf.iffi_density_500, self._t.static.iffi_density_saturation)
         slope = _norm_slope(sf.slope_deg, sat)
         pai = _clamp01(sf.pai_class_norm) if sf.pai_class_norm is not None else 0.0
         litho = _clamp01(sf.litho_weight) if sf.litho_weight is not None else 0.0

@@ -85,6 +85,10 @@ class StaticWeights(_StrictModel):
 class StaticBlock(_StrictModel):
     weights: StaticWeights
     slope_saturation_deg: float = Field(..., gt=0.0, le=90.0)
+    # IFFI-density (features within 500 m of a cell) at which the term
+    # saturates to 1.0. Was a hard-coded 3.0 in the engine; moved here and
+    # rescaled after the density query fix raised typical counts ~5×.
+    iffi_density_saturation: float = Field(..., gt=0.0)
 
 
 class MeteoWeights(_StrictModel):

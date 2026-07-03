@@ -39,6 +39,12 @@ static:
   # Slope (degrees) is normalised by a piecewise-linear ramp from 0° to a
   # cap value; above the cap, the term saturates at 1.
   slope_saturation_deg: 45.0
+  # IFFI-density saturation: features-within-500 m at which the IFFI term
+  # reaches 1.0. Balances recall vs discrimination on the ITALICA ground
+  # truth: at 8 the gauge-rain recall stays 72% (>70% target) while cells
+  # below it discriminate, instead of every IFFI cell saturating at the old
+  # hard-coded 3.0 (which flattened S after the ~5x density-query fix).
+  iffi_density_saturation: 8.0
 
 # Sub-weights inside M(c, t) (meteo, time-varying).
 meteo:
