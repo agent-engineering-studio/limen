@@ -463,9 +463,7 @@ class Settings(BaseSettings):
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
     kg: KgSettings = Field(default_factory=KgSettings)
     geodata: GeodataSettings = Field(default_factory=GeodataSettings)
-    geoserver_source: GeoServerSourceSettings = Field(
-        default_factory=GeoServerSourceSettings
-    )
+    geoserver_source: GeoServerSourceSettings = Field(default_factory=GeoServerSourceSettings)
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_json: bool = False
