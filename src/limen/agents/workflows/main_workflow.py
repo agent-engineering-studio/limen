@@ -74,17 +74,45 @@ class WorkflowDeps:
 # ---------------------------------------------------------------------------
 # LLM nodes wrapped as executors
 # ---------------------------------------------------------------------------
+_LEVEL_ORDER = ("None", "Low", "Moderate", "High", "VeryHigh")
+
+
+def _llm_worthwhile(ctx: MonitoringContext, min_level: str) -> bool:
+    """True when the cycle warrants the (slow) LLM narrative.
+
+    Local models take minutes per briefing; running them on every all-quiet
+    cycle would blow the hourly budget across 20 AOIs. Hard escalation always
+    qualifies; otherwise at least one cell must sit at/above ``min_level``.
+    """
+    if min_level == "None":
+        return True
+    if any(r.hard_escalation for r in ctx.cell_results):
+        return True
+    if ctx.assessment is None:
+        return False
+    floor = _LEVEL_ORDER.index(min_level)
+    return any(
+        count > 0 and _LEVEL_ORDER.index(level) >= floor
+        for level, count in ctx.assessment.cells_by_level.items()
+        if level in _LEVEL_ORDER
+    )
+
+
 class RiskAnalystNode(Executor):
     """Executor wrapper around :class:`RiskAnalystAgent`."""
 
-    def __init__(self, llm_factory: LlmClientFactory) -> None:
+    def __init__(self, llm_factory: LlmClientFactory, *, min_level: str = "None") -> None:
         super().__init__(name="RiskAnalyst")
         self._agent = RiskAnalystAgent(llm_factory.create("RiskAnalyst"))
+        self._min_level = min_level
 
     @handler
     async def run(self, ctx: MonitoringContext) -> MonitoringContext:
         if ctx.assessment is None:
             log.warning("workflow.risk_analyst.skip", reason="no assessment in ctx")
+            return ctx
+        if not _llm_worthwhile(ctx, self._min_level):
+            log.info("workflow.risk_analyst.skip", reason="below_min_level", aoi_id=ctx.aoi_id)
             return ctx
         analysis = await self._agent.analyse(ctx.assessment)
         from limen.core.models.context import RiskAnalysisDTO
@@ -109,14 +137,19 @@ class BriefingNode(Executor):
         llm_factory: LlmClientFactory,
         *,
         grounding: GroundingService | None = None,
+        min_level: str = "None",
     ) -> None:
         super().__init__(name="Briefing")
         self._agent = BriefingAgent(llm_factory.create("Briefing"), grounding=grounding)
+        self._min_level = min_level
 
     @handler
     async def run(self, ctx: MonitoringContext) -> MonitoringContext:
         if ctx.assessment is None:
             log.warning("workflow.briefing.skip", reason="no assessment in ctx")
+            return ctx
+        if not _llm_worthwhile(ctx, self._min_level):
+            log.info("workflow.briefing.skip", reason="below_min_level", aoi_id=ctx.aoi_id)
             return ctx
         # The Briefing prompt reads the (possibly missing) RiskAnalyst output.
         # We map the DTO back to the strict RiskAnalysis model when present.
@@ -181,8 +214,14 @@ def build_landslide_workflow(
         builder = builder.add(ShadowChallengerExecutor(challenger))
     builder = (
         builder.add(EscalationGateExecutor())
-        .add(RiskAnalystNode(deps.llm_factory))
-        .add(BriefingNode(deps.llm_factory, grounding=deps.grounding_service))
+        .add(RiskAnalystNode(deps.llm_factory, min_level=settings.llm.briefing_min_level))
+        .add(
+            BriefingNode(
+                deps.llm_factory,
+                grounding=deps.grounding_service,
+                min_level=settings.llm.briefing_min_level,
+            )
+        )
         .add(PersistResultExecutor())
         .add(AlertDispatchExecutor(deps.notification_dispatcher))
     )

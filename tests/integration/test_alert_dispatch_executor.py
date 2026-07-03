@@ -245,3 +245,25 @@ async def test_exposure_boosts_priority(reset_db: None) -> None:
     # Exposed cell ranks first despite identical raw score.
     assert payload.cells[0].cell_id == exposed_id
     assert payload.cells[0].priority > payload.cells[1].priority
+
+
+async def test_moderate_alerts_only_on_susceptible_slopes(reset_db: None) -> None:
+    """Below-High cells pass only with S >= min_static_s (susceptible slope)."""
+    cell_ids = await _seed_aoi_with_cells()
+    cells = [
+        _cell(cell_ids[0], score=0.40, level=RiskLevel.Moderate),  # s=0.40 < gate
+        _cell(cell_ids[1], score=0.52, level=RiskLevel.Moderate),  # s=0.52 >= gate
+    ]
+    capture = _CaptureChannel()
+    executor = AlertDispatchExecutor(
+        dispatcher=NotificationDispatcher([capture]),
+        alert_settings=AlertSettings(
+            min_level="Moderate", min_static_s=0.5, dedup_window_minutes=60
+        ),
+    )
+    result = await executor.run(_ctx(cells))
+
+    assert len(capture.received) == 1
+    flagged = {c.cell_id for c in capture.received[0].cells}
+    assert flagged == {cell_ids[1]}
+    assert result.dispatched_alerts

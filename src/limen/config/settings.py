@@ -154,7 +154,12 @@ class LLMSettings(BaseSettings):
     ollama_api_key: SecretStr | None = None
     # Single Ollama model used for every agent role (the per-role defaults are
     # Claude ids, which Ollama can't serve). Override per host/cloud.
-    ollama_model: str = "qwen2.5"
+    ollama_model: str = "qwen3.6:latest"
+    # Run the RiskAnalyst + Briefing LLM nodes only when the assessment has at
+    # least one cell at/above this level (hard escalation always runs them).
+    # Local models take minutes per briefing; skipping all-quiet cycles keeps
+    # the hourly job inside its hour. "None" = always run.
+    briefing_min_level: Literal["None", "Low", "Moderate", "High", "VeryHigh"] = "Moderate"
 
 
 class SchedulerSettings(BaseSettings):
@@ -450,7 +455,15 @@ class AlertSettings(BaseSettings):
 
     # Minimum :class:`RiskLevel` to dispatch. Stored as a string so
     # operators can override via env without importing the enum.
-    min_level: Literal["Low", "Moderate", "High", "VeryHigh"] = "High"
+    # Default Moderate: the §2.5 gauge-rain validation measured that real
+    # landslides reach High in only ~3% of cases even with perfect rain, so a
+    # High-only pipeline is effectively silent. Sub-High dispatches are gated
+    # by `min_static_s` below to keep them selective.
+    min_level: Literal["Low", "Moderate", "High", "VeryHigh"] = "Moderate"
+    # Below-High cells must also sit on a genuinely susceptible slope
+    # (S component ≥ this) to alert — "moderate rain on a susceptible slope",
+    # not "moderate rain anywhere". High/VeryHigh and hard escalation bypass.
+    min_static_s: float = Field(default=0.5, ge=0.0, le=1.0)
     # Window during which a repeat alert for the same cell is suppressed.
     dedup_window_minutes: int = Field(default=180, ge=0)
     # How many top-priority cells to mention explicitly in the payload.

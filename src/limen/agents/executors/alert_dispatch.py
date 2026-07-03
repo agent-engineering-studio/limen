@@ -160,7 +160,13 @@ class AlertDispatchExecutor(Executor):
         for r in ctx.cell_results:
             if r.cell_id in seen:
                 continue
-            if level_at_least(r.level, threshold) or r.hard_escalation:
+            # Below-High levels alert only on genuinely susceptible slopes
+            # (S ≥ min_static_s): "moderate rain on a susceptible slope", not
+            # "moderate rain anywhere". High+ and hard escalation bypass.
+            selective = (
+                level_at_least(r.level, RiskLevel.High) or r.s >= alert_settings.min_static_s
+            )
+            if r.hard_escalation or (level_at_least(r.level, threshold) and selective):
                 above_threshold.append(r)
                 seen.add(r.cell_id)
         if not above_threshold:
