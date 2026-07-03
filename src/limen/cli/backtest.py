@@ -68,6 +68,9 @@ _RAIN_NODE_DEG = 0.1
 # Archive reanalysis for the antecedent rainfall. CERRA (5.5 km) resolves the
 # localized triggering rain far better than ERA5 (~28 km) — see get_rainfall_grid.
 _DEFAULT_RAIN_MODEL = "cerra"
+# Warning horizon: an alert this many hours (or fewer) before the event counts
+# as a hit. Generous by design — antecedent-driven landslides warn days ahead.
+_DEFAULT_LEAD_MAX_HOURS = 120.0
 _ALERT_LEVELS_ORDERED = (
     RiskLevel.None_,
     RiskLevel.Low,
@@ -222,7 +225,7 @@ def _evaluate(
     start: datetime,
     end: datetime,
     alert_level: RiskLevel,
-    lead_min_hours: float,
+    lead_max_hours: float,
 ) -> _BacktestMetrics:
     thresholds = load_regional_thresholds()
     engine = MultiFactorScoringEngine(thresholds)
@@ -261,7 +264,12 @@ def _evaluate(
             misses += 1
             continue
         lead_hours = (event_time - alert_time).total_seconds() / 3600.0
-        if 0 < lead_hours <= max(lead_min_hours, 24.0):
+        # A hit is any alert BEFORE the event within the warning horizon.
+        # Rainfall-triggered landslides have multi-day antecedent rain, so a
+        # 3-5 day lead is a *good* early warning, not a miss; the old 24 h cap
+        # wrongly discarded them. Mean lead is reported separately against the
+        # section-2.5 lead_time_hours_min quality gate.
+        if 0 < lead_hours <= lead_max_hours:
             hits += 1
             leads.append(lead_hours)
         else:
@@ -408,11 +416,11 @@ async def run() -> int:
     single_aoi = os.getenv("LIMEN_BACKTEST_AOI")
     rain_model = os.getenv("LIMEN_BACKTEST_RAIN_MODEL", _DEFAULT_RAIN_MODEL).strip() or None
     node_deg = float(os.getenv("LIMEN_BACKTEST_RAIN_NODE_DEG", str(_RAIN_NODE_DEG)))
+    lead_max = float(os.getenv("LIMEN_BACKTEST_LEAD_MAX_HOURS", str(_DEFAULT_LEAD_MAX_HOURS)))
 
     try:
         async with lifespan_pool():
             await run_migrations()
-            thresholds = load_regional_thresholds()
             aois = [single_aoi] if single_aoi else await list_aoi_ids()
             if not aois:
                 log.warning("backtest.no_aois", note="run `limen seed` first")
@@ -451,7 +459,7 @@ async def run() -> int:
                     start=start,
                     end=end,
                     alert_level=alert_level,
-                    lead_min_hours=thresholds.calibration.backtest.lead_time_hours_min,
+                    lead_max_hours=lead_max,
                 )
                 log.info(
                     "backtest.aoi.done",
