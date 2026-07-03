@@ -13,6 +13,8 @@ from shapely.geometry import MultiPolygon, Point, Polygon
 from limen.data.db import acquire
 from limen.data.repos.aoi_repo import upsert_aoi
 from limen.data.repos.cell_static_factors_repo import count_factors, get_for_cell
+from limen.data.repos.flood_repo import FloodHazard
+from limen.data.repos.flood_repo import upsert_many as upsert_flood
 from limen.data.repos.grid_repo import count_grid_cells, generate_and_store_grid
 from limen.data.repos.iffi_repo import IFFILandslide
 from limen.data.repos.iffi_repo import upsert_many as upsert_iffi
@@ -137,6 +139,84 @@ async def test_bootstrap_writes_pai_class_norm(reset_db: None) -> None:
     assert int(row["rows_with_pai"]) > 0
     # P3 → 0.80 normalised
     assert float(row["max_pai"]) == pytest.approx(0.80)
+
+
+_FLOOD_GEOM = MultiPolygon(
+    [
+        Polygon(
+            [
+                (16.89, 41.14),
+                (16.92, 41.14),
+                (16.92, 41.17),
+                (16.89, 41.17),
+                (16.89, 41.14),
+            ]
+        )
+    ]
+)
+
+
+async def test_bootstrap_writes_flood_hazard_from_subdiv(reset_db: None) -> None:
+    """Repo upsert keeps flood_hazard_subdiv in lockstep; aggregation reads it."""
+    await _seed(reset_db)
+    await upsert_flood(
+        [
+            FloodHazard(
+                id="flood-p2", hazard_class="P2", geom=_FLOOD_GEOM, attributes={"src": "test"}
+            )
+        ]
+    )
+    await bootstrap_static_for_aoi(_AOI_ID)
+
+    async with acquire() as conn:
+        subdiv = await conn.fetchval(
+            "SELECT count(*) FROM flood_hazard_subdiv WHERE id = 'flood-p2'"
+        )
+        row = await conn.fetchrow(
+            """
+            SELECT MAX(flood_hazard_norm) AS max_flood,
+                   COUNT(*) FILTER (WHERE flood_hazard_norm IS NOT NULL) AS rows_with_flood
+            FROM cell_static_factors c
+            JOIN grid_cells g ON g.id = c.cell_id
+            WHERE g.aoi_id = $1
+            """,
+            _AOI_ID,
+        )
+    assert int(subdiv) >= 1
+    assert row is not None
+    assert int(row["rows_with_flood"]) > 0
+    # P2 → 0.60 normalised (PAI_CLASS_TO_NORM ladder)
+    assert float(row["max_flood"]) == pytest.approx(0.60)
+
+
+async def test_bootstrap_backfills_flood_subdiv(reset_db: None) -> None:
+    """Rows inserted before migration 014 (raw flood_hazard only) get healed."""
+    await _seed(reset_db)
+    async with acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO flood_hazard (id, hazard_class, hazard_class_norm, geom)
+            VALUES ('flood-legacy', 'P3', 0.80, ST_SetSRID($1::geometry, 4326))
+            """,
+            _FLOOD_GEOM,
+        )
+    await bootstrap_static_for_aoi(_AOI_ID)
+
+    async with acquire() as conn:
+        subdiv = await conn.fetchval(
+            "SELECT count(*) FROM flood_hazard_subdiv WHERE id = 'flood-legacy'"
+        )
+        max_flood = await conn.fetchval(
+            """
+            SELECT MAX(flood_hazard_norm)
+            FROM cell_static_factors c
+            JOIN grid_cells g ON g.id = c.cell_id
+            WHERE g.aoi_id = $1
+            """,
+            _AOI_ID,
+        )
+    assert int(subdiv) >= 1
+    assert float(max_flood) == pytest.approx(0.80)
 
 
 async def test_bootstrap_leaves_dem_fields_null(reset_db: None) -> None:

@@ -80,5 +80,19 @@ async def upsert_many(items: Iterable[FloodHazard]) -> int:
                 multi,
                 attrs_json,
             )
+            # Keep the subdivided companion (migration 014) in lockstep, in
+            # the same transaction — the per-cell aggregation joins it
+            # instead of the raw multi-million-vertex mosaic polygons.
+            await conn.execute("DELETE FROM flood_hazard_subdiv WHERE id = $1", item.id)
+            await conn.execute(
+                """
+                INSERT INTO flood_hazard_subdiv (id, hazard_class, hazard_class_norm, geom)
+                SELECT id, hazard_class, hazard_class_norm,
+                       ST_Subdivide(ST_CollectionExtract(ST_MakeValid(geom), 3), 256)
+                FROM flood_hazard
+                WHERE id = $1
+                """,
+                item.id,
+            )
     log.info("flood.upsert_many", count=len(items_list))
     return len(items_list)
