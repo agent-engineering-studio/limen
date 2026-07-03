@@ -32,12 +32,16 @@ def test_each_cell_gets_its_nearest_node_series() -> None:
         rain_nodes=((16.0, 40.0), (16.5, 40.0)),
         rainfall_by_node=((_sample(10.0),), (_sample(50.0),)),
     )
-    by_cell = {b.cell_id: b.dynamic.rainfall.samples[0].precipitation_mm for b in assemble_bundles(ctx)}
+    by_cell = {
+        b.cell_id: b.dynamic.rainfall.samples[0].precipitation_mm for b in assemble_bundles(ctx)
+    }
     assert by_cell == {"c-west": 10.0, "c-east": 50.0}
 
 
 def test_no_grid_falls_back_to_aoi_series() -> None:
-    by_cell = {b.cell_id: b.dynamic.rainfall.samples[0].precipitation_mm for b in assemble_bundles(_ctx())}
+    by_cell = {
+        b.cell_id: b.dynamic.rainfall.samples[0].precipitation_mm for b in assemble_bundles(_ctx())
+    }
     assert by_cell == {"c-west": 1.0, "c-east": 1.0}
 
 
@@ -47,6 +51,8 @@ def test_empty_node_series_and_missing_centroid_fall_back() -> None:
         rain_nodes=((16.0, 40.0), (16.5, 40.0)),
         rainfall_by_node=((), (_sample(50.0),)),  # west node series empty
     )
-    by_cell = {b.cell_id: b.dynamic.rainfall.samples[0].precipitation_mm for b in assemble_bundles(ctx)}
+    by_cell = {
+        b.cell_id: b.dynamic.rainfall.samples[0].precipitation_mm for b in assemble_bundles(ctx)
+    }
     # west: nearest node empty → AOI fallback; east: no centroid → AOI fallback.
     assert by_cell == {"c-west": 1.0, "c-east": 1.0}
