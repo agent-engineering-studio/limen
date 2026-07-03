@@ -219,3 +219,44 @@ class OpenMeteoHttpClient:
         precips = list(daily.get("precipitation_sum") or [])
         total = float(sum(p for p in precips if p is not None))
         return {f"api_{days}d": total}
+
+    async def get_rainfall_grid(
+        self,
+        *,
+        nodes: list[tuple[float, float]],
+        window_start: datetime,
+        window_end: datetime,
+        batch_size: int = 100,
+    ) -> list[list[WeatherSample]]:
+        """Hourly ERA5-archive precipitation for many ``(lon, lat)`` nodes.
+
+        Returns one hourly precipitation series per input node, in the same
+        order. Nodes that fail to fetch degrade to an empty series (never
+        raises). Used by the backtest to give each grid cell the rainfall of
+        its nearest node instead of a single AOI-centroid series.
+        """
+        out: list[list[WeatherSample]] = []
+        for i in range(0, len(nodes), batch_size):
+            batch = nodes[i : i + batch_size]
+            params: dict[str, Any] = {
+                "latitude": ",".join(f"{lat:.4f}" for _, lat in batch),
+                "longitude": ",".join(f"{lon:.4f}" for lon, _ in batch),
+                "hourly": "precipitation",
+                "start_date": window_start.date().isoformat(),
+                "end_date": window_end.date().isoformat(),
+                "timezone": "UTC",
+            }
+            try:
+                resp = await fetch_with_retry(
+                    "GET", ARCHIVE_URL, client=await self._client(), params=params
+                )
+            except _DEGRADATION_EXC as exc:
+                log.warning("integration.degraded", label="openmeteo.rainfall_grid", error=str(exc))
+                out.extend([] for _ in batch)
+                continue
+            payload = resp.json()
+            # A single-node request returns an object, not a list.
+            results = payload if isinstance(payload, list) else [payload]
+            for node_payload in results:
+                out.append(_parse_hourly(node_payload))
+        return out

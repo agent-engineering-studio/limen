@@ -61,6 +61,10 @@ REPORTS_DIR = Path("./reports")
 # cluster on the 7th, so the default window has a real truth set.
 _DEFAULT_START = datetime(2009, 3, 4, 0, 0, tzinfo=UTC)
 _DEFAULT_END = datetime(2009, 3, 10, 0, 0, tzinfo=UTC)
+
+# Rainfall sampling grid step in degrees (~ERA5 0.25° native resolution).
+# Finer than this adds no real spatial information from the reanalysis.
+_RAIN_NODE_DEG = 0.25
 _ALERT_LEVELS_ORDERED = (
     RiskLevel.None_,
     RiskLevel.Low,
@@ -115,33 +119,38 @@ async def _fetch_truth_events(
     return {str(r["cell_id"]): r["first_event"] for r in rows}
 
 
-async def _fetch_static_factors(aoi_id: str) -> list[StaticFactors]:
+async def _fetch_static_factors(aoi_id: str) -> list[tuple[StaticFactors, float, float]]:
+    """Return ``(static_factors, centroid_lon, centroid_lat)`` per cell.
+
+    The centroid lets the backtest assign each cell the rainfall of its
+    nearest sampling node rather than a single AOI-wide series.
+    """
     async with acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT c.cell_id, c.iffi_density_500, c.slope_deg, c.pai_class_norm,
-                   c.litho_weight, c.s_static
+                   c.litho_weight, c.s_static,
+                   ST_X(ST_Centroid(g.geom)) AS lon, ST_Y(ST_Centroid(g.geom)) AS lat
             FROM cell_static_factors c
             JOIN grid_cells g ON g.id = c.cell_id
             WHERE g.aoi_id = $1
             """,
             aoi_id,
         )
-    out: list[StaticFactors] = []
+    out: list[tuple[StaticFactors, float, float]] = []
     for r in rows:
-        out.append(
-            StaticFactors(
-                cell_id=str(r["cell_id"]),
-                iffi_density_500=(
-                    float(r["iffi_density_500"]) if r["iffi_density_500"] is not None else None
-                ),
-                slope_deg=float(r["slope_deg"]) if r["slope_deg"] is not None else None,
-                pai_class_norm=(
-                    float(r["pai_class_norm"]) if r["pai_class_norm"] is not None else None
-                ),
-                litho_weight=float(r["litho_weight"]) if r["litho_weight"] is not None else None,
-            )
+        sf = StaticFactors(
+            cell_id=str(r["cell_id"]),
+            iffi_density_500=(
+                float(r["iffi_density_500"]) if r["iffi_density_500"] is not None else None
+            ),
+            slope_deg=float(r["slope_deg"]) if r["slope_deg"] is not None else None,
+            pai_class_norm=(
+                float(r["pai_class_norm"]) if r["pai_class_norm"] is not None else None
+            ),
+            litho_weight=float(r["litho_weight"]) if r["litho_weight"] is not None else None,
         )
+        out.append((sf, float(r["lon"]), float(r["lat"])))
     return out
 
 
@@ -150,6 +159,33 @@ async def _fetch_static_factors(aoi_id: str) -> list[StaticFactors]:
 # ---------------------------------------------------------------------------
 def _level_at_least(level: RiskLevel, threshold: RiskLevel) -> bool:
     return _ALERT_LEVELS_ORDERED.index(level) >= _ALERT_LEVELS_ORDERED.index(threshold)
+
+
+def _build_rain_nodes(
+    bbox: tuple[float, float, float, float], *, spacing: float = _RAIN_NODE_DEG
+) -> list[tuple[float, float]]:
+    """A regular ``(lon, lat)`` grid over ``bbox`` at ~ERA5 native spacing."""
+    min_lon, min_lat, max_lon, max_lat = bbox
+    nodes: list[tuple[float, float]] = []
+    lat = min_lat
+    while lat <= max_lat + 1e-9:
+        lon = min_lon
+        while lon <= max_lon + 1e-9:
+            nodes.append((lon, lat))
+            lon += spacing
+        lat += spacing
+    return nodes or [((min_lon + max_lon) / 2.0, (min_lat + max_lat) / 2.0)]
+
+
+def _nearest_node(lon: float, lat: float, nodes: list[tuple[float, float]]) -> int:
+    best_i = 0
+    best_d = float("inf")
+    for i, (nlon, nlat) in enumerate(nodes):
+        d = (lon - nlon) ** 2 + (lat - nlat) ** 2
+        if d < best_d:
+            best_d = d
+            best_i = i
+    return best_i
 
 
 def _hourly_window(start: datetime, end: datetime) -> list[datetime]:
@@ -176,9 +212,10 @@ def _synthesise_rainfall(
 def _evaluate(
     *,
     aoi_id: str,
-    cells: list[StaticFactors],
+    cells: list[tuple[StaticFactors, float, float]],
+    nodes: list[tuple[float, float]],
+    node_rainfall: list[list[RainfallSample]],
     truth: dict[str, datetime],
-    rainfall: list[RainfallSample],
     start: datetime,
     end: datetime,
     alert_level: RiskLevel,
@@ -188,16 +225,23 @@ def _evaluate(
     engine = MultiFactorScoringEngine(thresholds)
     hours = _hourly_window(start, end)
 
+    # Assign each cell to its nearest rainfall node once.
+    cell_node = [_nearest_node(lon, lat, nodes) for _, lon, lat in cells]
+
     earliest_alert: dict[str, datetime] = {}
     alerts_total = 0
     for t in hours:
-        rainfall_slice = _synthesise_rainfall(samples=rainfall, as_of=t)
-        for sf in cells:
+        # Slice each node's antecedent series once, then reuse across the
+        # (many) cells that map to that node.
+        node_slice = [
+            _synthesise_rainfall(samples=node_rainfall[n], as_of=t) for n in range(len(nodes))
+        ]
+        for i, (sf, _lon, _lat) in enumerate(cells):
             bundle = CellFeatureBundle(
                 aoi_id=aoi_id,
                 cell_id=sf.cell_id,
                 static=sf,
-                dynamic=DynamicInputs(valuation_time=t, rainfall=rainfall_slice),
+                dynamic=DynamicInputs(valuation_time=t, rainfall=node_slice[cell_node[i]]),
             )
             scored = engine.score(bundle)
             if _level_at_least(scored.level, alert_level):
@@ -305,29 +349,28 @@ def _write_report(
 
 
 # ---------------------------------------------------------------------------
-# Open-Meteo historical fetch (single call per AOI)
+# Open-Meteo historical fetch (one ERA5 series per sampling node)
 # ---------------------------------------------------------------------------
-async def _fetch_rainfall_for_window(
+async def _fetch_rainfall_grid(
     *,
-    aoi_id: str,
-    bbox: tuple[float, float, float, float],
+    nodes: list[tuple[float, float]],
     start: datetime,
     end: datetime,
-) -> list[RainfallSample]:
+) -> list[list[RainfallSample]]:
+    """One antecedent-inclusive precipitation series per sampling node."""
     client = OpenMeteoHttpClient()
-    snap = await client.get_meteo_snapshot(
-        aoi_id=aoi_id,
-        bbox=bbox,
+    grid = await client.get_rainfall_grid(
+        nodes=nodes,
         window_start=start - timedelta(hours=48),
         window_end=end,
-        use_archive=True,
     )
-    if snap is None:
-        log.warning("backtest.rainfall.degraded", aoi_id=aoi_id)
-        return []
+    if len(grid) != len(nodes):
+        # Guard against batch misalignment: pad/truncate to the node count.
+        log.warning("backtest.rainfall.node_count", expected=len(nodes), got=len(grid))
+        grid = (grid + [[] for _ in nodes])[: len(nodes)]
     return [
-        RainfallSample(timestamp=s.timestamp, precipitation_mm=s.precipitation_mm)
-        for s in snap.samples
+        [RainfallSample(timestamp=s.timestamp, precipitation_mm=s.precipitation_mm) for s in series]
+        for series in grid
     ]
 
 
@@ -378,22 +421,23 @@ async def run() -> int:
 
                 cells = await _fetch_static_factors(aoi_id)
                 truth = await _fetch_truth_events(aoi_id, start=start, end=end)
-                rainfall = await _fetch_rainfall_for_window(
-                    aoi_id=aoi_id, bbox=bbox, start=start, end=end
-                )
+                nodes = _build_rain_nodes(bbox)
+                node_rainfall = await _fetch_rainfall_grid(nodes=nodes, start=start, end=end)
                 log.info(
                     "backtest.aoi.loaded",
                     aoi_id=aoi_id,
                     cells=len(cells),
                     truth_events=len(truth),
-                    rainfall_samples=len(rainfall),
+                    rain_nodes=len(nodes),
+                    rain_samples=sum(len(s) for s in node_rainfall),
                 )
 
                 metrics = _evaluate(
                     aoi_id=aoi_id,
                     cells=cells,
+                    nodes=nodes,
+                    node_rainfall=node_rainfall,
                     truth=truth,
-                    rainfall=rainfall,
                     start=start,
                     end=end,
                     alert_level=alert_level,
