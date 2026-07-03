@@ -98,6 +98,17 @@ down:
 	docker compose $(COMPOSE_ALL) $(UP_PROFILES) down
 
 # ---------------------------------------------------------------------------
+# Docker images — build every Limen-owned image (GeoServer/pg_tileserv/etc.
+# are pulled, not built). Tags match the compose files.
+# ---------------------------------------------------------------------------
+build-images:
+	docker build -f infra/postgres/Dockerfile.db -t limen/postgres:16-3.5 infra/postgres
+	docker build -f infra/docker/Dockerfile.api  -t limen/api:0.1 .
+	docker build -f geodata/Dockerfile           -t limen/geodata:0.1 .
+	( cd frontend && npm ci && npm run build )
+	@echo "[build-images] built: limen/postgres:16-3.5, limen/api:0.1, limen/geodata:0.1 + frontend dist/"
+
+# ---------------------------------------------------------------------------
 # Backend
 # ---------------------------------------------------------------------------
 install:

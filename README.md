@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/banner.png" alt="Limen — Landslide Monitoring Framework" width="100%">
+</p>
+
 # Limen
 
 > **Monitoraggio AI multi-fattore del rischio frana per il territorio italiano.**

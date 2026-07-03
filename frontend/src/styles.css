@@ -37,6 +37,18 @@ html, body, #root {
   gap: 16px;
 }
 
+.app-logo {
+  border-radius: 8px;
+  display: block;
+}
+
+.app-header .auth-controls {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .app-header h1 {
   font-size: 18px;
   margin: 0;

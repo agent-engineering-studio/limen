@@ -29,6 +29,7 @@ export function App(): JSX.Element {
   return (
     <div className="app-shell">
       <header className="app-header">
+        <img src="/logo.png" alt="Limen" className="app-logo" height={40} />
         <h1>Limen</h1>
         <span className="subtitle">
           Mappa pubblica del rischio frane — copertura nazionale
