@@ -99,14 +99,18 @@ down:
 
 # ---------------------------------------------------------------------------
 # Docker images — build every Limen-owned image (GeoServer/pg_tileserv/etc.
-# are pulled, not built). Tags match the compose files.
+# are pulled, not built). Tags match the compose files. Built for
+# linux/amd64 (the self-hosted VPS deploy target) so it works from an
+# Apple-Silicon dev box too — the postgis/postgis base has no arm64 manifest.
 # ---------------------------------------------------------------------------
+PLATFORM ?= linux/amd64
+
 build-images:
-	docker build -f infra/postgres/Dockerfile.db -t limen/postgres:16-3.5 infra/postgres
-	docker build -f infra/docker/Dockerfile.api  -t limen/api:0.1 .
-	docker build -f geodata/Dockerfile           -t limen/geodata:0.1 .
+	docker build --platform $(PLATFORM) -f infra/postgres/Dockerfile.db -t limen/postgres:16-3.5 infra/postgres
+	docker build --platform $(PLATFORM) -f infra/docker/Dockerfile.api  -t limen/api:0.1 .
+	docker build --platform $(PLATFORM) -f geodata/Dockerfile           -t limen/geodata:0.1 .
 	( cd frontend && npm ci && npm run build )
-	@echo "[build-images] built: limen/postgres:16-3.5, limen/api:0.1, limen/geodata:0.1 + frontend dist/"
+	@echo "[build-images] built limen/postgres:16-3.5, limen/api:0.1, limen/geodata:0.1 ($(PLATFORM)) + frontend dist/"
 
 # ---------------------------------------------------------------------------
 # Backend
