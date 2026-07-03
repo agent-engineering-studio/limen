@@ -1,3 +1,4 @@
+import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/react";
 import { useCallback, useRef, useState } from "react";
 import type maplibregl from "maplibre-gl";
 
@@ -30,8 +31,17 @@ export function App(): JSX.Element {
       <header className="app-header">
         <h1>Limen</h1>
         <span className="subtitle">
-          Mappa pubblica del rischio frane — pilota Puglia + Basilicata
+          Mappa pubblica del rischio frane — copertura nazionale
         </span>
+        <div className="auth-controls">
+          <Show when="signed-out">
+            <SignInButton />
+            <SignUpButton />
+          </Show>
+          <Show when="signed-in">
+            <UserButton />
+          </Show>
+        </div>
       </header>
 
       <aside className="sidebar" aria-label="Pannello laterale">
