@@ -32,4 +32,3 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = "geodata"
 module-root = "src"
-

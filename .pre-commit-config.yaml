@@ -17,12 +17,17 @@ repos:
         args: ["--fix"]
       - id: ruff-format
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.13.0
+  # mypy runs in the project's uv venv (via `uv run`), NOT an isolated
+  # pre-commit env: --strict resolves the real third-party stubs
+  # (httpx, structlog, fastapi, torch, lightgbm, …). An isolated hook with a
+  # hand-listed `additional_dependencies` drifts and floods with
+  # import-not-found. `files=[src, geodata/src]` lives in pyproject's
+  # [tool.mypy]; pass_filenames=false lets mypy use it.
+  - repo: local
     hooks:
       - id: mypy
-        additional_dependencies:
-          - "pydantic>=2.9"
-          - "pydantic-settings>=2.5"
-        args: ["--config-file=pyproject.toml"]
-        files: ^src/
+        name: mypy (strict, project venv)
+        entry: uv run mypy --config-file=pyproject.toml
+        language: system
+        types: [python]
+        pass_filenames: false

@@ -126,7 +126,7 @@ def resolve_llm_factory(settings: Settings | None = None) -> LlmClientFactory:
         return _build_ollama(s)
 
     # Autodetect: a cloud key selects its provider only if the SDK is actually
-    # installed. Otherwise fall through — on Aruba prod the image ships without
+    # installed. Otherwise fall through — in production the image ships without
     # the `agents` group and Ollama (httpx-only, no SDK) is the intended engine,
     # so a leaked ANTHROPIC_API_KEY must not crash the non-authoritative LLM path.
     if _has_anthropic(s):

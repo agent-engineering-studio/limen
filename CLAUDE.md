@@ -17,12 +17,12 @@
 
 ## Deployment context (mandatory)
 
-- **Target**: VPS Aruba + Docker containers. **No cloud providers** — no
+- **Target**: self-hosted VPS + Docker containers. **No cloud providers** — no
   AWS, no Azure, no GCP. Stored in memory as `deploy-target`.
 - **Database**: PostgreSQL 16 + PostGIS, containerised in production.
   **Neon** is allowed only for dev/test branches.
 - **Object storage**: `filesystem` (volume mount) or `s3`-compatible
-  (MinIO sidecar, Aruba Cloud Object Storage, R2, B2 — via
+  (MinIO sidecar, R2, B2 — via
   `OBJECT_STORE__ENDPOINT_URL`). Never AWS SDK calls. Never Azure Blob.
 
 ---
@@ -38,7 +38,7 @@
 | Migrations | Plain SQL in `src/limen/data/migrations/NNN_*.sql`, applied by `limen.data.migrate`. Tracked with SHA-256 checksums. **NEVER edit an applied migration** — add a new file. Comments count: even a comment-only change breaks the checksum. |
 | Object store | Use the `ObjectStore` Protocol only. Never `import boto3` in app code. The factory in `limen.data.object_store.factory` is the only place that picks a backend. |
 | Settings | `pydantic-settings` with `env_nested_delimiter="__"`. New env vars go through `limen.config.settings.Settings`. |
-| LLM | Resolver order: Anthropic → OpenAI → Foundry → Ollama. Cloud key wins over Ollama unless `LLM__PROVIDER` overrides. On Aruba prod prefer **Ollama**; cloud is fallback. |
+| LLM | Resolver order: Anthropic → OpenAI → Foundry → Ollama. Cloud key wins over Ollama unless `LLM__PROVIDER` overrides. In production prefer **Ollama** (host, qwen); cloud is fallback. |
 | Scheduling | `pg_cron` is optional. The same job must work via APScheduler when pg_cron is absent (Neon). |
 | Logging | `structlog.get_logger(__name__)` via `limen.core.logging.get_logger`. **Never `print`.** |
 | Geometry CRS | All geometries stored in EPSG:4326. Compute distances/areas in EPSG:3035 (LAEA Europe). |
@@ -68,7 +68,7 @@
 | KG is advisory only | The knowledge-graph sidecar enriches briefings with citations; it NEVER alters numeric scoring. `BriefingAgent` launches the KG task concurrently with the LLM and accepts an empty result on any failure. KG-down ⇒ briefing still emits, scores unchanged. |
 | KG short timeout | `KG__TIMEOUT_SECONDS` (default 3s) is the per-call ceiling. `GroundingService.ground()` wraps it in a defensive `asyncio.wait_for`; an unhealthy sidecar can never extend the briefing's total wall time. |
 | KG cache by (region, mechanism) | Same `(region, mechanism)` inside the TTL ⇒ same cached citations; different `top_k` requests reuse the cached set sliced client-side. Empty results are cached too, so an un-ingested sidecar doesn't generate repeat traffic. |
-| Geodata is VPS-only | The `geodata` compose profile runs **only** on the Aruba VPS / dedicated host — never on Neon, never on the operational API process. Activate explicitly: `docker compose --profile geodata up`. |
+| Geodata is VPS-only | The `geodata` compose profile runs **only** on the self-hosted VPS / dedicated host — never on Neon, never on the operational API process. Activate explicitly: `docker compose --profile geodata up`. |
 | Geodata image carries no data | The Docker image bundles Python + GDAL/PROJ + tippecanoe + the code. Datasets land in the named PostGIS volume at first `limen geodata init`. Verify with `docker image inspect` — image size ≪ data size. |
 | Geodata never in critical path | The operational API reads pre-computed numeric per-cell features. `limen geodata export-features` ships those across with one upsert per cell. The MCP server is for agents; nothing in the hourly scoring path waits on it. |
 | Geodata is self-contained | `geodata/` is a uv workspace member designed to be extracted into a standalone repo with one `mv`. Nothing in `geodata.*` imports from `limen.*`; Prompt-2 parsers are duplicated in `geodata/parsers.py`. |
@@ -258,10 +258,10 @@ to advance.
 
 - **README.md** — public-facing overview, architecture diagram, schema
   highlights, configuration reference.
-- **`.env.example`** — every env var with comments (Neon + MinIO + Aruba
-  Object Storage examples).
+- **`.env.example`** — every env var with comments (Neon + MinIO
+  examples).
 - **Memories** at `~/.claude/projects/-Users-gzileni-Git-limen/memory/`:
-  - `deploy-target` — Aruba VPS + Docker, no cloud.
+  - `deploy-target` — self-hosted VPS + Docker, no cloud.
   - `object-store-design` — Protocol, filesystem + s3-compatible, Azure
     removed.
 - **Project doc**: `Limen_Project_Document.md` (when present at repo root)
