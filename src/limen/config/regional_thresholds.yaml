@@ -48,9 +48,14 @@ meteo:
     soil:            0.25
 
 # Caine power law I = α · D^(-β). Per macroregion (Italy).
-# Brunetti et al. 2010 reports α ≈ 7.7, β ≈ 0.39 nation-wide; Peruccacci
-# et al. 2017 refines per climatic macroregion. Values below are the
-# defaults we ship; calibration jobs can override on a per-AOI basis.
+# RECALIBRATED (2026-07) against the e-ITALICA catalogue: a T5 lower-envelope
+# power-law fit (Peruccacci-style, 5th-percentile of log-residuals) over the
+# gauge-measured triggering (I, D) pairs — 5974 events nationally. Each
+# macroregion's threshold now sits below ~95% of its real triggering events
+# (the shipped Brunetti-2010 7.7/0.39 default left 36% of real landslides
+# BELOW threshold → caine≈0). β is steeper (~0.5–0.65) than the old 0.39.
+# Measured effect on the gauge-rain validation: ≥Moderate 46.6% → 63.0%,
+# High 0.2% → 2.7%. Calibration jobs can still override per-AOI.
 caine:
   # Event reconstruction (Melillo 2018-inspired): hours of no-rain that
   # break an "event" into two events; minimum total mm to qualify as an
@@ -61,17 +66,17 @@ caine:
   # I-units: mm/h; D-units: h.
   macroregions:
     italy_default:
-      alpha: 7.700
-      beta:  0.390
-    southern_italy:        # Peruccacci 2017 Cluster D
-      alpha: 8.600
-      beta:  0.440
+      alpha: 7.190
+      beta:  0.568
+    southern_italy:        # ITALICA T5, southern regions (Puglia..Sicilia)
+      alpha: 8.750
+      beta:  0.645
     central_italy:
-      alpha: 7.250
-      beta:  0.380
+      alpha: 7.950
+      beta:  0.608
     northern_italy:
-      alpha: 6.800
-      beta:  0.310
+      alpha: 6.370
+      beta:  0.512
 
 # Antecedent Precipitation Index parameters.
 # Kohler-Linsley: API_t = k · API_{t-1} + P_t (we approximate with a
