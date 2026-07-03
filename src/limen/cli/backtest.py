@@ -322,6 +322,7 @@ async def _fetch_rainfall_for_window(
         bbox=bbox,
         window_start=start - timedelta(hours=48),
         window_end=end,
+        use_archive=True,
     )
     if snap is None:
         log.warning("backtest.rainfall.degraded", aoi_id=aoi_id)

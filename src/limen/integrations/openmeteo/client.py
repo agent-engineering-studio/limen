@@ -112,8 +112,13 @@ class OpenMeteoHttpClient:
         bbox: tuple[float, float, float, float],
         window_start: datetime,
         window_end: datetime,
+        use_archive: bool = False,
     ) -> MeteoSnapshot | None:
         """Fetch hourly weather + soil-moisture for ``[window_start, window_end]``.
+
+        ``use_archive=True`` routes the request to the ERA5 archive API instead
+        of the forecast API — required for historical windows (e.g. the
+        backtest replay), which the forecast endpoint rejects with HTTP 400.
 
         Returns ``None`` on terminal HTTP failure (graceful degradation).
         """
@@ -126,6 +131,8 @@ class OpenMeteoHttpClient:
             "end_date": window_end.date().isoformat(),
             "timezone": "UTC",
         }
+        url = ARCHIVE_URL if use_archive else FORECAST_URL
+        source = "open-meteo:archive" if use_archive else "open-meteo:forecast"
 
         log.info(
             "openmeteo.snapshot.fetch",
@@ -134,11 +141,10 @@ class OpenMeteoHttpClient:
             lat=lat,
             window_start=window_start.isoformat(),
             window_end=window_end.isoformat(),
+            source=source,
         )
         try:
-            resp = await fetch_with_retry(
-                "GET", FORECAST_URL, client=await self._client(), params=params
-            )
+            resp = await fetch_with_retry("GET", url, client=await self._client(), params=params)
         except _DEGRADATION_EXC as exc:
             log.warning(
                 "integration.degraded",
@@ -158,7 +164,7 @@ class OpenMeteoHttpClient:
             window_start=window_start,
             window_end=window_end,
             samples=samples,
-            source="open-meteo:forecast",
+            source=source,
             api_version=str(payload.get("generationtime_ms", "")) or None,
         )
 
