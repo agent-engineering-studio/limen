@@ -62,9 +62,12 @@ REPORTS_DIR = Path("./reports")
 _DEFAULT_START = datetime(2009, 3, 4, 0, 0, tzinfo=UTC)
 _DEFAULT_END = datetime(2009, 3, 10, 0, 0, tzinfo=UTC)
 
-# Rainfall sampling grid step in degrees (~ERA5 0.25° native resolution).
-# Finer than this adds no real spatial information from the reanalysis.
-_RAIN_NODE_DEG = 0.25
+# Rainfall sampling grid step in degrees. Default 0.1° (~11 km) to exploit
+# CERRA's 5.5 km resolution; ERA5 (~28 km) would warrant a coarser 0.25°.
+_RAIN_NODE_DEG = 0.1
+# Archive reanalysis for the antecedent rainfall. CERRA (5.5 km) resolves the
+# localized triggering rain far better than ERA5 (~28 km) — see get_rainfall_grid.
+_DEFAULT_RAIN_MODEL = "cerra"
 _ALERT_LEVELS_ORDERED = (
     RiskLevel.None_,
     RiskLevel.Low,
@@ -356,6 +359,7 @@ async def _fetch_rainfall_grid(
     nodes: list[tuple[float, float]],
     start: datetime,
     end: datetime,
+    model: str | None = None,
 ) -> list[list[RainfallSample]]:
     """One antecedent-inclusive precipitation series per sampling node."""
     client = OpenMeteoHttpClient()
@@ -363,6 +367,7 @@ async def _fetch_rainfall_grid(
         nodes=nodes,
         window_start=start - timedelta(hours=48),
         window_end=end,
+        model=model,
     )
     if len(grid) != len(nodes):
         # Guard against batch misalignment: pad/truncate to the node count.
@@ -401,6 +406,8 @@ async def run() -> int:
     end = _parse_dt("LIMEN_BACKTEST_END", _DEFAULT_END)
     alert_level = _parse_level("LIMEN_BACKTEST_HIGH_LEVEL", RiskLevel.High)
     single_aoi = os.getenv("LIMEN_BACKTEST_AOI")
+    rain_model = os.getenv("LIMEN_BACKTEST_RAIN_MODEL", _DEFAULT_RAIN_MODEL).strip() or None
+    node_deg = float(os.getenv("LIMEN_BACKTEST_RAIN_NODE_DEG", str(_RAIN_NODE_DEG)))
 
     try:
         async with lifespan_pool():
@@ -421,13 +428,16 @@ async def run() -> int:
 
                 cells = await _fetch_static_factors(aoi_id)
                 truth = await _fetch_truth_events(aoi_id, start=start, end=end)
-                nodes = _build_rain_nodes(bbox)
-                node_rainfall = await _fetch_rainfall_grid(nodes=nodes, start=start, end=end)
+                nodes = _build_rain_nodes(bbox, spacing=node_deg)
+                node_rainfall = await _fetch_rainfall_grid(
+                    nodes=nodes, start=start, end=end, model=rain_model
+                )
                 log.info(
                     "backtest.aoi.loaded",
                     aoi_id=aoi_id,
                     cells=len(cells),
                     truth_events=len(truth),
+                    rain_model=rain_model or "era5",
                     rain_nodes=len(nodes),
                     rain_samples=sum(len(s) for s in node_rainfall),
                 )
