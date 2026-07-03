@@ -43,19 +43,22 @@ SELECT id FROM grid_cells WHERE aoi_id = $1
 ON CONFLICT (cell_id) DO NOTHING
 """
 
-# Count IFFI features within ~500 m of each cell's centroid. We stay in
-# EPSG:4326 and match in degrees ($2) so the GiST index on iffi_landslides
-# (iffi_geom_gix) accelerates ST_DWithin — wrapping both sides in
-# ST_Transform (metric) would force a full seq scan (O(cells x features)),
-# which times out on real IFFI volumes. ~500 m ≈ 0.0045° at Italian
-# latitudes; a density proxy that saturates at 3 tolerates the ~10 % error.
+# Count IFFI features within ~500 m of each cell. We match against the cell
+# POLYGON (g.geom), not its centroid: with 1 km cells a feature near a cell
+# edge sits ~700 m from the centroid and would be missed by every cell
+# (centroid+500 m leaves uncovered gaps), undercounting the inventory exactly
+# where real landslides cluster. We stay in EPSG:4326 and match in degrees
+# ($2) so the GiST index on iffi_landslides (iffi_geom_gix) accelerates
+# ST_DWithin — wrapping both sides in ST_Transform (metric) would force a full
+# seq scan (O(cells x features)), which times out on real IFFI volumes.
+# ~500 m ≈ 0.0045° at Italian latitudes; the density proxy saturates at 3.
 _IFFI_DENSITY_SQL = """
 WITH counts AS (
     SELECT g.id AS cell_id,
            COUNT(i.id)::double precision AS iffi_count
     FROM grid_cells g
     LEFT JOIN iffi_landslides i
-      ON ST_DWithin(g.centroid, i.geom, $2)
+      ON ST_DWithin(g.geom, i.geom, $2)
     WHERE g.aoi_id = $1
     GROUP BY g.id
 )
