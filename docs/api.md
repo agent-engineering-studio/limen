@@ -1,19 +1,28 @@
-# API reference
+# Riferimento API
 
-Limen's HTTP surface is a thin shell over the MAF workflow + Phase-1
-repos. **No business logic in endpoints** — they call workflows /
-repos. OpenAPI lives at `/docs` (Swagger UI) and `/redoc` (ReDoc).
+La superficie HTTP di Limen è un guscio sottile sopra il workflow MAF +
+i repository di Phase-1. **Nessuna logica di business negli endpoint** —
+si limitano a invocare i workflow / repository. L'OpenAPI è disponibile
+su `/docs` (Swagger UI) e `/redoc` (ReDoc).
 
-Base URL defaults to `http://localhost:8080`. CORS is permissive by
-default (`API__CORS_ORIGINS=["*"]`) so the public map can fetch from
-any host; tighten in production.
+L'API copre l'intero territorio nazionale (le 20 regioni ISTAT); Puglia e
+Basilicata restano l'area pilota di riferimento.
 
-## Health & readiness
+La Base URL predefinita è `http://localhost:8080`. Il CORS è permissivo
+di default (`API__CORS_ORIGINS=["*"]`) così che la mappa pubblica possa
+effettuare richieste da qualunque host; da restringere in produzione.
 
-| Method | Path | Description |
+L'autenticazione lato frontend (SPA Vite) usa Clerk (`@clerk/react`); la
+validazione del JWT lato FastAPI è un follow-up. L'LLM in produzione gira
+via Ollama (host + modello `qwen`); una chiave cloud, se presente, ha la
+precedenza.
+
+## Salute e prontezza
+
+| Metodo | Path | Descrizione |
 |---|---|---|
-| `GET` | `/health` | Pool + cache + LLM provider reachability. Always 200 once the lifespan finishes. |
-| `GET` | `/ready` | Gated on pool + migrations. Returns 503 until the lifespan flips `app.state.ready`. |
+| `GET` | `/health` | Raggiungibilità di pool + cache + provider LLM. Restituisce sempre 200 una volta terminato il lifespan. |
+| `GET` | `/ready` | Vincolato a pool + migrazioni. Restituisce 503 finché il lifespan non imposta `app.state.ready`. |
 
 ```
 curl -s http://localhost:8080/health | jq
@@ -26,7 +35,7 @@ curl -s http://localhost:8080/health | jq
 curl -s http://localhost:8080/api/aoi | jq
 ```
 
-Returns every row in the `aoi` table:
+Restituisce ogni riga della tabella `aoi`:
 
 ```json
 {
@@ -37,7 +46,7 @@ Returns every row in the `aoi` table:
 }
 ```
 
-## Run a monitoring cycle
+## Esegui un ciclo di monitoraggio
 
 ```
 curl -s -X POST http://localhost:8080/api/monitor/it-puglia \
@@ -45,7 +54,7 @@ curl -s -X POST http://localhost:8080/api/monitor/it-puglia \
   -d '{"cell_limit": 25}' | jq
 ```
 
-Body (optional):
+Corpo (opzionale):
 
 ```json
 {
@@ -54,7 +63,7 @@ Body (optional):
 }
 ```
 
-Response:
+Risposta:
 
 ```json
 {
@@ -79,65 +88,69 @@ Response:
 }
 ```
 
-A missing AOI returns `404`. The workflow itself never raises on
-external-source failures — it degrades.
+Un AOI mancante restituisce `404`. Il workflow stesso non solleva mai
+eccezioni sui fallimenti delle sorgenti esterne — degrada.
 
-## Latest per-AOI assessment
+## Ultima valutazione per-AOI
 
 ```
 curl -s http://localhost:8080/api/aoi/it-puglia/risk/latest | jq
 ```
 
-Returns the most recent persisted assessment (one row per cell rolled
-into a list). Includes the Italian briefing + the structured
-RiskAnalyst output.
+Restituisce la valutazione persistita più recente (una riga per cella
+raccolta in una lista). Include il briefing in italiano + l'output
+strutturato del RiskAnalyst.
 
-## Per-cell breakdown
+## Breakdown per cella
 
 ```
 curl -s http://localhost:8080/api/cell/it-puglia%7C12%7C7/breakdown | jq
 ```
 
-Returns the raw `risk_assessments.factors` (S/M/E/F/H + sub-terms) and
-`risk_assessments.explanation` (briefing + analysis).
+Restituisce i `risk_assessments.factors` grezzi (S/M/E/F/H/K + sotto-termini)
+e `risk_assessments.explanation` (briefing + analisi). Le componenti di
+scoring per cella sono: S (statico), M (meteo/Caine), E (sismico),
+F (post-incendio), H (idraulico — ora attivo) e K (cinematico/IoT, quando
+presente).
 
-## Recent alerts
+## Alert recenti
 
 ```
 curl -s 'http://localhost:8080/api/alerts?threshold=High&since_hours=72&limit=50' | jq
 ```
 
-Query params:
+Parametri di query:
 
-* `threshold` — minimum level, default `High`.
-* `since_hours` — trailing window in hours, default 72.
-* `limit` — pagination cap, default 200, max 2000.
+* `threshold` — livello minimo, default `High`.
+* `since_hours` — finestra temporale a ritroso in ore, default 72.
+* `limit` — limite di paginazione, default 200, max 2000.
 
-## Tiles (pg_tileserv proxy)
+## Tiles (proxy pg_tileserv)
 
 ```
 GET /api/tiles/{layer}/{z}/{x}/{y}.pbf
 ```
 
-Returns a **307 redirect** to the configured `pg_tileserv` instance
-(`API__PG_TILESERV_URL`). The frontend reads the same path via the
-`apiUrl` config and the redirect happens transparently in the browser.
-When `API__PG_TILESERV_URL` is unset, the endpoint returns **503**.
+Restituisce un **redirect 307** verso l'istanza `pg_tileserv`
+configurata (`API__PG_TILESERV_URL`). Il frontend legge lo stesso path
+tramite la configurazione `apiUrl` e il redirect avviene in modo
+trasparente nel browser. Quando `API__PG_TILESERV_URL` non è impostato,
+l'endpoint restituisce **503**.
 
 ## OpenAPI
 
 * `GET /docs` — Swagger UI
 * `GET /redoc` — ReDoc
-* `GET /openapi.json` — raw schema
+* `GET /openapi.json` — schema grezzo
 
-## Error shape
+## Forma degli errori
 
-Errors are FastAPI's default `{"detail": "..."}` envelope. The notable
-codes:
+Gli errori usano l'envelope predefinito di FastAPI `{"detail": "..."}`.
+I codici rilevanti:
 
-| Code | When |
+| Codice | Quando |
 |---|---|
-| `404` | `POST /api/monitor/{aoi_id}` with an unknown AOI |
-| `404` | `GET /api/aoi/{id}/risk/latest` with no persisted assessment |
-| `503` | `/ready` while the lifespan is bootstrapping |
-| `503` | `/api/tiles/...` when `API__PG_TILESERV_URL` is unconfigured |
+| `404` | `POST /api/monitor/{aoi_id}` con un AOI sconosciuto |
+| `404` | `GET /api/aoi/{id}/risk/latest` senza alcuna valutazione persistita |
+| `503` | `/ready` mentre il lifespan è in fase di bootstrap |
+| `503` | `/api/tiles/...` quando `API__PG_TILESERV_URL` non è configurato |

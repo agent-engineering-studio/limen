@@ -1,40 +1,41 @@
 # Deployment
 
-> Three documented targets, **identical code**: dev/test on Neon,
-> demo / production on **Aruba VPS + Docker**, enterprise alternative
-> on **Azure Container Apps**. Switching environments changes only the
-> env vars, never the source.
+> Due target documentati, **codice identico**: dev/test su Neon,
+> demo / produzione su **VPS self-hosted + Docker**. Cambiare
+> ambiente modifica solo le variabili d'ambiente, mai il sorgente.
+> Nessun cloud provider è supportato (no AWS/Azure/GCP).
 
-## Common env vars
+## Variabili d'ambiente comuni
 
-| Variable | Notes |
+| Variabile | Note |
 |---|---|
-| `DB__CONNECTION_STRING` | PostgreSQL DSN; add `?sslmode=require` for Neon. |
-| `DB__POOL_MIN_SIZE` / `DB__POOL_MAX_SIZE` | asyncpg pool. Defaults 2 / 20. |
-| `OBJECT_STORE__BACKEND` | `filesystem` (default) or `s3`. |
-| `OBJECT_STORE__ROOT` | Filesystem root (`filesystem` only). |
-| `OBJECT_STORE__BUCKET` / `__PREFIX` / `__REGION` / `__ENDPOINT_URL` / `__ACCESS_KEY_ID` / `__SECRET_ACCESS_KEY` | S3-compatible (MinIO / Aruba Cloud Object Storage / R2 / B2). |
-| `SCHEDULER__CACHE_CLEANUP` | `apscheduler` (works on Neon) or `pg_cron`. |
-| `API__HOST` / `API__PORT` | uvicorn bind. Default `0.0.0.0:8080`. |
-| `API__CORS_ORIGINS` | JSON array; tighten in prod. |
-| `API__PG_TILESERV_URL` | Where the `/api/tiles` proxy redirects. |
-| `API__OTEL_OTLP_ENDPOINT` | OTLP/HTTP. Set to the observability container. |
-| `LLM__PROVIDER` | Optional override: `anthropic` / `openai` / `foundry` / `ollama`. |
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `FOUNDRY_*` / `AZURE_AI_*` / `ANTHROPIC_FOUNDRY_*` | Provider credentials. Resolver precedence: Anthropic → OpenAI → Foundry → Ollama. |
-| `LLM__OLLAMA_BASE_URL` | Fallback local LLM, default `http://localhost:11434`. |
-| `NOTIFICATIONS__ENABLED_CHANNELS` | JSON array, e.g. `["mqtt","email"]`. |
-| `NOTIFICATIONS__TELEGRAM__*` / `__MQTT__*` / `__EMAIL__*` | Per-channel config. |
+| `DB__CONNECTION_STRING` | DSN PostgreSQL; aggiungi `?sslmode=require` per Neon. |
+| `DB__POOL_MIN_SIZE` / `DB__POOL_MAX_SIZE` | Pool asyncpg. Default 2 / 20. |
+| `OBJECT_STORE__BACKEND` | `filesystem` (default) oppure `s3`. |
+| `OBJECT_STORE__ROOT` | Root del filesystem (solo `filesystem`). |
+| `OBJECT_STORE__BUCKET` / `__PREFIX` / `__REGION` / `__ENDPOINT_URL` / `__ACCESS_KEY_ID` / `__SECRET_ACCESS_KEY` | S3-compatibile (MinIO / R2 / B2). |
+| `SCHEDULER__CACHE_CLEANUP` | `apscheduler` (funziona su Neon) oppure `pg_cron`. |
+| `API__HOST` / `API__PORT` | Bind uvicorn. Default `0.0.0.0:8080`. |
+| `API__CORS_ORIGINS` | Array JSON; restringi in produzione. |
+| `API__PG_TILESERV_URL` | Destinazione del proxy `/api/tiles`. |
+| `API__OTEL_OTLP_ENDPOINT` | OTLP/HTTP. Punta al container di observability. |
+| `LLM__PROVIDER` | Override opzionale: `anthropic` / `openai` / `foundry` / `ollama`. |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `FOUNDRY_*` / `AZURE_AI_*` / `ANTHROPIC_FOUNDRY_*` | Credenziali provider. Precedenza del resolver: Anthropic → OpenAI → Foundry → Ollama. |
+| `LLM__OLLAMA_BASE_URL` | LLM locale di fallback, default `http://localhost:11434`. |
+| `NOTIFICATIONS__ENABLED_CHANNELS` | Array JSON, es. `["mqtt","email"]`. |
+| `NOTIFICATIONS__TELEGRAM__*` / `__MQTT__*` / `__EMAIL__*` | Configurazione per canale. |
 | `ALERT__MIN_LEVEL` | `Low` / `Moderate` / `High` (default) / `VeryHigh`. |
 | `ALERT__DEDUP_WINDOW_MINUTES` | default 180. |
-| `ALERT__MAP_BASE_URL` | Where alert deep links point. |
+| `ALERT__MAP_BASE_URL` | Destinazione dei deep link degli alert. |
 
-Full `.env.example` is at the repo root.
+Il file `.env.example` completo si trova nella root del repository.
 
 ## Target A — Neon (dev / test)
 
-The fastest "fresh laptop → working stack" path. Neon serverless
-Postgres ships PostGIS; pg_cron is unavailable, so APScheduler runs
-the periodic jobs.
+Il percorso più rapido "laptop pulito → stack funzionante". Neon
+serverless Postgres include PostGIS; pg_cron non è disponibile, quindi
+APScheduler esegue i job periodici. **Neon è consentito solo per
+dev/test**, mai in produzione.
 
 ```bash
 export DB__CONNECTION_STRING="postgresql://user:password@ep-xxxx.aws.neon.tech/limen?sslmode=require"
@@ -47,7 +48,7 @@ uv run limen bootstrap-static
 uv run limen serve
 ```
 
-Frontend (separate terminal):
+Frontend (terminale separato):
 
 ```bash
 cd frontend
@@ -57,147 +58,104 @@ npm run dev
 # → http://localhost:5173
 ```
 
-Notes:
+Note:
 
-* **Branching**: open a Neon branch per feature; the migration runner
-  is idempotent so the same `limen migrate` works on every branch.
-* **Scale-to-zero**: Neon hibernates after inactivity; the first request
-  after a long pause will take a few extra seconds.
+* **Branching**: apri un branch Neon per ogni feature; il runner delle
+  migrazioni è idempotente, quindi lo stesso `limen migrate` funziona su
+  ogni branch.
+* **Scale-to-zero**: Neon va in ibernazione dopo un periodo di
+  inattività; la prima richiesta dopo una lunga pausa richiederà qualche
+  secondo in più.
 
-## Target B — Aruba VPS + Docker (demo + prod)
+## Target B — VPS self-hosted + Docker (demo + prod)
 
-This is the canonical production target. Single VPS, Docker engine,
-docker compose (no Kubernetes).
+È il target di produzione canonico. Singola VPS, Docker engine,
+docker compose (niente Kubernetes). Nessun cloud provider.
 
-### Demo / single-host
+### Demo / host singolo
 
 ```bash
-# On the VPS, as the deploy user:
+# Sulla VPS, come utente di deploy:
 git clone https://github.com/agent-engineering-studio/limen.git
 cd limen
 docker compose -f infra/docker/docker-compose.demo.yml up -d --build
 
-# Bring observability up alongside:
+# Con il profilo geoserver (GeoServer PostGIS come sorgente dati statici ISPRA):
+docker compose -f infra/docker/docker-compose.demo.yml --profile geoserver up -d --build
+
+# Con l'observability affiancata:
 docker compose \
   -f infra/docker/docker-compose.demo.yml \
   -f infra/docker/docker-compose.observability.yml \
   up -d --build
 ```
 
-Services exposed:
+Servizi esposti:
 
-| Service | Port | Notes |
+| Servizio | Porta | Note |
 |---|---|---|
-| Postgres + PostGIS | 5432 | Persistent volume `limen-pgdata`. |
+| Postgres + PostGIS | 5432 | Volume persistente `limen-pgdata`. |
 | Limen API | 8080 | `/docs`, `/health`, `/api/*`. |
-| pg_tileserv | 7800 | Vector tiles for the matview. |
-| Mosquitto | 1883 | Local MQTT broker. |
+| pg_tileserv | 7800 | Vector tiles per la matview. |
+| Mosquitto | 1883 | Broker MQTT locale. |
 | Frontend (`--profile frontend`) | 5173 | Vite dev server. |
-| Grafana | 3000 | When the observability compose is also up. |
-| OTLP gRPC | 4317 | OpenTelemetry collector ingress. |
-| OTLP HTTP | 4318 | Same as above. |
+| Grafana | 3000 | Quando è attivo anche il compose di observability. |
+| OTLP gRPC | 4317 | Ingress del collector OpenTelemetry. |
+| OTLP HTTP | 4318 | Come sopra. |
 
-### Production hardening
+### Hardening di produzione
 
-* **DBaaS option**: if a PostGIS-capable managed PostgreSQL is
-  available on Aruba Cloud, point `DB__CONNECTION_STRING` at it and
-  drop the `postgres` service from the compose.
-* **TLS**: front the API with nginx or Caddy doing ACME for
+* **DBaaS**: se è disponibile un PostgreSQL gestito con PostGIS, punta
+  `DB__CONNECTION_STRING` verso di esso e rimuovi il servizio `postgres`
+  dal compose.
+* **TLS**: metti davanti all'API nginx o Caddy con ACME per
   `api.limen.example`; redirect `:80` → `:443`.
-* **Object storage**: switch to S3-compatible (MinIO sidecar or Aruba
-  Cloud Object Storage). PostGIS still stores only references.
-* **Backups**: see [`runbook.md`](./runbook.md). `pg_basebackup` to an
-  external Aruba volume nightly.
-* **Secrets**: store provider keys + Clerk secrets in a per-environment
-  `.env` mounted read-only into the container; never bake into the
-  image.
+* **Object storage**: passa a S3-compatibile (sidecar MinIO / R2 / B2).
+  PostGIS continua a memorizzare solo i riferimenti.
+* **Backup**: vedi [`runbook.md`](./runbook.md). `pg_basebackup` notturno
+  verso un volume esterno.
+* **Segreti**: conserva le chiavi provider + i secret Clerk in un file
+  `.env` per-ambiente, montato in sola lettura nel container; non
+  includerli mai nell'immagine.
 
-### Deploy from CI
+### Deploy da CI
 
-The [`deploy-aruba.yml`](../.github/workflows/deploy-aruba.yml)
-workflow ships the latest `ghcr.io/agent-engineering-studio/limen-api`
-image via SSH + `docker compose pull/up`. It is **manual** and gated by
-the `aruba-prod` GitHub Environment (required reviewers + secrets).
+Il deploy verso la VPS self-hosted avviene via SSH + `docker compose
+pull/up`: pubblica l'ultima immagine
+`ghcr.io/agent-engineering-studio/limen-api` sulla VPS. È **manuale** e
+protetto da un GitHub Environment (reviewer richiesti + secret).
 
-Required secrets on the `aruba-prod` environment:
+Il workflow è attualmente
+[`deploy-aruba.yml`](../.github/workflows/deploy-aruba.yml) (rinomina
+pendente). I secret richiesti sull'ambiente GitHub sono:
 
-| Secret | Value |
+| Secret | Valore |
 |---|---|
-| `ARUBA_SSH_HOST` | VPS IP / FQDN |
-| `ARUBA_SSH_USER` | Deploy user in the `docker` group |
-| `ARUBA_SSH_PRIVATE_KEY` | SSH private key |
-| `ARUBA_COMPOSE_PATH` | Absolute path to the compose file on the VPS |
+| `ARUBA_SSH_HOST` | IP / FQDN della VPS |
+| `ARUBA_SSH_USER` | Utente di deploy nel gruppo `docker` |
+| `ARUBA_SSH_PRIVATE_KEY` | Chiave SSH privata |
+| `ARUBA_COMPOSE_PATH` | Path assoluto del file compose sulla VPS |
 
-Trigger: GitHub UI → "Actions" → "deploy-aruba" → "Run workflow".
+Trigger: GitHub UI → "Actions" → seleziona il workflow → "Run workflow".
 
-## Target C — Azure Container Apps (enterprise alternative)
+## LLM in produzione
 
-When the customer needs Azure compliance / IAM. The same image runs
-unchanged; only the build/push surface and the orchestration change.
+Su VPS self-hosted il provider LLM preferito è **Ollama** in esecuzione
+sull'host (modello `qwen`); i provider cloud restano solo come fallback.
+Imposta `LLM__OLLAMA_BASE_URL` verso l'host Ollama e, se necessario,
+`LLM__PROVIDER=ollama` per forzare la scelta.
 
-### One-time setup
+## Garanzie provider-agnostiche
 
-```bash
-# Resource group + ACR + Container App environment
-az group create -n limen-rg -l italynorth
-az acr create -n limen -g limen-rg --sku Basic --admin-enabled true
-az containerapp env create -n limen-env -g limen-rg -l italynorth
+Valgono su tutti i target — sono il contratto di design:
 
-# Postgres (Flex Server) with PostGIS extension
-az postgres flexible-server create \
-  -n limen-pg -g limen-rg -l italynorth \
-  --tier Burstable --sku-name Standard_B1ms --version 16
-az postgres flexible-server parameter set \
-  -n limen-pg -g limen-rg --name azure.extensions --value POSTGIS
-
-# Initial Container App
-az containerapp create \
-  -n limen-api -g limen-rg --environment limen-env \
-  --image limen.azurecr.io/limen-api:latest \
-  --registry-server limen.azurecr.io \
-  --target-port 8080 --ingress external \
-  --env-vars DB__CONNECTION_STRING=secretref:db-dsn \
-             SCHEDULER__CACHE_CLEANUP=apscheduler
-```
-
-### Continuous deploy
-
-[`deploy-azure.yml`](../.github/workflows/deploy-azure.yml) builds the
-image, pushes it to ACR, and rolls a new Container App revision via
-`az containerapp update`. Same manual gate as Aruba (environment
-`azure-prod`).
-
-Required secrets on the `azure-prod` environment:
-
-| Secret | Value |
-|---|---|
-| `AZURE_CREDENTIALS` | `az ad sp create-for-rbac --sdk-auth` JSON |
-| `AZURE_RESOURCE_GROUP` | `limen-rg` |
-| `AZURE_CONTAINER_APP` | `limen-api` |
-| `AZURE_REGISTRY` | `limen.azurecr.io` |
-| `AZURE_REGISTRY_USERNAME` / `AZURE_REGISTRY_PASSWORD` | ACR creds |
-
-### Notes
-
-* Container Apps scale to zero — the first request after inactivity
-  takes a few seconds (Container App warmup + Neon-like behaviour on
-  the Flex Server depending on plan).
-* Use Azure Key Vault for the provider keys, referenced as
-  `secretref:` in the Container App env.
-* Wire OTLP to Azure Monitor / Application Insights via the OTel
-  collector — same `API__OTEL_OTLP_ENDPOINT` knob, different sink.
-
-## Provider-agnostic guarantees
-
-These hold across all three targets — they are the design contract:
-
-1. Migrations are idempotent: running `limen migrate` multiple times
-   is a no-op when no new files are pending.
-2. The scoring engine is pure: identical input ⇒ identical output, no
-   matter where it runs.
-3. Notification channels are independent: a misconfigured Telegram
-   bot never blocks MQTT or Email.
-4. `mv_latest_risk` is the single tile source: any DB the API can
-   reach can host the matview and pg_tileserv reads it.
-5. The frontend SPA never holds environment-specific code — only
-   `VITE_API_URL` and `VITE_TILESERV_URL` differ per deployment.
+1. Le migrazioni sono idempotenti: eseguire `limen migrate` più volte è
+   un no-op quando non ci sono nuovi file in sospeso.
+2. Lo scoring engine è puro: input identico ⇒ output identico, ovunque
+   venga eseguito.
+3. I canali di notifica sono indipendenti: un bot Telegram mal
+   configurato non blocca mai MQTT o Email.
+4. `mv_latest_risk` è l'unica sorgente delle tile: qualsiasi DB
+   raggiungibile dall'API può ospitare la matview e pg_tileserv la legge.
+5. La SPA frontend non contiene mai codice specifico dell'ambiente —
+   variano solo `VITE_API_URL` e `VITE_TILESERV_URL` per deployment.

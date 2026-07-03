@@ -1,54 +1,69 @@
-# Operations runbook
+# Runbook operativo
 
-Operator-facing reference for the running V1 stack. Pair with
-[`deployment.md`](./deployment.md) for the install path and
-[`architecture.md`](./architecture.md) for the system shape.
+Riferimento per gli operatori dello stack V1 in esecuzione. Da usare
+insieme a [`deployment.md`](./deployment.md) per il percorso di
+installazione e [`architecture.md`](./architecture.md) per la forma del
+sistema.
 
-## Normal-day cycle
+Copertura **nazionale**: 20 regioni italiane. Avvio completo con
+`make up` + `make init` (che esegue in sequenza migrate → seed delle 20
+regioni → `ingest-events` (truth set e-ITALICA da Zenodo) →
+`bootstrap-static` → `calibrate`).
 
-| What | When | Owner |
+## Ciclo di una giornata normale
+
+| Cosa | Quando | Owner |
 |---|---|---|
-| Hourly monitoring workflow | APScheduler in-process every `SCHEDULER__HOURLY_MONITORING_MINUTES` (default 60) | API container |
-| ISPRA IdroGEO sync | APScheduler weekly cron (Mon 03:15 UTC) | API container |
-| Cache cleanup | APScheduler every `SCHEDULER__CACHE_CLEANUP_INTERVAL_SECONDS` (default 300) when `SCHEDULER__CACHE_CLEANUP=apscheduler` | API container |
-| `mv_latest_risk` refresh | Tail of every `PersistResultExecutor` call | Workflow |
+| Workflow di monitoraggio orario | APScheduler in-process ogni `SCHEDULER__HOURLY_MONITORING_MINUTES` (default 60) | Container API |
+| Sync ISPRA IdroGEO | APScheduler cron settimanale (lun 03:15 UTC) | Container API |
+| Pulizia cache | APScheduler ogni `SCHEDULER__CACHE_CLEANUP_INTERVAL_SECONDS` (default 300) quando `SCHEDULER__CACHE_CLEANUP=apscheduler` | Container API |
+| Refresh `mv_latest_risk` | In coda a ogni chiamata `PersistResultExecutor` | Workflow |
 
-## Health probes
+La sorgente dei dati statici ISPRA è il **PostGIS di GeoServer**
+(`mcp-geoserver`). Il componente H è attivo a partire dal mosaico di
+pericolosità idraulica.
 
-* **Liveness** — `GET /health` returns 200 with `pool` and `cache`
-  booleans. Container orchestrator should restart on 5+ consecutive
-  failures.
-* **Readiness** — `GET /ready` returns 503 until the lifespan finishes
-  bootstrapping. Use this as the load-balancer health check; the
-  `infra/docker/Dockerfile.api` `HEALTHCHECK` already targets it.
+## Sonde di salute
 
-## Common operator commands
+* **Liveness** — `GET /health` restituisce 200 con i booleani `pool` e
+  `cache`. L'orchestratore dei container dovrebbe riavviare dopo 5+
+  fallimenti consecutivi.
+* **Readiness** — `GET /ready` restituisce 503 finché il lifespan non ha
+  completato il bootstrap. Da usare come health check del load
+  balancer; l'`HEALTHCHECK` di `infra/docker/Dockerfile.api` punta già
+  a questo endpoint.
+
+## Comandi operativi comuni
 
 ```bash
-# One-shot workflow for one AOI (uses configured channels by env)
+# Workflow one-shot per un'AOI (usa i canali configurati via env)
 LIMEN_MONITOR_AOI=it-puglia uv run limen monitor-once
 
-# Recompute s_static + per-AOI norm stats, run the §2.5 S↔ISPRA gate
+# Ricalcola s_static + stat di normalizzazione per-AOI, esegue il gate §2.5 S↔ISPRA
 uv run limen calibrate
 
-# Replay any window — writes reports/backtest_<aoi>_<start>_<end>.md
+# Ingest del truth set e-ITALICA (eventi da Zenodo) usato dal backtest
+uv run limen ingest-events
+
+# Replay di una qualsiasi finestra — scrive reports/backtest_<aoi>_<start>_<end>.md
+# (pioggia CERRA + truth set e-ITALICA)
 LIMEN_BACKTEST_AOI=it-puglia \
 LIMEN_BACKTEST_START=2018-10-28T00:00:00+00:00 \
 LIMEN_BACKTEST_END=2018-11-02T00:00:00+00:00 \
   uv run limen backtest
 
-# Trigger an alert pipeline test (high-level cell synthesised below)
+# Innesca un test della pipeline di alert (cella high-level sintetizzata sotto)
 docker compose -f infra/docker/docker-compose.demo.yml exec api \
   python -c "import asyncio; from limen.cli.monitor_once import run; asyncio.run(run())"
 ```
 
-## Backups
+## Backup
 
-PostGIS holds the source of truth. The ObjectStore only holds raster
-bytes referenced by `raster_refs` — the DB has the checksums so a
-re-pull is verifiable.
+PostGIS custodisce la source of truth. L'ObjectStore contiene solo i
+byte dei raster referenziati da `raster_refs` — il DB ha i checksum,
+quindi un re-pull è verificabile.
 
-### Logical dump (small AOI / dev)
+### Dump logico (AOI piccola / dev)
 
 ```bash
 docker compose -f infra/docker/docker-compose.demo.yml exec postgres \
@@ -56,10 +71,10 @@ docker compose -f infra/docker/docker-compose.demo.yml exec postgres \
           --file=/var/lib/postgresql/data/limen.dump
 ```
 
-### Physical base backup (prod, Aruba VPS)
+### Base backup fisico (prod, VPS self-hosted)
 
-Configure `wal_level=replica` and use `pg_basebackup` to an external
-volume. Document the restore procedure below in your runbook.
+Configurare `wal_level=replica` e usare `pg_basebackup` verso un volume
+esterno. Documentare qui sotto nel runbook la procedura di restore.
 
 ### Restore
 
@@ -68,7 +83,7 @@ docker compose -f infra/docker/docker-compose.demo.yml exec postgres \
   pg_restore -U limen -d limen --clean --if-exists /var/lib/postgresql/data/limen.dump
 ```
 
-After a restore, **re-refresh the matview**:
+Dopo un restore, **rieseguire il refresh della matview**:
 
 ```sql
 SELECT refresh_mv_latest_risk();
@@ -76,69 +91,79 @@ SELECT refresh_mv_latest_risk();
 
 ### ObjectStore
 
-* `filesystem` backend: rsync the mounted volume off-box on a cron.
-* `s3`-compatible: use the vendor's snapshot/replication primitives
-  (Aruba Cloud Object Storage, R2, B2 all expose lifecycle rules).
+* Backend `filesystem`: rsync del volume montato fuori dalla macchina
+  via cron.
+* Backend `s3`-compatibile: usare le primitive di
+  snapshot/replicazione del fornitore (R2, B2, MinIO espongono tutti
+  regole di lifecycle).
 
-## Incident playbooks
+## Playbook per gli incidenti
 
-### "All monitoring runs are empty"
+### "Tutti i run di monitoraggio sono vuoti"
 
-1. Check `GET /ready` and `/health`. If 503, check the lifespan logs
-   for migration failures.
-2. Confirm the AOI grid exists: `SELECT COUNT(*) FROM grid_cells WHERE aoi_id = 'it-puglia';`
-3. Confirm `cell_static_factors` has rows: same query against
-   `cell_static_factors`. If 0, run `uv run limen bootstrap-static`.
-4. Check Open-Meteo reachability — the `MeteoFetchExecutor` degrades
-   silently to `None` on a 5xx but logs `integration.degraded`.
+1. Controllare `GET /ready` e `/health`. Se 503, controllare i log del
+   lifespan per fallimenti delle migrazioni.
+2. Verificare che la griglia dell'AOI esista: `SELECT COUNT(*) FROM grid_cells WHERE aoi_id = 'it-puglia';`
+3. Verificare che `cell_static_factors` abbia righe: stessa query su
+   `cell_static_factors`. Se 0, eseguire `uv run limen bootstrap-static`.
+4. Controllare la raggiungibilità di Open-Meteo — il
+   `MeteoFetchExecutor` degrada silenziosamente a `None` su un 5xx ma
+   logga `integration.degraded`.
 
-### "Alerts aren't firing"
+### "Gli alert non partono"
 
-1. Confirm at least one cell crosses `ALERT__MIN_LEVEL`. The Phase 5
-   `GET /api/aoi/{id}/risk/latest` will surface the latest classes.
-2. Check `alert_dispatches` for recent rows for that cell: if a row is
-   within the dedup window, the executor suppressed the repeat by
-   design. Adjust `ALERT__DEDUP_WINDOW_MINUTES` if needed.
-3. Confirm channels are listed in `NOTIFICATIONS__ENABLED_CHANNELS`
-   AND that each channel's creds are set. An unconfigured channel
-   silently returns `False` — no error, no alert.
-4. Inspect logs for `notifications.channel.error` (one channel raised)
-   or `notifications.dispatch.empty` (no channels configured).
+1. Verificare che almeno una cella superi `ALERT__MIN_LEVEL`. La
+   `GET /api/aoi/{id}/risk/latest` (Phase 5) mostra le ultime classi.
+2. Controllare `alert_dispatches` per righe recenti di quella cella: se
+   una riga rientra nella finestra di dedup, l'executor ha soppresso la
+   ripetizione by design. Regolare `ALERT__DEDUP_WINDOW_MINUTES` se
+   necessario.
+3. Verificare che i canali siano elencati in
+   `NOTIFICATIONS__ENABLED_CHANNELS` E che le credenziali di ciascun
+   canale siano impostate. Un canale non configurato restituisce
+   silenziosamente `False` — nessun errore, nessun alert.
+4. Ispezionare i log per `notifications.channel.error` (un canale ha
+   sollevato un'eccezione) o `notifications.dispatch.empty` (nessun
+   canale configurato).
 
-### "ISPRA IdroGEO sync is failing"
+### "Il sync ISPRA IdroGEO sta fallendo"
 
-1. The weekly sync degrades gracefully on 5xx — it records an empty
-   `dataset_versions` row with the empty hash and skips writes. The
-   workflow stays usable; you just have stale IFFI/PAI until ISPRA is
-   back.
-2. Check `SELECT * FROM dataset_versions WHERE source = 'ispra' ORDER BY fetched_at DESC LIMIT 5;`.
-3. Manually retry: `uv run python -m limen.integrations.idrogeo.sync_job` (or
-   wait for the next Monday tick).
+1. Il sync settimanale degrada con grazia su 5xx — registra una riga
+   `dataset_versions` vuota con hash vuoto e salta le scritture. Il
+   workflow resta utilizzabile; si hanno solo IFFI/PAI stantii finché
+   ISPRA non torna disponibile.
+2. Controllare `SELECT * FROM dataset_versions WHERE source = 'ispra' ORDER BY fetched_at DESC LIMIT 5;`.
+3. Retry manuale: `uv run python -m limen.integrations.idrogeo.sync_job` (oppure
+   attendere il tick del lunedì successivo).
 
-### "Map is blank"
+### "La mappa è vuota"
 
-1. Confirm pg_tileserv reaches the matview:
+1. Verificare che pg_tileserv raggiunga la matview:
    `curl http://pg_tileserv:7800/index.json | jq '.[] | .name'`.
-2. Confirm the matview has rows:
+2. Verificare che la matview abbia righe:
    `SELECT COUNT(*) FROM mv_latest_risk WHERE aoi_id = 'it-puglia';`.
-3. If 0, run `SELECT refresh_mv_latest_risk();` or trigger a
-   monitoring cycle (the `PersistResultExecutor` refreshes on exit).
-4. Confirm `API__PG_TILESERV_URL` is set in the API container env.
+3. Se 0, eseguire `SELECT refresh_mv_latest_risk();` o innescare un
+   ciclo di monitoraggio (il `PersistResultExecutor` fa il refresh in
+   uscita).
+4. Verificare che `API__PG_TILESERV_URL` sia impostata nell'env del
+   container API.
 
-### "FastAPI lifespan refuses to start"
+### "Il lifespan di FastAPI non parte"
 
-Lifespan crashes on:
+Il lifespan va in crash su:
 
-* DB unreachable → check `DB__CONNECTION_STRING` + the `postgres`
-  container's healthcheck.
-* Bad migration → checksum mismatch on an applied file. **Don't edit
-  applied migrations** — add a new one.
-* LLM resolver failure → set `LLM__PROVIDER` explicitly or remove the
-  override so the precedence falls back to Ollama.
+* DB irraggiungibile → controllare `DB__CONNECTION_STRING` +
+  l'healthcheck del container `postgres`.
+* Migrazione errata → checksum mismatch su un file già applicato. **Non
+  modificare le migrazioni applicate** — aggiungerne una nuova.
+* Fallimento del resolver LLM → impostare `LLM__PROVIDER` esplicitamente
+  o rimuovere l'override così che la precedenza ricada su Ollama. In
+  prod si usa un host Ollama con modello qwen; il resolver ricade su
+  Ollama se manca l'SDK del provider cloud.
 
-## Observability
+## Osservabilità
 
-Bring up the Grafana LGTM stack alongside the demo:
+Avviare lo stack Grafana LGTM accanto alla demo:
 
 ```bash
 docker compose \
@@ -147,26 +172,32 @@ docker compose \
   up -d --build
 ```
 
-Then point the API at it:
+Poi puntare l'API su di esso:
 
 ```env
 API__OTEL_OTLP_ENDPOINT=http://observability:4318
 API__OTEL_SERVICE_NAME=limen-api
 ```
 
-Grafana UI → `http://localhost:3000` (anonymous Viewer). The provisioned
-dashboards:
+UI Grafana → `http://localhost:3000` (Viewer anonimo). Le dashboard
+provisionate:
 
-* **Limen — risk metrics (§3.9)** — the five OTel custom instruments.
-* **Limen — system health** — DB pool, request rates, job runs, alert
-  volume, recent logs.
+* **Limen — risk metrics (§3.9)** — i cinque strumenti custom OTel.
+* **Limen — system health** — pool DB, tassi di richiesta, run dei job,
+  volume di alert, log recenti.
 
-## Versions + provenance
+## Versioni + provenienza
 
-* The active scoring engine version is in `RegionalThresholds.model_version`
-  (default `limen-deterministic-v1`). Every persisted
-  `risk_assessments.pipeline_version` references it.
-* External datasets are tagged by `dataset_versions(source, dataset, version)`.
-* Open-Meteo / ISPRA / INGV / EFFIS open-data licenses + attribution
-  are documented in the README "Attribution" section — propagate them
-  to any public-facing rendering.
+* La versione del motore di scoring attivo è in
+  `RegionalThresholds.model_version` (default `limen-deterministic-v1`).
+  Ogni `risk_assessments.pipeline_version` persistito la referenzia.
+* I dataset esterni sono etichettati da
+  `dataset_versions(source, dataset, version)`.
+* Le licenze open-data e l'attribuzione di Open-Meteo / ISPRA / INGV /
+  EFFIS sono documentate nella sezione "Attribution" del README —
+  propagarle a qualsiasi rendering pubblico.
+
+## Deploy
+
+VPS self-hosted + Docker. Nessun cloud provider (no AWS/Azure/GCP).
+L'object storage per i backup è S3-compatibile (R2, B2, MinIO).
