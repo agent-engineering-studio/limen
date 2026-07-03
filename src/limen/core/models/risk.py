@@ -107,6 +107,9 @@ class DynamicInputs(_Frozen):
     api_30_mm: float | None = Field(default=None, ge=0.0)
     api_baseline_mm: float | None = Field(default=None, ge=0.0)
     soil_moisture_0_7: float | None = Field(default=None, ge=0.0, le=1.0)
+    # Standing snowpack depth over the window (m) — drives the rain-on-snow
+    # amplification of M. AOI-level in V1 (like soil moisture).
+    snow_depth_m: float | None = Field(default=None, ge=0.0)
     seismic_history: tuple[SeismicHistoryEvent, ...] = ()
     months_since_fire: float | None = Field(default=None, ge=0.0)
     # V1.5 — per-cell in-situ aggregate. Absent on cells without sensors;
@@ -149,6 +152,8 @@ class MeteoBreakdown(_Frozen):
     caine_norm: float = Field(..., ge=0.0, le=1.0)
     api_factor: float = Field(..., ge=0.0, le=1.0)
     soil_factor: float = Field(..., ge=0.0, le=1.0)
+    # Rain-on-snow amplification (0 when no snowpack / no snow block).
+    snow_factor: float = Field(default=0.0, ge=0.0, le=1.0)
     # V1.5: which inputs came from in-situ sensors (vs Open-Meteo).
     # Empty tuple on the pure V1 path.
     measured_overrides: tuple[str, ...] = ()

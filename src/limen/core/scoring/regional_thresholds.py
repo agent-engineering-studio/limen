@@ -146,6 +146,20 @@ class SoilBlock(_StrictModel):
     sigmoid_steepness: float = Field(..., gt=0.0)
 
 
+class SnowBlock(_StrictModel):
+    """Rain-on-snow amplification of M (additive, baseline-preserving).
+
+    With a standing snowpack (depth ≥ ``ros_min_depth_m``), rain in the last
+    24 h loads the pack and adds melt water: the factor ramps to 1 at
+    ``ros_rain_scale_mm`` and adds up to ``weight`` to M. No snow ⇒ factor 0
+    ⇒ scores byte-identical to the pre-snow engine.
+    """
+
+    ros_min_depth_m: float = Field(..., ge=0.0)
+    ros_rain_scale_mm: float = Field(..., gt=0.0)
+    weight: float = Field(..., ge=0.0, le=1.0)
+
+
 class SeismicBlock(_StrictModel):
     tau_days: float = Field(..., gt=0.0)
     min_magnitude: float = Field(..., gt=0.0)
@@ -236,6 +250,9 @@ class RegionalThresholds(_StrictModel):
     caine: CaineBlock
     api: ApiBlock
     soil: SoilBlock
+    # Optional: older YAMLs without a `snow` block validate; rain-on-snow
+    # amplification simply stays inactive everywhere.
+    snow: SnowBlock | None = None
     seismic: SeismicBlock
     post_fire: PostFireBlock
     # V1.5: optional. Older YAMLs without a `kinematic` block still

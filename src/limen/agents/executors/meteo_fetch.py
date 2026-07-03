@@ -85,7 +85,11 @@ class MeteoFetchExecutor(Executor):
         centroid = (snapshot.centroid_lon, snapshot.centroid_lat) if snapshot is not None else None
         api_mm = api.get(f"api_{self._api_days}d") if api else None
         soil = None
+        snow_depth = None
         if snapshot is not None and snapshot.samples:
+            depths = [s.snow_depth_m for s in snapshot.samples if s.snow_depth_m is not None]
+            if depths:
+                snow_depth = float(max(depths))
             sm_vals = [
                 s.soil_moisture_0_7_cm
                 for s in snapshot.samples
@@ -110,4 +114,5 @@ class MeteoFetchExecutor(Executor):
             rainfall_by_node=rainfall_by_node,
             api_30_mm=api_mm,
             soil_moisture_0_7=soil,
+            snow_depth_m=snow_depth,
         )

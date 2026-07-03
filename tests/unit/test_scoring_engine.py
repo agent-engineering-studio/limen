@@ -240,3 +240,35 @@ def test_engine_reads_all_constants_from_yaml(tweaked_yaml: Path) -> None:
 def test_engine_model_version_propagates() -> None:
     s = score(_bundle())
     assert s.model_version == load_regional_thresholds().model_version
+
+
+# ---------------------------------------------------------------------------
+# Rain-on-snow (snow block)
+# ---------------------------------------------------------------------------
+def test_no_snowpack_scores_identical_to_pre_snow_engine() -> None:
+    """snow_depth None or below ros_min_depth_m ⇒ snow_factor 0 ⇒ same M."""
+    base = _bundle(rainfall_hourly=[3.0] * 12, api_30_mm=100.0, soil=0.30)
+    shallow = base.model_copy(
+        update={"dynamic": base.dynamic.model_copy(update={"snow_depth_m": 0.01})}
+    )
+    assert score(shallow).breakdown.meteo_terms.snow_factor == 0.0
+    assert score(shallow).score == score(base).score
+
+
+def test_rain_on_snow_amplifies_m() -> None:
+    base = _bundle(rainfall_hourly=[3.0] * 12, api_30_mm=100.0, soil=0.30)
+    snowy = base.model_copy(
+        update={"dynamic": base.dynamic.model_copy(update={"snow_depth_m": 0.5})}
+    )
+    dry_snow = _bundle(api_30_mm=100.0, soil=0.30).model_copy(
+        update={
+            "dynamic": _bundle(api_30_mm=100.0, soil=0.30).dynamic.model_copy(
+                update={"snow_depth_m": 0.5}
+            )
+        }
+    )
+    scored = score(snowy)
+    assert scored.breakdown.meteo_terms.snow_factor > 0.0
+    assert scored.breakdown.m > score(base).breakdown.m
+    # Snowpack WITHOUT recent rain adds nothing (it's rain-ON-snow).
+    assert score(dry_snow).breakdown.meteo_terms.snow_factor == 0.0

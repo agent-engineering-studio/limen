@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from datetime import timedelta
 
 from limen.core.models.risk import (
     CellFeatureBundle,
@@ -39,6 +40,7 @@ from limen.core.scoring.post_fire import post_fire_factor
 from limen.core.scoring.regional_thresholds import (
     ClassCutoffs,
     RegionalThresholds,
+    SnowBlock,
     SoilBlock,
     load_regional_thresholds,
 )
@@ -77,6 +79,21 @@ def _norm_iffi_density(density: float | None, saturation: float) -> float:
 
 def _norm_caine(excess: float) -> float:
     return _clamp01(excess / _CAINE_LOG_EXCESS_CAP)
+
+
+def _snow_factor(bundle: CellFeatureBundle, *, snow: SnowBlock | None) -> float:
+    """Rain-on-snow loading: 24 h rain on a standing snowpack, ramped to 1
+    at ``ros_rain_scale_mm``. 0 without a snowpack or a YAML snow block."""
+    if snow is None:
+        return 0.0
+    depth = bundle.dynamic.snow_depth_m
+    if depth is None or depth < snow.ros_min_depth_m:
+        return 0.0
+    cutoff = bundle.dynamic.valuation_time - timedelta(hours=24)
+    rain_24h = sum(
+        s.precipitation_mm for s in bundle.dynamic.rainfall.samples if s.timestamp >= cutoff
+    )
+    return _clamp01(rain_24h / snow.ros_rain_scale_mm)
 
 
 def _soil_sigmoid(value: float | None, *, soil: SoilBlock) -> float:
@@ -187,7 +204,12 @@ class MultiFactorScoringEngine:
                 soil_f = _soil_sigmoid(sensor.soil_moisture, soil=self._t.soil)
                 overrides.append("soil")
 
-        m = w.caine * caine_norm + w.api * api_f + w.soil * soil_f
+        snow_f = _snow_factor(bundle, snow=self._t.snow)
+
+        # Rain-on-snow is an additive, capped bonus (not a reweighting) so a
+        # bundle without snowpack scores byte-identical to the pre-snow engine.
+        snow_weight = self._t.snow.weight if self._t.snow is not None else 0.0
+        m = w.caine * caine_norm + w.api * api_f + w.soil * soil_f + snow_weight * snow_f
         return _MeteoAggregate(
             m=_clamp01(m),
             breakdown=MeteoBreakdown(
@@ -195,6 +217,7 @@ class MultiFactorScoringEngine:
                 caine_norm=caine_norm,
                 api_factor=api_f,
                 soil_factor=soil_f,
+                snow_factor=snow_f,
                 measured_overrides=tuple(overrides),
             ),
         )

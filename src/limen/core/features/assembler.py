@@ -83,6 +83,7 @@ def assemble_bundles(
             rainfall=rainfall,
             api_30_mm=ctx.api_30_mm,
             soil_moisture_0_7=ctx.soil_moisture_0_7,
+            snow_depth_m=ctx.snow_depth_m,
             seismic_history=seismic,
             months_since_fire=ctx.months_since_fire,
             sensor_features=ctx.sensor_features_by_cell.get(cell_id),

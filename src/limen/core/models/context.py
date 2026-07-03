@@ -109,6 +109,8 @@ class MonitoringContext(BaseModel):
     rainfall_by_node: Sequence[Any] = Field(default_factory=tuple)
     api_30_mm: float | None = None
     soil_moisture_0_7: float | None = None
+    # Max standing snowpack over the window (m) — rain-on-snow input.
+    snow_depth_m: float | None = None
     seismic_events: Sequence[SeismicHistoryEvent] = Field(default_factory=tuple)
     months_since_fire: float | None = None
     sensor_payload: dict[str, Any] | None = None
