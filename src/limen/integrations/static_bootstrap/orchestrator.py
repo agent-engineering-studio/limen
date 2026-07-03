@@ -116,9 +116,23 @@ FROM p
 WHERE c.cell_id = p.cell_id
 """
 
+# Rows synced into flood_hazard before migration 014 have no subdivided
+# parts yet — heal them once, idempotently. Newly upserted rows are kept in
+# lockstep by flood_repo.upsert_many.
+_FLOOD_SUBDIV_BACKFILL_SQL = """
+INSERT INTO flood_hazard_subdiv (id, hazard_class, hazard_class_norm, geom)
+SELECT f.id, f.hazard_class, f.hazard_class_norm,
+       ST_Subdivide(ST_CollectionExtract(ST_MakeValid(f.geom), 3), 256)
+FROM flood_hazard f
+WHERE NOT EXISTS (SELECT 1 FROM flood_hazard_subdiv s WHERE s.id = f.id)
+"""
+
 # Idraulica (flood): most-severe hydraulic-hazard polygon intersecting the
 # cell → flood_hazard_norm + class (drives the engine's H component). NULL
 # when no polygon intersects, so H stays 0 there — byte-identical baseline.
+# Joins the subdivided companion, not flood_hazard: the raw mosaic has
+# polygons with ~3.7M vertices whose bboxes cover thousands of cells, which
+# blew the 900 s statement timeout.
 _FLOOD_HAZARD_SQL = """
 WITH f AS (
     SELECT g.id AS cell_id,
@@ -126,7 +140,7 @@ WITH f AS (
            (array_agg(fh.hazard_class ORDER BY fh.hazard_class_norm DESC NULLS LAST))[1]
              AS flood_cls
     FROM grid_cells g
-    LEFT JOIN flood_hazard fh
+    LEFT JOIN flood_hazard_subdiv fh
       ON ST_Intersects(g.geom, fh.geom)
     WHERE g.aoi_id = $1
     GROUP BY g.id
@@ -158,6 +172,11 @@ async def bootstrap_static_for_aoi(aoi_id: str) -> dict[str, int]:
     gs_counts = await sync_geoserver_source_for_aoi(aoi_id)
     if gs_counts["iffi"] or gs_counts["pai"] or gs_counts.get("flood"):
         log.info("static_bootstrap.geoserver_source", aoi_id=aoi_id, **gs_counts)
+
+    # Outside the factors transaction: the backfill's work stays committed
+    # even if a later aggregation times out and rolls back.
+    async with acquire() as conn:
+        await conn.execute(_FLOOD_SUBDIV_BACKFILL_SQL, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
 
     async with acquire() as conn, conn.transaction():
         result_seed = await conn.execute(_SEED_CELLS_SQL, aoi_id)
