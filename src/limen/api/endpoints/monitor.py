@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, status
 
+from limen.api.auth import RequireUser
 from limen.api.dependencies import DepsDep
 from limen.api.schemas import MonitorRequest, MonitorResponse
 from limen.core.logging import get_logger
@@ -20,9 +21,14 @@ router = APIRouter(prefix="/api/monitor", tags=["monitor"])
 async def run_monitor(
     aoi_id: str,
     deps: DepsDep,
+    _user: RequireUser,
     body: MonitorRequest | None = None,
 ) -> MonitorResponse:
-    """Execute the Phase-4 workflow for ``aoi_id`` and persist the result."""
+    """Execute the Phase-4 workflow for ``aoi_id`` and persist the result.
+
+    Protected: requires a valid Clerk JWT when ``CLERK__ENABLED`` (open
+    otherwise). The public read-only map endpoints stay unauthenticated.
+    """
     body = body or MonitorRequest()
     workflow = deps.build_workflow(cell_limit=body.cell_limit)
     ctx = MonitoringContext(
