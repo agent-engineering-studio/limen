@@ -6,6 +6,8 @@ model rather than env vars to keep tests hermetic.
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 
 from limen.agents.llm_factory.anthropic_factory import AnthropicFactory
@@ -18,7 +20,11 @@ from limen.config.settings import LLMProvider, Settings
 
 
 def _settings(**overrides: object) -> Settings:
-    return Settings.model_validate(overrides)
+    # `_env_file=None` keeps these hermetic: no local .env (which may set
+    # LLM__PROVIDER / cloud keys) leaks into the precedence assertions.
+    # Cast through Any: pydantic-settings' `_env_file` kwarg coexists with
+    # arbitrary field overrides, which its typed __init__ signature rejects.
+    return cast(Settings, cast(Any, Settings)(_env_file=None, **overrides))
 
 
 def test_precedence_anthropic_wins_over_openai() -> None:
@@ -103,3 +109,26 @@ def test_provider_label_matches_resolved_factory() -> None:
 def test_explicit_override_value_in_llm_provider_uses_enum() -> None:
     s = _settings(llm={"provider": LLMProvider.OLLAMA.value})
     assert isinstance(resolve_llm_factory(s), OllamaFactory)
+
+
+def test_autodetect_skips_provider_when_sdk_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A leaked cloud key must not select a provider whose SDK is absent —
+    autodetect falls through to Ollama (httpx-only, always available)."""
+    import limen.agents.llm_factory.resolver as resolver
+
+    monkeypatch.setattr(resolver, "_sdk_available", lambda module: False)
+    s = _settings(anthropic_api_key="ak-xxx", openai_api_key="ok-yyy")
+    f = resolve_llm_factory(s)
+    assert isinstance(f, OllamaFactory)
+
+
+def test_explicit_anthropic_still_selected_regardless_of_sdk_probe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit LLM__PROVIDER=anthropic is honoured (constructs the factory);
+    the SDK error, if any, surfaces later at client creation, not here."""
+    import limen.agents.llm_factory.resolver as resolver
+
+    monkeypatch.setattr(resolver, "_sdk_available", lambda module: False)
+    s = _settings(llm={"provider": LLMProvider.ANTHROPIC.value}, anthropic_api_key="ak-xxx")
+    assert isinstance(resolve_llm_factory(s), AnthropicFactory)

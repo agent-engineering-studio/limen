@@ -97,11 +97,15 @@ services:
       #   host Ollama:  LLM__OLLAMA_BASE_URL=http://host.docker.internal:11434
       #   Ollama Cloud: LLM__OLLAMA_BASE_URL=https://ollama.com + LLM__OLLAMA_API_KEY
       #   Claude:       ANTHROPIC_API_KEY (or LLM__PROVIDER=anthropic)
-      LLM__PROVIDER: ${LLM__PROVIDER:-}
+      # Default to host Ollama: the image ships without the `agents` group
+      # (no anthropic/openai SDK), so a leaked ANTHROPIC_API_KEY must not be
+      # auto-selected. Override to anthropic/openai only with the SDK installed.
+      LLM__PROVIDER: ${LLM__PROVIDER:-ollama}
       # Host-Ollama URL differs host vs container, so use an API_-prefixed
       # override (defaults to host.docker.internal). Ollama Cloud / Anthropic
       # need no such split — the key/base are identical everywhere.
       LLM__OLLAMA_BASE_URL: ${API_LLM_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      LLM__OLLAMA_MODEL: ${LLM__OLLAMA_MODEL:-qwen3.6:latest}
       LLM__OLLAMA_API_KEY: ${LLM__OLLAMA_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     extra_hosts:

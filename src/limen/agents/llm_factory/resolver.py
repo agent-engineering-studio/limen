@@ -79,6 +79,13 @@ def _build_ollama(settings: Settings) -> OllamaFactory:
     )
 
 
+def _sdk_available(module: str) -> bool:
+    """True when ``module`` can be imported (the provider's SDK is installed)."""
+    import importlib.util
+
+    return importlib.util.find_spec(module) is not None
+
+
 def _has_anthropic(settings: Settings) -> bool:
     return settings.anthropic_api_key is not None
 
@@ -118,12 +125,20 @@ def resolve_llm_factory(settings: Settings | None = None) -> LlmClientFactory:
         # explicit Ollama or anything else
         return _build_ollama(s)
 
+    # Autodetect: a cloud key selects its provider only if the SDK is actually
+    # installed. Otherwise fall through — on Aruba prod the image ships without
+    # the `agents` group and Ollama (httpx-only, no SDK) is the intended engine,
+    # so a leaked ANTHROPIC_API_KEY must not crash the non-authoritative LLM path.
     if _has_anthropic(s):
-        log.info("llm.resolver.autodetect", provider="anthropic")
-        return _build_anthropic(s)
+        if _sdk_available("anthropic"):
+            log.info("llm.resolver.autodetect", provider="anthropic")
+            return _build_anthropic(s)
+        log.warning("llm.resolver.sdk_missing", provider="anthropic", note="agents group")
     if _has_openai(s):
-        log.info("llm.resolver.autodetect", provider="openai")
-        return _build_openai(s)
+        if _sdk_available("openai"):
+            log.info("llm.resolver.autodetect", provider="openai")
+            return _build_openai(s)
+        log.warning("llm.resolver.sdk_missing", provider="openai", note="agents group")
     if _has_foundry(s):
         log.info("llm.resolver.autodetect", provider="foundry")
         return _build_foundry(s)

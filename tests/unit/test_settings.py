@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 
 from limen.config.settings import (
@@ -14,9 +16,10 @@ from limen.core.llm_resolver import resolve_provider
 
 
 def _make_settings(**overrides: object) -> Settings:
-    # Build a Settings instance with defaults but no .env file picked up
-    s = Settings.model_validate(overrides)
-    return s
+    # Build a Settings instance with defaults and no .env file picked up.
+    # Cast through Any: pydantic-settings' `_env_file` kwarg coexists with
+    # arbitrary field overrides, which its typed __init__ signature rejects.
+    return cast(Settings, cast(Any, Settings)(_env_file=None, **overrides))
 
 
 def test_defaults_select_filesystem_and_apscheduler() -> None:
