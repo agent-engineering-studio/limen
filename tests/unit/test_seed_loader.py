@@ -22,6 +22,10 @@ def test_load_basilicata_returns_polygon_or_multipolygon() -> None:
     assert aoi.geom.is_valid
 
 
-def test_load_all_returns_both() -> None:
+def test_load_all_returns_all_regions() -> None:
     aois = load_all()
-    assert {a.id for a in aois} == {"it-puglia", "it-basilicata"}
+    ids = {a.id for a in aois}
+    # All 20 ISTAT regions, including the original pilot pair.
+    assert len(aois) == 20
+    assert {"it-puglia", "it-basilicata", "it-lombardia", "it-sicilia"} <= ids
+    assert all(a.geom.is_valid and a.geom.area > 0 for a in aois)

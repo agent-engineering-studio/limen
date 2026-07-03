@@ -4,9 +4,13 @@ Reads the ITALICA CSV (semicolon-delimited, EPSG:4326 lon/lat + UTC date)
 into ``landslide_events``. This is the dated truth set the §2.5 backtest
 replays against — IFFI on its own is an undated inventory.
 
-Opt-in: set ``LIMEN_ITALICA_CSV`` to the downloaded CSV path (e.g. the
-e-ITALICA ``ITALICA_v4.csv`` from Zenodo, CC-BY-4.0). Unset ⇒ logged skip,
-no writes. Idempotent: re-running upserts by catalogue id.
+Source resolution (for reproducible init on a fresh machine):
+1. ``LIMEN_ITALICA_CSV`` — explicit local path wins (offline / custom file);
+2. otherwise download e-ITALICA v4 from the pinned Zenodo DOI
+   (10.5281/zenodo.14204473, CC-BY-4.0) into ``LIMEN_DATA_DIR`` and cache it.
+
+Idempotent: the download is skipped when the cached file already exists, and
+the upsert is keyed by catalogue id.
 """
 
 from __future__ import annotations
@@ -23,8 +27,40 @@ from limen.data.db import lifespan_pool
 from limen.data.migrate import run_migrations
 from limen.data.repos.landslide_events_repo import LandslideEvent, count_events
 from limen.data.repos.landslide_events_repo import upsert_many as events_upsert
+from limen.integrations._http import SharedHttpClient, fetch_with_retry
 
 log = get_logger(__name__)
+
+# Pinned e-ITALICA v4 (Zenodo DOI 10.5281/zenodo.14204473, CC-BY-4.0).
+# The download lives under the /api/records/ path — the bare /records/ path
+# returns 404 for the /content file endpoint.
+_ITALICA_URL = "https://zenodo.org/api/records/14204473/files/ITALICA_v4.csv/content"
+_ITALICA_FILENAME = "ITALICA_v4.csv"
+
+
+async def _resolve_csv() -> Path | None:
+    """Return the ITALICA CSV path, downloading from Zenodo if not local."""
+    explicit = os.getenv("LIMEN_ITALICA_CSV", "").strip()
+    if explicit:
+        path = Path(explicit).expanduser()
+        if not path.is_file():
+            log.error("ingest_events.csv_missing", path=str(path))
+            return None
+        return path
+
+    data_dir = Path(os.getenv("LIMEN_DATA_DIR", "./data")).expanduser()
+    dest = data_dir / _ITALICA_FILENAME
+    if dest.is_file() and dest.stat().st_size > 0:
+        log.info("ingest_events.cache_hit", path=str(dest))
+        return dest
+
+    url = os.getenv("LIMEN_ITALICA_URL", _ITALICA_URL)
+    log.info("ingest_events.download", url=url, dest=str(dest))
+    resp = await fetch_with_retry("GET", url, client=await SharedHttpClient.get())
+    data_dir.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(resp.content)
+    log.info("ingest_events.downloaded", path=str(dest), bytes=len(resp.content))
+    return dest
 
 
 def _f(value: str | None) -> float | None:
@@ -90,17 +126,11 @@ def _parse_rows(path: Path) -> list[LandslideEvent]:
 
 
 async def run() -> int:
-    raw_path = os.getenv("LIMEN_ITALICA_CSV", "").strip()
-    if not raw_path:
-        log.warning(
-            "ingest_events.skip_no_csv",
-            note="set LIMEN_ITALICA_CSV to the ITALICA/e-ITALICA CSV path",
-        )
-        return 0
-
-    path = Path(raw_path).expanduser()
-    if not path.is_file():
-        log.error("ingest_events.csv_missing", path=str(path))
+    try:
+        path = await _resolve_csv()
+    finally:
+        await SharedHttpClient.aclose()
+    if path is None:
         return 1
 
     events = _parse_rows(path)

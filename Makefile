@@ -127,6 +127,18 @@ calibrate:
 backtest:
 	$(UV) run limen backtest
 
+ingest-events:
+	$(UV) run limen ingest-events
+
+# Full reproducible data init for a fresh machine (all 20 regions + ITALICA
+# truth set auto-downloaded from Zenodo). Idempotent: safe to re-run.
+init:
+	$(UV) run limen migrate
+	$(UV) run limen seed
+	$(UV) run limen ingest-events
+	$(UV) run limen bootstrap-static
+	$(UV) run limen calibrate
+
 serve:
 	$(UV) run limen serve
 

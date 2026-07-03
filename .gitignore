@@ -49,3 +49,6 @@ infra/docker/volumes/
 
 # Generated docs
 docs/_build/
+
+# Generated backtest/calibrate reports
+reports/
