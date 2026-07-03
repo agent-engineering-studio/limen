@@ -173,13 +173,21 @@ integrazione usano automaticamente `imresamu/postgis-arm64`
 
 ---
 
-## Roadmap
+## Stato & roadmap
 
-- **Attivazione H (idraulica)** dal PostGIS di GeoServer: caricare il
-  mosaico idraulica ISPRA + estendere il loader (peso 0.03, completezza).
-- **Autenticazione Clerk** (`@clerk/clerk-react` sulla stessa SPA Vite +
-  validazione JWT in FastAPI) — unico item deferito; vedi memoria
-  `production-stack`.
+Completati di recente:
+
+- **Copertura nazionale** (20 regioni ISTAT) con soglia Caine ri-tarata su
+  e-ITALICA e pioggia di backtest CERRA.
+- **Componente H (idraulica)** attivo dal mosaico idraulica ISPRA via
+  GeoServer (~132k celle in zona di pericolosità idraulica).
+- **Autenticazione Clerk** attiva sulla SPA Vite (`@clerk/react`:
+  sign-in/sign-up/user button).
+
+Prossimi passi:
+
+- **Validazione JWT Clerk lato FastAPI** per gli endpoint protetti (il
+  frontend Clerk è già attivo).
 
 ---
 
