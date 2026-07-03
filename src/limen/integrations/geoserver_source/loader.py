@@ -16,12 +16,20 @@ import asyncpg
 from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.data.db import acquire, register_postgis
+from limen.data.repos.flood_repo import FloodHazard
+from limen.data.repos.flood_repo import upsert_many as flood_upsert
 from limen.data.repos.iffi_repo import IFFILandslide
 from limen.data.repos.iffi_repo import upsert_many as iffi_upsert
 from limen.data.repos.pai_repo import PAIHazard
 from limen.data.repos.pai_repo import upsert_many as pai_upsert
 
 log = get_logger(__name__)
+
+# ISPRA hydraulic-hazard (idraulica) mosaic: published per severity as
+# separate tables (HPH elevata / MPH media / LPH bassa). We discover them by
+# name pattern so the loader works whether they were bootstrapped with the
+# full sanitized basename or a short alias. Severity → shared AA/P1..P4 class.
+_IDRAULICA_SEVERITY: dict[str, str] = {"elevata": "P3", "media": "P2", "bassa": "P1"}
 
 # Landslide-inventory families published per region as
 # ``<family>_<region>_opendata`` (polygons, lines, points).
@@ -151,6 +159,58 @@ async def _load_pai(
     return items
 
 
+async def _idraulica_tables(conn: asyncpg.Connection, schema: str) -> dict[str, str]:
+    """Discover the idraulica tables by severity keyword → class token."""
+    found: dict[str, str] = {}
+    for keyword, cls in _IDRAULICA_SEVERITY.items():
+        row = await conn.fetchrow(
+            """
+            SELECT tablename FROM pg_tables
+            WHERE schemaname = $1 AND tablename ILIKE $2
+            ORDER BY tablename LIMIT 1
+            """,
+            schema,
+            f"%idraulica%{keyword}%",
+        )
+        if row is not None:
+            found[str(row["tablename"])] = cls
+    return found
+
+
+async def _load_idraulica(
+    conn: asyncpg.Connection, schema: str, bbox: tuple[float, float, float, float]
+) -> list[FloodHazard]:
+    items: list[FloodHazard] = []
+    for table, cls in (await _idraulica_tables(conn, schema)).items():
+        cols = await _table_columns(conn, schema, table)
+        if "geom" not in cols:
+            continue
+        id_col = next((c for c in _ID_COL_PREFERENCE if c in cols), None)
+        id_expr = f'"{id_col}"::text' if id_col else 'md5(ST_AsEWKB("geom"))'
+        rows = await conn.fetch(
+            f'SELECT {id_expr} AS rid, "geom" AS geom '
+            f'FROM "{schema}"."{table}" '
+            "WHERE ST_Intersects(geom, ST_MakeEnvelope($1, $2, $3, $4, 4326))",
+            bbox[0],
+            bbox[1],
+            bbox[2],
+            bbox[3],
+        )
+        for r in rows:
+            geom = r["geom"]
+            if geom is None:
+                continue
+            items.append(
+                FloodHazard(
+                    id=f"idr:{table}:{r['rid']}",
+                    hazard_class=cls,
+                    geom=geom,
+                    attributes={"source": "geoserver", "table": table},
+                )
+            )
+    return items
+
+
 async def sync_geoserver_source_for_aoi(aoi_id: str) -> dict[str, int]:
     """Sync IFFI + PAI for ``aoi_id`` from GeoServer PostGIS.
 
@@ -161,7 +221,7 @@ async def sync_geoserver_source_for_aoi(aoi_id: str) -> dict[str, int]:
     cfg = get_settings().geoserver_source
     if not cfg.db_dsn:
         log.info("geoserver_source.skip_no_dsn", aoi_id=aoi_id)
-        return {"iffi": 0, "pai": 0}
+        return {"iffi": 0, "pai": 0, "flood": 0}
 
     region = _region_token(aoi_id)
     bbox = await _aoi_bbox(aoi_id)
@@ -170,25 +230,28 @@ async def sync_geoserver_source_for_aoi(aoi_id: str) -> dict[str, int]:
         conn = await asyncpg.connect(cfg.db_dsn)
     except (OSError, asyncpg.PostgresError) as exc:
         log.warning("integration.degraded", source="geoserver_source", op="connect", error=str(exc))
-        return {"iffi": 0, "pai": 0}
+        return {"iffi": 0, "pai": 0, "flood": 0}
 
     try:
         await register_postgis(conn)
         iffi_items = await _load_iffi(conn, cfg.schema_name, region)
         pai_items = await _load_pai(conn, cfg.schema_name, bbox) if bbox else []
+        flood_items = await _load_idraulica(conn, cfg.schema_name, bbox) if bbox else []
     except (OSError, asyncpg.PostgresError) as exc:
         log.warning("integration.degraded", source="geoserver_source", op="read", error=str(exc))
-        return {"iffi": 0, "pai": 0}
+        return {"iffi": 0, "pai": 0, "flood": 0}
     finally:
         await conn.close()
 
     iffi_n = await iffi_upsert(iffi_items)
     pai_n = await pai_upsert(pai_items)
+    flood_n = await flood_upsert(flood_items)
     log.info(
         "geoserver_source.synced",
         aoi_id=aoi_id,
         region=region,
         iffi=iffi_n,
         pai=pai_n,
+        flood=flood_n,
     )
-    return {"iffi": iffi_n, "pai": pai_n}
+    return {"iffi": iffi_n, "pai": pai_n, "flood": flood_n}

@@ -116,6 +116,29 @@ FROM p
 WHERE c.cell_id = p.cell_id
 """
 
+# Idraulica (flood): most-severe hydraulic-hazard polygon intersecting the
+# cell → flood_hazard_norm + class (drives the engine's H component). NULL
+# when no polygon intersects, so H stays 0 there — byte-identical baseline.
+_FLOOD_HAZARD_SQL = """
+WITH f AS (
+    SELECT g.id AS cell_id,
+           MAX(fh.hazard_class_norm) AS flood_max,
+           (array_agg(fh.hazard_class ORDER BY fh.hazard_class_norm DESC NULLS LAST))[1]
+             AS flood_cls
+    FROM grid_cells g
+    LEFT JOIN flood_hazard fh
+      ON ST_Intersects(g.geom, fh.geom)
+    WHERE g.aoi_id = $1
+    GROUP BY g.id
+)
+UPDATE cell_static_factors c
+SET flood_hazard_norm = f.flood_max,
+    flood_hazard_class = f.flood_cls,
+    updated_at = now()
+FROM f
+WHERE c.cell_id = f.cell_id
+"""
+
 
 async def bootstrap_static_for_aoi(aoi_id: str) -> dict[str, int]:
     """Run the achievable static-bootstrap steps for ``aoi_id``.
@@ -133,7 +156,7 @@ async def bootstrap_static_for_aoi(aoi_id: str) -> dict[str, int]:
     from limen.integrations.geoserver_source import sync_geoserver_source_for_aoi
 
     gs_counts = await sync_geoserver_source_for_aoi(aoi_id)
-    if gs_counts["iffi"] or gs_counts["pai"]:
+    if gs_counts["iffi"] or gs_counts["pai"] or gs_counts.get("flood"):
         log.info("static_bootstrap.geoserver_source", aoi_id=aoi_id, **gs_counts)
 
     async with acquire() as conn, conn.transaction():
@@ -149,6 +172,7 @@ async def bootstrap_static_for_aoi(aoi_id: str) -> dict[str, int]:
             _DISTANCE_TO_IFFI_SQL, aoi_id, _DISTANCE_CAP_M, timeout=_BOOTSTRAP_STMT_TIMEOUT_S
         )
         await conn.execute(_PAI_CLASS_SQL, aoi_id, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
+        await conn.execute(_FLOOD_HAZARD_SQL, aoi_id, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
 
     # DEM derivatives — runs when LIMEN_DEM_RASTER points at a GeoTIFF
     # (e.g. TINITALY 10 m). With the env var unset the step is a clean
