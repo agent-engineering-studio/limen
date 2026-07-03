@@ -209,6 +209,10 @@ quando la mappa / i briefing vengono pubblicati:
 * **INGV** (servizio eventi FDSN, ShakeMap) — CC-BY 4.0.
   https://terremoti.ingv.it
 * **EFFIS** (perimetri aree bruciate) — termini Copernicus EFFIS.
+* **CORINE Land Cover 2018 Italia** (SINAnet/ISPRA) — CC-BY.
+  https://groupware.sinanet.isprambiente.it
+* **Carta Geolitologica d'Italia 1:500k** (Geoportale Nazionale
+  PCN/MASE, Servizio Geologico d'Italia) — CC-BY 4.0.
 * **ISTAT** (confini amministrativi 2023) — CC-BY 4.0.
 * **OpenStreetMap** (basemap) — ODbL.
 
