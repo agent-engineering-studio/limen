@@ -97,7 +97,7 @@ def _export_onnx(model: Any, dest: Path) -> Path | None:
     try:
         torch.onnx.export(
             model,
-            dummy,
+            (dummy,),
             str(dest),
             input_names=["rainfall_window"],
             output_names=["probability"],

@@ -83,7 +83,7 @@ def _objective_factory(
     weights = _class_weight(matrix.y)
 
     def objective(trial: optuna.Trial) -> float:
-        params = {
+        params: dict[str, Any] = {
             "objective": "binary",
             "metric": "average_precision",
             "verbosity": -1,

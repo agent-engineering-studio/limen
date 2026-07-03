@@ -21,7 +21,7 @@ def build_rainfall_cnn() -> Any:
     import torch
     import torch.nn as nn
 
-    class RainfallCNN(nn.Module):  # type: ignore[misc]
+    class RainfallCNN(nn.Module):  # type: ignore[misc, unused-ignore]
         def __init__(self) -> None:
             super().__init__()
             self.net = nn.Sequential(
