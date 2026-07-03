@@ -27,6 +27,7 @@ from limen.cli.calibrate import run as _run_calibrate
 from limen.cli.geodata import build_subparser as _build_geodata_subparser
 from limen.cli.geodata import run as _run_geodata
 from limen.cli.geoserver_sync import run as _run_geoserver_sync
+from limen.cli.ingest_events import run as _run_ingest_events
 from limen.cli.ingest_kb import run as _run_ingest_kb
 from limen.cli.migrate import run as _run_migrate
 from limen.cli.monitor_once import run as _run_monitor_once
@@ -83,6 +84,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="load ISPRA IFFI + PAI from GeoServer PostGIS (GEOSERVER_SOURCE__DB_DSN)",
     )
     sub.add_parser(
+        "ingest-events",
+        help="load the ITALICA/e-ITALICA dated landslide catalogue (LIMEN_ITALICA_CSV)",
+    )
+    sub.add_parser(
         "ingest-kb",
         help="push the local corpus (papers + PAI + ISPRA + briefings) to the KG sidecar",
     )
@@ -128,6 +133,7 @@ def main(argv: list[str] | None = None) -> int:
         "sync-egms": _run_sync_egms,
         "ingest-kb": _run_ingest_kb,
         "geoserver-sync": _run_geoserver_sync,
+        "ingest-events": _run_ingest_events,
     }
     if args.command == "geodata":
         try:

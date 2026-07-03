@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from limen.core.logging import get_logger
@@ -57,8 +57,10 @@ from limen.integrations.openmeteo.client import OpenMeteoHttpClient
 log = get_logger(__name__)
 
 REPORTS_DIR = Path("./reports")
-_DEFAULT_START = datetime(2018, 10, 28, 0, 0, tzinfo=UTC)
-_DEFAULT_END = datetime(2018, 11, 2, 0, 0, tzinfo=UTC)
+# March 2009 Southern-Italy storm — 23 ITALICA events in Puglia/Basilicata
+# cluster on the 7th, so the default window has a real truth set.
+_DEFAULT_START = datetime(2009, 3, 4, 0, 0, tzinfo=UTC)
+_DEFAULT_END = datetime(2009, 3, 10, 0, 0, tzinfo=UTC)
 _ALERT_LEVELS_ORDERED = (
     RiskLevel.None_,
     RiskLevel.Low,
@@ -91,30 +93,26 @@ async def _fetch_truth_events(
     start: datetime,
     end: datetime,
 ) -> dict[str, datetime]:
-    """Return ``{cell_id: occurrence_datetime}`` from IFFI features that
-    occurred in ``[start, end]`` inside ``aoi_id``."""
+    """Return ``{cell_id: first_event_time}`` from the dated landslide-event
+    catalogue (ITALICA / e-ITALICA) for events in ``[start, end]`` inside
+    ``aoi_id``. Times are UTC; the earliest event per cell is the anchor."""
     async with acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT g.id AS cell_id, MIN(i.occurrence_date) AS first_event
-            FROM iffi_landslides i
+            SELECT g.id AS cell_id, MIN(e.event_time) AS first_event
+            FROM landslide_events e
             JOIN grid_cells g
-              ON ST_Intersects(g.geom, i.geom)
+              ON ST_Intersects(g.geom, e.geom)
             WHERE g.aoi_id = $1
-              AND i.occurrence_date >= $2::date
-              AND i.occurrence_date <= $3::date
+              AND e.event_time >= $2
+              AND e.event_time <= $3
             GROUP BY g.id
             """,
             aoi_id,
-            start.date(),
-            end.date(),
+            start,
+            end,
         )
-    out: dict[str, datetime] = {}
-    for r in rows:
-        d: date = r["first_event"]
-        # Anchor to the middle of the day in UTC — IFFI rarely has hour-precision.
-        out[str(r["cell_id"])] = datetime(d.year, d.month, d.day, 12, 0, tzinfo=UTC)
-    return out
+    return {str(r["cell_id"]): r["first_event"] for r in rows}
 
 
 async def _fetch_static_factors(aoi_id: str) -> list[StaticFactors]:
