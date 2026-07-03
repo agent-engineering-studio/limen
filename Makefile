@@ -74,7 +74,14 @@ help:
 # ---------------------------------------------------------------------------
 # Full stack (operational + GeoServer) — one command, idempotent data refresh
 # ---------------------------------------------------------------------------
-up:
+# The GeoServer PostGIS + data volumes are declared `external` (shared between
+# `make up` and `make geoserver-up` without compose project-ownership warnings);
+# create them idempotently before any stack that mounts them.
+gs-volumes:
+	@docker volume create limen-geoserver-pgdata >/dev/null
+	@docker volume create limen-geoserver-gsdata >/dev/null
+
+up: gs-volumes
 	docker compose $(COMPOSE_ALL) $(UP_PROFILES) up -d --build
 	@echo "[up] waiting for the API to become ready…"
 	@for i in $$(seq 1 40); do \
@@ -193,7 +200,7 @@ observability-down:
 # ---------------------------------------------------------------------------
 # GeoServer vector-data layer (opt-in — mcp-geo-server integration)
 # ---------------------------------------------------------------------------
-geoserver-up:
+geoserver-up: gs-volumes
 	docker compose -f $(COMPOSE_GEOSERVER) --profile geoserver up -d
 
 geoserver-init:

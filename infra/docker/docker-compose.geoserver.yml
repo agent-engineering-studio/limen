@@ -200,7 +200,13 @@ services:
       retries: 3
 
 volumes:
+  # External so the same named volumes are shared cleanly between the
+  # standalone `make geoserver-up` (project limen-geoserver) and the unified
+  # `make up` (project limen) — otherwise compose warns about volume
+  # project-ownership. Created idempotently by the Makefile before `up`.
   limen-geoserver-pgdata:
     name: limen-geoserver-pgdata
+    external: true
   limen-geoserver-gsdata:
     name: limen-geoserver-gsdata
+    external: true
