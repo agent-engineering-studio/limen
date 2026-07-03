@@ -228,20 +228,22 @@ class OpenMeteoHttpClient:
         window_end: datetime,
         batch_size: int = 100,
         model: str | None = None,
+        use_archive: bool = True,
     ) -> list[list[WeatherSample]]:
-        """Hourly archive precipitation for many ``(lon, lat)`` nodes.
+        """Hourly precipitation for many ``(lon, lat)`` nodes in one batch.
 
-        ``model`` selects the reanalysis (Open-Meteo ``models`` param). Default
-        (None) is the archive's ERA5 seamless (~28 km); ``"cerra"`` is the 5.5 km
-        Copernicus European regional reanalysis, which resolves localized
-        (convective) rainfall far better — measured median capture of the
-        gauge-observed triggering rain 0.84 vs ERA5's 0.71 (worse on extremes).
+        ``use_archive=True`` (default — the backtest) reads the reanalysis
+        archive; ``model`` selects it (``"cerra"`` = 5.5 km Copernicus regional
+        reanalysis, measured median capture of gauge-observed triggering rain
+        0.84 vs ERA5's 0.71). ``use_archive=False`` reads the forecast API
+        (recent past + nowcast) — the operational monitoring path.
 
         Returns one hourly precipitation series per input node, in the same
         order. Nodes that fail to fetch degrade to an empty series (never
-        raises). Used by the backtest to give each grid cell the rainfall of
-        its nearest node instead of a single AOI-centroid series.
+        raises). Callers give each grid cell the rainfall of its nearest node
+        instead of a single AOI-centroid series.
         """
+        url = ARCHIVE_URL if use_archive else FORECAST_URL
         out: list[list[WeatherSample]] = []
         for i in range(0, len(nodes), batch_size):
             batch = nodes[i : i + batch_size]
@@ -257,7 +259,7 @@ class OpenMeteoHttpClient:
                 params["models"] = model
             try:
                 resp = await fetch_with_retry(
-                    "GET", ARCHIVE_URL, client=await self._client(), params=params
+                    "GET", url, client=await self._client(), params=params
                 )
             except _DEGRADATION_EXC as exc:
                 log.warning("integration.degraded", label="openmeteo.rainfall_grid", error=str(exc))

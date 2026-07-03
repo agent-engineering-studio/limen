@@ -94,11 +94,19 @@ class MonitoringContext(BaseModel):
     # Geometry slice — set by AreaResolver
     bbox: tuple[float, float, float, float] | None = None
     cell_ids: Sequence[str] = Field(default_factory=tuple)
+    # (lon, lat) centroid per cell — lets the assembler map each cell to its
+    # nearest rainfall node instead of one AOI-wide series.
+    cell_centroids: dict[str, tuple[float, float]] = Field(default_factory=dict)
 
     # Snapshots filled progressively
     static_by_cell: dict[str, StaticFactors] = Field(default_factory=dict)
     meteo_centroid_lonlat: tuple[float, float] | None = None
     meteo_samples: Sequence[Any] = Field(default_factory=tuple)
+    # Per-node rainfall grid (MeteoFetch, when enabled): sampling nodes over
+    # the bbox + one hourly series per node. Empty ⇒ the assembler falls back
+    # to the single AOI-centroid `meteo_samples` series.
+    rain_nodes: Sequence[tuple[float, float]] = Field(default_factory=tuple)
+    rainfall_by_node: Sequence[Any] = Field(default_factory=tuple)
     api_30_mm: float | None = None
     soil_moisture_0_7: float | None = None
     seismic_events: Sequence[SeismicHistoryEvent] = Field(default_factory=tuple)

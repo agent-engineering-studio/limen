@@ -17,7 +17,7 @@ from pydantic import TypeAdapter
 from limen.core.logging import get_logger
 from limen.data.caching.postgres_cache import DistributedCache, PostgresCache
 from limen.integrations.openmeteo.client import OpenMeteoHttpClient
-from limen.integrations.openmeteo.dtos import MeteoSnapshot
+from limen.integrations.openmeteo.dtos import MeteoSnapshot, WeatherSample
 
 if TYPE_CHECKING:
     pass
@@ -89,6 +89,23 @@ class CachedOpenMeteoClient:
                 ttl_seconds=self._ttl,
             )
         return snapshot
+
+    async def get_rainfall_grid(
+        self,
+        *,
+        nodes: list[tuple[float, float]],
+        window_start: datetime,
+        window_end: datetime,
+        use_archive: bool = True,
+    ) -> list[list[WeatherSample]]:
+        """Uncached passthrough — per-node series change every cycle and the
+        upstream already batches ~100 nodes per HTTP call."""
+        return await self._upstream.get_rainfall_grid(
+            nodes=nodes,
+            window_start=window_start,
+            window_end=window_end,
+            use_archive=use_archive,
+        )
 
     async def get_api(
         self,

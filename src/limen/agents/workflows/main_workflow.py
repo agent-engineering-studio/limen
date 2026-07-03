@@ -161,7 +161,7 @@ def build_landslide_workflow(
         WorkflowBuilder("limen-landslide-v1")
         .add(AreaResolverExecutor(cell_limit=cell_limit))
         .add(StaticFactorsExecutor())
-        .add(MeteoFetchExecutor())
+        .add(MeteoFetchExecutor(rain_node_deg=settings.meteo_rain_node_deg))
         .add(SeismicCheckExecutor())
         .add(FireCheckExecutor())
     )

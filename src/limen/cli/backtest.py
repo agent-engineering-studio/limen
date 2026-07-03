@@ -53,6 +53,7 @@ from limen.data.migrate import run_migrations
 from limen.data.repos.aoi_repo import get_aoi, list_aoi_ids
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.openmeteo.client import OpenMeteoHttpClient
+from limen.integrations.openmeteo.grid import build_rain_nodes, nearest_node
 
 log = get_logger(__name__)
 
@@ -167,33 +168,6 @@ def _level_at_least(level: RiskLevel, threshold: RiskLevel) -> bool:
     return _ALERT_LEVELS_ORDERED.index(level) >= _ALERT_LEVELS_ORDERED.index(threshold)
 
 
-def _build_rain_nodes(
-    bbox: tuple[float, float, float, float], *, spacing: float = _RAIN_NODE_DEG
-) -> list[tuple[float, float]]:
-    """A regular ``(lon, lat)`` grid over ``bbox`` at ~ERA5 native spacing."""
-    min_lon, min_lat, max_lon, max_lat = bbox
-    nodes: list[tuple[float, float]] = []
-    lat = min_lat
-    while lat <= max_lat + 1e-9:
-        lon = min_lon
-        while lon <= max_lon + 1e-9:
-            nodes.append((lon, lat))
-            lon += spacing
-        lat += spacing
-    return nodes or [((min_lon + max_lon) / 2.0, (min_lat + max_lat) / 2.0)]
-
-
-def _nearest_node(lon: float, lat: float, nodes: list[tuple[float, float]]) -> int:
-    best_i = 0
-    best_d = float("inf")
-    for i, (nlon, nlat) in enumerate(nodes):
-        d = (lon - nlon) ** 2 + (lat - nlat) ** 2
-        if d < best_d:
-            best_d = d
-            best_i = i
-    return best_i
-
-
 def _hourly_window(start: datetime, end: datetime) -> list[datetime]:
     out: list[datetime] = []
     t = start
@@ -232,7 +206,7 @@ def _evaluate(
     hours = _hourly_window(start, end)
 
     # Assign each cell to its nearest rainfall node once.
-    cell_node = [_nearest_node(lon, lat, nodes) for _, lon, lat in cells]
+    cell_node = [nearest_node(lon, lat, nodes) for _, lon, lat in cells]
 
     earliest_alert: dict[str, datetime] = {}
     alerts_total = 0
@@ -436,7 +410,7 @@ async def run() -> int:
 
                 cells = await _fetch_static_factors(aoi_id)
                 truth = await _fetch_truth_events(aoi_id, start=start, end=end)
-                nodes = _build_rain_nodes(bbox, spacing=node_deg)
+                nodes = build_rain_nodes(bbox, spacing=node_deg)
                 node_rainfall = await _fetch_rainfall_grid(
                     nodes=nodes, start=start, end=end, model=rain_model
                 )

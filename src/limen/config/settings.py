@@ -495,6 +495,10 @@ class Settings(BaseSettings):
     # MAF workflow. V1 default = False (no IoT). V1.5 will flip this when
     # the real sensor ingestion lands.
     enable_insitu: bool = False
+    # Rainfall sampling-node grid step (degrees) for the live MeteoFetch —
+    # each cell gets the series of its nearest node instead of one AOI-wide
+    # centroid series. 0 disables the grid (centroid-only).
+    meteo_rain_node_deg: float = Field(default=0.25, ge=0.0)
 
     # Provider credentials are read as *top-level* env vars (no nesting) so the
     # canonical names from each vendor's SDK keep working unchanged.
