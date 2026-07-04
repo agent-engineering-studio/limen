@@ -296,10 +296,11 @@ class ScoringSettings(BaseSettings):
 
     engine: ScoringEngineKind = ScoringEngineKind.DETERMINISTIC
     mode: ScoringMode = ScoringMode.CHAMPION_ONLY
-    # MLflow tracking — file:// for the dev default, postgresql:// for prod
+    # MLflow tracking — sqlite for the dev default (MLflow >=3.13 rejects the
+    # legacy ./mlruns file store), postgresql:// for prod
     # (the project's Postgres can host the MLflow backend, avoiding a
     # separate database). Artifacts go to the ObjectStore root by default.
-    mlflow_tracking_uri: str = "file:./mlruns"
+    mlflow_tracking_uri: str = "sqlite:///mlflow.db"
     mlflow_experiment: str = "limen-landslide"
     mlflow_registered_model: str = "limen-landslide-ml"
     mlflow_model_stage: Literal["Staging", "Production", "Archived"] = "Production"
