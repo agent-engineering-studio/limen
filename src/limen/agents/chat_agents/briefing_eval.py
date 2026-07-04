@@ -54,12 +54,12 @@ def allowed_numbers_from_payload(payload: Any) -> set[str]:
     def _walk(node: Any) -> None:
         if isinstance(node, bool):
             return
-        if isinstance(node, (int, float)):
+        if isinstance(node, int | float):
             _add(float(node))
         elif isinstance(node, dict):
             for v in node.values():
                 _walk(v)
-        elif isinstance(node, (list, tuple)):
+        elif isinstance(node, list | tuple):
             for v in node:
                 _walk(v)
 
