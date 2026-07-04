@@ -23,6 +23,11 @@ from limen.data.repos.pai_repo import PAI_CLASS_TO_NORM
 
 log = get_logger(__name__)
 
+# The Po-plain mosaic polygons run to millions of vertices: inserting and
+# subdividing one can exceed the pool's 30 s command_timeout. Same ceiling
+# as the bootstrap's batch aggregations.
+_STMT_TIMEOUT_S = 900.0
+
 
 @dataclass(frozen=True, slots=True)
 class FloodHazard:
