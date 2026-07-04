@@ -49,6 +49,12 @@ def _as_multipolygon(geom: BaseGeometry) -> MultiPolygon | None:
     return None
 
 
+# The mosaic has polygons with millions of vertices: inserting one (and
+# ST_Subdividing it into the companion) legitimately takes minutes — the
+# pool's default per-statement timeout killed the bootstrap mid-region.
+_STMT_TIMEOUT_S = 900.0
+
+
 async def upsert_many(items: Iterable[FloodHazard]) -> int:
     """Insert-or-update hydraulic-hazard polygons in a single transaction."""
     items_list = list(items)
@@ -79,11 +85,16 @@ async def upsert_many(items: Iterable[FloodHazard]) -> int:
                 item.hazard_class_norm,
                 multi,
                 attrs_json,
+                timeout=_STMT_TIMEOUT_S,
             )
             # Keep the subdivided companion (migration 014) in lockstep, in
             # the same transaction — the per-cell aggregation joins it
             # instead of the raw multi-million-vertex mosaic polygons.
-            await conn.execute("DELETE FROM flood_hazard_subdiv WHERE id = $1", item.id)
+            await conn.execute(
+                "DELETE FROM flood_hazard_subdiv WHERE id = $1",
+                item.id,
+                timeout=_STMT_TIMEOUT_S,
+            )
             await conn.execute(
                 """
                 INSERT INTO flood_hazard_subdiv (id, hazard_class, hazard_class_norm, geom)
@@ -93,6 +104,7 @@ async def upsert_many(items: Iterable[FloodHazard]) -> int:
                 WHERE id = $1
                 """,
                 item.id,
+                timeout=_STMT_TIMEOUT_S,
             )
     log.info("flood.upsert_many", count=len(items_list))
     return len(items_list)
