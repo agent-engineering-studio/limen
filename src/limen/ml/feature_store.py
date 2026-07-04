@@ -70,34 +70,38 @@ class _PositiveEvent:
 
 
 async def _load_positives(*, min_occurrence: datetime) -> list[_PositiveEvent]:
-    """Join IFFI events to the cells they fall in (PostGIS ST_Within)."""
+    """Join dated landslide events (e-ITALICA) to their containing cells.
+
+    The IFFI inventory carries no dates (occurrence_date is NULL across the
+    GeoServer opendata), so labels come from ``landslide_events`` — the
+    catalogue the §2.5 backtest validates against.
+    """
     async with acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT i.id AS iffi_id,
+            SELECT e.id AS event_id,
                    g.id AS cell_id,
                    g.aoi_id,
-                   i.occurrence_date,
+                   e.event_time,
                    ST_X(ST_Centroid(g.geom)) AS lon,
                    ST_Y(ST_Centroid(g.geom)) AS lat,
-                   i.geom
-            FROM iffi_landslides i
+                   e.geom
+            FROM landslide_events e
             JOIN grid_cells g
-              ON ST_Intersects(g.geom, i.geom)
-            WHERE i.occurrence_date IS NOT NULL
-              AND i.occurrence_date >= $1
-            ORDER BY i.occurrence_date
+              ON ST_Intersects(g.geom, e.geom)
+            WHERE e.event_time >= $1
+            ORDER BY e.event_time
             """,
-            min_occurrence.date(),
+            min_occurrence,
         )
     out: list[_PositiveEvent] = []
     for r in rows:
         out.append(
             _PositiveEvent(
-                iffi_id=str(r["iffi_id"]),
+                iffi_id=str(r["event_id"]),
                 cell_id=str(r["cell_id"]),
                 aoi_id=str(r["aoi_id"]),
-                occurrence_date=datetime.combine(r["occurrence_date"], datetime.min.time(), UTC),
+                occurrence_date=r["event_time"],
                 centroid_lonlat=(float(r["lon"]), float(r["lat"])),
                 geom=r["geom"],
             )
@@ -218,7 +222,7 @@ async def extract_training_samples(
                 cell_id=ev.cell_id,
                 valuation_time=ev.occurrence_date,
                 label=1,
-                label_source="iffi",
+                label_source="italica",
                 features=features,
                 split_block=block,
                 dataset_version_id=dataset_version_id,
