@@ -41,6 +41,20 @@ def _finite_or_none(value: float) -> float | None:
     return value if math.isfinite(value) else None
 
 
+def _nanmean_or_none(arr: Any) -> float | None:
+    """Mean of the finite values, or None when there are none.
+
+    Guarding first keeps np.nanmean from emitting "Mean of empty slice"
+    RuntimeWarnings on all-NaN slices — noise that reads like an error in
+    the bootstrap logs.
+    """
+    import numpy as np
+
+    if not np.any(~np.isnan(arr)):
+        return None
+    return _finite_or_none(float(np.nanmean(arr)))
+
+
 def _reproject_geom(geom: BaseGeometry, *, src_crs: Any, dst_crs: Any) -> BaseGeometry:
     """Reproject a shapely geometry from EPSG:4326 to the raster's CRS."""
     if src_crs == dst_crs:
@@ -136,10 +150,10 @@ def compute_cell_stats(
             out.append(
                 CellDemStats(
                     cell_id=cell_id,
-                    elevation_m=_finite_or_none(float(np.nanmean(arr))),
-                    slope_deg=_finite_or_none(float(np.nanmean(slope_arr))),
+                    elevation_m=_nanmean_or_none(arr),
+                    slope_deg=_nanmean_or_none(slope_arr),
                     aspect_deg=aspect_median,
-                    curvature=_finite_or_none(float(np.nanmean(curv_arr))),
+                    curvature=_nanmean_or_none(curv_arr),
                     pixel_count=n_valid,
                 )
             )
