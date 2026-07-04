@@ -29,6 +29,7 @@ from limen.cli.geodata import run as _run_geodata
 from limen.cli.geoserver_sync import run as _run_geoserver_sync
 from limen.cli.ingest_events import run as _run_ingest_events
 from limen.cli.ingest_kb import run as _run_ingest_kb
+from limen.cli.mcp_serve import run as _run_mcp_serve
 from limen.cli.migrate import run as _run_migrate
 from limen.cli.monitor_once import run as _run_monitor_once
 from limen.cli.seed import run as _run_seed
@@ -88,6 +89,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="load the ITALICA/e-ITALICA dated landslide catalogue (LIMEN_ITALICA_CSV)",
     )
     sub.add_parser(
+        "mcp-serve",
+        help="start the limen-ops MCP server (LIMEN_MCP_TRANSPORT=stdio|http)",
+    )
+    sub.add_parser(
         "ingest-kb",
         help="push the local corpus (papers + PAI + ISPRA + briefings) to the KG sidecar",
     )
@@ -134,6 +139,7 @@ def main(argv: list[str] | None = None) -> int:
         "ingest-kb": _run_ingest_kb,
         "geoserver-sync": _run_geoserver_sync,
         "ingest-events": _run_ingest_events,
+        "mcp-serve": _run_mcp_serve,
     }
     if args.command == "geodata":
         try:
