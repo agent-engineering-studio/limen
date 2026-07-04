@@ -163,3 +163,193 @@ html, body, #root {
   border-radius: 6px;
   padding: 10px;
 }
+
+/* --- nav header --- */
+.app-nav {
+  display: flex;
+  gap: 4px;
+  margin-left: 12px;
+}
+.app-nav a {
+  color: var(--text);
+  text-decoration: none;
+  font-size: 14px;
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+.app-nav a.on {
+  background: var(--accent);
+  color: #fff;
+}
+.app-nav a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* --- pagina "Come funziona" --- */
+.explainer-area {
+  grid-column: 1 / span 2;
+  overflow-y: auto;
+  background: var(--bg);
+}
+.explainer {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 24px 96px;
+}
+.explainer h2 {
+  font-size: 30px;
+  line-height: 1.2;
+  margin: 0.2em 0 0.4em;
+  text-wrap: balance;
+}
+.explainer h3 {
+  font-size: 19px;
+  margin: 1.8em 0 0.4em;
+}
+.explainer p,
+.explainer li {
+  max-width: 66ch;
+  line-height: 1.65;
+}
+.explainer code {
+  background: #eceef2;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.9em;
+}
+.exp-eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.exp-lede {
+  font-size: 18px;
+  color: #3d4654;
+}
+.exp-note {
+  font-size: 13.5px;
+  color: #5e6473;
+}
+
+/* simulatore */
+.sim {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 22px 24px;
+  margin: 28px 0;
+}
+.sim h3 {
+  margin-top: 0;
+}
+.sim-cells {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 12px 0 18px;
+}
+.sim-cells button {
+  flex: 1 1 240px;
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font: 600 14px/1.4 inherit;
+  cursor: pointer;
+}
+.sim-cells button.sel {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.sim-cells button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.sim-cells small {
+  display: block;
+  font-weight: 400;
+  color: #5e6473;
+}
+.sim-ctrl {
+  display: grid;
+  grid-template-columns: minmax(170px, 220px) 1fr 70px;
+  gap: 8px 14px;
+  align-items: center;
+  margin: 8px 0;
+}
+.sim-ctrl label {
+  font-size: 14px;
+}
+.sim-ctrl input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.sim-ctrl output {
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  text-align: right;
+}
+.sim-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin: 18px 0 10px;
+}
+.sim-kpis > div {
+  background: var(--bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.sim-kpis span {
+  display: block;
+  font-size: 11.5px;
+  color: #5e6473;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.sim-kpis b {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+.sim-kpis .sim-risk {
+  border-color: var(--accent);
+}
+.sim-ladder {
+  display: flex;
+  gap: 4px;
+  margin: 12px 0;
+}
+.sim-ladder div {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 4px;
+  border-radius: 4px;
+  color: #2b2417;
+}
+.sim-ladder div:last-child {
+  color: #fff;
+}
+.sim-ladder .on {
+  outline: 3px solid var(--text);
+  outline-offset: 2px;
+}
+.sim-verdict {
+  font-size: 15px;
+  margin-top: 12px;
+}
+@media (max-width: 640px) {
+  .sim-ctrl {
+    grid-template-columns: 1fr 70px;
+  }
+  .sim-ctrl label {
+    grid-column: 1 / -1;
+  }
+}

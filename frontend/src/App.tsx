@@ -1,9 +1,10 @@
 import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type maplibregl from "maplibre-gl";
 
 import AlertList from "./components/AlertList";
 import CellPopup from "./components/CellPopup";
+import ExplainerPage from "./components/ExplainerPage";
 import LegendPanel from "./components/LegendPanel";
 import RiskMap from "./components/RiskMap";
 import TimelineSlider from "./components/TimelineSlider";
@@ -13,6 +14,16 @@ import type { AlertItem } from "./types";
 export function App(): JSX.Element {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [selectedCell, setSelectedCell] = useState<string | null>(null);
+  const [page, setPage] = useState(
+    window.location.hash === "#/come-funziona" ? "explainer" : "map",
+  );
+
+  useEffect(() => {
+    const onHash = (): void =>
+      setPage(window.location.hash === "#/come-funziona" ? "explainer" : "map");
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   const flyToAlert = useCallback((alert: AlertItem) => {
     // We don't have per-cell coordinates from /api/alerts; fly to the
@@ -34,6 +45,14 @@ export function App(): JSX.Element {
         <span className="subtitle">
           Mappa pubblica del rischio frane — copertura nazionale
         </span>
+        <nav className="app-nav" aria-label="Navigazione">
+          <a href="#/" className={page === "map" ? "on" : ""}>
+            Mappa
+          </a>
+          <a href="#/come-funziona" className={page === "explainer" ? "on" : ""}>
+            Come funziona
+          </a>
+        </nav>
         <div className="auth-controls">
           <Show when="signed-out">
             <SignInButton />
@@ -45,6 +64,12 @@ export function App(): JSX.Element {
         </div>
       </header>
 
+      {page === "explainer" ? (
+        <div className="explainer-area">
+          <ExplainerPage />
+        </div>
+      ) : (
+        <>
       <aside className="sidebar" aria-label="Pannello laterale">
         <LegendPanel />
         {config.enableTimeline ? <TimelineSlider /> : null}
@@ -56,6 +81,8 @@ export function App(): JSX.Element {
       </aside>
 
       <RiskMap mapRef={mapRef} onCellClick={setSelectedCell} />
+        </>
+      )}
     </div>
   );
 }
