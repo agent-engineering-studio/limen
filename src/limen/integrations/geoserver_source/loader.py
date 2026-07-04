@@ -16,6 +16,7 @@ import asyncpg
 from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.data.db import acquire, register_postgis
+from limen.data.repos.dataset_versions_repo import content_hash, find, record
 from limen.data.repos.flood_repo import FloodHazard
 from limen.data.repos.flood_repo import upsert_many as flood_upsert
 from limen.data.repos.iffi_repo import IFFILandslide
@@ -245,7 +246,25 @@ async def sync_geoserver_source_for_aoi(aoi_id: str) -> dict[str, int]:
 
     iffi_n = await iffi_upsert(iffi_items)
     pai_n = await pai_upsert(pai_items)
-    flood_n = await flood_upsert(flood_items)
+    # Flood upsert is the slow step (ST_Subdivide over Po-plain mega-polygons,
+    # minutes per region) and the mosaic is static: skip it entirely when the
+    # fetched payload is byte-identical to the last synced version (the same
+    # dataset_versions idempotency pattern as the ISPRA sync jobs).
+    flood_n = 0
+    if flood_items:
+        flood_version = content_hash(
+            [f"{i.id}|{i.hazard_class}".encode() + i.geom.wkb for i in flood_items]
+        )
+        if await find("geoserver", f"flood:{aoi_id}", flood_version):
+            log.info("geoserver_source.flood_unchanged", aoi_id=aoi_id, items=len(flood_items))
+        else:
+            flood_n = await flood_upsert(flood_items)
+            await record(
+                source="geoserver",
+                dataset=f"flood:{aoi_id}",
+                version=flood_version,
+                metadata={"items": len(flood_items)},
+            )
     log.info(
         "geoserver_source.synced",
         aoi_id=aoi_id,
