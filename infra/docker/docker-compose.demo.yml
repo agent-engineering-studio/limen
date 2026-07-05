@@ -106,6 +106,10 @@ services:
       # need no such split — the key/base are identical everywhere.
       LLM__OLLAMA_BASE_URL: ${API_LLM_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       LLM__OLLAMA_MODEL: ${LLM__OLLAMA_MODEL:-qwen3.6:latest}
+      # Champion/challenger: shadow runs the ML model in parallel (writes
+      # model_runs only; alerts stay with the deterministic champion).
+      SCORING__MODE: ${SCORING__MODE:-champion_only}
+      SCORING__MLFLOW_TRACKING_URI: sqlite:////app/mlflow.db
       LLM__OLLAMA_API_KEY: ${LLM__OLLAMA_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     extra_hosts:
@@ -117,6 +121,11 @@ services:
       - limen-objects:/var/lib/limen/objects
       # DTM / shared vector data (read-only). Same folder GeoServer serves.
       - ${GEOSERVER_SHAPEFILE_DIR:-../../../mcp-geoserver/data}:/data:ro
+      # MLflow registry for the shadow challenger. mlruns mounts at the SAME
+      # absolute path as on the host: the registry stores absolute artifact
+      # URIs at log time. Missing files ⇒ challenger degrades to None.
+      - ../../mlflow.db:/app/mlflow.db:ro
+      - ../../mlruns:/Users/gzileni/Git/limen/mlruns:ro
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/ready', timeout=3).status==200 else 1)\""]
       interval: 15s

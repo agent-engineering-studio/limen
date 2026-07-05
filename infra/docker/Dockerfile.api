@@ -36,7 +36,9 @@ WORKDIR /app
 # Resolve and lock the runtime dependency set into /app/.venv.
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
-RUN uv sync --frozen --no-dev --no-editable
+# `--group ml` ships lightgbm+mlflow+shap so the shadow challenger can load
+# in-container; without it resolve_challenger degrades to None (logged).
+RUN uv sync --frozen --no-dev --no-editable --group ml
 
 # ---------------------------------------------------------------------------
 # Stage 2 — runtime
