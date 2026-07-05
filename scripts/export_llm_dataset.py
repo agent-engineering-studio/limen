@@ -32,10 +32,9 @@ INSTRUCTION = (
 
 
 async def main() -> None:
-    async with lifespan_pool():
-        async with acquire() as conn:
-            aois = await conn.fetch(
-                """
+    async with lifespan_pool(), acquire() as conn:
+        aois = await conn.fetch(
+            """
                 WITH latest AS (
                     SELECT g.aoi_id, MAX(ra.computed_at) AS ts
                     FROM risk_assessments ra JOIN grid_cells g ON g.id = ra.cell_id
@@ -43,53 +42,52 @@ async def main() -> None:
                 )
                 SELECT l.aoi_id, l.ts FROM latest l ORDER BY l.aoi_id
                 """
-            )
-            examples: list[dict[str, str]] = []
-            for a in aois:
-                rows = await conn.fetch(
-                    """
+        )
+        examples: list[dict[str, str]] = []
+        for a in aois:
+            rows = await conn.fetch(
+                """
                     SELECT ra.cell_id, ra.score, ra.class, ra.explanation
                     FROM risk_assessments ra JOIN grid_cells g ON g.id = ra.cell_id
                     WHERE g.aoi_id = $1 AND ra.computed_at = $2
                     ORDER BY ra.score DESC
                     """,
-                    a["aoi_id"],
-                    a["ts"],
-                )
-                if not rows:
-                    continue
-                expl = rows[0]["explanation"]
-                expl = json.loads(expl) if isinstance(expl, str) else (expl or {})
-                briefing = expl.get("briefing_it")
-                if not briefing:
-                    continue
-                by_level: dict[str, int] = {}
-                for r in rows:
-                    by_level[str(r["class"])] = by_level.get(str(r["class"]), 0) + 1
-                payload = {
-                    "aoi_id": str(a["aoi_id"]),
-                    "valutato_il": a["ts"].isoformat(),
-                    "celle_totali": len(rows),
-                    "distribuzione_classi": by_level,
-                    "celle_high_o_superiori": by_level.get("High", 0)
-                    + by_level.get("VeryHigh", 0),
-                    "top_celle": [
-                        {
-                            "cell_id": str(r["cell_id"]),
-                            "score": round(float(r["score"]), 2),
-                            "classe": str(r["class"]),
-                        }
-                        for r in rows[:5]
-                    ],
-                    "analisi": expl.get("analysis"),
-                }
-                examples.append(
+                a["aoi_id"],
+                a["ts"],
+            )
+            if not rows:
+                continue
+            expl = rows[0]["explanation"]
+            expl = json.loads(expl) if isinstance(expl, str) else (expl or {})
+            briefing = expl.get("briefing_it")
+            if not briefing:
+                continue
+            by_level: dict[str, int] = {}
+            for r in rows:
+                by_level[str(r["class"])] = by_level.get(str(r["class"]), 0) + 1
+            payload = {
+                "aoi_id": str(a["aoi_id"]),
+                "valutato_il": a["ts"].isoformat(),
+                "celle_totali": len(rows),
+                "distribuzione_classi": by_level,
+                "celle_high_o_superiori": by_level.get("High", 0) + by_level.get("VeryHigh", 0),
+                "top_celle": [
                     {
-                        "instruction": INSTRUCTION,
-                        "input": json.dumps(payload, ensure_ascii=False),
-                        "output": str(briefing),
+                        "cell_id": str(r["cell_id"]),
+                        "score": round(float(r["score"]), 2),
+                        "classe": str(r["class"]),
                     }
-                )
+                    for r in rows[:5]
+                ],
+                "analisi": expl.get("analysis"),
+            }
+            examples.append(
+                {
+                    "instruction": INSTRUCTION,
+                    "input": json.dumps(payload, ensure_ascii=False),
+                    "output": str(briefing),
+                }
+            )
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(examples, ensure_ascii=False, indent=2), encoding="utf-8")
