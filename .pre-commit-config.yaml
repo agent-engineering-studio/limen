@@ -10,12 +10,20 @@ repos:
       - id: mixed-line-ending
         args: ["--fix=lf"]
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.7.4
+  # ruff runs from the project venv (single source of truth with `make
+  # lint`/CI) — a pinned mirror version drifts and disagrees on formatting.
+  - repo: local
     hooks:
       - id: ruff
-        args: ["--fix"]
+        name: ruff check (project venv)
+        entry: uv run ruff check --fix
+        language: system
+        types: [python]
       - id: ruff-format
+        name: ruff format (project venv)
+        entry: uv run ruff format
+        language: system
+        types: [python]
 
   # mypy runs in the project's uv venv (via `uv run`), NOT an isolated
   # pre-commit env: --strict resolves the real third-party stubs
