@@ -201,3 +201,24 @@ provisionate:
 
 VPS self-hosted + Docker. Nessun cloud provider (no AWS/Azure/GCP).
 L'object storage per i backup è S3-compatibile (R2, B2, MinIO).
+
+## Backup e ripristino del training ML
+
+Il dataset di training (37k+ campioni con pioggia CERRA, ~13 h di replay) e
+il modello addestrato (registro MLflow) sono artefatti costosi che NON stanno
+in git. Prima di migrare macchina o dopo un retrain riuscito:
+
+```bash
+make dump-training      # crea data/backups/{training_samples,mlflow}_YYYY-MM-DD.*
+```
+
+Sulla macchina nuova (dopo `make init`):
+
+```bash
+make restore-training DUMP=data/backups/training_samples_YYYY-MM-DD.dump \
+                      MLTGZ=data/backups/mlflow_YYYY-MM-DD.tgz
+```
+
+La cartella `data/backups/` è gitignored: va trasportata a parte (chiavetta,
+MinIO, asset privato). La produzione NON dipende dal training: il champion
+deterministico gira completo con il solo `make init`.

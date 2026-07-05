@@ -185,13 +185,24 @@ Completati di recente:
   e-ITALICA e pioggia di backtest CERRA.
 - **Componente H (idraulica)** attivo dal mosaico idraulica ISPRA via
   GeoServer (~132k celle in zona di pericolosità idraulica).
-- **Autenticazione Clerk** attiva sulla SPA Vite (`@clerk/react`:
-  sign-in/sign-up/user button).
+- **Autenticazione Clerk** attiva: sign-in sulla SPA Vite (`@clerk/react`) +
+  validazione JWT sugli endpoint protetti FastAPI (`CLERK__ENABLED`).
+- **Sfidante ML addestrato** su 37k campioni (frane e-ITALICA + pioggia
+  antecedente CERRA per campione): **AUC-PR 0.60 vs 0.28 del motore
+  deterministico** sulla stessa partizione spaziale e la stessa pioggia
+  (`limen train`; registro MLflow; promozione solo manuale). Backup/ripristino
+  del dataset e del modello: `make dump-training` / `make restore-training`.
+- **MCP `limen-ops`** (`limen mcp-serve`): rischio, allerte e run del
+  workflow esposti come tool per gateway agentici (OpenClaw, Claude Desktop).
+- **Pagina divulgativa** «Come funziona» nel frontend (`#/come-funziona`)
+  con simulatore che usa la formula reale di produzione.
+- **Cartella `llm-training/`**: dataset (assessment → briefing) in formato
+  Alpaca + guida passo-passo per l'eventuale fine-tuning con LLaMA-Factory.
 
 Prossimi passi:
 
-- **Validazione JWT Clerk lato FastAPI** per gli endpoint protetti (il
-  frontend Clerk è già attivo).
+- **Shadow mode nazionale** del challenger ML (`SCORING__MODE=shadow`).
+- **Pipeline event-driven** (radar/nowcast → scoring mirato sul footprint).
 
 ---
 

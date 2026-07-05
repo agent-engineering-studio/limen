@@ -152,6 +152,24 @@ backtest:
 ingest-events:
 	$(UV) run limen ingest-events
 
+# ML training artefacts: the enriched dataset costs ~13h of CERRA replay and
+# the trained model lives in MLflow — dump both to portable files so a new
+# machine restores instead of recomputing. Files land in data/backups/
+# (gitignored): carry them over manually (USB, MinIO, private asset).
+dump-training:
+	mkdir -p data/backups
+	docker exec limen-postgres pg_dump -U limen -d limen -t training_samples --data-only -Fc > data/backups/training_samples_$$(date +%F).dump
+	tar czf data/backups/mlflow_$$(date +%F).tgz mlflow.db mlruns
+	@ls -lah data/backups/
+
+restore-training:            # usage: make restore-training DUMP=data/backups/training_samples_YYYY-MM-DD.dump [MLTGZ=data/backups/mlflow_YYYY-MM-DD.tgz]
+	@test -n "$(DUMP)" || { echo "usa: make restore-training DUMP=data/backups/training_samples_YYYY-MM-DD.dump"; ls data/backups/ 2>/dev/null; exit 1; }
+	docker exec limen-postgres psql -U limen -d limen -c "TRUNCATE training_samples;"
+	docker exec -i limen-postgres pg_restore -U limen -d limen --data-only < $(DUMP)
+	@test -z "$(MLTGZ)" || tar xzf $(MLTGZ)
+	@echo "[restore-training] done"
+
+
 # Full reproducible data init for a fresh machine (all 20 regions + ITALICA
 # truth set auto-downloaded from Zenodo). Idempotent: safe to re-run.
 init:
