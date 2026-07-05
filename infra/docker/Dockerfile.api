@@ -58,6 +58,7 @@ RUN apt-get update \
         libgdal32 \
         libgeos-c1v5 \
         libproj25 \
+        libgomp1 \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system limen \

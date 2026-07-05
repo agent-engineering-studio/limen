@@ -123,9 +123,10 @@ services:
       - ${GEOSERVER_SHAPEFILE_DIR:-../../../mcp-geoserver/data}:/data:ro
       # MLflow registry for the shadow challenger. mlruns mounts at the SAME
       # absolute path as on the host: the registry stores absolute artifact
-      # URIs at log time. Missing files ⇒ challenger degrades to None.
+      # URIs at log time. rw because model load writes registered_model_meta
+      # into the artifact dir. Missing files ⇒ challenger degrades to None.
       - ../../mlflow.db:/app/mlflow.db:ro
-      - ../../mlruns:/Users/gzileni/Git/limen/mlruns:ro
+      - ../../mlruns:/Users/gzileni/Git/limen/mlruns
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/ready', timeout=3).status==200 else 1)\""]
       interval: 15s

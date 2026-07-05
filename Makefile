@@ -15,7 +15,9 @@ COMPOSE_DEMO := infra/docker/docker-compose.demo.yml
 COMPOSE_OBS  := infra/docker/docker-compose.observability.yml
 COMPOSE_GEOSERVER := infra/docker/docker-compose.geoserver.yml
 # Unified stack: operational services + GeoServer, one project, one network.
-COMPOSE_ALL  := -f $(COMPOSE_DEMO) -f $(COMPOSE_GEOSERVER) -p limen
+# Repo-root .env feeds compose ${VAR} interpolation (e.g. SCORING__MODE);
+# without --env-file compose only reads infra/docker/.env, which doesn't exist.
+COMPOSE_ALL  := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_DEMO) -f $(COMPOSE_GEOSERVER) -p limen
 UP_PROFILES  := --profile geoserver --profile frontend
 
 .PHONY: help install \
