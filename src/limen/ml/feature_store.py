@@ -27,6 +27,7 @@ from limen.core.logging import get_logger
 from limen.core.models.risk import (
     CellFeatureBundle,
     DynamicInputs,
+    RainfallSample,
     RainfallSeries,
     StaticFactors,
 )
@@ -176,11 +177,33 @@ def features_to_bundle(
     static = StaticFactors(
         cell_id=cell_id, **{k: v for k, v in static_dict.items() if v is not None}
     )
+    # Rebuild an hourly rainfall series from the stored antecedent aggregates
+    # so the V1 baseline scores the same water the ML trains on (fair
+    # champion/challenger comparison): last 24 h at rain_24h's mean rate, the
+    # 24-72 h tail at its own mean rate. api_30 flows straight through.
+    rain = dict(features.get("rain") or {})
+    samples: list[RainfallSample] = []
+    r24 = float(rain.get("rain_24h_mm") or 0.0)
+    r72 = float(rain.get("rain_72h_mm") or 0.0)
+    tail = max(0.0, r72 - r24)
+    for i in range(72):
+        rate = (r24 / 24.0) if i < 24 else (tail / 48.0)
+        if rate > 0:
+            samples.append(
+                RainfallSample(
+                    timestamp=valuation_time - timedelta(hours=i + 1), precipitation_mm=rate
+                )
+            )
+    api_30 = rain.get("rain_30d_mm")
     return CellFeatureBundle(
         aoi_id=aoi_id,
         cell_id=cell_id,
         static=static,
-        dynamic=DynamicInputs(valuation_time=valuation_time, rainfall=RainfallSeries()),
+        dynamic=DynamicInputs(
+            valuation_time=valuation_time,
+            rainfall=RainfallSeries(samples=tuple(samples)),
+            api_30_mm=float(api_30) if api_30 is not None else None,
+        ),
     )
 
 

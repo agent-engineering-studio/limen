@@ -7,6 +7,7 @@ from limen.core.logging import get_logger
 from limen.data.db import lifespan_pool
 from limen.data.migrate import run_migrations
 from limen.ml.feature_store import extract_training_samples
+from limen.ml.rain_features import enrich_rain_features
 from limen.ml.train import run_training
 
 log = get_logger(__name__)
@@ -19,6 +20,8 @@ async def run() -> int:
         await run_migrations()
         written = await extract_training_samples(settings=settings)
         log.info("train.samples_extracted", count=written)
+        enriched = await enrich_rain_features()
+        log.info("train.rain_enriched", count=enriched)
         if written == 0:
             log.warning(
                 "train.no_samples",

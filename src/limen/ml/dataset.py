@@ -25,6 +25,12 @@ CANONICAL_FEATURES: tuple[str, ...] = (
     "insar.velocity_mmy",
     "insar.accel_mmy2",
     "insar.scatterer_count",
+    # Antecedent rainfall at the sample's (cell, time) — CERRA replay
+    # (ml/rain_features.py). Absent (pre-enrichment rows) degrades to 0.
+    "rain.rain_24h_mm",
+    "rain.rain_72h_mm",
+    "rain.rain_30d_mm",
+    "rain.max_i_24h_mmh",
 )
 
 
