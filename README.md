@@ -80,10 +80,12 @@ La stessa interfaccia `CellFeatureBundle` accetta anche il motore ML V2.
 | **Workflow MAF (V1)** | AreaResolver → StaticFactors → MeteoFetch → SeismicCheck → FireCheck → \[SensorFetch?\] → RiskScoring → EscalationGate → RiskAnalyst → Briefing → PersistResult → AlertDispatch | one-shot CLI | `agents/` + `limen monitor-once` |
 | **Provider LLM** | precedenza `LLM__PROVIDER` > Anthropic > OpenAI > Foundry > Ollama; il resolver salta i provider cloud senza SDK e cade su Ollama (solo httpx). Briefing in italiano; RiskAnalyst restituisce JSON tipizzato. | risolto all'avvio | `agents/llm_factory/resolve_llm_factory` |
 | **API HTTP** | `/health` + `/ready`, `POST /api/monitor/{aoi}`, `GET /api/aoi/{id}/risk/latest`, `GET /api/cell/{id}/breakdown`, `GET /api/aoi`, `GET /api/alerts`, `/api/tiles/...`, OpenAPI su `/docs` e `/redoc` | FastAPI / uvicorn | `api/` + `limen serve` |
-| **Job periodici** | workflow MAF orario, sync ISPRA settimanale, cache cleanup | APScheduler in-process | `api/jobs/` |
+| **Job periodici** | workflow MAF orario (con shadow ML), **sweep previsionale** ogni 6 h, sync ISPRA settimanale, drift monitor, cache cleanup | APScheduler in-process | `api/jobs/` |
+| **Forecast previsionale** | scoring a `now+H` ore con pioggia prevista Open-Meteo (osservata+prevista nella stessa finestra); champion + challenger ML sulle stesse celle; report on-demand o alert "PREVISIONE" schedulato con dedup (AOI, orizzonte) | `limen forecast` / job ogni `FORECAST__INTERVAL_HOURS` | `agents/workflows/forecast.py` + `api/jobs/forecast_monitoring.py` |
+| **MCP `limen-ops`** | `tool_risk_summary`, `tool_top_risk_cells`, `tool_cell_breakdown`, `tool_recent_alerts`, `tool_run_monitor` (admin, fail-closed su `MCP_ADMIN_TOKEN`) per gateway agentici (OpenClaw, Claude Desktop) | servizio compose `mcp`, HTTP `127.0.0.1:8766/mcp` | `mcp/` + `limen mcp-serve` |
 | **Vector tiles** | matview `mv_latest_risk` (grid_cells ⨝ ultimo risk_assessment per cella), rinfrescata da `refresh_mv_latest_risk()`; servita da **pg_tileserv** | per ciclo di monitoraggio | migrazione `007_map_views.sql` |
 | **Frontend** | SPA Vite + TS + React + **MapLibre GL JS**: `RiskMap` (vector tiles, palette 5 classi ColorBrewer YlOrRd), `LegendPanel` (etichette + range, non solo colore), `AlertList`, `CellPopup`, `TimelineSlider`; overlay PMTiles PAI/IFFI opt-in | pubblico, read-only | `frontend/` |
-| **Notifiche** | Protocol `NotificationChannel` + Telegram / MQTT / Email; dispatcher in parallelo con isolamento eccezioni per canale; dedup su `alert_dispatches` | per tick del workflow | `notifications/` |
+| **Notifiche** | Protocol `NotificationChannel` + Telegram / MQTT / Email / **Webhook** (POST JSON a gateway agentici, es. OpenClaw `/hooks` con bearer token); dispatcher in parallelo con isolamento eccezioni per canale; dedup su `alert_dispatches` | per tick del workflow | `notifications/` |
 
 ---
 
@@ -137,7 +139,11 @@ delimitatore.
 | `SCHEDULER__CACHE_CLEANUP` | `apscheduler` | `pg_cron` o `apscheduler`. **Usa APScheduler su Neon.** |
 | `LLM__PROVIDER` | _vuoto_ | Override: `anthropic` / `openai` / `foundry` / `ollama`. |
 | `LLM__OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama host (da container: `host.docker.internal`). |
-| `LLM__OLLAMA_MODEL` | `qwen2.5` | Modello Ollama (es. `qwen3.6:latest`). |
+| `LLM__OLLAMA_MODEL` | `qwen3.6:latest` | Modello Ollama unico per tutti i ruoli agente. |
+| `SCORING__MODE` | `champion_only` | `shadow` fa girare il challenger ML in parallelo (scrive solo `model_runs`). |
+| `FORECAST__ENABLED` | `true` | Sweep previsionale schedulato; `FORECAST__HORIZON_HOURS` (48), `__INTERVAL_HOURS` (6), `__MIN_LEVEL` (High). |
+| `NOTIFICATIONS__WEBHOOK__URL` | _vuoto_ | Gateway agentico (OpenClaw `/hooks`); `__TOKEN` per il bearer. |
+| `MCP_ADMIN_TOKEN` | _vuoto_ | Abilita `tool_run_monitor` sull'MCP; assente = disabilitato (fail-closed). |
 | `GEOSERVER_SOURCE__DB_DSN` | _vuoto_ | DSN del PostGIS di mcp-geoserver (IFFI + PAI). |
 | `LIMEN_DEM_RASTER` | _vuoto_ | GeoTIFF DTM per lo slope (opt-in). |
 | `LIMEN_ITALICA_CSV` | _vuoto_ | CSV e-ITALICA locale; se assente, auto-download da Zenodo. |
@@ -151,8 +157,10 @@ Vedi [`.env.example`](./.env.example) per l'elenco completo con esempi.
 
 `aoi`, `grid_cells`, `cell_static_factors`, `iffi_landslides`,
 `pai_hazard`, `landslide_events` (catalogo eventi datati),
-`risk_assessments`, `norm_stats`, `raster_refs`, `app_cache`,
-`alert_dispatches`, `seismic_events`, `fire_perimeters`, tabelle sensori,
+`risk_assessments`, `model_runs` (predizioni del challenger in shadow),
+`training_samples` (feature store ML), `norm_stats`, `raster_refs`,
+`app_cache`, `alert_dispatches`, `forecast_dispatches` (dedup alert
+previsionali), `seismic_events`, `fire_perimeters`, tabelle sensori,
 `schema_migrations`. Tutte le geometrie in EPSG:4326; distanze/aree
 calcolate in EPSG:3035 (LAEA Europe). Migrazioni SQL immutabili in
 `src/limen/data/migrations/NNN_*.sql`.
@@ -214,7 +222,7 @@ Completati di recente:
 - **Cartella `llm-training/`**: dataset (assessment → briefing) in formato
   Alpaca + guida passo-passo per l'eventuale fine-tuning con LLaMA-Factory.
 
-- **Pipeline event-driven** (`FORECAST__ENABLED=true`): sweep previsionale
+- **Pipeline event-driven** (attiva di default, opt-out `FORECAST__ENABLED=false`): sweep previsionale
   schedulato a `now+48h` con pioggia prevista; celle a livello ≥
   `FORECAST__MIN_LEVEL` fanno partire un alert **previsionale** sugli stessi
   canali (webhook/OpenClaw, Telegram…), etichettato "PREVISIONE", riassunto

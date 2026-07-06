@@ -486,11 +486,11 @@ class AlertSettings(BaseSettings):
 
 
 class ForecastSettings(BaseSettings):
-    """Scheduled predictive runs (event-driven pipeline). OFF by default."""
+    """Scheduled predictive runs (event-driven pipeline). ON by default."""
 
     model_config = SettingsConfigDict(extra="ignore")
 
-    enabled: bool = False
+    enabled: bool = True
     # Predictive horizon: score at now + this many hours with forecast rain.
     horizon_hours: int = Field(default=48, ge=1, le=384)
     # How often the scheduled job re-runs the forecast sweep.

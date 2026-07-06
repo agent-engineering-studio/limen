@@ -110,7 +110,7 @@ services:
       # model_runs only; alerts stay with the deterministic champion).
       SCORING__MODE: ${SCORING__MODE:-champion_only}
       # Event-driven predictive sweep (forecast rain → predictive alerts).
-      FORECAST__ENABLED: ${FORECAST__ENABLED:-false}
+      FORECAST__ENABLED: ${FORECAST__ENABLED:-true}
       FORECAST__HORIZON_HOURS: ${FORECAST__HORIZON_HOURS:-48}
       FORECAST__INTERVAL_HOURS: ${FORECAST__INTERVAL_HOURS:-6}
       FORECAST__MIN_LEVEL: ${FORECAST__MIN_LEVEL:-High}
