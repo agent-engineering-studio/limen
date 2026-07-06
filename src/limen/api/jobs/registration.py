@@ -20,6 +20,7 @@ from limen.api.jobs.geodata_export import run_geodata_export_job
 from limen.api.jobs.hourly_monitoring import run_hourly_monitoring
 from limen.api.jobs.iot_partition_rollover import run_iot_partition_rollover_job
 from limen.api.jobs.iot_rollup import run_iot_rollup_job
+from limen.api.jobs.nowcast_monitoring import run_nowcast_monitoring
 from limen.api.jobs.weekly_idrogeo_sync import run_weekly_idrogeo_sync
 from limen.config.settings import SchedulerBackend
 from limen.core.logging import get_logger
@@ -29,6 +30,7 @@ log = get_logger(__name__)
 JOB_HOURLY_MONITORING = "limen-hourly-monitoring"
 JOB_FORECAST_MONITORING = "limen-forecast-monitoring"
 JOB_DAILY_REPORT = "limen-daily-report"
+JOB_NOWCAST_MONITORING = "limen-nowcast-monitoring"
 JOB_WEEKLY_IDROGEO = "limen-weekly-idrogeo"
 JOB_CACHE_CLEANUP = "limen-cache-cleanup"
 JOB_IOT_ROLLUP = "limen-iot-rollup"
@@ -86,6 +88,22 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
             "scheduler.registered",
             job=JOB_DAILY_REPORT,
             hour_utc=deps.settings.report.hour_utc,
+        )
+
+    if deps.settings.nowcast.enabled:
+        await scheduler.add_schedule(
+            run_nowcast_monitoring,
+            args=(deps,),
+            trigger=IntervalTrigger(minutes=deps.settings.nowcast.interval_minutes),
+            id=JOB_NOWCAST_MONITORING,
+            conflict_policy=ConflictPolicy.replace,
+        )
+        registered.append(JOB_NOWCAST_MONITORING)
+        log.info(
+            "scheduler.registered",
+            job=JOB_NOWCAST_MONITORING,
+            interval_minutes=deps.settings.nowcast.interval_minutes,
+            min_intensity_mmh=deps.settings.nowcast.min_intensity_mmh,
         )
 
     if cfg.enable_weekly_idrogeo:

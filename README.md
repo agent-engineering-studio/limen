@@ -81,7 +81,8 @@ La stessa interfaccia `CellFeatureBundle` accetta anche il motore ML V2.
 | **Workflow MAF (V1)** | AreaResolver → StaticFactors → MeteoFetch → SeismicCheck → FireCheck → \[SensorFetch?\] → RiskScoring → EscalationGate → RiskAnalyst → Briefing → PersistResult → AlertDispatch | one-shot CLI | `agents/` + `limen monitor-once` |
 | **Provider LLM** | precedenza `LLM__PROVIDER` > Anthropic > OpenAI > Foundry > Ollama; il resolver salta i provider cloud senza SDK e cade su Ollama (solo httpx). Briefing in italiano; RiskAnalyst restituisce JSON tipizzato. | risolto all'avvio | `agents/llm_factory/resolve_llm_factory` |
 | **API HTTP** | `/health` + `/ready`, `POST /api/monitor/{aoi}`, `GET /api/aoi/{id}/risk/latest`, `GET /api/cell/{id}/breakdown`, `GET /api/aoi`, `GET /api/alerts`, `/api/tiles/...`, OpenAPI su `/docs` e `/redoc` | FastAPI / uvicorn | `api/` + `limen serve` |
-| **Job periodici** | workflow MAF orario (con shadow ML), **sweep previsionale** ogni 6 h, sync ISPRA settimanale, drift monitor, cache cleanup | APScheduler in-process | `api/jobs/` |
+| **Job periodici** | workflow MAF orario (con shadow ML), **sweep previsionale** ogni 6 h, **nowcast radar DPC** ogni 15 min, report nazionale giornaliero, sync ISPRA settimanale, drift monitor, cache cleanup | APScheduler in-process | `api/jobs/` |
+| **Radar DPC (nowcast)** | SRI nazionale 1 km / 5 min (piattaforma radar DPC, CC-BY-SA): pioggia ≥ `NOWCAST__MIN_INTENSITY_MMH` su una regione ⇒ il workflow di quella AOI parte subito invece di aspettare il tick orario (cooldown 45 min; alert dal percorso operativo normale) | poll ogni `NOWCAST__INTERVAL_MINUTES` | `integrations/dpc/` + `api/jobs/nowcast_monitoring.py` |
 | **Forecast previsionale** | scoring a `now+H` ore con pioggia prevista Open-Meteo (osservata+prevista nella stessa finestra); champion + challenger ML sulle stesse celle; report on-demand o alert "PREVISIONE" schedulato con dedup (AOI, orizzonte) | `limen forecast` / job ogni `FORECAST__INTERVAL_HOURS` | `agents/workflows/forecast.py` + `api/jobs/forecast_monitoring.py` |
 | **MCP `limen-ops`** | `tool_risk_summary`, `tool_top_risk_cells`, `tool_cell_breakdown`, `tool_recent_alerts`, `tool_national_report`, `tool_run_monitor` (admin, fail-closed su `MCP_ADMIN_TOKEN`) per gateway agentici (OpenClaw, Claude Desktop) | servizio compose `mcp`, HTTP `127.0.0.1:8766/mcp` | `mcp/` + `limen mcp-serve` |
 | **Report nazionale giornaliero** | quadro aggregato 20 regioni (riepilogo per regione, top celle nazionali, top ML shadow, conteggi alert 24h) reso in italiano deterministico e spedito ogni mattina sui canali di notifica | cron `REPORT__HOUR_UTC` (default 06 UTC) | `api/jobs/daily_report.py` + `tool_national_report` |
@@ -230,10 +231,12 @@ Completati di recente:
   canali (webhook/OpenClaw, Telegram…), etichettato "PREVISIONE", riassunto
   deterministico, dedup per (AOI, orizzonte) separata dagli alert operativi.
 
+- **Nowcast radar DPC** (attivo di default): l'SRI a 1 km della rete radar
+  nazionale fa da innesco a orizzonte breve — pioggia intensa vista dal
+  radar ⇒ scoring immediato della regione colpita.
+
 Prossimi passi:
 
-- **Radar/nowcast DPC** come sorgente di innesco a orizzonte breve
-  (la sweep previsionale odierna usa il forecast Open-Meteo).
 - **Confronto shadow** challenger vs champion su eventi reali (dopo qualche
   settimana di `model_runs` accumulati).
 

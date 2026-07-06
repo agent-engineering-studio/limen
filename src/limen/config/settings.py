@@ -504,6 +504,23 @@ class ForecastSettings(BaseSettings):
     cell_limit: int | None = None
 
 
+class NowcastSettings(BaseSettings):
+    """DPC radar (SRI) nowcast trigger. ON by default."""
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    enabled: bool = True
+    # How often the radar sweep polls the latest SRI frame.
+    interval_minutes: int = Field(default=15, ge=5)
+    # Rain intensity (mm/h) that counts as a trigger signal.
+    min_intensity_mmh: float = Field(default=30.0, gt=0)
+    # At least this many 1 km pixels over threshold inside the AOI bbox
+    # (a single hot pixel is usually radar clutter).
+    min_pixels: int = Field(default=3, ge=1)
+    # Skip AOIs whose latest assessment is fresher than this.
+    cooldown_minutes: int = Field(default=45, ge=0)
+
+
 class ReportSettings(BaseSettings):
     """Daily national report dispatched on the notification channels."""
 
@@ -534,6 +551,7 @@ class Settings(BaseSettings):
     alert: AlertSettings = Field(default_factory=AlertSettings)
     forecast: ForecastSettings = Field(default_factory=ForecastSettings)
     report: ReportSettings = Field(default_factory=ReportSettings)
+    nowcast: NowcastSettings = Field(default_factory=NowcastSettings)
     iot: IotSettings = Field(default_factory=IotSettings)
     scoring: ScoringSettings = Field(default_factory=ScoringSettings)
     training: TrainingSettings = Field(default_factory=TrainingSettings)
