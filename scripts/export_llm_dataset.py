@@ -90,7 +90,7 @@ async def main() -> None:
             )
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps(examples, ensure_ascii=False, indent=2), encoding="utf-8")
+    OUT.write_text(json.dumps(examples, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"scritti {len(examples)} esempi -> {OUT}")
 
 
