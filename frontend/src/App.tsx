@@ -1,26 +1,66 @@
-import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/react";
+import { Show, SignInButton, UserButton } from "@clerk/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type maplibregl from "maplibre-gl";
 
 import AlertList from "./components/AlertList";
 import CellPopup from "./components/CellPopup";
 import ExplainerPage from "./components/ExplainerPage";
-import NationalReportPanel from "./components/NationalReportPanel";
+import HomePage from "./components/HomePage";
 import LegendPanel from "./components/LegendPanel";
+import NationalReportPanel from "./components/NationalReportPanel";
 import RiskMap from "./components/RiskMap";
 import TimelineSlider from "./components/TimelineSlider";
 import { config } from "./lib/env";
 import type { AlertItem } from "./types";
 
+type Page = "home" | "dashboard" | "national" | "explainer";
+
+function pageFromHash(): Page {
+  switch (window.location.hash) {
+    case "#/dashboard":
+      return "dashboard";
+    case "#/italia":
+      return "national";
+    case "#/come-funziona":
+      return "explainer";
+    default:
+      return "home";
+  }
+}
+
+/** Auth wall for the operational pages: dashboard + national picture. */
+function RequireAuth({ children }: { children: JSX.Element }): JSX.Element {
+  return (
+    <>
+      <Show when="signed-in">{children}</Show>
+      <Show when="signed-out">
+        <div className="auth-wall">
+          <h2>Area riservata</h2>
+          <p>
+            La dashboard operativa è accessibile agli utenti registrati.
+            Accedi per consultare la mappa del rischio, il quadro nazionale e
+            le allerte.
+          </p>
+          <div className="auth-wall-actions">
+            <SignInButton mode="modal">
+              <button type="button" className="btn-primary">
+                Accedi
+              </button>
+            </SignInButton>
+            <a className="btn-ghost" href="#/">
+              ← Torna alla home
+            </a>
+          </div>
+        </div>
+      </Show>
+    </>
+  );
+}
+
 export function App(): JSX.Element {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [selectedCell, setSelectedCell] = useState<string | null>(null);
-  const pageFromHash = (): string => {
-    if (window.location.hash === "#/come-funziona") return "explainer";
-    if (window.location.hash === "#/italia") return "national";
-    return "map";
-  };
-  const [page, setPage] = useState(pageFromHash);
+  const [page, setPage] = useState<Page>(pageFromHash);
 
   useEffect(() => {
     const onHash = (): void => setPage(pageFromHash());
@@ -40,17 +80,31 @@ export function App(): JSX.Element {
     });
   }, []);
 
+  const dashboard = (
+    <>
+      <aside className="sidebar" aria-label="Pannello laterale">
+        <LegendPanel />
+        {config.enableTimeline ? <TimelineSlider /> : null}
+        <AlertList onAlertClick={flyToAlert} />
+        <CellPopup cellId={selectedCell} onDismiss={() => setSelectedCell(null)} />
+      </aside>
+      <RiskMap mapRef={mapRef} onCellClick={setSelectedCell} />
+    </>
+  );
+
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${page === "home" ? "is-home" : ""}`}>
       <header className="app-header">
-        <img src="/logo.png" alt="Limen" className="app-logo" height={40} />
-        <h1>Limen</h1>
-        <span className="subtitle">
-          Mappa pubblica del rischio frane — copertura nazionale
-        </span>
+        <a className="brand" href="#/">
+          <img src="/logo.png" alt="" className="app-logo" height={36} />
+          <span className="brand-name">Limen</span>
+        </a>
         <nav className="app-nav" aria-label="Navigazione">
-          <a href="#/" className={page === "map" ? "on" : ""}>
-            Mappa
+          <a href="#/" className={page === "home" ? "on" : ""}>
+            Home
+          </a>
+          <a href="#/dashboard" className={page === "dashboard" ? "on" : ""}>
+            Dashboard
           </a>
           <a href="#/italia" className={page === "national" ? "on" : ""}>
             Situazione Italia
@@ -61,8 +115,11 @@ export function App(): JSX.Element {
         </nav>
         <div className="auth-controls">
           <Show when="signed-out">
-            <SignInButton />
-            <SignUpButton />
+            <SignInButton mode="modal">
+              <button type="button" className="btn-signin">
+                Accedi
+              </button>
+            </SignInButton>
           </Show>
           <Show when="signed-in">
             <UserButton />
@@ -70,28 +127,20 @@ export function App(): JSX.Element {
         </div>
       </header>
 
-      {page === "explainer" ? (
+      {page === "home" ? (
+        <HomePage />
+      ) : page === "explainer" ? (
         <div className="explainer-area">
           <ExplainerPage />
         </div>
       ) : page === "national" ? (
-        <div className="explainer-area">
-          <NationalReportPanel />
-        </div>
+        <RequireAuth>
+          <div className="explainer-area">
+            <NationalReportPanel />
+          </div>
+        </RequireAuth>
       ) : (
-        <>
-      <aside className="sidebar" aria-label="Pannello laterale">
-        <LegendPanel />
-        {config.enableTimeline ? <TimelineSlider /> : null}
-        <AlertList onAlertClick={flyToAlert} />
-        <CellPopup
-          cellId={selectedCell}
-          onDismiss={() => setSelectedCell(null)}
-        />
-      </aside>
-
-      <RiskMap mapRef={mapRef} onCellClick={setSelectedCell} />
-        </>
+        <RequireAuth>{dashboard}</RequireAuth>
       )}
     </div>
   );
