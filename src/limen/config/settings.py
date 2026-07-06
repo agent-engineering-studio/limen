@@ -160,6 +160,11 @@ class LLMSettings(BaseSettings):
     # Local models take minutes per briefing; skipping all-quiet cycles keeps
     # the hourly job inside its hour. "None" = always run.
     briefing_min_level: Literal["None", "Low", "Moderate", "High", "VeryHigh"] = "Moderate"
+    # Per-request ceiling for Ollama chat calls. Local models writing a
+    # 200-word Italian briefing routinely exceed the shared HTTP client's
+    # default timeout, which silently downgraded briefings to the
+    # deterministic fallback.
+    ollama_timeout_seconds: float = Field(default=300.0, gt=0)
 
 
 class SchedulerSettings(BaseSettings):

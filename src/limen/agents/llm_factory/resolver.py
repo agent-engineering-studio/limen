@@ -76,6 +76,7 @@ def _build_ollama(settings: Settings) -> OllamaFactory:
         role_models={},
         default_model=settings.llm.ollama_model,
         api_key=key.get_secret_value() if key is not None else None,
+        timeout_seconds=settings.llm.ollama_timeout_seconds,
     )
 
 

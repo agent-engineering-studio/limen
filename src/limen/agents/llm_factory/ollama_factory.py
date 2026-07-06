@@ -25,6 +25,9 @@ class OllamaChatClient:  # Implements the ChatClient Protocol structurally
     # Bearer token for Ollama Cloud (https://ollama.com). None ⇒ host Ollama,
     # which needs no auth. The endpoint shape is identical either way.
     api_key: str | None = None
+    # Generation can take minutes on local models — the shared client's
+    # default read timeout is far too short for a full briefing.
+    timeout_seconds: float = 300.0
 
     async def chat(
         self,
@@ -49,7 +52,14 @@ class OllamaChatClient:  # Implements the ChatClient Protocol structurally
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else None
         client = await SharedHttpClient.get()
         log.debug("ollama.chat", model=self.model, url=url, n_messages=len(messages))
-        resp = await fetch_with_retry("POST", url, client=client, json=payload, headers=headers)
+        resp = await fetch_with_retry(
+            "POST",
+            url,
+            client=client,
+            json=payload,
+            headers=headers,
+            timeout=self.timeout_seconds,
+        )
         data = resp.json()
         try:
             return str(data["choices"][0]["message"]["content"])
@@ -66,7 +76,13 @@ class OllamaFactory:  # Implements the LlmClientFactory Protocol structurally
     provider: str = "ollama"
     default_model: str = "qwen2.5:32b"
     api_key: str | None = None
+    timeout_seconds: float = 300.0
 
     def create(self, agent_role: str) -> ChatClient:
         model = self.role_models.get(agent_role, self.default_model)
-        return OllamaChatClient(base_url=self.base_url, model=model, api_key=self.api_key)
+        return OllamaChatClient(
+            base_url=self.base_url,
+            model=model,
+            api_key=self.api_key,
+            timeout_seconds=self.timeout_seconds,
+        )
