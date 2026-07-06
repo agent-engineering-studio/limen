@@ -215,3 +215,42 @@ async def test_email_send_failure_returns_false(monkeypatch: pytest.MonkeyPatch)
     )
     ok = await EmailChannel(settings).send(_payload())
     assert ok is False
+
+
+# --------------------------------------------------------------------- webhook
+
+
+async def test_webhook_disabled_without_url() -> None:
+    from limen.config.settings import WebhookChannelSettings
+    from limen.notifications.webhook import WebhookChannel
+
+    ch = WebhookChannel(WebhookChannelSettings())
+    assert ch.is_enabled is False
+    assert await ch.send(_payload()) is False
+
+
+async def test_webhook_send_posts_json_with_bearer() -> None:
+    from limen.config.settings import WebhookChannelSettings
+    from limen.notifications.webhook import WebhookChannel
+
+    ch = WebhookChannel(
+        WebhookChannelSettings(url="http://gw.test/hooks/limen", token=SecretStr("s3cret"))
+    )
+    with respx.mock() as mock:
+        route = mock.post("http://gw.test/hooks/limen").mock(
+            return_value=httpx.Response(200, json={"ok": True})
+        )
+        assert await ch.send(_payload()) is True
+    req = route.calls.last.request
+    assert req.headers["Authorization"] == "Bearer s3cret"
+    assert b'"aoi_id":"it-puglia"' in req.content.replace(b" ", b"")
+
+
+async def test_webhook_5xx_returns_false_without_raising() -> None:
+    from limen.config.settings import WebhookChannelSettings
+    from limen.notifications.webhook import WebhookChannel
+
+    ch = WebhookChannel(WebhookChannelSettings(url="http://gw.test/hooks/limen"))
+    with respx.mock() as mock:
+        mock.post("http://gw.test/hooks/limen").mock(return_value=httpx.Response(500))
+        assert await ch.send(_payload()) is False

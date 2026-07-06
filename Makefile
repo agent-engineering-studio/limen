@@ -117,9 +117,12 @@ PLATFORM ?= linux/amd64
 build-images:
 	docker build --platform $(PLATFORM) -f infra/postgres/Dockerfile.db -t limen/postgres:16-3.5 infra/postgres
 	docker build --platform $(PLATFORM) -f infra/docker/Dockerfile.api  -t limen/api:0.1 .
+	# limen-ops MCP ships in the api image (same code, `limen mcp-serve`
+	# entrypoint); the alias tag makes it a first-class deployable artifact.
+	docker tag limen/api:0.1 limen/mcp:0.1
 	docker build --platform $(PLATFORM) -f geodata/Dockerfile           -t limen/geodata:0.1 .
 	( cd frontend && npm ci && npm run build )
-	@echo "[build-images] built limen/postgres:16-3.5, limen/api:0.1, limen/geodata:0.1 ($(PLATFORM)) + frontend dist/"
+	@echo "[build-images] built limen/postgres:16-3.5, limen/api:0.1, limen/mcp:0.1, limen/geodata:0.1 ($(PLATFORM)) + frontend dist/"
 
 # ---------------------------------------------------------------------------
 # Backend

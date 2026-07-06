@@ -134,6 +134,30 @@ services:
       retries: 10
       start_period: 20s
 
+  mcp:
+    # limen-ops MCP server for agent gateways (OpenClaw & co.). Same image
+    # as the api; HTTP transport on :8766. The host bind defaults to
+    # loopback (same-host OpenClaw); set LIMEN_MCP_BIND=0.0.0.0 only when
+    # the gateway lives on another machine — and put TLS in front.
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.api
+    image: limen/mcp:0.1
+    container_name: limen-mcp
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["limen", "mcp-serve"]
+    environment:
+      DB__CONNECTION_STRING: postgresql://limen:limen@postgres:5432/limen
+      LIMEN_MCP_TRANSPORT: http
+      # Unset ⇒ the run_monitor admin tool is disabled (fail-closed).
+      MCP_ADMIN_TOKEN: ${MCP_ADMIN_TOKEN:-}
+      LOG_JSON: "true"
+    ports:
+      - "${LIMEN_MCP_BIND:-127.0.0.1}:8766:8766"
+
   mosquitto:
     # Phase 7 — local MQTT broker for the alert pipeline. The API
     # publishes to ``${NOTIFICATIONS__MQTT__BROKER_HOST}`` (default

@@ -17,6 +17,7 @@ from limen.notifications.base import AlertPayload, NotificationChannel
 from limen.notifications.email import EmailChannel
 from limen.notifications.mqtt import MqttChannel
 from limen.notifications.telegram import TelegramChannel
+from limen.notifications.webhook import WebhookChannel
 
 log = get_logger(__name__)
 
@@ -89,6 +90,8 @@ def build_default_dispatcher(
         channels.append(MqttChannel(settings.mqtt))
     if "email" in enabled:
         channels.append(EmailChannel(settings.email))
+    if "webhook" in enabled:
+        channels.append(WebhookChannel(settings.webhook))
     log.info(
         "notifications.dispatcher.built",
         enabled=sorted(enabled),

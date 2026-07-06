@@ -11,6 +11,7 @@ Run via ``limen mcp-serve`` (stdio, default) or
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from limen.core.logging import get_logger
@@ -103,7 +104,9 @@ async def run_mcp_server(*, transport: str = "stdio") -> int:
         if transport == "stdio":
             await mcp.run_async()
         elif transport == "http":
-            await mcp.run_streamable_http_async(host="0.0.0.0", port=8766)
+            host = os.getenv("LIMEN_MCP_HTTP_HOST", "0.0.0.0")
+            port = int(os.getenv("LIMEN_MCP_HTTP_PORT", "8766"))
+            await mcp.run_http_async(host=host, port=port)
         else:
             log.error("limen.mcp.bad_transport", transport=transport)
             return 2

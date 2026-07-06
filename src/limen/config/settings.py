@@ -235,6 +235,15 @@ class EmailChannelSettings(BaseSettings):
     timeout_seconds: float = Field(default=15.0, gt=0)
 
 
+class WebhookChannelSettings(BaseSettings):
+    """Generic webhook POST (e.g. OpenClaw ``/hooks``). Disabled when ``url`` is empty."""
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    url: str | None = None
+    token: SecretStr | None = None
+
+
 class NotificationsSettings(BaseSettings):
     """Top-level notifications block — enabled channels + per-channel config."""
 
@@ -242,10 +251,13 @@ class NotificationsSettings(BaseSettings):
 
     # When the list is empty no channels are constructed; the workflow
     # logs alerts as if `alert_dispatch` were still the V1 stub.
-    enabled_channels: list[Literal["telegram", "mqtt", "email"]] = Field(default_factory=list)
+    enabled_channels: list[Literal["telegram", "mqtt", "email", "webhook"]] = Field(
+        default_factory=list
+    )
     telegram: TelegramChannelSettings = Field(default_factory=TelegramChannelSettings)
     mqtt: MqttChannelSettings = Field(default_factory=MqttChannelSettings)
     email: EmailChannelSettings = Field(default_factory=EmailChannelSettings)
+    webhook: WebhookChannelSettings = Field(default_factory=WebhookChannelSettings)
 
 
 class IotSettings(BaseSettings):

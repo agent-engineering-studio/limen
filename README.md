@@ -192,8 +192,23 @@ Completati di recente:
   deterministico** sulla stessa partizione spaziale e la stessa pioggia
   (`limen train`; registro MLflow; promozione solo manuale). Backup/ripristino
   del dataset e del modello: `make dump-training` / `make restore-training`.
+- **Shadow mode attivo**: il challenger ML gira in parallelo al champion
+  a ogni ciclo orario (`SCORING__MODE=shadow`) e scrive le probabilità in
+  `model_runs`; il motore deterministico resta l'unico autoritativo.
+- **`limen forecast`** — run *previsionale* a `now+H` ore: la finestra
+  Open-Meteo miscela pioggia osservata e prevista, champion e ML valutano
+  le stesse celle, report in `./reports/` senza toccare lo stato operativo
+  (`LIMEN_FORECAST_AOI` / `_HOURS` / `_CELL_LIMIT`).
 - **MCP `limen-ops`** (`limen mcp-serve`): rischio, allerte e run del
   workflow esposti come tool per gateway agentici (OpenClaw, Claude Desktop).
+  Nel compose è il servizio `mcp` (immagine `limen/mcp:0.1`, HTTP su
+  `127.0.0.1:8766`; `LIMEN_MCP_BIND=0.0.0.0` solo dietro TLS quando il
+  gateway sta su un'altra macchina). Aggancio OpenClaw:
+  `openclaw mcp set limen-ops '{"url":"http://127.0.0.1:8766/mcp","transport":"streamable-http"}'`.
+- **Canale di notifica `webhook`**: gli alert POSTano il payload JSON al
+  gateway agentico (es. OpenClaw `/hooks`, bearer token) — pull via MCP per
+  le domande, push via webhook per gli eventi. Config:
+  `NOTIFICATIONS__ENABLED_CHANNELS=["webhook"]` + `NOTIFICATIONS__WEBHOOK__URL/TOKEN`.
 - **Pagina divulgativa** «Come funziona» nel frontend (`#/come-funziona`)
   con simulatore che usa la formula reale di produzione.
 - **Cartella `llm-training/`**: dataset (assessment → briefing) in formato
@@ -201,8 +216,9 @@ Completati di recente:
 
 Prossimi passi:
 
-- **Shadow mode nazionale** del challenger ML (`SCORING__MODE=shadow`).
 - **Pipeline event-driven** (radar/nowcast → scoring mirato sul footprint).
+- **Confronto shadow** challenger vs champion su eventi reali (dopo qualche
+  settimana di `model_runs` accumulati).
 
 ---
 

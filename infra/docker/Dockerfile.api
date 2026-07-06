@@ -38,7 +38,8 @@ COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 # `--group ml` ships lightgbm+mlflow+shap so the shadow challenger can load
 # in-container; without it resolve_challenger degrades to None (logged).
-RUN uv sync --frozen --no-dev --no-editable --group ml
+# `--group mcp` ships fastmcp so the same image serves `limen mcp-serve`.
+RUN uv sync --frozen --no-dev --no-editable --group ml --group mcp
 
 # ---------------------------------------------------------------------------
 # Stage 2 — runtime
