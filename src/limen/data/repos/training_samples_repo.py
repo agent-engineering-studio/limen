@@ -51,7 +51,14 @@ async def insert_many(items: Iterable[TrainingSample]) -> int:
                 ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
                 ON CONFLICT (cell_id, valuation_time, label_source) DO UPDATE
                 SET label = EXCLUDED.label,
-                    features = EXCLUDED.features,
+                    -- Re-extraction refreshes static/insar but must NEVER
+                    -- wipe the expensive CERRA rain enrichment (13 h of
+                    -- archive replay) already attached to the row.
+                    features = EXCLUDED.features ||
+                        CASE WHEN training_samples.features ? 'rain'
+                             THEN jsonb_build_object(
+                                 'rain', training_samples.features->'rain')
+                             ELSE '{}'::jsonb END,
                     split_block = EXCLUDED.split_block,
                     dataset_version_id = EXCLUDED.dataset_version_id
                 """,

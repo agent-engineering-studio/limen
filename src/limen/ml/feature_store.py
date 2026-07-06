@@ -119,6 +119,7 @@ async def _load_background_pool(*, exclude_cells: set[str]) -> list[tuple[str, s
                    ST_X(ST_Centroid(geom)) AS lon,
                    ST_Y(ST_Centroid(geom)) AS lat
             FROM grid_cells
+            ORDER BY id
             """
         )
     return [
