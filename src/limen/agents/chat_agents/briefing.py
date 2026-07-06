@@ -118,10 +118,19 @@ class BriefingAgent:
         assessment: AggregateAssessment,
         analysis: RiskAnalysis | None,
     ) -> str:
-        top_lines = [
-            f"- {c.cell_id} score={c.score:.3f} level={c.level.value}"
-            for c in assessment.top_cells[:5]
-        ]
+        top_lines = []
+        for c in assessment.top_cells[:5]:
+            # Top-3 component drivers + Caine exceedance: anchors the
+            # narrative to the quantitative breakdown (issue #2 P2) so the
+            # LLM cites real drivers instead of paraphrasing the score.
+            components = {"S": c.s, "M": c.m, "E": c.e, "F": c.f, "H": c.h}
+            drivers = sorted(components.items(), key=lambda kv: kv[1], reverse=True)[:3]
+            drivers_txt = ", ".join(f"{name}={value:.2f}" for name, value in drivers)
+            caine = "sì" if c.meteo_terms.caine_excess > 0 else "no"
+            top_lines.append(
+                f"- {c.cell_id} score={c.score:.3f} level={c.level.value} "
+                f"driver=[{drivers_txt}] soglia_caine_superata={caine}"
+            )
         analysis_part = ""
         if analysis is not None:
             analysis_part = (

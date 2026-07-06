@@ -147,3 +147,31 @@ async def cell_breakdown(cell_id: str, deps: DepsDep) -> CellBreakdownResponse: 
         factors=_coerce_json(row["factors"]),
         explanation=_coerce_json(row["explanation"]),
     )
+
+
+@router.get("/api/legend")
+async def legend() -> dict[str, Any]:
+    """Class cutoffs + Protezione Civile alert colours (presentation only)."""
+    from limen.core.scoring.regional_thresholds import load_regional_thresholds
+
+    t = load_regional_thresholds()
+    pc = t.pc_alert
+    levels = {
+        "none": "None",
+        "low": "Low",
+        "moderate": "Moderate",
+        "high": "High",
+        "very_high": "VeryHigh",
+    }
+    return {
+        "classes": [
+            {
+                "level": level,
+                "lo": getattr(t.classes, key).lo,
+                "hi": getattr(t.classes, key).hi,
+                "pc_alert": getattr(pc, key),
+            }
+            for key, level in levels.items()
+        ],
+        "model_version": t.model_version,
+    }

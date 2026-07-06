@@ -151,6 +151,16 @@ classes:
   high:      [0.55, 0.75]
   very_high: [0.75, 1.00]
 
+# Mapping presentazionale verso la scala di allerta della Protezione
+# Civile (verde/gialla/arancione/rossa). Solo etichette per API,
+# legenda e notifiche: gli score e le classi NON cambiano.
+pc_alert:
+  none:      verde
+  low:       verde
+  moderate:  gialla
+  high:      arancione
+  very_high: rossa
+
 # Target annual class-frequency distribution (§2.5). The calibration
 # CLI emits a report comparing achieved frequencies against this target
 # so analysts can tune weights.

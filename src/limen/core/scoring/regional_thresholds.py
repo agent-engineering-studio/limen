@@ -18,7 +18,7 @@ from functools import lru_cache
 from importlib import resources
 from itertools import pairwise
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -240,6 +240,22 @@ class CalibrationBlock(_StrictModel):
     backtest: BacktestTargets
 
 
+class PcAlertMapping(_StrictModel):
+    """Presentational mapping of the 5 classes onto the Protezione
+    Civile alert scale. Labels only — scores and classes never change."""
+
+    none: Literal["verde", "gialla", "arancione", "rossa"] = "verde"
+    low: Literal["verde", "gialla", "arancione", "rossa"] = "verde"
+    moderate: Literal["verde", "gialla", "arancione", "rossa"] = "gialla"
+    high: Literal["verde", "gialla", "arancione", "rossa"] = "arancione"
+    very_high: Literal["verde", "gialla", "arancione", "rossa"] = "rossa"
+
+    def for_level(self, level: str) -> str:
+        """PC colour for a RiskLevel value ("None", "Low", ...)."""
+        key = {"None": "none", "VeryHigh": "very_high"}.get(level, level.lower())
+        return str(getattr(self, key, "verde"))
+
+
 class RegionalThresholds(_StrictModel):
     """Top-level config object — strict validation, immutable."""
 
@@ -259,6 +275,8 @@ class RegionalThresholds(_StrictModel):
     # validate; K simply stays inactive everywhere.
     kinematic: KinematicBlock | None = None
     classes: ClassCutoffs
+    # Optional presentational block — older YAMLs without it validate.
+    pc_alert: PcAlertMapping = Field(default_factory=lambda: PcAlertMapping())
     target_distribution: TargetDistribution
     calibration: CalibrationBlock
 
