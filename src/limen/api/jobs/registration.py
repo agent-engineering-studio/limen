@@ -13,6 +13,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from limen.api.dependencies import AppDependencies
 from limen.api.jobs.cache_cleanup import run_cache_cleanup_job
+from limen.api.jobs.daily_report import run_daily_report
 from limen.api.jobs.drift_monitor import run_drift_monitor_job
 from limen.api.jobs.forecast_monitoring import run_forecast_monitoring
 from limen.api.jobs.geodata_export import run_geodata_export_job
@@ -27,6 +28,7 @@ log = get_logger(__name__)
 
 JOB_HOURLY_MONITORING = "limen-hourly-monitoring"
 JOB_FORECAST_MONITORING = "limen-forecast-monitoring"
+JOB_DAILY_REPORT = "limen-daily-report"
 JOB_WEEKLY_IDROGEO = "limen-weekly-idrogeo"
 JOB_CACHE_CLEANUP = "limen-cache-cleanup"
 JOB_IOT_ROLLUP = "limen-iot-rollup"
@@ -69,6 +71,21 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
             job=JOB_FORECAST_MONITORING,
             interval_hours=deps.settings.forecast.interval_hours,
             horizon_hours=deps.settings.forecast.horizon_hours,
+        )
+
+    if deps.settings.report.enabled:
+        await scheduler.add_schedule(
+            run_daily_report,
+            args=(deps,),
+            trigger=CronTrigger(hour=deps.settings.report.hour_utc, minute=0),
+            id=JOB_DAILY_REPORT,
+            conflict_policy=ConflictPolicy.replace,
+        )
+        registered.append(JOB_DAILY_REPORT)
+        log.info(
+            "scheduler.registered",
+            job=JOB_DAILY_REPORT,
+            hour_utc=deps.settings.report.hour_utc,
         )
 
     if cfg.enable_weekly_idrogeo:

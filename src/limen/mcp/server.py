@@ -19,6 +19,7 @@ from limen.data.db import lifespan_pool
 from limen.mcp.tools import (
     AdminAuthError,
     cell_breakdown,
+    national_report,
     recent_alerts,
     risk_summary,
     run_monitor,
@@ -39,6 +40,9 @@ Read tools (open):
   Italian briefing for one cell.
 * recent_alerts(threshold?, since_hours?, limit?) → cells at/above a level
   in the recent window.
+* national_report() → aggregated national picture (per-region summary,
+  national top cells, ML shadow top, 24h alert counts) + a deterministic
+  Italian rendering in `report_it`.
 
 Admin tool (MCP_ADMIN_TOKEN, fail-closed):
 * run_monitor(aoi_id, admin_token, cell_limit?) → run the full monitoring
@@ -77,6 +81,11 @@ def _build_server() -> Any:
     ) -> list[dict[str, Any]]:
         """Cells at/above a risk level in the recent window."""
         return await recent_alerts(threshold=threshold, since_hours=since_hours, limit=limit)
+
+    @mcp.tool()
+    async def tool_national_report() -> dict[str, Any]:
+        """Aggregated national picture + Italian rendering (report_it)."""
+        return await national_report()
 
     @mcp.tool()
     async def tool_run_monitor(

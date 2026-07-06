@@ -207,3 +207,90 @@ async def run_monitor(
         "high_or_above": out.assessment.cells_high_or_above if out.assessment else 0,
         "dispatched_alerts": list(out.dispatched_alerts),
     }
+
+
+async def national_report() -> dict[str, Any]:
+    """Aggregate national picture: regions, top cells, ML shadow, 24h alerts."""
+    regions = await risk_summary()
+    top = await top_risk_cells(limit=10)
+    async with acquire() as conn:
+        ml_rows = await conn.fetch(
+            """
+            WITH latest AS (
+                SELECT aoi_id, MAX(valuation_time) AS ts
+                FROM model_runs GROUP BY aoi_id
+            )
+            SELECT m.cell_id, m.aoi_id, m.probability, m.risk_class
+            FROM model_runs m
+            JOIN latest l ON l.aoi_id = m.aoi_id AND l.ts = m.valuation_time
+            ORDER BY m.probability DESC
+            LIMIT 10
+            """
+        )
+        alerts_24h = await conn.fetchval(
+            """SELECT COUNT(*) FROM alert_dispatches
+               WHERE dispatched_at >= now() - interval '24 hours'"""
+        )
+        forecast_24h = await conn.fetchval(
+            """SELECT COUNT(*) FROM forecast_dispatches
+               WHERE dispatched_at >= now() - interval '24 hours'"""
+        )
+    report = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "regions": regions,
+        "totals": {
+            "regions": len(regions),
+            "cells": sum(r["cells_scored"] for r in regions),
+            "high_or_above": sum(r["high_or_above"] for r in regions),
+            "moderate": sum(r["moderate"] for r in regions),
+        },
+        "top_cells": top,
+        "ml_top_cells": [
+            {
+                "cell_id": str(r["cell_id"]),
+                "aoi_id": str(r["aoi_id"]),
+                "probability": round(float(r["probability"]), 3),
+                "level": str(r["risk_class"]),
+            }
+            for r in ml_rows
+        ],
+        "alerts_24h": int(alerts_24h or 0),
+        "forecast_alerts_24h": int(forecast_24h or 0),
+    }
+    report["report_it"] = render_national_report_it(report)
+    return report
+
+
+def render_national_report_it(report: dict[str, Any]) -> str:
+    """Deterministic Italian rendering — only numbers from the report dict."""
+    t = report["totals"]
+    dt = datetime.fromisoformat(report["generated_at"])
+    hot = [r for r in report["regions"] if r["high_or_above"] > 0]
+    if hot:
+        hot_txt = "; regioni con celle High o superiori: " + ", ".join(
+            f"{r['aoi_id']} ({r['high_or_above']})" for r in hot[:5]
+        )
+    else:
+        hot_txt = "; nessuna regione con celle High o superiori"
+    lines = [
+        f"Report Limen — situazione frane Italia al {dt:%d/%m/%Y %H:%M} UTC.",
+        f"Valutate {t['cells']} celle in {t['regions']} regioni: "
+        f"{t['high_or_above']} High+ e {t['moderate']} Moderate{hot_txt}.",
+    ]
+    if report["top_cells"]:
+        c = report["top_cells"][0]
+        lines.append(
+            f"Cella di picco nazionale {c['cell_id']} ({c['aoi_id']}) "
+            f"con punteggio {c['score']:.2f} ({c['level']})."
+        )
+    if report["ml_top_cells"]:
+        m = report["ml_top_cells"][0]
+        lines.append(
+            f"Challenger ML (shadow): probabilità massima {m['probability']:.2f} "
+            f"sulla cella {m['cell_id']} ({m['aoi_id']})."
+        )
+    lines.append(
+        f"Ultime 24 ore: {report['alerts_24h']} alert operativi, "
+        f"{report['forecast_alerts_24h']} alert previsionali."
+    )
+    return " ".join(lines)

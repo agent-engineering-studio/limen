@@ -504,6 +504,16 @@ class ForecastSettings(BaseSettings):
     cell_limit: int | None = None
 
 
+class ReportSettings(BaseSettings):
+    """Daily national report dispatched on the notification channels."""
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    enabled: bool = True
+    # UTC hour of the daily dispatch (07:00 Europe/Rome in winter = 06 UTC).
+    hour_utc: int = Field(default=6, ge=0, le=23)
+
+
 class Settings(BaseSettings):
     """Top-level application settings."""
 
@@ -523,6 +533,7 @@ class Settings(BaseSettings):
     notifications: NotificationsSettings = Field(default_factory=NotificationsSettings)
     alert: AlertSettings = Field(default_factory=AlertSettings)
     forecast: ForecastSettings = Field(default_factory=ForecastSettings)
+    report: ReportSettings = Field(default_factory=ReportSettings)
     iot: IotSettings = Field(default_factory=IotSettings)
     scoring: ScoringSettings = Field(default_factory=ScoringSettings)
     training: TrainingSettings = Field(default_factory=TrainingSettings)
