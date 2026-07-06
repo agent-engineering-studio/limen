@@ -21,7 +21,7 @@ COMPOSE_ALL  := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_DEMO) -f $(C
 UP_PROFILES  := --profile geoserver --profile frontend
 
 .PHONY: help install \
-        up down \
+        up down build rebuild up-host-ollama \
         up-dev down-dev logs migrate seed bootstrap-static calibrate backtest serve \
         demo demo-down demo-walkthrough \
         observability observability-down \
@@ -35,6 +35,9 @@ help:
 	@echo "Full stack (one command)"
 	@echo "  make up                 start operational + GeoServer stack, seed + geoserver-sync (idempotent)"
 	@echo "  make down               tear down the full stack"
+	@echo "  make build              rebuild compose images (NOCACHE=1 for from-scratch)"
+	@echo "  make rebuild            down + build + up (full local refresh)"
+	@echo "  make up-host-ollama     alias of 'make up' (host Ollama is the default)"
 	@echo ""
 	@echo "Backend setup"
 	@echo "  make install            install runtime + dev deps via uv"
@@ -105,6 +108,18 @@ up: gs-volumes
 
 down:
 	docker compose $(COMPOSE_ALL) $(UP_PROFILES) down
+
+# Rebuild the compose images (native arch, local testing). NOCACHE=1
+# forces a from-scratch build; default reuses the layer cache.
+build: gs-volumes
+	docker compose $(COMPOSE_ALL) $(UP_PROFILES) build $(if $(NOCACHE),--no-cache)
+
+# Full refresh of the local test environment: down → build → up.
+rebuild: down build up
+
+# `make up` already talks to the HOST Ollama (host.docker.internal);
+# explicit alias for clarity.
+up-host-ollama: up
 
 # ---------------------------------------------------------------------------
 # Docker images — build every Limen-owned image (GeoServer/pg_tileserv/etc.
