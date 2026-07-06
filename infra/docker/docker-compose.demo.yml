@@ -25,6 +25,9 @@ services:
     image: limen/postgres:16-3.5
     container_name: limen-postgres
     restart: unless-stopped
+    # Parallel workers on national-scale aggregations (312k cells) blow
+    # through Docker's 64 MB /dev/shm default → DiskFullError.
+    shm_size: 1gb
     environment:
       POSTGRES_USER: limen
       POSTGRES_PASSWORD: limen
