@@ -243,7 +243,9 @@ async def test_webhook_send_posts_json_with_bearer() -> None:
         assert await ch.send(_payload()) is True
     req = route.calls.last.request
     assert req.headers["Authorization"] == "Bearer s3cret"
-    assert b'"aoi_id":"it-puglia"' in req.content.replace(b" ", b"")
+    compact = req.content.replace(b" ", b"")
+    assert b'"text":"Allertaditestinitaliano."' in compact
+    assert b'"aoi_id":"it-puglia"' in compact
 
 
 async def test_webhook_5xx_returns_false_without_raising() -> None:

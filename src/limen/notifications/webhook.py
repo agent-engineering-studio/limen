@@ -44,7 +44,14 @@ class WebhookChannel(NotificationChannel):
         headers: dict[str, str] = {}
         if self._settings.token is not None:
             headers["Authorization"] = f"Bearer {self._settings.token.get_secret_value()}"
-        body = payload.model_dump(mode="json")
+        # `text` top-level: OpenClaw /hooks/wake requires it ("message" on
+        # /hooks/agent — see docs/openclaw.md). Generic receivers read the
+        # full alert from `payload`.
+        body = {
+            "text": payload.summary_it,
+            "message": payload.summary_it,
+            "payload": payload.model_dump(mode="json"),
+        }
         client = await SharedHttpClient.get()
         try:
             resp = await fetch_with_retry(

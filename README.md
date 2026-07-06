@@ -51,6 +51,7 @@ provider): `docker compose -f infra/docker/docker-compose.demo.yml up -d
 in locale/produzione si usa **Ollama** (host, modello qwen).
 
 Approfondimenti: [`docs/architecture.md`](./docs/architecture.md),
+[`docs/openclaw.md`](./docs/openclaw.md),
 [`docs/api.md`](./docs/api.md),
 [`docs/deployment.md`](./docs/deployment.md),
 [`docs/scoring-model.md`](./docs/scoring-model.md),
