@@ -42,3 +42,23 @@ def test_lead_time_ignores_misses() -> None:
     events = [base + timedelta(hours=12), base + timedelta(hours=24)]
     hits = [True, False]
     assert mean_lead_time_hours(vts, events, hits=hits) == pytest.approx(12.0)
+
+
+def test_tss_perfect_classifier() -> None:
+    from limen.ml.metrics import tss
+
+    y = [0, 0, 1, 1]
+    p = [0.1, 0.2, 0.8, 0.9]
+    skill, sens, spec = tss(y, p, threshold=0.5)
+    assert (skill, sens, spec) == (1.0, 1.0, 1.0)
+
+
+def test_threshold_sweep_meets_recall_targets() -> None:
+    from limen.ml.metrics import threshold_sweep
+
+    y = [1] * 10 + [0] * 90
+    p = [i / 10 for i in range(10, 0, -1)] + [0.05] * 90
+    points = threshold_sweep(y, p, recall_targets=(0.5, 0.9))
+    for point in points:
+        assert point["hit_rate"] >= point["recall_target"]
+    assert points[0]["threshold"] > points[1]["threshold"]

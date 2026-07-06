@@ -27,10 +27,10 @@ from limen.data.repos.training_samples_repo import (
     fetch_samples,
     list_blocks,
 )
-from limen.ml.baseline import v1_baseline
+from limen.ml.baseline import caine_baseline, v1_baseline
 from limen.ml.dataset import CANONICAL_FEATURES, TrainingMatrix, to_matrix
 from limen.ml.feature_store import spatial_block_folds
-from limen.ml.metrics import auc_pr, brier_score, hit_rate_far
+from limen.ml.metrics import auc_pr, brier_score, hit_rate_far, threshold_sweep, tss
 
 _log: structlog.stdlib.BoundLogger = get_logger(__name__)
 
@@ -270,9 +270,14 @@ async def run_training(*, settings: Settings | None = None) -> TrainResult:
 
         baseline_scores = v1_baseline(samples)
         baseline_auc = auc_pr(matrix.y, baseline_scores)
+        # Second reference: the bare Caine I-D power law — the ML must add
+        # value over the triggering threshold itself, not just the blend.
+        caine_scores = caine_baseline(samples)
+        caine_auc = auc_pr(matrix.y, caine_scores)
 
         # Operational metrics at a sane default threshold (0.5 for probs).
         hit_rate, far = hit_rate_far(matrix.y, oof_prob, threshold=0.5)
+        tss_05, _, spec_05 = tss(matrix.y, oof_prob, threshold=0.5)
 
         # Calibrator on the out-of-fold predictions.
         calibrator = _fit_isotonic(oof_prob, oof_y)
@@ -286,10 +291,28 @@ async def run_training(*, settings: Settings | None = None) -> TrainResult:
                 "brier_mean": brier_mean,
                 "brier_calibrated": brier_calibrated,
                 "baseline_auc_pr": baseline_auc,
+                "caine_baseline_auc_pr": caine_auc,
                 "hit_rate_at_0_5": hit_rate,
                 "far_at_0_5": far,
+                "tss_at_0_5": tss_05,
+                "specificity_at_0_5": spec_05,
             }
         )
+        # Operating points at 50/70/90% recall — what does catching X% of
+        # the landslides cost, for the ML and both references?
+        for label, scores in (
+            ("ml", oof_prob),
+            ("v1", baseline_scores),
+            ("caine", caine_scores),
+        ):
+            for point in threshold_sweep(matrix.y, scores):
+                r = int(point["recall_target"] * 100)
+                mlflow.log_metrics(
+                    {
+                        f"{label}_far_at_r{r}": point.get("far", 1.0),
+                        f"{label}_tss_at_r{r}": point.get("tss", 0.0),
+                    }
+                )
 
         # Fit the final model on ALL data using the best params + log it.
         import lightgbm as lgb
