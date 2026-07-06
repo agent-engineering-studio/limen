@@ -485,6 +485,25 @@ class AlertSettings(BaseSettings):
     map_base_url: str = "http://localhost:5173"
 
 
+class ForecastSettings(BaseSettings):
+    """Scheduled predictive runs (event-driven pipeline). OFF by default."""
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    enabled: bool = False
+    # Predictive horizon: score at now + this many hours with forecast rain.
+    horizon_hours: int = Field(default=48, ge=1, le=384)
+    # How often the scheduled job re-runs the forecast sweep.
+    interval_hours: int = Field(default=6, ge=1)
+    # Minimum champion level a forecast cell must reach to trigger an alert.
+    min_level: Literal["Low", "Moderate", "High", "VeryHigh"] = "High"
+    # Repeat predictive alerts for the same (AOI, horizon) are suppressed
+    # inside this window — coarser than the operational per-cell dedup.
+    dedup_window_hours: int = Field(default=24, ge=0)
+    # Optional cap on cells per AOI (smoke/dev); None = full grid.
+    cell_limit: int | None = None
+
+
 class Settings(BaseSettings):
     """Top-level application settings."""
 
@@ -503,6 +522,7 @@ class Settings(BaseSettings):
     api: ApiSettings = Field(default_factory=ApiSettings)
     notifications: NotificationsSettings = Field(default_factory=NotificationsSettings)
     alert: AlertSettings = Field(default_factory=AlertSettings)
+    forecast: ForecastSettings = Field(default_factory=ForecastSettings)
     iot: IotSettings = Field(default_factory=IotSettings)
     scoring: ScoringSettings = Field(default_factory=ScoringSettings)
     training: TrainingSettings = Field(default_factory=TrainingSettings)

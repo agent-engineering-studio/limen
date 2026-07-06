@@ -14,6 +14,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from limen.api.dependencies import AppDependencies
 from limen.api.jobs.cache_cleanup import run_cache_cleanup_job
 from limen.api.jobs.drift_monitor import run_drift_monitor_job
+from limen.api.jobs.forecast_monitoring import run_forecast_monitoring
 from limen.api.jobs.geodata_export import run_geodata_export_job
 from limen.api.jobs.hourly_monitoring import run_hourly_monitoring
 from limen.api.jobs.iot_partition_rollover import run_iot_partition_rollover_job
@@ -25,6 +26,7 @@ from limen.core.logging import get_logger
 log = get_logger(__name__)
 
 JOB_HOURLY_MONITORING = "limen-hourly-monitoring"
+JOB_FORECAST_MONITORING = "limen-forecast-monitoring"
 JOB_WEEKLY_IDROGEO = "limen-weekly-idrogeo"
 JOB_CACHE_CLEANUP = "limen-cache-cleanup"
 JOB_IOT_ROLLUP = "limen-iot-rollup"
@@ -51,6 +53,22 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
             "scheduler.registered",
             job=JOB_HOURLY_MONITORING,
             interval_minutes=cfg.hourly_monitoring_minutes,
+        )
+
+    if deps.settings.forecast.enabled:
+        await scheduler.add_schedule(
+            run_forecast_monitoring,
+            args=(deps,),
+            trigger=IntervalTrigger(hours=deps.settings.forecast.interval_hours),
+            id=JOB_FORECAST_MONITORING,
+            conflict_policy=ConflictPolicy.replace,
+        )
+        registered.append(JOB_FORECAST_MONITORING)
+        log.info(
+            "scheduler.registered",
+            job=JOB_FORECAST_MONITORING,
+            interval_hours=deps.settings.forecast.interval_hours,
+            horizon_hours=deps.settings.forecast.horizon_hours,
         )
 
     if cfg.enable_weekly_idrogeo:

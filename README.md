@@ -214,9 +214,16 @@ Completati di recente:
 - **Cartella `llm-training/`**: dataset (assessment → briefing) in formato
   Alpaca + guida passo-passo per l'eventuale fine-tuning con LLaMA-Factory.
 
+- **Pipeline event-driven** (`FORECAST__ENABLED=true`): sweep previsionale
+  schedulato a `now+48h` con pioggia prevista; celle a livello ≥
+  `FORECAST__MIN_LEVEL` fanno partire un alert **previsionale** sugli stessi
+  canali (webhook/OpenClaw, Telegram…), etichettato "PREVISIONE", riassunto
+  deterministico, dedup per (AOI, orizzonte) separata dagli alert operativi.
+
 Prossimi passi:
 
-- **Pipeline event-driven** (radar/nowcast → scoring mirato sul footprint).
+- **Radar/nowcast DPC** come sorgente di innesco a orizzonte breve
+  (la sweep previsionale odierna usa il forecast Open-Meteo).
 - **Confronto shadow** challenger vs champion su eventi reali (dopo qualche
   settimana di `model_runs` accumulati).
 
