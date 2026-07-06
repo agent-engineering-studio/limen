@@ -62,3 +62,15 @@ def test_threshold_sweep_meets_recall_targets() -> None:
     for point in points:
         assert point["hit_rate"] >= point["recall_target"]
     assert points[0]["threshold"] > points[1]["threshold"]
+
+
+def test_conformal_quantiles_cover_marginally() -> None:
+    from limen.ml.metrics import conformal_quantiles
+
+    y = [0] * 90 + [1] * 10
+    p = [0.05] * 90 + [0.7] * 10
+    q = conformal_quantiles(y, p)
+    assert set(q) == {"q80", "q90", "q95"}
+    assert q["q80"] <= q["q90"] <= q["q95"]
+    covered = sum(1 for yt, yp in zip(y, p) if abs(yt - yp) <= q["q90"])
+    assert covered / len(y) >= 0.9

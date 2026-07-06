@@ -344,6 +344,10 @@ class TrainingSettings(BaseSettings):
     # don't end up in different folds. 0.5° ≈ 50 km in southern Italy.
     spatial_block_deg: float = Field(default=0.5, gt=0.0, le=2.0)
     spatial_cv_folds: int = Field(default=5, ge=2, le=10)
+    # Feature QA: drop the later feature of any pair with |Pearson r|
+    # above this before training (SHAP credit otherwise splits across
+    # collinear twins). 1.0 disables pruning.
+    collinearity_prune_r: float = Field(default=0.95, gt=0.0, le=1.0)
     # Optuna search.
     optuna_trials: int = Field(default=50, ge=1, le=2000)
     optuna_timeout_seconds: int = Field(default=900, ge=10)

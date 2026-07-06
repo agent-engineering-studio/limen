@@ -125,9 +125,38 @@ def threshold_sweep(
     return out
 
 
+def conformal_quantiles(
+    y_true: Any,
+    y_prob: Any,
+    *,
+    alphas: Sequence[float] = (0.2, 0.1, 0.05),
+) -> dict[str, float]:
+    """Split-conformal error quantiles on the calibration set.
+
+    Nonconformity = |y - p_calibrated|. For each miscoverage ``alpha``
+    the returned ``q`` guarantees (marginally) that
+    ``[p - q, p + q]`` covers the outcome with probability ≥ 1 - alpha
+    on exchangeable data. Reuses the isotonic-calibrated OOF
+    predictions — no extra data split needed.
+    """
+    import numpy as np
+
+    yt = np.asarray(y_true, dtype=float)
+    yp = np.asarray(y_prob, dtype=float)
+    scores = np.abs(yt - yp)
+    n = scores.size
+    out: dict[str, float] = {}
+    for alpha in alphas:
+        # Finite-sample corrected quantile rank (Vovk).
+        rank = min(1.0, np.ceil((n + 1) * (1 - alpha)) / n)
+        out[f"q{int((1 - alpha) * 100)}"] = float(np.quantile(scores, rank))
+    return out
+
+
 __all__ = [
     "auc_pr",
     "brier_score",
+    "conformal_quantiles",
     "hit_rate_far",
     "mean_lead_time_hours",
     "threshold_sweep",

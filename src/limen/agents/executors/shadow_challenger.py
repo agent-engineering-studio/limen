@@ -49,6 +49,9 @@ class ShadowChallengerExecutor(Executor):
                 # Canonical model inputs → drift monitoring compares
                 # training vs live on identical keys and scales.
                 breakdown["features"] = feature_row_fn(bundle)
+            q90 = getattr(self._challenger, "conformal_q90", None)
+            if q90 is not None:
+                breakdown["conformal_q90"] = q90
             rows.append(
                 ModelRunRow(
                     cell_id=bundle.cell_id,

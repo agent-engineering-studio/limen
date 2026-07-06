@@ -59,6 +59,8 @@ class _MLArtefacts:
     calibrator: object | None
     explainer: object | None
     feature_names: list[str]
+    # Split-conformal error quantiles from training ({"q80": .., "q90": ..}).
+    conformal: dict[str, float] | None = None
 
 
 class MLScoringEngine(ScoringEngine):
@@ -131,6 +133,7 @@ class MLScoringEngine(ScoringEngine):
         calibrator = _try_load_artifact(version.run_id, "calibrator.pkl")
         explainer = _try_load_artifact(version.run_id, "shap_explainer.pkl")
         feature_names = _try_load_feature_names(version.run_id) or []
+        conformal = _try_load_json(version.run_id, "conformal.json")
 
         return cls(
             _MLArtefacts(
@@ -140,6 +143,7 @@ class MLScoringEngine(ScoringEngine):
                 calibrator=calibrator,
                 explainer=explainer,
                 feature_names=feature_names,
+                conformal=conformal,
             ),
             thresholds=thresholds,
         )
@@ -147,6 +151,12 @@ class MLScoringEngine(ScoringEngine):
     # ------------------------------------------------------------------
     # ScoringEngine interface
     # ------------------------------------------------------------------
+    @property
+    def conformal_q90(self) -> float | None:
+        """± half-width of the 90% conformal interval around the probability."""
+        c = self._artefacts.conformal
+        return float(c["q90"]) if c and "q90" in c else None
+
     def feature_row(self, bundle: CellFeatureBundle) -> dict[str, float]:
         """Named canonical feature vector — persisted by the shadow so the
         drift monitor compares training vs live on identical keys/scales."""
@@ -300,6 +310,23 @@ def _try_load_artifact(run_id: str, name: str) -> object | None:
             return obj
     except Exception as exc:
         log.debug("ml.artifact.missing", name=name, error=str(exc))
+        return None
+
+
+def _try_load_json(run_id: str, artifact: str) -> dict[str, float] | None:
+    try:
+        import json
+
+        import mlflow
+    except ImportError:
+        return None
+    try:
+        local_path = mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path=artifact)
+        from pathlib import Path
+
+        data = json.loads(Path(local_path).read_text())
+        return {str(k): float(v) for k, v in data.items()}
+    except Exception:
         return None
 
 

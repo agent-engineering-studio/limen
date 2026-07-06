@@ -61,3 +61,40 @@ def test_to_matrix_treats_none_as_zero(samples: list[TrainingSample]) -> None:
     velocity_idx = CANONICAL_FEATURES.index("insar.velocity_mmy")
     # Row 1 set velocity_mmy=None explicitly → 0.0 in the matrix.
     assert matrix.X[1, velocity_idx] == pytest.approx(0.0)
+
+
+def test_prune_collinear_drops_twin_keeps_canonical_first() -> None:
+    import numpy as np
+
+    from limen.ml.dataset import TrainingMatrix, prune_collinear
+
+    rng = np.random.default_rng(7)
+    a = rng.normal(size=200)
+    b = a * 2.0 + 1e-9  # perfect twin of a
+    c = rng.normal(size=200)
+    m = TrainingMatrix(
+        feature_names=("a", "b", "c"),
+        X=np.column_stack([a, b, c]),
+        y=np.zeros(200, dtype=int),
+        groups=tuple("g" for _ in range(200)),
+    )
+    pruned, dropped = prune_collinear(m, threshold=0.95)
+    assert pruned.feature_names == ("a", "c")
+    assert dropped[0][0] == "a" and dropped[0][1] == "b"
+    assert pruned.X.shape == (200, 2)
+
+
+def test_prune_collinear_noop_below_threshold() -> None:
+    import numpy as np
+
+    from limen.ml.dataset import TrainingMatrix, prune_collinear
+
+    rng = np.random.default_rng(7)
+    m = TrainingMatrix(
+        feature_names=("a", "b"),
+        X=rng.normal(size=(100, 2)),
+        y=np.zeros(100, dtype=int),
+        groups=tuple("g" for _ in range(100)),
+    )
+    pruned, dropped = prune_collinear(m, threshold=0.95)
+    assert pruned is m and dropped == []

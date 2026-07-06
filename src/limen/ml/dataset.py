@@ -78,4 +78,47 @@ def to_matrix(samples: list[TrainingSample]) -> TrainingMatrix:
     )
 
 
-__all__ = ["CANONICAL_FEATURES", "TrainingMatrix", "to_matrix"]
+def prune_collinear(
+    matrix: TrainingMatrix, *, threshold: float
+) -> tuple[TrainingMatrix, list[tuple[str, str, float]]]:
+    """Drop features whose |Pearson r| with an earlier feature exceeds
+    ``threshold``. Canonical order is the priority: the first feature of
+    a collinear pair survives. GBMs tolerate collinearity numerically,
+    but it splits SHAP credit across twins and muddies the breakdown.
+
+    Returns the pruned matrix + the dropped pairs ``(kept, dropped, r)``.
+    """
+    import numpy as np
+
+    x = np.asarray(matrix.X, dtype=float)
+    names = list(matrix.feature_names)
+    # Zero-variance columns produce NaN correlations — treat as 0.
+    with np.errstate(invalid="ignore"):
+        corr = np.corrcoef(x, rowvar=False)
+    corr = np.nan_to_num(corr, nan=0.0)
+
+    dropped: list[tuple[str, str, float]] = []
+    keep: list[int] = []
+    for j in range(len(names)):
+        twin = next(
+            (i for i in keep if abs(corr[i, j]) > threshold),
+            None,
+        )
+        if twin is None:
+            keep.append(j)
+        else:
+            dropped.append((names[twin], names[j], float(corr[twin, j])))
+    if not dropped:
+        return matrix, []
+    return (
+        TrainingMatrix(
+            feature_names=tuple(names[j] for j in keep),
+            X=x[:, keep],
+            y=matrix.y,
+            groups=matrix.groups,
+        ),
+        dropped,
+    )
+
+
+__all__ = ["CANONICAL_FEATURES", "TrainingMatrix", "prune_collinear", "to_matrix"]

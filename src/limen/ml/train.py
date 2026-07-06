@@ -28,9 +28,16 @@ from limen.data.repos.training_samples_repo import (
     list_blocks,
 )
 from limen.ml.baseline import caine_baseline, v1_baseline
-from limen.ml.dataset import CANONICAL_FEATURES, TrainingMatrix, to_matrix
+from limen.ml.dataset import TrainingMatrix, prune_collinear, to_matrix
 from limen.ml.feature_store import spatial_block_folds
-from limen.ml.metrics import auc_pr, brier_score, hit_rate_far, threshold_sweep, tss
+from limen.ml.metrics import (
+    auc_pr,
+    brier_score,
+    conformal_quantiles,
+    hit_rate_far,
+    threshold_sweep,
+    tss,
+)
 
 _log: structlog.stdlib.BoundLogger = get_logger(__name__)
 
@@ -232,6 +239,12 @@ async def run_training(*, settings: Settings | None = None) -> TrainResult:
         )
 
     matrix = to_matrix(samples)
+    matrix, collinear_dropped = prune_collinear(matrix, threshold=s.training.collinearity_prune_r)
+    if collinear_dropped:
+        _log.warning(
+            "training.collinear_pruned",
+            dropped=[(a, b, round(r, 3)) for a, b, r in collinear_dropped],
+        )
     blocks = await list_blocks()
     folds = spatial_block_folds(blocks, k=s.training.spatial_cv_folds, rng_seed=s.training.seed)
 
@@ -283,6 +296,7 @@ async def run_training(*, settings: Settings | None = None) -> TrainResult:
         calibrator = _fit_isotonic(oof_prob, oof_y)
         calibrated = calibrator.transform(oof_prob)
         brier_calibrated = brier_score(matrix.y, calibrated)
+        conformal = conformal_quantiles(matrix.y, calibrated)
 
         mlflow.log_metrics(
             {
@@ -296,8 +310,10 @@ async def run_training(*, settings: Settings | None = None) -> TrainResult:
                 "far_at_0_5": far,
                 "tss_at_0_5": tss_05,
                 "specificity_at_0_5": spec_05,
+                **{f"conformal_{k}": v for k, v in conformal.items()},
             }
         )
+        mlflow.log_param("collinear_dropped", json.dumps(collinear_dropped))
         # Operating points at 50/70/90% recall — what does catching X% of
         # the landslides cost, for the ML and both references?
         for label, scores in (
@@ -339,14 +355,20 @@ async def run_training(*, settings: Settings | None = None) -> TrainResult:
 
         with tempfile.TemporaryDirectory() as tmpd:
             tmp = Path(tmpd)
-            (tmp / "feature_names.json").write_text(json.dumps(list(CANONICAL_FEATURES)))
+            (tmp / "feature_names.json").write_text(json.dumps(list(matrix.feature_names)))
+            (tmp / "conformal.json").write_text(json.dumps(conformal))
             with (tmp / "calibrator.pkl").open("wb") as fh:
                 pickle.dump(calibrator, fh)
             explainer = _build_shap_explainer(final_model, matrix)
             if explainer is not None:
                 with (tmp / "shap_explainer.pkl").open("wb") as fh:
                     pickle.dump(explainer, fh)
-            for name in ("feature_names.json", "calibrator.pkl", "shap_explainer.pkl"):
+            for name in (
+                "feature_names.json",
+                "conformal.json",
+                "calibrator.pkl",
+                "shap_explainer.pkl",
+            ):
                 p = tmp / name
                 if p.exists():
                     mlflow.log_artifact(str(p))
