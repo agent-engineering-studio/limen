@@ -20,12 +20,26 @@ function pageFromHash(): Page {
     case "#/dashboard":
       return "dashboard";
     case "#/italia":
+      // Vista "Situazione Italia": una tab della dashboard, stesso gate.
       return "national";
     case "#/come-funziona":
       return "explainer";
     default:
       return "home";
   }
+}
+
+function DashboardTabs({ active }: { active: "map" | "national" }): JSX.Element {
+  return (
+    <nav className="dash-tabs" aria-label="Viste della dashboard">
+      <a href="#/dashboard" className={active === "map" ? "on" : ""}>
+        Mappa
+      </a>
+      <a href="#/italia" className={active === "national" ? "on" : ""}>
+        Situazione Italia
+      </a>
+    </nav>
+  );
 }
 
 /** Auth wall for the operational pages: dashboard + national picture. */
@@ -83,6 +97,7 @@ export function App(): JSX.Element {
   const dashboard = (
     <>
       <aside className="sidebar" aria-label="Pannello laterale">
+        <DashboardTabs active="map" />
         <LegendPanel />
         {config.enableTimeline ? <TimelineSlider /> : null}
         <AlertList onAlertClick={flyToAlert} />
@@ -103,11 +118,11 @@ export function App(): JSX.Element {
           <a href="#/" className={page === "home" ? "on" : ""}>
             Home
           </a>
-          <a href="#/dashboard" className={page === "dashboard" ? "on" : ""}>
+          <a
+            href="#/dashboard"
+            className={page === "dashboard" || page === "national" ? "on" : ""}
+          >
             Dashboard
-          </a>
-          <a href="#/italia" className={page === "national" ? "on" : ""}>
-            Situazione Italia
           </a>
           <a href="#/come-funziona" className={page === "explainer" ? "on" : ""}>
             Come funziona
@@ -136,6 +151,7 @@ export function App(): JSX.Element {
       ) : page === "national" ? (
         <RequireAuth>
           <div className="explainer-area">
+            <DashboardTabs active="national" />
             <NationalReportPanel />
           </div>
         </RequireAuth>

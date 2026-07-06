@@ -38,6 +38,29 @@ async def _purge_old_model_runs(retention_days: int) -> int:
     return int(tag.split()[-1])
 
 
+async def _purge_old_assessments(retention_days: int) -> int:
+    """The hourly national sweep persists ~312k rows/tick (~15 GB/day):
+    without retention the operational DB outgrows any host in weeks.
+    mv_latest_risk keeps the map/report state; history beyond the window
+    lives in backups, not in the hot table."""
+    if retention_days <= 0:
+        return 0
+    async with acquire() as conn:
+        tag = await conn.execute(
+            """
+            DELETE FROM risk_assessments WHERE id IN (
+                SELECT id FROM risk_assessments
+                WHERE computed_at < now() - make_interval(days => $1)
+                ORDER BY id
+                LIMIT $2
+            )
+            """,
+            retention_days,
+            _RETENTION_BATCH,
+        )
+    return int(tag.split()[-1])
+
+
 async def run_cache_cleanup_job(deps: AppDependencies) -> int:
     """Delete expired ``app_cache`` rows; returns the number removed."""
     try:

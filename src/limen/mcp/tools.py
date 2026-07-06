@@ -55,25 +55,21 @@ def _coerce_json(value: Any) -> dict[str, Any]:
 
 async def risk_summary(aoi_id: str | None = None) -> list[dict[str, Any]]:
     """Latest assessment summary per AOI: when, cells per level, max score."""
+    # mv_latest_risk (latest assessment per cell, tile pipeline) — the raw
+    # risk_assessments table grows by millions of rows/day nationally and
+    # latest-per-AOI scans over it time out.
     async with acquire() as conn:
         rows = await conn.fetch(
             """
-            WITH latest AS (
-                SELECT g.aoi_id, MAX(ra.computed_at) AS ts
-                FROM risk_assessments ra
-                JOIN grid_cells g ON g.id = ra.cell_id
-                WHERE ($1::text IS NULL OR g.aoi_id = $1)
-                GROUP BY g.aoi_id
-            )
-            SELECT g.aoi_id, l.ts AS computed_at,
+            SELECT aoi_id, MAX(computed_at) AS computed_at,
                    COUNT(*) AS cells,
-                   MAX(ra.score) AS max_score,
-                   COUNT(*) FILTER (WHERE ra.class IN ('High','VeryHigh')) AS high_or_above,
-                   COUNT(*) FILTER (WHERE ra.class = 'Moderate') AS moderate
-            FROM risk_assessments ra
-            JOIN grid_cells g ON g.id = ra.cell_id
-            JOIN latest l ON l.aoi_id = g.aoi_id AND l.ts = ra.computed_at
-            GROUP BY g.aoi_id, l.ts
+                   MAX(risk_score) AS max_score,
+                   COUNT(*) FILTER (WHERE risk_level IN ('High','VeryHigh')) AS high_or_above,
+                   COUNT(*) FILTER (WHERE risk_level = 'Moderate') AS moderate
+            FROM mv_latest_risk
+            WHERE risk_score IS NOT NULL
+              AND ($1::text IS NULL OR aoi_id = $1)
+            GROUP BY aoi_id
             ORDER BY high_or_above DESC, max_score DESC
             """,
             aoi_id,
@@ -97,18 +93,12 @@ async def top_risk_cells(limit: int = 10, aoi_id: str | None = None) -> list[dic
     async with acquire() as conn:
         rows = await conn.fetch(
             """
-            WITH latest AS (
-                SELECT g.aoi_id, MAX(ra.computed_at) AS ts
-                FROM risk_assessments ra
-                JOIN grid_cells g ON g.id = ra.cell_id
-                GROUP BY g.aoi_id
-            )
-            SELECT ra.cell_id, g.aoi_id, ra.score, ra.class, ra.computed_at
-            FROM risk_assessments ra
-            JOIN grid_cells g ON g.id = ra.cell_id
-            JOIN latest l ON l.aoi_id = g.aoi_id AND l.ts = ra.computed_at
-            WHERE ($2::text IS NULL OR g.aoi_id = $2)
-            ORDER BY ra.score DESC
+            SELECT cell_id, aoi_id, risk_score AS score,
+                   risk_level AS class, computed_at
+            FROM mv_latest_risk
+            WHERE risk_score IS NOT NULL
+              AND ($2::text IS NULL OR aoi_id = $2)
+            ORDER BY risk_score DESC
             LIMIT $1
             """,
             limit,
@@ -217,12 +207,12 @@ async def national_report() -> dict[str, Any]:
         ml_rows = await conn.fetch(
             """
             WITH latest AS (
-                SELECT aoi_id, MAX(valuation_time) AS ts
+                SELECT aoi_id, MAX(computed_at) AS ts
                 FROM model_runs GROUP BY aoi_id
             )
             SELECT m.cell_id, m.aoi_id, m.probability, m.risk_class
             FROM model_runs m
-            JOIN latest l ON l.aoi_id = m.aoi_id AND l.ts = m.valuation_time
+            JOIN latest l ON l.aoi_id = m.aoi_id AND l.ts = m.computed_at
             ORDER BY m.probability DESC
             LIMIT 10
             """

@@ -323,6 +323,9 @@ class ScoringSettings(BaseSettings):
     # Shadow rows older than this are purged by the cleanup job — the
     # national hourly sweep writes ~1M rows/day (~1 GB/day). 0 = keep all.
     model_runs_retention_days: int = Field(default=30, ge=0)
+    # Hot-table retention for per-cell assessments (~15 GB/day nationally).
+    # mv_latest_risk + alert ledgers keep the operational state. 0 = keep all.
+    assessments_retention_days: int = Field(default=14, ge=0)
     mlflow_model_stage: Literal["Staging", "Production", "Archived"] = "Production"
     # Promotion gate — the ML model is blocked from champion until it
     # clears these floors on the same backtest the V1 baseline ran on.
