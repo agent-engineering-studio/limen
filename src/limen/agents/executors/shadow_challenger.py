@@ -40,9 +40,15 @@ class ShadowChallengerExecutor(Executor):
         model_version = getattr(self._challenger, "model_version", "v1-deterministic")
 
         bundles = assemble_bundles(ctx)
+        feature_row_fn = getattr(self._challenger, "feature_row", None)
         rows: list[ModelRunRow] = []
         for bundle in bundles:
             scored = self._challenger.score(bundle)
+            breakdown = scored.breakdown.model_dump(mode="json")
+            if feature_row_fn is not None:
+                # Canonical model inputs → drift monitoring compares
+                # training vs live on identical keys and scales.
+                breakdown["features"] = feature_row_fn(bundle)
             rows.append(
                 ModelRunRow(
                     cell_id=bundle.cell_id,
@@ -53,7 +59,7 @@ class ShadowChallengerExecutor(Executor):
                     role="challenger",
                     probability=scored.score,
                     risk_class=scored.level.value,
-                    breakdown=scored.breakdown.model_dump(mode="json"),
+                    breakdown=breakdown,
                 )
             )
 

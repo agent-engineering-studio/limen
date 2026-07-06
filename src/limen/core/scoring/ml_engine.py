@@ -147,6 +147,15 @@ class MLScoringEngine(ScoringEngine):
     # ------------------------------------------------------------------
     # ScoringEngine interface
     # ------------------------------------------------------------------
+    def feature_row(self, bundle: CellFeatureBundle) -> dict[str, float]:
+        """Named canonical feature vector — persisted by the shadow so the
+        drift monitor compares training vs live on identical keys/scales."""
+        names = self._artefacts.feature_names
+        if not names:
+            return {}
+        row = _bundle_to_feature_row(bundle, names=names)
+        return dict(zip(names, row, strict=True))
+
     def score(self, bundle: CellFeatureBundle) -> RiskScore:
         """Predict the cell's calibrated probability + component breakdown.
 
@@ -216,14 +225,28 @@ def _clamp01_scaled(x: float | None, cap: float) -> float:
 
 def _bundle_to_feature_row(bundle: CellFeatureBundle, *, names: list[str]) -> list[float]:
     """Project a bundle onto the ordered feature vector the model expects."""
+    from limen.ml.rain_features import compute_rain_aggregates
+
+    rain = compute_rain_aggregates(
+        [(s.timestamp, s.precipitation_mm) for s in bundle.dynamic.rainfall.samples],
+        as_of=bundle.dynamic.valuation_time,
+    )
     flat: dict[str, float] = {
         "static.susc_ispra": _clamp01(bundle.static.susc_ispra),
         "static.iffi_density_500": float(bundle.static.iffi_density_500 or 0.0),
+        "static.distance_to_iffi_m": float(bundle.static.distance_to_iffi_m or 0.0),
         "static.slope_deg": float(bundle.static.slope_deg or 0.0),
         "static.pai_class_norm": _clamp01(bundle.static.pai_class_norm),
         "static.litho_weight": _clamp01(bundle.static.litho_weight),
         "static.twi": float(bundle.static.twi or 0.0),
         "static.curvature": float(bundle.static.curvature or 0.0),
+        # Same antecedent-rain aggregates the model trained on (CERRA
+        # replay). The monitoring window is 48 h, so rain_72h is a lower
+        # bound; the 30-day total comes from the API_30 archive lookup.
+        "rain.rain_24h_mm": rain["rain_24h_mm"],
+        "rain.rain_72h_mm": rain["rain_72h_mm"],
+        "rain.max_i_24h_mmh": rain["max_i_24h_mmh"],
+        "rain.rain_30d_mm": float(bundle.dynamic.api_30_mm or rain["rain_30d_mm"]),
     }
     if not names:
         # Resolver fallback path: no feature schema → uniform vector,

@@ -315,6 +315,9 @@ class ScoringSettings(BaseSettings):
     mlflow_tracking_uri: str = "sqlite:///mlflow.db"
     mlflow_experiment: str = "limen-landslide"
     mlflow_registered_model: str = "limen-landslide-ml"
+    # Shadow rows older than this are purged by the cleanup job — the
+    # national hourly sweep writes ~1M rows/day (~1 GB/day). 0 = keep all.
+    model_runs_retention_days: int = Field(default=30, ge=0)
     mlflow_model_stage: Literal["Staging", "Production", "Archived"] = "Production"
     # Promotion gate — the ML model is blocked from champion until it
     # clears these floors on the same backtest the V1 baseline ran on.
@@ -368,7 +371,11 @@ class MonitoringSettings(BaseSettings):
     prediction_drift_alert: float = Field(default=0.15, ge=0.0)
     # APScheduler cadence — coarse, drift checks aren't a hot path.
     drift_check_hours: int = Field(default=24, ge=1)
-    enable_drift_monitoring: bool = False
+    enable_drift_monitoring: bool = True
+    # Canonical feature whose distribution is compared training-vs-live.
+    # Must exist both in training_samples.features and in the shadow's
+    # persisted breakdown["features"] (same keys, same scales).
+    drift_feature: str = "rain.rain_72h_mm"
 
 
 class GeodataSettings(BaseSettings):

@@ -65,8 +65,14 @@ async def insert_many(rows: Iterable[ModelRunRow]) -> int:
 
 
 async def recent_for_role(
-    role: ModelRole, *, since: datetime, limit: int = 10_000
+    role: ModelRole,
+    *,
+    since: datetime,
+    limit: int = 10_000,
+    require_features: bool = False,
 ) -> list[ModelRunRow]:
+    """Newest runs for a role. ``require_features`` keeps only rows whose
+    breakdown carries the canonical feature vector (drift monitoring)."""
     async with acquire() as conn:
         rows = await conn.fetch(
             """
@@ -74,12 +80,14 @@ async def recent_for_role(
                    role, probability, risk_class, breakdown
             FROM model_runs
             WHERE role = $1 AND computed_at >= $2
+              AND (NOT $4 OR breakdown ? 'features')
             ORDER BY computed_at DESC
             LIMIT $3
             """,
             role,
             since,
             limit,
+            require_features,
         )
     return [_to_row(r) for r in rows]
 

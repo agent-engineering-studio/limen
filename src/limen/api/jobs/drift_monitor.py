@@ -31,24 +31,31 @@ async def run_drift_monitor_job(deps: AppDependencies) -> int:
         log.info("job.drift.skip_no_training_samples")
         return 0
 
-    # Use the static.susc_ispra column as the reference univariate
-    # distribution — cheap to compute and a good proxy for distributional
-    # change. Production deployments will rotate which feature is
-    # monitored each cycle.
-    reference = [
-        float(s.features.get("static", {}).get("susc_ispra") or 0.0) for s in training_samples
-    ]
+    # Compare one canonical model feature training-vs-live. The shadow
+    # persists the exact vector the model consumed under
+    # breakdown["features"] (same keys and scales as training_samples),
+    # so the comparison is apples-to-apples by construction.
+    feature = deps.settings.monitoring.drift_feature
+    top, _, sub = feature.partition(".")
+    reference = [float((s.features.get(top) or {}).get(sub) or 0.0) for s in training_samples]
     reference_labels = [float(s.label) for s in training_samples]
 
     window_start = datetime.now(UTC) - timedelta(days=7)
-    recent = await recent_for_role("challenger", since=window_start, limit=10_000)
+    recent = await recent_for_role(
+        "challenger", since=window_start, limit=10_000, require_features=True
+    )
     if not recent:
         log.info("job.drift.no_recent_challenger_runs")
         return 0
 
     candidate = [
-        float(r.breakdown.get("static_terms", {}).get("susc_ispra") or 0.0) for r in recent
+        float(r.breakdown["features"][feature])
+        for r in recent
+        if feature in (r.breakdown.get("features") or {})
     ]
+    if not candidate:
+        log.info("job.drift.no_feature_rows", feature=feature)
+        return 0
     candidate_probs = [r.probability for r in recent]
     report = make_report(
         reference=reference,
@@ -63,6 +70,7 @@ async def run_drift_monitor_job(deps: AppDependencies) -> int:
     trigger = RetrainingTrigger.from_inputs(drift=report, new_iffi_since_last_train=0)
     log.info(
         "job.drift.done",
+        feature=feature,
         psi=report.psi,
         ks=report.ks,
         pred_drift=report.pred_drift,
