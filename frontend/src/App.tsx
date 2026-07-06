@@ -5,6 +5,7 @@ import type maplibregl from "maplibre-gl";
 import AlertList from "./components/AlertList";
 import CellPopup from "./components/CellPopup";
 import ExplainerPage from "./components/ExplainerPage";
+import NationalReportPanel from "./components/NationalReportPanel";
 import LegendPanel from "./components/LegendPanel";
 import RiskMap from "./components/RiskMap";
 import TimelineSlider from "./components/TimelineSlider";
@@ -14,13 +15,15 @@ import type { AlertItem } from "./types";
 export function App(): JSX.Element {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [selectedCell, setSelectedCell] = useState<string | null>(null);
-  const [page, setPage] = useState(
-    window.location.hash === "#/come-funziona" ? "explainer" : "map",
-  );
+  const pageFromHash = (): string => {
+    if (window.location.hash === "#/come-funziona") return "explainer";
+    if (window.location.hash === "#/italia") return "national";
+    return "map";
+  };
+  const [page, setPage] = useState(pageFromHash);
 
   useEffect(() => {
-    const onHash = (): void =>
-      setPage(window.location.hash === "#/come-funziona" ? "explainer" : "map");
+    const onHash = (): void => setPage(pageFromHash());
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
@@ -49,6 +52,9 @@ export function App(): JSX.Element {
           <a href="#/" className={page === "map" ? "on" : ""}>
             Mappa
           </a>
+          <a href="#/italia" className={page === "national" ? "on" : ""}>
+            Situazione Italia
+          </a>
           <a href="#/come-funziona" className={page === "explainer" ? "on" : ""}>
             Come funziona
           </a>
@@ -67,6 +73,10 @@ export function App(): JSX.Element {
       {page === "explainer" ? (
         <div className="explainer-area">
           <ExplainerPage />
+        </div>
+      ) : page === "national" ? (
+        <div className="explainer-area">
+          <NationalReportPanel />
         </div>
       ) : (
         <>

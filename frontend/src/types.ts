@@ -98,3 +98,55 @@ export interface HealthResponse {
   cache: boolean;
   llm_provider: string | null;
 }
+
+export interface LegendClass {
+  level: RiskLevel;
+  lo: number;
+  hi: number;
+  pc_alert: "verde" | "gialla" | "arancione" | "rossa";
+}
+
+export interface LegendResponse {
+  classes: LegendClass[];
+  model_version: string;
+}
+
+export interface NationalRegionSummary {
+  aoi_id: string;
+  computed_at: string;
+  cells_scored: number;
+  max_score: number;
+  high_or_above: number;
+  moderate: number;
+}
+
+export interface NationalTopCell {
+  cell_id: string;
+  aoi_id: string;
+  score: number;
+  level: RiskLevel;
+  computed_at: string;
+}
+
+export interface NationalMlCell {
+  cell_id: string;
+  aoi_id: string;
+  probability: number;
+  level: string;
+}
+
+export interface NationalReportResponse {
+  generated_at: string;
+  regions: NationalRegionSummary[];
+  totals: {
+    regions: number;
+    cells: number;
+    high_or_above: number;
+    moderate: number;
+  };
+  top_cells: NationalTopCell[];
+  ml_top_cells: NationalMlCell[];
+  alerts_24h: number;
+  forecast_alerts_24h: number;
+  report_it: string;
+}

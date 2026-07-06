@@ -353,3 +353,68 @@ html, body, #root {
     grid-column: 1 / -1;
   }
 }
+
+/* --- Situazione Italia (beta) --- */
+.national-panel {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+.panel-meta { color: #5e6473; font-size: 0.9rem; }
+.panel-error { color: #c92a2a; }
+.stat-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+.stat-card {
+  border: 1px solid #e2e4ea;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  background: #fff;
+}
+.stat-card strong { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.stat-card span { color: #5e6473; font-size: 0.85rem; }
+.report-text {
+  background: #f6f7f9;
+  border-left: 3px solid #b8bcc7;
+  padding: 0.75rem 1rem;
+  border-radius: 0 6px 6px 0;
+  line-height: 1.55;
+}
+.table-scroll { overflow-x: auto; }
+.regions-table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+.regions-table th, .regions-table td {
+  text-align: left;
+  padding: 0.35rem 0.7rem;
+  border-bottom: 1px solid #eceef2;
+  font-variant-numeric: tabular-nums;
+}
+.regions-table td:first-child { text-transform: capitalize; }
+.top-cells-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+.top-cells { list-style: none; padding: 0; margin: 0.5rem 0; }
+.top-cells li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0;
+  font-size: 0.9rem;
+}
+.pc-chip {
+  display: inline-block;
+  color: #fff;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  padding: 0.05rem 0.5rem;
+  margin-left: 0.4rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}

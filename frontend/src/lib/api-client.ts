@@ -3,6 +3,8 @@
 // requests on unmount.
 
 import type {
+  LegendResponse,
+  NationalReportResponse,
   AlertsResponse,
   AoiListResponse,
   CellBreakdownResponse,
@@ -110,6 +112,14 @@ export class ApiClient {
     if (opts.limit != null) params.set("limit", String(opts.limit));
     const query = params.toString() ? `?${params.toString()}` : "";
     return this.request<AlertsResponse>(`/api/alerts${query}`, {}, signal);
+  }
+
+  getLegend(signal?: AbortSignal): Promise<LegendResponse> {
+    return this.request<LegendResponse>("/api/legend", {}, signal);
+  }
+
+  getNationalReport(signal?: AbortSignal): Promise<NationalReportResponse> {
+    return this.request<NationalReportResponse>("/api/report/national", {}, signal);
   }
 }
 

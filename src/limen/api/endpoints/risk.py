@@ -175,3 +175,11 @@ async def legend() -> dict[str, Any]:
         ],
         "model_version": t.model_version,
     }
+
+
+@router.get("/api/report/national")
+async def national_report_endpoint() -> dict[str, Any]:
+    """Aggregated national picture — same payload as the MCP tool."""
+    from limen.mcp.tools import national_report
+
+    return await national_report()
