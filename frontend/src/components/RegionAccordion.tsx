@@ -127,9 +127,8 @@ export function RegionAccordion(props: RegionAccordionProps): JSX.Element {
     <section className="alert-list region-accordion" aria-label="Celle per regione">
       <h2>Celle sopra soglia · 72h</h2>
       <p className="alert-meta" style={{ margin: "0 0 6px" }}>
-        Ordinate per priorità <span className="mono">P</span> = rischio ×
-        esposizione (abitati, strade). Il colore segue il rischio della
-        legenda.
+        Prima le celle il cui eventuale movimento toccherebbe case o strade
+        (🏠 🛣), poi le altre. Il numero è il rischio della legenda.
       </p>
       {error ? (
         <p className="panel-error">{error}</p>
@@ -150,8 +149,11 @@ export function RegionAccordion(props: RegionAccordionProps): JSX.Element {
               />
               <span className="region-name">{g.name}</span>
               <span className="region-meta">
-                {g.cells.length} {g.cells.length === 1 ? "cella" : "celle"} ·
-                priorità max <span className="mono">{g.maxScore.toFixed(2)}</span>
+                {g.cells.length} {g.cells.length === 1 ? "cella" : "celle"}
+                {(() => {
+                  const esposte = g.cells.filter((c) => c.exposure).length;
+                  return esposte > 0 ? ` · ${esposte} presso abitati/strade` : "";
+                })()}
               </span>
             </summary>
             <ul>
@@ -190,12 +192,6 @@ export function RegionAccordion(props: RegionAccordionProps): JSX.Element {
                     </span>
                     <span className="mono cell-score">
                       {it.score.toFixed(2)}
-                    </span>
-                    <span
-                      className="mono cell-prio"
-                      title="priorità = rischio × esposizione: ordina la lista, può superare 1"
-                    >
-                      P {(it.priority ?? it.score).toFixed(2)}
                     </span>
                     <span className="cell-level">
                       {RISK_LABEL_IT_BY_LEVEL[it.level]}

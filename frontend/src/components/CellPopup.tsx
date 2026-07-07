@@ -90,7 +90,12 @@ function plainSummary(b: BreakdownView, exposure?: string | null): string {
   if (top && b[top[0]] > 0.05) {
     parts.push(`Il punteggio nasce soprattutto ${top[1]}.`);
   }
-  if (b.m < 0.2) {
+  if (b.m < 0.05) {
+    parts.push(
+      "Non c'è pioggia in corso: il punteggio riflette la fragilità " +
+        "storica del versante, non un pericolo in atto.",
+    );
+  } else if (b.m < 0.2) {
     parts.push("La pioggia recente incide poco.");
   } else if (b.m < 0.5) {
     parts.push("La pioggia recente contribuisce in modo moderato.");
@@ -278,15 +283,13 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
         );
       })()}
       <p className="plain-summary">{plainSummary(breakdown, props.exposure)}</p>
-      {props.priority != null ? (
+      {props.priority != null && props.exposure ? (
         <p className="priority-line">
           <span className="eyebrow" style={{ marginBottom: 2 }}>
-            Perché è in questa posizione in lista
+            Perché è in alto in lista
           </span>
-          La lista ordina per <strong>priorità {props.priority.toFixed(2)}</strong>:
-          il rischio del versante ({data.score.toFixed(2)}) moltiplicato per
-          l&rsquo;esposizione — conta di più dove può fare più danni, non dove il
-          terreno è più instabile.
+          Non perché il versante sia più instabile di altri, ma perché un
+          eventuale movimento toccherebbe {exposureText(props.exposure)}.
         </p>
       ) : null}
       <div className="comp-bars">
