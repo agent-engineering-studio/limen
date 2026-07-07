@@ -10,6 +10,8 @@ The executor is a no-op when ``SCORING__MODE`` is not ``shadow``.
 
 from __future__ import annotations
 
+import asyncio
+
 from limen.agents.workflow_runtime.executor import Executor, handler
 from limen.core.features.assembler import assemble_bundles
 from limen.core.logging import get_logger
@@ -28,28 +30,25 @@ class ShadowChallengerExecutor(Executor):
         super().__init__(name="ShadowChallenger")
         self._challenger = challenger
 
-    @handler
-    async def run(self, ctx: MonitoringContext) -> MonitoringContext:
-        if self._challenger is None:
-            return ctx
-
-        # Surface a model URI / version when the challenger is the V2
-        # engine; the deterministic challenger gets a stable placeholder
-        # so the model_runs table can still index by role.
-        model_uri = getattr(self._challenger, "model_uri", "scoring://deterministic")
-        model_version = getattr(self._challenger, "model_version", "v1-deterministic")
-
+    def _score_all(
+        self, ctx: MonitoringContext, model_uri: str, model_version: str
+    ) -> list[ModelRunRow]:
+        """CPU-bound (LightGBM + SHAP per cella) — in un worker thread
+        per non bloccare l'event loop condiviso con l'API."""
+        challenger = self._challenger
+        if challenger is None:
+            return []
         bundles = assemble_bundles(ctx)
-        feature_row_fn = getattr(self._challenger, "feature_row", None)
+        feature_row_fn = getattr(challenger, "feature_row", None)
         rows: list[ModelRunRow] = []
         for bundle in bundles:
-            scored = self._challenger.score(bundle)
+            scored = challenger.score(bundle)
             breakdown = scored.breakdown.model_dump(mode="json")
             if feature_row_fn is not None:
                 # Canonical model inputs → drift monitoring compares
                 # training vs live on identical keys and scales.
                 breakdown["features"] = feature_row_fn(bundle)
-            q90 = getattr(self._challenger, "conformal_q90", None)
+            q90 = getattr(challenger, "conformal_q90", None)
             if q90 is not None:
                 breakdown["conformal_q90"] = q90
             rows.append(
@@ -65,6 +64,21 @@ class ShadowChallengerExecutor(Executor):
                     breakdown=breakdown,
                 )
             )
+
+        return rows
+
+    @handler
+    async def run(self, ctx: MonitoringContext) -> MonitoringContext:
+        if self._challenger is None:
+            return ctx
+
+        # Surface a model URI / version when the challenger is the V2
+        # engine; the deterministic challenger gets a stable placeholder
+        # so the model_runs table can still index by role.
+        model_uri = getattr(self._challenger, "model_uri", "scoring://deterministic")
+        model_version = getattr(self._challenger, "model_version", "v1-deterministic")
+
+        rows = await asyncio.to_thread(self._score_all, ctx, model_uri, model_version)
 
         if rows:
             try:

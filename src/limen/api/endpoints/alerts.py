@@ -38,36 +38,29 @@ async def list_alerts(
     async with acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT DISTINCT ON (ra.cell_id)
-                   ra.cell_id, g.aoi_id, ra.score, ra.class, ra.computed_at,
+            WITH latest AS (
+                SELECT DISTINCT ON (ra.cell_id)
+                       ra.cell_id, ra.score, ra.class, ra.computed_at
+                FROM risk_assessments ra
+                WHERE ra.class = ANY($1::text[])
+                  AND ra.computed_at >= now() - ($2::int * interval '1 hour')
+                ORDER BY ra.cell_id, ra.computed_at DESC
+            )
+            -- Esposizione dal CORINE: 11x tessuto urbano, 12x
+            -- infrastrutture principali (strade/ferrovie 122,
+            -- industriale 121, porti/aeroporti 123-124) — nella cella
+            -- stessa e nelle adiacenti (~2 km). Calcolata DOPO la
+            -- dedup: solo sulle celle uniche, non su ogni tick orario.
+            SELECT l.cell_id, g.aoi_id, l.score, l.class, l.computed_at,
                    ST_X(ST_Centroid(g.geom)) AS lon,
                    ST_Y(ST_Centroid(g.geom)) AS lat,
-                   -- Esposizione dal CORINE: 11x tessuto urbano, 12x
-                   -- infrastrutture principali (strade/ferrovie 122,
-                   -- industriale 121, porti/aeroporti 123-124) — nella
-                   -- cella stessa e nelle celle adiacenti (~2 km).
                    (csf.landuse_code LIKE '11%') AS urban_here,
                    (csf.landuse_code LIKE '12%') AS infra_here,
-                   EXISTS (
-                       SELECT 1 FROM grid_cells n
-                       JOIN cell_static_factors nf ON nf.cell_id = n.id
-                       WHERE n.id <> g.id
-                         AND ST_DWithin(n.geom, g.geom, 0.02)
-                         AND nf.landuse_code LIKE '11%'
-                   ) AS urban_near,
-                   EXISTS (
-                       SELECT 1 FROM grid_cells n
-                       JOIN cell_static_factors nf ON nf.cell_id = n.id
-                       WHERE n.id <> g.id
-                         AND ST_DWithin(n.geom, g.geom, 0.02)
-                         AND nf.landuse_code LIKE '12%'
-                   ) AS infra_near
-            FROM risk_assessments ra
-            JOIN grid_cells g ON g.id = ra.cell_id
-            LEFT JOIN cell_static_factors csf ON csf.cell_id = ra.cell_id
-            WHERE ra.class = ANY($1::text[])
-              AND ra.computed_at >= now() - ($2::int * interval '1 hour')
-            ORDER BY ra.cell_id, ra.computed_at DESC
+                   csf.near_urban AS urban_near,
+                   csf.near_infra AS infra_near
+            FROM latest l
+            JOIN grid_cells g ON g.id = l.cell_id
+            LEFT JOIN cell_static_factors csf ON csf.cell_id = l.cell_id
             """,
             levels_to_include,
             since_hours,

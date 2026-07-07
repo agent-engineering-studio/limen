@@ -7,6 +7,7 @@ these numbers; it never alters them.
 
 from __future__ import annotations
 
+import asyncio
 from collections import Counter
 from datetime import UTC, datetime
 
@@ -61,8 +62,13 @@ class RiskScoringExecutor(Executor):
         self._top_k = top_k
         self._macroregion = macroregion
 
-    @handler
-    async def run(self, ctx: MonitoringContext) -> MonitoringContext:
+    def _score_all(self, ctx: MonitoringContext) -> list[CellRiskRecord]:
+        """CPU-bound loop over every cell — runs in a worker thread.
+
+        The hourly job lives in the SAME process as the API: scoring
+        312k cells inline blocked the event loop for minutes and every
+        HTTP request during a sweep timed out.
+        """
         bundles = assemble_bundles(ctx, macroregion=self._macroregion)
         records: list[CellRiskRecord] = []
         for bundle in bundles:
@@ -88,6 +94,11 @@ class RiskScoringExecutor(Executor):
 
         # Sort by descending score so top-K is easy
         records.sort(key=lambda r: r.score, reverse=True)
+        return records
+
+    @handler
+    async def run(self, ctx: MonitoringContext) -> MonitoringContext:
+        records = await asyncio.to_thread(self._score_all, ctx)
         by_level = Counter(r.level.value for r in records)
         high_or_above = sum(
             1 for r in records if _level_rank(r.level) >= _level_rank(RiskLevel.High)
