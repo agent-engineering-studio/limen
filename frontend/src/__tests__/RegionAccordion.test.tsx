@@ -30,7 +30,11 @@ describe("groupByRegion", () => {
     ]);
     expect(groups.map((g) => g.aoiId)).toEqual(["it-liguria", "it-puglia"]);
     expect(groups[0]?.maxScore).toBe(0.44);
-    expect(groups[0]?.cells.map((c) => c.score)).toEqual([0.44, 0.4]);
+    // Dentro la regione: ordine per indice di griglia (riga, colonna).
+    expect(groups[1]?.cells.map((c) => c.cell_id)).toEqual([
+      "it-puglia|1|1",
+      "it-puglia|4|4",
+    ]);
     expect(groups[1]?.name).toBe("puglia");
   });
 

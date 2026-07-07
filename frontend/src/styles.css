@@ -1095,3 +1095,15 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
 }
 .overlay-control label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .overlay-control input { accent-color: var(--amber); }
+
+.cell-place { font-size: 12.5px; }
+.exposure-chip {
+  display: inline-block;
+  font-size: 10px;
+  background: #fdeee2;
+  color: var(--amber-deep);
+  border-radius: 999px;
+  padding: 1px 7px;
+  margin-left: 6px;
+  font-weight: 700;
+}

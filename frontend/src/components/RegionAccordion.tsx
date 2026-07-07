@@ -18,6 +18,12 @@ export interface RegionGroup {
   cells: AlertItem[];
 }
 
+/** (row, col) della griglia dal cell_id "aoi|row|col" — per l'ordinamento. */
+function cellIndex(cellId: string): [number, number] {
+  const parts = cellId.split("|");
+  return [Number(parts[1] ?? 0), Number(parts[2] ?? 0)];
+}
+
 /** Group per-cell alerts by region, worst first — pure, unit-tested. */
 export function groupByRegion(items: AlertItem[]): RegionGroup[] {
   const by = new Map<string, AlertItem[]>();
@@ -29,8 +35,14 @@ export function groupByRegion(items: AlertItem[]): RegionGroup[] {
   }
   const groups: RegionGroup[] = [];
   for (const [aoiId, cells] of by) {
-    cells.sort((a, b) => b.score - a.score);
-    const worst = cells[0];
+    const worst = [...cells].sort((a, b) => b.score - a.score)[0];
+    // Dentro la regione le celle sono in ordine di indice di griglia
+    // (riga, colonna): stabile e prevedibile da un giro all'altro.
+    cells.sort((a, b) => {
+      const [ra, ca] = cellIndex(a.cell_id);
+      const [rb, cb] = cellIndex(b.cell_id);
+      return ra - rb || ca - cb;
+    });
     if (!worst) continue;
     groups.push({
       aoiId,
@@ -118,8 +130,14 @@ export function RegionAccordion(props: RegionAccordionProps): JSX.Element {
                       style={{ background: RISK_COLOR_BY_LEVEL[it.level] }}
                       aria-hidden
                     />
-                    <span className="mono cell-id">
-                      {it.cell_id.split("|").slice(1).join("·")}
+                    <span
+                      className="cell-place"
+                      title={`riquadro di griglia 1 km — riga ${cellIndex(it.cell_id)[0]}, colonna ${cellIndex(it.cell_id)[1]}`}
+                    >
+                      {it.place ?? `riquadro ${it.cell_id.split("|").slice(1).join("·")}`}
+                      {it.exposure ? (
+                        <span className="exposure-chip">🏠 {it.exposure}</span>
+                      ) : null}
                     </span>
                     <span className="mono cell-score">
                       {it.score.toFixed(2)}

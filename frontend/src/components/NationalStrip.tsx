@@ -81,8 +81,11 @@ export function NationalStrip(): JSX.Element {
             <ul className="top-cells">
               {report.ml_top_cells.slice(0, 3).map((c) => (
                 <li key={c.cell_id}>
-                  <code>{c.cell_id}</code>{" "}
-                  <span className="mono">P={c.probability.toFixed(2)}</span>
+                  {c.place ?? c.cell_id} (
+                  {c.aoi_id.replace(/^it-/, "").replace(/-/g, " ")}) ·{" "}
+                  <span className="mono">
+                    {Math.round(c.probability * 100)}%
+                  </span>
                 </li>
               ))}
             </ul>

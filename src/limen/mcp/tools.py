@@ -225,6 +225,30 @@ async def national_report() -> dict[str, Any]:
             """SELECT COUNT(*) FROM forecast_dispatches
                WHERE dispatched_at >= now() - interval '24 hours'"""
         )
+    from limen.integrations.geoserver_source.comuni import comuni_for_points
+
+    async def _places(cell_ids: list[str]) -> list[str | None]:
+        if not cell_ids:
+            return []
+        async with acquire() as conn:
+            pts = await conn.fetch(
+                """
+                SELECT id, ST_X(ST_Centroid(geom)) AS lon,
+                       ST_Y(ST_Centroid(geom)) AS lat
+                FROM grid_cells WHERE id = ANY($1::text[])
+                """,
+                cell_ids,
+            )
+        by_id = {str(r["id"]): (float(r["lon"]), float(r["lat"])) for r in pts}
+        ordered = [by_id.get(c, (0.0, 0.0)) for c in cell_ids]
+        return await comuni_for_points(ordered)
+
+    top_places = await _places([c["cell_id"] for c in top])
+    for c, place in zip(top, top_places, strict=True):
+        c["place"] = place
+    ml_cells = [str(r["cell_id"]) for r in ml_rows]
+    ml_places = await _places(ml_cells)
+
     report = {
         "generated_at": datetime.now(UTC).isoformat(),
         "regions": regions,
@@ -241,8 +265,9 @@ async def national_report() -> dict[str, Any]:
                 "aoi_id": str(r["aoi_id"]),
                 "probability": round(float(r["probability"]), 3),
                 "level": str(r["risk_class"]),
+                "place": place,
             }
-            for r in ml_rows
+            for r, place in zip(ml_rows, ml_places, strict=True)
         ],
         "alerts_24h": int(alerts_24h or 0),
         "forecast_alerts_24h": int(forecast_24h or 0),
@@ -269,15 +294,18 @@ def render_national_report_it(report: dict[str, Any]) -> str:
     ]
     if report["top_cells"]:
         c = report["top_cells"][0]
+        dove = f"presso {c['place']}" if c.get("place") else f"nella cella {c['cell_id']}"
+        regione = c["aoi_id"].removeprefix("it-").replace("-", " ").title()
         lines.append(
-            f"Cella di picco nazionale {c['cell_id']} ({c['aoi_id']}) "
+            f"Punto di massima attenzione {dove} ({regione}) "
             f"con punteggio {c['score']:.2f} ({c['level']})."
         )
     if report["ml_top_cells"]:
         m = report["ml_top_cells"][0]
+        dove = f"presso {m['place']}" if m.get("place") else f"sulla cella {m['cell_id']}"
         lines.append(
-            f"Challenger ML (shadow): probabilità massima {m['probability']:.2f} "
-            f"sulla cella {m['cell_id']} ({m['aoi_id']})."
+            f"Il modello ML in osservazione indica la probabilità più alta "
+            f"({m['probability']:.2f}) {dove}."
         )
     lines.append(
         f"Ultime 24 ore: {report['alerts_24h']} alert operativi, "

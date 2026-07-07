@@ -39,9 +39,13 @@ async def list_alerts(
             SELECT DISTINCT ON (ra.cell_id)
                    ra.cell_id, g.aoi_id, ra.score, ra.class, ra.computed_at,
                    ST_X(ST_Centroid(g.geom)) AS lon,
-                   ST_Y(ST_Centroid(g.geom)) AS lat
+                   ST_Y(ST_Centroid(g.geom)) AS lat,
+                   -- CORINE 1xx = tessuto urbano: frana vicino ad
+                   -- abitazioni, non versante isolato.
+                   (csf.landuse_code LIKE '1%') AS urban
             FROM risk_assessments ra
             JOIN grid_cells g ON g.id = ra.cell_id
+            LEFT JOIN cell_static_factors csf ON csf.cell_id = ra.cell_id
             WHERE ra.class = ANY($1::text[])
               AND ra.computed_at >= now() - ($2::int * interval '1 hour')
             ORDER BY ra.cell_id, ra.computed_at DESC
@@ -50,6 +54,10 @@ async def list_alerts(
             since_hours,
         )
     rows = sorted(rows, key=lambda r: float(r["score"]), reverse=True)[:limit]
+
+    from limen.integrations.geoserver_source.comuni import comuni_for_points
+
+    places = await comuni_for_points([(float(r["lon"]), float(r["lat"])) for r in rows])
 
     items = [
         AlertItem(
@@ -60,8 +68,10 @@ async def list_alerts(
             computed_at=r["computed_at"],
             lon=float(r["lon"]),
             lat=float(r["lat"]),
+            place=place,
+            exposure="abitato" if r["urban"] else None,
         )
-        for r in rows
+        for r, place in zip(rows, places, strict=True)
     ]
     return AlertsResponse(items=items)
 

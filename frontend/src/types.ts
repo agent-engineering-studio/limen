@@ -88,6 +88,8 @@ export interface AlertItem {
   computed_at: string;
   lon?: number | null;
   lat?: number | null;
+  place?: string | null;
+  exposure?: string | null;
 }
 
 export interface AlertsResponse {
@@ -135,6 +137,7 @@ export interface NationalMlCell {
   aoi_id: string;
   probability: number;
   level: string;
+  place?: string | null;
 }
 
 export interface NationalReportResponse {

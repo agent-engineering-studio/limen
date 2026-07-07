@@ -115,6 +115,10 @@ class AlertItem(BaseModel):
     computed_at: datetime
     lon: float | None = None
     lat: float | None = None
+    # Nome del comune (ISTAT) del centroide — leggibile per non esperti.
+    place: str | None = None
+    # "abitato" quando la cella ricade su tessuto urbano CORINE (1xx).
+    exposure: str | None = None
 
 
 class AlertsResponse(BaseModel):
