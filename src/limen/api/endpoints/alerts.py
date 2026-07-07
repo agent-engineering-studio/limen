@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Response
 
 from limen.api.dependencies import DepsDep
 from limen.api.schemas import AlertItem, AlertsResponse
@@ -13,12 +13,14 @@ router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 
 @router.get("", response_model=AlertsResponse)
 async def list_alerts(
+    response: Response,
     deps: DepsDep,  # noqa: ARG001 — DI presence
     threshold: str = Query("High", description="Minimum risk level to include"),
     since_hours: int = Query(72, ge=1, le=24 * 30),
     limit: int = Query(200, ge=1, le=2000),
 ) -> AlertsResponse:
     """Return the most recent persisted alerts above ``threshold``."""
+    response.headers["Cache-Control"] = "public, max-age=30"
     valid = {"None", "Low", "Moderate", "High", "VeryHigh"}
     if threshold not in valid:
         threshold = "High"

@@ -15,6 +15,8 @@ interface ViteEnv {
   readonly VITE_PAI_PMTILES_URL?: string;
   /** URL of the static `iffi_landslides.pmtiles`. Same opt-in semantics. */
   readonly VITE_IFFI_PMTILES_URL?: string;
+  /** GeoServer WMS endpoint for the ISPRA overlays (PAI, IFFI). */
+  readonly VITE_GEOSERVER_WMS_URL?: string;
 }
 
 const env: ViteEnv =
@@ -45,4 +47,6 @@ export const config = {
   // `limen geodata make-pmtiles`. When unset the layers are not added.
   paiPmtilesUrl: env.VITE_PAI_PMTILES_URL,
   iffiPmtilesUrl: env.VITE_IFFI_PMTILES_URL,
+  geoserverWmsUrl:
+    env.VITE_GEOSERVER_WMS_URL ?? "http://localhost:8081/geoserver/ispra/wms",
 } as const;

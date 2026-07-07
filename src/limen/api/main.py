@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 from apscheduler import AsyncScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from limen.api.dependencies import AppDependencies
 from limen.api.endpoints import all_routers
@@ -112,6 +113,9 @@ def _build_lifespan_for(deps: AppDependencies, scheduler: AsyncScheduler | None)
 
 
 def _apply_middleware(app: FastAPI, settings: Settings) -> None:
+    # The national report and alert lists are tens-of-KB JSON: gzip cuts
+    # them ~5-10x for browsers on slow links.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.api.cors_origins,

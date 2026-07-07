@@ -8,6 +8,7 @@ import ForecastList from "./components/ForecastList";
 import HomePage from "./components/HomePage";
 import LegendPanel from "./components/LegendPanel";
 import NationalStrip from "./components/NationalStrip";
+import OverlayControl from "./components/OverlayControl";
 import RegionAccordion from "./components/RegionAccordion";
 import type { CellSelection } from "./components/RegionAccordion";
 import RiskMap from "./components/RiskMap";
@@ -102,6 +103,7 @@ export function App(): JSX.Element {
           onCellClick={onMapClick}
           selectedCellId={selected?.cellId ?? null}
         />
+        <OverlayControl mapRef={mapRef} />
         <CellPopup
           cellId={selected?.cellId ?? null}
           lon={selected?.lon}

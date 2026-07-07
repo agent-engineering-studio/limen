@@ -6,7 +6,7 @@ import json
 from collections import Counter
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Response, status
 
 from limen.api.dependencies import DepsDep
 from limen.api.schemas import (
@@ -150,10 +150,11 @@ async def cell_breakdown(cell_id: str, deps: DepsDep) -> CellBreakdownResponse: 
 
 
 @router.get("/api/legend")
-async def legend() -> dict[str, Any]:
+async def legend(response: Response) -> dict[str, Any]:
     """Class cutoffs + Protezione Civile alert colours (presentation only)."""
     from limen.core.scoring.regional_thresholds import load_regional_thresholds
 
+    response.headers["Cache-Control"] = "public, max-age=3600"
     t = load_regional_thresholds()
     pc = t.pc_alert
     levels = {
@@ -178,8 +179,11 @@ async def legend() -> dict[str, Any]:
 
 
 @router.get("/api/report/national")
-async def national_report_endpoint() -> dict[str, Any]:
+async def national_report_endpoint(response: Response) -> dict[str, Any]:
     """Aggregated national picture — same payload as the MCP tool."""
     from limen.mcp.tools import national_report
 
+    # The picture changes at most hourly; 60 s keeps repeat navigation
+    # instant without hiding fresh sweeps.
+    response.headers["Cache-Control"] = "public, max-age=60"
     return await national_report()

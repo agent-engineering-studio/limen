@@ -925,8 +925,8 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
 .level-chip.on-dark { color: #fff; }
 .comp-bars { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 0; }
 .comp-bar { display: grid; grid-template-columns: 110px 1fr 52px; gap: 8px; align-items: center; font-size: 12.5px; }
-.comp-bar .track { background: var(--hairline); border-radius: 999px; height: 8px; overflow: hidden; }
-.comp-bar .fill { height: 100%; border-radius: 999px; }
+.comp-bar .track { display: block; background: var(--hairline); border-radius: 999px; height: 8px; overflow: hidden; }
+.comp-bar .fill { display: block; height: 100%; border-radius: 999px; }
 .comp-bar .val { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
 .popup-briefing { border-top: 1px solid var(--hairline); padding-top: 10px; }
 .popup-note { font-style: italic; font-size: 11px; color: #8a867c; }
@@ -1075,3 +1075,23 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   font-size: 12.5px;
 }
 .rain-outlook .eyebrow { display: block; font-size: 10px; }
+
+/* Toggle overlay ISPRA sulla mappa */
+.overlay-control {
+  position: absolute;
+  bottom: 26px;
+  left: 12px;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(4px);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  box-shadow: 0 2px 12px rgba(20, 22, 27, 0.08);
+}
+.overlay-control label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.overlay-control input { accent-color: var(--amber); }

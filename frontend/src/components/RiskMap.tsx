@@ -9,6 +9,36 @@ import { maplibreColorMatch } from "../lib/risk-colors";
 const SOURCE_ID = "limen-risk";
 const LAYER_ID = "limen-risk-fill";
 const SELECTED_LAYER_ID = "limen-risk-selected";
+const REGION_SOURCE_ID = "limen-region";
+const REGION_LAYER_ID = "limen-region-fill";
+// Sotto questo zoom una cella da 1 km è sub-pixel: mostriamo il
+// choropleth regionale (20 poligoni) invece dei 312k poligoni cella.
+const CELL_MIN_ZOOM = 7;
+const WMS_PAI_LAYER = "ispra:mosaicatura_ispra_2020_2021_aree_pericolosita_frana_pai";
+const IFFI_REGIONS = [
+  "abruzzo", "basilicata", "bolzano", "calabria", "campania",
+  "emilia_romagna", "friuli_venezia_giulia", "lazio", "liguria",
+  "lombardia", "marche", "molise", "piemonte", "puglia", "sardegna",
+  "sicilia", "toscana", "trento", "umbria", "valle_d_aosta", "veneto",
+];
+const WMS_IFFI_LAYERS = IFFI_REGIONS.map(
+  (r) => `ispra:frane_poly_${r}_opendata`,
+).join(",");
+
+function wmsTileUrl(base: string, layers: string): string {
+  const params = new URLSearchParams({
+    service: "WMS",
+    version: "1.1.1",
+    request: "GetMap",
+    layers,
+    srs: "EPSG:3857",
+    width: "256",
+    height: "256",
+    format: "image/png",
+    transparent: "true",
+  });
+  return `${base}?${params.toString()}&bbox={bbox-epsg-3857}`;
+}
 const PAI_SOURCE_ID = "limen-pai";
 const PAI_LAYER_ID = "limen-pai-fill";
 const IFFI_SOURCE_ID = "limen-iffi";
@@ -69,7 +99,7 @@ export interface RiskMapProps {
 export function RiskMap(props: RiskMapProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const tileserv = (props.tileservUrl ?? config.tileservUrl).replace(/\/+$/, "");
-  const tileLayer = props.tileLayer ?? "public.mv_latest_risk";
+  const tileLayer = props.tileLayer ?? "public.v_risk_tiles";
   const onCellClick = props.onCellClick;
 
   useEffect(() => {
@@ -98,14 +128,59 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         minzoom: 5,
         maxzoom: 14,
       },
+      [REGION_SOURCE_ID]: {
+        type: "vector",
+        tiles: [`${tileserv}/public.v_region_tiles/{z}/{x}/{y}.pbf`],
+        minzoom: 0,
+        maxzoom: 10,
+      },
+      "wms-pai": {
+        type: "raster",
+        tiles: [wmsTileUrl(config.geoserverWmsUrl, WMS_PAI_LAYER)],
+        tileSize: 256,
+        attribution: "ISPRA PAI (CC-BY-4.0)",
+      },
+      "wms-iffi": {
+        type: "raster",
+        tiles: [wmsTileUrl(config.geoserverWmsUrl, WMS_IFFI_LAYERS)],
+        tileSize: 256,
+        attribution: "ISPRA IFFI (CC-BY-4.0)",
+      },
     };
     const layers: maplibregl.StyleSpecification["layers"] = [
       { id: "osm", type: "raster", source: "osm" },
       {
+        id: "wms-pai-layer",
+        type: "raster",
+        source: "wms-pai",
+        paint: { "raster-opacity": 0.6 },
+        layout: { visibility: "none" },
+      },
+      {
+        id: "wms-iffi-layer",
+        type: "raster",
+        source: "wms-iffi",
+        paint: { "raster-opacity": 0.7 },
+        layout: { visibility: "none" },
+      },
+      {
+        id: REGION_LAYER_ID,
+        type: "fill",
+        source: REGION_SOURCE_ID,
+        "source-layer": "public.v_region_tiles",
+        maxzoom: CELL_MIN_ZOOM,
+        paint: {
+          "fill-color": maplibreColorMatch() as never,
+          "fill-opacity": 0.45,
+          "fill-outline-color": "#555",
+        },
+      },
+      {
         id: LAYER_ID,
         type: "fill",
         source: SOURCE_ID,
-        "source-layer": tileLayer.replace(/^public\./, ""),
+        "source-layer": tileLayer,
+        minzoom: CELL_MIN_ZOOM,
         paint: {
           "fill-color": maplibreColorMatch() as never,
           "fill-opacity": 0.55,
@@ -118,7 +193,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         id: SELECTED_LAYER_ID,
         type: "line",
         source: SOURCE_ID,
-        "source-layer": tileLayer.replace(/^public\./, ""),
+        "source-layer": tileLayer,
         paint: {
           "line-color": "#2456a3",
           "line-width": 3,
@@ -195,6 +270,16 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         }
       });
     }
+    // Click su una regione a zoom nazionale → zoom fino alle celle.
+    map.on("click", REGION_LAYER_ID, (e: maplibregl.MapMouseEvent) => {
+      map.easeTo({ center: e.lngLat, zoom: CELL_MIN_ZOOM + 1 });
+    });
+    map.on("mouseenter", REGION_LAYER_ID, () => {
+      map.getCanvas().style.cursor = "pointer";
+    });
+    map.on("mouseleave", REGION_LAYER_ID, () => {
+      map.getCanvas().style.cursor = "";
+    });
 
     return () => {
       map.remove();
