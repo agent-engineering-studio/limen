@@ -199,7 +199,13 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
       .then(setData)
       .catch((err: unknown) => {
         if (ctrl.signal.aborted) return;
-        if (err instanceof ApiClientError) {
+        if (err instanceof ApiClientError && err.status === 404) {
+          setError(
+            "Questa cella non è ancora stata rivalutata dal ciclo di " +
+              "monitoraggio (le regioni vengono aggiornate a rotazione). " +
+              "Riprova tra qualche ora.",
+          );
+        } else if (err instanceof ApiClientError) {
           setError(`Errore ${err.status}: ${err.message}`);
         } else if (err instanceof Error) {
           setError(err.message);
