@@ -16,21 +16,79 @@ export interface CellPopupProps {
   readonly onDismiss?: () => void;
 }
 
+const EXPOSURE_PHRASE: Record<string, string> = {
+  abitato: "un centro abitato",
+  "vicino abitato": "case nelle vicinanze",
+  infrastrutture: "strade o ferrovie principali",
+  "infrastrutture vicine": "strade o ferrovie nelle vicinanze",
+};
+
+function exposureText(exposure?: string | null): string | null {
+  if (!exposure) return null;
+  const parts = exposure
+    .split(", ")
+    .map((t) => EXPOSURE_PHRASE[t] ?? t)
+    .filter(Boolean);
+  if (parts.length === 0) return null;
+  return parts.length === 1
+    ? parts[0]!
+    : `${parts.slice(0, -1).join(", ")} e ${parts[parts.length - 1]}`;
+}
+
+/** Verdetto operativo — deterministico da livello + esposizione:
+ * risponde a "devo preoccuparmi? devo monitorare questa cella?". */
+function verdict(
+  level: RiskLevel,
+  exposure?: string | null,
+): { text: string; tone: "ok" | "watch" | "warn" } {
+  const exposed = Boolean(exposure);
+  if (level === "VeryHigh" || level === "High") {
+    return {
+      text: exposed
+        ? "Da attenzionare subito: rischio alto vicino a case o strade."
+        : "Da attenzionare: rischio alto, versante isolato.",
+      tone: "warn",
+    };
+  }
+  if (level === "Moderate") {
+    return exposed
+      ? {
+          text:
+            "Da tenere sotto osservazione: rischio moderato, ma la zona è " +
+            "abitata o attraversata da infrastrutture.",
+          tone: "watch",
+        }
+      : {
+          text:
+            "Controlli di routine: rischio moderato su versante isolato, " +
+            "nessuna azione immediata.",
+          tone: "ok",
+        };
+  }
+  return {
+    text: exposed
+      ? "Nessuna preoccupazione immediata: il rischio è basso — la cella è " +
+        "in lista solo perché vicina ad abitazioni o strade."
+      : "Nessuna preoccupazione: rischio basso.",
+    tone: "ok",
+  };
+}
+
 /** Spiegazione della cella in linguaggio piano — deterministica, dal
  * breakdown: niente LLM, niente numeri inventati. */
 function plainSummary(b: BreakdownView, exposure?: string | null): string {
   const drivers: [keyof BreakdownView, string][] = [
-    ["s", "la predisposizione del versante (geologia, pendenza, frane passate)"],
-    ["m", "la spinta della pioggia recente"],
-    ["e", "le scosse sismiche recenti"],
-    ["f", "l'effetto di incendi recenti"],
-    ["h", "la pericolosità idraulica della zona"],
+    ["s", "dalla natura del versante: geologia, pendenza e frane del passato"],
+    ["m", "dalla spinta della pioggia recente"],
+    ["e", "dalle scosse sismiche recenti"],
+    ["f", "dall'effetto di incendi recenti"],
+    ["h", "dalla pericolosità idraulica della zona"],
   ];
   const sorted = [...drivers].sort((x, y) => b[y[0]] - b[x[0]]);
   const top = sorted[0];
   const parts: string[] = [];
   if (top && b[top[0]] > 0.05) {
-    parts.push(`Qui il rischio nasce soprattutto da ${top[1]}.`);
+    parts.push(`Il punteggio nasce soprattutto ${top[1]}.`);
   }
   if (b.m < 0.2) {
     parts.push("La pioggia recente incide poco.");
@@ -39,10 +97,9 @@ function plainSummary(b: BreakdownView, exposure?: string | null): string {
   } else {
     parts.push("La pioggia recente sta spingendo il rischio verso l'alto.");
   }
-  if (exposure) {
-    parts.push(
-      `La priorità è più alta della media perché la zona è ${exposure}.`,
-    );
+  const exp = exposureText(exposure);
+  if (exp) {
+    parts.push(`Nelle vicinanze: ${exp}.`);
   }
   return parts.join(" ");
 }
@@ -180,7 +237,6 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
     f: pickScalar(factors, "f"),
     h: pickScalar(factors, "h"),
   };
-  const briefing = (data.explanation["briefing_it"] as string | undefined) ?? null;
   const level = asLevel(data.level);
 
   const COMP_COLORS: Record<keyof BreakdownView, string> = {
@@ -213,17 +269,26 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
         {props.place ? `${props.place} · ` : ""}cella {data.cell_id} · modello{" "}
         {data.pipeline_version} · {new Date(data.computed_at).toLocaleString("it-IT")}
       </p>
+      {(() => {
+        const v = verdict(level, props.exposure);
+        return (
+          <p className={`verdict verdict-${v.tone}`} role="status">
+            {v.text}
+          </p>
+        );
+      })()}
+      <p className="plain-summary">{plainSummary(breakdown, props.exposure)}</p>
       {props.priority != null ? (
         <p className="priority-line">
           <span className="eyebrow" style={{ marginBottom: 2 }}>
-            Priorità operativa
+            Perché è in questa posizione in lista
           </span>
-          <span className="mono priority-value">{props.priority.toFixed(2)}</span>{" "}
-          = rischio {data.score.toFixed(2)} × esposizione
-          {props.exposure ? ` (${props.exposure})` : " (nessuna: versante isolato)"}
+          La lista ordina per <strong>priorità {props.priority.toFixed(2)}</strong>:
+          il rischio del versante ({data.score.toFixed(2)}) moltiplicato per
+          l&rsquo;esposizione — conta di più dove può fare più danni, non dove il
+          terreno è più instabile.
         </p>
       ) : null}
-      <p className="plain-summary">{plainSummary(breakdown, props.exposure)}</p>
       <div className="comp-bars">
         {(Object.keys(COMP_LABELS) as (keyof BreakdownView)[]).map((k) => (
           <div className="comp-bar" key={k}>
@@ -251,20 +316,7 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
           <span className="mono">{outlook.peakMmh.toFixed(1)} mm/h</span>
         </p>
       ) : null}
-      {briefing ? (
-        <details className="regional-briefing">
-          <summary>
-            Analisi regionale (AI) —{" "}
-            {data.cell_id.split("|")[0]?.replace(/^it-/, "").replace(/-/g, " ")}
-          </summary>
-          <p className="popup-briefing">{briefing}</p>
-          <p className="popup-note">
-            Testo generato da un modello linguistico sull'intera regione (non
-            su questa cella): i numeri citati vengono dalla valutazione
-            deterministica.
-          </p>
-        </details>
-      ) : null}
+
       {onDismiss ? (
         <button type="button" onClick={onDismiss} style={{ marginTop: 8 }}>
           chiudi

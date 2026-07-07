@@ -68,6 +68,42 @@ export interface RegionAccordionProps {
  * first). Native <details> keeps the sidebar scannable: the region row
  * is the summary, the cells expand on demand.
  */
+/** Analisi AI della regione, caricata solo quando l'operatore la apre. */
+function RegionalAnalysis({ aoiId }: { aoiId: string }): JSX.Element {
+  const [text, setText] = useState<string | null | undefined>(undefined);
+
+  const load = (): void => {
+    if (text !== undefined) return;
+    setText(null);
+    defaultApiClient
+      .getLatestRisk(aoiId)
+      .then((resp) => setText(resp.briefing_it ?? ""))
+      .catch(() => setText(""));
+  };
+
+  return (
+    <details className="regional-analysis" onToggle={load}>
+      <summary>Analisi regionale (AI)</summary>
+      {text === null || text === undefined ? (
+        <p className="alert-meta">caricamento…</p>
+      ) : text === "" ? (
+        <p className="alert-meta">
+          Nessuna analisi disponibile per questa regione (viene generata
+          quando ci sono celle sopra soglia).
+        </p>
+      ) : (
+        <>
+          <p className="regional-analysis-text">{text}</p>
+          <p className="popup-note">
+            Testo generato da un modello linguistico sull'intera regione; i
+            numeri citati vengono dalla valutazione deterministica.
+          </p>
+        </>
+      )}
+    </details>
+  );
+}
+
 export function RegionAccordion(props: RegionAccordionProps): JSX.Element {
   const { onCellSelect, selectedCellId } = props;
   const [items, setItems] = useState<AlertItem[] | null>(null);
@@ -90,6 +126,11 @@ export function RegionAccordion(props: RegionAccordionProps): JSX.Element {
   return (
     <section className="alert-list region-accordion" aria-label="Celle per regione">
       <h2>Celle sopra soglia · 72h</h2>
+      <p className="alert-meta" style={{ margin: "0 0 6px" }}>
+        Ordinate per priorità <span className="mono">P</span> = rischio ×
+        esposizione (abitati, strade). Il colore segue il rischio della
+        legenda.
+      </p>
       {error ? (
         <p className="panel-error">{error}</p>
       ) : items === null ? (
@@ -110,7 +151,7 @@ export function RegionAccordion(props: RegionAccordionProps): JSX.Element {
               <span className="region-name">{g.name}</span>
               <span className="region-meta">
                 {g.cells.length} {g.cells.length === 1 ? "cella" : "celle"} ·
-                max <span className="mono">{g.maxScore.toFixed(2)}</span>
+                priorità max <span className="mono">{g.maxScore.toFixed(2)}</span>
               </span>
             </summary>
             <ul>
@@ -147,11 +188,14 @@ export function RegionAccordion(props: RegionAccordionProps): JSX.Element {
                         </span>
                       ))}
                     </span>
+                    <span className="mono cell-score">
+                      {it.score.toFixed(2)}
+                    </span>
                     <span
-                      className="mono cell-score"
-                      title={`rischio ${it.score.toFixed(2)} × esposizione = priorità ${(it.priority ?? it.score).toFixed(2)}`}
+                      className="mono cell-prio"
+                      title="priorità = rischio × esposizione: ordina la lista, può superare 1"
                     >
-                      {(it.priority ?? it.score).toFixed(2)}
+                      P {(it.priority ?? it.score).toFixed(2)}
                     </span>
                     <span className="cell-level">
                       {RISK_LABEL_IT_BY_LEVEL[it.level]}
@@ -165,6 +209,7 @@ export function RegionAccordion(props: RegionAccordionProps): JSX.Element {
                 </li>
               ) : null}
             </ul>
+            <RegionalAnalysis aoiId={g.aoiId} />
           </details>
         ))
       )}

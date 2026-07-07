@@ -72,6 +72,11 @@ export function LegendPanel(): JSX.Element {
           </li>
         ))}
       </ul>
+      <p className="legend-note">
+        <span className="mono">P</span> nelle liste = priorità operativa:
+        rischio × esposizione (centri abitati, strade). Ordina le celle e può
+        superare 1; il colore resta legato al rischio qui sopra.
+      </p>
     </section>
   );
 }
