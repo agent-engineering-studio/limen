@@ -72,5 +72,5 @@ def test_conformal_quantiles_cover_marginally() -> None:
     q = conformal_quantiles(y, p)
     assert set(q) == {"q80", "q90", "q95"}
     assert q["q80"] <= q["q90"] <= q["q95"]
-    covered = sum(1 for yt, yp in zip(y, p) if abs(yt - yp) <= q["q90"])
+    covered = sum(1 for yt, yp in zip(y, p, strict=True) if abs(yt - yp) <= q["q90"])
     assert covered / len(y) >= 0.9

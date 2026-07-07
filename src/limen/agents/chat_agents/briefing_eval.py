@@ -67,6 +67,37 @@ def allowed_numbers_from_payload(payload: Any) -> set[str]:
     return out
 
 
+# Numeri COMPOSTI scritti in lettere ("settantadue", "ventiquattromila-
+# quattrocentosessantaquattro"): vietati — illeggibili, non verificabili
+# contro il payload, e l'LLM li sbaglia ("ventiquillemila..."). I numeri
+# semplici del parlato naturale ("tre anomalie") restano legittimi:
+# serve la composizione di almeno due morfemi numerali.
+_NUM_MORPHEME = (
+    "uno|due|tre|quattro|cinque|sei|sette|otto|nove|dieci|"
+    "undici|dodici|tredici|quattordici|quindici|sedici|"
+    "diciassette|diciotto|diciannove|"
+    "venti|vent|trenta|trent|quaranta|quarant|cinquanta|cinquant|"
+    "sessanta|sessant|settanta|settant|ottanta|ottant|novanta|novant|"
+    "cento|cent|mila|mille|milioni|milione|miliardi|miliardo"
+)
+_SPELLED_NUMBER_RE = re.compile(rf"\b(?:{_NUM_MORPHEME}){{2,}}\b", re.IGNORECASE)
+# Le agglutinazioni SGRAMMATICATE dell'LLM ("ventiquillemila...") non
+# compongono morfemi validi e sfuggono al pattern sopra: euristica a
+# sottostringhe — parola lunga con almeno due morfemi numerali dentro.
+_MORPHEME_SUBSTR_RE = re.compile(rf"(?:{_NUM_MORPHEME})", re.IGNORECASE)
+_LONG_WORD_RE = re.compile(r"\b\w{12,}\b")
+
+
+def _garbled_spelled_numbers(text: str) -> list[str]:
+    out = []
+    for m in _LONG_WORD_RE.finditer(text):
+        word = m.group(0)
+        hits = {h.group(0).lower() for h in _MORPHEME_SUBSTR_RE.finditer(word)}
+        if len(hits) >= 2:
+            out.append(word)
+    return out
+
+
 def evaluate_briefing(
     text: str,
     *,
@@ -82,6 +113,13 @@ def evaluate_briefing(
 
     if _BULLET_RE.search(text):
         violations.append("contiene elenchi puntati o titoli markdown (vietati)")
+
+    spelled = sorted(
+        {m.group(0) for m in _SPELLED_NUMBER_RE.finditer(text)}
+        | set(_garbled_spelled_numbers(text))
+    )
+    if spelled:
+        violations.append(f"numeri composti scritti in lettere (vietati): {spelled}")
 
     lower = text.lower()
     for term in _BANNED_TERMS:

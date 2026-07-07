@@ -43,3 +43,35 @@ def test_comma_decimals_and_structural_numbers_allowed() -> None:
     text = ("Il punteggio 0,62 richiede monitoraggio nelle prossime 48 ore su 3 celle. " * 16)[:-1]
     r = evaluate_briefing(text, allowed_numbers=allowed)
     assert r.passed, r.violations
+
+
+def test_spelled_out_compound_numbers_are_flagged() -> None:
+    from limen.agents.chat_agents.briefing_eval import evaluate_briefing
+
+    text = (
+        "L'orizzonte si estende per settantadue ore su un totale di "
+        "ventiquattromilaquattrocentosessantaquattro celle analizzate. " + "parola " * 150
+    )
+    res = evaluate_briefing(text, allowed_numbers=set())
+    assert any("scritti in lettere" in v for v in res.violations)
+    joined = " ".join(res.violations)
+    assert "settantadue" in joined
+    assert "ventiquattromilaquattrocentosessantaquattro" in joined
+
+
+def test_simple_prose_numbers_are_fine() -> None:
+    from limen.agents.chat_agents.briefing_eval import evaluate_briefing
+
+    text = "Si segnalano tre elementi critici su nove componenti. " + "parola " * 150
+    res = evaluate_briefing(text, allowed_numbers=set())
+    assert not any("scritti in lettere" in v for v in res.violations)
+
+
+def test_garbled_llm_number_words_are_flagged() -> None:
+    from limen.agents.chat_agents.briefing_eval import evaluate_briefing
+
+    # Agglutinazione sgrammaticata realmente prodotta dall'LLM.
+    text = "un totale di ventiquillemilaquattrocentosessantaquattro celle " + "parola " * 150
+    res = evaluate_briefing(text, allowed_numbers=set())
+    joined = " ".join(res.violations)
+    assert "ventiquillemilaquattrocentosessantaquattro" in joined
