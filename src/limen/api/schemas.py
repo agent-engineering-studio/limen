@@ -113,6 +113,8 @@ class AlertItem(BaseModel):
     score: float
     level: str
     computed_at: datetime
+    lon: float | None = None
+    lat: float | None = None
 
 
 class AlertsResponse(BaseModel):

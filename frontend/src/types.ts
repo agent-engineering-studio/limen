@@ -86,6 +86,8 @@ export interface AlertItem {
   score: number;
   level: RiskLevel;
   computed_at: string;
+  lon?: number | null;
+  lat?: number | null;
 }
 
 export interface AlertsResponse {

@@ -8,6 +8,7 @@ import { maplibreColorMatch } from "../lib/risk-colors";
 
 const SOURCE_ID = "limen-risk";
 const LAYER_ID = "limen-risk-fill";
+const SELECTED_LAYER_ID = "limen-risk-selected";
 const PAI_SOURCE_ID = "limen-pai";
 const PAI_LAYER_ID = "limen-pai-fill";
 const IFFI_SOURCE_ID = "limen-iffi";
@@ -50,6 +51,8 @@ export interface RiskMapProps {
   readonly tileLayer?: string;
   /** Callback when the user clicks a cell — surfaces the cell_id. */
   readonly onCellClick?: (cellId: string) => void;
+  /** Cell to outline on the map (selection from the sidebar or a click). */
+  readonly selectedCellId?: string | null;
   /** Imperative ref for tests / parent controls (e.g. fly-to). */
   readonly mapRef?: { current: maplibregl.Map | null };
 }
@@ -108,6 +111,19 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
           "fill-opacity": 0.55,
           "fill-outline-color": "#333",
         },
+      },
+      {
+        // Selection outline: the filter starts matching nothing and is
+        // swapped in the selectedCellId effect below.
+        id: SELECTED_LAYER_ID,
+        type: "line",
+        source: SOURCE_ID,
+        "source-layer": tileLayer.replace(/^public\./, ""),
+        paint: {
+          "line-color": "#2456a3",
+          "line-width": 3,
+        },
+        filter: ["==", ["get", "cell_id"], "__none__"],
       },
     ];
 
@@ -188,6 +204,22 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tileserv, tileLayer]);
+
+  // Update the selection outline without rebuilding the map.
+  useEffect(() => {
+    const map = props.mapRef?.current;
+    if (!map) return;
+    const apply = (): void => {
+      if (!map.getLayer(SELECTED_LAYER_ID)) return;
+      map.setFilter(SELECTED_LAYER_ID, [
+        "==",
+        ["get", "cell_id"],
+        props.selectedCellId ?? "__none__",
+      ]);
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("idle", apply);
+  }, [props.selectedCellId, props.mapRef]);
 
   return (
     <div

@@ -2,27 +2,25 @@ import { Show, SignInButton, UserButton } from "@clerk/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type maplibregl from "maplibre-gl";
 
-import AlertList from "./components/AlertList";
 import CellPopup from "./components/CellPopup";
 import ExplainerPage from "./components/ExplainerPage";
 import ForecastList from "./components/ForecastList";
 import HomePage from "./components/HomePage";
 import LegendPanel from "./components/LegendPanel";
-import NationalReportPanel from "./components/NationalReportPanel";
+import NationalStrip from "./components/NationalStrip";
+import RegionAccordion from "./components/RegionAccordion";
+import type { CellSelection } from "./components/RegionAccordion";
 import RiskMap from "./components/RiskMap";
 import TimelineSlider from "./components/TimelineSlider";
 import { config } from "./lib/env";
-import type { AlertItem } from "./types";
 
-type Page = "home" | "dashboard" | "national" | "explainer";
+type Page = "home" | "dashboard" | "explainer";
 
 function pageFromHash(): Page {
   switch (window.location.hash) {
     case "#/dashboard":
+    case "#/italia": // vecchio deep-link: il quadro nazionale vive in dashboard
       return "dashboard";
-    case "#/italia":
-      // Vista "Situazione Italia": una tab della dashboard, stesso gate.
-      return "national";
     case "#/come-funziona":
       return "explainer";
     default:
@@ -30,20 +28,7 @@ function pageFromHash(): Page {
   }
 }
 
-function DashboardTabs({ active }: { active: "map" | "national" }): JSX.Element {
-  return (
-    <nav className="dash-tabs" aria-label="Viste della dashboard">
-      <a href="#/dashboard" className={active === "map" ? "on" : ""}>
-        Mappa
-      </a>
-      <a href="#/italia" className={active === "national" ? "on" : ""}>
-        Situazione Italia
-      </a>
-    </nav>
-  );
-}
-
-/** Auth wall for the operational pages: dashboard + national picture. */
+/** Auth wall for the operational dashboard. */
 function RequireAuth({ children }: { children: JSX.Element }): JSX.Element {
   return (
     <>
@@ -74,7 +59,7 @@ function RequireAuth({ children }: { children: JSX.Element }): JSX.Element {
 
 export function App(): JSX.Element {
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const [selectedCell, setSelectedCell] = useState<string | null>(null);
+  const [selected, setSelected] = useState<CellSelection | null>(null);
   const [page, setPage] = useState<Page>(pageFromHash);
 
   useEffect(() => {
@@ -83,29 +68,47 @@ export function App(): JSX.Element {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  const flyToAlert = useCallback((alert: AlertItem) => {
-    // We don't have per-cell coordinates from /api/alerts; fly to the
-    // map's overall extent instead. The map click handler picks up
-    // cell geometry from the vector tile when an analyst zooms in.
-    setSelectedCell(alert.cell_id);
-    mapRef.current?.flyTo({
-      center: [config.defaultLon, config.defaultLat],
-      zoom: 9,
-      essential: true,
-    });
+  const selectCell = useCallback((sel: CellSelection) => {
+    setSelected(sel);
+    if (sel.lon != null && sel.lat != null && mapRef.current) {
+      mapRef.current.flyTo({
+        center: [sel.lon, sel.lat],
+        zoom: Math.max(mapRef.current.getZoom(), 11),
+        essential: true,
+      });
+    }
+  }, []);
+
+  const onMapClick = useCallback((cellId: string) => {
+    // Le coordinate non servono: la cella è già inquadrata dall'utente.
+    setSelected({ cellId, lon: null, lat: null });
   }, []);
 
   const dashboard = (
     <>
       <aside className="sidebar" aria-label="Pannello laterale">
-        <DashboardTabs active="map" />
+        <NationalStrip />
+        <ForecastList />
+        <RegionAccordion
+          onCellSelect={selectCell}
+          selectedCellId={selected?.cellId ?? null}
+        />
         <LegendPanel />
         {config.enableTimeline ? <TimelineSlider /> : null}
-        <AlertList threshold="Moderate" onAlertClick={flyToAlert} />
-        <ForecastList />
-        <CellPopup cellId={selectedCell} onDismiss={() => setSelectedCell(null)} />
       </aside>
-      <RiskMap mapRef={mapRef} onCellClick={setSelectedCell} />
+      <div className="map-area">
+        <RiskMap
+          mapRef={mapRef}
+          onCellClick={onMapClick}
+          selectedCellId={selected?.cellId ?? null}
+        />
+        <CellPopup
+          cellId={selected?.cellId ?? null}
+          lon={selected?.lon}
+          lat={selected?.lat}
+          onDismiss={() => setSelected(null)}
+        />
+      </div>
     </>
   );
 
@@ -121,10 +124,7 @@ export function App(): JSX.Element {
           <a href="#/" className={page === "home" ? "on" : ""}>
             Home
           </a>
-          <a
-            href="#/dashboard"
-            className={page === "dashboard" || page === "national" ? "on" : ""}
-          >
+          <a href="#/dashboard" className={page === "dashboard" ? "on" : ""}>
             Dashboard
           </a>
           <a href="#/come-funziona" className={page === "explainer" ? "on" : ""}>
@@ -152,13 +152,6 @@ export function App(): JSX.Element {
         <div className="explainer-area">
           <ExplainerPage />
         </div>
-      ) : page === "national" ? (
-        <RequireAuth>
-          <div className="explainer-area">
-            <DashboardTabs active="national" />
-            <NationalReportPanel />
-          </div>
-        </RequireAuth>
       ) : (
         <RequireAuth>{dashboard}</RequireAuth>
       )}

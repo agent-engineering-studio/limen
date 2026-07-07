@@ -28,21 +28,26 @@ async def list_alerts(
     order = ["None", "Low", "Moderate", "High", "VeryHigh"]
     levels_to_include = order[order.index(threshold) :]
 
+    # Latest row per cell (repeat hourly ticks would flood the list with
+    # duplicates), ranked by score so the worst cells come first. The
+    # centroid lets the UI fly to / highlight the cell on the map.
     async with acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT ra.cell_id, g.aoi_id, ra.score, ra.class, ra.computed_at
+            SELECT DISTINCT ON (ra.cell_id)
+                   ra.cell_id, g.aoi_id, ra.score, ra.class, ra.computed_at,
+                   ST_X(ST_Centroid(g.geom)) AS lon,
+                   ST_Y(ST_Centroid(g.geom)) AS lat
             FROM risk_assessments ra
             JOIN grid_cells g ON g.id = ra.cell_id
             WHERE ra.class = ANY($1::text[])
               AND ra.computed_at >= now() - ($2::int * interval '1 hour')
-            ORDER BY ra.computed_at DESC, ra.score DESC
-            LIMIT $3
+            ORDER BY ra.cell_id, ra.computed_at DESC
             """,
             levels_to_include,
             since_hours,
-            limit,
         )
+    rows = sorted(rows, key=lambda r: float(r["score"]), reverse=True)[:limit]
 
     items = [
         AlertItem(
@@ -51,6 +56,8 @@ async def list_alerts(
             score=float(r["score"]),
             level=str(r["class"]),
             computed_at=r["computed_at"],
+            lon=float(r["lon"]),
+            lat=float(r["lat"]),
         )
         for r in rows
     ]

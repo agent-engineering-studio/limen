@@ -6,7 +6,36 @@ import type { CellBreakdownResponse, RiskLevel } from "../types";
 
 export interface CellPopupProps {
   readonly cellId: string | null;
+  /** Cell centroid — enables the 48h forecast strip (Open-Meteo). */
+  readonly lon?: number | null;
+  readonly lat?: number | null;
   readonly onDismiss?: () => void;
+}
+
+interface RainOutlook {
+  total48h: number;
+  peakMmh: number;
+}
+
+async function fetchRainOutlook(
+  lon: number,
+  lat: number,
+  signal: AbortSignal,
+): Promise<RainOutlook> {
+  const url =
+    "https://api.open-meteo.com/v1/forecast" +
+    `?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}` +
+    "&hourly=precipitation&forecast_days=2&timezone=UTC";
+  const resp = await fetch(url, { signal });
+  if (!resp.ok) throw new Error(`open-meteo ${resp.status}`);
+  const data = (await resp.json()) as {
+    hourly?: { precipitation?: (number | null)[] };
+  };
+  const rain = (data.hourly?.precipitation ?? []).map((v) => v ?? 0);
+  return {
+    total48h: rain.reduce((a, b) => a + b, 0),
+    peakMmh: rain.reduce((a, b) => Math.max(a, b), 0),
+  };
 }
 
 interface BreakdownView {
@@ -45,6 +74,19 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
   const onDismiss = props.onDismiss;
   const [data, setData] = useState<CellBreakdownResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [outlook, setOutlook] = useState<RainOutlook | null>(null);
+
+  useEffect(() => {
+    setOutlook(null);
+    if (props.lon == null || props.lat == null || !cellId) return;
+    const ctrl = new AbortController();
+    fetchRainOutlook(props.lon, props.lat, ctrl.signal)
+      .then(setOutlook)
+      .catch(() => {
+        // Il popup resta utile anche senza il meteo.
+      });
+    return () => ctrl.abort();
+  }, [cellId, props.lon, props.lat]);
 
   useEffect(() => {
     if (!cellId) {
@@ -153,6 +195,16 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
           </div>
         ))}
       </div>
+      {outlook ? (
+        <p className="rain-outlook">
+          <span className="eyebrow" style={{ marginBottom: 2 }}>
+            Meteo previsto · 48h
+          </span>
+          pioggia <span className="mono">{outlook.total48h.toFixed(1)} mm</span>
+          {" · "}picco{" "}
+          <span className="mono">{outlook.peakMmh.toFixed(1)} mm/h</span>
+        </p>
+      ) : null}
       {briefing ? (
         <>
           <p className="popup-briefing">{briefing}</p>

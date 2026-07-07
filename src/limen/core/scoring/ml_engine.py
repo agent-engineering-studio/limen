@@ -387,14 +387,23 @@ def _shap_contributions(artefacts: _MLArtefacts, row: list[float]) -> list[float
     if explainer is None:
         return None
     try:
+        import warnings
+
         import numpy as np
 
         arr = np.asarray([row], dtype=float)
         # shap.TreeExplainer.shap_values returns either an (n_samples,
         # n_features) array for binary models or a length-2 list for
         # the LightGBM binary classifier (one per class). We want the
-        # positive-class contributions.
-        values = explainer.shap_values(arr)
+        # positive-class contributions. SHAP warns about exactly this
+        # shape change on every call — handled below, so silence it.
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=".*LightGBM binary classifier.*",
+                category=UserWarning,
+            )
+            values = explainer.shap_values(arr)
         if isinstance(values, list):
             values = values[-1]
         # Drop the leading sample axis.
