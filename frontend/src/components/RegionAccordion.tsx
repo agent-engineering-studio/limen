@@ -34,20 +34,18 @@ export function groupByRegion(items: AlertItem[]): RegionGroup[] {
     by.set(key, list);
   }
   const groups: RegionGroup[] = [];
+  const prio = (c: AlertItem): number => c.priority ?? c.score;
   for (const [aoiId, cells] of by) {
-    const worst = [...cells].sort((a, b) => b.score - a.score)[0];
-    // Dentro la regione le celle sono in ordine di indice di griglia
-    // (riga, colonna): stabile e prevedibile da un giro all'altro.
-    cells.sort((a, b) => {
-      const [ra, ca] = cellIndex(a.cell_id);
-      const [rb, cb] = cellIndex(b.cell_id);
-      return ra - rb || ca - cb;
-    });
+    // Ordinamento per PRIORITÀ (rischio x esposizione): la cella che
+    // minaccia un abitato o una strada viene prima di una identica su
+    // un versante isolato. L'indice di griglia resta nel tooltip.
+    cells.sort((a, b) => prio(b) - prio(a));
+    const worst = cells[0];
     if (!worst) continue;
     groups.push({
       aoiId,
       name: aoiId.replace(/^it-/, "").replace(/-/g, " "),
-      maxScore: worst.score,
+      maxScore: prio(worst),
       maxLevel: worst.level,
       cells,
     });
@@ -135,12 +133,17 @@ export function RegionAccordion(props: RegionAccordionProps): JSX.Element {
                       title={`riquadro di griglia 1 km — riga ${cellIndex(it.cell_id)[0]}, colonna ${cellIndex(it.cell_id)[1]}`}
                     >
                       {it.place ?? `riquadro ${it.cell_id.split("|").slice(1).join("·")}`}
-                      {it.exposure ? (
-                        <span className="exposure-chip">🏠 {it.exposure}</span>
-                      ) : null}
+                      {(it.exposure ?? "").split(", ").filter(Boolean).map((tag) => (
+                        <span key={tag} className="exposure-chip">
+                          {tag.startsWith("infrastrutture") ? "🛣" : "🏠"} {tag}
+                        </span>
+                      ))}
                     </span>
-                    <span className="mono cell-score">
-                      {it.score.toFixed(2)}
+                    <span
+                      className="mono cell-score"
+                      title={`rischio ${it.score.toFixed(2)} × esposizione = priorità ${(it.priority ?? it.score).toFixed(2)}`}
+                    >
+                      {(it.priority ?? it.score).toFixed(2)}
                     </span>
                     <span className="cell-level">
                       {RISK_LABEL_IT_BY_LEVEL[it.level]}

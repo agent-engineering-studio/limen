@@ -27,10 +27,12 @@ _REPORT = {
 def test_render_is_deterministic_and_faithful() -> None:
     text = render_national_report_it(_REPORT)
     assert text == render_national_report_it(_REPORT)
-    assert "300 celle in 2 regioni" in text
-    assert "it-campania (3)" in text
-    assert "0.81" in text and "0.64" in text
-    assert "4 alert operativi, 1 alert previsionali" in text
+    assert "300 monitorate in 2 regioni" in text
+    assert "Campania (3)" in text
+    assert "0.81" in text and "64%" in text
+    assert "4 allerte operative, 1 allerte previsionali" in text
+    # Multi-riga: un fatto per riga, leggibile da non esperti.
+    assert text.count("\n") >= 5
 
 
 def test_render_quiet_country() -> None:
@@ -42,7 +44,7 @@ def test_render_quiet_country() -> None:
         "ml_top_cells": [],
     }
     text = render_national_report_it(quiet)
-    assert "nessuna regione con celle High o superiori" in text
+    assert "Nessuna zona d'Italia è a rischio alto" in text
 
 
 def test_payload_wraps_report() -> None:

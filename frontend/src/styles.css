@@ -1021,7 +1021,7 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   font-weight: 600;
   color: var(--amber-deep);
 }
-.strip-report { font-size: 12.5px; line-height: 1.55; color: #454239; }
+.strip-report { font-size: 12.5px; line-height: 1.55; color: #454239; white-space: pre-line; }
 
 /* Accordion regioni */
 .region-group { border-top: 1px solid var(--hairline); }

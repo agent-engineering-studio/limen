@@ -117,8 +117,11 @@ class AlertItem(BaseModel):
     lat: float | None = None
     # Nome del comune (ISTAT) del centroide — leggibile per non esperti.
     place: str | None = None
-    # "abitato" quando la cella ricade su tessuto urbano CORINE (1xx).
+    # Tag di esposizione CORINE: "abitato", "vicino abitato",
+    # "infrastrutture", "infrastrutture vicine" (comma-separated).
     exposure: str | None = None
+    # score x (1 + fattore esposizione) — ordina la lista operativa.
+    priority: float | None = None
 
 
 class AlertsResponse(BaseModel):

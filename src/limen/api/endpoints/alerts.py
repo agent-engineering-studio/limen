@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Query, Response
 
 from limen.api.dependencies import DepsDep
@@ -40,9 +42,26 @@ async def list_alerts(
                    ra.cell_id, g.aoi_id, ra.score, ra.class, ra.computed_at,
                    ST_X(ST_Centroid(g.geom)) AS lon,
                    ST_Y(ST_Centroid(g.geom)) AS lat,
-                   -- CORINE 1xx = tessuto urbano: frana vicino ad
-                   -- abitazioni, non versante isolato.
-                   (csf.landuse_code LIKE '1%') AS urban
+                   -- Esposizione dal CORINE: 11x tessuto urbano, 12x
+                   -- infrastrutture principali (strade/ferrovie 122,
+                   -- industriale 121, porti/aeroporti 123-124) — nella
+                   -- cella stessa e nelle celle adiacenti (~2 km).
+                   (csf.landuse_code LIKE '11%') AS urban_here,
+                   (csf.landuse_code LIKE '12%') AS infra_here,
+                   EXISTS (
+                       SELECT 1 FROM grid_cells n
+                       JOIN cell_static_factors nf ON nf.cell_id = n.id
+                       WHERE n.id <> g.id
+                         AND ST_DWithin(n.geom, g.geom, 0.02)
+                         AND nf.landuse_code LIKE '11%'
+                   ) AS urban_near,
+                   EXISTS (
+                       SELECT 1 FROM grid_cells n
+                       JOIN cell_static_factors nf ON nf.cell_id = n.id
+                       WHERE n.id <> g.id
+                         AND ST_DWithin(n.geom, g.geom, 0.02)
+                         AND nf.landuse_code LIKE '12%'
+                   ) AS infra_near
             FROM risk_assessments ra
             JOIN grid_cells g ON g.id = ra.cell_id
             LEFT JOIN cell_static_factors csf ON csf.cell_id = ra.cell_id
@@ -53,11 +72,37 @@ async def list_alerts(
             levels_to_include,
             since_hours,
         )
-    rows = sorted(rows, key=lambda r: float(r["score"]), reverse=True)[:limit]
+
+    # Priorità = rischio x (1 + esposizione): la stessa formula del
+    # dispatcher degli alert. Una frana Moderate sopra un paese o una
+    # statale conta più di una identica su un versante disabitato.
+    def _exposure(r: Any) -> tuple[float, list[str]]:
+        factor = 0.0
+        tags: list[str] = []
+        if r["urban_here"]:
+            factor += 1.0
+            tags.append("abitato")
+        elif r["urban_near"]:
+            factor += 0.5
+            tags.append("vicino abitato")
+        if r["infra_here"]:
+            factor += 0.6
+            tags.append("infrastrutture")
+        elif r["infra_near"]:
+            factor += 0.3
+            tags.append("infrastrutture vicine")
+        return min(factor, 2.0), tags
+
+    scored = []
+    for r in rows:
+        factor, tags = _exposure(r)
+        scored.append((float(r["score"]) * (1.0 + factor), tags, r))
+    scored.sort(key=lambda t: t[0], reverse=True)
+    scored = scored[:limit]
 
     from limen.integrations.geoserver_source.comuni import comuni_for_points
 
-    places = await comuni_for_points([(float(r["lon"]), float(r["lat"])) for r in rows])
+    places = await comuni_for_points([(float(r["lon"]), float(r["lat"])) for _, _, r in scored])
 
     items = [
         AlertItem(
@@ -69,9 +114,10 @@ async def list_alerts(
             lon=float(r["lon"]),
             lat=float(r["lat"]),
             place=place,
-            exposure="abitato" if r["urban"] else None,
+            exposure=", ".join(tags) if tags else None,
+            priority=round(priority, 3),
         )
-        for r, place in zip(rows, places, strict=True)
+        for (priority, tags, r), place in zip(scored, places, strict=True)
     ]
     return AlertsResponse(items=items)
 

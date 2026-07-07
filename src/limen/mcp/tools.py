@@ -277,38 +277,57 @@ async def national_report() -> dict[str, Any]:
 
 
 def render_national_report_it(report: dict[str, Any]) -> str:
-    """Deterministic Italian rendering — only numbers from the report dict."""
+    """Rendering italiano per non esperti — righe brevi, un fatto per riga.
+
+    Deterministico: solo numeri presenti nel report. Il frontend lo
+    mostra con ``white-space: pre-line``, i canali testuali (Telegram,
+    webhook) beneficiano delle stesse interruzioni di riga.
+    """
     t = report["totals"]
     dt = datetime.fromisoformat(report["generated_at"])
-    hot = [r for r in report["regions"] if r["high_or_above"] > 0]
-    if hot:
-        hot_txt = "; regioni con celle High o superiori: " + ", ".join(
-            f"{r['aoi_id']} ({r['high_or_above']})" for r in hot[:5]
+    lines = [f"Aggiornamento del {dt:%d/%m/%Y} alle {dt:%H:%M} UTC.", ""]
+
+    if t["high_or_above"] > 0:
+        hot = [r for r in report["regions"] if r["high_or_above"] > 0]
+        dove = ", ".join(
+            f"{r['aoi_id'].removeprefix('it-').replace('-', ' ').title()} ({r['high_or_above']})"
+            for r in hot[:5]
         )
+        lines.append(f"⚠ {t['high_or_above']} zone a rischio ALTO o molto alto: {dove}.")
     else:
-        hot_txt = "; nessuna regione con celle High o superiori"
-    lines = [
-        f"Report Limen — situazione frane Italia al {dt:%d/%m/%Y %H:%M} UTC.",
-        f"Valutate {t['cells']} celle in {t['regions']} regioni: "
-        f"{t['high_or_above']} High+ e {t['moderate']} Moderate{hot_txt}.",
-    ]
+        lines.append("Nessuna zona d'Italia è a rischio alto in questo momento.")
+
+    def _it(n: int) -> str:
+        return f"{n:,}".replace(",", ".")
+
+    lines.append(
+        f"{_it(t['moderate'])} aree da 1 km² mostrano un rischio moderato, "
+        f"su {_it(t['cells'])} monitorate in {t['regions']} regioni."
+    )
+
     if report["top_cells"]:
         c = report["top_cells"][0]
-        dove = f"presso {c['place']}" if c.get("place") else f"nella cella {c['cell_id']}"
+        dove = c.get("place") or "una zona non abitata"
         regione = c["aoi_id"].removeprefix("it-").replace("-", " ").title()
         lines.append(
-            f"Punto di massima attenzione {dove} ({regione}) "
-            f"con punteggio {c['score']:.2f} ({c['level']})."
+            f"Il punto da tenere d'occhio è {dove}, in {regione} (punteggio {c['score']:.2f} su 1)."
         )
+
     if report["ml_top_cells"]:
         m = report["ml_top_cells"][0]
-        dove = f"presso {m['place']}" if m.get("place") else f"sulla cella {m['cell_id']}"
+        dove = m.get("place") or "una zona non abitata"
         lines.append(
-            f"Il modello ML in osservazione indica la probabilità più alta "
-            f"({m['probability']:.2f}) {dove}."
+            f"Il modello sperimentale di intelligenza artificiale — in fase di "
+            f"osservazione, non genera allerte — indica {dove} come probabilità "
+            f"più alta ({m['probability']:.0%})."
         )
-    lines.append(
-        f"Ultime 24 ore: {report['alerts_24h']} alert operativi, "
-        f"{report['forecast_alerts_24h']} alert previsionali."
+
+    lines.append("")
+    prev = report["forecast_alerts_24h"]
+    prev_txt = (
+        "nessuna criticità prevista a 48 ore"
+        if prev == 0
+        else f"{prev} allerte previsionali a 48 ore"
     )
-    return " ".join(lines)
+    lines.append(f"Nelle ultime 24 ore: {report['alerts_24h']} allerte operative, {prev_txt}.")
+    return "\n".join(lines)

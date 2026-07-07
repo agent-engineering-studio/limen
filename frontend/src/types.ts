@@ -90,6 +90,7 @@ export interface AlertItem {
   lat?: number | null;
   place?: string | null;
   exposure?: string | null;
+  priority?: number | null;
 }
 
 export interface AlertsResponse {
