@@ -9,7 +9,42 @@ export interface CellPopupProps {
   /** Cell centroid — enables the 48h forecast strip (Open-Meteo). */
   readonly lon?: number | null;
   readonly lat?: number | null;
+  /** Dalla lista: priorità operativa, tag esposizione, comune. */
+  readonly priority?: number | null;
+  readonly exposure?: string | null;
+  readonly place?: string | null;
   readonly onDismiss?: () => void;
+}
+
+/** Spiegazione della cella in linguaggio piano — deterministica, dal
+ * breakdown: niente LLM, niente numeri inventati. */
+function plainSummary(b: BreakdownView, exposure?: string | null): string {
+  const drivers: [keyof BreakdownView, string][] = [
+    ["s", "la predisposizione del versante (geologia, pendenza, frane passate)"],
+    ["m", "la spinta della pioggia recente"],
+    ["e", "le scosse sismiche recenti"],
+    ["f", "l'effetto di incendi recenti"],
+    ["h", "la pericolosità idraulica della zona"],
+  ];
+  const sorted = [...drivers].sort((x, y) => b[y[0]] - b[x[0]]);
+  const top = sorted[0];
+  const parts: string[] = [];
+  if (top && b[top[0]] > 0.05) {
+    parts.push(`Qui il rischio nasce soprattutto da ${top[1]}.`);
+  }
+  if (b.m < 0.2) {
+    parts.push("La pioggia recente incide poco.");
+  } else if (b.m < 0.5) {
+    parts.push("La pioggia recente contribuisce in modo moderato.");
+  } else {
+    parts.push("La pioggia recente sta spingendo il rischio verso l'alto.");
+  }
+  if (exposure) {
+    parts.push(
+      `La priorità è più alta della media perché la zona è ${exposure}.`,
+    );
+  }
+  return parts.join(" ");
 }
 
 interface RainOutlook {
@@ -175,9 +210,20 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
         </span>
       </h3>
       <p className="alert-meta" style={{ margin: "2px 0 0" }}>
-        cella {data.cell_id} · modello {data.pipeline_version} · orizzonte{" "}
-        {data.horizon} · {new Date(data.computed_at).toLocaleString("it-IT")}
+        {props.place ? `${props.place} · ` : ""}cella {data.cell_id} · modello{" "}
+        {data.pipeline_version} · {new Date(data.computed_at).toLocaleString("it-IT")}
       </p>
+      {props.priority != null ? (
+        <p className="priority-line">
+          <span className="eyebrow" style={{ marginBottom: 2 }}>
+            Priorità operativa
+          </span>
+          <span className="mono priority-value">{props.priority.toFixed(2)}</span>{" "}
+          = rischio {data.score.toFixed(2)} × esposizione
+          {props.exposure ? ` (${props.exposure})` : " (nessuna: versante isolato)"}
+        </p>
+      ) : null}
+      <p className="plain-summary">{plainSummary(breakdown, props.exposure)}</p>
       <div className="comp-bars">
         {(Object.keys(COMP_LABELS) as (keyof BreakdownView)[]).map((k) => (
           <div className="comp-bar" key={k}>
@@ -206,18 +252,19 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
         </p>
       ) : null}
       {briefing ? (
-        <>
+        <details className="regional-briefing">
+          <summary>
+            Analisi regionale (AI) —{" "}
+            {data.cell_id.split("|")[0]?.replace(/^it-/, "").replace(/-/g, " ")}
+          </summary>
           <p className="popup-briefing">{briefing}</p>
           <p className="popup-note">
-            Briefing deterministico da GET /api/cell/&#123;id&#125;/breakdown —
-            mai un numero inventato.
+            Testo generato da un modello linguistico sull'intera regione (non
+            su questa cella): i numeri citati vengono dalla valutazione
+            deterministica.
           </p>
-        </>
-      ) : (
-        <p className="popup-briefing" style={{ color: "#5e6473" }}>
-          Briefing non ancora generato per questa cella.
-        </p>
-      )}
+        </details>
+      ) : null}
       {onDismiss ? (
         <button type="button" onClick={onDismiss} style={{ marginTop: 8 }}>
           chiudi

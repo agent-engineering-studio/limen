@@ -1107,3 +1107,25 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   margin-left: 6px;
   font-weight: 700;
 }
+
+/* Popup cella: priorità + spiegazione piana + briefing regionale */
+.priority-line {
+  background: #fdf6ee;
+  border: 1px solid #f3dfc6;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  margin: 10px 0 0;
+}
+.priority-line .eyebrow { display: block; font-size: 10px; }
+.priority-value { font-size: 1.15rem; font-weight: 800; margin-right: 4px; }
+.plain-summary { font-size: 13px; line-height: 1.55; margin: 10px 0 0; }
+.regional-briefing { border-top: 1px solid var(--hairline); margin-top: 10px; padding-top: 8px; }
+.regional-briefing summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: capitalize;
+}
+.regional-briefing .popup-briefing { font-size: 12px; color: #565248; }

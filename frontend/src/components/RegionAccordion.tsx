@@ -8,6 +8,10 @@ export interface CellSelection {
   cellId: string;
   lon: number | null;
   lat: number | null;
+  score?: number;
+  priority?: number | null;
+  exposure?: string | null;
+  place?: string | null;
 }
 
 export interface RegionGroup {
@@ -120,6 +124,10 @@ export function RegionAccordion(props: RegionAccordionProps): JSX.Element {
                         cellId: it.cell_id,
                         lon: it.lon ?? null,
                         lat: it.lat ?? null,
+                        score: it.score,
+                        priority: it.priority,
+                        exposure: it.exposure,
+                        place: it.place,
                       })
                     }
                   >

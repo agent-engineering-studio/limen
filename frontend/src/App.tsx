@@ -112,6 +112,9 @@ export function App(): JSX.Element {
           cellId={selected?.cellId ?? null}
           lon={selected?.lon}
           lat={selected?.lat}
+          priority={selected?.priority}
+          exposure={selected?.exposure}
+          place={selected?.place}
           onDismiss={() => setSelected(null)}
         />
       </div>
