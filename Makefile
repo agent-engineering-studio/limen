@@ -242,7 +242,9 @@ geoserver-up: gs-volumes
 	docker compose -f $(COMPOSE_GEOSERVER) --profile geoserver up -d
 
 geoserver-init:
-	docker compose -f $(COMPOSE_GEOSERVER) --profile geoserver run --rm geoserver-init
+	# Same project (-p limen) as `make up`: a standalone project name would
+	# collide with the running limen-geoserver-postgis container.
+	docker compose $(COMPOSE_ALL) --profile geoserver run --rm geoserver-init
 
 geoserver-logs:
 	docker compose -f $(COMPOSE_GEOSERVER) --profile geoserver logs -f
