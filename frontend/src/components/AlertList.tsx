@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { defaultApiClient, ApiClientError } from "../lib/api-client";
-import { RISK_LABEL_IT_BY_LEVEL } from "../lib/risk-colors";
+import { RISK_COLOR_BY_LEVEL, RISK_LABEL_IT_BY_LEVEL } from "../lib/risk-colors";
 import type { AlertItem } from "../types";
 
 export interface AlertListProps {
@@ -77,19 +77,28 @@ export function AlertList(props: AlertListProps): JSX.Element {
             <button
               type="button"
               className="alert-item"
-              style={{ width: "100%", textAlign: "left", border: "none", padding: 0 }}
+              style={{ width: "100%", textAlign: "left" }}
               onClick={() => onAlertClick?.(it)}
             >
-              <div className="alert-row">
-                <strong>{it.aoi_id ?? "—"}</strong>
-                <span className="alert-score">
-                  {it.score.toFixed(2)} {RISK_LABEL_IT_BY_LEVEL[it.level]}
+              <span className="alert-body">
+                <span
+                  className="alert-level-bar"
+                  style={{ background: RISK_COLOR_BY_LEVEL[it.level] }}
+                  aria-hidden
+                />
+                <span className="alert-content">
+                  <span className="alert-row">
+                    <strong>{(it.aoi_id ?? "—").replace(/^it-/, "").replace(/-/g, " ")}</strong>
+                    <span className="alert-score">
+                      {it.score.toFixed(2)} {RISK_LABEL_IT_BY_LEVEL[it.level]}
+                    </span>
+                  </span>
+                  <span className="alert-meta">
+                    cella {it.cell_id} ·{" "}
+                    {new Date(it.computed_at).toLocaleString("it-IT")}
+                  </span>
                 </span>
-              </div>
-              <div style={{ fontSize: 11, color: "#5e6473" }}>
-                cella {it.cell_id} ·{" "}
-                {new Date(it.computed_at).toLocaleString("it-IT")}
-              </div>
+              </span>
             </button>
           </li>
         ))}

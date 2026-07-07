@@ -150,3 +150,17 @@ export interface NationalReportResponse {
   forecast_alerts_24h: number;
   report_it: string;
 }
+
+export interface ForecastAlertItem {
+  aoi_id: string;
+  horizon_h: number;
+  max_level: string;
+  max_score: number;
+  cells_alerted: number;
+  summary: string | null;
+  dispatched_at: string;
+}
+
+export interface ForecastAlertsResponse {
+  items: ForecastAlertItem[];
+}

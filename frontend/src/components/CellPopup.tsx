@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { defaultApiClient, ApiClientError } from "../lib/api-client";
-import { RISK_LABEL_IT_BY_LEVEL } from "../lib/risk-colors";
+import { RISK_COLOR_BY_LEVEL, RISK_LABEL_IT_BY_LEVEL } from "../lib/risk-colors";
 import type { CellBreakdownResponse, RiskLevel } from "../types";
 
 export interface CellPopupProps {
@@ -106,33 +106,61 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
   const briefing = (data.explanation["briefing_it"] as string | undefined) ?? null;
   const level = asLevel(data.level);
 
+  const COMP_COLORS: Record<keyof BreakdownView, string> = {
+    s: "#2456a3",
+    m: "#e8720c",
+    e: "#7a5cc0",
+    f: "#b34a04",
+    h: "#2a8fb5",
+  };
+  const COMP_LABELS: Record<keyof BreakdownView, string> = {
+    s: "S statico",
+    m: "M meteo",
+    e: "E sismico",
+    f: "F post-incendio",
+    h: "H idrologico",
+  };
+
   return (
     <aside className="popup-card" role="dialog" aria-labelledby="cell-id">
-      <h3 id="cell-id">
-        Cella {data.cell_id} —{" "}
-        <span style={{ fontVariantNumeric: "tabular-nums" }}>
-          {data.score.toFixed(2)}
-        </span>{" "}
-        ({RISK_LABEL_IT_BY_LEVEL[level]})
+      <h3 id="cell-id" style={{ margin: 0 }}>
+        <span className="popup-score">{data.score.toFixed(2)}</span>
+        <span
+          className={`level-chip ${level === "VeryHigh" ? "on-dark" : ""}`}
+          style={{ background: RISK_COLOR_BY_LEVEL[level] }}
+        >
+          {RISK_LABEL_IT_BY_LEVEL[level]}
+        </span>
       </h3>
-      <p style={{ fontSize: 11, color: "#5e6473", margin: 0 }}>
-        modello {data.pipeline_version} · orizzonte {data.horizon} ·{" "}
-        {new Date(data.computed_at).toLocaleString("it-IT")}
+      <p className="alert-meta" style={{ margin: "2px 0 0" }}>
+        cella {data.cell_id} · modello {data.pipeline_version} · orizzonte{" "}
+        {data.horizon} · {new Date(data.computed_at).toLocaleString("it-IT")}
       </p>
-      <dl className="popup-grid" style={{ margin: "8px 0 0 0" }}>
-        <dt>S (statico)</dt>
-        <dd>{breakdown.s.toFixed(3)}</dd>
-        <dt>M (meteo)</dt>
-        <dd>{breakdown.m.toFixed(3)}</dd>
-        <dt>E (sismico)</dt>
-        <dd>{breakdown.e.toFixed(3)}</dd>
-        <dt>F (post-incendio)</dt>
-        <dd>{breakdown.f.toFixed(3)}</dd>
-        <dt>H (idrologico)</dt>
-        <dd>{breakdown.h.toFixed(3)}</dd>
-      </dl>
+      <div className="comp-bars">
+        {(Object.keys(COMP_LABELS) as (keyof BreakdownView)[]).map((k) => (
+          <div className="comp-bar" key={k}>
+            <span>{COMP_LABELS[k]}</span>
+            <span className="track">
+              <span
+                className="fill"
+                style={{
+                  width: `${Math.min(100, breakdown[k] * 100)}%`,
+                  background: COMP_COLORS[k],
+                }}
+              />
+            </span>
+            <span className="val">{breakdown[k].toFixed(3)}</span>
+          </div>
+        ))}
+      </div>
       {briefing ? (
-        <p className="popup-briefing">{briefing}</p>
+        <>
+          <p className="popup-briefing">{briefing}</p>
+          <p className="popup-note">
+            Briefing deterministico da GET /api/cell/&#123;id&#125;/breakdown —
+            mai un numero inventato.
+          </p>
+        </>
       ) : (
         <p className="popup-briefing" style={{ color: "#5e6473" }}>
           Briefing non ancora generato per questa cella.

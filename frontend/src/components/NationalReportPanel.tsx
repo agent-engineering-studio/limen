@@ -61,6 +61,7 @@ export function NationalReportPanel(): JSX.Element {
 
   return (
     <section className="national-panel" aria-label="Situazione Italia">
+      <p className="eyebrow">Quadro nazionale · aggiornamento orario</p>
       <h2>Situazione Italia</h2>
       <p className="panel-meta">
         Aggiornato al {generated.toLocaleString("it-IT")} ·{" "}
@@ -133,7 +134,10 @@ export function NationalReportPanel(): JSX.Element {
         </div>
         {report.ml_top_cells.length > 0 ? (
           <div>
-            <h3>Top celle — modello ML (shadow)</h3>
+            <h3>
+              Top celle — modello ML
+              <span className="shadow-badge">shadow</span>
+            </h3>
             <p className="panel-meta">
               Probabilità del challenger in osservazione: non guida gli
               alert.

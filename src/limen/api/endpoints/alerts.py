@@ -55,3 +55,39 @@ async def list_alerts(
         for r in rows
     ]
     return AlertsResponse(items=items)
+
+
+@router.get("/forecast")
+async def list_forecast_alerts(
+    deps: DepsDep,  # noqa: ARG001 — DI presence
+    since_hours: int = Query(72, ge=1, le=24 * 30),
+    limit: int = Query(50, ge=1, le=500),
+) -> dict[str, list[dict[str, object]]]:
+    """Predictive (PREVISIONE) dispatches from the forecast sweep."""
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT aoi_id, horizon_h, max_level, max_score,
+                   cells_alerted, summary, dispatched_at
+            FROM forecast_dispatches
+            WHERE dispatched_at >= now() - make_interval(hours => $1)
+            ORDER BY dispatched_at DESC
+            LIMIT $2
+            """,
+            since_hours,
+            limit,
+        )
+    return {
+        "items": [
+            {
+                "aoi_id": str(r["aoi_id"]),
+                "horizon_h": int(r["horizon_h"]),
+                "max_level": str(r["max_level"]),
+                "max_score": float(r["max_score"]),
+                "cells_alerted": int(r["cells_alerted"]),
+                "summary": r["summary"],
+                "dispatched_at": r["dispatched_at"].isoformat(),
+            }
+            for r in rows
+        ]
+    }

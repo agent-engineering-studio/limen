@@ -3,6 +3,7 @@
 // requests on unmount.
 
 import type {
+  ForecastAlertsResponse,
   LegendResponse,
   NationalReportResponse,
   AlertsResponse,
@@ -112,6 +113,22 @@ export class ApiClient {
     if (opts.limit != null) params.set("limit", String(opts.limit));
     const query = params.toString() ? `?${params.toString()}` : "";
     return this.request<AlertsResponse>(`/api/alerts${query}`, {}, signal);
+  }
+
+  getForecastAlerts(
+    opts: { sinceHours?: number; limit?: number } = {},
+    signal?: AbortSignal,
+  ): Promise<ForecastAlertsResponse> {
+    const params = new URLSearchParams();
+    if (opts.sinceHours != null)
+      params.set("since_hours", String(opts.sinceHours));
+    if (opts.limit != null) params.set("limit", String(opts.limit));
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return this.request<ForecastAlertsResponse>(
+      `/api/alerts/forecast${query}`,
+      {},
+      signal,
+    );
   }
 
   getLegend(signal?: AbortSignal): Promise<LegendResponse> {

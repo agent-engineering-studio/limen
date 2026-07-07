@@ -5,6 +5,7 @@ import type maplibregl from "maplibre-gl";
 import AlertList from "./components/AlertList";
 import CellPopup from "./components/CellPopup";
 import ExplainerPage from "./components/ExplainerPage";
+import ForecastList from "./components/ForecastList";
 import HomePage from "./components/HomePage";
 import LegendPanel from "./components/LegendPanel";
 import NationalReportPanel from "./components/NationalReportPanel";
@@ -100,7 +101,8 @@ export function App(): JSX.Element {
         <DashboardTabs active="map" />
         <LegendPanel />
         {config.enableTimeline ? <TimelineSlider /> : null}
-        <AlertList onAlertClick={flyToAlert} />
+        <AlertList threshold="Moderate" onAlertClick={flyToAlert} />
+        <ForecastList />
         <CellPopup cellId={selectedCell} onDismiss={() => setSelectedCell(null)} />
       </aside>
       <RiskMap mapRef={mapRef} onCellClick={setSelectedCell} />
@@ -113,6 +115,7 @@ export function App(): JSX.Element {
         <a className="brand" href="#/">
           <img src="/logo.png" alt="" className="app-logo" height={36} />
           <span className="brand-name">Limen</span>
+          <span className="brand-tag">soglia</span>
         </a>
         <nav className="app-nav" aria-label="Navigazione">
           <a href="#/" className={page === "home" ? "on" : ""}>
@@ -128,6 +131,7 @@ export function App(): JSX.Element {
             Come funziona
           </a>
         </nav>
+        <span className="header-meta">agg. 1h · 20 regioni</span>
         <div className="auth-controls">
           <Show when="signed-out">
             <SignInButton mode="modal">
