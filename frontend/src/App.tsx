@@ -61,6 +61,7 @@ function RequireAuth({ children }: { children: JSX.Element }): JSX.Element {
 export function App(): JSX.Element {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [selected, setSelected] = useState<CellSelection | null>(null);
+  const [hoursAgo, setHoursAgo] = useState(0);
   const [page, setPage] = useState<Page>(pageFromHash);
 
   useEffect(() => {
@@ -95,13 +96,16 @@ export function App(): JSX.Element {
           selectedCellId={selected?.cellId ?? null}
         />
         <LegendPanel />
-        {config.enableTimeline ? <TimelineSlider /> : null}
+        {config.enableTimeline ? (
+          <TimelineSlider maxHours={72} onChange={setHoursAgo} />
+        ) : null}
       </aside>
       <div className="map-area">
         <RiskMap
           mapRef={mapRef}
           onCellClick={onMapClick}
           selectedCellId={selected?.cellId ?? null}
+          hoursAgo={hoursAgo}
         />
         <OverlayControl mapRef={mapRef} />
         <CellPopup

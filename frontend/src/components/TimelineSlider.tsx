@@ -23,9 +23,7 @@ export function TimelineSlider(props: TimelineSliderProps): JSX.Element {
     <section className="legend-panel" aria-label="Linea temporale">
       <h2>Linea temporale</h2>
       <label htmlFor="timeline-slider" style={{ fontSize: 12 }}>
-        {hoursAgo === 0
-          ? "Stato corrente"
-          : `${hoursAgo} ore fa`}
+        {hoursAgo === 0 ? "Stato corrente" : `${hoursAgo} ore fa`}
       </label>
       <input
         id="timeline-slider"
@@ -41,6 +39,10 @@ export function TimelineSlider(props: TimelineSliderProps): JSX.Element {
         }}
         style={{ width: "100%" }}
       />
+      <p className="alert-meta" style={{ margin: "4px 0 0" }}>
+        Lo storico copre la finestra di retention (14 giorni); più
+        indietro la mappa resta vuota.
+      </p>
     </section>
   );
 }

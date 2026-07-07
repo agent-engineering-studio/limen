@@ -33,12 +33,16 @@ COPY --from=ghcr.io/astral-sh/uv:0.5.7 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# Resolve and lock the runtime dependency set into /app/.venv.
+# Layer split: dependencies first (invalidated only by lockfile changes),
+# source afterwards — otherwise every code edit re-downloads the whole
+# ml/mcp dependency set (~10 min per build).
 COPY pyproject.toml uv.lock README.md ./
-COPY src ./src
 # `--group ml` ships lightgbm+mlflow+shap so the shadow challenger can load
 # in-container; without it resolve_challenger degrades to None (logged).
 # `--group mcp` ships fastmcp so the same image serves `limen mcp-serve`.
+RUN uv sync --frozen --no-dev --no-editable --no-install-project \
+    --group ml --group mcp
+COPY src ./src
 RUN uv sync --frozen --no-dev --no-editable --group ml --group mcp
 
 # ---------------------------------------------------------------------------
