@@ -25,7 +25,7 @@ UP_PROFILES  := --profile geoserver --profile frontend
         up-dev down-dev logs migrate seed bootstrap-static calibrate backtest serve \
         demo demo-down demo-walkthrough \
         observability observability-down \
-        geoserver-up geoserver-down geoserver-init geoserver-logs geoserver-sync dtm-vrt \
+        geoserver-up geoserver-down geoserver-init geoserver-logs geoserver-sync dtm-vrt osm-data \
         test test-unit test-integration test-frontend \
         lint format typecheck check clean
 
@@ -261,6 +261,22 @@ geoserver-sync:                # load IFFI + PAI from GeoServer PostGIS into the
 dtm-vrt:                       # build a virtual mosaic over the 5 m DTM tiles (needs host GDAL)
 	gdalbuildvrt $(GEOSERVER_DTM_DIR)/dtm5m.vrt $(GEOSERVER_DTM_DIR)/*.tif
 	@echo "Built $(GEOSERVER_DTM_DIR)/dtm5m.vrt — set LIMEN_DEM_RASTER to this path."
+
+# OSM road/rail network for the alert-exposure factor (© OpenStreetMap, ODbL).
+# Country-agnostic: override OSM_PBF_URL with another Geofabrik extract.
+OSM_DIR     ?= ./data/osm
+OSM_PBF_URL ?= https://download.geofabrik.de/europe/italy-latest.osm.pbf
+OSM_PBF      = $(OSM_DIR)/$(notdir $(OSM_PBF_URL))
+
+osm-data:                      # download the Geofabrik PBF + extract road/rail GPKGs (needs host GDAL)
+	mkdir -p $(OSM_DIR)
+	[ -s $(OSM_PBF) ] || curl -SL -C - -o $(OSM_PBF) $(OSM_PBF_URL)
+	[ -s $(OSM_DIR)/osm_roads.gpkg ] || ogr2ogr -f GPKG $(OSM_DIR)/osm_roads.gpkg $(OSM_PBF) lines \
+	  -where "highway IN ('motorway','trunk','primary','secondary')"
+	[ -s $(OSM_DIR)/osm_rails.gpkg ] || ogr2ogr -f GPKG $(OSM_DIR)/osm_rails.gpkg $(OSM_PBF) lines \
+	  -where "railway = 'rail'"
+	@echo "Set LIMEN_OSM_ROADS=$(OSM_DIR)/osm_roads.gpkg and LIMEN_OSM_RAILWAYS=$(OSM_DIR)/osm_rails.gpkg,"
+	@echo "then run \`limen bootstrap-static\` to load the network and compute per-cell distances."
 
 # ---------------------------------------------------------------------------
 # Quality

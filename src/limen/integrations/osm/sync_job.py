@@ -14,7 +14,7 @@ Two env vars wire the files (any OGR-readable vector format):
 * ``LIMEN_OSM_RAILWAYS`` — railway lines::
 
       ogr2ogr -f GPKG osm_rails.gpkg italy-latest.osm.pbf lines \\
-        -where "other_tags LIKE '%\\"railway\\"=>\\"rail\\"%'"
+        -where "railway = 'rail'"
 
 Data © OpenStreetMap contributors, ODbL.
 """
