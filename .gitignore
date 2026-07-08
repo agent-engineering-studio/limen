@@ -53,3 +53,10 @@ docs/_build/
 
 # Generated backtest/calibrate reports
 reports/
+
+# Claude Code session config (local)
+.claude/
+
+# MLflow local tracking store
+mlflow.db
+mlruns/
