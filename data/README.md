@@ -34,6 +34,7 @@ data/
 ├── events/italica/ITALICA_v4.csv  # catalogo eventi datati → backtest + ML
 ├── landcover/                     # slot pronto (CORINE quando prodotto)
 ├── geology/                       # slot pronto (carta geolitologica)
+├── osm/                           # rete strade/ferrovie OSM (make osm-data)
 └── backups/                       # dump training ML (make dump-training)
 ```
 
@@ -49,6 +50,7 @@ data/
 | `events/` | per backtest/ML | truth set §2.5 + feature store | CSV con data+lat/lon | `LIMEN_ITALICA_CSV` | niente backtest/training |
 | `landcover/` | opzionale | S/K | GeoTIFF Int16 codici classe | `LIMEN_CORINE_RASTER` | skip |
 | `geology/` | opzionale | S (litho_weight) | shapefile con campo litologia | `LIMEN_GEOLOGICAL_SHAPEFILE` + `_FIELD` | skip |
+| `osm/` | opzionale | esposizione alert (priorità) | GPKG linee (estratti PBF) | `LIMEN_OSM_ROADS` + `LIMEN_OSM_RAILWAYS` | fallback flag CORINE 12x |
 
 Le geometrie vengono riproiettate a EPSG:4326 in ingestione; i calcoli
 metrici avvengono in EPSG:3035. Il CRS sorgente è libero purché
@@ -127,3 +129,27 @@ Geolitologica 1:500k (PCN/MASE, CC-BY) — attenzione all'ordine assi
 lat/lon del WFS 1.1 (`SwapCoords`). **Altrove**: BRGM 1:50k (FR),
 OneGeology come indice globale. Attivazione:
 `LIMEN_GEOLOGICAL_SHAPEFILE` + `LIMEN_GEOLOGICAL_FIELD`.
+
+### `osm/` — rete strade/ferrovie (esposizione alert)
+
+Linee della viabilità principale (`highway=motorway|trunk|primary|
+secondary`) e ferrovie (`railway=rail`): alimentano
+`distance_to_road_m` / `distance_to_rail_m` per cella e il fattore di
+esposizione graduato nella priorità degli alert. © OpenStreetMap
+contributors (ODbL, attribuzione nel footer UI). **Italia**: estratto
+Geofabrik `europe/italy` — `make osm-data` scarica il PBF ed estrae i
+due GPKG (idempotente, serve GDAL host). **Altrove**: identico con
+l'estratto Geofabrik della nazione (`OSM_PBF_URL=...`). Ricetta manuale:
+
+```bash
+curl -L -o data/osm/italy-latest.osm.pbf \
+  https://download.geofabrik.de/europe/italy-latest.osm.pbf
+ogr2ogr -f GPKG data/osm/osm_roads.gpkg data/osm/italy-latest.osm.pbf lines \
+  -where "highway IN ('motorway','trunk','primary','secondary')"
+ogr2ogr -f GPKG data/osm/osm_rails.gpkg data/osm/italy-latest.osm.pbf lines \
+  -where "railway = 'rail'"
+```
+
+Attivazione: `LIMEN_OSM_ROADS` + `LIMEN_OSM_RAILWAYS`; poi
+`limen bootstrap-static` carica la rete e calcola le distanze. Senza
+questo slot l'esposizione degrada ai flag CORINE 12x.
