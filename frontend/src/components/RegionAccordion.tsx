@@ -186,7 +186,7 @@ export function RegionAccordion(props: RegionAccordionProps): JSX.Element {
                       {it.place ?? `riquadro ${it.cell_id.split("|").slice(1).join("·")}`}
                       {(it.exposure ?? "").split(", ").filter(Boolean).map((tag) => (
                         <span key={tag} className="exposure-chip">
-                          {tag.startsWith("infrastrutture") ? "🛣" : "🏠"} {tag}
+                          {/^(infrastrutture|statale|autostrada)/.test(tag) ? "🛣" : tag.startsWith("ferrovia") ? "🚆" : "🏠"} {tag}
                         </span>
                       ))}
                     </span>
