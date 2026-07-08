@@ -20,8 +20,8 @@ The report never promotes anything: promotion stays a manual
 
 from __future__ import annotations
 
-import math
 import os
+import statistics
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -97,17 +97,11 @@ class _AoiStats:
 
 
 def _pearson(xs: list[float], ys: list[float]) -> float | None:
-    n = len(xs)
-    if n < 2:
+    try:
+        return statistics.correlation(xs, ys)
+    except statistics.StatisticsError:
+        # meno di 2 punti o input costante
         return None
-    mx = sum(xs) / n
-    my = sum(ys) / n
-    cov = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True))
-    vx = sum((x - mx) ** 2 for x in xs)
-    vy = sum((y - my) ** 2 for y in ys)
-    if vx == 0.0 or vy == 0.0:
-        return None
-    return cov / math.sqrt(vx * vy)
 
 
 def _percentile(sorted_values: list[float], q: float) -> float:
@@ -222,7 +216,15 @@ def _write_report(
 async def run() -> int:
     """Build the shadow-comparison report for the post-fix window."""
     raw_since = os.getenv("LIMEN_SHADOW_SINCE")
-    since = datetime.fromisoformat(raw_since) if raw_since else _DEFAULT_SINCE
+    try:
+        since = datetime.fromisoformat(raw_since) if raw_since else _DEFAULT_SINCE
+    except ValueError:
+        log.error(
+            "shadow_report.bad_since",
+            value=raw_since,
+            hint="ISO 8601, es. 2026-07-06T13:00:00+00:00",
+        )
+        return 1
     if since.tzinfo is None:
         since = since.replace(tzinfo=UTC)
     aoi_filter = os.getenv("LIMEN_SHADOW_AOI") or None

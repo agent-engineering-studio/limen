@@ -154,8 +154,9 @@ classes:
 # Fattore di ESPOSIZIONE per la priorità degli alert (endpoint /api/alerts
 # e dispatcher). NON entra nello scoring: priority = score * (1 + fattore),
 # cappato a `cap`. Strade/ferrovie graduate per distanza dalla rete OSM
-# (motorway/trunk/primary/secondary + railway=rail); con le distanze NULL
-# (rete non ingerita) valgono i fallback sui flag CORINE 12x.
+# (motorway/trunk/primary/secondary + railway=rail); quando la rete OSM non
+# dà contributo (non ingerita o oltre le bande) valgono i fallback sui flag
+# CORINE 12x, che coprono anche industriale/porti/aeroporti.
 exposure:
   urban_here:          1.0    # tessuto urbano CORINE 11x nella cella
   urban_near:          0.5    # entro ~2 km

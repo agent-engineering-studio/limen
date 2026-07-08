@@ -270,7 +270,7 @@ OSM_PBF      = $(OSM_DIR)/$(notdir $(OSM_PBF_URL))
 
 osm-data:                      # download the Geofabrik PBF + extract road/rail GPKGs (needs host GDAL)
 	mkdir -p $(OSM_DIR)
-	[ -s $(OSM_PBF) ] || curl -SL -C - -o $(OSM_PBF) $(OSM_PBF_URL)
+	[ -s $(OSM_PBF) ] || { curl -fSL -C - -o $(OSM_PBF).part $(OSM_PBF_URL) && mv $(OSM_PBF).part $(OSM_PBF); }
 	[ -s $(OSM_DIR)/osm_roads.gpkg ] || ogr2ogr -f GPKG $(OSM_DIR)/osm_roads.gpkg $(OSM_PBF) lines \
 	  -where "highway IN ('motorway','trunk','primary','secondary')"
 	[ -s $(OSM_DIR)/osm_rails.gpkg ] || ogr2ogr -f GPKG $(OSM_DIR)/osm_rails.gpkg $(OSM_PBF) lines \

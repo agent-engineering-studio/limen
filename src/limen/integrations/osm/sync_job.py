@@ -29,6 +29,7 @@ from shapely.geometry.base import BaseGeometry
 
 from limen.core.logging import get_logger
 from limen.data.db import acquire
+from limen.data.repos.dataset_versions_repo import content_hash, find, record
 
 _log: structlog.stdlib.BoundLogger = get_logger(__name__)
 
@@ -56,12 +57,12 @@ def _read_lines(path: Path, *, class_field: str | None) -> list[tuple[str | None
     gdf = gpd.read_file(path)
     if gdf.crs is not None and gdf.crs.to_epsg() != 4326:
         gdf = gdf.to_crs("EPSG:4326")
+    classes = gdf[class_field] if class_field and class_field in gdf.columns else None
     out: list[tuple[str | None, BaseGeometry]] = []
-    for _, row in gdf.iterrows():
-        geom = row.geometry
+    for i, geom in enumerate(gdf.geometry):
         if geom is None or geom.is_empty:
             continue
-        cls = row.get(class_field) if class_field and class_field in gdf.columns else None
+        cls = classes.iloc[i] if classes is not None else None
         parts = geom.geoms if geom.geom_type == "MultiLineString" else [geom]
         for part in parts:
             if part.geom_type == "LineString":
@@ -70,6 +71,13 @@ def _read_lines(path: Path, *, class_field: str | None) -> list[tuple[str | None
 
 
 async def _sync_kind(kind: str, path: Path, *, class_field: str | None) -> int:
+    # Idempotenza da invariante di progetto: hash del file in
+    # dataset_versions — stesso estratto ⇒ zero riletture della rete
+    # nazionale a ogni bootstrap.
+    version = content_hash(path.read_bytes())
+    if await find("osm", kind, version) is not None:
+        _log.info("osm.sync.skip_same_version", kind=kind, version=version[:12])
+        return 0
     try:
         lines = _read_lines(path, class_field=class_field)
     except Exception as exc:
@@ -87,6 +95,12 @@ async def _sync_kind(kind: str, path: Path, *, class_field: str | None) -> int:
     async with acquire() as conn, conn.transaction():
         await conn.execute("DELETE FROM osm_infrastructure WHERE kind = $1", kind)
         await conn.executemany(_INSERT_SQL, [(kind, cls, geom) for cls, geom in lines])
+    await record(
+        source="osm",
+        dataset=kind,
+        version=version,
+        metadata={"path": str(path), "features": len(lines)},
+    )
     _log.info("osm.sync.kind_done", kind=kind, features=len(lines), path=str(path))
     return len(lines)
 
