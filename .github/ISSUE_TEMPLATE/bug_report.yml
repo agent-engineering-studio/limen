@@ -1,0 +1,50 @@
+name: Bug report
+description: Report something broken or incorrect
+title: "bug: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the issue clearly.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. AOI/source used
+        2. Command/API/page
+        3. Error or incorrect result
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Data ingestion
+        - Scoring
+        - Backend/API
+        - Frontend/map
+        - Notifications
+        - Deployment
+        - Documentation
+        - Other
+  - type: textarea
+    id: data-source
+    attributes:
+      label: Public data source or AOI
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      render: shell
