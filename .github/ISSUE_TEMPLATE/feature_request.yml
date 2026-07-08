@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest an improvement, integration or data-source adapter
+title: "feat: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: What should become easier, safer or more useful?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Data source / ingestion
+        - Scoring / validation
+        - Backend/API
+        - Frontend/map
+        - Notifications / operations
+        - Deployment
+        - Documentation
+        - Other
+  - type: textarea
+    id: responsible-use
+    attributes:
+      label: Responsible-use notes
+      description: Any uncertainty, risk, limitation or public-safety consideration?
