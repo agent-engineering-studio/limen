@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from fastapi import APIRouter, Query, Response
 
 from limen.api.dependencies import DepsDep
 from limen.api.schemas import AlertItem, AlertsResponse
+from limen.core.scoring.exposure import exposure_factor
+from limen.core.scoring.regional_thresholds import load_regional_thresholds
 from limen.data.db import acquire
 
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
@@ -46,18 +46,22 @@ async def list_alerts(
                   AND ra.computed_at >= now() - ($2::int * interval '1 hour')
                 ORDER BY ra.cell_id, ra.computed_at DESC
             )
-            -- Esposizione dal CORINE: 11x tessuto urbano, 12x
-            -- infrastrutture principali (strade/ferrovie 122,
-            -- industriale 121, porti/aeroporti 123-124) — nella cella
-            -- stessa e nelle adiacenti (~2 km). Calcolata DOPO la
-            -- dedup: solo sulle celle uniche, non su ogni tick orario.
+            -- Esposizione: 11x tessuto urbano CORINE (in cella + adiacenti
+            -- ~2 km) e distanza precomputata dalla rete OSM principale
+            -- (strade motorway..secondary, ferrovie). I flag CORINE 12x
+            -- restano il fallback quando le distanze OSM sono NULL.
+            -- Calcolata DOPO la dedup: solo sulle celle uniche, non su
+            -- ogni tick orario.
             SELECT l.cell_id, g.aoi_id, l.score, l.class, l.computed_at,
                    ST_X(ST_Centroid(g.geom)) AS lon,
                    ST_Y(ST_Centroid(g.geom)) AS lat,
                    (csf.landuse_code LIKE '11%') AS urban_here,
                    (csf.landuse_code LIKE '12%') AS infra_here,
                    csf.near_urban AS urban_near,
-                   csf.near_infra AS infra_near
+                   csf.near_infra AS infra_near,
+                   csf.distance_to_road_m,
+                   csf.distance_to_rail_m,
+                   csf.nearest_road_class
             FROM latest l
             JOIN grid_cells g ON g.id = l.cell_id
             LEFT JOIN cell_static_factors csf ON csf.cell_id = l.cell_id
@@ -67,28 +71,26 @@ async def list_alerts(
         )
 
     # Priorità = rischio x (1 + esposizione): la stessa formula del
-    # dispatcher degli alert. Una frana Moderate sopra un paese o una
+    # dispatcher degli alert (limen.core.scoring.exposure, soglie in
+    # regional_thresholds.yaml). Una frana Moderate sopra un paese o una
     # statale conta più di una identica su un versante disabitato.
-    def _exposure(r: Any) -> tuple[float, list[str]]:
-        factor = 0.0
-        tags: list[str] = []
-        if r["urban_here"]:
-            factor += 1.0
-            tags.append("abitato")
-        elif r["urban_near"]:
-            factor += 0.5
-            tags.append("vicino abitato")
-        if r["infra_here"]:
-            factor += 0.6
-            tags.append("infrastrutture")
-        elif r["infra_near"]:
-            factor += 0.3
-            tags.append("infrastrutture vicine")
-        return min(factor, 2.0), tags
-
+    cfg = load_regional_thresholds().exposure
     scored = []
     for r in rows:
-        factor, tags = _exposure(r)
+        factor, tags = exposure_factor(
+            urban_here=bool(r["urban_here"]),
+            urban_near=bool(r["urban_near"]),
+            infra_here=bool(r["infra_here"]),
+            infra_near=bool(r["infra_near"]),
+            dist_road_m=(
+                float(r["distance_to_road_m"]) if r["distance_to_road_m"] is not None else None
+            ),
+            dist_rail_m=(
+                float(r["distance_to_rail_m"]) if r["distance_to_rail_m"] is not None else None
+            ),
+            road_class=r["nearest_road_class"],
+            cfg=cfg,
+        )
         scored.append((float(r["score"]) * (1.0 + factor), tags, r))
     scored.sort(key=lambda t: t[0], reverse=True)
     scored = scored[:limit]

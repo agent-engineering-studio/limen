@@ -193,7 +193,8 @@ export function HomePage(): JSX.Element {
         <p>
           Dati: ISPRA IdroGEO (CC-BY 4.0) · e-ITALICA CNR-IRPI (CC-BY 4.0) ·
           Copernicus / Open-Meteo · INGV (CC-BY 4.0) · Radar DPC (CC-BY-SA
-          4.0) · CORINE Land Cover. Codice Apache-2.0.
+          4.0) · CORINE Land Cover · © OpenStreetMap contributors (ODbL).
+          Codice Apache-2.0.
         </p>
         <p className="footer-disclaimer">
           Limen è uno strumento di supporto al monitoraggio: non sostituisce le

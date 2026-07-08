@@ -221,12 +221,13 @@ async def test_exposure_boosts_priority(reset_db: None) -> None:
     """Cell with populated exposure ranks ahead of an unexposed cell at equal score."""
     cell_ids = await _seed_aoi_with_cells()
     exposed_id, unexposed_id = cell_ids[0], cell_ids[1]
+    # Urban fabric in-cell + a main road 150 m away (OSM distance).
     async with acquire() as conn:
         await conn.execute(
             """
             UPDATE cell_static_factors
-            SET population_count = 5000, buildings_count = 200,
-                infra_density_norm = 0.8
+            SET landuse_code = '112', distance_to_road_m = 150.0,
+                nearest_road_class = 'primary'
             WHERE cell_id = $1
             """,
             exposed_id,

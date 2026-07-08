@@ -111,6 +111,7 @@ async def reset_db(pg_pool: asyncpg.Pool) -> AsyncIterator[None]:
         "training_samples",
         "cell_insar_features",
         "model_runs",
+        "osm_infrastructure",
     ]
     async with acquire() as conn:
         with contextlib.suppress(Exception):
