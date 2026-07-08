@@ -7,8 +7,10 @@ populated. DEM/CORINE/lithology are documented NULLs.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
-from shapely.geometry import MultiPolygon, Point, Polygon
+from shapely.geometry import LineString, MultiPolygon, Point, Polygon
 
 from limen.data.db import acquire
 from limen.data.repos.aoi_repo import upsert_aoi
@@ -20,6 +22,7 @@ from limen.data.repos.iffi_repo import IFFILandslide
 from limen.data.repos.iffi_repo import upsert_many as upsert_iffi
 from limen.data.repos.pai_repo import PAIHazard
 from limen.data.repos.pai_repo import upsert_many as upsert_pai
+from limen.integrations.osm import sync_osm_infrastructure
 from limen.integrations.static_bootstrap import bootstrap_static_for_aoi
 
 pytestmark = pytest.mark.integration
@@ -240,3 +243,87 @@ async def test_bootstrap_leaves_dem_fields_null(reset_db: None) -> None:
     assert factors.twi is None
     assert factors.landuse_code is None
     assert factors.lithology is None
+
+
+async def test_osm_sync_and_distances(reset_db: None, tmp_path: Path) -> None:
+    """OSM network loaded from vector files → per-cell road/rail distances."""
+    import geopandas as gpd
+
+    await _seed(reset_db)
+
+    # A primary road crossing the AOI north-south and a railway well
+    # outside it (~45 km east) but under the 50 km cap.
+    roads_path = tmp_path / "roads.gpkg"
+    gpd.GeoDataFrame(
+        {"highway": ["primary"]},
+        geometry=[LineString([(16.88, 41.10), (16.88, 41.19)])],
+        crs="EPSG:4326",
+    ).to_file(roads_path)
+    rails_path = tmp_path / "rails.gpkg"
+    gpd.GeoDataFrame(
+        {"dummy": [1]},
+        geometry=[LineString([(17.40, 41.10), (17.40, 41.19)])],
+        crs="EPSG:4326",
+    ).to_file(rails_path)
+
+    written = await sync_osm_infrastructure(roads_path=roads_path, railways_path=rails_path)
+    assert written == 2
+
+    await bootstrap_static_for_aoi(_AOI_ID)
+
+    async with acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT MIN(distance_to_road_m) AS min_road,
+                   MIN(distance_to_rail_m) AS min_rail,
+                   COUNT(*) FILTER (WHERE distance_to_road_m IS NULL) AS null_road
+            FROM cell_static_factors c
+            JOIN grid_cells g ON g.id = c.cell_id
+            WHERE g.aoi_id = $1
+            """,
+            _AOI_ID,
+        )
+        near_class = await conn.fetchval(
+            """
+            SELECT c.nearest_road_class
+            FROM cell_static_factors c
+            JOIN grid_cells g ON g.id = c.cell_id
+            WHERE g.aoi_id = $1
+            ORDER BY c.distance_to_road_m ASC
+            LIMIT 1
+            """,
+            _AOI_ID,
+        )
+    assert row is not None
+    assert int(row["null_road"]) == 0
+    # The road crosses the AOI: the nearest cell centroid sits within ~1 km.
+    assert float(row["min_road"]) < 1_500.0
+    # The railway is ~40+ km east: far, but below the 50 km cap.
+    assert 20_000.0 < float(row["min_rail"]) < 50_000.0
+    assert near_class == "primary"
+
+
+async def test_osm_unset_leaves_distances_null(
+    reset_db: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No LIMEN_OSM_* files → clean no-op, distance columns stay NULL."""
+    monkeypatch.delenv("LIMEN_OSM_ROADS", raising=False)
+    monkeypatch.delenv("LIMEN_OSM_RAILWAYS", raising=False)
+    await _seed(reset_db)
+    written = await sync_osm_infrastructure()
+    assert written == 0
+
+    await bootstrap_static_for_aoi(_AOI_ID)
+    async with acquire() as conn:
+        non_null = await conn.fetchval(
+            """
+            SELECT COUNT(*) FILTER (
+                WHERE distance_to_road_m IS NOT NULL OR distance_to_rail_m IS NOT NULL
+            )
+            FROM cell_static_factors c
+            JOIN grid_cells g ON g.id = c.cell_id
+            WHERE g.aoi_id = $1
+            """,
+            _AOI_ID,
+        )
+    assert int(non_null) == 0

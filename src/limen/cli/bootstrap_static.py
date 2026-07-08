@@ -6,6 +6,7 @@ from limen.core.logging import get_logger
 from limen.data.db import lifespan_pool
 from limen.data.migrate import run_migrations
 from limen.data.repos.aoi_repo import list_aoi_ids
+from limen.integrations.osm import sync_osm_infrastructure
 from limen.integrations.static_bootstrap import bootstrap_static_for_aoi
 
 log = get_logger(__name__)
@@ -19,6 +20,9 @@ async def run() -> int:
         if not aois:
             log.warning("bootstrap_static.no_aois", note="run `limen seed` first")
             return 0
+        # La rete OSM è nazionale: si carica una volta sola, prima del
+        # giro per-AOI che ne calcola le distanze.
+        await sync_osm_infrastructure()
         for aoi_id in aois:
             result = await bootstrap_static_for_aoi(aoi_id)
             log.info("bootstrap_static.aoi.done", aoi_id=aoi_id, **result)

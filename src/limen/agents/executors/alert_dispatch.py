@@ -33,6 +33,8 @@ from limen.config.settings import AlertSettings, Settings, get_settings
 from limen.core.logging import get_logger
 from limen.core.models.context import CellRiskRecord, MonitoringContext
 from limen.core.models.risk import RiskLevel
+from limen.core.scoring.exposure import exposure_factor
+from limen.core.scoring.regional_thresholds import load_regional_thresholds
 from limen.data.db import acquire
 from limen.data.repos.alert_dispatches_repo import (
     AlertDispatchRow,
@@ -61,58 +63,49 @@ def _resolve_threshold(min_level: str) -> RiskLevel:
     return _LEVEL_FROM_STRING.get(min_level, RiskLevel.High)
 
 
-def _exposure_factor(
-    *,
-    population: int | None,
-    buildings: int | None,
-    infra_density: float | None,
-) -> float:
-    """Bounded exposure multiplier in roughly ``[0, 2]``.
+async def _load_exposure_factors(aoi_id: str) -> dict[str, float]:
+    """Per-cell exposure multiplier for one AOI.
 
-    The weighting is empirical (no V1 calibration data yet). Designed so
-    that a cell with no exposure data gets a multiplier of 0 (priority
-    == score), while a heavily-exposed cell can roughly double its
-    priority. V1.5 calibration on real population/buildings density
-    will replace these magic numbers with a YAML knob.
+    Same shared formula as ``/api/alerts`` (``limen.core.scoring.exposure``,
+    thresholds in ``regional_thresholds.yaml``): CORINE urban flags +
+    distance from the OSM road/rail network, with the CORINE 12x flags
+    as fallback. Cells without a factors row get 0 (priority == score).
     """
-    components: list[float] = []
-    if population is not None and population > 0:
-        components.append(min(1.0, population / 1000.0))
-    if buildings is not None and buildings > 0:
-        components.append(min(1.0, buildings / 100.0))
-    if infra_density is not None and infra_density > 0:
-        components.append(min(1.0, float(infra_density)))
-    return sum(components) / max(1, len(components)) if components else 0.0
-
-
-async def _load_exposure(
-    aoi_id: str,
-) -> dict[str, tuple[int | None, int | None, float | None]]:
-    """Load per-cell exposure for one AOI.
-
-    Returns a mapping ``cell_id → (population, buildings, infra_density)``.
-    Missing rows yield ``(None, None, None)`` so the priority function
-    can fall back cleanly.
-    """
+    cfg = load_regional_thresholds().exposure
     async with acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT c.cell_id, c.population_count, c.buildings_count,
-                   c.infra_density_norm
+            SELECT c.cell_id,
+                   (c.landuse_code LIKE '11%') AS urban_here,
+                   (c.landuse_code LIKE '12%') AS infra_here,
+                   c.near_urban AS urban_near,
+                   c.near_infra AS infra_near,
+                   c.distance_to_road_m, c.distance_to_rail_m,
+                   c.nearest_road_class
             FROM cell_static_factors c
             JOIN grid_cells g ON g.id = c.cell_id
             WHERE g.aoi_id = $1
             """,
             aoi_id,
         )
-    return {
-        str(r["cell_id"]): (
-            int(r["population_count"]) if r["population_count"] is not None else None,
-            int(r["buildings_count"]) if r["buildings_count"] is not None else None,
-            float(r["infra_density_norm"]) if r["infra_density_norm"] is not None else None,
+    out: dict[str, float] = {}
+    for r in rows:
+        factor, _tags = exposure_factor(
+            urban_here=bool(r["urban_here"]),
+            urban_near=bool(r["urban_near"]),
+            infra_here=bool(r["infra_here"]),
+            infra_near=bool(r["infra_near"]),
+            dist_road_m=(
+                float(r["distance_to_road_m"]) if r["distance_to_road_m"] is not None else None
+            ),
+            dist_rail_m=(
+                float(r["distance_to_rail_m"]) if r["distance_to_rail_m"] is not None else None
+            ),
+            road_class=r["nearest_road_class"],
+            cfg=cfg,
         )
-        for r in rows
-    }
+        out[str(r["cell_id"])] = factor
+    return out
 
 
 class AlertDispatchExecutor(Executor):
@@ -179,11 +172,10 @@ class AlertDispatchExecutor(Executor):
             return ctx
 
         # Priority — exposure-weighted score.
-        exposure = await _load_exposure(ctx.aoi_id)
+        exposure = await _load_exposure_factors(ctx.aoi_id)
         prioritised: list[tuple[CellRiskRecord, float]] = []
         for record in above_threshold:
-            pop, bld, infra = exposure.get(record.cell_id, (None, None, None))
-            mult = 1.0 + _exposure_factor(population=pop, buildings=bld, infra_density=infra)
+            mult = 1.0 + exposure.get(record.cell_id, 0.0)
             prioritised.append((record, record.score * mult))
         prioritised.sort(key=lambda pr: pr[1], reverse=True)
 

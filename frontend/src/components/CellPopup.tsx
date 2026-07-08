@@ -23,11 +23,20 @@ const EXPOSURE_PHRASE: Record<string, string> = {
   "infrastrutture vicine": "strade o ferrovie nelle vicinanze",
 };
 
+/** I tag con distanza OSM ("statale a 250 m") arrivano già in italiano
+ * dal backend: qui serve solo l'articolo per la frase discorsiva. */
+function phraseFor(tag: string): string {
+  if (EXPOSURE_PHRASE[tag]) return EXPOSURE_PHRASE[tag];
+  if (tag.startsWith("autostrada")) return `un'${tag}`;
+  if (tag.startsWith("statale") || tag.startsWith("ferrovia")) return `una ${tag}`;
+  return tag;
+}
+
 function exposureText(exposure?: string | null): string | null {
   if (!exposure) return null;
   const parts = exposure
     .split(", ")
-    .map((t) => EXPOSURE_PHRASE[t] ?? t)
+    .map(phraseFor)
     .filter(Boolean);
   if (parts.length === 0) return null;
   return parts.length === 1

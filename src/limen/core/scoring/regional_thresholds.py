@@ -190,6 +190,38 @@ class KinematicBlock(_StrictModel):
     weights: KinematicWeights
 
 
+class ExposureBlock(_StrictModel):
+    """Alert-priority exposure multiplier — NOT a scoring-engine input.
+
+    ``priority = score * (1 + factor)`` with ``factor`` capped at ``cap``.
+    Road/rail terms grade by distance from the OSM network; when the OSM
+    distances are NULL (network not ingested) the CORINE 12x flags act as
+    fallback so behaviour degrades to the pre-OSM formula.
+    """
+
+    urban_here: float = Field(default=1.0, ge=0.0)
+    urban_near: float = Field(default=0.5, ge=0.0)
+    road_strong_m: float = Field(default=250.0, gt=0.0)
+    road_strong: float = Field(default=0.6, ge=0.0)
+    road_medium_m: float = Field(default=1000.0, gt=0.0)
+    road_medium: float = Field(default=0.3, ge=0.0)
+    rail_strong_m: float = Field(default=250.0, gt=0.0)
+    rail_strong: float = Field(default=0.5, ge=0.0)
+    rail_medium_m: float = Field(default=1000.0, gt=0.0)
+    rail_medium: float = Field(default=0.25, ge=0.0)
+    infra_here_fallback: float = Field(default=0.6, ge=0.0)
+    infra_near_fallback: float = Field(default=0.3, ge=0.0)
+    cap: float = Field(default=2.0, gt=0.0)
+
+    @model_validator(mode="after")
+    def _bands_ordered(self) -> ExposureBlock:
+        if self.road_strong_m > self.road_medium_m:
+            raise ValueError("exposure.road_strong_m must be <= road_medium_m")
+        if self.rail_strong_m > self.rail_medium_m:
+            raise ValueError("exposure.rail_strong_m must be <= rail_medium_m")
+        return self
+
+
 class ClassRange(_StrictModel):
     """Closed-open ``[lo, hi)`` interval; the final class is closed-closed."""
 
@@ -275,6 +307,8 @@ class RegionalThresholds(_StrictModel):
     # validate; K simply stays inactive everywhere.
     kinematic: KinematicBlock | None = None
     classes: ClassCutoffs
+    # Alert-priority knob (not scoring) — older YAMLs without it validate.
+    exposure: ExposureBlock = Field(default_factory=lambda: ExposureBlock())
     # Optional presentational block — older YAMLs without it validate.
     pc_alert: PcAlertMapping = Field(default_factory=lambda: PcAlertMapping())
     target_distribution: TargetDistribution

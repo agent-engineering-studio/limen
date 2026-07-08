@@ -151,6 +151,26 @@ classes:
   high:      [0.55, 0.75]
   very_high: [0.75, 1.00]
 
+# Fattore di ESPOSIZIONE per la priorità degli alert (endpoint /api/alerts
+# e dispatcher). NON entra nello scoring: priority = score * (1 + fattore),
+# cappato a `cap`. Strade/ferrovie graduate per distanza dalla rete OSM
+# (motorway/trunk/primary/secondary + railway=rail); con le distanze NULL
+# (rete non ingerita) valgono i fallback sui flag CORINE 12x.
+exposure:
+  urban_here:          1.0    # tessuto urbano CORINE 11x nella cella
+  urban_near:          0.5    # entro ~2 km
+  road_strong_m:       250.0  # strada principale sotto questa distanza
+  road_strong:         0.6
+  road_medium_m:       1000.0
+  road_medium:         0.3
+  rail_strong_m:       250.0
+  rail_strong:         0.5
+  rail_medium_m:       1000.0
+  rail_medium:         0.25
+  infra_here_fallback: 0.6    # CORINE 12x nella cella (distanze OSM NULL)
+  infra_near_fallback: 0.3    # CORINE 12x entro ~2 km
+  cap:                 2.0
+
 # Mapping presentazionale verso la scala di allerta della Protezione
 # Civile (verde/gialla/arancione/rossa). Solo etichette per API,
 # legenda e notifiche: gli score e le classi NON cambiano.

@@ -154,6 +154,79 @@ WHERE c.cell_id = f.cell_id
 """
 
 
+# Distanza (m) dal centroide cella alla rete OSM più vicina, per kind.
+# Stesso pattern KNN di _DISTANCE_TO_IFFI_SQL: l'indice GiST parziale per
+# kind restituisce il segmento più vicino (index scan), ST_Distance su
+# geography dà i metri veri solo per quello. Cap a 50 km ($2).
+_DISTANCE_TO_ROAD_SQL = """
+WITH d AS (
+    SELECT g.id AS cell_id, near.cls,
+           LEAST(COALESCE(near.dist, $2::double precision), $2::double precision) AS dist
+    FROM grid_cells g
+    LEFT JOIN LATERAL (
+        SELECT o.class AS cls,
+               ST_Distance(g.centroid::geography, o.geom::geography) AS dist
+        FROM osm_infrastructure o
+        WHERE o.kind = 'road'
+        ORDER BY g.centroid <-> o.geom
+        LIMIT 1
+    ) near ON true
+    WHERE g.aoi_id = $1
+)
+UPDATE cell_static_factors c
+SET distance_to_road_m = d.dist,
+    nearest_road_class = d.cls,
+    updated_at = now()
+FROM d
+WHERE c.cell_id = d.cell_id
+"""
+
+_DISTANCE_TO_RAIL_SQL = """
+WITH d AS (
+    SELECT g.id AS cell_id,
+           LEAST(COALESCE(near.dist, $2::double precision), $2::double precision) AS dist
+    FROM grid_cells g
+    LEFT JOIN LATERAL (
+        SELECT ST_Distance(g.centroid::geography, o.geom::geography) AS dist
+        FROM osm_infrastructure o
+        WHERE o.kind = 'rail'
+        ORDER BY g.centroid <-> o.geom
+        LIMIT 1
+    ) near ON true
+    WHERE g.aoi_id = $1
+)
+UPDATE cell_static_factors c
+SET distance_to_rail_m = d.dist,
+    updated_at = now()
+FROM d
+WHERE c.cell_id = d.cell_id
+"""
+
+
+async def compute_osm_distances_for_aoi(aoi_id: str) -> None:
+    """Fill distance_to_road_m / distance_to_rail_m for one AOI.
+
+    Skips a kind entirely when osm_infrastructure has no rows for it —
+    the columns stay NULL and the exposure factor degrades to the
+    CORINE flags.
+    """
+    for kind, sql in (("road", _DISTANCE_TO_ROAD_SQL), ("rail", _DISTANCE_TO_RAIL_SQL)):
+        async with acquire() as conn:
+            count = await conn.fetchval(
+                "SELECT count(*) FROM osm_infrastructure WHERE kind = $1", kind
+            )
+            if not count:
+                log.info("static_bootstrap.osm_distance.skip", aoi_id=aoi_id, kind=kind)
+                continue
+            await conn.execute(sql, aoi_id, _DISTANCE_CAP_M, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
+            log.info(
+                "static_bootstrap.osm_distance.done",
+                aoi_id=aoi_id,
+                kind=kind,
+                network_features=count,
+            )
+
+
 async def bootstrap_static_for_aoi(aoi_id: str) -> dict[str, int]:
     """Run the achievable static-bootstrap steps for ``aoi_id``.
 
@@ -192,6 +265,10 @@ async def bootstrap_static_for_aoi(aoi_id: str) -> dict[str, int]:
         )
         await conn.execute(_PAI_CLASS_SQL, aoi_id, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
         await conn.execute(_FLOOD_HAZARD_SQL, aoi_id, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
+
+    # Distanze dalla rete OSM (strade/ferrovie) — no-op finché
+    # `sync_osm_infrastructure` non ha popolato osm_infrastructure.
+    await compute_osm_distances_for_aoi(aoi_id)
 
     # DEM derivatives — runs when LIMEN_DEM_RASTER points at a GeoTIFF
     # (e.g. TINITALY 10 m). With the env var unset the step is a clean
