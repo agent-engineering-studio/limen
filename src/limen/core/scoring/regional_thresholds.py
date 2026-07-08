@@ -195,8 +195,9 @@ class ExposureBlock(_StrictModel):
 
     ``priority = score * (1 + factor)`` with ``factor`` capped at ``cap``.
     Road/rail terms grade by distance from the OSM network; when the OSM
-    distances are NULL (network not ingested) the CORINE 12x flags act as
-    fallback so behaviour degrades to the pre-OSM formula.
+    term contributes nothing (network not ingested, or beyond the bands)
+    the CORINE 12x flags act as fallback — they also cover what the
+    road/rail extract can't see (industrial 121, ports/airports 123-124).
     """
 
     urban_here: float = Field(default=1.0, ge=0.0)

@@ -155,20 +155,27 @@ WHERE c.cell_id = f.cell_id
 
 
 # Distanza (m) dal centroide cella alla rete OSM più vicina, per kind.
-# Stesso pattern KNN di _DISTANCE_TO_IFFI_SQL: l'indice GiST parziale per
-# kind restituisce il segmento più vicino (index scan), ST_Distance su
-# geography dà i metri veri solo per quello. Cap a 50 km ($2).
+# Il KNN ``<->`` ordina in gradi, che a ~41°N sono anisotropi (1° di
+# longitudine ≈ 0.75° di latitudine in metri): il più vicino in gradi
+# può non esserlo in metri, e con la banda strong a 250 m l'errore
+# cambia fascia. Quindi: 10 candidati dall'indice GiST parziale (index
+# scan), vincitore scelto con ST_Distance su geography. Cap a 50 km ($2).
 _DISTANCE_TO_ROAD_SQL = """
 WITH d AS (
     SELECT g.id AS cell_id, near.cls,
            LEAST(COALESCE(near.dist, $2::double precision), $2::double precision) AS dist
     FROM grid_cells g
     LEFT JOIN LATERAL (
-        SELECT o.class AS cls,
-               ST_Distance(g.centroid::geography, o.geom::geography) AS dist
-        FROM osm_infrastructure o
-        WHERE o.kind = 'road'
-        ORDER BY g.centroid <-> o.geom
+        SELECT q.class AS cls,
+               ST_Distance(g.centroid::geography, q.geom::geography) AS dist
+        FROM (
+            SELECT o.class, o.geom
+            FROM osm_infrastructure o
+            WHERE o.kind = 'road'
+            ORDER BY g.centroid <-> o.geom
+            LIMIT 10
+        ) q
+        ORDER BY ST_Distance(g.centroid::geography, q.geom::geography)
         LIMIT 1
     ) near ON true
     WHERE g.aoi_id = $1
@@ -187,10 +194,15 @@ WITH d AS (
            LEAST(COALESCE(near.dist, $2::double precision), $2::double precision) AS dist
     FROM grid_cells g
     LEFT JOIN LATERAL (
-        SELECT ST_Distance(g.centroid::geography, o.geom::geography) AS dist
-        FROM osm_infrastructure o
-        WHERE o.kind = 'rail'
-        ORDER BY g.centroid <-> o.geom
+        SELECT ST_Distance(g.centroid::geography, q.geom::geography) AS dist
+        FROM (
+            SELECT o.geom
+            FROM osm_infrastructure o
+            WHERE o.kind = 'rail'
+            ORDER BY g.centroid <-> o.geom
+            LIMIT 10
+        ) q
+        ORDER BY ST_Distance(g.centroid::geography, q.geom::geography)
         LIMIT 1
     ) near ON true
     WHERE g.aoi_id = $1

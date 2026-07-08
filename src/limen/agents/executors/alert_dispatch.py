@@ -33,7 +33,7 @@ from limen.config.settings import AlertSettings, Settings, get_settings
 from limen.core.logging import get_logger
 from limen.core.models.context import CellRiskRecord, MonitoringContext
 from limen.core.models.risk import RiskLevel
-from limen.core.scoring.exposure import exposure_factor
+from limen.core.scoring.exposure import exposure_factor_from_row
 from limen.core.scoring.regional_thresholds import load_regional_thresholds
 from limen.data.db import acquire
 from limen.data.repos.alert_dispatches_repo import (
@@ -63,8 +63,8 @@ def _resolve_threshold(min_level: str) -> RiskLevel:
     return _LEVEL_FROM_STRING.get(min_level, RiskLevel.High)
 
 
-async def _load_exposure_factors(aoi_id: str) -> dict[str, float]:
-    """Per-cell exposure multiplier for one AOI.
+async def _load_exposure_factors(cell_ids: list[str]) -> dict[str, float]:
+    """Exposure multiplier for the candidate cells only.
 
     Same shared formula as ``/api/alerts`` (``limen.core.scoring.exposure``,
     thresholds in ``regional_thresholds.yaml``): CORINE urban flags +
@@ -83,29 +83,11 @@ async def _load_exposure_factors(aoi_id: str) -> dict[str, float]:
                    c.distance_to_road_m, c.distance_to_rail_m,
                    c.nearest_road_class
             FROM cell_static_factors c
-            JOIN grid_cells g ON g.id = c.cell_id
-            WHERE g.aoi_id = $1
+            WHERE c.cell_id = ANY($1::text[])
             """,
-            aoi_id,
+            cell_ids,
         )
-    out: dict[str, float] = {}
-    for r in rows:
-        factor, _tags = exposure_factor(
-            urban_here=bool(r["urban_here"]),
-            urban_near=bool(r["urban_near"]),
-            infra_here=bool(r["infra_here"]),
-            infra_near=bool(r["infra_near"]),
-            dist_road_m=(
-                float(r["distance_to_road_m"]) if r["distance_to_road_m"] is not None else None
-            ),
-            dist_rail_m=(
-                float(r["distance_to_rail_m"]) if r["distance_to_rail_m"] is not None else None
-            ),
-            road_class=r["nearest_road_class"],
-            cfg=cfg,
-        )
-        out[str(r["cell_id"])] = factor
-    return out
+    return {str(r["cell_id"]): exposure_factor_from_row(r, cfg)[0] for r in rows}
 
 
 class AlertDispatchExecutor(Executor):
@@ -172,7 +154,7 @@ class AlertDispatchExecutor(Executor):
             return ctx
 
         # Priority — exposure-weighted score.
-        exposure = await _load_exposure_factors(ctx.aoi_id)
+        exposure = await _load_exposure_factors([r.cell_id for r in above_threshold])
         prioritised: list[tuple[CellRiskRecord, float]] = []
         for record in above_threshold:
             mult = 1.0 + exposure.get(record.cell_id, 0.0)

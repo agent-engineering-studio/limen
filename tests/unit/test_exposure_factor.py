@@ -65,17 +65,31 @@ def test_distance_formatting_edges() -> None:
     wide = ExposureBlock(rail_medium_m=2_000.0)
     _, km = _factor(dist_rail_m=1_240.0, cfg=wide)
     assert km == ["ferrovia a 1,2 km"]
+    # 996 m arrotonda a 1000 → formato km, mai "1000 m".
+    _, edge = _factor(dist_road_m=996.0)
+    assert edge == ["statale a 1,0 km"]
 
 
-def test_corine_fallback_only_without_osm_distances() -> None:
+def test_corine_fallback_when_osm_contributes_nothing() -> None:
+    # Rete OSM non ingerita (distanze NULL) → fallback CORINE.
     fallback, fallback_tags = _factor(infra_near=True)
     assert fallback == _CFG.infra_near_fallback
     assert fallback_tags == ["infrastrutture vicine"]
 
-    # A known OSM distance (even a far one) disables the CORINE fallback.
-    with_osm, with_osm_tags = _factor(infra_near=True, dist_road_m=30_000.0)
-    assert with_osm == 0.0
-    assert with_osm_tags == []
+    # Distanze note ma oltre le bande (contributo OSM zero) → il flag
+    # CORINE 12x copre ancora rail/porti/aeroporti/industriale.
+    far, far_tags = _factor(infra_here=True, dist_road_m=30_000.0, dist_rail_m=30_000.0)
+    assert far == _CFG.infra_here_fallback
+    assert far_tags == ["infrastrutture"]
+
+    # Ingest parziale (solo strade): il fallback resta per il resto.
+    partial, _ = _factor(infra_near=True, dist_road_m=30_000.0)
+    assert partial == _CFG.infra_near_fallback
+
+    # Con un contributo OSM reale il fallback non si somma.
+    with_osm, with_osm_tags = _factor(infra_near=True, dist_road_m=200.0)
+    assert with_osm == _CFG.road_strong
+    assert with_osm_tags == ["statale a 200 m"]
 
 
 def test_urban_terms_and_cap() -> None:

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Query, Response
 
 from limen.api.dependencies import DepsDep
 from limen.api.schemas import AlertItem, AlertsResponse
-from limen.core.scoring.exposure import exposure_factor
+from limen.core.scoring.exposure import exposure_factor_from_row
 from limen.core.scoring.regional_thresholds import load_regional_thresholds
 from limen.data.db import acquire
 
@@ -77,20 +77,7 @@ async def list_alerts(
     cfg = load_regional_thresholds().exposure
     scored = []
     for r in rows:
-        factor, tags = exposure_factor(
-            urban_here=bool(r["urban_here"]),
-            urban_near=bool(r["urban_near"]),
-            infra_here=bool(r["infra_here"]),
-            infra_near=bool(r["infra_near"]),
-            dist_road_m=(
-                float(r["distance_to_road_m"]) if r["distance_to_road_m"] is not None else None
-            ),
-            dist_rail_m=(
-                float(r["distance_to_rail_m"]) if r["distance_to_rail_m"] is not None else None
-            ),
-            road_class=r["nearest_road_class"],
-            cfg=cfg,
-        )
+        factor, tags = exposure_factor_from_row(r, cfg)
         scored.append((float(r["score"]) * (1.0 + factor), tags, r))
     scored.sort(key=lambda t: t[0], reverse=True)
     scored = scored[:limit]
