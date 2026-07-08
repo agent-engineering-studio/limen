@@ -10,6 +10,7 @@ Usage:
     limen forecast           Predictive run at now+H hours (forecast rain, no persistence).
     limen serve              Start the FastAPI HTTP server (uvicorn on :8080).
     limen train              Extract training samples and train the V2 ML model (MLflow).
+    limen shadow-report      Champion vs ML-challenger comparison over the shadow window.
     limen --help             Show this help.
 """
 
@@ -36,6 +37,7 @@ from limen.cli.migrate import run as _run_migrate
 from limen.cli.monitor_once import run as _run_monitor_once
 from limen.cli.seed import run as _run_seed
 from limen.cli.server import run as _run_server
+from limen.cli.shadow_report import run as _run_shadow_report
 from limen.cli.sync_egms import run as _run_sync_egms
 from limen.cli.train import run as _run_train
 from limen.config.settings import get_settings
@@ -81,6 +83,10 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "train",
         help="extract training samples and train the V2 ML model (LightGBM + MLflow)",
+    )
+    sub.add_parser(
+        "shadow-report",
+        help="champion vs ML-challenger comparison report (LIMEN_SHADOW_SINCE / _AOI)",
     )
     sub.add_parser(
         "sync-egms",
@@ -142,6 +148,7 @@ def main(argv: list[str] | None = None) -> int:
         "forecast": _run_forecast,
         "serve": _run_server,
         "train": _run_train,
+        "shadow-report": _run_shadow_report,
         "sync-egms": _run_sync_egms,
         "ingest-kb": _run_ingest_kb,
         "geoserver-sync": _run_geoserver_sync,
