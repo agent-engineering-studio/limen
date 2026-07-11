@@ -3,16 +3,27 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-
-from jinja2 import Environment, PackageLoader, select_autoescape
+from typing import TYPE_CHECKING
 
 from limen.core.models.risk import RiskLevel
 from limen.report.palette import RISK_CLASSES
 
-_env = Environment(
-    loader=PackageLoader("limen.report", "templates"),
-    autoescape=select_autoescape(["html", "j2"]),
-)
+if TYPE_CHECKING:
+    from jinja2 import Environment
+
+_env: Environment | None = None
+
+
+def _get_env() -> Environment:
+    global _env
+    if _env is None:
+        from jinja2 import Environment, PackageLoader, select_autoescape
+
+        _env = Environment(
+            loader=PackageLoader("limen.report", "templates"),
+            autoescape=select_autoescape(["html", "j2"]),
+        )
+    return _env
 
 
 @dataclass
@@ -41,5 +52,5 @@ class ReportView:
 
 
 def render_html(view: ReportView) -> str:
-    template = _env.get_template("report.html.j2")
+    template = _get_env().get_template("report.html.j2")
     return template.render(view=view, classes=RISK_CLASSES)

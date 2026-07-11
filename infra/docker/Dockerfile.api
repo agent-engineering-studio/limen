@@ -40,10 +40,11 @@ COPY pyproject.toml uv.lock README.md ./
 # `--group ml` ships lightgbm+mlflow+shap so the shadow challenger can load
 # in-container; without it resolve_challenger degrades to None (logged).
 # `--group mcp` ships fastmcp so the same image serves `limen mcp-serve`.
+# `--group report` ships jinja2+pillow for the static-HTML risk report.
 RUN uv sync --frozen --no-dev --no-editable --no-install-project \
-    --group ml --group mcp
+    --group ml --group mcp --group report
 COPY src ./src
-RUN uv sync --frozen --no-dev --no-editable --group ml --group mcp
+RUN uv sync --frozen --no-dev --no-editable --group ml --group mcp --group report
 
 # ---------------------------------------------------------------------------
 # Stage 2 — runtime

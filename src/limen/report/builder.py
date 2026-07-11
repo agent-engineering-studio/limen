@@ -191,9 +191,9 @@ async def build_report(settings: Settings | None = None) -> Path | None:
     shutil.rmtree(build_dir, ignore_errors=True)
     cluster_views: list[ClusterView] = []
     manifest_clusters: list[dict[str, object]] = []
-    for c in capped:
+    for idx, c in enumerate(capped):
         colored = [(r.geom_json, color_for(RiskLevel(r.level))) for r in c.rows]
-        png_path = build_dir / "assets" / f"cluster-{c.cluster_id}.png"
+        png_path = build_dir / "assets" / f"cluster-{idx}.png"
         is_png = await render_cluster_png(
             out_path=png_path,
             bbox=c.bbox,
@@ -202,7 +202,7 @@ async def build_report(settings: Settings | None = None) -> Path | None:
             attribution=cfg.html_basemap_attribution,
         )
         ext = "png" if is_png else "svg"
-        cluster_views.append(_cluster_to_view(c, f"assets/cluster-{c.cluster_id}.{ext}"))
+        cluster_views.append(_cluster_to_view(c, f"assets/cluster-{idx}.{ext}"))
         manifest_clusters.append(
             {
                 "cluster_id": c.cluster_id,
