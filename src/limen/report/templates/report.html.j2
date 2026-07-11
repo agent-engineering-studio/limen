@@ -31,6 +31,8 @@
   .legend { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; font-size: .8rem; }
   .legend span { display: inline-flex; align-items: center; gap: .3rem; }
   .legend .sw { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+  .notice { background: #eef4fb; border-left: 4px solid #4a72a8; border-radius: 6px;
+            padding: .7rem 1rem; margin-bottom: 1.25rem; font-size: .9rem; color: #21456e; }
 </style>
 </head>
 <body>
@@ -39,6 +41,7 @@
   <div class="meta">Valutazione: {{ view.valuation_time }} · pipeline {{ view.pipeline_version }}</div>
 </header>
 <main>
+  {% if view.notice %}<p class="notice">{{ view.notice }}</p>{% endif %}
   <section class="national"><p>{{ view.national_summary }}</p></section>
 
   {% for c in view.clusters %}
