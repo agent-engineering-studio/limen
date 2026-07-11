@@ -20,13 +20,17 @@ def lonlat_to_pixel(lon: float, lat: float, zoom: int) -> tuple[float, float]:
     return (x, y)
 
 
-def zoom_for_bbox(bbox: tuple[float, float, float, float], *, width_px: int, height_px: int) -> int:
-    """Massimo zoom per cui il bbox (con margine 20%) sta nel canvas."""
+def padded_bbox(bbox: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
+    """bbox con margine 20% (o 0.01° minimo per bbox degeneri)."""
     minx, miny, maxx, maxy = bbox
     pad_x = (maxx - minx) * 0.2 or 0.01
     pad_y = (maxy - miny) * 0.2 or 0.01
-    minx, maxx = minx - pad_x, maxx + pad_x
-    miny, maxy = miny - pad_y, maxy + pad_y
+    return (minx - pad_x, miny - pad_y, maxx + pad_x, maxy + pad_y)
+
+
+def zoom_for_bbox(bbox: tuple[float, float, float, float], *, width_px: int, height_px: int) -> int:
+    """Massimo zoom per cui il bbox (con margine 20%) sta nel canvas."""
+    minx, miny, maxx, maxy = padded_bbox(bbox)
     for z in range(19, -1, -1):
         x0, y0 = lonlat_to_pixel(minx, maxy, z)
         x1, y1 = lonlat_to_pixel(maxx, miny, z)
