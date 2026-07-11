@@ -19,6 +19,8 @@ from typing import Literal
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from limen.core.models.risk import RiskLevel
+
 
 class ObjectStoreBackend(StrEnum):
     FILESYSTEM = "filesystem"
@@ -548,6 +550,19 @@ class ReportSettings(BaseSettings):
     enabled: bool = True
     # UTC hour of the daily dispatch (07:00 Europe/Rome in winter = 06 UTC).
     hour_utc: int = Field(default=6, ge=0, le=23)
+
+    # --- Report HTML statico (job limen-html-report) ---
+    html_enabled: bool = True
+    html_interval_hours: int = Field(default=1, ge=1)
+    html_run_at_startup: bool = True
+    html_output_dir: Path = Path("report")
+    html_max_clusters: int = Field(default=50, ge=1)
+    html_min_level: RiskLevel = RiskLevel.High
+    html_cluster_eps_deg: float = Field(default=0.02, gt=0)
+    html_archive_keep: int = Field(default=240, ge=1)
+    html_basemap_url_template: str = "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
+    html_basemap_attribution: str = "© OpenStreetMap contributors © CARTO"
+    html_publish: bool = False
 
 
 class Settings(BaseSettings):

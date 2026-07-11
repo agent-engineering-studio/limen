@@ -93,6 +93,10 @@ dl = [
     "torch>=2.4",
     "onnx>=1.17",
 ]
+report = [
+    "jinja2>=3.1",
+    "pillow>=10.4",
+]
 
 [build-system]
 requires = ["uv_build>=0.11.16,<0.12.0"]
