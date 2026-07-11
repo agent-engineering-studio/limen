@@ -54,6 +54,9 @@ docs/_build/
 # Generated backtest/calibrate reports
 reports/
 
+# Generated static HTML risk-report site (limen report build)
+site/
+
 # Claude Code session config (local)
 .claude/
 

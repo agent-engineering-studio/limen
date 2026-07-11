@@ -21,10 +21,10 @@ from limen.core.models.risk import RiskLevel
 from limen.data.db import acquire
 from limen.report.archive import prune_archive, write_build
 from limen.report.clustering import Cluster, load_clusters
+from limen.report.geojson import coord_label, zone_center, zone_feature_collection_json
 from limen.report.palette import color_for, label_for
 from limen.report.reasons import plain_summary, verdict
 from limen.report.render import ClusterView, ReportView, render_html
-from limen.report.snapshot import render_cluster_png
 
 log = get_logger(__name__)
 
@@ -125,10 +125,11 @@ def _last_signature(root: Path) -> str | None:
     return str(sig) if sig is not None else None
 
 
-def _cluster_to_view(c: Cluster, image_rel: str) -> ClusterView:
+def _cluster_to_view(c: Cluster, idx: int) -> ClusterView:
     d = c.dominant
     level = RiskLevel(d.level)
     v = verdict(level)
+    lat, lon = zone_center(c)
     return ClusterView(
         cluster_id=c.cluster_id,
         aoi_id=c.aoi_id,
@@ -137,7 +138,11 @@ def _cluster_to_view(c: Cluster, image_rel: str) -> ClusterView:
         level_color=color_for(level),
         max_score=c.max_score,
         n_cells=len(c.cell_ids),
-        image_rel=image_rel,
+        map_id=f"zone-{idx}",
+        geojson=zone_feature_collection_json(c),
+        center_lat=lat,
+        center_lon=lon,
+        coord_label=coord_label(lat, lon),
         reason=plain_summary(s=d.s, m=d.m, e=d.e, f=d.f, h=d.h),
         verdict_text=v.text,
         verdict_tone=v.tone,
@@ -241,35 +246,26 @@ async def build_report(settings: Settings | None = None) -> Path | None:
     # Un build_id riusato potrebbe avere asset orfani di un run precedente
     # interrotto: ripulisci prima di riscrivere, così la dir parte pulita.
     shutil.rmtree(build_dir, ignore_errors=True)
-    cluster_views: list[ClusterView] = []
-    manifest_clusters: list[dict[str, object]] = []
-    for idx, c in enumerate(capped):
-        colored = [(r.geom_json, color_for(RiskLevel(r.level))) for r in c.rows]
-        png_path = build_dir / "assets" / f"cluster-{idx}.png"
-        is_png = await render_cluster_png(
-            out_path=png_path,
-            bbox=c.bbox,
-            colored_cells=colored,
-            basemap_url_template=cfg.html_basemap_url_template,
-            attribution=cfg.html_basemap_attribution,
-        )
-        ext = "png" if is_png else "svg"
-        cluster_views.append(_cluster_to_view(c, f"assets/cluster-{idx}.{ext}"))
-        manifest_clusters.append(
-            {
-                "cluster_id": c.cluster_id,
-                "aoi_id": c.aoi_id,
-                "cell_ids": c.cell_ids,
-                "max_score": c.max_score,
-                "level": c.dominant.level,
-            }
-        )
+    cluster_views = [_cluster_to_view(c, idx) for idx, c in enumerate(capped)]
+    manifest_clusters = [
+        {
+            "cluster_id": c.cluster_id,
+            "aoi_id": c.aoi_id,
+            "cell_ids": c.cell_ids,
+            "max_score": c.max_score,
+            "level": c.dominant.level,
+            "center": list(zone_center(c)),  # [lat, lon]
+        }
+        for c in capped
+    ]
 
     view = ReportView(
         title="Limen — Zone a maggior rischio frana",
         valuation_time=valuation_iso,
         pipeline_version=pipeline_version,
         national_summary=str(national.get("report_it", "")),
+        basemap_url=cfg.html_basemap_url_template,
+        basemap_attribution=cfg.html_basemap_attribution,
         clusters=cluster_views,
         notice=notice,
     )
@@ -281,8 +277,8 @@ async def build_report(settings: Settings | None = None) -> Path | None:
         "shown_level": shown_level.value,
         "clusters": manifest_clusters,
     }
-    # render_cluster_png ha già scritto gli asset in build_dir/assets/;
-    # write_build scrive HTML+manifest e aggiorna puntatore/indice.
+    # Report interattivo: nessun asset raster da scrivere, le celle sono GeoJSON
+    # inline; write_build scrive HTML+manifest e aggiorna puntatore/indice.
     result = write_build(root, build_id=build_id, html=html, assets={}, manifest=manifest)
     prune_archive(root, keep=cfg.html_archive_keep)
     log.info(

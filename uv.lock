@@ -2095,7 +2095,6 @@ ml = [
 ]
 report = [
     { name = "jinja2" },
-    { name = "pillow" },
 ]
 storage = [
     { name = "boto3" },
@@ -2157,10 +2156,7 @@ ml = [
     { name = "scikit-learn", specifier = ">=1.5" },
     { name = "shap", specifier = ">=0.46" },
 ]
-report = [
-    { name = "jinja2", specifier = ">=3.1" },
-    { name = "pillow", specifier = ">=10.4" },
-]
+report = [{ name = "jinja2", specifier = ">=3.1" }]
 storage = [{ name = "boto3", specifier = ">=1.35" }]
 
 [[package]]

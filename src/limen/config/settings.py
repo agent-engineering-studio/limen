@@ -555,7 +555,7 @@ class ReportSettings(BaseSettings):
     html_enabled: bool = True
     html_interval_hours: int = Field(default=1, ge=1)
     html_run_at_startup: bool = True
-    html_output_dir: Path = Path("report")
+    html_output_dir: Path = Path("site")
     html_max_clusters: int = Field(default=50, ge=1)
     html_min_level: RiskLevel = RiskLevel.High
     html_cluster_eps_deg: float = Field(default=0.02, gt=0)

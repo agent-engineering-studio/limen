@@ -95,7 +95,6 @@ dl = [
 ]
 report = [
     "jinja2>=3.1",
-    "pillow>=10.4",
 ]
 
 [build-system]
