@@ -49,6 +49,8 @@ class ReportView:
     pipeline_version: str
     national_summary: str
     clusters: list[ClusterView] = field(default_factory=list)
+    # Informational banner (e.g. "zones shown are below the alert threshold").
+    notice: str | None = None
 
 
 def render_html(view: ReportView) -> str:

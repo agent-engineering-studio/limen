@@ -50,6 +50,43 @@ def build_id_for(valuation_time_iso: str) -> str:
     return dt.strftime("%Y-%m-%dT%H%MZ")
 
 
+_LEVELS_DESC = [RiskLevel.VeryHigh, RiskLevel.High, RiskLevel.Moderate, RiskLevel.Low]
+
+
+def _threshold_candidates(alert_level: RiskLevel) -> list[RiskLevel]:
+    """Alert threshold first, then progressively lower down to Low.
+
+    The report must ALWAYS surface the *relatively* most-at-risk zones, even
+    when nothing crosses the alert threshold. We try the configured level, and
+    if it yields no zone we step down (High -> Moderate -> Low) to the first
+    level that has zones — flagged as informational, never an alarm.
+    """
+    try:
+        start = _LEVELS_DESC.index(alert_level)
+    except ValueError:
+        start = _LEVELS_DESC.index(RiskLevel.High)
+    return _LEVELS_DESC[start:]
+
+
+def _zones_notice(
+    *, alert_level: RiskLevel, shown_level: RiskLevel, has_clusters: bool
+) -> str | None:
+    """Italian banner shown when the report displays below-alert zones (or none)."""
+    if not has_clusters:
+        return (
+            "Nessuna zona a rischio rilevata: tutte le celle sono sotto la soglia "
+            "minima. Quadro puramente informativo, nessun allarme attivo."
+        )
+    if shown_level != alert_level:
+        return (
+            f"Nessuna zona sopra la soglia di allerta ({label_for(alert_level)}). "
+            f"Sono mostrate le aree relativamente più a rischio "
+            f"(livello {label_for(shown_level)}) a scopo informativo: "
+            f"nessun allarme attivo."
+        )
+    return None
+
+
 async def _aoi_ids() -> list[str]:
     async with acquire() as conn:
         rows = await conn.fetch("SELECT id FROM aoi ORDER BY id")
@@ -128,14 +165,28 @@ async def build_report(settings: Settings | None = None) -> Path | None:
         log.info("report.skip", reason="no aoi")
         return None
 
+    # Try the alert threshold first; if no zone crosses it, step down so the
+    # report still shows the relatively most-at-risk areas (informational).
+    alert_level = cfg.html_min_level
     all_clusters: list[Cluster] = []
-    for aoi_id in aoi_ids:
-        all_clusters.extend(
-            await load_clusters(
-                aoi_id, eps_deg=cfg.html_cluster_eps_deg, min_level=cfg.html_min_level
+    shown_level = alert_level
+    for level in _threshold_candidates(alert_level):
+        gathered: list[Cluster] = []
+        for aoi_id in aoi_ids:
+            gathered.extend(
+                await load_clusters(aoi_id, eps_deg=cfg.html_cluster_eps_deg, min_level=level)
             )
-        )
+        if gathered:
+            all_clusters = gathered
+            shown_level = level
+            break
     all_clusters.sort(key=lambda c: (-c.max_score, c.cell_ids[0]))
+    below_alert = bool(all_clusters) and shown_level != alert_level
+    notice = _zones_notice(
+        alert_level=alert_level, shown_level=shown_level, has_clusters=bool(all_clusters)
+    )
+    if below_alert:
+        log.info("report.below_alert", alert=alert_level.value, shown=shown_level.value)
 
     valuation_iso, pipeline_version = await _latest_valuation(aoi_ids)
     if not valuation_iso:
@@ -152,6 +203,7 @@ async def build_report(settings: Settings | None = None) -> Path | None:
         {
             "valuation_time": valuation_iso,
             "pipeline_version": pipeline_version,
+            "shown_level": shown_level.value,
             # report_it è escluso: contiene un timestamp di generazione (now())
             # che cambia a ogni chiamata e forzerebbe un rebuild continuo.
             # I totali nazionali (conteggi) sono la parte stabile che guida il testo.
@@ -219,17 +271,24 @@ async def build_report(settings: Settings | None = None) -> Path | None:
         pipeline_version=pipeline_version,
         national_summary=str(national.get("report_it", "")),
         clusters=cluster_views,
+        notice=notice,
     )
     html = render_html(view)
     manifest: dict[str, object] = {
         "valuation_time": valuation_iso,
         "pipeline_version": pipeline_version,
         "assessment_sha256": signature,
+        "shown_level": shown_level.value,
         "clusters": manifest_clusters,
     }
     # render_cluster_png ha già scritto gli asset in build_dir/assets/;
     # write_build scrive HTML+manifest e aggiorna puntatore/indice.
     result = write_build(root, build_id=build_id, html=html, assets={}, manifest=manifest)
     prune_archive(root, keep=cfg.html_archive_keep)
-    log.info("report.built", build_id=build_id, clusters=len(cluster_views))
+    log.info(
+        "report.built",
+        build_id=build_id,
+        clusters=len(cluster_views),
+        shown_level=shown_level.value,
+    )
     return result
