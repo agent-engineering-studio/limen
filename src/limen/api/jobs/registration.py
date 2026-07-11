@@ -7,6 +7,8 @@ rather than stacking.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from apscheduler import AsyncScheduler, ConflictPolicy
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -41,6 +43,27 @@ JOB_GEODATA_EXPORT = "limen-geodata-export"
 JOB_HTML_REPORT = "limen-html-report"
 
 
+def _deferred_interval(*, minutes: int = 0, hours: int = 0, seconds: int = 0) -> IntervalTrigger:
+    """Interval trigger whose FIRST fire is one interval out, not at boot.
+
+    APScheduler fires an ``IntervalTrigger`` immediately when the schedule is
+    added. With several heavy sweeps registered at once, that stampedes the
+    shared event loop at startup and starves the ``/ready`` health endpoint
+    until the boot-time sweeps finish (``make up`` then times out waiting).
+    Deferring the first fire by one interval keeps startup responsive; the
+    jobs still run on their normal cadence in the background. Boot-time output
+    where genuinely wanted comes from explicit paths (the report startup
+    kickoff, ``limen monitor-once``), not from the scheduler.
+    """
+    delta = timedelta(minutes=minutes, hours=hours, seconds=seconds)
+    return IntervalTrigger(
+        minutes=minutes,
+        hours=hours,
+        seconds=seconds,
+        start_time=datetime.now(UTC) + delta,
+    )
+
+
 async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> list[str]:
     """Schedule every Limen periodic job. Returns the list of job ids registered."""
     cfg = deps.settings.scheduler
@@ -50,7 +73,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
         await scheduler.add_schedule(
             run_hourly_monitoring,
             args=(deps,),
-            trigger=IntervalTrigger(minutes=cfg.hourly_monitoring_minutes),
+            trigger=_deferred_interval(minutes=cfg.hourly_monitoring_minutes),
             id=JOB_HOURLY_MONITORING,
             conflict_policy=ConflictPolicy.replace,
         )
@@ -65,7 +88,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
         await scheduler.add_schedule(
             run_forecast_monitoring,
             args=(deps,),
-            trigger=IntervalTrigger(hours=deps.settings.forecast.interval_hours),
+            trigger=_deferred_interval(hours=deps.settings.forecast.interval_hours),
             id=JOB_FORECAST_MONITORING,
             conflict_policy=ConflictPolicy.replace,
         )
@@ -96,7 +119,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
         await scheduler.add_schedule(
             run_html_report,
             args=(deps,),
-            trigger=IntervalTrigger(hours=deps.settings.report.html_interval_hours),
+            trigger=_deferred_interval(hours=deps.settings.report.html_interval_hours),
             id=JOB_HTML_REPORT,
             conflict_policy=ConflictPolicy.replace,
         )
@@ -111,7 +134,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
         await scheduler.add_schedule(
             run_nowcast_monitoring,
             args=(deps,),
-            trigger=IntervalTrigger(minutes=deps.settings.nowcast.interval_minutes),
+            trigger=_deferred_interval(minutes=deps.settings.nowcast.interval_minutes),
             id=JOB_NOWCAST_MONITORING,
             conflict_policy=ConflictPolicy.replace,
         )
@@ -142,7 +165,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
         await scheduler.add_schedule(
             run_cache_cleanup_job,
             args=(deps,),
-            trigger=IntervalTrigger(seconds=cfg.cache_cleanup_interval_seconds),
+            trigger=_deferred_interval(seconds=cfg.cache_cleanup_interval_seconds),
             id=JOB_CACHE_CLEANUP,
             conflict_policy=ConflictPolicy.replace,
         )
@@ -157,7 +180,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
         await scheduler.add_schedule(
             run_iot_rollup_job,
             args=(deps,),
-            trigger=IntervalTrigger(minutes=deps.settings.iot.rollup_minutes),
+            trigger=_deferred_interval(minutes=deps.settings.iot.rollup_minutes),
             id=JOB_IOT_ROLLUP,
             conflict_policy=ConflictPolicy.replace,
         )
@@ -186,7 +209,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
         await scheduler.add_schedule(
             run_drift_monitor_job,
             args=(deps,),
-            trigger=IntervalTrigger(hours=deps.settings.monitoring.drift_check_hours),
+            trigger=_deferred_interval(hours=deps.settings.monitoring.drift_check_hours),
             id=JOB_DRIFT_MONITOR,
             conflict_policy=ConflictPolicy.replace,
         )
@@ -201,7 +224,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
         await scheduler.add_schedule(
             run_geodata_export_job,
             args=(deps,),
-            trigger=IntervalTrigger(hours=deps.settings.geodata.export_features_hours),
+            trigger=_deferred_interval(hours=deps.settings.geodata.export_features_hours),
             id=JOB_GEODATA_EXPORT,
             conflict_policy=ConflictPolicy.replace,
         )
