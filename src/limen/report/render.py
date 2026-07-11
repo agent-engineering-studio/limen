@@ -35,7 +35,11 @@ class ClusterView:
     level_color: str
     max_score: float
     n_cells: int
-    image_rel: str
+    map_id: str
+    geojson: str
+    center_lat: float
+    center_lon: float
+    coord_label: str
     reason: str
     verdict_text: str
     verdict_tone: str
@@ -48,6 +52,8 @@ class ReportView:
     valuation_time: str
     pipeline_version: str
     national_summary: str
+    basemap_url: str
+    basemap_attribution: str
     clusters: list[ClusterView] = field(default_factory=list)
     # Informational banner (e.g. "zones shown are below the alert threshold").
     notice: str | None = None

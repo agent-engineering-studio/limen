@@ -8,6 +8,8 @@ def _view() -> ReportView:
         valuation_time="2026-07-11T08:00:00Z",
         pipeline_version="v1",
         national_summary="Quadro nazionale di prova.",
+        basemap_url="https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+        basemap_attribution="© OpenStreetMap © CARTO",
         clusters=[
             ClusterView(
                 cluster_id=0,
@@ -17,7 +19,11 @@ def _view() -> ReportView:
                 level_color="#bd0026",
                 max_score=0.91,
                 n_cells=4,
-                image_rel="assets/cluster-0.png",
+                map_id="zone-0",
+                geojson='{"type":"FeatureCollection","features":[]}',
+                center_lat=41.1234,
+                center_lon=16.5678,
+                coord_label="41.1234° N, 16.5678° E",
                 reason="Il punteggio nasce soprattutto dalla pioggia.",
                 verdict_text="Da attenzionare: rischio alto.",
                 verdict_tone="warn",
@@ -27,16 +33,23 @@ def _view() -> ReportView:
     )
 
 
-def test_render_produces_html_with_cluster_and_palette() -> None:
+def test_render_produces_interactive_map_card() -> None:
     html = render_html(_view())
     assert "<!doctype html>" in html.lower() or "<html" in html.lower()
-    assert "assets/cluster-0.png" in html
+    # interactive map, not a static image
+    assert "leaflet" in html.lower()
+    assert 'id="zone-0"' in html
+    assert 'class="zonemap"' in html
+    assert "FeatureCollection" in html  # embedded GeoJSON
+    assert "<img" not in html
+    # detailed zone info incl. geographic coordinates
+    assert "41.1234° N, 16.5678° E" in html
     assert "#bd0026" in html
     assert "Molto alto" in html
     assert "Da attenzionare" in html
 
 
-def test_render_escapes_text() -> None:
+def test_render_escapes_national_text() -> None:
     view = _view()
     view.national_summary = "<script>alert(1)</script>"
     html = render_html(view)
