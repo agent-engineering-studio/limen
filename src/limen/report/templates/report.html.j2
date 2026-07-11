@@ -1,0 +1,69 @@
+{# src/limen/report/templates/report.html.j2 #}
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ view.title }}</title>
+<style>
+  :root { color-scheme: light; }
+  body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+         color: #1a1a1a; background: #f5f6f8; }
+  header { background: #1a2733; color: #fff; padding: 1.5rem 2rem; }
+  header h1 { margin: 0 0 .25rem; font-size: 1.4rem; }
+  header .meta { opacity: .8; font-size: .85rem; }
+  main { max-width: 960px; margin: 0 auto; padding: 1.5rem 2rem 3rem; }
+  .national { background: #fff; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1.5rem;
+              box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .cluster { background: #fff; border-radius: 10px; overflow: hidden; margin-bottom: 1.5rem;
+             box-shadow: 0 1px 6px rgba(0,0,0,.1); }
+  .cluster img { width: 100%; display: block; }
+  .cluster .body { padding: 1rem 1.25rem; }
+  .badge { display: inline-block; padding: .15rem .6rem; border-radius: 999px; color: #fff;
+           font-size: .8rem; font-weight: 600; }
+  .verdict { margin: .5rem 0; font-weight: 600; }
+  .verdict-warn { color: #bd0026; } .verdict-watch { color: #b8860b; } .verdict-ok { color: #2e7d32; }
+  .bars { margin-top: .75rem; }
+  .bar { display: flex; align-items: center; gap: .5rem; margin: .2rem 0; font-size: .8rem; }
+  .bar .track { flex: 1; height: 8px; background: #eceef1; border-radius: 4px; overflow: hidden; }
+  .bar .fill { height: 100%; }
+  .legend { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; font-size: .8rem; }
+  .legend span { display: inline-flex; align-items: center; gap: .3rem; }
+  .legend .sw { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+</style>
+</head>
+<body>
+<header>
+  <h1>{{ view.title }}</h1>
+  <div class="meta">Valutazione: {{ view.valuation_time }} · pipeline {{ view.pipeline_version }}</div>
+</header>
+<main>
+  <section class="national"><p>{{ view.national_summary }}</p></section>
+
+  {% for c in view.clusters %}
+  <article class="cluster">
+    <img src="{{ c.image_rel }}" alt="Mappa cluster {{ c.cluster_id }} ({{ c.aoi_id }})">
+    <div class="body">
+      <span class="badge" style="background: {{ c.level_color }}">{{ c.level_label }}</span>
+      <span> · {{ c.aoi_id }} · {{ c.n_cells }} celle · score {{ '%.2f'|format(c.max_score) }}</span>
+      <p class="verdict verdict-{{ c.verdict_tone }}">{{ c.verdict_text }}</p>
+      <p>{{ c.reason }}</p>
+      <div class="bars">
+        {% for label, value, color in c.components %}
+        <div class="bar"><span>{{ label }}</span>
+          <span class="track"><span class="fill" style="width: {{ (value*100)|round(0, 'floor') }}%; background: {{ color }}"></span></span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </article>
+  {% endfor %}
+
+  <div class="legend">
+    {% for rc in classes %}
+    <span><span class="sw" style="background: {{ rc.color }}"></span>{{ rc.label_it }} ({{ '%.2f'|format(rc.range[0]) }}–{{ '%.2f'|format(rc.range[1]) }})</span>
+    {% endfor %}
+  </div>
+</main>
+</body>
+</html>
