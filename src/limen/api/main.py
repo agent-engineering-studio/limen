@@ -17,6 +17,7 @@ httpx client.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -29,6 +30,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from limen.api.dependencies import AppDependencies
 from limen.api.endpoints import all_routers
+from limen.api.jobs.html_report import run_html_report
 from limen.api.jobs.registration import register_jobs
 from limen.config.settings import Settings, get_settings
 from limen.core.logging import configure_logging, get_logger
@@ -62,6 +64,16 @@ async def _lifespan_default(app: FastAPI) -> AsyncIterator[None]:
     await register_jobs(scheduler, deps)
     await scheduler.start_in_background()
 
+    if deps.settings.report.html_enabled and deps.settings.report.html_run_at_startup:
+
+        async def _kickoff_report() -> None:
+            try:
+                await run_html_report(deps)
+            except Exception as exc:  # never break startup
+                log.warning("api.lifespan.report_kickoff.failed", error=str(exc))
+
+        app.state.report_kickoff_task = asyncio.create_task(_kickoff_report())
+
     ingestor: MqttIngestor | None = None
     if settings.enable_insitu:
         sigma_v = (
@@ -76,6 +88,11 @@ async def _lifespan_default(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        task = getattr(app.state, "report_kickoff_task", None)
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(BaseException):
+                await task
         if ingestor is not None:
             with contextlib.suppress(Exception):
                 await ingestor.stop()

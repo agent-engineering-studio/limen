@@ -18,6 +18,7 @@ from limen.api.jobs.drift_monitor import run_drift_monitor_job
 from limen.api.jobs.forecast_monitoring import run_forecast_monitoring
 from limen.api.jobs.geodata_export import run_geodata_export_job
 from limen.api.jobs.hourly_monitoring import run_hourly_monitoring
+from limen.api.jobs.html_report import run_html_report
 from limen.api.jobs.iot_partition_rollover import run_iot_partition_rollover_job
 from limen.api.jobs.iot_rollup import run_iot_rollup_job
 from limen.api.jobs.nowcast_monitoring import run_nowcast_monitoring
@@ -37,6 +38,7 @@ JOB_IOT_ROLLUP = "limen-iot-rollup"
 JOB_IOT_PARTITION_ROLLOVER = "limen-iot-partition-rollover"
 JOB_DRIFT_MONITOR = "limen-drift-monitor"
 JOB_GEODATA_EXPORT = "limen-geodata-export"
+JOB_HTML_REPORT = "limen-html-report"
 
 
 async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> list[str]:
@@ -88,6 +90,21 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
             "scheduler.registered",
             job=JOB_DAILY_REPORT,
             hour_utc=deps.settings.report.hour_utc,
+        )
+
+    if deps.settings.report.html_enabled:
+        await scheduler.add_schedule(
+            run_html_report,
+            args=(deps,),
+            trigger=IntervalTrigger(hours=deps.settings.report.html_interval_hours),
+            id=JOB_HTML_REPORT,
+            conflict_policy=ConflictPolicy.replace,
+        )
+        registered.append(JOB_HTML_REPORT)
+        log.info(
+            "scheduler.registered",
+            job=JOB_HTML_REPORT,
+            interval_hours=deps.settings.report.html_interval_hours,
         )
 
     if deps.settings.nowcast.enabled:
