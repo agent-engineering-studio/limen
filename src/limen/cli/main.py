@@ -11,6 +11,7 @@ Usage:
     limen serve              Start the FastAPI HTTP server (uvicorn on :8080).
     limen train              Extract training samples and train the V2 ML model (MLflow).
     limen shadow-report      Champion vs ML-challenger comparison over the shadow window.
+    limen report build       Generate the static HTML risk report once (idempotent).
     limen --help             Show this help.
 """
 
@@ -35,6 +36,7 @@ from limen.cli.ingest_kb import run as _run_ingest_kb
 from limen.cli.mcp_serve import run as _run_mcp_serve
 from limen.cli.migrate import run as _run_migrate
 from limen.cli.monitor_once import run as _run_monitor_once
+from limen.cli.report import run as _run_report_build
 from limen.cli.seed import run as _run_seed
 from limen.cli.server import run as _run_server
 from limen.cli.shadow_report import run as _run_shadow_report
@@ -88,6 +90,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "shadow-report",
         help="champion vs ML-challenger comparison report (LIMEN_SHADOW_SINCE / _AOI)",
     )
+    # ``limen report build`` — nested dispatcher for the static HTML risk
+    # report. Only one action exists today, so this is a plain inline
+    # subparser (not a `build_subparser`-style module like `geodata`, which
+    # earns that indirection with five distinct subcommands).
+    report_parser = sub.add_parser("report", help="static HTML risk report")
+    report_sub = report_parser.add_subparsers(dest="report_command", required=True)
+    report_sub.add_parser("build", help="generate the report once (idempotent)")
     sub.add_parser(
         "sync-egms",
         help="refresh cell_insar_features from Copernicus EGMS (V2.1)",
@@ -149,6 +158,8 @@ def main(argv: list[str] | None = None) -> int:
         "serve": _run_server,
         "train": _run_train,
         "shadow-report": _run_shadow_report,
+        # only action is `build`; inspect args.report_command before adding a second.
+        "report": _run_report_build,
         "sync-egms": _run_sync_egms,
         "ingest-kb": _run_ingest_kb,
         "geoserver-sync": _run_geoserver_sync,
