@@ -1465,3 +1465,93 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
 .sci-refs li {
   margin-bottom: 6px;
 }
+
+/* --- Chrome del percorso "Capire Limen" (corso a 3 capitoli) --- */
+.course-head {
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 24px;
+  background: var(--panel);
+}
+.course-kicker {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+.course-toc {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0;
+  margin: 0 0 8px;
+  counter-reset: none;
+}
+.course-toc a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  text-decoration: none;
+  color: #3d4654;
+  background: #eceef2;
+}
+.course-toc a.on {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+.course-num {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.12);
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+.course-where {
+  font-size: 12.5px;
+  color: #5e6473;
+  margin: 0 0 2px;
+}
+.course-learn {
+  font-size: 13.5px;
+  margin: 0;
+}
+.course-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid var(--panel-border);
+}
+.course-foot a {
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--accent);
+}
+.course-next {
+  margin-left: auto;
+  text-align: right;
+}
+
+/* pastiglie colore inline nella spiegazione della mappa divergenza */
+.dv-inline {
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 3px;
+}
+.dv-less { background: #2166ac; color: #fff; }
+.dv-eq { background: #e6e6e6; color: #333; }
+.dv-more { background: #762a83; color: #fff; }

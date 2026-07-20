@@ -17,7 +17,6 @@ import ShadowDiagnosticsPage from "./components/ShadowDiagnosticsPage";
 import ShadowPanel from "./components/ShadowPanel";
 import TimelineSlider from "./components/TimelineSlider";
 import { config } from "./lib/env";
-import { useMlOps } from "./lib/roles";
 
 type Page = "home" | "dashboard" | "explainer" | "science" | "shadow";
 
@@ -66,40 +65,11 @@ function RequireAuth({ children }: { children: JSX.Element }): JSX.Element {
   );
 }
 
-/** Gate the ML-diagnostics area to the `ml-ops` role (issue #26). */
-function RequireMlOps({ children }: { children: JSX.Element }): JSX.Element {
-  const { ready, allowed } = useMlOps();
-  if (!ready) {
-    return (
-      <div className="explainer">
-        <p>Verifica dei permessi…</p>
-      </div>
-    );
-  }
-  if (!allowed) {
-    return (
-      <div className="explainer">
-        <h2>Accesso riservato</h2>
-        <p>
-          Questa area di diagnostica del modello ML è riservata al ruolo{" "}
-          <code>ml-ops</code>. Se ti serve accesso, contatta chi gestisce gli
-          utenti.
-        </p>
-        <a className="btn-ghost" href="#/dashboard">
-          ← Torna alla dashboard
-        </a>
-      </div>
-    );
-  }
-  return children;
-}
-
 export function App(): JSX.Element {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [selected, setSelected] = useState<CellSelection | null>(null);
   const [hoursAgo, setHoursAgo] = useState(0);
   const [page, setPage] = useState<Page>(pageFromHash);
-  const { allowed: isMlOps } = useMlOps();
 
   useEffect(() => {
     const onHash = (): void => setPage(pageFromHash());
@@ -180,11 +150,9 @@ export function App(): JSX.Element {
           <a href="#/modello" className={page === "science" ? "on" : ""}>
             Il modello
           </a>
-          {isMlOps ? (
-            <a href="#/diagnostica-ml" className={page === "shadow" ? "on" : ""}>
-              Diagnostica ML
-            </a>
-          ) : null}
+          <a href="#/diagnostica-ml" className={page === "shadow" ? "on" : ""}>
+            Diagnostica ML
+          </a>
         </nav>
         <span className="header-meta">agg. 1h · 20 regioni</span>
         <div className="auth-controls">
@@ -213,11 +181,7 @@ export function App(): JSX.Element {
         </div>
       ) : page === "shadow" ? (
         <div className="explainer-area">
-          <RequireAuth>
-            <RequireMlOps>
-              <ShadowDiagnosticsPage />
-            </RequireMlOps>
-          </RequireAuth>
+          <ShadowDiagnosticsPage />
         </div>
       ) : (
         <RequireAuth>{dashboard}</RequireAuth>
