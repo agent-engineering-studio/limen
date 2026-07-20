@@ -38,6 +38,8 @@ from limen.core.scoring.caine import compute_caine
 from limen.core.scoring.kinematic import compute_kinematic
 from limen.core.scoring.post_fire import post_fire_factor
 from limen.core.scoring.regional_thresholds import (
+    CaineBlock,
+    CaineMacroregion,
     ClassCutoffs,
     RegionalThresholds,
     SnowBlock,
@@ -135,6 +137,21 @@ class MultiFactorScoringEngine:
 
     def __init__(self, thresholds: RegionalThresholds | None = None) -> None:
         self._t: RegionalThresholds = thresholds or load_regional_thresholds()
+        # The floor reuses the operational event reconstruction (same physical
+        # event) but a lower T2 threshold line. Built once, per engine.
+        self._caine_floor: CaineBlock | None = self._build_caine_floor()
+
+    def _build_caine_floor(self) -> CaineBlock | None:
+        floor = self._t.rain_floor
+        if floor is None:
+            return None
+        return CaineBlock(
+            event_reconstruction=self._t.caine.event_reconstruction,
+            macroregions={
+                name: CaineMacroregion(alpha=mr.alpha, beta=mr.beta)
+                for name, mr in floor.macroregions.items()
+            },
+        )
 
     # ------------------------------------------------------------------
     # Static component
@@ -225,6 +242,32 @@ class MultiFactorScoringEngine:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+    def is_rescued_by_floor(self, bundle: CellFeatureBundle) -> bool:
+        """Issue #20 — pure predicate: does this cell cross the permissive rain
+        floor (T2) with enough antecedent wetness to warrant scoring?
+
+        ``True`` ⇒ the national tiering step MUST evaluate this cell even if its
+        susceptibility tier is low, so an exceptional rain event on a cell with
+        an incomplete IFFI inventory is never missed in silence. ``False`` when
+        no ``rain_floor`` block is configured (backward-compatible: no rescue).
+
+        Conditioned on the soil-moisture sigmoid: identical rain rescues a
+        saturated cell but not a dry one. No DB, no network — safe to call for
+        every candidate cell before the meteo budget is spent.
+        """
+        floor = self._t.rain_floor
+        if floor is None or self._caine_floor is None:
+            return False
+        excess, _event = compute_caine(
+            bundle.dynamic.rainfall,
+            caine=self._caine_floor,
+            macroregion=bundle.macroregion,
+        )
+        if excess <= 0.0:
+            return False
+        wetness = _soil_sigmoid(bundle.dynamic.soil_moisture_0_7, soil=self._t.soil)
+        return wetness >= floor.wetness_min
+
     def score(self, bundle: CellFeatureBundle) -> RiskScore:
         """Score one cell at one moment. Pure, deterministic.
 

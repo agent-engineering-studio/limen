@@ -272,3 +272,59 @@ def test_rain_on_snow_amplifies_m() -> None:
     assert scored.breakdown.m > score(base).breakdown.m
     # Snowpack WITHOUT recent rain adds nothing (it's rain-ON-snow).
     assert score(dry_snow).breakdown.meteo_terms.snow_factor == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Rain floor — tier bypass predicate (issue #20)
+# ---------------------------------------------------------------------------
+_LOW_SUSC = StaticFactors(cell_id="c", susc_ispra=0.05, iffi_density_500=0.0)
+
+
+def test_floor_rescues_low_susceptibility_cell_with_extreme_rain() -> None:
+    """A low-susceptibility cell with rain over the floor is rescued regardless
+    of its tier — the predicate never looks at susceptibility."""
+    engine = MultiFactorScoringEngine()
+    b = _bundle(static=_LOW_SUSC, rainfall_hourly=[5.0] * 6, soil=0.60)
+    assert engine.is_rescued_by_floor(b) is True
+    # Rescued ⇒ it gets scored and can carry a non-zero risk (can escalate).
+    assert engine.score(b).score > 0.0
+
+
+def test_floor_leaves_sub_floor_rain_pruned() -> None:
+    """Rain below the floor ⇒ not rescued ⇒ the tiering saving is preserved
+    (no superfluous meteo/LLM spend on this cell)."""
+    engine = MultiFactorScoringEngine()
+    b = _bundle(static=_LOW_SUSC, rainfall_hourly=[1.0] * 6, soil=0.60)
+    assert engine.is_rescued_by_floor(b) is False
+
+
+def test_floor_is_conditioned_on_antecedent_wetness() -> None:
+    """Same rain over the floor: a saturated cell is rescued, a dry one is not."""
+    engine = MultiFactorScoringEngine()
+    saturated = _bundle(static=_LOW_SUSC, rainfall_hourly=[5.0] * 6, soil=0.60)
+    dry = _bundle(static=_LOW_SUSC, rainfall_hourly=[5.0] * 6, soil=0.10)
+    assert engine.is_rescued_by_floor(saturated) is True
+    assert engine.is_rescued_by_floor(dry) is False
+
+
+def test_floor_absent_returns_false(tmp_path: Path) -> None:
+    """A YAML without a rain_floor block ⇒ predicate inert (backward-compatible)."""
+    cfg = yaml.safe_load(DEFAULT_THRESHOLDS_PATH.read_text(encoding="utf-8"))
+    cfg.pop("rain_floor", None)
+    out = tmp_path / "no_floor.yaml"
+    out.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    engine = MultiFactorScoringEngine(load_regional_thresholds(out))
+    b = _bundle(static=_LOW_SUSC, rainfall_hourly=[50.0] * 6, soil=0.90)
+    assert engine.is_rescued_by_floor(b) is False
+
+
+def test_floor_values_come_from_yaml(tmp_path: Path) -> None:
+    """Raising wetness_min above the saturated cell's wetness suppresses the
+    rescue — proving the floor is parametrised entirely from the YAML."""
+    cfg = yaml.safe_load(DEFAULT_THRESHOLDS_PATH.read_text(encoding="utf-8"))
+    cfg["rain_floor"]["wetness_min"] = 0.999
+    out = tmp_path / "strict_floor.yaml"
+    out.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    engine = MultiFactorScoringEngine(load_regional_thresholds(out))
+    b = _bundle(static=_LOW_SUSC, rainfall_hourly=[5.0] * 6, soil=0.60)
+    assert engine.is_rescued_by_floor(b) is False

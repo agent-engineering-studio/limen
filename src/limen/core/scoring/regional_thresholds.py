@@ -130,6 +130,32 @@ class CaineBlock(_StrictModel):
         return v
 
 
+class RainFloorMacroregion(_StrictModel):
+    alpha: float = Field(..., gt=0.0)
+    beta: float = Field(..., gt=0.0)
+
+
+class RainFloorBlock(_StrictModel):
+    """Issue #20 — permissive Caine T2 envelope that bypasses the tier.
+
+    A cell whose rainfall crosses this floor *and* whose antecedent wetness
+    (soil-moisture sigmoid) is at least ``wetness_min`` must be scored
+    regardless of its susceptibility tier — the floor is the correctness
+    constraint that guards a national EWS against silent false negatives on
+    exceptional rain over low-susceptibility cells.
+    """
+
+    wetness_min: float = Field(..., ge=0.0, le=1.0)
+    macroregions: dict[str, RainFloorMacroregion]
+
+    @field_validator("macroregions")
+    @classmethod
+    def _has_default(cls, v: dict[str, RainFloorMacroregion]) -> dict[str, RainFloorMacroregion]:
+        if "italy_default" not in v:
+            raise ValueError("rain_floor.macroregions must define 'italy_default'")
+        return v
+
+
 class ApiBaseline(_StrictModel):
     fallback_mm: float = Field(..., ge=0.0)
 
@@ -299,6 +325,9 @@ class RegionalThresholds(_StrictModel):
     caine: CaineBlock
     api: ApiBlock
     soil: SoilBlock
+    # Optional (issue #20): older YAMLs without a `rain_floor` block validate;
+    # the floor predicate then returns False everywhere (tier bypass inactive).
+    rain_floor: RainFloorBlock | None = None
     # Optional: older YAMLs without a `snow` block validate; rain-on-snow
     # amplification simply stays inactive everywhere.
     snow: SnowBlock | None = None
