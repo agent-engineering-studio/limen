@@ -51,7 +51,8 @@ provider): `docker compose -f infra/docker/docker-compose.demo.yml up -d
 `ANTHROPIC_API_KEY` > `OPENAI_API_KEY` > credenziali Foundry > Ollama;
 in locale/produzione si usa **Ollama** (host, modello qwen).
 
-Approfondimenti: [`docs/architecture.md`](./docs/architecture.md),
+Approfondimenti: [`docs/demo.md`](./docs/demo.md) (demo locale su un AOI piccolo),
+[`docs/architecture.md`](./docs/architecture.md),
 [`docs/openclaw.md`](./docs/openclaw.md),
 [`docs/api.md`](./docs/api.md),
 [`docs/deployment.md`](./docs/deployment.md),
@@ -284,11 +285,17 @@ quando la mappa / i briefing vengono pubblicati:
 
 ---
 
-## Contributi & sicurezza
+## Contributi e governance
 
 * [`CONTRIBUTING.md`](./CONTRIBUTING.md) — setup dev, stile commit, gate.
 * [`SECURITY.md`](./SECURITY.md) — canale di disclosure privato.
+* [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md) — regole di comportamento della community.
+* [`ROADMAP.md`](./ROADMAP.md) — direzione e prossimi passi.
+* [`docs/OSS_IMPACT.md`](./docs/OSS_IMPACT.md) — impatto open-source e componenti riusabili.
 * [`CHANGELOG.md`](./CHANGELOG.md) — storico versionato (Keep a Changelog).
+
+> Limen è uno strumento di **supporto alle decisioni**: i suoi output sono
+> indicatori modellati, non allerte ufficiali di Protezione Civile.
 
 ## Licenza
 

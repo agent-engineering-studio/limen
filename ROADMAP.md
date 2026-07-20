@@ -37,6 +37,10 @@ Potential reusable packages or extractable modules:
 
 ## Long term
 
+- Dynamic/forecast flood component (post-V2): combine forecast rainfall with the
+  static ISPRA hazard class into a `flood_forecast` factor feeding the reserved
+  `hydrology` weight — deterministic first, pure scoring, opt-in feed. Design
+  recorded in issue #8; 2D hydraulic modelling stays out of scope.
 - More regional validation cases.
 - Cleaner package boundaries for data ingestion and scoring.
 - Public demo datasets suitable for contributors without large downloads.

@@ -17,6 +17,16 @@ validazione del JWT lato FastAPI è un follow-up. L'LLM in produzione gira
 via Ollama (host + modello `qwen`); una chiave cloud, se presente, ha la
 precedenza.
 
+> ⚠️ **Uso responsabile.** Gli output di queste API sono **indicatori di
+> supporto alle decisioni prodotti da un modello**, non allerte ufficiali di
+> Protezione Civile. Sono probabilità/indici areali per cella e finestra
+> temporale, da affiancare — mai sostituire — alle fonti e alle procedure
+> ufficiali. Vedi anche [`docs/warning-logic.md`](./warning-logic.md).
+
+Gli esempi seguenti usano solo endpoint **read-only** (l'unico che scrive è
+`POST /api/monitor/{aoi}`, mostrato a parte). Ogni esempio riassume la **forma
+attesa della risposta**.
+
 ## Salute e prontezza
 
 | Metodo | Path | Descrizione |
@@ -27,6 +37,9 @@ precedenza.
 ```
 curl -s http://localhost:8080/health | jq
 # → {"status":"ok","pool":true,"cache":true,"llm_provider":"stub"}
+
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/ready
+# → 200 quando pronto, 503 durante il bootstrap
 ```
 
 ## AOI
@@ -99,7 +112,22 @@ curl -s http://localhost:8080/api/aoi/it-puglia/risk/latest | jq
 
 Restituisce la valutazione persistita più recente (una riga per cella
 raccolta in una lista). Include il briefing in italiano + l'output
-strutturato del RiskAnalyst.
+strutturato del RiskAnalyst. Forma della risposta:
+
+```json
+{
+  "aoi_id": "it-puglia",
+  "valuation_time": "2026-06-01T12:00:03+00:00",
+  "model_version": "limen-deterministic-v1",
+  "cells": [
+    {"cell_id": "it-puglia|12|7", "score": 0.81, "level": "VeryHigh"}
+  ],
+  "briefing_it": "Le condizioni osservate …",
+  "analysis": {"driver": "meteo_trigger", "confidence": "media"}
+}
+```
+
+`404` se per l'AOI non esiste ancora alcuna valutazione persistita.
 
 ## Breakdown per cella
 
@@ -111,7 +139,19 @@ Restituisce i `risk_assessments.factors` grezzi (S/M/E/F/H/K + sotto-termini)
 e `risk_assessments.explanation` (briefing + analisi). Le componenti di
 scoring per cella sono: S (statico), M (meteo/Caine), E (sismico),
 F (post-incendio), H (idraulico — ora attivo) e K (cinematico/IoT, quando
-presente).
+presente). Forma della risposta:
+
+```json
+{
+  "cell_id": "it-puglia|12|7",
+  "score": 0.81,
+  "level": "VeryHigh",
+  "factors": {"s": 0.42, "m": 0.71, "e": 0.0, "f": 0.0, "h": 0.30, "k": 0.0},
+  "explanation": {"briefing_it": "…", "analysis": {"driver": "meteo_trigger"}}
+}
+```
+
+Il `cell_id` va URL-encoded (le barre `|` diventano `%7C`).
 
 ## Alert recenti
 
@@ -124,6 +164,24 @@ Parametri di query:
 * `threshold` — livello minimo, default `High`.
 * `since_hours` — finestra temporale a ritroso in ore, default 72.
 * `limit` — limite di paginazione, default 200, max 2000.
+
+Forma della risposta:
+
+```json
+{
+  "items": [
+    {
+      "cell_id": "it-puglia|12|7",
+      "aoi_id": "it-puglia",
+      "level": "VeryHigh",
+      "score": 0.81,
+      "priority": 1.62,
+      "exposure": "abitato, statale a 180 m",
+      "dispatched_at": "2026-06-01T12:05:00+00:00"
+    }
+  ]
+}
+```
 
 ## Tiles (proxy pg_tileserv)
 
