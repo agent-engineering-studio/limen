@@ -111,6 +111,11 @@ class MonitoringContext(BaseModel):
     soil_moisture_0_7: float | None = None
     # Max standing snowpack over the window (m) — rain-on-snow input.
     snow_depth_m: float | None = None
+    # Issue #8 — AOI-level dynamic flood signals (opt-in feed). The assembler
+    # copies them onto each cell's DynamicInputs; None ⇒ flood bonus 0.
+    flood_forecast_rain_72h_mm: float | None = None
+    river_discharge_ratio: float | None = None
+    coastal_surge_norm: float | None = None
     seismic_events: Sequence[SeismicHistoryEvent] = Field(default_factory=tuple)
     months_since_fire: float | None = None
     sensor_payload: dict[str, Any] | None = None

@@ -30,7 +30,7 @@ describe("HomePage", () => {
   it("renders the pitch, the sign-in CTA and live stats", async () => {
     render(<HomePage />);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      /Il rischio frana/,
+      /Rischio frana e inondazione/,
     );
     expect(screen.getByText("Accedi alla dashboard")).toBeInTheDocument();
     expect(screen.getByText("Cos'è Limen")).toBeInTheDocument();

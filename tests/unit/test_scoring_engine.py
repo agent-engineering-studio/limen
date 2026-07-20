@@ -328,3 +328,26 @@ def test_floor_values_come_from_yaml(tmp_path: Path) -> None:
     engine = MultiFactorScoringEngine(load_regional_thresholds(out))
     b = _bundle(static=_LOW_SUSC, rainfall_hourly=[5.0] * 6, soil=0.60)
     assert engine.is_rescued_by_floor(b) is False
+
+
+# ---------------------------------------------------------------------------
+# Dynamic flood forecast — H uplift (issue #8)
+# ---------------------------------------------------------------------------
+def test_flood_forecast_lifts_h_when_rain_forecast() -> None:
+    static = StaticFactors(cell_id="c", flood_hazard_norm=0.8)
+    dry = _bundle(static=static)  # no forecast flood signals
+    wet = dry.model_copy(
+        update={
+            "dynamic": dry.dynamic.model_copy(
+                update={"flood_forecast_rain_72h_mm": 200.0}
+            )
+        }
+    )
+    assert score(wet).breakdown.h > score(dry).breakdown.h
+    assert score(wet).score >= score(dry).score
+
+
+def test_flood_forecast_absent_keeps_h_static() -> None:
+    # No flood signals ⇒ H equals the pure static hazard (byte-identical to V1).
+    b = _bundle(static=StaticFactors(cell_id="c", flood_hazard_norm=0.8))
+    assert score(b).breakdown.h == pytest.approx(0.8)

@@ -35,9 +35,9 @@ describe("ShadowPanel", () => {
   it("shows the non-authoritative disclaimer and the plain-language agreement", async () => {
     vi.spyOn(defaultApiClient, "getShadowSummary").mockResolvedValue(SUMMARY);
     render(<ShadowPanel />);
-    expect(screen.getByText(/Non decide le allerte/)).toBeInTheDocument();
+    expect(screen.getByText(/non decide le allerte/)).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.getByText(/Accordo col sistema ufficiale/)).toBeInTheDocument(),
+      expect(screen.getByText(/stessa classe di rischio/)).toBeInTheDocument(),
     );
     // weighted national agreement 45%, rendered as text (not colour-only)
     expect(screen.getByText("45%")).toBeInTheDocument();

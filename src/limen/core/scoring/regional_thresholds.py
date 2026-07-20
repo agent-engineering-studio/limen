@@ -156,6 +156,42 @@ class RainFloorBlock(_StrictModel):
         return v
 
 
+class FloodForecastMacroregion(_StrictModel):
+    center_mm: float = Field(..., gt=0.0)  # 72h forecast rain at sigmoid centre
+    steepness_mm: float = Field(..., gt=0.0)  # sigmoid σ in mm
+
+
+class FloodForecastBlock(_StrictModel):
+    """Issue #8 — dynamic, multi-source flood uplift on the hydrology quota H.
+
+    Combines three forward-looking signals, each scaled by the ISPRA static
+    hydraulic hazard (``flood_hazard_norm``):
+
+    * **pluvial** — forecast 72h rain (Open-Meteo forecast), sigmoid per macroregion;
+    * **fluvial** — river-discharge ratio vs seasonal normal (Open-Meteo Flood
+      API / GloFAS), sigmoid centred at ``discharge_ratio_center``;
+    * **coastal** — sea surge / wave signal in [0,1] (Open-Meteo Marine API).
+
+    ``bonus = hazard_uplift · flood_hazard_norm · max(pluvial, fluvial, coastal)``,
+    added to the static hazard. Any missing signal contributes 0, so the score
+    is byte-identical to V1 when no flood feed is present.
+    """
+
+    hazard_uplift: float = Field(..., ge=0.0, le=5.0)
+    discharge_ratio_center: float = Field(..., gt=0.0)  # ratio at sigmoid centre
+    discharge_ratio_steepness: float = Field(..., gt=0.0)
+    macroregions: dict[str, FloodForecastMacroregion]
+
+    @field_validator("macroregions")
+    @classmethod
+    def _has_default(
+        cls, v: dict[str, FloodForecastMacroregion]
+    ) -> dict[str, FloodForecastMacroregion]:
+        if "italy_default" not in v:
+            raise ValueError("flood_forecast.macroregions must define 'italy_default'")
+        return v
+
+
 class ApiBaseline(_StrictModel):
     fallback_mm: float = Field(..., ge=0.0)
 
@@ -328,6 +364,9 @@ class RegionalThresholds(_StrictModel):
     # Optional (issue #20): older YAMLs without a `rain_floor` block validate;
     # the floor predicate then returns False everywhere (tier bypass inactive).
     rain_floor: RainFloorBlock | None = None
+    # Optional (issue #8): dynamic multi-source flood uplift on H. Absent ⇒
+    # bonus 0 everywhere (H stays purely static, byte-identical to V1).
+    flood_forecast: FloodForecastBlock | None = None
     # Optional: older YAMLs without a `snow` block validate; rain-on-snow
     # amplification simply stays inactive everywhere.
     snow: SnowBlock | None = None

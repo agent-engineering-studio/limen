@@ -50,9 +50,10 @@ export default function ShadowPanel(): JSX.Element | null {
         <span className="shadow-pill">in prova</span>
       </div>
       <p className="shadow-note" role="note">
-        Un secondo modello (intelligenza artificiale) gira in parallelo per
-        confronto. <strong>Non decide le allerte</strong>: quelle usano solo il
-        sistema ufficiale.
+        Accanto al sistema ufficiale proviamo <strong>in sottofondo</strong> un
+        secondo modello basato su intelligenza artificiale, per capire se un
+        giorno potrà fare meglio. È un <strong>esperimento</strong>:{" "}
+        <strong>non decide le allerte</strong> e non è ancora usato.
       </p>
 
       {!data ? (
@@ -64,22 +65,25 @@ export default function ShadowPanel(): JSX.Element | null {
       ) : (
         <>
           <p className="shadow-headline">
-            Osservate <strong>{data.total_pairs.toLocaleString("it-IT")}</strong>{" "}
-            valutazioni. Accordo col sistema ufficiale:{" "}
-            <strong>{agreement !== null ? pct(agreement) : "—"}</strong>.
+            Su <strong>{data.total_pairs.toLocaleString("it-IT")}</strong>{" "}
+            valutazioni, l&apos;IA ha dato la <strong>stessa classe di rischio</strong>{" "}
+            del sistema ufficiale nel{" "}
+            <strong>{agreement !== null ? pct(agreement) : "—"}</strong> dei casi.
           </p>
           {agreement !== null ? (
             <div
               className="shadow-bar"
               role="img"
-              aria-label={`Accordo col sistema ufficiale ${pct(agreement)}`}
+              aria-label={`Coincidenza col sistema ufficiale ${pct(agreement)}`}
             >
               <span className="shadow-bar-fill" style={{ width: pct(agreement) }} />
             </div>
           ) : null}
           <p className="shadow-muted">
-            Un accordo ancora basso è normale: il modello è in valutazione e non
-            è stato promosso.
+            Questa percentuale è quanto spesso i due modelli assegnano la stessa
+            classe (Nessuno / Basso / Moderato / Alto / Molto alto) alla stessa
+            zona. Un valore basso è <strong>normale</strong> per un modello ancora
+            in prova — non è un errore del sistema ufficiale.
           </p>
           {data.regions.length > 0 ? (
             <details className="shadow-details">
@@ -89,7 +93,7 @@ export default function ShadowPanel(): JSX.Element | null {
                   .sort((a, b) => b.n - a.n)
                   .map((r) => (
                     <li key={r.aoi_id}>
-                      <span>{r.aoi_id}</span>
+                      <span>{r.aoi_name}</span>
                       <span className="shadow-region-val">
                         {pct(r.class_agreement)} · {r.n.toLocaleString("it-IT")} celle
                       </span>

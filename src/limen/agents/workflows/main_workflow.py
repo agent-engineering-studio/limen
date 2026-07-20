@@ -27,6 +27,7 @@ from limen.agents.executors import (
     AreaResolverExecutor,
     EscalationGateExecutor,
     FireCheckExecutor,
+    FloodForecastFetchExecutor,
     MeteoFetchExecutor,
     PersistResultExecutor,
     RiskScoringExecutor,
@@ -205,6 +206,12 @@ def build_landslide_workflow(
     # settings value through `with_update`).
     sensor = SensorFetchExecutor()
     builder = builder.add_if(lambda ctx: bool(getattr(ctx, "enable_insitu", False)), sensor)
+
+    # Issue #8 — opt-in dynamic flood signals (forecast rain + GloFAS river
+    # discharge + marine surge) into the context before scoring assembles the
+    # bundles. Off by default ⇒ scores byte-identical to V1.
+    if settings.enable_flood_forecast:
+        builder = builder.add(FloodForecastFetchExecutor())
 
     builder = builder.add(RiskScoringExecutor(engine=champion))
     if challenger is not None:
