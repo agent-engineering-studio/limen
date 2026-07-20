@@ -111,9 +111,38 @@ export interface LegendClass {
   pc_alert: "verde" | "gialla" | "arancione" | "rossa";
 }
 
+export interface CaineParams {
+  alpha: number;
+  beta: number;
+}
+
+/** Model card served by /api/legend — the versioned YAML weights/thresholds,
+ * so the "Il modello, spiegato" page never hard-codes numbers. */
+export interface ModelCard {
+  weights: {
+    static: number;
+    meteo: number;
+    seismic: number;
+    fire: number;
+    hydrology: number;
+  };
+  meteo_weights: { caine: number; api: number; soil: number };
+  caine: { macroregions: Record<string, CaineParams> };
+  api: { sigmoid_sigma_mm: number; baseline_fallback_mm: number };
+  soil: { sigmoid_center: number; sigmoid_steepness: number };
+  seismic: { tau_days: number; pga_threshold_g: number; pga_scale_g: number };
+  post_fire: {
+    peak_months: number;
+    curve_denominator: number;
+    window_months_max: number;
+  };
+}
+
 export interface LegendResponse {
   classes: LegendClass[];
   model_version: string;
+  // Optional for backward-compat with older backends / cached responses.
+  model?: ModelCard;
 }
 
 export interface NationalRegionSummary {

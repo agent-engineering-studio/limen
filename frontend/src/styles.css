@@ -1159,3 +1159,166 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   font-size: 11.5px;
 }
 .legend-note { font-size: 11px; color: var(--muted); line-height: 1.5; margin: 8px 0 0; }
+
+/* --- Pagina scientifica "Il modello, spiegato" (issue #16) --- */
+.sci .sci-plain {
+  font-weight: 600;
+  color: #2b3240;
+}
+.sci .sci-key {
+  border-left: 3px solid var(--accent);
+  padding-left: 12px;
+}
+.sci-components {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.sci-components li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.sci-badge {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: #fff;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sci-bars {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.sci-bars li {
+  display: grid;
+  grid-template-columns: 150px 1fr 44px;
+  gap: 10px;
+  align-items: center;
+}
+.sci-bar-label {
+  font-size: 13px;
+}
+.sci-bar-track {
+  background: #eceef2;
+  border-radius: 6px;
+  height: 16px;
+  overflow: hidden;
+}
+.sci-bar-fill {
+  display: block;
+  height: 100%;
+}
+.sci-bar-val {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  text-align: right;
+}
+.sci-chart {
+  margin: 16px 0;
+  max-width: 340px;
+}
+.sci-chart svg {
+  width: 100%;
+  height: auto;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+}
+.sci-scale {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.sci-scale li {
+  display: grid;
+  grid-template-columns: 18px 120px 90px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+.sci-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+.sci-scale-range {
+  font-variant-numeric: tabular-nums;
+  color: #5e6473;
+}
+.sci-scale-pc {
+  font-size: 13px;
+}
+.sci-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 14px 0;
+}
+.sci-node {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.sci-champ {
+  border-color: var(--accent);
+  font-weight: 700;
+}
+.sci-chall {
+  border-style: dashed;
+}
+.sci-arrow {
+  font-size: 18px;
+  color: #5e6473;
+}
+.sci-shap {
+  margin: 12px 0;
+  display: grid;
+  gap: 6px;
+}
+.sci-shap-row {
+  display: grid;
+  grid-template-columns: 170px 120px 1fr;
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+}
+.sci-shap-track {
+  background: #eceef2;
+  border-radius: 5px;
+  height: 14px;
+  position: relative;
+}
+.sci-shap-fill {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+}
+.sci-shap-fill.pos {
+  background: #d62728;
+}
+.sci-shap-fill.neg {
+  background: #2b8cbe;
+}
+.sci-glossary dt {
+  font-weight: 700;
+  margin-top: 8px;
+}
+.sci-glossary dd {
+  margin: 0 0 4px;
+  color: #3d4654;
+}
+.sci-see-also {
+  margin-top: 24px;
+}

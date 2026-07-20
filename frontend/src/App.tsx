@@ -12,10 +12,11 @@ import OverlayControl from "./components/OverlayControl";
 import RegionAccordion from "./components/RegionAccordion";
 import type { CellSelection } from "./components/RegionAccordion";
 import RiskMap from "./components/RiskMap";
+import SciencePage from "./components/SciencePage";
 import TimelineSlider from "./components/TimelineSlider";
 import { config } from "./lib/env";
 
-type Page = "home" | "dashboard" | "explainer";
+type Page = "home" | "dashboard" | "explainer" | "science";
 
 function pageFromHash(): Page {
   switch (window.location.hash) {
@@ -24,6 +25,8 @@ function pageFromHash(): Page {
       return "dashboard";
     case "#/come-funziona":
       return "explainer";
+    case "#/modello":
+      return "science";
     default:
       return "home";
   }
@@ -139,6 +142,9 @@ export function App(): JSX.Element {
           <a href="#/come-funziona" className={page === "explainer" ? "on" : ""}>
             Come funziona
           </a>
+          <a href="#/modello" className={page === "science" ? "on" : ""}>
+            Il modello
+          </a>
         </nav>
         <span className="header-meta">agg. 1h · 20 regioni</span>
         <div className="auth-controls">
@@ -160,6 +166,10 @@ export function App(): JSX.Element {
       ) : page === "explainer" ? (
         <div className="explainer-area">
           <ExplainerPage />
+        </div>
+      ) : page === "science" ? (
+        <div className="explainer-area">
+          <SciencePage />
         </div>
       ) : (
         <RequireAuth>{dashboard}</RequireAuth>
