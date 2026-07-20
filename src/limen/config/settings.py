@@ -559,6 +559,13 @@ class ReportSettings(BaseSettings):
     html_max_clusters: int = Field(default=50, ge=1)
     html_min_level: RiskLevel = RiskLevel.High
     html_cluster_eps_deg: float = Field(default=0.02, gt=0)
+    # Salienza: quando un AOI ha più di *trigger* celle a rischio, invece di
+    # clusterizzare l'intera macchia (mezza regione a Moderate) si evidenziano
+    # solo le celle che spiccano sullo sfondo: score >= percentile(ref) + margin.
+    # Il resto ("coda lunga") è riportato come conteggio, mai scartato in silenzio.
+    html_salience_volume_trigger: int = Field(default=200, ge=1)
+    html_salience_reference_pct: float = Field(default=0.5, ge=0.0, le=1.0)
+    html_salience_min_anomaly: float = Field(default=0.08, ge=0.0)
     html_archive_keep: int = Field(default=240, ge=1)
     html_basemap_url_template: str = "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
     html_basemap_attribution: str = "© OpenStreetMap contributors © CARTO"

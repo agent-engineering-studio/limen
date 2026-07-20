@@ -25,7 +25,7 @@ SELECT ST_ClusterDBSCAN(centroid, eps := $2, minpoints := 1) OVER () AS cluster_
        ST_X(centroid) AS lon, ST_Y(centroid) AS lat,
        ST_AsGeoJSON(geom) AS geom_json
 FROM   mv_latest_risk
-WHERE  aoi_id = $1 AND risk_level = ANY($3::text[])
+WHERE  aoi_id = $1 AND risk_level = ANY($3::text[]) AND risk_score >= $4
 """
 
 
@@ -89,6 +89,28 @@ def group_into_clusters(rows: list[ClusterRow]) -> list[Cluster]:
     return sorted(clusters, key=lambda c: (-c.max_score, c.cell_ids[0]))
 
 
+def _percentile(values: list[float], pct: float) -> float:
+    """Linear-interpolation percentile. Pura, deterministica; [] -> 0.0."""
+    s = sorted(values)
+    if not s:
+        return 0.0
+    k = (len(s) - 1) * pct
+    lo = int(k)
+    hi = min(lo + 1, len(s) - 1)
+    return s[lo] + (s[hi] - s[lo]) * (k - lo)
+
+
+def anomaly_cutoff(scores: list[float], *, reference_pct: float, margin: float) -> float:
+    """Soglia di salienza: sfondo locale (percentile) + margine di anomalia.
+
+    Le celle con ``score >= cutoff`` spiccano sullo sfondo regionale. In una
+    regione uniforme (nessun picco) nessuna cella supera il margine ⇒ zero
+    hotspot, e il resto finisce nel "diffuso" — esattamente il caso "mezza
+    regione a Moderate senza hotspot netti".
+    """
+    return _percentile(scores, reference_pct) + margin
+
+
 def _levels_at_least(minimum: RiskLevel) -> list[str]:
     order = [
         RiskLevel.None_,
@@ -112,9 +134,15 @@ def _coerce_json(value: Any) -> dict[str, Any]:
     return dict(json.loads(value))
 
 
-async def load_clusters(aoi_id: str, *, eps_deg: float, min_level: RiskLevel) -> list[Cluster]:
+async def load_clusters(
+    aoi_id: str, *, eps_deg: float, min_level: RiskLevel, score_floor: float = -1.0
+) -> list[Cluster]:
+    # score_floor < 0 (default): nessun filtro, i punteggi sono in [0, 1]. Un
+    # floor >= 0 tiene solo le celle saliente (salienza calcolata a monte).
     async with acquire() as conn:
-        records = await conn.fetch(_CLUSTER_SQL, aoi_id, eps_deg, _levels_at_least(min_level))
+        records = await conn.fetch(
+            _CLUSTER_SQL, aoi_id, eps_deg, _levels_at_least(min_level), score_floor
+        )
     rows = []
     for r in records:
         factors = _coerce_json(r["factors"])

@@ -49,3 +49,28 @@ def test_zones_notice_when_no_zones_at_all() -> None:
     msg = _zones_notice(alert_level=RiskLevel.High, shown_level=RiskLevel.High, has_clusters=False)
     assert msg is not None
     assert "Nessuna zona a rischio" in msg
+
+
+def test_zones_notice_reports_diffuse_tail_alongside_hotspots() -> None:
+    msg = _zones_notice(
+        alert_level=RiskLevel.High,
+        shown_level=RiskLevel.High,
+        has_clusters=True,
+        diffuse_cells=5280,
+    )
+    assert msg is not None
+    assert "5280" in msg
+
+
+def test_zones_notice_diffuse_only_when_no_net_hotspot() -> None:
+    # Regione uniforme: hotspot azzerati dalla salienza ma migliaia di celle
+    # diffuse — non deve dire "nessuna zona a rischio", deve riportare il diffuso.
+    msg = _zones_notice(
+        alert_level=RiskLevel.High,
+        shown_level=RiskLevel.Moderate,
+        has_clusters=False,
+        diffuse_cells=5280,
+    )
+    assert msg is not None
+    assert "5280" in msg
+    assert "Nessuna zona a rischio" not in msg
