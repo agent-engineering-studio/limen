@@ -209,6 +209,14 @@ Completati di recente:
 - **Shadow mode attivo**: il challenger ML gira in parallelo al champion
   a ogni ciclo orario (`SCORING__MODE=shadow`) e scrive le probabilità in
   `model_runs`; il motore deterministico resta l'unico autoritativo.
+- **Area di diagnostica ML shadow** (issue #26): endpoint `/api/shadow/summary`
+  (accordo/divergenza per regione + eventi reali) con aggregazione condivisa
+  col CLI `limen shadow-report`; un **pannellino operatore** in linguaggio piano
+  nella dashboard; e una **rotta riservata** `#/diagnostica-ml` (ruolo Clerk
+  `ml-ops`) con recall sugli eventi reali, accordo per regione e **mappa della
+  divergenza** per cella (palette neutra, non quella del rischio; vista tile
+  `v_shadow_divergence_tiles` via pg_tileserv). Non autoritativa — il V1 guida
+  sempre le allerte; il testo è pensato per operatori non tecnici.
 - **`limen forecast`** — run *previsionale* a `now+H` ore: la finestra
   Open-Meteo miscela pioggia osservata e prevista, champion e ML valutano
   le stesse celle, report in `./reports/` senza toccare lo stato operativo
@@ -247,11 +255,9 @@ Prossimi passi:
   gli eventi reali ITALICA in `reports/shadow_report_*.md`. Il giudizio va dato
   entro la retention di 30 gg di `model_runs` — **finestra 2026-07-20 →
   2026-08-03**. Se il challenger convince, promozione **manuale**
-  (`mlflow models transition-stage`, mai automatica). Candidato successivo: una
-  **vista shadow di diagnostica ML** nella dashboard autenticata (divergenza
-  per cella dalla `v_shadow_comparison`, KPI per regione, reliability plot),
-  esplicitamente *non autoritativa* — il motore V1 resta l'unico che guida le
-  allerte.
+  (`mlflow models transition-stage`, mai automatica). L'area di diagnostica ML
+  è già realizzata (vedi sopra); resta solo il **reliability plot**, gated su
+  abbastanza eventi reali (issue #30).
 
 ---
 
