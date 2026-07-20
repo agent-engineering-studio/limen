@@ -572,6 +572,19 @@ class ReportSettings(BaseSettings):
     html_publish: bool = False
 
 
+class VerifySettings(BaseSettings):
+    """Fact-checking of archived report zones vs real events (#17)."""
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    # Match radius from a zone's cells (m), computed in EPSG:3035. ~grid scale.
+    match_radius_m: float = Field(default=2000.0, gt=0.0)
+    # Window after valuation_time in which an event counts as triggered.
+    horizon_hours: int = Field(default=72, ge=1)
+    # Extra wait before a build is verifiable (late-arriving events).
+    grace_hours: int = Field(default=24, ge=0)
+
+
 class Settings(BaseSettings):
     """Top-level application settings."""
 
@@ -592,6 +605,7 @@ class Settings(BaseSettings):
     alert: AlertSettings = Field(default_factory=AlertSettings)
     forecast: ForecastSettings = Field(default_factory=ForecastSettings)
     report: ReportSettings = Field(default_factory=ReportSettings)
+    verify: VerifySettings = Field(default_factory=VerifySettings)
     nowcast: NowcastSettings = Field(default_factory=NowcastSettings)
     iot: IotSettings = Field(default_factory=IotSettings)
     scoring: ScoringSettings = Field(default_factory=ScoringSettings)
