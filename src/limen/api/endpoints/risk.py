@@ -270,6 +270,7 @@ async def shadow_summary(
         "regions": [
             {
                 "aoi_id": s.aoi_id,
+                "aoi_name": s.aoi_name,
                 "n": s.n,
                 "mean_abs_div": s.mean_abs_div,
                 "p95_abs_div": s.p95_abs_div,
@@ -283,6 +284,7 @@ async def shadow_summary(
             {
                 "cell_id": r["cell_id"],
                 "aoi_id": r["aoi_id"],
+                "aoi_name": r["aoi_name"],
                 "event_time": r["event_time"].isoformat(),
                 "champion_score": (
                     float(r["champion_score"]) if r["champion_score"] is not None else None

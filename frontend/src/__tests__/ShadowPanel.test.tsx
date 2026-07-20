@@ -11,8 +11,8 @@ const SUMMARY: ShadowSummaryResponse = {
   model_versions: ["ml-v2"],
   total_pairs: 1200,
   regions: [
-    { aoi_id: "puglia", n: 800, mean_abs_div: 0.4, p95_abs_div: 0.6, max_abs_div: 0.8, correlation: 0.3, class_agreement: 0.5 },
-    { aoi_id: "basilicata", n: 200, mean_abs_div: 0.3, p95_abs_div: 0.5, max_abs_div: 0.7, correlation: 0.2, class_agreement: 0.25 },
+    { aoi_id: "it-puglia", aoi_name: "Puglia", n: 800, mean_abs_div: 0.4, p95_abs_div: 0.6, max_abs_div: 0.8, correlation: 0.3, class_agreement: 0.5 },
+    { aoi_id: "it-basilicata", aoi_name: "Basilicata", n: 200, mean_abs_div: 0.3, p95_abs_div: 0.5, max_abs_div: 0.7, correlation: 0.2, class_agreement: 0.25 },
   ],
   truth_events: [],
 };

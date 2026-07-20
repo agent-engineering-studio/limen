@@ -13,17 +13,18 @@ const SOURCE_ID = "limen-divergence";
 const LAYER_ID = "limen-divergence-fill";
 const TILE_LAYER = "public.v_shadow_divergence_tiles";
 
-// Divergenza = prob. IA − punteggio ufficiale, in [-1, 1] (tipicamente piccola).
-// Dominio grafico limitato a ±0.5: oltre, satura.
+// Divergenza = prob. IA − punteggio ufficiale, in [-1, 1] ma concentrata
+// attorno a piccoli valori: dominio grafico ±0.3 (satura oltre) per dare
+// contrasto, altrimenti la mappa appare di un colore quasi piatto.
 const DIVERGENCE_COLOR: maplibregl.ExpressionSpecification = [
   "interpolate",
   ["linear"],
   ["get", "divergence"],
-  -0.5,
+  -0.3,
   "#2166ac", // IA vede molto MENO rischio
   0,
   "#e6e6e6", // d'accordo
-  0.5,
+  0.3,
   "#762a83", // IA vede molto PIÙ rischio
 ];
 

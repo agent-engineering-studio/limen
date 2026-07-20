@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { defaultApiClient } from "../lib/api-client";
 import { RISK_CLASSES } from "../lib/risk-colors";
 import type { LegendResponse, ModelCard, RiskLevel } from "../types";
+import { ChapterFooter, CourseHeader } from "./Course";
 
 // Linguaggio visivo S/M/E/F/H condiviso con CellPopup / builder del report.
 const COMP_COLOR: Record<string, string> = {
@@ -243,6 +244,10 @@ export function ScienceContent({
   return (
     <div className="explainer sci" aria-label="Il modello di Limen, spiegato">
       <article>
+        <CourseHeader
+          current={2}
+          learn="come nasce il numero di rischio — i fattori, la formula, la fisica della pioggia, le 5 classi, e come l'IA (V2) impara."
+        />
         <p className="exp-eyebrow">Per chi decide</p>
         <h2>Il modello, spiegato</h2>
         <p className="exp-lede">
@@ -630,6 +635,7 @@ export function ScienceContent({
             motore ML V2 (docs)
           </a>
         </p>
+        <ChapterFooter current={2} />
       </article>
     </div>
   );

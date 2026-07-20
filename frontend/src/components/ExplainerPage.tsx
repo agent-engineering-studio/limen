@@ -5,6 +5,7 @@
 import { useState } from "react";
 
 import { RISK_CLASSES } from "../lib/risk-colors";
+import { ChapterFooter, CourseHeader } from "./Course";
 
 // Parametri di produzione (YAML 2026-07): pesi top-level, sotto-pesi di M,
 // sigmoidi API/suolo, bonus pioggia-su-neve, soglie Caine per macroregione.
@@ -112,6 +113,10 @@ export default function ExplainerPage(): JSX.Element {
   return (
     <div className="explainer" aria-label="Come funziona Limen">
       <article>
+        <CourseHeader
+          current={1}
+          learn="cosa fa Limen, le due domande (dove e quando), e un simulatore per provarlo tu."
+        />
         <p className="exp-eyebrow">Guida per tutti</p>
         <h2>Come fa Limen a dire dove può franare?</h2>
         <p className="exp-lede">
@@ -375,6 +380,7 @@ export default function ExplainerPage(): JSX.Element {
           </a>{" "}
           spiega la logica di innesco senza bisogno di leggere il codice.
         </p>
+        <ChapterFooter current={1} />
       </article>
     </div>
   );

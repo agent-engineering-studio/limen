@@ -147,6 +147,7 @@ export interface LegendResponse {
 
 export interface ShadowRegion {
   aoi_id: string;
+  aoi_name: string;
   n: number;
   mean_abs_div: number;
   p95_abs_div: number;
@@ -165,6 +166,7 @@ export interface ShadowSummaryResponse {
   truth_events: {
     cell_id: string;
     aoi_id: string;
+    aoi_name: string;
     event_time: string;
     champion_score: number | null;
     ml_probability: number | null;

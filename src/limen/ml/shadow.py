@@ -27,6 +27,7 @@ DEFAULT_SINCE = datetime(2026, 7, 6, 13, 0, tzinfo=UTC)
 # challenger run. Shared by the aggregate and top-divergent queries.
 _PAIR_LATERAL = """
 FROM model_runs m
+JOIN aoi a ON a.id = m.aoi_id
 JOIN LATERAL (
     SELECT ra.score, ra.class
     FROM risk_assessments ra
@@ -45,6 +46,7 @@ WHERE m.role = 'challenger'
 # champion_score). corr() is NULL for <2 rows or zero variance.
 _STATS_SQL = f"""
 SELECT m.aoi_id                                                        AS aoi_id,
+       max(a.name)                                                     AS aoi_name,
        count(*)                                                        AS n,
        avg(abs(m.probability - r.score))                              AS mean_abs_div,
        percentile_cont(0.95) WITHIN GROUP (ORDER BY abs(m.probability - r.score))
@@ -88,14 +90,16 @@ ORDER BY model_version
 # the last run of both engines before the event (48 h lookback).
 _TRUTH_SQL = """
 WITH events AS (
-    SELECT g.id AS cell_id, g.aoi_id, MIN(e.event_time) AS event_time
+    SELECT g.id AS cell_id, g.aoi_id, max(a.name) AS aoi_name,
+           MIN(e.event_time) AS event_time
     FROM landslide_events e
     JOIN grid_cells g ON ST_Intersects(g.geom, e.geom)
+    JOIN aoi a ON a.id = g.aoi_id
     WHERE e.event_time >= $1
       AND ($2::text IS NULL OR g.aoi_id = $2)
     GROUP BY g.id, g.aoi_id
 )
-SELECT ev.cell_id, ev.aoi_id, ev.event_time,
+SELECT ev.cell_id, ev.aoi_id, ev.aoi_name, ev.event_time,
        (SELECT m.probability FROM model_runs m
         WHERE m.cell_id = ev.cell_id AND m.role = 'challenger'
           AND m.computed_at BETWEEN ev.event_time - interval '48 hours'
@@ -118,6 +122,7 @@ class _Conn(Protocol):
 @dataclass(frozen=True, slots=True)
 class AoiShadowStats:
     aoi_id: str
+    aoi_name: str
     n: int
     mean_abs_div: float
     p95_abs_div: float
@@ -165,6 +170,7 @@ async def collect_shadow_summary(
     stats = [
         AoiShadowStats(
             aoi_id=str(r["aoi_id"]),
+            aoi_name=str(r["aoi_name"]),
             n=int(r["n"]),
             mean_abs_div=float(r["mean_abs_div"]),
             p95_abs_div=float(r["p95_abs_div"]),
