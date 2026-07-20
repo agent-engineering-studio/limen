@@ -110,6 +110,13 @@ class DynamicInputs(_Frozen):
     # Standing snowpack depth over the window (m) — drives the rain-on-snow
     # amplification of M. AOI-level in V1 (like soil moisture).
     snow_depth_m: float | None = Field(default=None, ge=0.0)
+    # Issue #8 — dynamic flood signals (opt-in feed). All None ⇒ flood bonus 0.
+    # pluvial: forecast cumulated rain over the next 72 h (mm).
+    flood_forecast_rain_72h_mm: float | None = Field(default=None, ge=0.0)
+    # fluvial: forecast peak river discharge / seasonal normal (Open-Meteo Flood).
+    river_discharge_ratio: float | None = Field(default=None, ge=0.0)
+    # coastal: normalised sea surge / wave signal in [0,1] (Open-Meteo Marine).
+    coastal_surge_norm: float | None = Field(default=None, ge=0.0, le=1.0)
     seismic_history: tuple[SeismicHistoryEvent, ...] = ()
     months_since_fire: float | None = Field(default=None, ge=0.0)
     # V1.5 — per-cell in-situ aggregate. Absent on cells without sensors;

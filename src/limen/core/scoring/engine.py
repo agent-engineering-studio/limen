@@ -35,6 +35,7 @@ from limen.core.models.risk import (
 )
 from limen.core.scoring.api import api_factor
 from limen.core.scoring.caine import compute_caine
+from limen.core.scoring.flood_forecast import flood_forecast_bonus
 from limen.core.scoring.kinematic import compute_kinematic
 from limen.core.scoring.post_fire import post_fire_factor
 from limen.core.scoring.regional_thresholds import (
@@ -290,11 +291,26 @@ class MultiFactorScoringEngine:
         # as PAI. NULL ⇒ keeps the V1 baseline `h = 0` so behaviour is
         # byte-identical for operational DBs not yet exported from
         # the geodata stack.
-        h = (
+        h_static = (
             _clamp01(bundle.static.flood_hazard_norm)
             if bundle.static.flood_hazard_norm is not None
             else 0.0
         )
+        # Issue #8: dynamic flood uplift (pluvial/fluvial/coastal forecast ×
+        # ISPRA hazard). 0 when no flood block or no forecast ⇒ H = h_static.
+        flood_bonus = (
+            flood_forecast_bonus(
+                rain_72h_mm=bundle.dynamic.flood_forecast_rain_72h_mm,
+                river_discharge_ratio=bundle.dynamic.river_discharge_ratio,
+                coastal_surge_norm=bundle.dynamic.coastal_surge_norm,
+                flood_hazard_norm=bundle.static.flood_hazard_norm,
+                macroregion=bundle.macroregion,
+                cfg=self._t.flood_forecast,
+            )
+            if self._t.flood_forecast is not None
+            else 0.0
+        )
+        h = _clamp01(h_static + flood_bonus)
 
         k_value, k_breakdown = compute_kinematic(
             bundle.dynamic.sensor_features,

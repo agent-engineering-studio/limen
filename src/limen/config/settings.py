@@ -625,6 +625,10 @@ class Settings(BaseSettings):
     # MAF workflow. V1 default = False (no IoT). V1.5 will flip this when
     # the real sensor ingestion lands.
     enable_insitu: bool = False
+    # Issue #8: opt-in dynamic flood feed (forecast rain + river discharge +
+    # marine). Off by default so the operational engine is byte-identical to V1
+    # until the feed is deployed.
+    enable_flood_forecast: bool = False
     # Rainfall sampling-node grid step (degrees) for the live MeteoFetch —
     # each cell gets the series of its nearest node instead of one AOI-wide
     # centroid series. 0 disables the grid (centroid-only).

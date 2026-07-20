@@ -4,7 +4,8 @@
 
 # Limen
 
-> **Monitoraggio AI multi-fattore del rischio frana per il territorio italiano.**
+> **Monitoraggio AI multi-fattore del rischio frana e inondazione per il
+> territorio italiano.**
 > **Copertura nazionale — tutte le 20 regioni ISTAT** su griglia 1 km²
 > (~312k celle); validato sul pilota Puglia + Basilicata.
 
@@ -16,7 +17,12 @@
 
 Limen ("soglia" in latino) unisce **morfologia, geologia, umidità del
 suolo, piogge, sismicità, incendi e archivi storici** in un punteggio di
-rischio frana per ogni cella di un'area italiana. Stack: Python 3.12 +
+rischio **frana e inondazione** per ogni cella di un'area italiana. Il
+rischio idraulico parte dalla pericolosità geografica ISPRA (Mosaicatura
+Idraulica / PGRA — reticolo fluviale, aree costiere e lacustri) e, con il
+feed opt-in, la solleva quando è **prevista** un'inondazione: pioggia
+prevista (pluviale), portata dei fiumi da GloFAS (fluviale) e mareggiate
+(costiera). Stack: Python 3.12 +
 FastAPI + PostgreSQL 16 + PostGIS, frontend Vite + React + MapLibre,
 notifiche multi-canale. Il sistema è costruito attorno a un Multi-Agent
 Framework (MAF) che orchestra ingestione → scoring → spiegazione, con un
@@ -198,8 +204,14 @@ Completati di recente:
 
 - **Copertura nazionale** (20 regioni ISTAT) con soglia Caine ri-tarata su
   e-ITALICA e pioggia di backtest CERRA.
-- **Componente H (idraulica)** attivo dal mosaico idraulica ISPRA via
-  GeoServer (~132k celle in zona di pericolosità idraulica).
+- **Componente H (idraulica / inondazione)** attivo dal mosaico idraulica
+  ISPRA via GeoServer (~132k celle in zona di pericolosità idraulica).
+- **Inondazione dinamica (issue #8, opt-in)**: con `ENABLE_FLOOD_FORECAST` la
+  componente H riceve un *uplift* quando è **prevista** un'inondazione — pioggia
+  prevista (pluviale), portata dei fiumi via **Open-Meteo Flood/GloFAS**
+  (fluviale) e mareggiate via **Open-Meteo Marine** (costiera), il tutto scalato
+  dalla pericolosità geografica ISPRA. Deterministico, puro, degrada in modo
+  neutro; con feed assente il punteggio è byte-identico a V1.
 - **Autenticazione Clerk** attiva: sign-in sulla SPA Vite (`@clerk/react`) +
   validazione JWT sugli endpoint protetti FastAPI (`CLERK__ENABLED`).
 - **Sfidante ML addestrato** su 37k campioni (frane e-ITALICA + pioggia

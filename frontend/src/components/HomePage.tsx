@@ -101,16 +101,19 @@ export function HomePage(): JSX.Element {
       <section className="hero">
         <Contours />
         <div className="hero-inner">
-          <p className="hero-eyebrow">Monitoraggio del rischio frane · Italia</p>
+          <p className="hero-eyebrow">
+            Monitoraggio del rischio frane e inondazioni · Italia
+          </p>
           <h1>
-            Il rischio frana,
+            Rischio frana e inondazione,
             <br />
             cella per cella.
           </h1>
           <p className="hero-sub">
-            Limen unisce dati geologici, meteo, sismici e radar in un punteggio
-            di rischio aggiornato ogni ora su una griglia di 1 km² che copre
-            tutto il territorio nazionale. Deterministico, spiegabile,
+            Limen unisce dati geologici, meteo, sismici, radar e{" "}
+            <strong>pericolosità idraulica</strong> (fiumi, coste, laghi) in un
+            punteggio di rischio aggiornato ogni ora su una griglia di 1 km² che
+            copre tutto il territorio nazionale. Deterministico, spiegabile,
             verificato su vent&rsquo;anni di frane reali.
           </p>
           <div className="hero-actions">

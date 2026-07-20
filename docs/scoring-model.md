@@ -170,6 +170,28 @@ ISPRA servito via GeoServer. Per ciascuna cella si ricava
 AA/P1..P4: pericolosità elevata → P3, media → P2, bassa → P1. Il peso
 top-level `hydrology` è `0.03` (vedi `regional_thresholds.yaml`).
 
+**Componente dinamica multi-sorgente (issue #8, opt-in).** Con il feed attivo
+(`ENABLE_FLOOD_FORECAST=true`), `H` riceve un *uplift* additivo quando è
+**prevista** un'inondazione su una cella in zona di pericolosità idraulica.
+L'uplift combina tre segnali previsionali, ognuno scalato dalla pericolosità
+statica ISPRA:
+
+* **pluviale** — pioggia prevista a 72 h (Open-Meteo forecast);
+* **fluviale** — rapporto portata prevista / normale stagionale (Open-Meteo
+  Flood API / GloFAS);
+* **costiero** — segnale di mareggiata / altezza d'onda (Open-Meteo Marine API).
+
+```
+bonus = hazard_uplift · flood_hazard_norm · max(pluviale, fluviale, costiero)
+H     = clamp01(flood_hazard_norm + bonus)
+```
+
+Parametri in `flood_forecast.*` (sigmoide pioggia per macroregione + soglia
+portata). Nessun forecast ⇒ `bonus = 0` ⇒ `H` puramente statico (byte-identico
+a V1). La pericolosità statica ISPRA non è modificata; l'uplift è deterministico,
+puro, e ogni fonte esterna degrada in modo neutro (segnale assente ⇒ 0).
+Modellazione idraulica 2D fuori scope.
+
 ## Classificazione
 
 ```yaml
