@@ -11,6 +11,7 @@ import type {
   CellBreakdownResponse,
   HealthResponse,
   LatestAssessmentResponse,
+  ReliabilityResponse,
   ShadowSummaryResponse,
 } from "../types";
 
@@ -142,6 +143,10 @@ export class ApiClient {
 
   getShadowSummary(signal?: AbortSignal): Promise<ShadowSummaryResponse> {
     return this.request<ShadowSummaryResponse>("/api/shadow/summary", {}, signal);
+  }
+
+  getShadowReliability(signal?: AbortSignal): Promise<ReliabilityResponse> {
+    return this.request<ReliabilityResponse>("/api/shadow/reliability", {}, signal);
   }
 }
 

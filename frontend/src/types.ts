@@ -145,6 +145,22 @@ export interface LegendResponse {
   model?: ModelCard;
 }
 
+export interface ReliabilityBin {
+  lo: number;
+  hi: number;
+  predicted_mean: number;
+  observed_freq: number;
+  count: number;
+}
+
+/** ML calibration curve — gated: `sufficient` false until enough real events. */
+export interface ReliabilityResponse {
+  sufficient: boolean;
+  n_positives: number;
+  min_positives: number;
+  bins: ReliabilityBin[];
+}
+
 export interface ShadowRegion {
   aoi_id: string;
   aoi_name: string;

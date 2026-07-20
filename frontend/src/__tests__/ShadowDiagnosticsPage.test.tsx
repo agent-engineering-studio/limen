@@ -58,9 +58,15 @@ describe("ShadowDiagnosticsPage — didactic intro (public)", () => {
 });
 
 describe("ShadowDiagnosticsPage — live data (ml-ops)", () => {
-  it("shows agreement + per-region table with human region names", async () => {
+  it("shows agreement + per-region table with human region names + calibration", async () => {
     h.role = "ml-ops";
     vi.spyOn(defaultApiClient, "getShadowSummary").mockResolvedValue(SUMMARY);
+    vi.spyOn(defaultApiClient, "getShadowReliability").mockResolvedValue({
+      sufficient: false,
+      n_positives: 0,
+      min_positives: 20,
+      bins: [],
+    });
     render(<ShadowDiagnosticsPage />);
     await waitFor(() =>
       expect(screen.getByText(/Accordo complessivo/)).toBeInTheDocument(),
@@ -68,5 +74,9 @@ describe("ShadowDiagnosticsPage — live data (ml-ops)", () => {
     // human names, not raw it-* ids
     expect(screen.getByText("Basilicata")).toBeInTheDocument();
     expect(screen.queryByText("it-basilicata")).not.toBeInTheDocument();
+    // calibration section present, gated to insufficient-data state
+    await waitFor(() =>
+      expect(screen.getByText(/Dati insufficienti/)).toBeInTheDocument(),
+    );
   });
 });
