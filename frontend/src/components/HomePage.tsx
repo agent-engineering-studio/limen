@@ -127,7 +127,7 @@ export function HomePage(): JSX.Element {
               </a>
             </Show>
             <a className="btn-ghost" href="#/come-funziona">
-              Come funziona
+              Cos&apos;è Limen
             </a>
           </div>
           <dl className="hero-stats">

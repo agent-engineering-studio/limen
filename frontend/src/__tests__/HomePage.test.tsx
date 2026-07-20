@@ -33,7 +33,7 @@ describe("HomePage", () => {
       /Il rischio frana/,
     );
     expect(screen.getByText("Accedi alla dashboard")).toBeInTheDocument();
-    expect(screen.getByText("Come funziona")).toBeInTheDocument();
+    expect(screen.getByText("Cos'è Limen")).toBeInTheDocument();
     // Static fallback first, live numbers after the fetch resolves.
     await waitFor(() =>
       expect(screen.getByText("312.550")).toBeInTheDocument(),
