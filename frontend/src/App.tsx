@@ -144,14 +144,13 @@ export function App(): JSX.Element {
           <a href="#/dashboard" className={page === "dashboard" ? "on" : ""}>
             Dashboard
           </a>
-          <a href="#/come-funziona" className={page === "explainer" ? "on" : ""}>
-            Come funziona
-          </a>
-          <a href="#/modello" className={page === "science" ? "on" : ""}>
-            Il modello
-          </a>
-          <a href="#/diagnostica-ml" className={page === "shadow" ? "on" : ""}>
-            Diagnostica ML
+          <a
+            href="#/come-funziona"
+            className={
+              page === "explainer" || page === "science" || page === "shadow" ? "on" : ""
+            }
+          >
+            Cos&apos;è Limen
           </a>
         </nav>
         <span className="header-meta">agg. 1h · 20 regioni</span>
