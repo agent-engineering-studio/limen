@@ -86,7 +86,8 @@ def test_dynamic_inputs_defaults_none() -> None:
     assert d.coastal_surge_norm is None
 
 
-def test_flood_forecast_disabled_by_default() -> None:
+def test_flood_forecast_enabled_by_default() -> None:
     from limen.config.settings import Settings
 
-    assert Settings().enable_flood_forecast is False
+    # Flood risk is a first-class output — the feed is on by default (#8).
+    assert Settings().enable_flood_forecast is True

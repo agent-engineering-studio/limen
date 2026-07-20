@@ -170,9 +170,10 @@ ISPRA servito via GeoServer. Per ciascuna cella si ricava
 AA/P1..P4: pericolosità elevata → P3, media → P2, bassa → P1. Il peso
 top-level `hydrology` è `0.03` (vedi `regional_thresholds.yaml`).
 
-**Componente dinamica multi-sorgente (issue #8, opt-in).** Con il feed attivo
-(`ENABLE_FLOOD_FORECAST=true`), `H` riceve un *uplift* additivo quando è
-**prevista** un'inondazione su una cella in zona di pericolosità idraulica.
+**Componente dinamica multi-sorgente (issue #8, attiva di default).** `H`
+riceve un *uplift* additivo quando è **prevista** un'inondazione su una cella
+in zona di pericolosità idraulica (disattivabile con
+`ENABLE_FLOOD_FORECAST=false`).
 L'uplift combina tre segnali previsionali, ognuno scalato dalla pericolosità
 statica ISPRA:
 
