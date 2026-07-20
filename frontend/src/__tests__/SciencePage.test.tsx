@@ -48,6 +48,19 @@ describe("ScienceContent", () => {
     expect(screen.getAllByText(/blocchi spaziali/).length).toBeGreaterThan(0);
     expect(screen.getAllByText("SHAP").length).toBeGreaterThan(0);
   });
+
+  it("includes the plain-language ML theory and external references", () => {
+    render(<ScienceContent model={MODEL} pcByLevel={PC} version="v1" />);
+    expect(screen.getByText(/come funziona l'algoritmo/i)).toBeInTheDocument();
+    expect(screen.getByText(/Gradient boosting/)).toBeInTheDocument();
+    expect(screen.getByText(/Per approfondire il ML/)).toBeInTheDocument();
+    // real references are linked out
+    const shap = screen.getByText(/il paper di SHAP/);
+    expect(shap.closest("li")?.querySelector("a")).toHaveAttribute(
+      "href",
+      "https://arxiv.org/abs/1705.07874",
+    );
+  });
 });
 
 describe("physical-model math (pure)", () => {

@@ -500,6 +500,81 @@ export function ScienceContent({
           ))}
         </div>
 
+        <h4 className="sci-sub">In parole semplici: come funziona l&apos;algoritmo</h4>
+        <dl className="sci-glossary">
+          <dt>Gradient boosting (LightGBM)</dt>
+          <dd>
+            Il modello è un insieme di tanti piccoli alberi decisionali costruiti
+            uno dopo l&apos;altro: ogni nuovo albero corregge gli errori lasciati
+            dai precedenti. Sommando tutte le piccole correzioni si ottiene una
+            previsione accurata. <em>LightGBM</em> è un&apos;implementazione veloce
+            di questa idea.
+          </dd>
+          <dt>Perché blocchi spaziali (non split casuali)</dt>
+          <dd>
+            Due celle vicine si somigliano molto: se una finisce
+            nell&apos;addestramento e l&apos;altra nella verifica, il modello sembra
+            bravo ma sta «sbirciando». Dividere il territorio in blocchi
+            geografici tiene le celle vicine dallo stesso lato ⇒ la bravura
+            misurata è onesta.
+          </dd>
+          <dt>Calibrazione (reliability)</dt>
+          <dd>
+            Un modello può ordinare bene i casi dal meno al più rischioso senza
+            che i suoi numeri siano vere probabilità. La calibrazione (regressione
+            isotonica) aggiusta i numeri perché, quando dice «30%», nella realtà
+            accada davvero ~30 volte su 100. Lo si verifica col{" "}
+            <em>reliability diagram</em>.
+          </dd>
+          <dt>SHAP (valori di Shapley)</dt>
+          <dd>
+            Viene dalla teoria dei giochi: distribuisce «equamente» il merito di
+            una previsione tra i fattori, dicendo quanto ognuno l&apos;ha spinta su
+            o giù. Così ogni allerta resta ispezionabile, non una scatola nera.
+          </dd>
+        </dl>
+
+        <h4 className="sci-sub">Per approfondire il ML</h4>
+        <ul className="sci-refs">
+          <li>
+            <a href="https://doi.org/10.1214/aos/1013203451" target="_blank" rel="noreferrer">
+              Friedman (2001), «Greedy Function Approximation: A Gradient Boosting
+              Machine»
+            </a>{" "}
+            — l&apos;idea originale del gradient boosting.
+          </li>
+          <li>
+            <a href="https://github.com/microsoft/LightGBM" target="_blank" rel="noreferrer">
+              Ke et al. (2017), «LightGBM» (NeurIPS)
+            </a>{" "}
+            — l&apos;implementazione usata qui.
+          </li>
+          <li>
+            <a
+              href="https://scikit-learn.org/stable/modules/calibration.html"
+              target="_blank"
+              rel="noreferrer"
+            >
+              scikit-learn — «Probability calibration»
+            </a>{" "}
+            — guida accessibile a calibrazione e reliability diagram.
+          </li>
+          <li>
+            <a href="https://arxiv.org/abs/1705.07874" target="_blank" rel="noreferrer">
+              Lundberg &amp; Lee (2017), «A Unified Approach to Interpreting Model
+              Predictions»
+            </a>{" "}
+            — il paper di SHAP.
+          </li>
+          <li>
+            <a href="https://doi.org/10.1111/ecog.02881" target="_blank" rel="noreferrer">
+              Roberts et al. (2017), Ecography
+            </a>{" "}
+            — perché la cross-validation a blocchi spaziali (evitare il leakage
+            geografico).
+          </li>
+        </ul>
+
         {/* 8. Limiti */}
         <h3>8. Incertezza e limiti (cosa il modello NON dice)</h3>
         <ul>
