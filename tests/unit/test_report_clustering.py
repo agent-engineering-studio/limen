@@ -1,5 +1,10 @@
 from limen.core.models.risk import RiskLevel
-from limen.report.clustering import ClusterRow, _levels_at_least, group_into_clusters
+from limen.report.clustering import (
+    ClusterRow,
+    _levels_at_least,
+    anomaly_cutoff,
+    group_into_clusters,
+)
 
 _CELL_A = '{"type":"Polygon","coordinates":[[[16,41],[16.01,41],[16.01,41.01],[16,41.01],[16,41]]]}'
 _CELL_B = '{"type":"Polygon","coordinates":[[[16.1,41.1],[16.11,41.1],[16.11,41.11],[16.1,41.11],[16.1,41.1]]]}'  # noqa: E501
@@ -72,6 +77,23 @@ def test_cluster_and_member_ordering_is_deterministic_on_ties() -> None:
         ]
     )
     assert same[0].cell_ids == ["x", "y"]
+
+
+def test_anomaly_cutoff_isolates_peaks_from_diffuse_mass() -> None:
+    # Regione tutta Moderate (0.45) + pochi picchi: il cutoff cade sopra la
+    # massa e sotto i picchi ⇒ vengono evidenziati solo i picchi.
+    mass = [0.45] * 500
+    peaks = [0.70, 0.72, 0.68]
+    cut = anomaly_cutoff(mass + peaks, reference_pct=0.5, margin=0.08)
+    kept = [s for s in mass + peaks if s >= cut]
+    assert sorted(kept) == sorted(peaks)
+
+
+def test_anomaly_cutoff_uniform_region_keeps_none() -> None:
+    # Nessun picco: niente supera il margine ⇒ zero hotspot, tutto va nel diffuso.
+    uniform = [0.45] * 100
+    cut = anomaly_cutoff(uniform, reference_pct=0.5, margin=0.08)
+    assert [s for s in uniform if s >= cut] == []
 
 
 def test_levels_at_least() -> None:

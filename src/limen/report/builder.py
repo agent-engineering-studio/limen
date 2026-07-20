@@ -20,7 +20,7 @@ from limen.core.logging import get_logger
 from limen.core.models.risk import RiskLevel
 from limen.data.db import acquire
 from limen.report.archive import prune_archive, write_build
-from limen.report.clustering import Cluster, load_clusters
+from limen.report.clustering import Cluster, anomaly_cutoff, load_clusters
 from limen.report.geojson import coord_label, zone_center, zone_feature_collection_json
 from limen.report.palette import color_for, label_for
 from limen.report.reasons import plain_summary, verdict
@@ -69,22 +69,36 @@ def _threshold_candidates(alert_level: RiskLevel) -> list[RiskLevel]:
 
 
 def _zones_notice(
-    *, alert_level: RiskLevel, shown_level: RiskLevel, has_clusters: bool
+    *, alert_level: RiskLevel, shown_level: RiskLevel, has_clusters: bool, diffuse_cells: int = 0
 ) -> str | None:
     """Italian banner shown when the report displays below-alert zones (or none)."""
     if not has_clusters:
+        if diffuse_cells > 0:
+            return (
+                f"Rischio diffuso su {diffuse_cells} celle senza hotspot netti che "
+                f"spicchino sullo sfondo regionale: quadro puramente informativo, "
+                f"nessun allarme attivo."
+            )
         return (
             "Nessuna zona a rischio rilevata: tutte le celle sono sotto la soglia "
             "minima. Quadro puramente informativo, nessun allarme attivo."
         )
+    base: str | None = None
     if shown_level != alert_level:
-        return (
+        base = (
             f"Nessuna zona sopra la soglia di allerta ({label_for(alert_level)}). "
             f"Sono mostrate le aree relativamente più a rischio "
             f"(livello {label_for(shown_level)}) a scopo informativo: "
             f"nessun allarme attivo."
         )
-    return None
+    if diffuse_cells > 0:
+        extra = (
+            f"Sono evidenziati solo gli hotspot che spiccano sullo sfondo regionale; "
+            f"altre {diffuse_cells} celle a rischio diffuso non sono elencate "
+            f"singolarmente."
+        )
+        return f"{base} {extra}" if base else extra
+    return base
 
 
 async def _aoi_ids() -> list[str]:
@@ -173,22 +187,56 @@ async def build_report(settings: Settings | None = None) -> Path | None:
     # Try the alert threshold first; if no zone crosses it, step down so the
     # report still shows the relatively most-at-risk areas (informational).
     alert_level = cfg.html_min_level
-    all_clusters: list[Cluster] = []
     shown_level = alert_level
+    per_aoi: dict[str, list[Cluster]] = {}
     for level in _threshold_candidates(alert_level):
-        gathered: list[Cluster] = []
+        per_aoi = {}
         for aoi_id in aoi_ids:
-            gathered.extend(
-                await load_clusters(aoi_id, eps_deg=cfg.html_cluster_eps_deg, min_level=level)
-            )
-        if gathered:
-            all_clusters = gathered
+            cs = await load_clusters(aoi_id, eps_deg=cfg.html_cluster_eps_deg, min_level=level)
+            if cs:
+                per_aoi[aoi_id] = cs
+        if per_aoi:
             shown_level = level
             break
+
+    # Salienza: per gli AOI con troppe celle a rischio (fallback a livello basso
+    # ⇒ macchia diffusa), evidenzia solo le celle che spiccano sullo sfondo e
+    # riporta il conteggio della coda lunga invece di elencare l'intera regione.
+    all_clusters: list[Cluster] = []
+    diffuse_cells = 0
+    for aoi_id, clusters in per_aoi.items():
+        cell_count = sum(len(c.cell_ids) for c in clusters)
+        if cell_count <= cfg.html_salience_volume_trigger:
+            all_clusters.extend(clusters)
+            continue
+        scores = [r.score for c in clusters for r in c.rows]
+        floor = anomaly_cutoff(
+            scores,
+            reference_pct=cfg.html_salience_reference_pct,
+            margin=cfg.html_salience_min_anomaly,
+        )
+        hotspots = await load_clusters(
+            aoi_id, eps_deg=cfg.html_cluster_eps_deg, min_level=shown_level, score_floor=floor
+        )
+        kept = sum(len(c.cell_ids) for c in hotspots)
+        diffuse_cells += cell_count - kept
+        all_clusters.extend(hotspots)
+        log.info(
+            "report.salience",
+            aoi_id=aoi_id,
+            total_cells=cell_count,
+            kept_cells=kept,
+            diffuse_cells=cell_count - kept,
+            floor=round(floor, 4),
+        )
+
     all_clusters.sort(key=lambda c: (-c.max_score, c.cell_ids[0]))
     below_alert = bool(all_clusters) and shown_level != alert_level
     notice = _zones_notice(
-        alert_level=alert_level, shown_level=shown_level, has_clusters=bool(all_clusters)
+        alert_level=alert_level,
+        shown_level=shown_level,
+        has_clusters=bool(all_clusters),
+        diffuse_cells=diffuse_cells,
     )
     if below_alert:
         log.info("report.below_alert", alert=alert_level.value, shown=shown_level.value)
@@ -209,6 +257,7 @@ async def build_report(settings: Settings | None = None) -> Path | None:
             "valuation_time": valuation_iso,
             "pipeline_version": pipeline_version,
             "shown_level": shown_level.value,
+            "diffuse_cells": diffuse_cells,
             # report_it è escluso: contiene un timestamp di generazione (now())
             # che cambia a ogni chiamata e forzerebbe un rebuild continuo.
             # I totali nazionali (conteggi) sono la parte stabile che guida il testo.
@@ -275,6 +324,7 @@ async def build_report(settings: Settings | None = None) -> Path | None:
         "pipeline_version": pipeline_version,
         "assessment_sha256": signature,
         "shown_level": shown_level.value,
+        "diffuse_cells": diffuse_cells,
         "clusters": manifest_clusters,
     }
     # Report interattivo: nessun asset raster da scrivere, le celle sono GeoJSON
