@@ -90,6 +90,41 @@ I sotto-pesi di default sono `(0.45, 0.30, 0.25)`.
   In precedenza si usava `7.7 / 0.39` (Brunetti 2010), che lasciava circa
   il 36% delle frane reali sotto soglia.
 
+  **Floor di pioggia — bypass del gate di suscettibilità (issue #20).**
+  Un secondo inviluppo Caine, *più permissivo* del T5 operativo, definito in
+  `rain_floor.macroregions.*` (T2, 2° percentile dei log-residui, α più basso
+  → più eventi lo superano):
+
+  | Macroregione   | α (T5) | α (floor T2) | β     |
+  |----------------|--------|--------------|-------|
+  | `italy_default`| 7.19   | 4.30         | 0.568 |
+  | `southern`     | 8.75   | 5.25         | 0.645 |
+  | `central`      | 7.95   | 4.75         | 0.608 |
+  | `northern`     | 6.37   | 3.80         | 0.512 |
+
+  Il floor è una **proprietà di correttezza**, non un guardrail: con la
+  copertura nazionale il tiering per suscettibilità (usare `s_static` come
+  maschera per decidere dove spendere il budget meteo/LLM) rischia un falso
+  negativo sistematico sugli eventi di coda — pioggia eccezionale su una cella
+  catalogata a bassa suscettibilità, spesso perché l'inventario IFFI è
+  incompleto, non perché il versante sia stabile. La regola di pruning corretta
+  non è «salta la cella se a bassa suscettibilità» ma «salta la cella *solo se*
+  a bassa suscettibilità **E** sotto il floor». Il predicato puro
+  `MultiFactorScoringEngine.is_rescued_by_floor(bundle) -> bool` esprime proprio
+  questa condizione: `True` ⇒ la cella va valutata a prescindere dal tier.
+
+  Il floor è **condizionato all'umidità antecedente** (sigmoide del fattore
+  suolo 0–7 cm, stesso blocco `soil`): una cella deve avere `wetness ≥
+  rain_floor.wetness_min` per essere ripescata, così pioggia identica ripesca
+  una cella satura ma non una secca. Nessun floor «piatto» in mm — resta
+  regionalizzato per macroregione come le soglie T5. Gli attuali α sono
+  segnaposto (~0.6·α_T5) da ri-tarare su e-ITALICA come il blocco `caine`.
+
+  > Nota di roadmap: quando lo step di selezione celle nazionale (tiering)
+  > verrà introdotto, dovrà valutare il meteo per `tier_alto ∪ {celle sopra
+  > floor}`, non per `tier_alto` soltanto. Il predicato è già il punto di
+  > innesto; il floor è definito *prima* del tiering, per guidarne il disegno.
+
 * **Fattore API** — antecedent precipitation index di Kohler & Linsley
   1951, decadimento giornaliero `k = 0.95` di default, sigmoide
   sull'anomalia standardizzata rispetto alla baseline mensile per cella.

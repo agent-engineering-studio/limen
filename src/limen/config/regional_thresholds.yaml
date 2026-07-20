@@ -104,6 +104,38 @@ soil:
   sigmoid_center:    0.30
   sigmoid_steepness: 12.0
 
+# Rain floor (issue #20): a SECOND, more permissive Caine I/D envelope that
+# BYPASSES the susceptibility tier. It's a correctness property, not a tuning
+# knob: a national EWS must never miss an exceptional rain event on a cell
+# catalogued as low-susceptibility (usually because the IFFI inventory is
+# incomplete, not because the slope is stable). Any cell whose rainfall crosses
+# this floor is scored by the MultiFactorScoringEngine regardless of tier.
+#
+# `alpha`/`beta`: T2 lower envelope (2nd-percentile of log-residuals) per
+# macroregion — below the operational T5 in `caine.macroregions.*`, so it
+# "rescues" more events. Current values are ~0.6·α_T5 placeholders: re-fit on
+# e-ITALICA exactly like the T5 caine block; calibration can override per-AOI.
+# `wetness_min`: the floor is CONDITIONED on antecedent wetness (the soil-
+# moisture 0–7 cm sigmoid, same `soil` block). A dry cell is NOT rescued at the
+# same rainfall as a saturated one — no flat mm floor. Regionalised for the
+# same reason the caine thresholds are (extreme rain in Puglia is ordinary in
+# Liguria or on the Alps).
+rain_floor:
+  wetness_min: 0.5
+  macroregions:
+    italy_default:
+      alpha: 4.30
+      beta:  0.568
+    southern_italy:
+      alpha: 5.25
+      beta:  0.645
+    central_italy:
+      alpha: 4.75
+      beta:  0.608
+    northern_italy:
+      alpha: 3.80
+      beta:  0.512
+
 # Rain-on-snow amplification (additive M bonus, baseline-preserving).
 # With a standing snowpack (>= ros_min_depth_m), rain over the last 24 h
 # loads the pack and adds melt water — a documented Alpine/Apennine
