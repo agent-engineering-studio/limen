@@ -44,6 +44,7 @@ from limen.cli.sync_egms import run as _run_sync_egms
 from limen.cli.train import run as _run_train
 from limen.config.settings import get_settings
 from limen.core.logging import configure_logging
+from limen.report.verify import run as _run_verify
 
 Runner = Callable[[], Coroutine[Any, Any, int]]
 
@@ -110,6 +111,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="load the ITALICA/e-ITALICA dated landslide catalogue (LIMEN_ITALICA_CSV)",
     )
     sub.add_parser(
+        "verify",
+        help="fact-check archived report zones vs real landslide events (#17)",
+    )
+    sub.add_parser(
         "mcp-serve",
         help="start the limen-ops MCP server (LIMEN_MCP_TRANSPORT=stdio|http)",
     )
@@ -165,6 +170,7 @@ def main(argv: list[str] | None = None) -> int:
         "geoserver-sync": _run_geoserver_sync,
         "ingest-events": _run_ingest_events,
         "mcp-serve": _run_mcp_serve,
+        "verify": _run_verify,
     }
     if args.command == "geodata":
         try:
