@@ -1399,3 +1399,25 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   color: #5e6473;
   font-variant-numeric: tabular-nums;
 }
+
+/* --- Area diagnostica ML (#/diagnostica-ml, issue #26) --- */
+.shadow-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  margin: 8px 0 4px;
+}
+.shadow-table th,
+.shadow-table td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--panel-border);
+}
+.shadow-table th {
+  font-size: 12px;
+  color: #5e6473;
+  font-weight: 700;
+}
+.shadow-table td {
+  font-variant-numeric: tabular-nums;
+}
