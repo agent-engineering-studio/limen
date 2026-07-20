@@ -175,6 +175,47 @@ async def legend(response: Response) -> dict[str, Any]:
             for key, level in levels.items()
         ],
         "model_version": t.model_version,
+        # Model card for the public "Il modello, spiegato" page (issue #16):
+        # the exact versioned weights/thresholds so the SPA draws its charts
+        # from the YAML source of truth, never hard-coded numbers in the TSX.
+        "model": {
+            "weights": {
+                "static": t.weights.static,
+                "meteo": t.weights.meteo,
+                "seismic": t.weights.seismic,
+                "fire": t.weights.fire,
+                "hydrology": t.weights.hydrology,
+            },
+            "meteo_weights": {
+                "caine": t.meteo.weights.caine,
+                "api": t.meteo.weights.api,
+                "soil": t.meteo.weights.soil,
+            },
+            "caine": {
+                "macroregions": {
+                    name: {"alpha": mr.alpha, "beta": mr.beta}
+                    for name, mr in t.caine.macroregions.items()
+                },
+            },
+            "api": {
+                "sigmoid_sigma_mm": t.api.sigmoid_sigma_mm,
+                "baseline_fallback_mm": t.api.baseline.fallback_mm,
+            },
+            "soil": {
+                "sigmoid_center": t.soil.sigmoid_center,
+                "sigmoid_steepness": t.soil.sigmoid_steepness,
+            },
+            "seismic": {
+                "tau_days": t.seismic.tau_days,
+                "pga_threshold_g": t.seismic.pga_threshold_g,
+                "pga_scale_g": t.seismic.pga_scale_g,
+            },
+            "post_fire": {
+                "peak_months": t.post_fire.peak_months,
+                "curve_denominator": t.post_fire.curve_denominator,
+                "window_months_max": t.post_fire.window_months_max,
+            },
+        },
     }
 
 
