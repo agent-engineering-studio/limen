@@ -296,3 +296,52 @@ async def shadow_summary(
             for r in summary.truth_rows
         ],
     }
+
+
+@router.get("/api/shadow/reliability")
+async def shadow_reliability(
+    response: Response, aoi: str | None = None, since: str | None = None
+) -> dict[str, Any]:
+    """ML challenger calibration curve (issue #30/#26). NON-authoritative.
+
+    Gated on data: with too few real landslide outcomes the diagram is noise, so
+    ``sufficient`` is False and the frontend shows an insufficient-data state.
+    """
+    from datetime import UTC, datetime
+
+    from limen.config.settings import Settings
+    from limen.ml.shadow import DEFAULT_SINCE, collect_reliability
+
+    cutoff = DEFAULT_SINCE
+    if since:
+        try:
+            cutoff = datetime.fromisoformat(since)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="`since` must be ISO 8601",
+            ) from exc
+        if cutoff.tzinfo is None:
+            cutoff = cutoff.replace(tzinfo=UTC)
+        cutoff = max(cutoff, DEFAULT_SINCE)
+
+    response.headers["Cache-Control"] = "public, max-age=300"
+    async with acquire() as conn:
+        rel = await collect_reliability(
+            conn, since=cutoff, aoi_filter=aoi, radius_m=Settings().verify.match_radius_m
+        )
+    return {
+        "sufficient": rel.sufficient,
+        "n_positives": rel.n_positives,
+        "min_positives": rel.min_positives,
+        "bins": [
+            {
+                "lo": b.lo,
+                "hi": b.hi,
+                "predicted_mean": b.predicted_mean,
+                "observed_freq": b.observed_freq,
+                "count": b.count,
+            }
+            for b in rel.bins
+        ],
+    }

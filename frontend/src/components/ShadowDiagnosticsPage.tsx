@@ -8,9 +8,10 @@ import { useEffect, useState } from "react";
 import { RISK_CLASSES } from "../lib/risk-colors";
 import { defaultApiClient } from "../lib/api-client";
 import { useMlOps } from "../lib/roles";
-import type { ShadowSummaryResponse } from "../types";
+import type { ReliabilityResponse, ShadowSummaryResponse } from "../types";
 import { ChapterFooter, CourseHeader } from "./Course";
 import DivergenceMap from "./DivergenceMap";
+import ReliabilityChart from "./ReliabilityChart";
 import { nationalAgreement } from "./ShadowPanel";
 
 const pct = (x: number): string => `${Math.round(x * 100)}%`;
@@ -32,6 +33,7 @@ export function championWouldAlert(score: number): boolean {
 // --- Dati live, riservati a ml-ops -----------------------------------------
 function LiveDiagnostics(): JSX.Element {
   const [data, setData] = useState<ShadowSummaryResponse | null>(null);
+  const [reliability, setReliability] = useState<ReliabilityResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -43,6 +45,11 @@ function LiveDiagnostics(): JSX.Element {
         if (e instanceof DOMException && e.name === "AbortError") return;
         setError("Impossibile caricare la diagnostica shadow.");
       });
+    // Reliability is optional/gated — its failure must not break the panel.
+    defaultApiClient
+      .getShadowReliability(ctrl.signal)
+      .then(setReliability)
+      .catch(() => undefined);
     return () => ctrl.abort();
   }, []);
 
@@ -144,10 +151,21 @@ function LiveDiagnostics(): JSX.Element {
       </p>
       <DivergenceMap />
 
+      <h3>Calibrazione (reliability)</h3>
+      <p className="shadow-muted">
+        Quando l&apos;IA stima una probabilità, quella percentuale corrisponde
+        alla frequenza reale? Più i punti stanno sulla diagonale, meglio è
+        calibrata.
+      </p>
+      {reliability ? (
+        <ReliabilityChart data={reliability} />
+      ) : (
+        <p className="shadow-muted">Caricamento della calibrazione…</p>
+      )}
+
       <p className="exp-note">
         Finestra dal {data.since.slice(0, 10)} · modello IA:{" "}
-        {data.model_versions.join(", ") || "n/d"}. Grafico di calibrazione
-        (reliability) in arrivo quando gli eventi reali bastano — vedi issue #30.
+        {data.model_versions.join(", ") || "n/d"}.
       </p>
     </>
   );

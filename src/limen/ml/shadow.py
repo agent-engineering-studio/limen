@@ -119,6 +119,11 @@ class _Conn(Protocol):
     async def fetch(self, query: str, *args: Any) -> list[Any]: ...
 
 
+# Below this many real landslide outcomes in the window a reliability diagram
+# is noise, not signal — the endpoint reports "insufficient" instead (#30).
+MIN_RELIABILITY_POSITIVES = 20
+
+
 @dataclass(frozen=True, slots=True)
 class AoiShadowStats:
     aoi_id: str
@@ -141,6 +146,111 @@ class ShadowSummary:
     truth_rows: list[dict[str, Any]]
     model_versions: list[str]
     total_pairs: int
+
+
+@dataclass(frozen=True, slots=True)
+class ReliabilityBin:
+    lo: float
+    hi: float
+    predicted_mean: float
+    observed_freq: float
+    count: int
+
+
+@dataclass(frozen=True, slots=True)
+class ReliabilitySummary:
+    sufficient: bool
+    n_positives: int
+    min_positives: int
+    bins: list[ReliabilityBin]
+
+
+def reliability_bins(
+    pairs: list[tuple[float, bool]], *, n_bins: int = 10
+) -> list[ReliabilityBin]:
+    """Bin (predicted probability, observed outcome) pairs for a calibration
+    curve. Pure. Empty bins are dropped. ``predicted_mean`` vs ``observed_freq``
+    on the diagonal ⇒ well-calibrated."""
+    buckets: dict[int, list[tuple[float, bool]]] = {}
+    for p, obs in pairs:
+        idx = min(n_bins - 1, max(0, int(p * n_bins)))
+        buckets.setdefault(idx, []).append((p, obs))
+    out: list[ReliabilityBin] = []
+    for i in range(n_bins):
+        b = buckets.get(i)
+        if not b:
+            continue
+        preds = [p for p, _ in b]
+        n_obs = sum(1 for _, o in b if o)
+        out.append(
+            ReliabilityBin(
+                lo=i / n_bins,
+                hi=(i + 1) / n_bins,
+                predicted_mean=sum(preds) / len(preds),
+                observed_freq=n_obs / len(b),
+                count=len(b),
+            )
+        )
+    return out
+
+
+_EVENT_COUNT_SQL = """
+SELECT count(*) AS n
+FROM landslide_events e
+LEFT JOIN aoi a ON ($2::text IS NOT NULL AND a.id = $2 AND ST_Intersects(a.geom, e.geom))
+WHERE e.event_time >= $1
+  AND ($2::text IS NULL OR a.id IS NOT NULL)
+"""
+
+# Latest challenger probability per cell paired with whether a real landslide
+# occurred near the cell in the window. Only runs once the gate is cleared.
+_RELIABILITY_PAIRS_SQL = """
+WITH pred AS (
+    SELECT cell_id, max(probability) AS predicted
+    FROM model_runs
+    WHERE role = 'challenger' AND computed_at >= $1
+      AND ($2::text IS NULL OR aoi_id = $2)
+    GROUP BY cell_id
+)
+SELECT pred.predicted AS predicted,
+       EXISTS (
+           SELECT 1 FROM landslide_events e
+           JOIN grid_cells g ON g.id = pred.cell_id
+           WHERE e.event_time >= $1
+             AND ST_DWithin(ST_Transform(e.geom, 3035), ST_Transform(g.geom, 3035), $3)
+       ) AS observed
+FROM pred
+"""
+
+
+async def collect_reliability(
+    conn: _Conn,
+    *,
+    since: datetime,
+    aoi_filter: str | None,
+    radius_m: float,
+    min_positives: int = MIN_RELIABILITY_POSITIVES,
+) -> ReliabilitySummary:
+    """Reliability (calibration) of the ML challenger over the window.
+
+    Gated: with fewer than ``min_positives`` real landslide outcomes the diagram
+    is noise, so we return ``sufficient=False`` without the expensive per-cell
+    scan (#30). No promotion here — diagnostics only.
+    """
+    count_rows = await conn.fetch(_EVENT_COUNT_SQL, since, aoi_filter)
+    n_pos = int(count_rows[0]["n"]) if count_rows else 0
+    if n_pos < min_positives:
+        return ReliabilitySummary(
+            sufficient=False, n_positives=n_pos, min_positives=min_positives, bins=[]
+        )
+    rows = await conn.fetch(_RELIABILITY_PAIRS_SQL, since, aoi_filter, radius_m)
+    pairs = [(float(r["predicted"]), bool(r["observed"])) for r in rows]
+    return ReliabilitySummary(
+        sufficient=True,
+        n_positives=n_pos,
+        min_positives=min_positives,
+        bins=reliability_bins(pairs),
+    )
 
 
 async def collect_shadow_summary(
