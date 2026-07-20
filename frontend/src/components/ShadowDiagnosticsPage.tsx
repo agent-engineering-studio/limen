@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { RISK_CLASSES } from "../lib/risk-colors";
 import { defaultApiClient } from "../lib/api-client";
 import type { ShadowSummaryResponse } from "../types";
+import DivergenceMap from "./DivergenceMap";
 import { nationalAgreement } from "./ShadowPanel";
 
 const pct = (x: number): string => `${Math.round(x * 100)}%`;
@@ -153,11 +154,19 @@ export default function ShadowDiagnosticsPage(): JSX.Element {
               </table>
             )}
 
+            <h3>Mappa della divergenza</h3>
+            <p className="shadow-muted">
+              Dove l&apos;IA vede <em>più</em> o <em>meno</em> rischio del sistema
+              ufficiale. Colori neutri, non la scala del rischio: qui il colore
+              significa «disaccordo tra modelli», non «pericolo».
+            </p>
+            <DivergenceMap />
+
             <p className="exp-note">
               Finestra dal {data.since.slice(0, 10)} · modello IA:{" "}
-              {data.model_versions.join(", ") || "n/d"}. Mappa della divergenza
-              per cella e grafico di calibrazione (reliability) in arrivo quando i
-              dati bastano — vedi issue #26.
+              {data.model_versions.join(", ") || "n/d"}. Grafico di calibrazione
+              (reliability) in arrivo quando gli eventi reali bastano — vedi
+              issue #26.
             </p>
           </>
         )}
