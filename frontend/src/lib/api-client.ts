@@ -11,6 +11,7 @@ import type {
   CellBreakdownResponse,
   HealthResponse,
   LatestAssessmentResponse,
+  ShadowSummaryResponse,
 } from "../types";
 
 export class ApiClientError extends Error {
@@ -137,6 +138,10 @@ export class ApiClient {
 
   getNationalReport(signal?: AbortSignal): Promise<NationalReportResponse> {
     return this.request<NationalReportResponse>("/api/report/national", {}, signal);
+  }
+
+  getShadowSummary(signal?: AbortSignal): Promise<ShadowSummaryResponse> {
+    return this.request<ShadowSummaryResponse>("/api/shadow/summary", {}, signal);
   }
 }
 

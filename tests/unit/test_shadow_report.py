@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from limen.cli.shadow_report import _aoi_stats, _pearson
+from limen.ml.shadow import aoi_stats as _aoi_stats
+from limen.ml.shadow import pearson as _pearson
 
 
 def test_pearson_basics() -> None:

@@ -13,6 +13,7 @@ import RegionAccordion from "./components/RegionAccordion";
 import type { CellSelection } from "./components/RegionAccordion";
 import RiskMap from "./components/RiskMap";
 import SciencePage from "./components/SciencePage";
+import ShadowPanel from "./components/ShadowPanel";
 import TimelineSlider from "./components/TimelineSlider";
 import { config } from "./lib/env";
 
@@ -99,6 +100,7 @@ export function App(): JSX.Element {
           selectedCellId={selected?.cellId ?? null}
         />
         <LegendPanel />
+        <ShadowPanel />
         {config.enableTimeline ? (
           <TimelineSlider maxHours={72} onChange={setHoursAgo} />
         ) : null}
