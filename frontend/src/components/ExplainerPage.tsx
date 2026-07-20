@@ -363,6 +363,18 @@ export default function ExplainerPage(): JSX.Element {
           ITALICA), Copernicus, INGV — tutti dati pubblici aperti. I parametri
           mostrati sono quelli reali di produzione.
         </p>
+        <p className="exp-note">
+          Vuoi capire <em>come nasce un&apos;allerta</em>, passo per passo e con
+          schemi?{" "}
+          <a
+            href="https://github.com/agent-engineering-studio/limen/blob/main/docs/warning-logic.md"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Come si innesca un&apos;allerta frana
+          </a>{" "}
+          spiega la logica di innesco senza bisogno di leggere il codice.
+        </p>
       </article>
     </div>
   );
