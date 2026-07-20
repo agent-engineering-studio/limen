@@ -145,6 +145,32 @@ export interface LegendResponse {
   model?: ModelCard;
 }
 
+export interface ShadowRegion {
+  aoi_id: string;
+  n: number;
+  mean_abs_div: number;
+  p95_abs_div: number;
+  max_abs_div: number;
+  correlation: number | null;
+  class_agreement: number;
+}
+
+/** Champion (V1) vs shadow challenger (ML) diagnostics — NON-authoritative. */
+export interface ShadowSummaryResponse {
+  since: string;
+  aoi_filter: string | null;
+  model_versions: string[];
+  total_pairs: number;
+  regions: ShadowRegion[];
+  truth_events: {
+    cell_id: string;
+    aoi_id: string;
+    event_time: string;
+    champion_score: number | null;
+    ml_probability: number | null;
+  }[];
+}
+
 export interface NationalRegionSummary {
   aoi_id: string;
   computed_at: string;

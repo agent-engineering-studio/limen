@@ -1322,3 +1322,80 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
 .sci-see-also {
   margin-top: 24px;
 }
+
+/* --- Pannello shadow "Modello sperimentale (IA)" (issue #26) --- */
+.shadow-panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-top: 14px;
+}
+.shadow-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.shadow-head h2 {
+  font-size: 15px;
+  margin: 0;
+}
+.shadow-pill {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a5a00;
+  background: #ffe8bf;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.shadow-note {
+  font-size: 12.5px;
+  color: #5e6473;
+  margin: 8px 0;
+}
+.shadow-headline {
+  font-size: 13.5px;
+  margin: 8px 0 6px;
+}
+.shadow-muted {
+  font-size: 12px;
+  color: #7a808c;
+  margin: 6px 0;
+}
+.shadow-bar {
+  background: #eceef2;
+  border-radius: 6px;
+  height: 10px;
+  overflow: hidden;
+}
+.shadow-bar-fill {
+  display: block;
+  height: 100%;
+  background: #6b7280; /* grigio neutro: NON la palette del rischio, è diagnostica */
+}
+.shadow-details {
+  margin-top: 8px;
+  font-size: 12.5px;
+}
+.shadow-details summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+.shadow-details ul {
+  list-style: none;
+  padding: 6px 0 0;
+  margin: 0;
+  display: grid;
+  gap: 3px;
+}
+.shadow-details li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.shadow-region-val {
+  color: #5e6473;
+  font-variant-numeric: tabular-nums;
+}

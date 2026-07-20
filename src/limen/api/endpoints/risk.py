@@ -228,3 +228,69 @@ async def national_report_endpoint(response: Response) -> dict[str, Any]:
     # instant without hiding fresh sweeps.
     response.headers["Cache-Control"] = "public, max-age=60"
     return await national_report()
+
+
+@router.get("/api/shadow/summary")
+async def shadow_summary(
+    response: Response, aoi: str | None = None, since: str | None = None
+) -> dict[str, Any]:
+    """Champion (V1) vs shadow challenger (ML) diagnostics (issue #4/#26).
+
+    NON-authoritative: the ML challenger never drives alerts. The frontend
+    renders this behind the authenticated dashboard, clearly labelled as
+    diagnostics. Reuses the same aggregation as ``limen shadow-report``.
+    """
+    from datetime import UTC, datetime
+
+    from limen.ml.shadow import DEFAULT_SINCE, collect_shadow_summary
+
+    cutoff = DEFAULT_SINCE
+    if since:
+        try:
+            cutoff = datetime.fromisoformat(since)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="`since` must be ISO 8601",
+            ) from exc
+        if cutoff.tzinfo is None:
+            cutoff = cutoff.replace(tzinfo=UTC)
+        # Pre-fix rows (rain features at zero, 7d19fe4) must never be judged.
+        cutoff = max(cutoff, DEFAULT_SINCE)
+
+    response.headers["Cache-Control"] = "public, max-age=300"
+    async with acquire() as conn:
+        summary = await collect_shadow_summary(conn, since=cutoff, aoi_filter=aoi)
+
+    return {
+        "since": summary.since.isoformat(),
+        "aoi_filter": summary.aoi_filter,
+        "model_versions": summary.model_versions,
+        "total_pairs": summary.total_pairs,
+        "regions": [
+            {
+                "aoi_id": s.aoi_id,
+                "n": s.n,
+                "mean_abs_div": s.mean_abs_div,
+                "p95_abs_div": s.p95_abs_div,
+                "max_abs_div": s.max_abs_div,
+                "correlation": s.correlation,
+                "class_agreement": s.class_agreement,
+            }
+            for s in summary.stats
+        ],
+        "truth_events": [
+            {
+                "cell_id": r["cell_id"],
+                "aoi_id": r["aoi_id"],
+                "event_time": r["event_time"].isoformat(),
+                "champion_score": (
+                    float(r["champion_score"]) if r["champion_score"] is not None else None
+                ),
+                "ml_probability": (
+                    float(r["ml_probability"]) if r["ml_probability"] is not None else None
+                ),
+            }
+            for r in summary.truth_rows
+        ],
+    }
