@@ -240,8 +240,18 @@ Completati di recente:
 
 Prossimi passi:
 
-- **Confronto shadow** challenger vs champion su eventi reali (dopo qualche
-  settimana di `model_runs` accumulati).
+- **Verdetto shadow** challenger ML vs champion (issue #4). Tooling pronto:
+  `uv run limen shadow-report` legge `model_runs` sulla finestra post-fix
+  (`LIMEN_SHADOW_SINCE` default `2026-07-06T13:00Z`, `LIMEN_SHADOW_AOI`
+  opzionale) e scrive divergenza media/p95/max, correlazione, accordo classi e
+  gli eventi reali ITALICA in `reports/shadow_report_*.md`. Il giudizio va dato
+  entro la retention di 30 gg di `model_runs` — **finestra 2026-07-20 →
+  2026-08-03**. Se il challenger convince, promozione **manuale**
+  (`mlflow models transition-stage`, mai automatica). Candidato successivo: una
+  **vista shadow di diagnostica ML** nella dashboard autenticata (divergenza
+  per cella dalla `v_shadow_comparison`, KPI per regione, reliability plot),
+  esplicitamente *non autoritativa* — il motore V1 resta l'unico che guida le
+  allerte.
 
 ---
 
