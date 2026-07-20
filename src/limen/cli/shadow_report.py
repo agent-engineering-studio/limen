@@ -139,7 +139,9 @@ async def run() -> int:
     async with lifespan_pool():
         await run_migrations()
         async with acquire() as conn:
-            summary = await collect_shadow_summary(conn, since=since, aoi_filter=aoi_filter)
+            summary = await collect_shadow_summary(
+                conn, since=since, aoi_filter=aoi_filter, with_top=True
+            )
 
     report = _write_report(
         since=summary.since,
