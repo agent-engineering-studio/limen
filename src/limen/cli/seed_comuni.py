@@ -76,7 +76,9 @@ async def run() -> int:
             )
             tagged = await conn.fetchval("SELECT COUNT(*) FROM cell_comune")
         async with acquire() as conn:
-            rc = await conn.fetchval("SELECT refresh_mv_latest_risk()")
+            # First-time comune-matview population + the 312k-row latest refresh
+            # blow past the pool's default command timeout; give it room.
+            rc = await conn.fetchval("SELECT refresh_mv_latest_risk()", timeout=600)
     log.info("cli.seed_comuni.done", comuni=inserted, cells_tagged=tagged, refresh=rc)
     return 0
 
