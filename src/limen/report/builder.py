@@ -25,6 +25,7 @@ from limen.report.geojson import coord_label, zone_center, zone_feature_collecti
 from limen.report.palette import color_for, label_for
 from limen.report.reasons import plain_summary, verdict
 from limen.report.render import ClusterView, ReportView, render_html
+from limen.report.trend import read_cell_trend, trend_points, trend_svg
 
 log = get_logger(__name__)
 
@@ -295,7 +296,20 @@ async def build_report(settings: Settings | None = None) -> Path | None:
     # Un build_id riusato potrebbe avere asset orfani di un run precedente
     # interrotto: ripulisci prima di riscrivere, così la dir parte pulita.
     shutil.rmtree(build_dir, ignore_errors=True)
-    cluster_views = [_cluster_to_view(c, idx) for idx, c in enumerate(capped)]
+    # Per-zone risk trend (observed 72h + forecast) for the dominant cell (#42).
+    # Read after the signature check (trend is supplementary; not part of the
+    # report's identity) so forecast volatility doesn't force constant rebuilds.
+    trends: dict[int, tuple[list[Any], list[Any]]] = {}
+    async with acquire() as conn:
+        for c in capped:
+            trends[c.cluster_id] = await read_cell_trend(conn, c.dominant.cell_id)
+
+    cluster_views = []
+    for idx, c in enumerate(capped):
+        cv = _cluster_to_view(c, idx)
+        obs, fc = trends[c.cluster_id]
+        cv.trend_svg = trend_svg(obs, fc)
+        cluster_views.append(cv)
     manifest_clusters = [
         {
             "cluster_id": c.cluster_id,
@@ -304,6 +318,7 @@ async def build_report(settings: Settings | None = None) -> Path | None:
             "max_score": c.max_score,
             "level": c.dominant.level,
             "center": list(zone_center(c)),  # [lat, lon]
+            "trend": trend_points(*trends[c.cluster_id]),
         }
         for c in capped
     ]

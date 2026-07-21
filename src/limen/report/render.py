@@ -44,6 +44,8 @@ class ClusterView:
     verdict_text: str
     verdict_tone: str
     components: list[tuple[str, float, str]]
+    # Inline SVG sparkline (observed 72h + forecast 72h). "" when no history.
+    trend_svg: str = ""
 
 
 @dataclass

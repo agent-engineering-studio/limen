@@ -21,6 +21,9 @@
              box-shadow: 0 1px 6px rgba(0,0,0,.1); }
   .zonemap { height: 320px; width: 100%; background: #eef1f4; }
   .cluster .body { padding: 1rem 1.25rem; }
+  .trend { margin-top: .75rem; }
+  .trend-cap { font-size: .75rem; color: #5e6473; margin: 0 0 .25rem; }
+  .zone-trend { width: 100%; max-width: 280px; height: 48px; display: block; }
   .badge { display: inline-block; padding: .15rem .6rem; border-radius: 999px; color: #fff;
            font-size: .8rem; font-weight: 600; }
   .coords { font-weight: 600; color: #21456e; margin: .5rem 0 .25rem; font-size: .95rem;
@@ -65,6 +68,12 @@
         </div>
         {% endfor %}
       </div>
+      {% if c.trend_svg %}
+      <div class="trend">
+        <p class="trend-cap">Andamento rischio · 72 h passate (linea piena) + previsione 72 h (tratteggiata)</p>
+        {{ c.trend_svg|safe }}
+      </div>
+      {% endif %}
     </div>
   </article>
   {% endfor %}
