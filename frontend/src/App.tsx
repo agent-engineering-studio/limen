@@ -4,6 +4,7 @@ import type maplibregl from "maplibre-gl";
 import AdminUsersPage from "./components/AdminUsersPage";
 import { LoginPage, RegisterPage, VerifyEmailPage } from "./components/AuthPages";
 import CellPopup from "./components/CellPopup";
+import ComuneLeaderboard from "./components/ComuneLeaderboard";
 import ExplainerPage from "./components/ExplainerPage";
 import ForecastList from "./components/ForecastList";
 import HomePage from "./components/HomePage";
@@ -169,6 +170,7 @@ export function App(): JSX.Element {
           onCellSelect={selectCell}
           selectedCellId={selected?.cellId ?? null}
         />
+        <ComuneLeaderboard />
         <LegendPanel />
         <ShadowPanel />
       </aside>

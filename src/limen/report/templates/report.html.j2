@@ -78,6 +78,20 @@
   </article>
   {% endfor %}
 
+  {% if view.top_comuni %}
+  <section class="national">
+    <h2>Comuni a maggior rischio</h2>
+    <table class="int-table">
+      <thead><tr><th>Comune</th><th>Classe</th><th>Celle in allerta</th></tr></thead>
+      <tbody>
+        {% for c in view.top_comuni %}
+        <tr><td>{{ c.name }}</td><td>{{ c.worst_class }}</td><td>{{ c.n_alert }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+
   <div class="legend">
     {% for rc in classes %}
     <span><span class="sw" style="background: {{ rc.color }}"></span>{{ rc.label_it }} ({{ '%.2f'|format(rc.range[0]) }}–{{ '%.2f'|format(rc.range[1]) }})</span>

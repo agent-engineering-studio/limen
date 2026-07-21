@@ -396,6 +396,52 @@ html, body, #root {
   margin-right: 10px;
 }
 
+/* classifica comuni + headline sidebar */
+.comuni-board {
+  margin: 10px 0;
+}
+.comuni-board h3 {
+  font-size: 14px;
+  margin: 0 0 6px;
+}
+.comuni-board ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.comuni-board li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+.cb-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.cb-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cb-meta {
+  color: #5e6473;
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+.comune-headline {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #5e6473;
+  margin-left: 6px;
+}
+
 /* admin — gestione utenti */
 .admin-create {
   background: var(--panel);

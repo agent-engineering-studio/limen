@@ -20,11 +20,13 @@ from limen.mcp.tools import (
     AdminAuthError,
     build_static_report,
     cell_breakdown,
+    comune_risk,
     national_report,
     recent_alerts,
     risk_summary,
     run_forecast_history,
     run_monitor,
+    top_comuni,
     top_risk_cells,
 )
 
@@ -45,6 +47,8 @@ Read tools (open):
 * national_report() → aggregated national picture (per-region summary,
   national top cells, ML shadow top, 24h alert counts) + a deterministic
   Italian rendering in `report_it`.
+* top_comuni(limit?, aoi_id?) → comuni with alerting cells, exposure-ranked.
+* comune_risk(istat_code) → one comune's rollup (worst class, counts, exposure).
 
 Admin tools (MCP_ADMIN_TOKEN, fail-closed):
 * run_monitor(aoi_id, admin_token, cell_limit?) → run the full monitoring
@@ -92,6 +96,16 @@ def _build_server() -> Any:
     async def tool_national_report() -> dict[str, Any]:
         """Aggregated national picture + Italian rendering (report_it)."""
         return await national_report()
+
+    @mcp.tool()
+    async def tool_comune_risk(istat_code: str) -> dict[str, Any]:
+        """Comune rollup (worst class, class counts, exposure)."""
+        return await comune_risk(istat_code)
+
+    @mcp.tool()
+    async def tool_top_comuni(limit: int = 10, aoi_id: str | None = None) -> list[dict[str, Any]]:
+        """Comuni with alerting cells, exposure-ranked."""
+        return await top_comuni(limit=limit, aoi_id=aoi_id)
 
     @mcp.tool()
     async def tool_run_monitor(

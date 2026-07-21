@@ -63,3 +63,6 @@ site/
 # MLflow local tracking store
 mlflow.db
 mlruns/
+
+# Superpowers brainstorming (mockup companion)
+.superpowers/

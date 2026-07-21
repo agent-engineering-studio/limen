@@ -62,6 +62,22 @@ export interface AuthConfig {
   spid_enabled: boolean;
 }
 
+export interface ComuneRisk {
+  istat_code: string;
+  name: string;
+  aoi_id: string;
+  worst_class: RiskLevel;
+  max_score: number;
+  n_cells: number;
+  n_alert: number;
+  counts: Record<string, number>;
+  exposure_rank: number;
+}
+
+export interface ComuneListResponse {
+  comuni: ComuneRisk[];
+}
+
 export interface AoiListResponse {
   items: AoiSummary[];
 }

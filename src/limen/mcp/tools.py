@@ -238,6 +238,21 @@ async def run_forecast_history(
     return {"cells_persisted": total, "aoi_ids": aoi_ids}
 
 
+async def comune_risk(istat_code: str) -> dict[str, Any]:
+    """Comune rollup (worst class, counts, exposure) for one ISTAT code."""
+    from limen.data.repos.comune_risk import comune_detail
+
+    detail = await comune_detail(istat_code)
+    return detail["comune"] if detail else {"error": f"comune {istat_code!r} not found"}
+
+
+async def top_comuni(limit: int = 10, aoi_id: str | None = None) -> list[dict[str, Any]]:
+    """Comuni with alerting cells, ranked by exposure (national or per-AOI)."""
+    from limen.data.repos.comune_risk import top_comuni as _top
+
+    return await _top(aoi_id=aoi_id, limit=limit)
+
+
 async def national_report() -> dict[str, Any]:
     """Aggregate national picture: regions, top cells, ML shadow, 24h alerts."""
     regions = await risk_summary()

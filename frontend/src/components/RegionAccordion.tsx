@@ -129,6 +129,7 @@ function ComuneSection({
           aria-hidden
         />
         <span className="comune-name">{cg.label}</span>
+        <span className="comune-headline">{RISK_LABEL_IT_BY_LEVEL[cg.worstLevel]}</span>
         <span className="comune-meta">
           {cg.cells.length} {cg.cells.length === 1 ? "cella" : "celle"} ·{" "}
           {cg.minScore.toFixed(2)}–{cg.maxScore.toFixed(2)}

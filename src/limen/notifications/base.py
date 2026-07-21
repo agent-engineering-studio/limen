@@ -50,6 +50,8 @@ class AlertedCell(BaseModel):
     level: RiskLevel
     priority: float = Field(..., ge=0.0)
     map_url: str | None = None
+    # Comune (ISTAT) name for context — enriched by the dispatch executor.
+    comune: str | None = None
 
 
 class AlertPayload(BaseModel):
@@ -148,6 +150,7 @@ def build_alert_payload(
     prioritised: list[tuple[CellRiskRecord, float]],
     settings: AlertSettings,
     dispatched_at: datetime,
+    comuni: dict[str, str] | None = None,
 ) -> AlertPayload:
     """Assemble an :class:`AlertPayload`.
 
@@ -161,6 +164,7 @@ def build_alert_payload(
             the payload so channels can stamp the human-facing message.
     """
     take = prioritised[: settings.top_k]
+    comuni = comuni or {}
     cells = [
         AlertedCell(
             cell_id=record.cell_id,
@@ -172,6 +176,7 @@ def build_alert_payload(
                 aoi_id=assessment.aoi_id,
                 cell_id=record.cell_id,
             ),
+            comune=comuni.get(record.cell_id),
         )
         for record, priority in take
     ]
