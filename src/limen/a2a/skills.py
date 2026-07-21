@@ -57,6 +57,17 @@ async def _national_report(_: dict[str, Any]) -> Any:
     return await tools.national_report()
 
 
+async def _comune_risk(p: dict[str, Any]) -> Any:
+    code = p.get("istat_code")
+    if not isinstance(code, str) or not code:
+        raise ValueError("comune_risk requires an 'istat_code' string param")
+    return await tools.comune_risk(code)
+
+
+async def _top_comuni(p: dict[str, Any]) -> Any:
+    return await tools.top_comuni(limit=int(p.get("limit", 10)), aoi_id=p.get("aoi_id"))
+
+
 SKILLS: dict[str, Skill] = {
     s.id: s
     for s in (
@@ -105,6 +116,24 @@ SKILLS: dict[str, Skill] = {
             handler=_recent_alerts,
             tags=("landslide", "flood", "alerts"),
             examples=("Allerte High delle ultime 12 ore",),
+        ),
+        Skill(
+            id="top_comuni",
+            name="Comuni a rischio",
+            description="Comuni con celle in allerta, ordinati per esposizione. "
+            "Parametri: 'limit', 'aoi_id'.",
+            handler=_top_comuni,
+            tags=("landslide", "flood", "comune", "ranking"),
+            examples=("I comuni più a rischio in Puglia",),
+        ),
+        Skill(
+            id="comune_risk",
+            name="Rischio di un comune",
+            description="Rollup di un comune (classe peggiore, conteggi, esposizione). "
+            "Richiede 'istat_code'.",
+            handler=_comune_risk,
+            tags=("landslide", "flood", "comune"),
+            examples=("Che rischio c'è nel comune 072006?",),
         ),
     )
 }
