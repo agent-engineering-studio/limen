@@ -6,6 +6,7 @@ import CellPopup from "./components/CellPopup";
 import ExplainerPage from "./components/ExplainerPage";
 import ForecastList from "./components/ForecastList";
 import HomePage from "./components/HomePage";
+import IntegrationsPage from "./components/IntegrationsPage";
 import LegendPanel from "./components/LegendPanel";
 import NationalStrip from "./components/NationalStrip";
 import OverlayControl from "./components/OverlayControl";
@@ -16,7 +17,7 @@ import SciencePage from "./components/SciencePage";
 import ShadowDiagnosticsPage from "./components/ShadowDiagnosticsPage";
 import ShadowPanel from "./components/ShadowPanel";
 
-type Page = "home" | "dashboard" | "explainer" | "science" | "shadow";
+type Page = "home" | "dashboard" | "explainer" | "science" | "shadow" | "integrations";
 
 function pageFromHash(): Page {
   switch (window.location.hash) {
@@ -29,6 +30,8 @@ function pageFromHash(): Page {
       return "science";
     case "#/diagnostica-ml":
       return "shadow";
+    case "#/integrazioni":
+      return "integrations";
     default:
       return "home";
   }
@@ -145,6 +148,9 @@ export function App(): JSX.Element {
           >
             Cos&apos;è Limen
           </a>
+          <a href="#/integrazioni" className={page === "integrations" ? "on" : ""}>
+            Integrazioni
+          </a>
         </nav>
         <span className="header-meta">agg. 1h · 20 regioni</span>
         <div className="auth-controls">
@@ -174,6 +180,10 @@ export function App(): JSX.Element {
       ) : page === "shadow" ? (
         <div className="explainer-area">
           <ShadowDiagnosticsPage />
+        </div>
+      ) : page === "integrations" ? (
+        <div className="explainer-area">
+          <IntegrationsPage />
         </div>
       ) : (
         <RequireAuth>{dashboard}</RequireAuth>

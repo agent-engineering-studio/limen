@@ -30,6 +30,19 @@ VPS dedicato domani — cambia solo un URL):
    | `tool_recent_alerts(threshold?, since_hours?, limit?)` | celle sopra soglia nella finestra recente |
    | `tool_national_report()` | quadro nazionale aggregato + testo pronto in `report_it` |
    | `tool_run_monitor(aoi_id, admin_token)` | lancia il workflow (admin; fail-closed senza `MCP_ADMIN_TOKEN`) |
+   | `tool_build_report(admin_token)` | genera il report HTML statico on-demand, idempotente (admin) |
+   | `tool_forecast_history(admin_token, aoi_ids?)` | persiste il trend di previsione +24/48/72h per i grafici UI (admin) |
+
+   Un secondo MCP, **`ispra-geo`** (`127.0.0.1:8765/mcp`, profilo `geodata`,
+   solo VPS), espone i dati geografici ISPRA: `hazard_at`, `iffi_query`,
+   `pai_summary`, `dataset_status`, `refresh` (admin). Lo script
+   `setup_openclaw.sh` lo registra best-effort (la probe fallisce senza il
+   profilo attivo — normale).
+
+   > **Report ricorrenti**: `tool_build_report` / `tool_forecast_history` sono
+   > per generazioni *on-demand*. La cadenza automatica è già gestita da
+   > APScheduler dentro Limen (`JOB_DAILY_REPORT`, `JOB_HTML_REPORT`,
+   > `JOB_FORECAST_HISTORY`) — non serve un cron lato OpenClaw.
 
 2. **Push — canale di notifica `webhook`**: quando Limen genera un evento
    (alert operativo, alert **PREVISIONE** a +48h, report nazionale delle 06 UTC)
@@ -139,6 +152,41 @@ reverse-proxy fidato; token dedicato, mai riusare credenziali del gateway.
   (OpenClaw li rifiuta comunque).
 - I tool MCP di lettura non alterano mai i punteggi: leggono e basta.
   Gli alert webhook sono testo deterministico — nessun LLM nel percorso.
+
+## A2A — interoperabilità con altri agent
+
+Oltre a MCP (pensato per un gateway), Limen parla **A2A**
+([Agent2Agent](https://a2a-protocol.org)) per essere scoperto e usato da agent
+di terze parti in modo standard. Montato sull'API FastAPI (nessun servizio
+extra), di sola lettura, stessa postura del risk-API pubblico.
+
+- **Agent Card**: `GET /.well-known/agent-card.json` (alias legacy
+  `agent.json`). Dichiara `capabilities.streaming = true`,
+  `pushNotifications = true` e le skill (le stesse query di `limen-ops`:
+  `national_report`, `risk_summary`, `top_risk_cells`, `cell_breakdown`,
+  `recent_alerts`). L'URL assoluto è derivato dalla richiesta o da
+  `A2A_PUBLIC_URL` (dietro reverse-proxy).
+- **Endpoint JSON-RPC 2.0**: `POST /a2a`. Metodi: `message/send` (sincrono),
+  `message/stream` (SSE), `tasks/get`, `tasks/cancel`,
+  `tasks/pushNotificationConfig/{set,get}`.
+
+Una skill si seleziona con un `DataPart` `{"skill": id, "params": {…}}` (o nei
+`metadata` del messaggio); senza nulla, il server risponde con il quadro
+nazionale.
+
+```bash
+curl -s -X POST http://127.0.0.1:8080/a2a -H 'Content-Type: application/json' -d '{
+  "jsonrpc":"2.0","id":"1","method":"message/send",
+  "params":{"message":{"role":"user","messageId":"m1",
+    "parts":[{"kind":"data","data":{"skill":"risk_summary","params":{"aoi_id":"it-puglia"}}}]}}}'
+```
+
+I task sono persistiti (`a2a_tasks`, migration 024) per `tasks/get` /
+`tasks/cancel`; se il client passa una `pushNotificationConfig`, al termine del
+task Limen fa POST del Task al webhook indicato (bearer opzionale, best-effort).
+Le skill A2A non alterano mai i punteggi — è interop di query; le mutazioni
+restano su MCP con `MCP_ADMIN_TOKEN`. La pagina UI **Integrazioni**
+(`#/integrazioni`) documenta tutto lato utente.
 
 ## Troubleshooting
 

@@ -18,10 +18,12 @@ from limen.core.logging import get_logger
 from limen.data.db import lifespan_pool
 from limen.mcp.tools import (
     AdminAuthError,
+    build_static_report,
     cell_breakdown,
     national_report,
     recent_alerts,
     risk_summary,
+    run_forecast_history,
     run_monitor,
     top_risk_cells,
 )
@@ -44,9 +46,13 @@ Read tools (open):
   national top cells, ML shadow top, 24h alert counts) + a deterministic
   Italian rendering in `report_it`.
 
-Admin tool (MCP_ADMIN_TOKEN, fail-closed):
+Admin tools (MCP_ADMIN_TOKEN, fail-closed):
 * run_monitor(aoi_id, admin_token, cell_limit?) → run the full monitoring
   workflow once for an AOI.
+* build_report(admin_token) → generate the static HTML risk report once
+  (idempotent). Recurring builds already run via APScheduler.
+* forecast_history(admin_token, aoi_ids?) → persist the per-cell forecast
+  trend (+24/48/72h) used by the sidebar / report charts.
 
 Scores come from the deterministic/ML engine and are never altered here:
 these tools read and trigger, they do not decide.
@@ -97,6 +103,26 @@ def _build_server() -> Any:
         except AdminAuthError as exc:
             log.warning("limen.mcp.run_monitor_denied", reason=str(exc))
             return {"aoi_id": aoi_id, "error": str(exc)}
+
+    @mcp.tool()
+    async def tool_build_report(admin_token: str) -> dict[str, Any]:
+        """Generate the static HTML risk report once, on demand (admin only)."""
+        try:
+            return await build_static_report(admin_token=admin_token)
+        except AdminAuthError as exc:
+            log.warning("limen.mcp.build_report_denied", reason=str(exc))
+            return {"error": str(exc)}
+
+    @mcp.tool()
+    async def tool_forecast_history(
+        admin_token: str, aoi_ids: list[str] | None = None
+    ) -> dict[str, Any]:
+        """Persist the per-cell forecast trend for the UI charts (admin only)."""
+        try:
+            return await run_forecast_history(admin_token=admin_token, aoi_ids=aoi_ids)
+        except AdminAuthError as exc:
+            log.warning("limen.mcp.forecast_history_denied", reason=str(exc))
+            return {"error": str(exc)}
 
     return mcp
 
