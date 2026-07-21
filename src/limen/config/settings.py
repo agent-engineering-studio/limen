@@ -482,6 +482,35 @@ class ClerkSettings(BaseSettings):
     authorized_parties: list[str] = Field(default_factory=list)
 
 
+class AuthSettings(BaseSettings):
+    """Database-backed auth (replaces Clerk — PA-compliant, self-hosted).
+
+    ``enabled=False`` keeps protected endpoints open (public map + dev/test).
+    When enabled, protected endpoints require a valid server-side session
+    (opaque id in an httpOnly cookie). Email verification codes reuse the
+    SMTP config of the ``email`` notification channel.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    enabled: bool = False
+    # Allow public self-registration. Off ⇒ only the admin creates accounts.
+    registration_open: bool = True
+    session_ttl_hours: int = Field(default=168, ge=1)
+    session_cookie_name: str = "limen_session"
+    # Secure=True requires HTTPS — set False only for local http dev.
+    cookie_secure: bool = True
+    cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+    # Email verification / OTP codes.
+    code_ttl_minutes: int = Field(default=15, ge=1)
+    code_length: int = Field(default=6, ge=4, le=10)
+    code_max_attempts: int = Field(default=5, ge=1)
+    # scrypt work factor (RFC 7914). n MUST be a power of two.
+    scrypt_n: int = Field(default=2**16, ge=2**14)
+    scrypt_r: int = Field(default=8, ge=1)
+    scrypt_p: int = Field(default=1, ge=1)
+
+
 class AlertSettings(BaseSettings):
     """Alert-dispatch rules used by the AlertDispatchExecutor."""
 
@@ -616,6 +645,7 @@ class Settings(BaseSettings):
     geodata: GeodataSettings = Field(default_factory=GeodataSettings)
     geoserver_source: GeoServerSourceSettings = Field(default_factory=GeoServerSourceSettings)
     clerk: ClerkSettings = Field(default_factory=ClerkSettings)
+    auth: AuthSettings = Field(default_factory=AuthSettings)
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_json: bool = False
