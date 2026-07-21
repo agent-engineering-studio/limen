@@ -14,6 +14,7 @@ from datetime import UTC, date, datetime, timedelta
 from limen.agents.executors import (
     AreaResolverExecutor,
     FireCheckExecutor,
+    FloodForecastFetchExecutor,
     MeteoFetchExecutor,
     RiskScoringExecutor,
     SeismicCheckExecutor,
@@ -77,7 +78,7 @@ async def run_forecast(
     champion = resolve_scoring_engine(settings=settings)
     challenger = resolve_challenger(settings=settings)
 
-    wf = (
+    builder = (
         WorkflowBuilder("limen-landslide-forecast")
         .add(AreaResolverExecutor(cell_limit=cell_limit))
         .add(StaticFactorsExecutor())
@@ -89,9 +90,12 @@ async def run_forecast(
         )
         .add(SeismicCheckExecutor())
         .add(FireCheckExecutor())
-        .add(RiskScoringExecutor(engine=champion))
-        .build()
     )
+    # Flood is a first-class output (#8): include the forecast flood signals so
+    # the predictive H uplift is reflected in the forecast score too.
+    if settings.enable_flood_forecast:
+        builder = builder.add(FloodForecastFetchExecutor())
+    wf = builder.add(RiskScoringExecutor(engine=champion)).build()
 
     valuation_time = datetime.now(UTC) + timedelta(hours=horizon_h)
     ctx = MonitoringContext(aoi_id=aoi_id, valuation_time=valuation_time)

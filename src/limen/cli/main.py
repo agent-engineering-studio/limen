@@ -28,6 +28,7 @@ from limen.cli.backtest import run as _run_backtest
 from limen.cli.bootstrap_static import run as _run_bootstrap_static
 from limen.cli.calibrate import run as _run_calibrate
 from limen.cli.forecast import run as _run_forecast
+from limen.cli.forecast_history import run as _run_forecast_history
 from limen.cli.geodata import build_subparser as _build_geodata_subparser
 from limen.cli.geodata import run as _run_geodata
 from limen.cli.geoserver_sync import run as _run_geoserver_sync
@@ -115,6 +116,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="fact-check archived report zones vs real landslide events (#17)",
     )
     sub.add_parser(
+        "forecast-history",
+        help="persist per-cell forecast trend (+24/48/72h, ≥Moderate) for the UI (#41)",
+    )
+    sub.add_parser(
         "mcp-serve",
         help="start the limen-ops MCP server (LIMEN_MCP_TRANSPORT=stdio|http)",
     )
@@ -171,6 +176,7 @@ def main(argv: list[str] | None = None) -> int:
         "ingest-events": _run_ingest_events,
         "mcp-serve": _run_mcp_serve,
         "verify": _run_verify,
+        "forecast-history": _run_forecast_history,
     }
     if args.command == "geodata":
         try:

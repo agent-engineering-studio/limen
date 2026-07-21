@@ -93,6 +93,18 @@ export interface AlertItem {
   priority?: number | null;
 }
 
+export interface CellHistoryPoint {
+  t: string; // ISO time
+  score: number;
+  level: RiskLevel;
+}
+
+/** Per-cell risk trend: observed past + forecast tail (#41). */
+export interface CellHistoryResponse {
+  observed: CellHistoryPoint[];
+  forecast: CellHistoryPoint[];
+}
+
 export interface AlertsResponse {
   items: AlertItem[];
 }

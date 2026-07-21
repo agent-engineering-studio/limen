@@ -9,6 +9,7 @@ import type {
   AlertsResponse,
   AoiListResponse,
   CellBreakdownResponse,
+  CellHistoryResponse,
   HealthResponse,
   LatestAssessmentResponse,
   ReliabilityResponse,
@@ -99,6 +100,18 @@ export class ApiClient {
   ): Promise<CellBreakdownResponse> {
     return this.request<CellBreakdownResponse>(
       `/api/cell/${encodeURIComponent(cellId)}/breakdown`,
+      {},
+      signal,
+    );
+  }
+
+  getCellHistory(
+    cellId: string,
+    hours = 72,
+    signal?: AbortSignal,
+  ): Promise<CellHistoryResponse> {
+    return this.request<CellHistoryResponse>(
+      `/api/cell/${encodeURIComponent(cellId)}/history?hours=${hours}`,
       {},
       signal,
     );

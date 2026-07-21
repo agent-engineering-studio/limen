@@ -298,6 +298,50 @@ async def shadow_summary(
     }
 
 
+_CELL_OBSERVED_SQL = """
+SELECT computed_at, score, class
+FROM risk_assessments
+WHERE cell_id = $1
+  AND horizon NOT LIKE '+%'
+  AND computed_at >= now() - make_interval(hours => $2::int)
+ORDER BY computed_at
+"""
+
+_CELL_FORECAST_SQL = """
+SELECT computed_at, horizon, score, class
+FROM risk_assessments
+WHERE cell_id = $1 AND pipeline_version LIKE 'v1-forecast+%'
+ORDER BY horizon
+"""
+
+
+@router.get("/api/cell/{cell_id}/history")
+async def cell_history(cell_id: str, response: Response, hours: int = 72) -> dict[str, Any]:
+    """Per-cell risk trend: observed (past `hours`) + forecast (+24/48/72h) (#41).
+
+    Forecast rows carry the run time in ``computed_at`` and the offset in
+    ``horizon`` (e.g. ``+48h``); the target time is ``computed_at + offset``.
+    """
+    from datetime import timedelta
+
+    response.headers["Cache-Control"] = "public, max-age=120"
+    async with acquire() as conn:
+        obs = await conn.fetch(_CELL_OBSERVED_SQL, cell_id, hours)
+        fc = await conn.fetch(_CELL_FORECAST_SQL, cell_id)
+
+    observed = [
+        {"t": r["computed_at"].isoformat(), "score": float(r["score"]), "level": r["class"]}
+        for r in obs
+    ]
+    forecast: list[dict[str, Any]] = []
+    for r in fc:
+        offset_h = int(str(r["horizon"]).lstrip("+").rstrip("h") or 0)
+        target = r["computed_at"] + timedelta(hours=offset_h)
+        forecast.append({"t": target.isoformat(), "score": float(r["score"]), "level": r["class"]})
+    forecast.sort(key=lambda x: x["t"])
+    return {"observed": observed, "forecast": forecast}
+
+
 @router.get("/api/shadow/reliability")
 async def shadow_reliability(
     response: Response, aoi: str | None = None, since: str | None = None
