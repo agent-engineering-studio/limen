@@ -11,6 +11,11 @@ const LAYER_ID = "limen-risk-fill";
 const SELECTED_LAYER_ID = "limen-risk-selected";
 const REGION_SOURCE_ID = "limen-region";
 const REGION_LAYER_ID = "limen-region-fill";
+const COMUNE_SOURCE_ID = "limen-comune";
+const COMUNE_LAYER_ID = "limen-comune-fill";
+const COMUNE_BADGE_ID = "limen-comune-badge";
+const COMUNE_MIN_ZOOM = 7;
+const COMUNE_MAX_ZOOM = 11;
 // Sotto questo zoom una cella da 1 km è sub-pixel: mostriamo il
 // choropleth regionale (20 poligoni) invece dei 312k poligoni cella.
 const CELL_MIN_ZOOM = 7;
@@ -134,6 +139,12 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         minzoom: 0,
         maxzoom: 10,
       },
+      [COMUNE_SOURCE_ID]: {
+        type: "vector",
+        tiles: [`${tileserv}/public.mv_comune_risk/{z}/{x}/{y}.pbf`],
+        minzoom: 6,
+        maxzoom: 12,
+      },
       "wms-pai": {
         type: "raster",
         tiles: [wmsTileUrl(config.geoserverWmsUrl, WMS_PAI_LAYER)],
@@ -173,6 +184,38 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
           "fill-color": maplibreColorMatch() as never,
           "fill-opacity": 0.45,
           "fill-outline-color": "#555",
+        },
+      },
+      {
+        id: COMUNE_LAYER_ID,
+        type: "fill",
+        source: COMUNE_SOURCE_ID,
+        "source-layer": "public.mv_comune_risk",
+        minzoom: COMUNE_MIN_ZOOM,
+        maxzoom: COMUNE_MAX_ZOOM,
+        paint: {
+          "fill-color": maplibreColorMatch("worst_class") as never,
+          "fill-opacity": 0.5,
+          "fill-outline-color": "#ffffff",
+        },
+      },
+      {
+        // Count of alerting cells — only on High+ comuni (keeps it uncluttered).
+        id: COMUNE_BADGE_ID,
+        type: "symbol",
+        source: COMUNE_SOURCE_ID,
+        "source-layer": "public.mv_comune_risk",
+        minzoom: COMUNE_MIN_ZOOM,
+        maxzoom: COMUNE_MAX_ZOOM,
+        filter: ["in", ["get", "worst_class"], ["literal", ["High", "VeryHigh"]]],
+        layout: {
+          "text-field": ["to-string", ["get", "n_alert"]],
+          "text-size": 12,
+        },
+        paint: {
+          "text-color": "#ffffff",
+          "text-halo-color": "#1a2733",
+          "text-halo-width": 1.5,
         },
       },
       {
@@ -278,6 +321,17 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       map.getCanvas().style.cursor = "pointer";
     });
     map.on("mouseleave", REGION_LAYER_ID, () => {
+      map.getCanvas().style.cursor = "";
+    });
+
+    // Comune drill-down: click a comune → zoom into its cells.
+    map.on("click", COMUNE_LAYER_ID, (e: maplibregl.MapMouseEvent) => {
+      map.easeTo({ center: e.lngLat, zoom: CELL_MIN_ZOOM + 2 });
+    });
+    map.on("mouseenter", COMUNE_LAYER_ID, () => {
+      map.getCanvas().style.cursor = "pointer";
+    });
+    map.on("mouseleave", COMUNE_LAYER_ID, () => {
       map.getCanvas().style.cursor = "";
     });
 

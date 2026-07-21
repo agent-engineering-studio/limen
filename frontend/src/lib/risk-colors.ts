@@ -68,12 +68,13 @@ export const RISK_LABEL_IT_BY_LEVEL: Record<RiskLevel, string> =
   >;
 
 /**
- * MapLibre `match` expression for paint-fill-color binding against the
- * pg_tileserv layer's `risk_level` attribute. Cells without an
- * assessment yet fall through to a neutral light grey.
+ * MapLibre `match` expression for paint-fill-color binding against a
+ * pg_tileserv layer's class attribute (`risk_level` for cell/region tiles,
+ * `worst_class` for the comune rollup). Features without an assessment yet
+ * fall through to a neutral light grey.
  */
-export function maplibreColorMatch(): unknown {
-  const stops: unknown[] = ["match", ["get", "risk_level"]];
+export function maplibreColorMatch(prop = "risk_level"): unknown {
+  const stops: unknown[] = ["match", ["get", prop]];
   for (const c of RISK_CLASSES) {
     stops.push(c.level, c.color);
   }
