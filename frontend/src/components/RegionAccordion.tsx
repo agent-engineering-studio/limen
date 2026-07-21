@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { defaultApiClient } from "../lib/api-client";
 import { RISK_COLOR_BY_LEVEL, RISK_LABEL_IT_BY_LEVEL } from "../lib/risk-colors";
 import type { AlertItem } from "../types";
+import CellTrendSparkline from "./CellTrendSparkline";
 
 export interface CellSelection {
   cellId: string;
@@ -104,6 +105,83 @@ export interface RegionAccordionProps {
   readonly selectedCellId?: string | null;
 }
 
+/** One comune: collapsed summary; cells (with 72h trend) render only when open
+ * so the per-cell history fetch is lazy. */
+function ComuneSection({
+  cg,
+  selectedCellId,
+  onCellSelect,
+}: {
+  cg: ComuneGroup;
+  selectedCellId?: string | null;
+  onCellSelect?: (sel: CellSelection) => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  return (
+    <details
+      className="comune-group"
+      onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
+    >
+      <summary>
+        <span
+          className="cell-dot"
+          style={{ background: RISK_COLOR_BY_LEVEL[cg.worstLevel] }}
+          aria-hidden
+        />
+        <span className="comune-name">{cg.label}</span>
+        <span className="comune-meta">
+          {cg.cells.length} {cg.cells.length === 1 ? "cella" : "celle"} ·{" "}
+          {cg.minScore.toFixed(2)}–{cg.maxScore.toFixed(2)}
+          {cg.exposedCount > 0 ? ` · ${cg.exposedCount} 🏠🛣` : ""}
+        </span>
+      </summary>
+      {open ? (
+        <ul>
+          {cg.cells.map((it) => (
+            <li key={it.cell_id}>
+              <button
+                type="button"
+                className={`cell-row ${selectedCellId === it.cell_id ? "on" : ""}`}
+                onClick={() =>
+                  onCellSelect?.({
+                    cellId: it.cell_id,
+                    lon: it.lon ?? null,
+                    lat: it.lat ?? null,
+                    score: it.score,
+                    priority: it.priority,
+                    exposure: it.exposure,
+                    place: it.place,
+                  })
+                }
+              >
+                <span
+                  className="cell-dot"
+                  style={{ background: RISK_COLOR_BY_LEVEL[it.level] }}
+                  aria-hidden
+                />
+                <span
+                  className="cell-place"
+                  title={`riquadro di griglia 1 km — riga ${cellIndex(it.cell_id)[0]}, colonna ${cellIndex(it.cell_id)[1]}`}
+                >
+                  riquadro {cellIndex(it.cell_id)[0]}·{cellIndex(it.cell_id)[1]}
+                  {(it.exposure ?? "").split(", ").filter(Boolean).map((tag) => (
+                    <span key={tag} className="exposure-chip">
+                      {/^(infrastrutture|statale|autostrada)/.test(tag) ? "🛣" : tag.startsWith("ferrovia") ? "🚆" : "🏠"} {tag}
+                    </span>
+                  ))}
+                </span>
+                <span className="mono cell-score">{it.score.toFixed(2)}</span>
+                <span className="cell-level">{RISK_LABEL_IT_BY_LEVEL[it.level]}</span>
+              </button>
+              <CellTrendSparkline cellId={it.cell_id} />
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </details>
+  );
+}
+
 /**
  * Region-grouped view of the latest per-cell alerts (deduped, worst
  * first). Native <details> keeps the sidebar scannable: the region row
@@ -199,63 +277,12 @@ export function RegionAccordion(props: RegionAccordionProps): JSX.Element {
                 </span>
               </summary>
               {comuni.map((cg) => (
-                <details key={cg.label} className="comune-group">
-                  <summary>
-                    <span
-                      className="cell-dot"
-                      style={{ background: RISK_COLOR_BY_LEVEL[cg.worstLevel] }}
-                      aria-hidden
-                    />
-                    <span className="comune-name">{cg.label}</span>
-                    <span className="comune-meta">
-                      {cg.cells.length} {cg.cells.length === 1 ? "cella" : "celle"} ·{" "}
-                      {cg.minScore.toFixed(2)}–{cg.maxScore.toFixed(2)}
-                      {cg.exposedCount > 0 ? ` · ${cg.exposedCount} 🏠🛣` : ""}
-                    </span>
-                  </summary>
-                  <ul>
-                    {cg.cells.map((it) => (
-                      <li key={it.cell_id}>
-                        <button
-                          type="button"
-                          className={`cell-row ${selectedCellId === it.cell_id ? "on" : ""}`}
-                          onClick={() =>
-                            onCellSelect?.({
-                              cellId: it.cell_id,
-                              lon: it.lon ?? null,
-                              lat: it.lat ?? null,
-                              score: it.score,
-                              priority: it.priority,
-                              exposure: it.exposure,
-                              place: it.place,
-                            })
-                          }
-                        >
-                          <span
-                            className="cell-dot"
-                            style={{ background: RISK_COLOR_BY_LEVEL[it.level] }}
-                            aria-hidden
-                          />
-                          <span
-                            className="cell-place"
-                            title={`riquadro di griglia 1 km — riga ${cellIndex(it.cell_id)[0]}, colonna ${cellIndex(it.cell_id)[1]}`}
-                          >
-                            riquadro {cellIndex(it.cell_id)[0]}·{cellIndex(it.cell_id)[1]}
-                            {(it.exposure ?? "").split(", ").filter(Boolean).map((tag) => (
-                              <span key={tag} className="exposure-chip">
-                                {/^(infrastrutture|statale|autostrada)/.test(tag) ? "🛣" : tag.startsWith("ferrovia") ? "🚆" : "🏠"} {tag}
-                              </span>
-                            ))}
-                          </span>
-                          <span className="mono cell-score">{it.score.toFixed(2)}</span>
-                          <span className="cell-level">
-                            {RISK_LABEL_IT_BY_LEVEL[it.level]}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
+                <ComuneSection
+                  key={cg.label}
+                  cg={cg}
+                  selectedCellId={selectedCellId}
+                  onCellSelect={onCellSelect}
+                />
               ))}
               <RegionalAnalysis aoiId={g.aoiId} />
             </details>

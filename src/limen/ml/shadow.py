@@ -165,9 +165,7 @@ class ReliabilitySummary:
     bins: list[ReliabilityBin]
 
 
-def reliability_bins(
-    pairs: list[tuple[float, bool]], *, n_bins: int = 10
-) -> list[ReliabilityBin]:
+def reliability_bins(pairs: list[tuple[float, bool]], *, n_bins: int = 10) -> list[ReliabilityBin]:
     """Bin (predicted probability, observed outcome) pairs for a calibration
     curve. Pure. Empty bins are dropped. ``predicted_mean`` vs ``observed_freq``
     on the diagonal ⇒ well-calibrated."""
