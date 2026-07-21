@@ -16,7 +16,10 @@ from limen.auth.email import send_verification_code
 from limen.auth.models import (
     PURPOSE_VERIFY_EMAIL,
     ROLE_VIEWER,
+    STATUS_DISABLED,
+    VALID_ROLES,
     AuthUser,
+    PublicUser,
 )
 from limen.auth.passwords import hash_password, verify_password
 from limen.auth.tokens import generate_code, hash_code, new_session_token, session_id, verify_code
@@ -134,3 +137,64 @@ async def login(
 
 async def logout(token: str) -> None:
     await repo.delete_session(session_id(token))
+
+
+# --- admin (require_role("admin")) -------------------------------------------
+
+
+def _validate_roles(roles: list[str]) -> None:
+    invalid = [r for r in roles if r not in VALID_ROLES]
+    if invalid:
+        raise AuthError(400, f"ruoli non validi: {', '.join(invalid)}")
+
+
+def _to_public(user: AuthUser) -> PublicUser:
+    return PublicUser(
+        id=user.id,
+        email=user.email,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        email_verified=user.email_verified,
+        status=user.status,
+        roles=user.roles,
+    )
+
+
+async def admin_list_users(*, query: str | None, limit: int, offset: int) -> list[PublicUser]:
+    return await repo.list_users(query=query, limit=max(1, min(limit, 200)), offset=max(0, offset))
+
+
+async def admin_create_user(
+    *,
+    first_name: str,
+    last_name: str,
+    email: str,
+    password: str,
+    roles: list[str],
+    settings: Settings,
+) -> PublicUser:
+    _validate_roles(roles)
+    if await repo.get_by_email(email) is not None:
+        raise AuthError(409, "esiste già un utente con questa email")
+    user = await repo.create_user(
+        email=email,
+        first_name=first_name,
+        last_name=last_name,
+        password_hash=hash_password(password, settings.auth),
+        roles=roles,
+        email_verified=True,  # admin-created accounts skip email verification
+    )
+    log.info("auth.admin.created", user_id=user.id, roles=roles)
+    return _to_public(user)
+
+
+async def admin_update_user(*, user_id: str, roles: list[str], status: str) -> PublicUser:
+    _validate_roles(roles)
+    updated = await repo.update_user(user_id, roles=roles, status=status)
+    if updated is None:
+        raise AuthError(404, "utente non trovato")
+    if status == STATUS_DISABLED:
+        # Disabling takes effect immediately — drop the user's live sessions.
+        await repo.delete_user_sessions(user_id)
+    log.info("auth.admin.updated", user_id=user_id, roles=roles, status=status)
+    return _to_public(updated)

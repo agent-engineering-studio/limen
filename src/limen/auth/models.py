@@ -110,3 +110,37 @@ class PublicUser(BaseModel):
 
 class MeResponse(BaseModel):
     user: PublicUser
+
+
+class AdminCreateUserRequest(BaseModel):
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    email: str
+    password: str = Field(min_length=_MIN_PASSWORD, max_length=200)
+    roles: list[str] = Field(default_factory=lambda: [ROLE_VIEWER])
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v: str) -> str:
+        return _normalise_email(v)
+
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def _strip(cls, v: str) -> str:
+        return v.strip()
+
+
+class AdminUpdateUserRequest(BaseModel):
+    roles: list[str]
+    status: str = STATUS_ACTIVE
+
+    @field_validator("status")
+    @classmethod
+    def _status(cls, v: str) -> str:
+        if v not in (STATUS_ACTIVE, STATUS_DISABLED):
+            raise ValueError("status deve essere 'active' o 'disabled'")
+        return v
+
+
+class UserListResponse(BaseModel):
+    users: list[PublicUser]

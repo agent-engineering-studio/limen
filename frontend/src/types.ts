@@ -44,6 +44,20 @@ export interface RegisterBody {
   password: string;
 }
 
+export interface AdminUser extends AuthUser {
+  created_at?: string | null;
+}
+
+export interface UserListResponse {
+  users: AdminUser[];
+}
+
+export interface AdminCreateBody extends RegisterBody {
+  roles: string[];
+}
+
+export const ALL_ROLES: readonly string[] = ["admin", "ml-ops", "operatore", "viewer"] as const;
+
 export interface AoiListResponse {
   items: AoiSummary[];
 }
