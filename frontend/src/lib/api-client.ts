@@ -12,6 +12,7 @@ import type {
   CellHistoryResponse,
   AdminCreateBody,
   AdminUser,
+  AuthConfig,
   HealthResponse,
   LatestAssessmentResponse,
   MeResponse,
@@ -206,6 +207,10 @@ export class ApiClient {
 
   getMe(signal?: AbortSignal): Promise<MeResponse> {
     return this.request<MeResponse>("/api/auth/me", {}, signal);
+  }
+
+  getAuthConfig(signal?: AbortSignal): Promise<AuthConfig> {
+    return this.request<AuthConfig>("/api/auth/config", {}, signal);
   }
 
   // --- admin ---

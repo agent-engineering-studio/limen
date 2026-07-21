@@ -37,12 +37,14 @@ async def create_user(
     password_hash: str | None,
     roles: list[str],
     email_verified: bool = False,
+    spid_subject: str | None = None,
 ) -> AuthUser:
     async with acquire() as conn:
         row = await conn.fetchrow(
             f"""
-            INSERT INTO users (email, first_name, last_name, password_hash, roles, email_verified)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO users
+                (email, first_name, last_name, password_hash, roles, email_verified, spid_subject)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING {_USER_COLS}
             """,
             email,
@@ -51,8 +53,26 @@ async def create_user(
             password_hash,
             roles,
             email_verified,
+            spid_subject,
         )
     return _to_user(row)
+
+
+async def get_by_spid_subject(subject: str) -> AuthUser | None:
+    async with acquire() as conn:
+        row = await conn.fetchrow(
+            f"SELECT {_USER_COLS} FROM users WHERE spid_subject = $1", subject
+        )
+    return _to_user(row) if row else None
+
+
+async def link_spid_subject(user_id: str, subject: str) -> None:
+    async with acquire() as conn:
+        await conn.execute(
+            "UPDATE users SET spid_subject = $2, updated_at = now() WHERE id = $1::uuid",
+            user_id,
+            subject,
+        )
 
 
 async def get_by_email(email: str) -> AuthUser | None:

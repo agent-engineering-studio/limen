@@ -9,7 +9,7 @@ httpOnly session cookie; the browser never sees a token in JS.
 from __future__ import annotations
 
 from fastapi import APIRouter, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from limen.auth import service
 from limen.auth.deps import (
@@ -27,6 +27,8 @@ from limen.auth.models import (
     ResendCodeRequest,
     VerifyEmailRequest,
 )
+from limen.auth.spid import SpidError, build_authorization_url
+from limen.auth.tokens import new_session_token
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -101,3 +103,53 @@ async def logout(request: Request, response: Response, settings: SettingsDep) ->
 @router.get("/me", response_model=MeResponse)
 async def me(user: RequireUser) -> MeResponse:
     return MeResponse(user=_public(user))
+
+
+_SPID_STATE_COOKIE = "limen_spid_state"
+
+
+@router.get("/config")
+async def auth_config(settings: SettingsDep) -> dict[str, bool]:
+    """Public: which login providers are available (for the SPA to render)."""
+    return {"spid_enabled": settings.spid.configured}
+
+
+@router.get("/spid/login")
+async def spid_login(settings: SettingsDep) -> Response:
+    if not settings.spid.configured:
+        raise service.AuthError(404, "SPID non configurato")
+    state = new_session_token()
+    url = build_authorization_url(settings.spid, state=state, nonce=new_session_token())
+    resp = RedirectResponse(url, status_code=307)
+    resp.set_cookie(
+        _SPID_STATE_COOKIE,
+        state,
+        max_age=600,
+        httponly=True,
+        secure=settings.auth.cookie_secure,
+        samesite="lax",
+        path="/",
+    )
+    return resp
+
+
+@router.get("/spid/callback")
+async def spid_callback(request: Request, code: str, state: str, settings: SettingsDep) -> Response:
+    if not settings.spid.configured:
+        raise service.AuthError(404, "SPID non configurato")
+    expected = request.cookies.get(_SPID_STATE_COOKIE)
+    if not expected or expected != state:
+        raise service.AuthError(400, "state SPID non valido")
+    try:
+        _user, token = await service.spid_complete(
+            code=code,
+            user_agent=request.headers.get("user-agent"),
+            ip=request.client.host if request.client else None,
+            settings=settings,
+        )
+    except SpidError as exc:
+        raise service.AuthError(502, f"login SPID fallito: {exc}") from exc
+    resp = RedirectResponse(settings.spid.post_login_url, status_code=303)
+    set_session_cookie(resp, token, settings.auth)
+    resp.delete_cookie(_SPID_STATE_COOKIE, path="/")
+    return resp

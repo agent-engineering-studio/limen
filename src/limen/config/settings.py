@@ -515,6 +515,40 @@ class AuthSettings(BaseSettings):
     scrypt_p: int = Field(default=1, ge=1)
 
 
+class SpidSettings(BaseSettings):
+    """SPID / CIE login via OIDC (seam — fase D).
+
+    Disabled until the OIDC client is configured. Full SPID needs an AgID-
+    accredited Service Provider + a SAML/OIDC proxy or aggregator; this seam
+    speaks standard OIDC authorization-code so it can be wired to that proxy
+    when accreditation lands. ``configured`` gates the whole flow (endpoints
+    fail closed, the frontend button stays disabled).
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    client_id: str | None = None
+    client_secret: SecretStr | None = None
+    issuer: str | None = None
+    authorization_endpoint: str | None = None
+    token_endpoint: str | None = None
+    userinfo_endpoint: str | None = None
+    redirect_uri: str | None = None
+    scopes: list[str] = Field(default_factory=lambda: ["openid", "profile", "email"])
+    # Where the browser lands after a successful SPID login (frontend route).
+    post_login_url: str = "http://localhost:5173/#/dashboard"
+
+    @property
+    def configured(self) -> bool:
+        return bool(
+            self.client_id
+            and self.client_secret
+            and self.authorization_endpoint
+            and self.token_endpoint
+            and self.redirect_uri
+        )
+
+
 class AlertSettings(BaseSettings):
     """Alert-dispatch rules used by the AlertDispatchExecutor."""
 
@@ -650,6 +684,7 @@ class Settings(BaseSettings):
     geoserver_source: GeoServerSourceSettings = Field(default_factory=GeoServerSourceSettings)
     clerk: ClerkSettings = Field(default_factory=ClerkSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
+    spid: SpidSettings = Field(default_factory=SpidSettings)
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_json: bool = False

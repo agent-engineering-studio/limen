@@ -2,10 +2,11 @@
 // verifica email tramite codice. Form controllati, messaggi in italiano.
 // SPID: bottone presente ma disabilitato (arriva nella fase D, seam OIDC).
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { ApiClientError, defaultApiClient } from "../lib/api-client";
 import { useAuth } from "../lib/auth";
+import { config } from "../lib/env";
 
 function errorMessage(err: unknown): string {
   if (err instanceof ApiClientError) {
@@ -17,6 +18,25 @@ function errorMessage(err: unknown): string {
 }
 
 function SpidButton(): JSX.Element {
+  const [enabled, setEnabled] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    defaultApiClient
+      .getAuthConfig()
+      .then((c) => alive && setEnabled(c.spid_enabled))
+      .catch(() => alive && setEnabled(false));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (enabled) {
+    return (
+      <a className="btn-ghost auth-spid" href={`${config.apiUrl}/api/auth/spid/login`}>
+        Entra con SPID
+      </a>
+    );
+  }
   return (
     <button type="button" className="btn-ghost auth-spid" disabled title="Disponibile a breve">
       Entra con SPID <span className="auth-soon">(in arrivo)</span>

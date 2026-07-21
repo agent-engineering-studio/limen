@@ -1,14 +1,15 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-const { login, register } = vi.hoisted(() => ({
+const { login, register, getAuthConfig } = vi.hoisted(() => ({
   login: vi.fn(() => Promise.resolve()),
   register: vi.fn(() => Promise.resolve({ message: "ok" })),
+  getAuthConfig: vi.fn(() => Promise.resolve({ spid_enabled: false })),
 }));
 vi.mock("../lib/auth", () => ({ useAuth: () => ({ login }) }));
 vi.mock("../lib/api-client", () => ({
   ApiClientError: class extends Error {},
-  defaultApiClient: { register },
+  defaultApiClient: { register, getAuthConfig },
 }));
 
 import { LoginPage, RegisterPage, VerifyEmailPage } from "../components/AuthPages";
