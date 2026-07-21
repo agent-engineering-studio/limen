@@ -54,7 +54,7 @@
 | API has no business logic | Endpoints under `src/limen/api/endpoints/` only call the Phase-4 workflow or the Phase-1 repos. New behaviour goes in `agents/` or `core/`, never in route handlers. |
 | DI not globals | Everything routes need is in `AppDependencies` injected via FastAPI `Depends()`. No `from limen.x import _GLOBAL_THING` inside endpoints. |
 | APScheduler not pg_cron | Periodic jobs (hourly monitoring, weekly ISPRA sync, cache cleanup when configured) run in-process via APScheduler so the same code works on Neon. |
-| Frontend = Vite (no Next.js) | Phase 6 ships a public read-only map. Vite + React + MapLibre is the right surface; Next.js adds an unneeded Node server / RSC overhead. When auth lands (deferred §1.6), add `@clerk/clerk-react` to the same SPA — Clerk works with Vite natively. |
+| Frontend = Vite (no Next.js) | Phase 6 ships a public read-only map. Vite + React + MapLibre is the right surface; Next.js adds an unneeded Node server / RSC overhead. Auth is **database-backed** (Clerk removed — not PA-compliant): session cookie via `/api/auth/*`, `AuthProvider`/`useAuth` in the SPA, roles from `GET /api/auth/me`. See issue #49 + `src/limen/auth/`. |
 | Tile pipeline | `mv_latest_risk` materialised view joining `grid_cells` + latest per-cell `risk_assessments`. **Always refresh via `refresh_mv_latest_risk()`** (PersistResult executor calls it). Never `REFRESH MATERIALIZED VIEW mv_latest_risk` directly. |
 | Risk palette = ColorBrewer YlOrRd, **not colour-only** | The 5-class legend pairs every colour with the Italian label and the score range. Don't introduce green/red without checking WCAG-AA contrast and a colourblind simulator. |
 | Notifications = Strategy + safe gather | New channels implement `NotificationChannel` (see `notifications/base.py`). The dispatcher MUST run them via `asyncio.gather` with a `_send_safe` wrapper — one channel raising can NEVER abort the others or the workflow. |
@@ -242,8 +242,9 @@ extension points already:
 - V2 ML scoring engine (drop-in replacement of
   `MultiFactorScoringEngine` consuming the same `CellFeatureBundle`).
 - Knowledge-graph grounding of the briefing — V2.x.
-- Authentication via Clerk (`@clerk/clerk-react` on the same Vite SPA) —
-  see memory `production-stack`, deferred per §1.6.
+- Authentication is **database-backed** (Clerk removed — not PA-compliant):
+  see memory `auth-strategy` + issue #49. Phase A (backend) + B (frontend)
+  landed; admin dashboard (C) and SPID OIDC seam (D) remain.
 - ML/MLOps for V2 — out of scope for V1.5.
 - DEM derivatives (TINITALY → slope/aspect/curvature/TWI), CORINE, ISPRA Carta Geologica
   vettoriale: `cell_static_factors` columns stay NULL until the raster/vector ingest

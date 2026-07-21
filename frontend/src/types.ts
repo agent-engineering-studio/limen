@@ -18,6 +18,32 @@ export interface AoiSummary {
   kind: string | null;
 }
 
+// --- auth (mirror src/limen/auth/models.py) ---
+export interface AuthUser {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  email_verified: boolean;
+  status: string;
+  roles: string[];
+}
+
+export interface MeResponse {
+  user: AuthUser;
+}
+
+export interface MessageResponse {
+  message: string;
+}
+
+export interface RegisterBody {
+  first_name: string;
+  last_name: string;
+  email: string;
+  password: string;
+}
+
 export interface AoiListResponse {
   items: AoiSummary[];
 }

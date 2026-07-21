@@ -191,9 +191,13 @@ class ApiSettings(BaseSettings):
 
     host: str = "0.0.0.0"
     port: int = Field(default=8080, ge=1, le=65535)
-    # Default CORS is permissive because Phase 5 is intentionally
-    # auth-less and serves a public map. Tighten in production via env.
-    cors_origins: list[str] = Field(default_factory=lambda: ["*"])
+    # Cookie-based auth needs credentialed CORS, which browsers forbid with a
+    # wildcard origin — so we list explicit origins (the Vite dev server by
+    # default). In a same-origin deploy (frontend served by the API/nginx) CORS
+    # is moot. Override for a real domain via API__CORS_ORIGINS.
+    cors_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"]
+    )
     pg_tileserv_url: str | None = None
     otel_otlp_endpoint: str | None = None
     otel_service_name: str = "limen-api"

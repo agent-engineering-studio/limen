@@ -325,6 +325,77 @@ html, body, #root {
   padding-right: 16px;
 }
 
+/* auth (accedi / registrati / verifica) */
+.auth-form {
+  max-width: 420px;
+  margin: 48px auto;
+  padding: 28px 26px 32px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+}
+.auth-form h2 {
+  margin: 0 0 16px;
+  font-size: 22px;
+}
+.auth-form form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.auth-form label {
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 10px;
+}
+.auth-form input {
+  padding: 9px 11px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  font-size: 15px;
+}
+.auth-form .btn-primary {
+  margin-top: 18px;
+}
+.auth-error {
+  color: #bd0026;
+  font-size: 13.5px;
+  margin: 10px 0 0;
+}
+.auth-notice {
+  color: #2e7d32;
+  font-size: 13.5px;
+  margin: 10px 0 0;
+}
+.auth-alt {
+  margin-top: 14px;
+}
+.auth-spid {
+  width: 100%;
+}
+.auth-soon {
+  opacity: 0.7;
+  font-size: 0.85em;
+}
+.auth-links {
+  margin-top: 16px;
+  font-size: 14px;
+}
+.auth-linkbtn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  text-decoration: underline;
+}
+.auth-who {
+  font-size: 13px;
+  color: #3d4654;
+  margin-right: 10px;
+}
+
 /* simulatore */
 .sim {
   background: var(--panel);

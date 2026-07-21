@@ -1,10 +1,8 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@clerk/react", () => ({
-  Show: ({ when, children }: { when: string; children: React.ReactNode }) =>
-    when === "signed-out" ? <>{children}</> : null,
-  SignInButton: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+vi.mock("../lib/auth", () => ({
+  useAuth: () => ({ user: null, ready: true }),
 }));
 
 vi.mock("../lib/api-client", () => ({

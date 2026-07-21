@@ -12,6 +12,9 @@ import type {
   CellHistoryResponse,
   HealthResponse,
   LatestAssessmentResponse,
+  MeResponse,
+  MessageResponse,
+  RegisterBody,
   ReliabilityResponse,
   ShadowSummaryResponse,
 } from "../types";
@@ -53,6 +56,8 @@ export class ApiClient {
   ): Promise<T> {
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       ...init,
+      // Session cookie travels with every request (auth is cookie-based).
+      credentials: "include",
       signal: signal ?? init.signal ?? null,
       headers: {
         Accept: "application/json",
@@ -160,6 +165,39 @@ export class ApiClient {
 
   getShadowReliability(signal?: AbortSignal): Promise<ReliabilityResponse> {
     return this.request<ReliabilityResponse>("/api/shadow/reliability", {}, signal);
+  }
+
+  // --- auth ---
+  private post<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+    return this.request<T>(
+      path,
+      { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } },
+      signal,
+    );
+  }
+
+  register(body: RegisterBody): Promise<MessageResponse> {
+    return this.post<MessageResponse>("/api/auth/register", body);
+  }
+
+  verifyEmail(email: string, code: string): Promise<MessageResponse> {
+    return this.post<MessageResponse>("/api/auth/verify-email", { email, code });
+  }
+
+  resendCode(email: string): Promise<MessageResponse> {
+    return this.post<MessageResponse>("/api/auth/resend-code", { email });
+  }
+
+  login(email: string, password: string): Promise<MeResponse> {
+    return this.post<MeResponse>("/api/auth/login", { email, password });
+  }
+
+  logout(): Promise<MessageResponse> {
+    return this.post<MessageResponse>("/api/auth/logout", {});
+  }
+
+  getMe(signal?: AbortSignal): Promise<MeResponse> {
+    return this.request<MeResponse>("/api/auth/me", {}, signal);
   }
 }
 

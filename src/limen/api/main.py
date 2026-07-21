@@ -138,7 +138,9 @@ def _apply_middleware(app: FastAPI, settings: Settings) -> None:
         allow_origins=settings.api.cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
-        allow_credentials=False,
+        # Session cookie is sent cross-origin from the SPA — requires
+        # credentialed CORS (and thus explicit, non-wildcard origins above).
+        allow_credentials=True,
     )
 
 
