@@ -58,6 +58,47 @@ export function groupByRegion(items: AlertItem[]): RegionGroup[] {
   return groups;
 }
 
+export interface ComuneGroup {
+  place: string | null; // null = cells without a municipality
+  label: string;
+  cells: AlertItem[];
+  minScore: number;
+  maxScore: number;
+  worstLevel: AlertItem["level"]; // level of the highest-scoring cell
+  exposedCount: number;
+}
+
+/** Sub-group a region's cells by comune, worst first — pure, unit-tested.
+ * Cells without a `place` land in a single "fuori comune" bucket. */
+export function groupByComune(cells: AlertItem[]): ComuneGroup[] {
+  const prio = (c: AlertItem): number => c.priority ?? c.score;
+  const by = new Map<string, AlertItem[]>();
+  for (const c of cells) {
+    const key = c.place ?? "";
+    const list = by.get(key) ?? [];
+    list.push(c);
+    by.set(key, list);
+  }
+  const groups: ComuneGroup[] = [];
+  for (const [key, list] of by) {
+    list.sort((a, b) => prio(b) - prio(a));
+    const top = [...list].sort((a, b) => b.score - a.score)[0]!;
+    const scores = list.map((c) => c.score);
+    groups.push({
+      place: key === "" ? null : key,
+      label: key === "" ? "Fuori comune / griglia" : key,
+      cells: list,
+      minScore: Math.min(...scores),
+      maxScore: Math.max(...scores),
+      worstLevel: top.level,
+      exposedCount: list.filter((c) => c.exposure).length,
+    });
+  }
+  const maxPrio = (cg: ComuneGroup): number => Math.max(...cg.cells.map(prio));
+  groups.sort((a, b) => maxPrio(b) - maxPrio(a));
+  return groups;
+}
+
 export interface RegionAccordionProps {
   readonly onCellSelect?: (sel: CellSelection) => void;
   readonly selectedCellId?: string | null;
@@ -139,75 +180,87 @@ export function RegionAccordion(props: RegionAccordionProps): JSX.Element {
           Nessuna cella Moderate o superiore nelle ultime 72 ore.
         </p>
       ) : (
-        groups.map((g, i) => (
-          <details key={g.aoiId} className="region-group" open={i === 0}>
-            <summary>
-              <span
-                className="alert-level-bar"
-                style={{ background: RISK_COLOR_BY_LEVEL[g.maxLevel] }}
-                aria-hidden
-              />
-              <span className="region-name">{g.name}</span>
-              <span className="region-meta">
-                {g.cells.length} {g.cells.length === 1 ? "cella" : "celle"}
-                {(() => {
-                  const esposte = g.cells.filter((c) => c.exposure).length;
-                  return esposte > 0 ? ` · ${esposte} presso abitati/strade` : "";
-                })()}
-              </span>
-            </summary>
-            <ul>
-              {g.cells.slice(0, 30).map((it) => (
-                <li key={it.cell_id}>
-                  <button
-                    type="button"
-                    className={`cell-row ${selectedCellId === it.cell_id ? "on" : ""}`}
-                    onClick={() =>
-                      onCellSelect?.({
-                        cellId: it.cell_id,
-                        lon: it.lon ?? null,
-                        lat: it.lat ?? null,
-                        score: it.score,
-                        priority: it.priority,
-                        exposure: it.exposure,
-                        place: it.place,
-                      })
-                    }
-                  >
+        groups.map((g, i) => {
+          const comuni = groupByComune(g.cells);
+          const esposte = g.cells.filter((c) => c.exposure).length;
+          return (
+            <details key={g.aoiId} className="region-group" open={i === 0}>
+              <summary>
+                <span
+                  className="alert-level-bar"
+                  style={{ background: RISK_COLOR_BY_LEVEL[g.maxLevel] }}
+                  aria-hidden
+                />
+                <span className="region-name">{g.name}</span>
+                <span className="region-meta">
+                  {comuni.length} {comuni.length === 1 ? "comune" : "comuni"} ·{" "}
+                  {g.cells.length} {g.cells.length === 1 ? "cella" : "celle"}
+                  {esposte > 0 ? ` · ${esposte} presso abitati/strade` : ""}
+                </span>
+              </summary>
+              {comuni.map((cg) => (
+                <details key={cg.label} className="comune-group">
+                  <summary>
                     <span
                       className="cell-dot"
-                      style={{ background: RISK_COLOR_BY_LEVEL[it.level] }}
+                      style={{ background: RISK_COLOR_BY_LEVEL[cg.worstLevel] }}
                       aria-hidden
                     />
-                    <span
-                      className="cell-place"
-                      title={`riquadro di griglia 1 km — riga ${cellIndex(it.cell_id)[0]}, colonna ${cellIndex(it.cell_id)[1]}`}
-                    >
-                      {it.place ?? `riquadro ${it.cell_id.split("|").slice(1).join("·")}`}
-                      {(it.exposure ?? "").split(", ").filter(Boolean).map((tag) => (
-                        <span key={tag} className="exposure-chip">
-                          {/^(infrastrutture|statale|autostrada)/.test(tag) ? "🛣" : tag.startsWith("ferrovia") ? "🚆" : "🏠"} {tag}
-                        </span>
-                      ))}
+                    <span className="comune-name">{cg.label}</span>
+                    <span className="comune-meta">
+                      {cg.cells.length} {cg.cells.length === 1 ? "cella" : "celle"} ·{" "}
+                      {cg.minScore.toFixed(2)}–{cg.maxScore.toFixed(2)}
+                      {cg.exposedCount > 0 ? ` · ${cg.exposedCount} 🏠🛣` : ""}
                     </span>
-                    <span className="mono cell-score">
-                      {it.score.toFixed(2)}
-                    </span>
-                    <span className="cell-level">
-                      {RISK_LABEL_IT_BY_LEVEL[it.level]}
-                    </span>
-                  </button>
-                </li>
+                  </summary>
+                  <ul>
+                    {cg.cells.map((it) => (
+                      <li key={it.cell_id}>
+                        <button
+                          type="button"
+                          className={`cell-row ${selectedCellId === it.cell_id ? "on" : ""}`}
+                          onClick={() =>
+                            onCellSelect?.({
+                              cellId: it.cell_id,
+                              lon: it.lon ?? null,
+                              lat: it.lat ?? null,
+                              score: it.score,
+                              priority: it.priority,
+                              exposure: it.exposure,
+                              place: it.place,
+                            })
+                          }
+                        >
+                          <span
+                            className="cell-dot"
+                            style={{ background: RISK_COLOR_BY_LEVEL[it.level] }}
+                            aria-hidden
+                          />
+                          <span
+                            className="cell-place"
+                            title={`riquadro di griglia 1 km — riga ${cellIndex(it.cell_id)[0]}, colonna ${cellIndex(it.cell_id)[1]}`}
+                          >
+                            riquadro {cellIndex(it.cell_id)[0]}·{cellIndex(it.cell_id)[1]}
+                            {(it.exposure ?? "").split(", ").filter(Boolean).map((tag) => (
+                              <span key={tag} className="exposure-chip">
+                                {/^(infrastrutture|statale|autostrada)/.test(tag) ? "🛣" : tag.startsWith("ferrovia") ? "🚆" : "🏠"} {tag}
+                              </span>
+                            ))}
+                          </span>
+                          <span className="mono cell-score">{it.score.toFixed(2)}</span>
+                          <span className="cell-level">
+                            {RISK_LABEL_IT_BY_LEVEL[it.level]}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
               ))}
-              {g.cells.length > 30 ? (
-                <li className="alert-meta cell-more">
-                  … e altre {g.cells.length - 30} celle
-                </li>
-              ) : null}
-            </ul>
-            <RegionalAnalysis aoiId={g.aoiId} />
-          </details>
-        ))
+              <RegionalAnalysis aoiId={g.aoiId} />
+            </details>
+          );
+        })
       )}
     </section>
   );

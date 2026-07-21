@@ -38,7 +38,6 @@ const bool = (raw: string | undefined, fallback: boolean): boolean => {
 export const config = {
   apiUrl: env.VITE_API_URL ?? "http://localhost:8080",
   tileservUrl: env.VITE_TILESERV_URL ?? "http://localhost:7800",
-  enableTimeline: bool(env.VITE_ENABLE_TIMELINE, true),
   enableGraph: bool(env.VITE_ENABLE_GRAPH, false),
   defaultLon: num(env.VITE_DEFAULT_LON, 16.6),
   defaultLat: num(env.VITE_DEFAULT_LAT, 40.5),

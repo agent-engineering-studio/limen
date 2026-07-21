@@ -83,8 +83,6 @@ export interface RiskMapProps {
   readonly onCellClick?: (cellId: string) => void;
   /** Cell to outline on the map (selection from the sidebar or a click). */
   readonly selectedCellId?: string | null;
-  /** Timeline: mostra lo stato di N ore fa (0 = corrente). */
-  readonly hoursAgo?: number;
   /** Imperative ref for tests / parent controls (e.g. fly-to). */
   readonly mapRef?: { current: maplibregl.Map | null };
 }
@@ -291,27 +289,6 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tileserv, tileLayer]);
-
-  // Timeline: scambia l'URL dei tile celle tra la vista statica
-  // (corrente) e la tile function risk_at (stato a N ore fa). Il nome
-  // del layer MVT è lo stesso, quindi gli stili non cambiano.
-  useEffect(() => {
-    const map = props.mapRef?.current;
-    if (!map) return;
-    const hours = props.hoursAgo ?? 0;
-    const url =
-      hours === 0
-        ? `${tileserv}/${tileLayer}/{z}/{x}/{y}.pbf`
-        : `${tileserv}/public.risk_at/{z}/{x}/{y}.pbf?hours_ago=${hours}`;
-    const apply = (): void => {
-      const source = map.getSource(SOURCE_ID) as
-        | { setTiles?: (tiles: string[]) => void }
-        | undefined;
-      source?.setTiles?.([url]);
-    };
-    if (map.isStyleLoaded()) apply();
-    else map.once("idle", apply);
-  }, [props.hoursAgo, props.mapRef, tileserv, tileLayer]);
 
   // Update the selection outline without rebuilding the map.
   useEffect(() => {
