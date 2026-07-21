@@ -323,6 +323,10 @@ async def build_report(settings: Settings | None = None) -> Path | None:
         for c in capped
     ]
 
+    from limen.data.repos.comune_risk import top_comuni as _top_comuni_repo
+
+    comuni_top = await _top_comuni_repo(aoi_id=None, limit=15)
+
     view = ReportView(
         title="Limen — Zone a maggior rischio frana",
         valuation_time=valuation_iso,
@@ -332,6 +336,7 @@ async def build_report(settings: Settings | None = None) -> Path | None:
         basemap_attribution=cfg.html_basemap_attribution,
         clusters=cluster_views,
         notice=notice,
+        top_comuni=comuni_top,
     )
     html = render_html(view)
     manifest: dict[str, object] = {

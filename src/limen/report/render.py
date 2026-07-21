@@ -59,6 +59,8 @@ class ReportView:
     clusters: list[ClusterView] = field(default_factory=list)
     # Informational banner (e.g. "zones shown are below the alert threshold").
     notice: str | None = None
+    # Administrative rollup: comuni with alerting cells (exposure-ranked).
+    top_comuni: list[dict[str, object]] = field(default_factory=list)
 
 
 def render_html(view: ReportView) -> str:
