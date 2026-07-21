@@ -27,6 +27,7 @@ from limen import __version__
 from limen.cli.backtest import run as _run_backtest
 from limen.cli.bootstrap_static import run as _run_bootstrap_static
 from limen.cli.calibrate import run as _run_calibrate
+from limen.cli.create_admin import run as _run_create_admin
 from limen.cli.forecast import run as _run_forecast
 from limen.cli.forecast_history import run as _run_forecast_history
 from limen.cli.geodata import build_subparser as _build_geodata_subparser
@@ -124,6 +125,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="start the limen-ops MCP server (LIMEN_MCP_TRANSPORT=stdio|http)",
     )
     sub.add_parser(
+        "create-admin",
+        help="bootstrap/promote an admin (LIMEN_ADMIN_EMAIL / _PASSWORD / _FIRST / _LAST)",
+    )
+    sub.add_parser(
         "ingest-kb",
         help="push the local corpus (papers + PAI + ISPRA + briefings) to the KG sidecar",
     )
@@ -177,6 +182,7 @@ def main(argv: list[str] | None = None) -> int:
         "mcp-serve": _run_mcp_serve,
         "verify": _run_verify,
         "forecast-history": _run_forecast_history,
+        "create-admin": _run_create_admin,
     }
     if args.command == "geodata":
         try:

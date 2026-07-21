@@ -143,8 +143,12 @@ def _apply_middleware(app: FastAPI, settings: Settings) -> None:
 
 
 def _register_routes(app: FastAPI) -> None:
+    from limen.api.endpoints.auth import auth_error_handler
+    from limen.auth.service import AuthError
+
     for router in all_routers():
         app.include_router(router)
+    app.add_exception_handler(AuthError, auth_error_handler)
 
 
 def build_app(
