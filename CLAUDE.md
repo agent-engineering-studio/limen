@@ -1,5 +1,10 @@
 # Limen — Claude Code project guide
 
+> 🔴 **NUOVA MACCHINA / NUOVA SESSIONE: leggi prima [`docs/HANDOFF.md`](./docs/HANDOFF.md)**
+> — stato corrente, cosa correggere dopo la migrazione su server dedicato
+> (path assoluti in `.env`, Docker/PostGIS x86), lavoro in sospeso, e il
+> contenuto delle memorie locali di Claude (che NON si trasferiscono col repo).
+
 > AI multi-factor landslide-risk monitoring for the Italian territory.
 > Pilot: **Puglia + Basilicata**. Current state: **implementation
 > complete (0.6.0-impl-complete) — entering formal testing**.
