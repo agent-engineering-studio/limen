@@ -128,3 +128,24 @@ class AlertsResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     items: list[AlertItem]
+
+
+class ComuneRisk(BaseModel):
+    istat_code: str
+    name: str
+    aoi_id: str
+    worst_class: str
+    max_score: float
+    n_cells: int
+    n_alert: int
+    counts: dict[str, int]
+    exposure_rank: float
+
+
+class ComuneListResponse(BaseModel):
+    comuni: list[ComuneRisk]
+
+
+class ComuneDetailResponse(BaseModel):
+    comune: ComuneRisk
+    cells: list[dict[str, object]]
