@@ -10,6 +10,8 @@ import type {
   AoiListResponse,
   CellBreakdownResponse,
   CellHistoryResponse,
+  AdminCreateBody,
+  AdminUser,
   HealthResponse,
   LatestAssessmentResponse,
   MeResponse,
@@ -17,6 +19,7 @@ import type {
   RegisterBody,
   ReliabilityResponse,
   ShadowSummaryResponse,
+  UserListResponse,
 } from "../types";
 
 export class ApiClientError extends Error {
@@ -168,10 +171,15 @@ export class ApiClient {
   }
 
   // --- auth ---
-  private post<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  private post<T>(
+    path: string,
+    body: unknown,
+    signal?: AbortSignal,
+    method: "POST" | "PATCH" = "POST",
+  ): Promise<T> {
     return this.request<T>(
       path,
-      { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } },
+      { method, body: JSON.stringify(body), headers: { "Content-Type": "application/json" } },
       signal,
     );
   }
@@ -198,6 +206,20 @@ export class ApiClient {
 
   getMe(signal?: AbortSignal): Promise<MeResponse> {
     return this.request<MeResponse>("/api/auth/me", {}, signal);
+  }
+
+  // --- admin ---
+  adminListUsers(query?: string, signal?: AbortSignal): Promise<UserListResponse> {
+    const qs = query ? `?query=${encodeURIComponent(query)}` : "";
+    return this.request<UserListResponse>(`/api/admin/users${qs}`, {}, signal);
+  }
+
+  adminCreateUser(body: AdminCreateBody): Promise<AdminUser> {
+    return this.post<AdminUser>("/api/admin/users", body);
+  }
+
+  adminUpdateUser(userId: string, roles: string[], status: string): Promise<AdminUser> {
+    return this.post<AdminUser>(`/api/admin/users/${encodeURIComponent(userId)}`, { roles, status }, undefined, "PATCH");
   }
 }
 

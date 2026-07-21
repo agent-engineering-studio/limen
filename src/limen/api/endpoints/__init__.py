@@ -8,7 +8,7 @@ from collections.abc import Iterable
 
 from fastapi import APIRouter
 
-from limen.api.endpoints import a2a, alerts, aoi, auth, health, monitor, risk, tiles
+from limen.api.endpoints import a2a, admin, alerts, aoi, auth, health, monitor, risk, tiles
 
 
 def all_routers() -> Iterable[APIRouter]:
@@ -21,6 +21,7 @@ def all_routers() -> Iterable[APIRouter]:
         tiles.router,
         a2a.router,
         auth.router,
+        admin.router,
     )
 
 

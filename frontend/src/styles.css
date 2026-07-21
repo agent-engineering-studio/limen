@@ -396,6 +396,67 @@ html, body, #root {
   margin-right: 10px;
 }
 
+/* admin — gestione utenti */
+.admin-create {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin: 12px 0 20px;
+}
+.admin-create h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+.admin-create-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.admin-create input,
+.admin-search input {
+  padding: 8px 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  font-size: 14px;
+  width: 100%;
+}
+.admin-search {
+  margin: 8px 0 12px;
+}
+.admin-table td {
+  vertical-align: top;
+  padding: 10px 10px 10px 0;
+}
+.admin-email {
+  color: #5e6473;
+  font-size: 13px;
+}
+.admin-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #fbe9c7;
+  color: #7a5b00;
+  font-size: 11px;
+}
+.admin-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.admin-role {
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.admin-disabled {
+  opacity: 0.55;
+}
+
 /* simulatore */
 .sim {
   background: var(--panel);
