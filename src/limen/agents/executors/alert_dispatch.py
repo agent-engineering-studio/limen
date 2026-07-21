@@ -90,6 +90,22 @@ async def _load_exposure_factors(cell_ids: list[str]) -> dict[str, float]:
     return {str(r["cell_id"]): exposure_factor_from_row(r, cfg)[0] for r in rows}
 
 
+async def _comuni_for_cells(cell_ids: list[str]) -> dict[str, str]:
+    """Comune name per cell (from the precomputed cell_comune tag)."""
+    if not cell_ids:
+        return {}
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT cc.cell_id, c.name
+            FROM cell_comune cc JOIN comuni c ON c.istat_code = cc.istat_code
+            WHERE cc.cell_id = ANY($1::text[])
+            """,
+            cell_ids,
+        )
+    return {str(r["cell_id"]): str(r["name"]) for r in rows}
+
+
 class AlertDispatchExecutor(Executor):
     """V1 alert dispatcher.
 
@@ -182,11 +198,13 @@ class AlertDispatchExecutor(Executor):
 
         # Build the payload + dispatch.
         now = datetime.now(UTC)
+        comuni = await _comuni_for_cells([r.cell_id for r, _ in deduped[: alert_settings.top_k]])
         payload: AlertPayload = build_alert_payload(
             assessment=ctx.assessment,
             prioritised=deduped,
             settings=alert_settings,
             dispatched_at=now,
+            comuni=comuni,
         )
         outcomes: dict[str, bool] = {}
         if self._dispatcher is not None:
