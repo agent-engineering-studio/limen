@@ -135,6 +135,33 @@ async def login(
     return user, token
 
 
+async def create_session_for(
+    user: AuthUser, *, user_agent: str | None, ip: str | None, settings: Settings
+) -> str:
+    """Mint a session for an already-authenticated user (password or SPID)."""
+    token = new_session_token()
+    expires = datetime.now(UTC) + timedelta(hours=settings.auth.session_ttl_hours)
+    await repo.create_session(
+        sid=session_id(token), user_id=user.id, expires_at=expires, user_agent=user_agent, ip=ip
+    )
+    return token
+
+
+async def spid_complete(
+    *, code: str, user_agent: str | None, ip: str | None, settings: Settings
+) -> tuple[AuthUser, str]:
+    """Finish the SPID OIDC flow: exchange code → provision user → session."""
+    from limen.auth import spid
+
+    claims = await spid.exchange_code(settings.spid, code=code)
+    user = await spid.provision_user(claims)
+    if not user.is_active:
+        raise AuthError(403, "account disabilitato")
+    token = await create_session_for(user, user_agent=user_agent, ip=ip, settings=settings)
+    log.info("auth.spid.login", user_id=user.id)
+    return user, token
+
+
 async def logout(token: str) -> None:
     await repo.delete_session(session_id(token))
 

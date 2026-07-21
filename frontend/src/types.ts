@@ -58,6 +58,10 @@ export interface AdminCreateBody extends RegisterBody {
 
 export const ALL_ROLES: readonly string[] = ["admin", "ml-ops", "operatore", "viewer"] as const;
 
+export interface AuthConfig {
+  spid_enabled: boolean;
+}
+
 export interface AoiListResponse {
   items: AoiSummary[];
 }
