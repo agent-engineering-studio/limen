@@ -199,6 +199,45 @@ async def run_monitor(
     }
 
 
+async def build_static_report(admin_token: str | None = None) -> dict[str, Any]:
+    """Generate the static HTML risk report once (idempotent). Admin only.
+
+    Wraps ``limen report build``: the recurring generation is already handled
+    by Limen's APScheduler (JOB_DAILY_REPORT / JOB_HTML_REPORT); this tool lets
+    an agent trigger an on-demand build. Returns the archive path, or a skip
+    when the assessment signature is unchanged.
+    """
+    check_admin_token(admin_token)
+    from limen.config.settings import get_settings
+    from limen.integrations._http import SharedHttpClient
+    from limen.report.builder import build_report as _build
+
+    try:
+        result = await _build(get_settings())
+    finally:
+        await SharedHttpClient.aclose()
+    log.info("mcp.build_report.done", build=str(result) if result is not None else "skipped")
+    return {"build": str(result) if result is not None else None, "skipped": result is None}
+
+
+async def run_forecast_history(
+    admin_token: str | None = None, aoi_ids: list[str] | None = None
+) -> dict[str, Any]:
+    """Persist the per-cell forecast trend (+24/48/72h, ≥Moderate). Admin only.
+
+    Wraps ``limen forecast-history`` so the sidebar / report trend can be
+    refreshed on demand. ``aoi_ids`` omitted ⇒ every seeded AOI.
+    """
+    check_admin_token(admin_token)
+    from limen.agents.workflows.forecast_history import (
+        run_forecast_history as _run,
+    )
+
+    total = await _run(aoi_ids=aoi_ids)
+    log.info("mcp.forecast_history.done", cells=total, aois=aoi_ids or "all")
+    return {"cells_persisted": total, "aoi_ids": aoi_ids}
+
+
 async def national_report() -> dict[str, Any]:
     """Aggregate national picture: regions, top cells, ML shadow, 24h alerts."""
     regions = await risk_summary()
