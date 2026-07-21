@@ -8,12 +8,21 @@ import ShadowDiagnosticsPage, {
 import { defaultApiClient } from "../lib/api-client";
 import type { ShadowSummaryResponse } from "../types";
 
-// Clerk role is switchable per test via the hoisted holder.
+// Role is switchable per test via the hoisted holder; the real useMlOps reads
+// it from the mocked AuthContext.
 const h = vi.hoisted(() => ({ role: "ml-ops" as string | undefined }));
-vi.mock("@clerk/react", () => ({
-  useUser: () => ({
-    isLoaded: true,
-    user: { publicMetadata: h.role ? { role: h.role } : {} },
+vi.mock("../lib/auth", () => ({
+  useAuth: () => ({
+    ready: true,
+    user: {
+      id: "u1",
+      email: "x@y.it",
+      first_name: "A",
+      last_name: "B",
+      email_verified: true,
+      status: "active",
+      roles: h.role ? [h.role] : [],
+    },
   }),
 }));
 

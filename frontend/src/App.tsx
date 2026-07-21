@@ -1,7 +1,7 @@
-import { Show, SignInButton, UserButton } from "@clerk/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type maplibregl from "maplibre-gl";
 
+import { LoginPage, RegisterPage, VerifyEmailPage } from "./components/AuthPages";
 import CellPopup from "./components/CellPopup";
 import ExplainerPage from "./components/ExplainerPage";
 import ForecastList from "./components/ForecastList";
@@ -16,8 +16,18 @@ import RiskMap from "./components/RiskMap";
 import SciencePage from "./components/SciencePage";
 import ShadowDiagnosticsPage from "./components/ShadowDiagnosticsPage";
 import ShadowPanel from "./components/ShadowPanel";
+import { useAuth } from "./lib/auth";
 
-type Page = "home" | "dashboard" | "explainer" | "science" | "shadow" | "integrations";
+type Page =
+  | "home"
+  | "dashboard"
+  | "explainer"
+  | "science"
+  | "shadow"
+  | "integrations"
+  | "login"
+  | "register"
+  | "verify";
 
 function pageFromHash(): Page {
   switch (window.location.hash) {
@@ -32,37 +42,69 @@ function pageFromHash(): Page {
       return "shadow";
     case "#/integrazioni":
       return "integrations";
+    case "#/accedi":
+      return "login";
+    case "#/registrati":
+      return "register";
+    case "#/verifica":
+      return "verify";
     default:
       return "home";
   }
 }
 
-/** Auth wall for the operational dashboard. */
+/** Auth wall for the operational dashboard (DB-backed session). */
 function RequireAuth({ children }: { children: JSX.Element }): JSX.Element {
+  const { ready, user } = useAuth();
+  if (!ready) {
+    return <div className="auth-wall">Caricamento…</div>;
+  }
+  if (user) {
+    return children;
+  }
   return (
-    <>
-      <Show when="signed-in">{children}</Show>
-      <Show when="signed-out">
-        <div className="auth-wall">
-          <h2>Area riservata</h2>
-          <p>
-            La dashboard operativa è accessibile agli utenti registrati.
-            Accedi per consultare la mappa del rischio, il quadro nazionale e
-            le allerte.
-          </p>
-          <div className="auth-wall-actions">
-            <SignInButton mode="modal">
-              <button type="button" className="btn-primary">
-                Accedi
-              </button>
-            </SignInButton>
-            <a className="btn-ghost" href="#/">
-              ← Torna alla home
-            </a>
-          </div>
-        </div>
-      </Show>
-    </>
+    <div className="auth-wall">
+      <h2>Area riservata</h2>
+      <p>
+        La dashboard operativa è accessibile agli utenti registrati. Accedi per
+        consultare la mappa del rischio, il quadro nazionale e le allerte.
+      </p>
+      <div className="auth-wall-actions">
+        <a className="btn-primary" href="#/accedi">
+          Accedi
+        </a>
+        <a className="btn-ghost" href="#/">
+          ← Torna alla home
+        </a>
+      </div>
+    </div>
+  );
+}
+
+/** Header account controls — driven by the DB session. */
+function AuthControls(): JSX.Element {
+  const { ready, user, logout } = useAuth();
+  if (!ready) {
+    return <span className="auth-controls" />;
+  }
+  if (!user) {
+    return (
+      <div className="auth-controls">
+        <a href="#/accedi" className="btn-signin">
+          Accedi
+        </a>
+      </div>
+    );
+  }
+  return (
+    <div className="auth-controls">
+      <span className="auth-who" title={user.email}>
+        {user.first_name} {user.last_name}
+      </span>
+      <button type="button" className="btn-signin" onClick={() => void logout()}>
+        Esci
+      </button>
+    </div>
   );
 }
 
@@ -153,18 +195,7 @@ export function App(): JSX.Element {
           </a>
         </nav>
         <span className="header-meta">agg. 1h · 20 regioni</span>
-        <div className="auth-controls">
-          <Show when="signed-out">
-            <SignInButton mode="modal">
-              <button type="button" className="btn-signin">
-                Accedi
-              </button>
-            </SignInButton>
-          </Show>
-          <Show when="signed-in">
-            <UserButton />
-          </Show>
-        </div>
+        <AuthControls />
       </header>
 
       {page === "home" ? (
@@ -184,6 +215,18 @@ export function App(): JSX.Element {
       ) : page === "integrations" ? (
         <div className="explainer-area">
           <IntegrationsPage />
+        </div>
+      ) : page === "login" ? (
+        <div className="explainer-area">
+          <LoginPage />
+        </div>
+      ) : page === "register" ? (
+        <div className="explainer-area">
+          <RegisterPage />
+        </div>
+      ) : page === "verify" ? (
+        <div className="explainer-area">
+          <VerifyEmailPage />
         </div>
       ) : (
         <RequireAuth>{dashboard}</RequireAuth>

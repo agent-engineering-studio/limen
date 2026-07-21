@@ -212,8 +212,12 @@ Completati di recente:
   mareggiate via **Open-Meteo Marine** (costiera), il tutto scalato dalla
   pericolosità geografica ISPRA. Deterministico, puro, degrada in modo neutro
   (segnale non applicabile ⇒ 0); disattivabile con `ENABLE_FLOOD_FORECAST=false`.
-- **Autenticazione Clerk** attiva: sign-in sulla SPA Vite (`@clerk/react`) +
-  validazione JWT sugli endpoint protetti FastAPI (`CLERK__ENABLED`).
+- **Autenticazione su database** (self-hosted, PA-compliant — Clerk rimosso):
+  registrazione con nome/cognome/email + **verifica via codice**, login con
+  password (hash scrypt), **sessioni server-side** in cookie httpOnly
+  (revocabili), ruoli `admin`/`ml-ops`/`operatore`/`viewer`, CLI
+  `limen create-admin`. Endpoint `/api/auth/*`, `AuthProvider`/`useAuth` sulla
+  SPA. SPID via seam OIDC (in arrivo). Vedi issue #49 + `src/limen/auth/`.
 - **Sfidante ML addestrato** su 37k campioni (frane e-ITALICA + pioggia
   antecedente CERRA per campione): **AUC-PR 0.60 vs 0.28 del motore
   deterministico** sulla stessa partizione spaziale e la stessa pioggia
@@ -225,7 +229,7 @@ Completati di recente:
 - **Area di diagnostica ML shadow** (issue #26): endpoint `/api/shadow/summary`
   (accordo/divergenza per regione + eventi reali) con aggregazione condivisa
   col CLI `limen shadow-report`; un **pannellino operatore** in linguaggio piano
-  nella dashboard; e una **rotta riservata** `#/diagnostica-ml` (ruolo Clerk
+  nella dashboard; e una **rotta riservata** `#/diagnostica-ml` (ruolo
   `ml-ops`) con recall sugli eventi reali, accordo per regione e **mappa della
   divergenza** per cella (palette neutra, non quella del rischio; vista tile
   `v_shadow_divergence_tiles` via pg_tileserv). Non autoritativa — il V1 guida
