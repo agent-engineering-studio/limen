@@ -13,6 +13,7 @@ import type {
   AdminCreateBody,
   AdminUser,
   AuthConfig,
+  ComuneListResponse,
   HealthResponse,
   LatestAssessmentResponse,
   MeResponse,
@@ -211,6 +212,13 @@ export class ApiClient {
 
   getAuthConfig(signal?: AbortSignal): Promise<AuthConfig> {
     return this.request<AuthConfig>("/api/auth/config", {}, signal);
+  }
+
+  getTopComuni(aoi?: string, limit = 50, signal?: AbortSignal): Promise<ComuneListResponse> {
+    const qs = new URLSearchParams();
+    if (aoi) qs.set("aoi", aoi);
+    qs.set("limit", String(limit));
+    return this.request<ComuneListResponse>(`/api/comuni?${qs.toString()}`, {}, signal);
   }
 
   // --- admin ---
