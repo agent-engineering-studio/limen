@@ -17,6 +17,51 @@ function errorMessage(err: unknown): string {
   return "Qualcosa è andato storto. Riprova.";
 }
 
+function PasswordInput(props: {
+  id: string;
+  autoComplete: string;
+  value: string;
+  onChange: (v: string) => void;
+  minLength?: number;
+}): JSX.Element {
+  const [show, setShow] = useState(false);
+  return (
+    <span className="password-field" style={{ position: "relative", display: "block" }}>
+      <input
+        id={props.id}
+        type={show ? "text" : "password"}
+        autoComplete={props.autoComplete}
+        minLength={props.minLength}
+        value={props.value}
+        onChange={(e) => props.onChange(e.target.value)}
+        required
+        style={{ width: "100%", paddingRight: "2.5rem", boxSizing: "border-box" }}
+      />
+      <button
+        type="button"
+        onClick={() => setShow((s) => !s)}
+        aria-label={show ? "Nascondi password" : "Mostra password"}
+        aria-pressed={show}
+        title={show ? "Nascondi password" : "Mostra password"}
+        style={{
+          position: "absolute",
+          right: "0.5rem",
+          top: "50%",
+          transform: "translateY(-50%)",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          padding: 0,
+          fontSize: "1.1rem",
+          lineHeight: 1,
+        }}
+      >
+        {show ? "🙈" : "👁️"}
+      </button>
+    </span>
+  );
+}
+
 function SpidButton(): JSX.Element {
   const [enabled, setEnabled] = useState(false);
   useEffect(() => {
@@ -79,13 +124,11 @@ export function LoginPage(): JSX.Element {
           required
         />
         <label htmlFor="login-password">Password</label>
-        <input
+        <PasswordInput
           id="login-password"
-          type="password"
           autoComplete="current-password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
+          onChange={setPassword}
         />
         {error && <p className="auth-error" role="alert">{error}</p>}
         <button type="submit" className="btn-primary" disabled={busy}>
@@ -164,14 +207,12 @@ export function RegisterPage(): JSX.Element {
           required
         />
         <label htmlFor="reg-password">Password (min 8 caratteri)</label>
-        <input
+        <PasswordInput
           id="reg-password"
-          type="password"
           autoComplete="new-password"
           minLength={8}
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
+          onChange={setPassword}
         />
         {error && <p className="auth-error" role="alert">{error}</p>}
         <button type="submit" className="btn-primary" disabled={busy}>
