@@ -171,6 +171,7 @@ def build_app(
         version="0.1.0",
         docs_url="/docs",
         redoc_url="/redoc",
+        root_path=s.api.root_path,
         lifespan=_lifespan_default,
     )
     _apply_middleware(app, s)
@@ -201,6 +202,7 @@ def build_app_with_deps(
         version="0.1.0",
         docs_url="/docs",
         redoc_url="/redoc",
+        root_path=s.api.root_path,
         lifespan=_build_lifespan_for(deps, scheduler),
     )
     _apply_middleware(app, s)

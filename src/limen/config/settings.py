@@ -198,6 +198,12 @@ class ApiSettings(BaseSettings):
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"]
     )
+    # Path prefix a reverse proxy strips before forwarding. Empty when the
+    # app owns its hostname. Set it (e.g. ``/limen``) when the app is served
+    # under a prefix: FastAPI then advertises ``/limen/openapi.json`` in the
+    # docs page instead of ``/openapi.json``, which would 404 behind the
+    # proxy. It does NOT change the routes the app matches.
+    root_path: str = ""
     pg_tileserv_url: str | None = None
     otel_otlp_endpoint: str | None = None
     otel_service_name: str = "limen-api"
