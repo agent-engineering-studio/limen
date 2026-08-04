@@ -19,8 +19,9 @@
 | `API__CORS_ORIGINS` | Array JSON; restringi in produzione. |
 | `API__PG_TILESERV_URL` | Destinazione del proxy `/api/tiles`. |
 | `API__OTEL_OTLP_ENDPOINT` | OTLP/HTTP. Punta al container di observability. |
-| `LLM__PROVIDER` | Override opzionale: `anthropic` / `openai` / `foundry` / `ollama`. |
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `FOUNDRY_*` / `AZURE_AI_*` / `ANTHROPIC_FOUNDRY_*` | Credenziali provider. Precedenza del resolver: Anthropic → OpenAI → Foundry → Ollama. |
+| `LLM__PROVIDER` | Override opzionale: `anthropic` / `openai` / `foundry` / `ollama` / `llamacpp`. |
+| `LLM__LLAMACPP_BASE_URL` | Server llama.cpp/llama-swap self-hosted. Default `http://127.0.0.1:8080`. |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `FOUNDRY_*` / `AZURE_AI_*` / `ANTHROPIC_FOUNDRY_*` | Credenziali provider. Precedenza del resolver: Anthropic → OpenAI → Foundry → llama.cpp. Impostare `ANTHROPIC_API_KEY` *è* la configurazione che attiva Claude. |
 | `LLM__OLLAMA_BASE_URL` | LLM locale di fallback, default `http://localhost:11434`. |
 | `NOTIFICATIONS__ENABLED_CHANNELS` | Array JSON, es. `["mqtt","email"]`. |
 | `NOTIFICATIONS__TELEGRAM__*` / `__MQTT__*` / `__EMAIL__*` | Configurazione per canale. |
@@ -140,10 +141,22 @@ Trigger: GitHub UI → "Actions" → seleziona il workflow → "Run workflow".
 
 ## LLM in produzione
 
-Su VPS self-hosted il provider LLM preferito è **Ollama** in esecuzione
-sull'host (modello `qwen`); i provider cloud restano solo come fallback.
-Imposta `LLM__OLLAMA_BASE_URL` verso l'host Ollama e, se necessario,
-`LLM__PROVIDER=ollama` per forzare la scelta.
+Il motore predefinito è il **server di inferenza self-hosted llama.cpp**
+(`llama-swap` davanti a `llama-server`, forma OpenAI su `/v1/chat/completions`).
+Imposta `LLM__LLAMACPP_BASE_URL` verso quel server — dai container usa
+`host.docker.internal`, non `127.0.0.1`. **Claude API resta disponibile ma
+opzionale**: basta valorizzare `ANTHROPIC_API_KEY` e vince sul motore locale,
+senza altre modifiche.
+
+> **Cambio non retrocompatibile.** Il fallback senza credenziali era Ollama, ora
+> è llama.cpp. Il VPS Aruba imposta solo `LLM__OLLAMA_BASE_URL` e si affidava al
+> fallback implicito: **va aggiunto `LLM__PROVIDER=ollama`**, altrimenti il
+> backend cerca llama.cpp su `127.0.0.1:8080` e non lo trova.
+
+Timeout: `LLM__LLAMACPP_TIMEOUT_SECONDS` vale 600 s di default. Non è
+sovradimensionato — una richiesta che arriva mentre llama-swap sta caricando un
+altro modello attende lo swap, e il modello batch da 17,7 GB su disco rotante
+impiega ~2 minuti solo per arrivare in VRAM.
 
 ## Garanzie provider-agnostiche
 

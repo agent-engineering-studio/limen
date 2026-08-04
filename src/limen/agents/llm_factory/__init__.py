@@ -6,7 +6,10 @@ Public surface:
 * :class:`LlmClientFactory` — produces a :class:`ChatClient` for a given
   agent role (``"RiskAnalyst"`` / ``"Briefing"`` in V1).
 * :func:`resolve_llm_factory` — picks the concrete factory using the
-  precedence ``override > Anthropic > OpenAI > Foundry > Ollama``.
+  precedence ``override > Anthropic > OpenAI > Foundry > llama.cpp``.
+  llama.cpp is the self-hosted default; Claude is opt-in via
+  ``ANTHROPIC_API_KEY``; Ollama remains selectable with
+  ``LLM__PROVIDER=ollama``.
 * :class:`StubChatClient` / :class:`StubLlmClientFactory` — deterministic
   test doubles (used by ``tests/e2e``).
 """

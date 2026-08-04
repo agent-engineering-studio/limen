@@ -13,6 +13,7 @@ import pytest
 from limen.agents.llm_factory.anthropic_factory import AnthropicFactory
 from limen.agents.llm_factory.base import LlmFactoryError
 from limen.agents.llm_factory.foundry_factory import FoundryFactory
+from limen.agents.llm_factory.llamacpp_factory import LlamaCppFactory
 from limen.agents.llm_factory.ollama_factory import OllamaFactory
 from limen.agents.llm_factory.openai_factory import OpenAIFactory
 from limen.agents.llm_factory.resolver import resolve_llm_factory
@@ -61,11 +62,46 @@ def test_precedence_foundry_anthropic_variant() -> None:
     assert isinstance(f, FoundryFactory)
 
 
-def test_fallback_ollama() -> None:
+def test_fallback_llamacpp() -> None:
+    """No credentials → the self-hosted llama.cpp server."""
     s = _settings()
+    f = resolve_llm_factory(s)
+    assert isinstance(f, LlamaCppFactory)
+    assert f.provider == "llamacpp"
+
+
+def test_explicit_override_to_ollama_still_works() -> None:
+    """The fallback moved to llama.cpp, so Ollama now has to be declared."""
+    s = _settings(llm={"provider": "ollama"})
     f = resolve_llm_factory(s)
     assert isinstance(f, OllamaFactory)
     assert f.provider == "ollama"
+
+
+def test_explicit_override_to_llamacpp_needs_no_credentials() -> None:
+    """Unlike the cloud providers, the local engine has nothing to validate."""
+    s = _settings(llm={"provider": "llamacpp"})
+    f = resolve_llm_factory(s)
+    assert isinstance(f, LlamaCppFactory)
+
+
+def test_llamacpp_factory_carries_settings_through() -> None:
+    """base_url / model / timeout must reach the factory, not silently default."""
+    s = _settings(
+        llm={
+            "provider": "llamacpp",
+            "llamacpp_base_url": "http://inference.test:8080",
+            "llamacpp_model": "qwen3.6-35b",
+            "llamacpp_timeout_seconds": 42.0,
+        }
+    )
+    f = resolve_llm_factory(s)
+    assert isinstance(f, LlamaCppFactory)
+    assert f.base_url == "http://inference.test:8080"
+    assert f.default_model == "qwen3.6-35b"
+    assert f.timeout_seconds == 42.0
+    # Per-role Claude ids must NOT leak through: the local engine serves one model.
+    assert f.role_models == {}
 
 
 def test_explicit_override_wins_over_keys() -> None:
@@ -103,7 +139,7 @@ def test_provider_label_matches_resolved_factory() -> None:
     """Anthropic/OpenAI keys give the expected `.provider` string."""
     assert resolve_llm_factory(_settings(anthropic_api_key="a")).provider == "anthropic"
     assert resolve_llm_factory(_settings(openai_api_key="o")).provider == "openai"
-    assert resolve_llm_factory(_settings()).provider == "ollama"
+    assert resolve_llm_factory(_settings()).provider == "llamacpp"
 
 
 def test_explicit_override_value_in_llm_provider_uses_enum() -> None:
@@ -113,13 +149,13 @@ def test_explicit_override_value_in_llm_provider_uses_enum() -> None:
 
 def test_autodetect_skips_provider_when_sdk_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     """A leaked cloud key must not select a provider whose SDK is absent —
-    autodetect falls through to Ollama (httpx-only, always available)."""
+    autodetect falls through to llama.cpp (httpx-only, always available)."""
     import limen.agents.llm_factory.resolver as resolver
 
     monkeypatch.setattr(resolver, "_sdk_available", lambda module: False)
     s = _settings(anthropic_api_key="ak-xxx", openai_api_key="ok-yyy")
     f = resolve_llm_factory(s)
-    assert isinstance(f, OllamaFactory)
+    assert isinstance(f, LlamaCppFactory)
 
 
 def test_explicit_anthropic_still_selected_regardless_of_sdk_probe(

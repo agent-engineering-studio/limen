@@ -6,10 +6,14 @@ Precedence (identical in dev and prod, mirrors :mod:`limen.core.llm_resolver`):
 2. ``ANTHROPIC_API_KEY`` → Anthropic.
 3. ``OPENAI_API_KEY`` → OpenAI.
 4. Foundry credentials (Anthropic-on-Foundry or Azure-OpenAI-on-Foundry).
-5. Otherwise → Ollama.
+5. Otherwise → llama.cpp (the self-hosted inference server).
 
-A cloud key always wins over Ollama unless ``LLM__PROVIDER=ollama`` is set
-explicitly.
+A cloud key always wins over the local engine unless ``LLM__PROVIDER`` is set
+explicitly — so Claude is available but opt-in, selected by the mere presence
+of ``ANTHROPIC_API_KEY``.
+
+The fallback used to be Ollama. Deployments that relied on it implicitly must
+now set ``LLM__PROVIDER=ollama``.
 
 The resolver only **constructs** factories whose credentials/SDKs are
 satisfied. That keeps the test path (Stub/Ollama) free of third-party
@@ -21,6 +25,7 @@ from __future__ import annotations
 from limen.agents.llm_factory.anthropic_factory import AnthropicFactory
 from limen.agents.llm_factory.base import LlmClientFactory, LlmFactoryError
 from limen.agents.llm_factory.foundry_factory import FoundryFactory
+from limen.agents.llm_factory.llamacpp_factory import LlamaCppFactory
 from limen.agents.llm_factory.ollama_factory import OllamaFactory
 from limen.agents.llm_factory.openai_factory import OpenAIFactory
 from limen.config.settings import LLMProvider, Settings, get_settings
@@ -80,6 +85,19 @@ def _build_ollama(settings: Settings) -> OllamaFactory:
     )
 
 
+def _build_llamacpp(settings: Settings) -> LlamaCppFactory:
+    key = settings.llm.llamacpp_api_key
+    # Same reasoning as Ollama: ignore the per-role map (Claude ids the local
+    # engine can't serve) and use the single configured model for every role.
+    return LlamaCppFactory(
+        base_url=settings.llm.llamacpp_base_url,
+        role_models={},
+        default_model=settings.llm.llamacpp_model,
+        api_key=key.get_secret_value() if key is not None else None,
+        timeout_seconds=settings.llm.llamacpp_timeout_seconds,
+    )
+
+
 def _sdk_available(module: str) -> bool:
     """True when ``module`` can be imported (the provider's SDK is installed)."""
     import importlib.util
@@ -123,8 +141,10 @@ def resolve_llm_factory(settings: Settings | None = None) -> LlmClientFactory:
                     "LLM__PROVIDER=foundry but no Foundry endpoint+key pair is set"
                 )
             return _build_foundry(s)
-        # explicit Ollama or anything else
-        return _build_ollama(s)
+        if explicit is LLMProvider.OLLAMA:
+            return _build_ollama(s)
+        # explicit llama.cpp or anything else
+        return _build_llamacpp(s)
 
     # Autodetect: a cloud key selects its provider only if the SDK is actually
     # installed. Otherwise fall through — in production the image ships without
@@ -144,5 +164,5 @@ def resolve_llm_factory(settings: Settings | None = None) -> LlmClientFactory:
         log.info("llm.resolver.autodetect", provider="foundry")
         return _build_foundry(s)
 
-    log.info("llm.resolver.fallback", provider="ollama", base_url=s.llm.ollama_base_url)
-    return _build_ollama(s)
+    log.info("llm.resolver.fallback", provider="llamacpp", base_url=s.llm.llamacpp_base_url)
+    return _build_llamacpp(s)
