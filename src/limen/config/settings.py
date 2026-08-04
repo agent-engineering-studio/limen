@@ -37,6 +37,7 @@ class LLMProvider(StrEnum):
     OPENAI = "openai"
     FOUNDRY = "foundry"
     OLLAMA = "ollama"
+    LLAMACPP = "llamacpp"
 
 
 class ScoringEngineKind(StrEnum):
@@ -133,7 +134,16 @@ class LLMSettings(BaseSettings):
     2. else ``ANTHROPIC_API_KEY`` → :class:`LLMProvider.ANTHROPIC`.
     3. else ``OPENAI_API_KEY`` → :class:`LLMProvider.OPENAI`.
     4. else Foundry creds → :class:`LLMProvider.FOUNDRY`.
-    5. else → :class:`LLMProvider.OLLAMA`.
+    5. else → :class:`LLMProvider.LLAMACPP` (the self-hosted inference server).
+
+    Claude therefore stays available but opt-in: setting ``ANTHROPIC_API_KEY``
+    *is* the configuration that selects it.
+
+    .. warning::
+       The no-credentials fallback changed from Ollama to llama.cpp. A
+       deployment that relied on the implicit Ollama fallback — the Aruba VPS,
+       which sets only ``LLM__OLLAMA_BASE_URL`` — must now set
+       ``LLM__PROVIDER=ollama`` explicitly.
     """
 
     model_config = SettingsConfigDict(extra="ignore")
@@ -168,6 +178,22 @@ class LLMSettings(BaseSettings):
     # deterministic fallback.
     ollama_timeout_seconds: float = Field(default=300.0, gt=0)
 
+    # ── llama.cpp / llama-swap (self-hosted inference server) ──────────────
+    # llama-swap fronts llama-server and loads the requested model on demand,
+    # exposing the OpenAI shape at /v1/chat/completions. The embedding server
+    # is a separate process on :8081 — see EMBED settings where they are used.
+    llamacpp_base_url: str = "http://127.0.0.1:8080"
+    # Set only if llama-server was started with --api-key.
+    llamacpp_api_key: SecretStr | None = None
+    # Logical model id: for llama-swap this is a key in its config.yaml, not a
+    # file name. One model serves every agent role (the per-role defaults are
+    # Claude ids, which llama.cpp cannot serve).
+    llamacpp_model: str = "qwen3.5-9b"
+    # A request arriving mid-swap waits for the swap to finish. With the models
+    # on spinning disks the 17.7 GB batch model needs ~2 minutes just to load,
+    # so this ceiling covers swap + prompt processing + generation.
+    llamacpp_timeout_seconds: float = Field(default=600.0, gt=0)
+
 
 class SchedulerSettings(BaseSettings):
     """Background scheduling settings."""
@@ -198,6 +224,12 @@ class ApiSettings(BaseSettings):
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"]
     )
+    # Path prefix a reverse proxy strips before forwarding. Empty when the
+    # app owns its hostname. Set it (e.g. ``/limen``) when the app is served
+    # under a prefix: FastAPI then advertises ``/limen/openapi.json`` in the
+    # docs page instead of ``/openapi.json``, which would 404 behind the
+    # proxy. It does NOT change the routes the app matches.
+    root_path: str = ""
     pg_tileserv_url: str | None = None
     otel_otlp_endpoint: str | None = None
     otel_service_name: str = "limen-api"

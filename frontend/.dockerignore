@@ -1,0 +1,7 @@
+# Keep the build context small and hermetic: dependencies are installed from
+# the lockfile inside the image, never copied from the host.
+node_modules
+dist
+.vite
+coverage
+*.log
