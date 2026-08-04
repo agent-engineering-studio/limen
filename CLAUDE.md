@@ -43,7 +43,7 @@
 | Migrations | Plain SQL in `src/limen/data/migrations/NNN_*.sql`, applied by `limen.data.migrate`. Tracked with SHA-256 checksums. **NEVER edit an applied migration** — add a new file. Comments count: even a comment-only change breaks the checksum. |
 | Object store | Use the `ObjectStore` Protocol only. Never `import boto3` in app code. The factory in `limen.data.object_store.factory` is the only place that picks a backend. |
 | Settings | `pydantic-settings` with `env_nested_delimiter="__"`. New env vars go through `limen.config.settings.Settings`. |
-| LLM | Resolver order: Anthropic → OpenAI → Foundry → Ollama. Cloud key wins over Ollama unless `LLM__PROVIDER` overrides. In production prefer **Ollama** (host, qwen); cloud is fallback. |
+| LLM | Resolver order: Anthropic → OpenAI → Foundry → **llama.cpp**. A cloud key wins over the local engine unless `LLM__PROVIDER` overrides. Default engine is the self-hosted **llama.cpp/llama-swap** server; Claude is opt-in via `ANTHROPIC_API_KEY`. Ollama needs `LLM__PROVIDER=ollama`. |
 | Scheduling | `pg_cron` is optional. The same job must work via APScheduler when pg_cron is absent (Neon). |
 | Logging | `structlog.get_logger(__name__)` via `limen.core.logging.get_logger`. **Never `print`.** |
 | Geometry CRS | All geometries stored in EPSG:4326. Compute distances/areas in EPSG:3035 (LAEA Europe). |
@@ -53,7 +53,7 @@
 | Idempotency (sync jobs) | Compute SHA-256 over canonical-JSON of the fetched payloads, look up `dataset_versions(source, dataset, version)`. If the version exists, **skip all writes**. |
 | Scoring engine purity | `MultiFactorScoringEngine.score(bundle) -> RiskScore` is a *pure* function: no DB, no network, no LLM. Assembling the bundle is a separate concern. |
 | Magic numbers | All weights, thresholds, sigmoid/decay params, and class cutoffs live in `src/limen/config/regional_thresholds.yaml`. Validated by `RegionalThresholds` Pydantic schema at load. There are **no hard-coded constants** in scoring code — tests prove it via YAML override. |
-| LLM precedence | `LLM__PROVIDER` override > `ANTHROPIC_API_KEY` > `OPENAI_API_KEY` > Foundry creds > Ollama. Resolver: `limen.agents.llm_factory.resolve_llm_factory`. A cloud key always wins over Ollama unless explicitly overridden. |
+| LLM precedence | `LLM__PROVIDER` override > `ANTHROPIC_API_KEY` > `OPENAI_API_KEY` > Foundry creds > **llama.cpp**. Resolver: `limen.agents.llm_factory.resolve_llm_factory`. A cloud key always wins over the local engine unless explicitly overridden. The fallback moved from Ollama to llama.cpp: deployments relying on the implicit Ollama fallback must now declare `LLM__PROVIDER=ollama`. |
 | LLM is non-authoritative | ChatAgents (RiskAnalyst, Briefing) only *reformulate* the deterministic scoring engine's numeric output. **Never** alter `score` / `breakdown`. An invariance test (`test_llm_does_not_change_numeric_breakdown`) enforces this. |
 | Agents prompts in `*.it.md` | Prompt files live next to the agent in `src/limen/agents/chat_agents/prompts/`. Loaded with `importlib.resources`. Never inline a long prompt in Python source. |
 | API has no business logic | Endpoints under `src/limen/api/endpoints/` only call the Phase-4 workflow or the Phase-1 repos. New behaviour goes in `agents/` or `core/`, never in route handlers. |

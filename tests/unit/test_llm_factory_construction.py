@@ -19,6 +19,10 @@ from limen.agents.llm_factory.foundry_factory import (
     FoundryAzureOpenAIChatClient,
     FoundryFactory,
 )
+from limen.agents.llm_factory.llamacpp_factory import (
+    LlamaCppChatClient,
+    LlamaCppFactory,
+)
 from limen.agents.llm_factory.ollama_factory import (
     OllamaChatClient,
     OllamaFactory,
@@ -72,6 +76,38 @@ def test_ollama_factory_create_returns_client() -> None:
     assert isinstance(client, OllamaChatClient)
     assert client.model == "model-a"
     assert client.base_url == "http://ollama.test:11434"
+
+
+def test_llamacpp_factory_create_returns_client() -> None:
+    factory = LlamaCppFactory(
+        base_url="http://inference.test:8080",
+        role_models=ROLE_MODELS,
+    )
+    client = factory.create("RiskAnalyst")
+    assert isinstance(client, LlamaCppChatClient)
+    assert client.model == "model-a"
+    assert client.base_url == "http://inference.test:8080"
+    # Unknown role falls back to the single served model.
+    fallback = factory.create("UnknownRole")
+    assert isinstance(fallback, LlamaCppChatClient)
+    assert fallback.model == factory.default_model
+
+
+def test_llamacpp_factory_timeout_covers_a_model_swap() -> None:
+    """The default must survive a llama-swap load from spinning disk (~2 min),
+    otherwise callers time out and silently degrade to their fallback path."""
+    factory = LlamaCppFactory(base_url="http://inference.test:8080", role_models={})
+    assert factory.timeout_seconds >= 300.0
+    assert factory.create("Briefing").timeout_seconds == factory.timeout_seconds
+
+
+def test_llamacpp_factory_passes_api_key_through() -> None:
+    factory = LlamaCppFactory(
+        base_url="http://inference.test:8080",
+        role_models={},
+        api_key="secret-token",
+    )
+    assert factory.create("Briefing").api_key == "secret-token"
 
 
 def test_foundry_factory_prefers_anthropic_endpoint() -> None:

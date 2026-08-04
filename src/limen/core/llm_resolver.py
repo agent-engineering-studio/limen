@@ -1,7 +1,7 @@
 """LLM provider resolver.
 
 This is a *stub*: it only encodes the precedence rules (Anthropic > OpenAI >
-Foundry > Ollama) so that downstream code can already query
+Foundry > llama.cpp) so that downstream code can already query
 :func:`resolve_provider` without circular dependencies. The actual provider
 clients land in a later prompt.
 """
@@ -27,7 +27,10 @@ def resolve_provider(settings: Settings | None = None) -> ResolvedProvider:
         2. ``ANTHROPIC_API_KEY`` present → Anthropic.
         3. ``OPENAI_API_KEY`` present → OpenAI.
         4. Foundry endpoint + key present → Foundry.
-        5. Default → Ollama (local).
+        5. Default → llama.cpp (the self-hosted inference server).
+
+    Must stay in step with :func:`limen.agents.llm_factory.resolver.resolve_llm_factory`,
+    which makes the same decision one layer down.
     """
     s = settings or get_settings()
 
@@ -44,5 +47,6 @@ def resolve_provider(settings: Settings | None = None) -> ResolvedProvider:
         return ResolvedProvider(LLMProvider.FOUNDRY, "Foundry endpoint+key present")
 
     return ResolvedProvider(
-        LLMProvider.OLLAMA, "no cloud provider credentials; using Ollama fallback"
+        LLMProvider.LLAMACPP,
+        "no cloud provider credentials; using the self-hosted llama.cpp server",
     )

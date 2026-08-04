@@ -86,7 +86,7 @@ La stessa interfaccia `CellFeatureBundle` accetta anche il motore ML V2.
 | **Ingest eventi** | catalogo **e-ITALICA** (frane innescate da pioggia, datate, tutta Italia) — truth set del backtest | one-shot, auto-download Zenodo | `limen ingest-events` |
 | **Backtest** | replay di una finestra storica con pioggia antecedente **CERRA** (5.5 km) + truth set e-ITALICA → hit rate / FAR / lead time vs target §2.5 | one-shot | `limen backtest` + `reports/backtest_*.md` |
 | **Workflow MAF (V1)** | AreaResolver → StaticFactors → MeteoFetch → SeismicCheck → FireCheck → \[SensorFetch?\] → RiskScoring → EscalationGate → RiskAnalyst → Briefing → PersistResult → AlertDispatch | one-shot CLI | `agents/` + `limen monitor-once` |
-| **Provider LLM** | precedenza `LLM__PROVIDER` > Anthropic > OpenAI > Foundry > Ollama; il resolver salta i provider cloud senza SDK e cade su Ollama (solo httpx). Briefing in italiano; RiskAnalyst restituisce JSON tipizzato. | risolto all'avvio | `agents/llm_factory/resolve_llm_factory` |
+| **Provider LLM** | precedenza `LLM__PROVIDER` > Anthropic > OpenAI > Foundry > **llama.cpp**; il resolver salta i provider cloud senza SDK e cade su llama.cpp (solo httpx). Ollama resta selezionabile con `LLM__PROVIDER=ollama`. Briefing in italiano; RiskAnalyst restituisce JSON tipizzato. | risolto all'avvio | `agents/llm_factory/resolve_llm_factory` |
 | **API HTTP** | `/health` + `/ready`, `POST /api/monitor/{aoi}`, `GET /api/aoi/{id}/risk/latest`, `GET /api/cell/{id}/breakdown`, `GET /api/aoi`, `GET /api/alerts`, `/api/tiles/...`, OpenAPI su `/docs` e `/redoc` | FastAPI / uvicorn | `api/` + `limen serve` |
 | **Job periodici** | workflow MAF orario (con shadow ML), **sweep previsionale** ogni 6 h, **nowcast radar DPC** ogni 15 min, report nazionale giornaliero, sync ISPRA settimanale, **drift monitor ML** (PSI/KS training-vs-live sulle feature canoniche che lo shadow persiste), cache cleanup + retention di `model_runs` (default 30 gg) | APScheduler in-process | `api/jobs/` |
 | **Radar DPC (nowcast)** | SRI nazionale 1 km / 5 min (piattaforma radar DPC, CC-BY-SA): pioggia ≥ `NOWCAST__MIN_INTENSITY_MMH` su una regione ⇒ il workflow di quella AOI parte subito invece di aspettare il tick orario (cooldown 45 min; alert dal percorso operativo normale) | poll ogni `NOWCAST__INTERVAL_MINUTES` | `integrations/dpc/` + `api/jobs/nowcast_monitoring.py` |
@@ -150,7 +150,8 @@ delimitatore.
 | `OBJECT_STORE__BACKEND` | `filesystem` | `filesystem` o `s3`. |
 | `OBJECT_STORE__ENDPOINT_URL` | _vuoto_ | Endpoint S3-compatibile (MinIO, R2, B2). |
 | `SCHEDULER__CACHE_CLEANUP` | `apscheduler` | `pg_cron` o `apscheduler`. **Usa APScheduler su Neon.** |
-| `LLM__PROVIDER` | _vuoto_ | Override: `anthropic` / `openai` / `foundry` / `ollama`. |
+| `LLM__PROVIDER` | _vuoto_ | Override: `anthropic` / `openai` / `foundry` / `ollama` / `llamacpp`. Vuoto ⇒ llama.cpp se non c'è una chiave cloud. |
+| `LLM__LLAMACPP_BASE_URL` | `http://127.0.0.1:8080` | Server di inferenza self-hosted (llama-swap, forma OpenAI). |
 | `LLM__OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama host (da container: `host.docker.internal`). |
 | `LLM__OLLAMA_MODEL` | `qwen3.6:latest` | Modello Ollama unico per tutti i ruoli agente. |
 | `SCORING__MODE` | `champion_only` | `shadow` fa girare il challenger ML in parallelo (scrive solo `model_runs`). |

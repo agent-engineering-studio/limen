@@ -57,6 +57,13 @@ def test_llm_resolver_falls_back_to_foundry() -> None:
     assert resolve_provider(s).provider is LLMProvider.FOUNDRY
 
 
-def test_llm_resolver_falls_back_to_ollama() -> None:
+def test_llm_resolver_falls_back_to_llamacpp() -> None:
+    """No credentials → the self-hosted llama.cpp server, not Ollama."""
     s = _make_settings()
+    assert resolve_provider(s).provider is LLMProvider.LLAMACPP
+
+
+def test_llm_resolver_ollama_still_selectable_explicitly() -> None:
+    """The fallback moved to llama.cpp, so Ollama now needs to be declared."""
+    s = _make_settings(llm={"provider": "ollama"})
     assert resolve_provider(s).provider is LLMProvider.OLLAMA
