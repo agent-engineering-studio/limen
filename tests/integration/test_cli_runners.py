@@ -28,6 +28,7 @@ from limen.cli.monitor_once import run as run_monitor_once
 from limen.cli.seed import run as run_seed
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.openmeteo.client import ARCHIVE_URL, FORECAST_URL
+from tests.conftest import register_flood_mocks
 
 pytestmark = pytest.mark.integration
 
@@ -120,6 +121,7 @@ async def test_monitor_once_runs(reset_db: None, pg_pool: object) -> None:
         with respx.mock(assert_all_called=False) as mock:
             mock.get(FORECAST_URL).mock(return_value=httpx.Response(200, json=_hourly_payload()))
             mock.get(ARCHIVE_URL).mock(return_value=httpx.Response(200, json=_archive_payload()))
+            register_flood_mocks(mock)
             rc = await run_monitor_once()
     finally:
         monitor_mod.resolve_llm_factory = real_resolve  # type: ignore[assignment]

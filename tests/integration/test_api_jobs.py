@@ -23,6 +23,7 @@ from limen.config.settings import Settings
 from limen.data.db import acquire, get_pool
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.openmeteo.client import ARCHIVE_URL, FORECAST_URL
+from tests.conftest import register_flood_mocks
 
 pytestmark = pytest.mark.integration
 
@@ -90,6 +91,7 @@ async def test_hourly_monitoring_runs_against_seeded_aois(
     with respx.mock(assert_all_called=False) as mock:
         mock.get(FORECAST_URL).mock(return_value=httpx.Response(200, json=_hourly_payload()))
         mock.get(ARCHIVE_URL).mock(return_value=httpx.Response(200, json=_archive_payload()))
+        register_flood_mocks(mock)
         result = await run_hourly_monitoring(deps)
 
     # At least one AOI got at least one cell scored.

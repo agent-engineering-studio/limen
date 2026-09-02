@@ -6,6 +6,14 @@
 # If you want to point Limen at Neon instead, do NOT start this compose
 # stack — just set DB__CONNECTION_STRING in your .env to the Neon DSN
 # (sslmode=require) and SCHEDULER__CACHE_CLEANUP=apscheduler.
+#
+# LIMEN_PGDATA_DIR moves the cluster off the Docker volume (which lives on
+# whatever filesystem backs /var/lib/docker) onto a path you choose — set it
+# to an absolute directory on your fastest disk. Postgres commits are
+# fsync-bound, so on a host whose /var/lib/docker sits on spinning disks
+# this is the single biggest lever on write throughput: measured on the
+# dedicated server, fdatasync runs at 76 ops/s on the HDD array vs
+# 884 ops/s on NVMe. Unset ⇒ the named volume, i.e. no change.
 
 name: limen
 
@@ -25,7 +33,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - limen-pgdata:/var/lib/postgresql/data
+      - ${LIMEN_PGDATA_DIR:-limen-pgdata}:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U limen -d limen"]
       interval: 5s

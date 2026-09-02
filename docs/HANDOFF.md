@@ -23,7 +23,53 @@
    / `POSTGIS_BASE`; sul server dedicato x86 non serve l'override).
    > Gli errori I/O di Docker visti in locale erano **disco pieno**, non bug —
    > sul server con più spazio dovrebbero sparire.
-3. **Bring-up**: `make up-dev` → `make seed` (o `make migrate`) → `uv run limen seed-comuni`
+3. **Storage: Postgres è su dischi meccanici, l'NVMe è inutilizzato** (misurato
+   il 2026-09-02 sul server dedicato). `/var/lib/docker` è su
+   `vg1-lv_docker`, stripe LVM di tre HDD (Toshiba DT01ACA2, WD15EADS,
+   ST2000DM001); i due NVMe (Samsung 512 G, Crucial P3 500 G) ospitano solo
+   `/`, `/srv/models` e un `/srv/wal` da 32 G evidentemente predisposto per il
+   WAL e mai collegato. `pg_test_fsync`, host scarico:
+
+   | Percorso | Device | `fdatasync` |
+   |---|---|---|
+   | `/` | NVMe | 884 ops/s (1.1 ms) |
+   | `/var/lib/docker` (dati Postgres) | stripe HDD | 76 ops/s (13 ms) |
+   | `/srv/appdata` (repo) | stripe HDD | **0.69 ops/s (1.45 s)** |
+
+   Conseguenze concrete: `initdb` esegue migliaia di fsync singoli e sull'HDD
+   **non completa** entro la wait strategy dei testcontainers (verificato: con
+   `POSTGRES_INITDB_ARGS=--no-sync` lo stesso container è pronto in 10 s; con
+   fsync attivo resta bloccato oltre 3 minuti a 0% CPU). Per questo il datadir
+   dei test è su **tmpfs** in `tests/conftest.py`: il cluster è usa-e-getta,
+   la durabilità non serve.
+
+   Per il DB operativo la leva è `LIMEN_PGDATA_DIR` (compose dev/demo): puntalo
+   a una directory su NVMe. La migrazione richiede fermo servizio —
+   `docker compose stop postgres`, copia di `limen-pgdata/_data` sulla nuova
+   path, riavvio — quindi va pianificata, non fatta di corsa.
+
+   ⚠️ **La causa a monte è `sdb` (WDC WD15EADS-11P, seriale WD-WMAVU1961972):
+   un disco moribondo.** `iostat -dx`, due campioni a sistema quasi scarico:
+
+   | Disco | `w_await` | `f_await` (flush) | `%util` a ~5 write/s |
+   |---|---|---|---|
+   | sda (Toshiba) | 3.6 ms | 4.1 ms | 1% |
+   | **sdb (WD Green)** | **453 → 2248 ms** | **607 → 978 ms** | **100%** |
+   | sdc (Seagate) | 7.9 ms | 7.7 ms | 2% |
+
+   Tutti gli LV di `vg1` sono in stripe sui tre dischi, quindi **ogni** fsync
+   su `/var/lib/docker` e `/srv/appdata` attende `sdb`: da qui l'`initdb` che
+   non finisce, i seed lentissimi e l'fsync da 1.45 s. Non è un problema di
+   configurazione Docker né di kernel.
+
+   Ordine di intervento consigliato:
+   1. `LIMEN_PGDATA_DIR` su un percorso in `vg0` (NVMe) — sposta il DB fuori
+      dallo stripe malato senza toccare i dischi.
+   2. Sostituire `sdb`, o evacuarlo con `pvmove /dev/sdb` e `vgreduce` se c'è
+      spazio libero sugli altri PV.
+   3. `apt install smartmontools && smartctl -a /dev/sdb` per la conferma
+      formale (SMART non è installato sull'host).
+4. **Bring-up**: `make up-dev` → `make seed` (o `make migrate`) → `uv run limen seed-comuni`
    (serve `GEOSERVER_SOURCE__DB_DSN`) → `uv run limen create-admin` (env
    `LIMEN_ADMIN_EMAIL`/`_PASSWORD`).
 

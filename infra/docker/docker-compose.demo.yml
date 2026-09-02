@@ -36,7 +36,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - limen-pgdata:/var/lib/postgresql/data
+      - ${LIMEN_PGDATA_DIR:-limen-pgdata}:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U limen -d limen"]
       interval: 5s

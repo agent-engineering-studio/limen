@@ -11,12 +11,37 @@ import contextlib
 import os
 import platform
 from collections.abc import AsyncIterator, Iterator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+import httpx
 import pytest
 
 if TYPE_CHECKING:
     import asyncpg
+    import respx
+
+
+def register_flood_mocks(mock: respx.Router) -> None:
+    """Mock the flood/marine endpoints the default workflow calls.
+
+    ``ENABLE_FLOOD_FORECAST`` is on by default, so any end-to-end test
+    that runs the workflow reaches GloFAS discharge and marine waves in
+    addition to the two Open-Meteo endpoints. Without these routes respx
+    raises inside the executor, the workflow step fails, and the job
+    reports zero scored cells — a failure that says nothing about what
+    the test meant to assert.
+
+    Values are deliberately unremarkable (discharge peak 1.2x baseline,
+    0.4 m waves) so the flood bonus stays near zero and the assertions
+    remain about the landslide path.
+    """
+    from limen.integrations.openmeteo.flood import FLOOD_URL, MARINE_URL
+
+    discharge: list[float] = [10.0] * 31 + [12.0] * 7
+    flood_payload: dict[str, Any] = {"daily": {"river_discharge": discharge}}
+    marine_payload: dict[str, Any] = {"hourly": {"wave_height": [0.4] * 24}}
+    mock.get(FLOOD_URL).mock(return_value=httpx.Response(200, json=flood_payload))
+    mock.get(MARINE_URL).mock(return_value=httpx.Response(200, json=marine_payload))
 
 
 def _default_postgis_image() -> str:
