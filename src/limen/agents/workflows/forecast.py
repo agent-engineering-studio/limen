@@ -89,7 +89,7 @@ async def run_forecast(
             )
         )
         .add(SeismicCheckExecutor())
-        .add(FireCheckExecutor())
+        .add(FireCheckExecutor(min_hotspots=settings.firms.min_hotspots))
     )
     # Flood is a first-class output (#8): include the forecast flood signals so
     # the predictive H uplift is reflected in the forecast score too.

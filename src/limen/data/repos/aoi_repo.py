@@ -104,3 +104,25 @@ def _from_jsonb(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
     return dict(json.loads(value))
+
+
+async def assessed_within(aoi_id: str, *, minutes: int) -> bool:
+    """True when any cell of ``aoi_id`` was assessed in the last ``minutes``.
+
+    Event-driven triggers (radar nowcast, FIRMS hotspots) use this as a
+    cooldown so they never pile a second run on top of the hourly job.
+    """
+    async with acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT 1
+            FROM risk_assessments ra
+            JOIN grid_cells g ON g.id = ra.cell_id
+            WHERE g.aoi_id = $1
+              AND ra.computed_at >= now() - make_interval(mins => $2)
+            LIMIT 1
+            """,
+            aoi_id,
+            minutes,
+        )
+    return row is not None

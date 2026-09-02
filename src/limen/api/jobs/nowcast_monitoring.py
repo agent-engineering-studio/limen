@@ -21,6 +21,7 @@ from limen.api.dependencies import AppDependencies
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
 from limen.data.db import acquire
+from limen.data.repos.aoi_repo import assessed_within
 from limen.integrations.dpc import get_latest_sri
 
 log = get_logger(__name__)
@@ -41,23 +42,6 @@ async def _aoi_bboxes() -> list[tuple[str, tuple[float, float, float, float]]]:
     ]
 
 
-async def _recently_assessed(aoi_id: str, *, cooldown_minutes: int) -> bool:
-    async with acquire() as conn:
-        row = await conn.fetchrow(
-            """
-            SELECT 1
-            FROM risk_assessments ra
-            JOIN grid_cells g ON g.id = ra.cell_id
-            WHERE g.aoi_id = $1
-              AND ra.computed_at >= now() - make_interval(mins => $2)
-            LIMIT 1
-            """,
-            aoi_id,
-            cooldown_minutes,
-        )
-    return row is not None
-
-
 async def run_nowcast_monitoring(deps: AppDependencies) -> dict[str, float]:
     """Radar sweep; returns max mm/h per triggered AOI."""
     cfg = deps.settings.nowcast
@@ -71,7 +55,7 @@ async def run_nowcast_monitoring(deps: AppDependencies) -> dict[str, float]:
         peak, hot_pixels = sri.max_intensity(bbox, threshold_mmh=cfg.min_intensity_mmh)
         if peak < cfg.min_intensity_mmh or hot_pixels < cfg.min_pixels:
             continue
-        if await _recently_assessed(aoi_id, cooldown_minutes=cfg.cooldown_minutes):
+        if await assessed_within(aoi_id, minutes=cfg.cooldown_minutes):
             log.info("job.nowcast.cooldown", aoi_id=aoi_id, peak_mmh=round(peak, 1))
             continue
         log.info(

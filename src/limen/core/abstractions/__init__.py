@@ -8,6 +8,7 @@ callers.
 
 from limen.core.abstractions.external import (
     EffisClient,
+    FirmsClient,
     IdroGeoClient,
     IngvClient,
     OpenMeteoClient,
@@ -15,6 +16,7 @@ from limen.core.abstractions.external import (
 
 __all__ = [
     "EffisClient",
+    "FirmsClient",
     "IdroGeoClient",
     "IngvClient",
     "OpenMeteoClient",

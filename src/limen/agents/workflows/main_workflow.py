@@ -197,7 +197,7 @@ def build_landslide_workflow(
         .add(StaticFactorsExecutor())
         .add(MeteoFetchExecutor(rain_node_deg=settings.meteo_rain_node_deg))
         .add(SeismicCheckExecutor())
-        .add(FireCheckExecutor())
+        .add(FireCheckExecutor(min_hotspots=settings.firms.min_hotspots))
     )
     # IoT branch — conditional on the settings toggle. The shim's
     # add_if reads the predicate against the context at run time, so we

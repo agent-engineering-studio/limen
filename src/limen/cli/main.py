@@ -8,6 +8,7 @@ Usage:
     limen backtest           Replay a historical window and emit a §2.5 metrics report.
     limen monitor-once       Run the MAF landslide workflow once for an AOI.
     limen forecast           Predictive run at now+H hours (forecast rain, no persistence).
+    limen firms-sync         Ingest NASA FIRMS active-fire hotspots (FIRMS__MAP_KEY).
     limen serve              Start the FastAPI HTTP server (uvicorn on :8080).
     limen train              Extract training samples and train the V2 ML model (MLflow).
     limen shadow-report      Champion vs ML-challenger comparison over the shadow window.
@@ -28,6 +29,7 @@ from limen.cli.backtest import run as _run_backtest
 from limen.cli.bootstrap_static import run as _run_bootstrap_static
 from limen.cli.calibrate import run as _run_calibrate
 from limen.cli.create_admin import run as _run_create_admin
+from limen.cli.firms_sync import run as _run_firms_sync
 from limen.cli.forecast import run as _run_forecast
 from limen.cli.forecast_history import run as _run_forecast_history
 from limen.cli.geodata import build_subparser as _build_geodata_subparser
@@ -114,6 +116,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="load ISPRA IFFI + PAI from GeoServer PostGIS (GEOSERVER_SOURCE__DB_DSN)",
     )
     sub.add_parser(
+        "firms-sync",
+        help="ingest NASA FIRMS active-fire hotspots (needs FIRMS__MAP_KEY)",
+    )
+    sub.add_parser(
         "ingest-events",
         help="load the ITALICA/e-ITALICA dated landslide catalogue (LIMEN_ITALICA_CSV)",
     )
@@ -185,6 +191,7 @@ def main(argv: list[str] | None = None) -> int:
         "ingest-kb": _run_ingest_kb,
         "geoserver-sync": _run_geoserver_sync,
         "ingest-events": _run_ingest_events,
+        "firms-sync": _run_firms_sync,
         "mcp-serve": _run_mcp_serve,
         "verify": _run_verify,
         "forecast-history": _run_forecast_history,

@@ -48,6 +48,14 @@ def postgres_container() -> Iterator[str]:
     container = PostgresContainer(
         image=POSTGIS_IMAGE, username="limen", password="limen", dbname="limen"
     )
+    # Test data dir on tmpfs. The cluster is thrown away at session end, so
+    # durability buys nothing — and on hosts whose Docker storage driver is
+    # slow to fsync (the dedicated server: overlay2 on LVM) `initdb` stalls
+    # past the 120 s wait strategy and every integration test errors out.
+    # tmpfs takes container startup from "never" to ~10 s there.
+    container = container.with_env("PGDATA", "/var/lib/postgresql/data/pgdata").with_kwargs(
+        tmpfs={"/var/lib/postgresql/data": "rw,size=2g"}
+    )
     container.start()
     try:
         dsn = container.get_connection_url()
@@ -103,6 +111,7 @@ async def reset_db(pg_pool: asyncpg.Pool) -> AsyncIterator[None]:
         "pai_hazard",
         "seismic_events",
         "fire_perimeters",
+        "fire_hotspots",
         "raster_refs",
         "dataset_versions",
         "sensor_features_hourly",

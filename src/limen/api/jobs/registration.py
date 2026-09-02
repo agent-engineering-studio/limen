@@ -17,6 +17,7 @@ from limen.api.dependencies import AppDependencies
 from limen.api.jobs.cache_cleanup import run_cache_cleanup_job
 from limen.api.jobs.daily_report import run_daily_report
 from limen.api.jobs.drift_monitor import run_drift_monitor_job
+from limen.api.jobs.firms_monitoring import run_firms_monitoring
 from limen.api.jobs.forecast_history import run_forecast_history_job
 from limen.api.jobs.forecast_monitoring import run_forecast_monitoring
 from limen.api.jobs.geodata_export import run_geodata_export_job
@@ -36,6 +37,7 @@ JOB_FORECAST_MONITORING = "limen-forecast-monitoring"
 JOB_FORECAST_HISTORY = "limen-forecast-history"
 JOB_DAILY_REPORT = "limen-daily-report"
 JOB_NOWCAST_MONITORING = "limen-nowcast-monitoring"
+JOB_FIRMS_MONITORING = "limen-firms-monitoring"
 JOB_WEEKLY_IDROGEO = "limen-weekly-idrogeo"
 JOB_CACHE_CLEANUP = "limen-cache-cleanup"
 JOB_IOT_ROLLUP = "limen-iot-rollup"
@@ -157,6 +159,25 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
             job=JOB_NOWCAST_MONITORING,
             interval_minutes=deps.settings.nowcast.interval_minutes,
             min_intensity_mmh=deps.settings.nowcast.min_intensity_mmh,
+        )
+
+    # Fail-closed on the MAP_KEY: an unset key means no FIRMS feed, so the
+    # job is not scheduled at all rather than waking up to log a skip.
+    if deps.settings.firms.active:
+        await scheduler.add_schedule(
+            run_firms_monitoring,
+            args=(deps,),
+            trigger=_deferred_interval(minutes=deps.settings.firms.interval_minutes),
+            id=JOB_FIRMS_MONITORING,
+            conflict_policy=ConflictPolicy.replace,
+        )
+        registered.append(JOB_FIRMS_MONITORING)
+        log.info(
+            "scheduler.registered",
+            job=JOB_FIRMS_MONITORING,
+            interval_minutes=deps.settings.firms.interval_minutes,
+            sources=deps.settings.firms.sources,
+            min_hotspots=deps.settings.firms.min_hotspots,
         )
 
     if cfg.enable_weekly_idrogeo:

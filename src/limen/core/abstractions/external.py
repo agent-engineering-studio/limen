@@ -11,7 +11,7 @@ from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Sequence
 
     from shapely.geometry import Polygon
     from shapely.geometry.base import BaseGeometry
@@ -106,3 +106,18 @@ class EffisClient(Protocol):
         perimeter_id: str,
     ) -> bytes | None:
         """Return raw dNBR raster bytes (GeoTIFF), or ``None`` when not available."""
+
+
+@runtime_checkable
+class FirmsClient(Protocol):
+    """NASA FIRMS active-fire hotspot access (near-real-time detections)."""
+
+    async def fetch_hotspots(
+        self,
+        *,
+        bbox: tuple[float, float, float, float],
+        sources: Sequence[str],
+        day_range: int = 1,
+        on_date: date | None = None,
+    ) -> Sequence[Any]:
+        """Yield quality-filtered :class:`FireHotspot` detections for ``bbox``."""

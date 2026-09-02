@@ -641,6 +641,48 @@ class NowcastSettings(BaseSettings):
     cooldown_minutes: int = Field(default=45, ge=0)
 
 
+class FirmsSettings(BaseSettings):
+    """NASA FIRMS active-fire hotspots (VIIRS 375 m / MODIS 1 km, NRT).
+
+    Fail-closed: without ``FIRMS__MAP_KEY`` the feed is inert — the free
+    key is per-user, so there is no sensible default to fall back on.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    enabled: bool = True
+    map_key: SecretStr | None = None
+    # NRT latency is ~3 h, so polling faster buys nothing.
+    interval_minutes: int = Field(default=45, ge=5)
+    sources: list[str] = Field(
+        default_factory=lambda: [
+            "VIIRS_SNPP_NRT",
+            "VIIRS_NOAA20_NRT",
+            "VIIRS_NOAA21_NRT",
+        ]
+    )
+    # FIRMS caps the area endpoint at 1..5 trailing days per request.
+    day_range: int = Field(default=1, ge=1, le=5)
+    # VIIRS reports a category; MODIS a 0..100 percentage. Industrial
+    # flares and sun glint show up mostly as low-confidence detections.
+    min_confidence: Literal["low", "nominal", "high"] = "nominal"
+    min_confidence_pct: int = Field(default=50, ge=0, le=100)
+    min_frp_mw: float = Field(default=0.0, ge=0.0)
+    # A single detection is not an event: require a cluster before an AOI
+    # is triggered or its post-fire window is opened.
+    min_hotspots: int = Field(default=2, ge=1)
+    trigger_window_hours: int = Field(default=24, ge=1)
+    # Skip AOIs whose latest assessment is fresher than this.
+    cooldown_minutes: int = Field(default=90, ge=0)
+    # National bbox (west, south, east, north) — one transaction per source.
+    bbox: tuple[float, float, float, float] = (6.0, 35.0, 19.0, 48.0)
+
+    @property
+    def active(self) -> bool:
+        """Feed is usable: switched on *and* a MAP_KEY is present."""
+        return self.enabled and self.map_key is not None
+
+
 class ReportSettings(BaseSettings):
     """Daily national report dispatched on the notification channels."""
 
@@ -706,6 +748,7 @@ class Settings(BaseSettings):
     report: ReportSettings = Field(default_factory=ReportSettings)
     verify: VerifySettings = Field(default_factory=VerifySettings)
     nowcast: NowcastSettings = Field(default_factory=NowcastSettings)
+    firms: FirmsSettings = Field(default_factory=FirmsSettings)
     iot: IotSettings = Field(default_factory=IotSettings)
     scoring: ScoringSettings = Field(default_factory=ScoringSettings)
     training: TrainingSettings = Field(default_factory=TrainingSettings)
