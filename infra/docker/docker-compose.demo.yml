@@ -42,7 +42,15 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
-      start_period: 10s
+      # After an unclean stop Postgres fsyncs every file in the data
+      # directory before recovery starts, and it will not accept
+      # connections until that finishes. On fast storage that is seconds;
+      # on a degraded array it can be tens of minutes (measured on the
+      # dedicated server: ~2 s per file over 1267 files). Failures inside
+      # start_period don't count against `retries`, so raise
+      # LIMEN_PG_START_PERIOD there rather than watch `depends_on` give up
+      # on a database that was merely still starting.
+      start_period: ${LIMEN_PG_START_PERIOD:-10s}
 
   api:
     build:
@@ -109,6 +117,19 @@ services:
       # need no such split — the key/base are identical everywhere.
       LLM__OLLAMA_BASE_URL: ${API_LLM_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       LLM__OLLAMA_MODEL: ${LLM__OLLAMA_MODEL:-qwen3.6:latest}
+      # Self-hosted inference server on the host (aes-inference-lab). The
+      # base URL is the LiteLLM gateway, not llama-swap directly: routing by
+      # model name, budget cap and the local->cloud fallback all live there,
+      # and a direct port bypasses them. No /v1 suffix — the client appends
+      # /v1/chat/completions itself. Same host-vs-container split as Ollama,
+      # hence the API_-prefixed override.
+      LLM__LLAMACPP_BASE_URL: ${API_LLM_LLAMACPP_BASE_URL:-http://host.docker.internal:8091}
+      # Gateway model name, not a file: 'chat' is Qwen3-8B, the one picked
+      # for Italian prose. 'fast' is the 4B, 'extract' the JSON profile.
+      LLM__LLAMACPP_MODEL: ${LLM__LLAMACPP_MODEL:-chat}
+      LLM__LLAMACPP_API_KEY: ${LLM__LLAMACPP_API_KEY:-}
+      # A request arriving mid-swap waits for llama-swap to load the model.
+      LLM__LLAMACPP_TIMEOUT_SECONDS: ${LLM__LLAMACPP_TIMEOUT_SECONDS:-900}
       # Champion/challenger: shadow runs the ML model in parallel (writes
       # model_runs only; alerts stay with the deterministic champion).
       SCORING__MODE: ${SCORING__MODE:-champion_only}
@@ -232,8 +253,14 @@ services:
       api:
         condition: service_healthy
     environment:
-      VITE_API_URL: http://localhost:8080
-      VITE_TILESERV_URL: http://localhost:7800
+      # Risolti dal BROWSER, non dal container: dietro un reverse proxy
+      # 'localhost' e' la macchina di chi guarda, non il server. Vanno
+      # sovrascritti con l'origine pubblica (vedi .env).
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
+      VITE_TILESERV_URL: ${VITE_TILESERV_URL:-http://localhost:7800}
+      # Host ammessi dal dev server di Vite: dietro proxy l'Host e' il
+      # dominio pubblico, e senza elencarlo Vite blocca ogni richiesta.
+      VITE_ALLOWED_HOSTS: ${VITE_ALLOWED_HOSTS:-}
       # Phase 12 — optional static PMTiles served by the geodata stack.
       # Leave unset to keep the overlays hidden. Production deploys the
       # files behind nginx / Caddy from `$GEODATA_PMTILES_DIR`.
