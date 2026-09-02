@@ -39,7 +39,15 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
-      start_period: 10s
+      # After an unclean stop Postgres fsyncs every file in the data
+      # directory before recovery starts, and it will not accept
+      # connections until that finishes. On fast storage that is seconds;
+      # on a degraded array it can be tens of minutes (measured on the
+      # dedicated server: ~2 s per file over 1267 files). Failures inside
+      # start_period don't count against `retries`, so raise
+      # LIMEN_PG_START_PERIOD there rather than watch `depends_on` give up
+      # on a database that was merely still starting.
+      start_period: ${LIMEN_PG_START_PERIOD:-10s}
 
 volumes:
   limen-pgdata:

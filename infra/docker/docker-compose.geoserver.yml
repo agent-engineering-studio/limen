@@ -53,13 +53,17 @@ services:
     ports:
       - "55433:5432"
     volumes:
-      - limen-geoserver-pgdata:/var/lib/postgresql/data
+      # Same knob as the operational DB: an absolute path puts the cluster on
+      # the disk you choose, a bare name keeps the Docker volume (default).
+      - ${LIMEN_GEOSERVER_PGDATA_DIR:-limen-geoserver-pgdata}:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U gis -d gis"]
       interval: 5s
       timeout: 5s
       retries: 20
-      start_period: 10s
+      # Postgres fsyncs the whole data directory after an unclean stop before
+      # it accepts connections; slow storage turns that into minutes.
+      start_period: ${LIMEN_PG_START_PERIOD:-10s}
 
   geoserver:
     image: ${GEOSERVER_IMAGE:-kartoza/geoserver:2.28.0}
