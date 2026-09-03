@@ -93,11 +93,14 @@ services:
       # switch LLM__PROVIDER too, and only with the `agents` group installed.
       # ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       # OPENAI_API_KEY:    ${OPENAI_API_KEY}
-      # V2.x — KG advisory grounding. OFF by default. Enable by setting
-      # KG__ENABLED=true and pointing KG__BASE_URL at the sidecar service
-      # under the `kg` profile (or an external host).
-      KG__ENABLED: "false"
-      KG__BASE_URL: http://knowledge-graph:8000
+      # V2.x — KG advisory grounding. OFF by default. The sidecar is NOT a
+      # service of this compose (see the note where it used to be, further
+      # down): it runs from its own repo. Default points at its kg-api on the
+      # host — host.docker.internal, never 127.0.0.1, which inside a container
+      # is the container itself. API_-prefixed override so a host-side value in
+      # .env never leaks in here.
+      KG__ENABLED: ${KG__ENABLED:-false}
+      KG__BASE_URL: ${API_KG_BASE_URL:-http://host.docker.internal:8000}
       KG__THREAD_ID: landslide-kb
       KG__TIMEOUT_SECONDS: "3.0"
       KG__CACHE_TTL_SECONDS: "3600"
@@ -330,52 +333,43 @@ services:
       - "${LIMEN_FRONTEND_BIND:-127.0.0.1}:5173:5173"
     profiles: ["frontend"]  # opt-in: `docker compose --profile frontend up`
 
-  knowledge-graph:
-    # V2.x — advisory knowledge-graph sidecar (Neo4j + Redis + Ollama +
-    # FastAPI + MCP). Opt-in via `docker compose --profile kg up`. The
-    # actual image is owned by the team's `knowledge-graph` repository;
-    # this entry only sketches the port + LLM-coherence env. Production
-    # deployments should pin a tagged image and run it inside the same
-    # EU-region network as the Limen API.
-    #
-    # IMPORTANT: this sidecar is **advisory only**. Limen's deterministic
-    # scoring loop runs unchanged when this service is unavailable.
-    image: ghcr.io/agent-engineering-studio/knowledge-graph:latest
-    container_name: limen-knowledge-graph
-    restart: unless-stopped
-    environment:
-      # Provider coherence — the sidecar points at the same inference gateway
-      # the Limen API does. Its own default is already `llamacpp` (an
-      # OpenAI-compatible client at /v1/chat/completions), so these are the
-      # variables it actually reads; the OLLAMA_BASE_URL this service used to
-      # get was left over from before the sidecar grew a llama.cpp provider.
-      KG_LLM_PROVIDER: ${KG_LLM_PROVIDER:-llamacpp}
-      LLAMACPP_BASE_URL: ${API_LLM_LLAMACPP_BASE_URL:-http://host.docker.internal:8091}
-      # Gateway routing key. `extract` is the JSON-grammar profile, which is
-      # what the entity/relation extraction stage needs.
-      LLAMACPP_EXTRACTION_MODEL: ${KG_EXTRACTION_MODEL:-extract}
-      LLAMACPP_API_KEY: ${LLM__LLAMACPP_API_KEY:-}
-      EMBEDDING_PROVIDER: ${KG_EMBEDDING_PROVIDER:-llamacpp}
-      LLAMACPP_EMBEDDING_BASE_URL: ${KG_EMBEDDING_BASE_URL:-http://host.docker.internal:8091}
-      LLAMACPP_EMBEDDING_MODEL: ${KG_EMBEDDING_MODEL:-embed}
-      # Embeddings are NOT swappable at will: the Redis vector index is sized
-      # to the model's output width (1024 for Qwen3-Embedding-0.6B, 768 for
-      # nomic-embed-text). Changing the model means rebuilding the index and
-      # re-ingesting, so verify this matches before switching.
-      REDIS_VECTOR_DIM: ${KG_VECTOR_DIM:-1024}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      NEO4J_URI: ${KG_NEO4J_URI:-bolt://neo4j:7687}
-      REDIS_URL: ${KG_REDIS_URL:-redis://redis:6379/0}
-    extra_hosts:
-      # This service already used host.docker.internal but had no host-gateway
-      # mapping, so the name did not resolve on Linux at all.
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "${LIMEN_KG_BIND:-127.0.0.1}:8001:8000"
-    profiles: ["kg"]
-    # No healthcheck wired — the sidecar is advisory; nothing in Limen's
-    # critical path waits on it.
+  # ── Sidecar knowledge-graph: NON definito qui, di proposito ────────────
+  #
+  # Questo file conteneva un servizio `knowledge-graph` sotto il profilo `kg`
+  # che non e' mai stato avviabile, per tre ragioni indipendenti:
+  #
+  #   1. puntava a ghcr.io/agent-engineering-studio/knowledge-graph:latest,
+  #      un'immagine che NON esiste. Quel repo pubblica QUATTRO immagini
+  #      (kg-api, kg-ui, kg-mcp, kg-agents): il nome monolitico era
+  #      un'invenzione dello sketch;
+  #   2. dichiarava NEO4J_URI=bolt://neo4j:7687 e REDIS_URL=redis://redis:6379
+  #      verso servizi `neo4j` e `redis` che in questo compose non esistono;
+  #   3. usava host.docker.internal senza `extra_hosts: host-gateway`, quindi
+  #      su Linux il nome non risolveva.
+  #
+  # Lo stack KG vive nel SUO repo, che ha gia' un compose completo
+  # (docker-compose.ghcr.yml: neo4j + redis + api + ui + mcp + agents).
+  # Duplicarne un sottoinsieme qui significherebbe tenere allineate a mano due
+  # configurazioni — variabili del motore, auth Neo4j, REDIS_VECTOR_DIM — con
+  # l'unico effetto di farle divergere. Coerente con l'invariante "KG is
+  # advisory only": l'immagine e' di proprieta' di quel repo.
+  #
+  # Per abilitare il grounding:
+  #   1. avvia lo stack dal repo knowledge-graph:
+  #        docker compose -f docker-compose.ghcr.yml up -d
+  #   2. qui imposta KG__ENABLED=true e KG__BASE_URL verso il suo kg-api
+  #      (host.docker.internal:8000 se gira sullo stesso host, mai 127.0.0.1
+  #      che dentro il container e' il container stesso).
+  #
+  # Il motore del sidecar si configura NEL SUO repo, non qui: il suo default e'
+  # gia' `llamacpp` (client OpenAI su /v1), quindi va puntato allo stesso
+  # gateway :8091 che usa l'API. Vedi docs/inference.md.
+  #
+  # ATTENZIONE (verificato 2026-09-03): kg-api:latest su GHCR e' ancora
+  # costruita da eab6c0b (11 giugno) perche' la CI di quel repo e' rossa e
+  # `docker-publish` e' gated su di essa — quindi l'immagine pubblicata NON
+  # contiene il provider llama.cpp/OpenAI, nonostante il codice sia su main.
+  # Vedi knowledge-graph#7 (blocco CI) e #6 (provider openai).
 
 volumes:
   limen-pgdata:

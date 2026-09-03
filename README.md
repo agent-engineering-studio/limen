@@ -178,7 +178,7 @@ vengono consultate *prima* di quelle di ufw: il `default deny incoming`
 dell'host **non** protegge una porta pubblicata da un container. Per questo
 ogni `ports:` nei compose ha una variabile di bind con default `127.0.0.1`
 (`LIMEN_PG_BIND`, `LIMEN_API_BIND`, `LIMEN_MQTT_BIND`, `LIMEN_TILESERV_BIND`,
-`LIMEN_FRONTEND_BIND`, `LIMEN_KG_BIND`, `LIMEN_MCP_BIND`,
+`LIMEN_FRONTEND_BIND`, `LIMEN_MCP_BIND`,
 `LIMEN_GEOSERVER_*_BIND`, `LIMEN_GEODATA_*_BIND`).
 
 Le porte restano pubblicate — non rimosse — perché il workflow documentato

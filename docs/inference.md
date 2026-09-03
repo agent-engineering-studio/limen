@@ -179,7 +179,7 @@ prodotto un'analisi *degradata* pur sembrando normale.
 | Servizio | Provider | Variabili |
 |---|---|---|
 | `limen-api` | `llamacpp` | `LLM__LLAMACPP_*`, `LLM__MODELS__*` |
-| `knowledge-graph` | `llamacpp` | `KG_LLM_PROVIDER`, `LLAMACPP_BASE_URL`, `LLAMACPP_EXTRACTION_MODEL`, `EMBEDDING_PROVIDER`, `LLAMACPP_EMBEDDING_*` |
+| `kg-api` (repo esterno) | `llamacpp` | `KG_LLM_PROVIDER`, `LLAMACPP_BASE_URL`, `LLAMACPP_EXTRACTION_MODEL`, `EMBEDDING_PROVIDER`, `LLAMACPP_EMBEDDING_*` — **si impostano nel suo repo** |
 | `geoserver-webui` | `openai` | `GEO_LLM_PROVIDER=openai`, `OPENAI_BASE_URL`, `OPENAI_LLM_MODEL` |
 | `geoserver-mcp` | `openai` | idem |
 
@@ -199,5 +199,21 @@ un'immagine locale con `GEOSERVER_APP_IMAGE` / `GEOSERVER_BOOTSTRAP_IMAGE`.
 
 Per il sidecar KG gli embedding **non** sono liberamente sostituibili:
 l'indice vettoriale Redis è dimensionato sulla larghezza del modello
-(`REDIS_VECTOR_DIM`, 1024 per Qwen3-Embedding-0.6B). Cambiare modello vuol
-dire ricostruire l'indice e re-ingestare.
+(`REDIS_VECTOR_DIM`, 1024 per Qwen3-Embedding-0.6B — misurato sul gateway, non
+assunto). Cambiare modello vuol dire ricostruire l'indice e re-ingestare; il
+repo KG ha una guardia che rifiuta di scrivere su un indice di larghezza
+diversa invece di corrompere i vettori.
+
+Il sidecar **non è un servizio dei compose di Limen**: gira dal suo repo
+(`docker-compose.ghcr.yml`, con neo4j + redis + kg-api + ui + mcp + agents), e
+Limen si limita a puntargli `KG__BASE_URL`. L'entry che c'era prima nel compose
+demo non era mai stata avviabile: immagine inesistente
+(`knowledge-graph:latest` — quel repo pubblica `kg-api`, `kg-ui`, `kg-mcp`,
+`kg-agents`), dipendenze `neo4j`/`redis` non definite, e `host.docker.internal`
+senza `extra_hosts`.
+
+> **Stato al 2026-09-03**: `kg-api:latest` su GHCR è ancora costruita da
+> `eab6c0b` (11 giugno). La CI di quel repo è rossa per un `ruff` non pinnato e
+> `docker-publish` è gated sulla CI, quindi il provider llama.cpp/OpenAI è su
+> `main` ma **non nell'immagine**. Tracciato in knowledge-graph#7 (blocco) e
+> #6 (provider `openai` di prima classe).
