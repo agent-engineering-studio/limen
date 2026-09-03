@@ -33,8 +33,16 @@ services:
       POSTGRES_PASSWORD: limen
       POSTGRES_DB: limen
       PGDATA: /var/lib/postgresql/data/pgdata
+    # Docker publishes ports by writing its OWN iptables chains, which are
+    # consulted BEFORE ufw's — so the host's `default deny incoming` does not
+    # protect a published port. Bind defaults to loopback; override the
+    # variable (to 0.0.0.0 or a specific interface) only with something in
+    # front of it.
+    # Host-side `uv run limen migrate/seed/...` connects here (see
+    # DB__CONNECTION_STRING in .env.example), so the port stays published —
+    # just not to the LAN.
     ports:
-      - "5432:5432"
+      - "${LIMEN_PG_BIND:-127.0.0.1}:5432:5432"
     volumes:
       - ${LIMEN_PGDATA_DIR:-limen-pgdata}:/var/lib/postgresql/data
     healthcheck:
@@ -80,9 +88,9 @@ services:
       ALERT__DEDUP_WINDOW_MINUTES: "180"
       API__PORT: "8080"
       LOG_JSON: "true"
-      # Optional LLM credentials — when unset, the resolver falls back
-      # to Ollama at LLM__OLLAMA_BASE_URL (which is not exposed by this
-      # compose file in V1).
+      # Optional LLM credentials. The provider is pinned below
+      # (LLM__PROVIDER), so setting a key here is not enough on its own —
+      # switch LLM__PROVIDER too, and only with the `agents` group installed.
       # ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       # OPENAI_API_KEY:    ${OPENAI_API_KEY}
       # V2.x — KG advisory grounding. OFF by default. Enable by setting
@@ -104,14 +112,25 @@ services:
       # no-op; the heavy DTM slope bootstrap normally runs on the host.
       # Set API_DEM_RASTER=/data/HRDTM5m.tif to enable it in-container.
       LIMEN_DEM_RASTER: ${API_DEM_RASTER:-}
-      # LLM backend — host Ollama | Ollama Cloud | Anthropic (see .env).
-      #   host Ollama:  LLM__OLLAMA_BASE_URL=http://host.docker.internal:11434
-      #   Ollama Cloud: LLM__OLLAMA_BASE_URL=https://ollama.com + LLM__OLLAMA_API_KEY
+      # LLM backend — self-hosted gateway | host Ollama | Ollama Cloud | Claude.
+      #   gateway:      LLM__LLAMACPP_BASE_URL=http://host.docker.internal:8091
+      #   host Ollama:  LLM__PROVIDER=ollama + LLM__OLLAMA_BASE_URL=...:11434
+      #   Ollama Cloud: LLM__PROVIDER=ollama + https://ollama.com + API key
       #   Claude:       ANTHROPIC_API_KEY (or LLM__PROVIDER=anthropic)
-      # Default to host Ollama: the image ships without the `agents` group
-      # (no anthropic/openai SDK), so a leaked ANTHROPIC_API_KEY must not be
-      # auto-selected. Override to anthropic/openai only with the SDK installed.
-      LLM__PROVIDER: ${LLM__PROVIDER:-ollama}
+      # The provider is PINNED here rather than autodetected: the image ships
+      # without the `agents` group (no anthropic/openai SDK), so a leaked
+      # ANTHROPIC_API_KEY must not be auto-selected. Override to
+      # anthropic/openai only with the SDK installed.
+      #
+      # Default is `llamacpp` — the LiteLLM gateway. It used to be `ollama`,
+      # from when a host Ollama on :11434 was the only local engine; that pin
+      # now contradicts both the code's documented fallback order and the
+      # actual host, where nothing listens on 11434. Both defaults fail the
+      # same way when their engine is absent (connection refused → the
+      # non-authoritative LLM path degrades to the deterministic text, which
+      # is the invariant), so the tie-breaker is which one is right when the
+      # engine IS present.
+      LLM__PROVIDER: ${LLM__PROVIDER:-llamacpp}
       # Host-Ollama URL differs host vs container, so use an API_-prefixed
       # override (defaults to host.docker.internal). Ollama Cloud / Anthropic
       # need no such split — the key/base are identical everywhere.
@@ -128,8 +147,35 @@ services:
       # for Italian prose. 'fast' is the 4B, 'extract' the JSON profile.
       LLM__LLAMACPP_MODEL: ${LLM__LLAMACPP_MODEL:-chat}
       LLM__LLAMACPP_API_KEY: ${LLM__LLAMACPP_API_KEY:-}
-      # A request arriving mid-swap waits for llama-swap to load the model.
-      LLM__LLAMACPP_TIMEOUT_SECONDS: ${LLM__LLAMACPP_TIMEOUT_SECONDS:-900}
+      # Ceiling for roles with no per-role override. Sized for the GPU-resident
+      # gateway models on NVMe (a swap is seconds). Was 900 s, from when the
+      # GGUFs lived on spinning disk; that high a ceiling now only delays the
+      # moment you notice the engine is broken.
+      LLM__LLAMACPP_TIMEOUT_SECONDS: ${LLM__LLAMACPP_TIMEOUT_SECONDS:-120}
+      # Per-role ceiling, JSON keyed by agent-role label. Only needed for a
+      # role deliberately pointed at a slow model — which today no role may be
+      # (see LLM__MODELS__* below).
+      LLM__LLAMACPP_ROLE_TIMEOUT_SECONDS: ${LLM__LLAMACPP_ROLE_TIMEOUT_SECONDS:-{}}
+      # Per-role model routing. These are GATEWAY model names (keys in its
+      # model_list), not file names — which is what makes a per-role map
+      # possible at all. Only the roles set here reach the local engine; the
+      # rest fall back to LLM__LLAMACPP_MODEL, because the code defaults are
+      # Claude ids the gateway would reject.
+      #
+      # Only RiskAnalyst and Briefing are wired to an executor today
+      # (agents/workflows/main_workflow.py); the other three are declared
+      # config with no call site yet.
+      #
+      # RiskAnalyst emits strict JSON validated by Pydantic, so it gets
+      # `extract` (the JSON-grammar profile) rather than the general-purpose
+      # 4B. Briefing writes 150-250 words of Italian prose → `chat` (8B).
+      # NEVER put `quality-local` or `glm52` here: every one of these roles is
+      # invoked synchronously and the process refuses to start if you do.
+      LLM__MODELS__RISK_ANALYST: ${LLM__MODELS__RISK_ANALYST:-extract}
+      LLM__MODELS__BRIEFING: ${LLM__MODELS__BRIEFING:-chat}
+      LLM__MODELS__ORCHESTRATOR: ${LLM__MODELS__ORCHESTRATOR:-fast}
+      LLM__MODELS__SCORER: ${LLM__MODELS__SCORER:-fast}
+      LLM__MODELS__SUMMARIZER: ${LLM__MODELS__SUMMARIZER:-fast}
       # Champion/challenger: shadow runs the ML model in parallel (writes
       # model_runs only; alerts stay with the deterministic champion).
       SCORING__MODE: ${SCORING__MODE:-champion_only}
@@ -148,10 +194,14 @@ services:
       LLM__OLLAMA_API_KEY: ${LLM__OLLAMA_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     extra_hosts:
-      # So host.docker.internal (host Ollama) resolves on Linux too.
+      # So host.docker.internal (the inference gateway on the host) resolves on
+      # Linux too. 127.0.0.1 inside a container is the container itself.
       - "host.docker.internal:host-gateway"
+    # Public surface, but published to loopback: put a reverse proxy on 443
+    # in front rather than exposing 8080 directly. See the postgres note above
+    # for why ufw is not the control here.
     ports:
-      - "8080:8080"
+      - "${LIMEN_API_BIND:-127.0.0.1}:8080:8080"
     volumes:
       - limen-objects:/var/lib/limen/objects
       # DTM / shared vector data (read-only). Same folder GeoServer serves.
@@ -204,8 +254,11 @@ services:
     container_name: limen-mosquitto
     restart: unless-stopped
     command: ["mosquitto", "-c", "/mosquitto-no-auth.conf"]
+    # A broker reachable from the whole LAN with anonymous access is the
+    # worst case here. Host-side runs still reach it (see
+    # NOTIFICATIONS__MQTT__BROKER_PORT in .env.example).
     ports:
-      - "1883:1883"
+      - "${LIMEN_MQTT_BIND:-127.0.0.1}:1883:1883"
     healthcheck:
       test: ["CMD-SHELL", "mosquitto_sub -h 127.0.0.1 -t healthz -E -W 2 || exit 0"]
       interval: 15s
@@ -232,8 +285,9 @@ services:
       # a dedicated `tile_reader` role.
       TS_HTTPHOST: "0.0.0.0"
       TS_HTTPPORT: "7800"
+    # scripts/demo_walkthrough.sh hits this from the host.
     ports:
-      - "7800:7800"
+      - "${LIMEN_TILESERV_BIND:-127.0.0.1}:7800:7800"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:7800/health || exit 1"]
       interval: 15s
@@ -270,8 +324,10 @@ services:
     volumes:
       - ../../frontend:/app
       - frontend-node-modules:/app/node_modules
+    # Dev server. Public exposure belongs to a reverse proxy on 443, which is
+    # also what VITE_ALLOWED_HOSTS above exists for.
     ports:
-      - "5173:5173"
+      - "${LIMEN_FRONTEND_BIND:-127.0.0.1}:5173:5173"
     profiles: ["frontend"]  # opt-in: `docker compose --profile frontend up`
 
   knowledge-graph:
@@ -288,17 +344,35 @@ services:
     container_name: limen-knowledge-graph
     restart: unless-stopped
     environment:
-      # Provider coherence — the sidecar uses the same LLM the rest of
-      # Limen does (resolver order: Anthropic → OpenAI → Foundry → Ollama).
-      # On Aruba prod this typically resolves to a local Ollama; on dev
-      # it can be Anthropic/OpenAI via the host's env.
+      # Provider coherence — the sidecar points at the same inference gateway
+      # the Limen API does. Its own default is already `llamacpp` (an
+      # OpenAI-compatible client at /v1/chat/completions), so these are the
+      # variables it actually reads; the OLLAMA_BASE_URL this service used to
+      # get was left over from before the sidecar grew a llama.cpp provider.
+      KG_LLM_PROVIDER: ${KG_LLM_PROVIDER:-llamacpp}
+      LLAMACPP_BASE_URL: ${API_LLM_LLAMACPP_BASE_URL:-http://host.docker.internal:8091}
+      # Gateway routing key. `extract` is the JSON-grammar profile, which is
+      # what the entity/relation extraction stage needs.
+      LLAMACPP_EXTRACTION_MODEL: ${KG_EXTRACTION_MODEL:-extract}
+      LLAMACPP_API_KEY: ${LLM__LLAMACPP_API_KEY:-}
+      EMBEDDING_PROVIDER: ${KG_EMBEDDING_PROVIDER:-llamacpp}
+      LLAMACPP_EMBEDDING_BASE_URL: ${KG_EMBEDDING_BASE_URL:-http://host.docker.internal:8091}
+      LLAMACPP_EMBEDDING_MODEL: ${KG_EMBEDDING_MODEL:-embed}
+      # Embeddings are NOT swappable at will: the Redis vector index is sized
+      # to the model's output width (1024 for Qwen3-Embedding-0.6B, 768 for
+      # nomic-embed-text). Changing the model means rebuilding the index and
+      # re-ingesting, so verify this matches before switching.
+      REDIS_VECTOR_DIM: ${KG_VECTOR_DIM:-1024}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OLLAMA_BASE_URL: ${LLM__OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       NEO4J_URI: ${KG_NEO4J_URI:-bolt://neo4j:7687}
       REDIS_URL: ${KG_REDIS_URL:-redis://redis:6379/0}
+    extra_hosts:
+      # This service already used host.docker.internal but had no host-gateway
+      # mapping, so the name did not resolve on Linux at all.
+      - "host.docker.internal:host-gateway"
     ports:
-      - "8001:8000"
+      - "${LIMEN_KG_BIND:-127.0.0.1}:8001:8000"
     profiles: ["kg"]
     # No healthcheck wired — the sidecar is advisory; nothing in Limen's
     # critical path waits on it.

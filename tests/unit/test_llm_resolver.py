@@ -100,8 +100,56 @@ def test_llamacpp_factory_carries_settings_through() -> None:
     assert f.base_url == "http://inference.test:8080"
     assert f.default_model == "qwen3.6-35b"
     assert f.timeout_seconds == 42.0
-    # Per-role Claude ids must NOT leak through: the local engine serves one model.
+    # Nothing declared LLM__MODELS__*, so the Claude *defaults* must not leak
+    # through to the gateway — it would answer 400 for `claude-haiku-4-5`.
     assert f.role_models == {}
+
+
+def test_llamacpp_honours_declared_role_models() -> None:
+    """Behind the LiteLLM gateway a model name is an arbitrary routing key, so
+    a declared per-role map must reach the local factory instead of being
+    discarded — otherwise every role shares one model."""
+    s = _settings(
+        llm={
+            "provider": "llamacpp",
+            "llamacpp_model": "chat",
+            "models": {"briefing": "chat", "risk_analyst": "extract"},
+        }
+    )
+    f = resolve_llm_factory(s)
+    assert isinstance(f, LlamaCppFactory)
+    assert f.role_models == {"Briefing": "chat", "RiskAnalyst": "extract"}
+    assert f.create("Briefing").model == "chat"
+    assert f.create("RiskAnalyst").model == "extract"
+    # Undeclared roles keep falling back to the single configured model.
+    assert f.create("Summarizer").model == "chat"
+
+
+def test_ollama_honours_declared_role_models() -> None:
+    """Same mechanism for the other local engine — the two must not diverge."""
+    s = _settings(
+        llm={
+            "provider": "ollama",
+            "ollama_model": "qwen3.6:latest",
+            "models": {"briefing": "qwen3:8b"},
+        }
+    )
+    f = resolve_llm_factory(s)
+    assert isinstance(f, OllamaFactory)
+    assert f.role_models == {"Briefing": "qwen3:8b"}
+
+
+def test_llamacpp_role_timeouts_reach_the_factory() -> None:
+    s = _settings(
+        llm={
+            "provider": "llamacpp",
+            "llamacpp_role_timeout_seconds": {"Briefing": 5400.0},
+        }
+    )
+    f = resolve_llm_factory(s)
+    assert isinstance(f, LlamaCppFactory)
+    assert f.create("Briefing").timeout_seconds == 5400.0
+    assert f.create("RiskAnalyst").timeout_seconds == f.timeout_seconds
 
 
 def test_explicit_override_wins_over_keys() -> None:

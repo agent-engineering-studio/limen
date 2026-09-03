@@ -26,9 +26,16 @@
 # Point GEOSERVER_SHAPEFILE_DIR at a subset (e.g. Puglia+Basilicata only)
 # for a faster first test.
 #
-# LLM for the agent = HOST Ollama (host.docker.internal:11434), matching
-# Limen's Aruba-prod preference. Run `ollama serve` + pull the model first.
-# Override GEO_LLM_PROVIDER=anthropic (needs ANTHROPIC_API_KEY) if desired.
+# LLM for the agent = the self-hosted inference gateway on the host, reached
+# through the OpenAI-compatible provider (GEO_LLM_PROVIDER=openai). mcp-geo-server's
+# `ollama` providers speak Ollama's own /api/chat, so they cannot talk to a
+# gateway that exposes /v1/chat/completions — hence `openai` rather than a
+# rewritten OLLAMA_HOST. Override GEO_LLM_PROVIDER=ollama|anthropic if desired.
+#
+# Requires mcp-geo-server >= the commit that adds the `openai` provider. The
+# images here are PULLED from GHCR, so a source change in that repo takes
+# effect only once the image is rebuilt and published (or built locally and
+# passed via GEOSERVER_APP_IMAGE / GEOSERVER_BOOTSTRAP_IMAGE).
 
 name: limen-geoserver
 
@@ -50,8 +57,14 @@ services:
       POSTGRES_DB: gis
       POSTGRES_USER: gis
       POSTGRES_PASSWORD: gis
+    # Docker publishes ports by writing its OWN iptables chains, which are
+    # consulted BEFORE ufw's — so the host's `default deny incoming` does not
+    # protect a published port. Bind defaults to loopback; override the
+    # variable (to 0.0.0.0 or a specific interface) only with something in
+    # front of it.
+    # Host-side GEOSERVER_SOURCE__DB_DSN (localhost:55433) reads this.
     ports:
-      - "55433:5432"
+      - "${LIMEN_GEOSERVER_PG_BIND:-127.0.0.1}:55433:5432"
     volumes:
       # Same knob as the operational DB: an absolute path puts the cluster on
       # the disk you choose, a bare name keeps the Docker volume (default).
@@ -78,8 +91,10 @@ services:
       GEOSERVER_ADMIN_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD:-geoserver}
       GEOSERVER_DATA_DIR: ${GEOSERVER_DATA_DIR:-/opt/geoserver/data_dir}
       CORS_ENABLED: "true"
+    # 8081 is GeoServer on this host — NOT an LLM engine. Any doc that says
+    # otherwise predates the inference stack moving behind the gateway (:8091).
     ports:
-      - "8081:8080"
+      - "${LIMEN_GEOSERVER_BIND:-127.0.0.1}:8081:8080"
     volumes:
       - limen-geoserver-gsdata:${GEOSERVER_DATA_DIR:-/opt/geoserver/data_dir}
     healthcheck:
@@ -151,7 +166,11 @@ services:
       POSTGIS_PASSWORD: gis
       GEO_UPLOAD_WORKSPACE: ${GEO_UPLOAD_WORKSPACE:-uploads}
       GEO_UPLOAD_DATASTORE: ${GEO_UPLOAD_DATASTORE:-uploads_pg}
-      GEO_LLM_PROVIDER: ${GEO_LLM_PROVIDER:-ollama}
+      GEO_LLM_PROVIDER: ${GEO_LLM_PROVIDER:-openai}
+      # See geoserver-mcp below for why `openai` and not a rewritten OLLAMA_HOST.
+      OPENAI_BASE_URL: ${GEO_OPENAI_BASE_URL:-http://host.docker.internal:8091/v1}
+      OPENAI_LLM_MODEL: ${GEO_OPENAI_MODEL:-fast}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OLLAMA_HOST: ${GEO_OLLAMA_HOST:-http://host.docker.internal:11434}
       OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5}
       OLLAMA_CLOUD_HOST: ${OLLAMA_CLOUD_HOST:-https://ollama.com}
@@ -162,7 +181,7 @@ services:
       # So host.docker.internal resolves on Linux (Aruba VPS) too.
       - "host.docker.internal:host-gateway"
     ports:
-      - "8000:8000"
+      - "${LIMEN_GEOSERVER_WEBUI_BIND:-127.0.0.1}:8000:8000"
 
   # Intelligent MCP server: GeoServer agent over streamable-HTTP at :9000/mcp.
   geoserver-mcp:
@@ -179,7 +198,18 @@ services:
       GEOSERVER_USER: ${GEOSERVER_ADMIN_USER:-admin}
       GEOSERVER_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD:-geoserver}
       GEOSERVER_DEFAULT_SRS: EPSG:4326
-      GEO_LLM_PROVIDER: ${GEO_LLM_PROVIDER:-ollama}
+      GEO_LLM_PROVIDER: ${GEO_LLM_PROVIDER:-openai}
+      # OpenAI-compatible endpoint = the LiteLLM gateway on the host. The /v1
+      # suffix is required here (the SDK appends only the path). Never
+      # 127.0.0.1 from a container — that is the container itself.
+      OPENAI_BASE_URL: ${GEO_OPENAI_BASE_URL:-http://host.docker.internal:8091/v1}
+      # Gateway routing key. `fast` (the 4B) is the right size for tool
+      # selection and short GeoServer answers. NEVER `quality-local`/`glm52`:
+      # the MCP tool call and the chat UI are both synchronous.
+      OPENAI_LLM_MODEL: ${GEO_OPENAI_MODEL:-fast}
+      # Optional — the provider sends a placeholder for a keyless gateway.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # Alternative backends, inert unless GEO_LLM_PROVIDER selects them.
       OLLAMA_HOST: ${GEO_OLLAMA_HOST:-http://host.docker.internal:11434}
       OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5}
       OLLAMA_CLOUD_HOST: ${OLLAMA_CLOUD_HOST:-https://ollama.com}
@@ -194,7 +224,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "9000:9000"
+      - "${LIMEN_GEOSERVER_MCP_BIND:-127.0.0.1}:9000:9000"
     healthcheck:
       test: ["CMD", "python", "-c",
              "import socket; socket.create_connection(('127.0.0.1', 9000), timeout=3)"]

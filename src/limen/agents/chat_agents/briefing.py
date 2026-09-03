@@ -61,12 +61,18 @@ def trim_to_max(text: str, max_words: int = MAX_WORDS) -> str:
     return truncated + "."
 
 
-def _fallback_briefing(assessment: AggregateAssessment) -> str:
+def _fallback_briefing(assessment: AggregateAssessment, *, reason: str) -> str:
     """Deterministic Italian briefing built from the breakdown only.
 
     Used when the LLM call fails or repeatedly produces an out-of-range
     length. It mentions only numbers that are in the assessment.
+
+    Emits ``llm.fallback`` — the same event the RiskAnalyst uses — because the
+    return value is indistinguishable from a successful briefing to every
+    caller downstream. Without the log there is nothing to tell a healthy
+    engine from a dead one.
     """
+    log.warning("llm.fallback", role="Briefing", reason=reason)
     top = assessment.top_cells[0] if assessment.top_cells else None
     level = top.level.value if top else "None"
     counts = ", ".join(f"{k}: {v}" for k, v in sorted(assessment.cells_by_level.items()))
@@ -180,7 +186,7 @@ class BriefingAgent:
             )
             if grounding_task is not None:
                 grounding_task.cancel()
-            return _fallback_briefing(assessment)
+            return _fallback_briefing(assessment, reason=f"chat error: {type(exc).__name__}")
 
         words = count_words(text)
         log.info("briefing.length", words=words)
@@ -209,7 +215,9 @@ class BriefingAgent:
             log.warning("briefing.retry_error", error=str(exc))
             if grounding_task is not None:
                 grounding_task.cancel()
-            return _fallback_briefing(assessment)
+            return _fallback_briefing(
+                assessment, reason=f"chat error on length retry: {type(exc).__name__}"
+            )
 
         retry_words = count_words(retry)
         log.info("briefing.length.retry", words=retry_words)
@@ -219,7 +227,9 @@ class BriefingAgent:
             return await self._append_citations(trim_to_max(retry, MAX_WORDS), grounding_task)
         if grounding_task is not None:
             grounding_task.cancel()
-        return _fallback_briefing(assessment)
+        return _fallback_briefing(
+            assessment, reason=f"still out of range after retry ({retry_words} words)"
+        )
 
     # ------------------------------------------------------------------
     # KG grounding — advisory, never authoritative.

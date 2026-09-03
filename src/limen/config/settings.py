@@ -40,6 +40,19 @@ class LLMProvider(StrEnum):
     LLAMACPP = "llamacpp"
 
 
+# Gateway model names whose *generation* speed is measured in tens of minutes
+# per response (measured on the reference host: colibri/GLM-5.2 at ~0.08 tok/s
+# cold — 40 s for 3 output tokens). Every role in :class:`LLMModels` is
+# consumed on a synchronous path: an HTTP request, an MCP tool call, or a
+# scheduler tick shorter than the response time. Mapping one of these there
+# does not make Limen slow, it makes the monitoring stop — the caller times out
+# into its deterministic fallback, and the hourly sweep lock then skips every
+# later tick, so the system looks healthy while it has stopped scoring. Long
+# jobs need their own role driven by an asynchronous, persisted worker (see
+# docs/inference.md); until that exists, refuse to start.
+SLOW_GENERATION_MODELS: frozenset[str] = frozenset({"quality-local", "glm52"})
+
+
 class ScoringEngineKind(StrEnum):
     """Which scoring engine drives the workflow's authoritative numbers.
 
@@ -180,19 +193,78 @@ class LLMSettings(BaseSettings):
 
     # ── llama.cpp / llama-swap (self-hosted inference server) ──────────────
     # llama-swap fronts llama-server and loads the requested model on demand,
-    # exposing the OpenAI shape at /v1/chat/completions. The embedding server
-    # is a separate process on :8081 — see EMBED settings where they are used.
-    llamacpp_base_url: str = "http://127.0.0.1:8080"
+    # exposing the OpenAI shape at /v1/chat/completions. Point this at the
+    # LiteLLM gateway (:8091), not at llama-swap: routing by model name, the
+    # spend cap and the local->cloud fallback all live there. The embedding
+    # server is a separate process on :8082 — NOT :8081, which on this host is
+    # GeoServer.
+    # 8091 = the gateway. NOT 8080: that is Limen's own API on the reference
+    # host, and pointing the LLM client at it yields a 404 from Limen itself
+    # — an engine that "answers" but never generates.
+    llamacpp_base_url: str = "http://127.0.0.1:8091"
     # Set only if llama-server was started with --api-key.
     llamacpp_api_key: SecretStr | None = None
-    # Logical model id: for llama-swap this is a key in its config.yaml, not a
-    # file name. One model serves every agent role (the per-role defaults are
-    # Claude ids, which llama.cpp cannot serve).
+    # Logical model id: behind LiteLLM this is a key in the gateway's
+    # model_list, not a file name. Fallback for any agent role NOT declared in
+    # ``models`` — an undeclared role must not inherit the Claude default,
+    # which the gateway would reject.
     llamacpp_model: str = "qwen3.5-9b"
-    # A request arriving mid-swap waits for the swap to finish. With the models
-    # on spinning disks the 17.7 GB batch model needs ~2 minutes just to load,
-    # so this ceiling covers swap + prompt processing + generation.
-    llamacpp_timeout_seconds: float = Field(default=600.0, gt=0)
+    # Ceiling for a role with no entry in ``llamacpp_role_timeout_seconds``.
+    # Sized for the GPU-resident models behind the gateway (fast/chat/extract)
+    # on NVMe, where a llama-swap load is seconds — not the ~2 minutes from
+    # spinning disk that the old 600 s default was budgeting for.
+    #
+    # Too high is as harmful as too low, in opposite ways. Too low cuts off a
+    # healthy model mid-answer. Too high makes a *broken* engine
+    # indistinguishable from a slow one for as long as the ceiling lasts: the
+    # caller blocks, falls back to the deterministic text anyway, and the only
+    # signal is that the fallback arrived later. The number is "how long a
+    # working model can plausibly take", not "how long we will wait".
+    llamacpp_timeout_seconds: float = Field(default=120.0, gt=0)
+    # Per-role override, keyed by the agent-role label ("Briefing", ...) rather
+    # than the env-var name. A role deliberately pointed at a slow model needs
+    # its own ceiling, and the others must not inherit it and spend minutes
+    # waiting for an error:
+    #   LLM__LLAMACPP_ROLE_TIMEOUT_SECONDS='{"Briefing": 5400}'
+    llamacpp_role_timeout_seconds: dict[str, float] = Field(default_factory=dict)
+
+    @field_validator("llamacpp_role_timeout_seconds")
+    @classmethod
+    def _positive_role_timeouts(cls, v: dict[str, float]) -> dict[str, float]:
+        bad = sorted(role for role, seconds in v.items() if seconds <= 0)
+        if bad:
+            raise ValueError(
+                "LLM__LLAMACPP_ROLE_TIMEOUT_SECONDS needs a positive ceiling "
+                f"for every role; got <= 0 for: {', '.join(bad)}"
+            )
+        return v
+
+    @model_validator(mode="after")
+    def _reject_slow_models_on_sync_roles(self) -> LLMSettings:
+        """Fail closed when a synchronous role is pointed at a slow model.
+
+        See :data:`SLOW_GENERATION_MODELS`. Refusing to boot is the only
+        outcome here that is not a silent degradation.
+        """
+        offenders = {
+            field: value.strip()
+            for field, value in self.models.model_dump().items()
+            if isinstance(value, str) and value.strip() in SLOW_GENERATION_MODELS
+        }
+        if not offenders:
+            return self
+        listed = ", ".join(
+            f"LLM__MODELS__{field.upper()}={model}" for field, model in sorted(offenders.items())
+        )
+        raise ValueError(
+            f"{listed}: every LLM__MODELS__* role is invoked on a synchronous "
+            "path (HTTP request, MCP tool call, or a scheduler tick shorter "
+            "than the response), and these gateway models generate in tens of "
+            "minutes. The caller would time out into its deterministic "
+            "fallback and the monitoring sweep would stall silently. Use "
+            "'fast' / 'chat' / 'extract' here, and route long-running "
+            "generation through a dedicated asynchronous role instead."
+        )
 
 
 class SchedulerSettings(BaseSettings):

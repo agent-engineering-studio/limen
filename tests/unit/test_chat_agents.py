@@ -179,6 +179,6 @@ def test_word_counter_and_trim() -> None:
 
 def test_fallback_briefing_is_safe() -> None:
     """Pure-Python fallback never raises and is inside the word window."""
-    text = _fallback_briefing(_assessment())
+    text = _fallback_briefing(_assessment(), reason="test")
     assert MIN_WORDS <= count_words(text) <= MAX_WORDS or count_words(text) <= MAX_WORDS
     assert "aoi-test" in text
