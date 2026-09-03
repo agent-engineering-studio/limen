@@ -14,11 +14,24 @@ COMPOSE_DEV  := infra/docker/docker-compose.dev.yml
 COMPOSE_DEMO := infra/docker/docker-compose.demo.yml
 COMPOSE_OBS  := infra/docker/docker-compose.observability.yml
 COMPOSE_GEOSERVER := infra/docker/docker-compose.geoserver.yml
+COMPOSE_GEODATA := infra/docker/docker-compose.geodata.yml
 # Unified stack: operational services + GeoServer, one project, one network.
 # Repo-root .env feeds compose ${VAR} interpolation (e.g. SCORING__MODE);
 # without --env-file compose only reads infra/docker/.env, which doesn't exist.
 COMPOSE_ALL  := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_DEMO) -f $(COMPOSE_GEOSERVER) -p limen
 UP_PROFILES  := --profile geoserver --profile frontend
+
+# `make build` spans EVERY compose file, not just the ones `make up` starts:
+# a build target that silently skips half the stack is worse than no target.
+# Deliberately separate from COMPOSE_ALL/UP_PROFILES — `make up` must NOT
+# start geodata (VPS-only, activated explicitly per CLAUDE.md) nor the
+# observability sidecar.
+COMPOSE_BUILD := $(if $(wildcard .env),--env-file .env) \
+                 -f $(COMPOSE_DEMO) -f $(COMPOSE_GEOSERVER) \
+                 -f $(COMPOSE_GEODATA) -f $(COMPOSE_OBS) -p limen
+# No `kg` profile: the knowledge-graph sidecar is not a service of any compose
+# here — it runs from its own repo (see the note in docker-compose.demo.yml).
+BUILD_PROFILES ?= --profile geoserver --profile frontend --profile geodata
 
 .PHONY: help install \
         up down build rebuild up-host-ollama \
@@ -35,7 +48,7 @@ help:
 	@echo "Full stack (one command)"
 	@echo "  make up                 start operational + GeoServer stack, seed + geoserver-sync (idempotent)"
 	@echo "  make down               tear down the full stack"
-	@echo "  make build              rebuild compose images (NOCACHE=1 for from-scratch)"
+	@echo "  make build              build owned + pull third-party images, ALL compose files (NOCACHE=1)"
 	@echo "  make rebuild            down + build + up (full local refresh)"
 	@echo "  make up-host-ollama     alias of 'make up' (host Ollama is the default)"
 	@echo ""
@@ -109,10 +122,19 @@ up: gs-volumes
 down:
 	docker compose $(COMPOSE_ALL) $(UP_PROFILES) down
 
-# Rebuild the compose images (native arch, local testing). NOCACHE=1
-# forces a from-scratch build; default reuses the layer cache.
+# Bring EVERY image in the stack up to date (native arch, local testing).
+# Two steps, because the stack has two kinds of image:
+#   1. build — the ones Limen owns (api, mcp, postgres, geodata*)
+#   2. pull  — third-party (GeoServer, pg_tileserv, mosquitto, node, otel-lgtm)
+#      and cross-repo (mcp-geo-server, pulled pre-built from GHCR: there is no
+#      build context for it inside Limen, by design)
+# `--ignore-buildable` keeps step 2 from trying to pull what step 1 just built.
+# NOCACHE=1 forces a from-scratch build; default reuses the layer cache.
 build: gs-volumes
-	docker compose $(COMPOSE_ALL) $(UP_PROFILES) build $(if $(NOCACHE),--no-cache)
+	docker compose $(COMPOSE_BUILD) $(BUILD_PROFILES) build $(if $(NOCACHE),--no-cache)
+	docker compose $(COMPOSE_BUILD) $(BUILD_PROFILES) pull --ignore-buildable
+	@echo "[build] built + pulled every image across demo/geoserver/geodata/observability"
+	@echo "[build] NOT covered: knowledge-graph sidecar (image unpublished — see BUILD_PROFILES)"
 
 # Full refresh of the local test environment: down → build → up.
 rebuild: down build up
