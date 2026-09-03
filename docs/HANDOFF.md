@@ -91,6 +91,17 @@ Versione: implementazione completa, in fase di test. Feature mergiate di recente
   `127.0.0.1`. Doc: `docs/inference.md`.
   Repo collegati: `mcp-geo-server` `7ad6189` (provider `openai`),
   `aes-inference-lab` `ec9824a` (alias `glm52`).
+- **`make build` copre tutto lo stack** (2026-09-03, `19fa2ca`) — costruiva 3
+  immagini su 4 di quelle di Limen: `limen/geodata:0.1`, cioè `geodata-init`
+  **e** `ispra-geo-mcp`, non veniva mai vista perché `COMPOSE_ALL` include solo
+  demo + geoserver. Ora spazza demo + geoserver + geodata + observability in due
+  passi (build per le proprie, `pull --ignore-buildable` per terze parti e
+  cross-repo): 15 servizi, 4 immagini costruite, 8 scaricate. `COMPOSE_BUILD` è
+  separato da `COMPOSE_ALL` di proposito — `make build` deve *vedere* geodata,
+  `make up` non deve *avviarlo*.
+  Attenzione: `make build-images` resta un target distinto e non ridondante —
+  costruisce con `--platform linux/amd64` esplicito (la base `postgis/postgis`
+  non ha manifest arm64) e produce anche `frontend/dist/`.
 - **Auth su database** (issue #49, PR #50-53) — **Clerk rimosso** (non ammesso per la
   PA). `src/limen/auth/`: password scrypt (stdlib), verifica email via codice
   (SMTP riusato dal canale email; in dev il codice va nei log), sessioni
@@ -133,8 +144,9 @@ una volta applicate (checksum SHA-256) — mai editarle, aggiungerne di nuove.
 
 ### Da fare adesso — gateway di inferenza (2026-09-03)
 
-Il codice è su `main` in tutti e tre i repo, ma **due azioni restano fuori dalla
-portata di una sessione Claude** (servono root / accesso al server):
+Il codice è su `main` in tutti i repo coinvolti. **Due azioni restano fuori
+dalla portata di una sessione Claude** (servono root / accesso al server), più
+una che dipende da un altro repo.
 
 1. **[BLOCCANTE, serve `sudo`] Rendere `glm52` sul gateway in esecuzione.**
    `setup/etc/litellm/config.yaml` in `aes-inference-lab` è il *template*:
@@ -166,21 +178,40 @@ portata di una sessione Claude** (servono root / accesso al server):
    `llm-check` va eseguito **dentro** il container: da host `127.0.0.1` funziona
    e dal container no, quindi una verifica da host non prova niente.
 
-3. **[fatto, resta il pull] Immagini GeoServer.** Pubblicate su GHCR il
+3. **[FATTO — resta solo `up -d`] Immagini GeoServer.** Pubblicate su GHCR il
    2026-09-03 (run `33781145378`, `:latest` 16:54 + `:bootstrap` 17:06,
-   multi-arch). Verificato dentro l'immagine pubblicata che
-   `GEO_LLM_PROVIDER=openai` costruisca un `OpenAIChatClient`. Sul server:
-   ```bash
-   docker compose -f infra/docker/docker-compose.geoserver.yml --profile geoserver pull
-   docker compose -f infra/docker/docker-compose.geoserver.yml --profile geoserver up -d
-   ```
+   multi-arch, CI verde: **93 passed, 2 skipped**). Verificato **dentro
+   l'immagine pubblicata** che `GEO_LLM_PROVIDER=openai` costruisca un
+   `OpenAIChatClient`, non solo nel sorgente. `make build` le scarica già, quindi
+   sul server basta `up -d`.
    Nota: sono **due tag distinti** — `geoserver-mcp` usa `:latest`,
-   `geoserver-webui` e `geoserver-init` usano `:bootstrap`. `make build` **non**
-   li costruisce: nel merge dei compose solo `api`, `mcp` e `postgres` hanno un
-   `build:` (verificato con `docker compose build --dry-run`), per la scelta
-   dichiarata «application images are pulled PRE-BUILT from GHCR».
+   `geoserver-webui` e `geoserver-init` usano `:bootstrap`. Ricostruirne uno solo
+   lascia metà dello stack sul codice vecchio senza un errore evidente.
 
-4. **Ruolo asincrono per colibrì — progettato, non implementato.** Un modello che
+4. **[BLOCCATO da un altro repo] Grounding KG.** Applicata l'**opzione B**: il
+   sidecar non è più un servizio dei compose di Limen (`74a69de`) — quell'entry
+   non era mai stata avviabile (immagine `knowledge-graph:latest` inesistente,
+   `neo4j`/`redis` non definiti, `host.docker.internal` senza `extra_hosts`).
+   Lo stack KG gira dal suo repo; Limen punta solo `KG__BASE_URL`:
+   ```bash
+   # nel repo knowledge-graph
+   docker compose -f docker-compose.ghcr.yml up -d
+   # in limen/.env
+   KG__ENABLED=true
+   API_KG_BASE_URL=http://host.docker.internal:8000
+   ```
+   ⚠️ **Non funzionerà finché knowledge-graph#7 non è risolta.** Catena
+   verificata: la CI di quel repo è rossa (`ruff` non pinnato, `requirements.txt`
+   dichiara `ruff>=0.4.0` e la CI risolve alla 0.16.1 → 21 rilievi su codice
+   preesistente), `docker-publish` è **gated sulla CI** via `workflow_run`,
+   quindi è `skipped` e **`kg-api:latest` è ancora costruita da `eab6c0b`
+   (11 giugno)**. Il provider llama.cpp/OpenAI è su `main` (PR #5) ma non
+   nell'immagine: chi la usa ottiene il comportamento pre-#5, solo Ollama, senza
+   alcun segnale. Issue aperte: **#7** (blocco CI, con i 21 rilievi elencati) e
+   **#6** (provider `openai` di prima classe — il `llamacpp_provider` parla già
+   OpenAI su `/v1`, manca solo che si chiami come ciò che fa).
+
+5. **Ruolo asincrono per colibrì — progettato, non implementato.** Un modello che
    genera in decine di minuti è un modello *batch*: serve un ruolo dedicato
    (`report`/`deep_analysis`) fuori da `LLM__MODELS__*` con allowlist propria, un
    job asincrono che lo invoca, ed esito **persistito** con stato
@@ -188,10 +219,30 @@ portata di una sessione Claude** (servono root / accesso al server):
    completo in `docs/inference.md` §«Come si userà colibrì». Finché non esiste,
    colibrì è inutilizzabile da Limen **per costruzione** — ed è il comportamento
    voluto.
-5. **`mcp-geo-server`: 47 file "modificati" di soli permessi** (`100644`→`100755`,
-   artefatto della migrazione) sporcano `git status` in quel clone e hanno già
-   bloccato un `git switch`. Rimedio: `git config core.fileMode false` in quel
-   repo. Non applicato: è una scelta sulla copia di lavoro locale.
+6. **Mode-change fantasma nei repo affiancati.** `mcp-geo-server` (47 file) e
+   `knowledge-graph` (182 file) hanno file passati da `100644` a `100755` —
+   artefatto della migrazione, 0 righe di differenza. Sporcano `git status` e
+   hanno già bloccato due `git switch`. Fanno anche scattare `EXE002` in ruff
+   locale (eseguibile senza shebang), gonfiando il conteggio errori rispetto
+   alla CI: 69 invece di 21. Rimedio: `git config core.fileMode false` in quei
+   repo. Non applicato: è una scelta sulle copie di lavoro locali.
+
+### Trappole in cui sono già caduto (leggere prima di indagare)
+
+- **`git fetch` fallisce in silenzio se il remote è SSH.** In questa sessione
+  `origin` di `limen` e `mcp-geo-server` è `git@github.com:` e la chiave non è
+  caricata nella shell, quindi `git fetch origin` esce con errore e i ref
+  `origin/*` restano **vecchi**. Mi ha portato a leggere `git show main:file` su
+  un `main` di tre mesi prima e a dichiarare assente una feature che c'era.
+  Sempre `git -c credential.helper='!gh auth git-credential' fetch https://...`
+  e verificare la sha prima di concludere qualcosa su un altro branch.
+- **`pkill -f "<pattern>"` uccide la propria shell** quando il pattern compare
+  nella command line del `bash -c` che lo contiene. Ha ammazzato tre run di
+  test/mypy lasciando processi orfani che scrivevano sullo stesso file di
+  output, con risultati incoerenti. Usare i PID.
+- **Un file di output vuoto non è un pass.** Un `mypy` troncato da `timeout`
+  esce 124 e non scrive niente: identico a "nessun errore". Controllare sempre
+  il codice di uscita, non la dimensione del file.
 
 ### Backlog precedente
 
