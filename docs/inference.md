@@ -34,13 +34,19 @@ toccare Limen.
 | `chat` | 8B, GPU-resident | prosa italiana (briefing) |
 | `extract` | profilo JSON (grammar-constrained) | output JSON stretto |
 | `embed` | embedding | sidecar KG |
-| `quality-local` | colibrì / GLM-5.2 | **vietato** — vedi sotto |
-| `quality-cloud` | Claude via API, fallback di `quality-local` nel gateway | — |
-| `glm52` | colibrì per nome diretto | **vietato** — vedi sotto |
+| `quality-local` | colibrì / GLM-5.2, **con** fallback su `quality-cloud` | **vietato** — vedi sotto |
+| `quality-cloud` | Claude via API, fallback di `quality-local` | — |
+| `glm52` | colibrì per nome proprio, **senza** fallback | **vietato** — vedi sotto |
 
-`glm52` risultava assente dal catalogo all'ultima verifica (il gateway ne
-annunciava 6). Resta comunque in denylist: la lista del gateway può cambiare
-senza che Limen lo sappia.
+La differenza fra `quality-local` e `glm52` non è il modello — è la semantica
+del guasto. Se colibrì non risponde, `quality-local` restituisce Claude senza
+dirtelo; `glm52` restituisce un errore. Serve a chi vuole *quel* modello: un
+confronto fra modelli, una valutazione, un test di regressione, dove ricevere
+in silenzio le risposte di un altro modello invalida il risultato. È
+l'omissione da `router_settings.fallbacks` a implementarlo.
+
+Entrambi in denylist: il fallback riguarda *quale* modello risponde, non
+quanto ci mette, e la lentezza è la ragione del divieto.
 
 ## Mappa ruolo → modello
 
