@@ -34,15 +34,54 @@ from limen.core.logging import get_logger
 log = get_logger(__name__)
 
 
-def _role_models(settings: Settings) -> dict[str, str]:
+# Agent-role label (what the workflow passes to ``factory.create``) → the
+# ``LLMModels`` field that configures it, i.e. the LLM__MODELS__* env var.
+_ROLE_FIELDS: dict[str, str] = {
+    "RiskAnalyst": "risk_analyst",
+    "Briefing": "briefing",
+    "Orchestrator": "orchestrator",
+    "Scorer": "scorer",
+    "Summarizer": "summarizer",
+}
+
+
+# The roles a factory can be asked for, in declaration order. Public so the
+# `limen llm-check` command can probe every one without reaching into
+# ``_ROLE_FIELDS``; :func:`role_models` is public for the same reason.
+AGENT_ROLES: tuple[str, ...] = tuple(_ROLE_FIELDS)
+
+
+def role_models(settings: Settings) -> dict[str, str]:
     """Map agent-role label → concrete model id from the LLMModels block."""
     m = settings.llm.models
+    return {role: str(getattr(m, field)) for role, field in _ROLE_FIELDS.items()}
+
+
+def _declared_role_models(settings: Settings) -> dict[str, str]:
+    """The per-role map restricted to roles actually set in the environment.
+
+    A per-role map *is* meaningful to the local engines now. Behind the LiteLLM
+    gateway a model name is an arbitrary key in its ``model_list`` — ``fast``,
+    ``chat``, ``extract`` — so this map is exactly how you stop one 4B model
+    from having to serve both the Italian briefing and the JSON extraction.
+    That was not true when the map could only hold Claude ids, which is why
+    both local factories used to discard it.
+
+    What is still true is that the :class:`LLMModels` *defaults* are Claude
+    ids, and asking the gateway for ``claude-haiku-4-5`` is a 400, not a
+    graceful fallback. Hence the filter: honour the roles the operator
+    declared, and let every other role fall through to ``default_model``. A
+    deployment that sets no LLM__MODELS__* keeps today's single-model
+    behaviour; one that sets them gets real per-role routing.
+
+    Do not go back to passing ``{}`` here — that silently discards the
+    LLM__MODELS__* variables the compose file now sets.
+    """
+    declared = settings.llm.models.model_fields_set
     return {
-        "RiskAnalyst": m.risk_analyst,
-        "Briefing": m.briefing,
-        "Orchestrator": m.orchestrator,
-        "Scorer": m.scorer,
-        "Summarizer": m.summarizer,
+        role: model
+        for role, model in role_models(settings).items()
+        if _ROLE_FIELDS[role] in declared
     }
 
 
@@ -50,7 +89,7 @@ def _build_anthropic(settings: Settings) -> AnthropicFactory:
     assert settings.anthropic_api_key is not None
     return AnthropicFactory(
         api_key=settings.anthropic_api_key,
-        role_models=_role_models(settings),
+        role_models=role_models(settings),
     )
 
 
@@ -58,13 +97,13 @@ def _build_openai(settings: Settings) -> OpenAIFactory:
     assert settings.openai_api_key is not None
     return OpenAIFactory(
         api_key=settings.openai_api_key,
-        role_models=_role_models(settings),
+        role_models=role_models(settings),
     )
 
 
 def _build_foundry(settings: Settings) -> FoundryFactory:
     return FoundryFactory(
-        role_models=_role_models(settings),
+        role_models=role_models(settings),
         azure_endpoint=settings.azure_ai_endpoint,
         azure_api_key=settings.azure_ai_api_key,
         anthropic_endpoint=settings.anthropic_foundry_endpoint or settings.foundry_endpoint,
@@ -74,11 +113,14 @@ def _build_foundry(settings: Settings) -> FoundryFactory:
 
 def _build_ollama(settings: Settings) -> OllamaFactory:
     key = settings.llm.ollama_api_key
-    # Ignore the per-role map (Claude ids Ollama can't serve) and use the
-    # single configured Ollama model for every role.
+    # Same reasoning as llama.cpp: see :func:`_declared_role_models`. Ollama
+    # has no gateway in front of it, so the declared names must be real Ollama
+    # tags (``qwen3:4b``) rather than gateway aliases — but the mechanism is
+    # identical, and leaving the two local factories inconsistent would just be
+    # a trap for whoever configures Ollama next.
     return OllamaFactory(
         base_url=settings.llm.ollama_base_url,
-        role_models={},
+        role_models=_declared_role_models(settings),
         default_model=settings.llm.ollama_model,
         api_key=key.get_secret_value() if key is not None else None,
         timeout_seconds=settings.llm.ollama_timeout_seconds,
@@ -87,14 +129,13 @@ def _build_ollama(settings: Settings) -> OllamaFactory:
 
 def _build_llamacpp(settings: Settings) -> LlamaCppFactory:
     key = settings.llm.llamacpp_api_key
-    # Same reasoning as Ollama: ignore the per-role map (Claude ids the local
-    # engine can't serve) and use the single configured model for every role.
     return LlamaCppFactory(
         base_url=settings.llm.llamacpp_base_url,
-        role_models={},
+        role_models=_declared_role_models(settings),
         default_model=settings.llm.llamacpp_model,
         api_key=key.get_secret_value() if key is not None else None,
         timeout_seconds=settings.llm.llamacpp_timeout_seconds,
+        role_timeouts=dict(settings.llm.llamacpp_role_timeout_seconds),
     )
 
 

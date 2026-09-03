@@ -13,7 +13,7 @@ demand. Claude stays available as an opt-in alternative via ``ANTHROPIC_API_KEY`
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from limen.agents.llm_factory.base import ChatClient, ChatMessage
 from limen.core.logging import get_logger
@@ -22,12 +22,20 @@ from limen.integrations._http import SharedHttpClient, fetch_with_retry
 log = get_logger(__name__)
 
 # A request that arrives while llama-swap is loading a different model blocks
-# until the swap completes. On the reference host the models live on spinning
-# disks, where a 17.7 GB batch model takes ~2 minutes just to reach VRAM — so
-# the ceiling has to cover swap + prompt processing + generation, not
-# generation alone. Too low a value silently degrades callers to their
-# deterministic fallback instead of surfacing a timeout.
-DEFAULT_TIMEOUT_SECONDS = 600.0
+# until the swap completes, so this ceiling covers swap + prompt processing +
+# generation. On the reference host the GGUFs now sit on striped NVMe and a
+# load is seconds, not the ~2 minutes the previous 600 s default was budgeting
+# for on spinning disks — the models behind the gateway that serve agent roles
+# (fast/chat/extract) are GPU-resident and answer in seconds.
+#
+# Too high a ceiling is as harmful as too low, in the opposite direction. Too
+# low cuts off a healthy model mid-answer. Too high makes a *broken* engine
+# indistinguishable from a slow one for as long as the ceiling lasts: the
+# caller blocks, times out, falls back to the deterministic path anyway, and
+# the only difference the extra wait bought is that you found out later. A role
+# deliberately pointed at a slow model gets its own ceiling via
+# ``role_timeouts`` rather than raising this one for everybody.
+DEFAULT_TIMEOUT_SECONDS = 120.0
 
 
 @dataclass
@@ -73,6 +81,15 @@ class LlamaCppChatClient:  # Implements the ChatClient Protocol structurally
             headers=headers,
             timeout=self.timeout_seconds,
         )
+        # `fetch_with_retry` RETURNS non-retryable 4xx rather than raising, so
+        # without this check a wrong base_url (a 404 from some other service on
+        # the port) surfaced as "unexpected response shape: 'choices'" —
+        # pointing at the parser instead of at the misconfiguration.
+        if resp.status_code >= 400:
+            raise RuntimeError(
+                f"llama.cpp endpoint returned HTTP {resp.status_code} for {url} "
+                f"(model={self.model!r}): {resp.text[:200]}"
+            )
         data = resp.json()
         try:
             return str(data["choices"][0]["message"]["content"])
@@ -90,6 +107,9 @@ class LlamaCppFactory:  # Implements the LlmClientFactory Protocol structurally
     default_model: str = "qwen3.5-9b"
     api_key: str | None = None
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
+    # Per-role ceiling, keyed by the same labels as ``role_models``. Roles
+    # absent here use ``timeout_seconds``.
+    role_timeouts: dict[str, float] = field(default_factory=dict)
 
     def create(self, agent_role: str) -> ChatClient:
         model = self.role_models.get(agent_role, self.default_model)
@@ -97,5 +117,5 @@ class LlamaCppFactory:  # Implements the LlmClientFactory Protocol structurally
             base_url=self.base_url,
             model=model,
             api_key=self.api_key,
-            timeout_seconds=self.timeout_seconds,
+            timeout_seconds=self.role_timeouts.get(agent_role, self.timeout_seconds),
         )

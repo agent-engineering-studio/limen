@@ -152,7 +152,9 @@ delimitatore.
 | `OBJECT_STORE__ENDPOINT_URL` | _vuoto_ | Endpoint S3-compatibile (MinIO, R2, B2). |
 | `SCHEDULER__CACHE_CLEANUP` | `apscheduler` | `pg_cron` o `apscheduler`. **Usa APScheduler su Neon.** |
 | `LLM__PROVIDER` | _vuoto_ | Override: `anthropic` / `openai` / `foundry` / `ollama` / `llamacpp`. Vuoto ⇒ llama.cpp se non c'è una chiave cloud. |
-| `LLM__LLAMACPP_BASE_URL` | `http://127.0.0.1:8080` | Server di inferenza self-hosted (llama-swap, forma OpenAI). |
+| `LLM__LLAMACPP_BASE_URL` | `http://127.0.0.1:8091` | Gateway di inferenza self-hosted (forma OpenAI). **Non** `:8081`, che è GeoServer. Da container: `host.docker.internal`. |
+| `LLM__MODELS__<RUOLO>` | id Claude | Mappa ruolo → modello. I motori locali onorano solo i ruoli dichiarati. Mai `quality-local`/`glm52`: il processo rifiuta di partire. Vedi [`docs/inference.md`](./docs/inference.md). |
+| `LLM__LLAMACPP_TIMEOUT_SECONDS` | `120` | Tetto per i ruoli senza override; `LLM__LLAMACPP_ROLE_TIMEOUT_SECONDS` (JSON) per-ruolo. |
 | `LLM__OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama host (da container: `host.docker.internal`). |
 | `LLM__OLLAMA_MODEL` | `qwen3.6:latest` | Modello Ollama unico per tutti i ruoli agente. |
 | `SCORING__MODE` | `champion_only` | `shadow` fa girare il challenger ML in parallelo (scrive solo `model_runs`). |
@@ -165,7 +167,23 @@ delimitatore.
 | `LIMEN_ITALICA_CSV` | _vuoto_ | CSV e-ITALICA locale; se assente, auto-download da Zenodo. |
 | `LOG_LEVEL` / `LOG_JSON` | `INFO` / `false` | Livello + output JSON dei log structlog. |
 
-Vedi [`.env.example`](./.env.example) per l'elenco completo con esempi.
+Vedi [`.env.example`](./.env.example) per l'elenco completo con esempi, e
+[`docs/inference.md`](./docs/inference.md) per il motore LLM (modelli del
+gateway, mappa ruolo → modello, vincoli sui percorsi sincroni).
+
+### Porte pubblicate: Docker scavalca ufw
+
+Docker pubblica le porte scrivendo nelle **proprie** catene iptables, che
+vengono consultate *prima* di quelle di ufw: il `default deny incoming`
+dell'host **non** protegge una porta pubblicata da un container. Per questo
+ogni `ports:` nei compose ha una variabile di bind con default `127.0.0.1`
+(`LIMEN_PG_BIND`, `LIMEN_API_BIND`, `LIMEN_MQTT_BIND`, `LIMEN_TILESERV_BIND`,
+`LIMEN_FRONTEND_BIND`, `LIMEN_KG_BIND`, `LIMEN_MCP_BIND`,
+`LIMEN_GEOSERVER_*_BIND`, `LIMEN_GEODATA_*_BIND`).
+
+Le porte restano pubblicate — non rimosse — perché il workflow documentato
+`uv run limen migrate/seed/...` da host ci si collega. L'esposizione pubblica
+va fatta a monte con un reverse proxy su 443, non alzando un bind a `0.0.0.0`.
 
 ---
 

@@ -7,6 +7,7 @@ from typing import Any, cast
 import pytest
 
 from limen.config.settings import (
+    SLOW_GENERATION_MODELS,
     LLMProvider,
     ObjectStoreBackend,
     SchedulerBackend,
@@ -67,3 +68,29 @@ def test_llm_resolver_ollama_still_selectable_explicitly() -> None:
     """The fallback moved to llama.cpp, so Ollama now needs to be declared."""
     s = _make_settings(llm={"provider": "ollama"})
     assert resolve_provider(s).provider is LLMProvider.OLLAMA
+
+
+@pytest.mark.parametrize("slow_model", sorted(SLOW_GENERATION_MODELS))
+def test_slow_model_on_a_sync_role_refuses_to_start(slow_model: str) -> None:
+    """Every LLM__MODELS__* role is on a synchronous path. Pointing one at a
+    model that generates in tens of minutes must be a boot-time refusal, not a
+    caller timeout that silently degrades to the deterministic fallback."""
+    with pytest.raises(ValueError, match=r"synchronous"):
+        _make_settings(llm={"models": {"briefing": slow_model}})
+
+
+def test_slow_model_check_covers_undeclared_roles_too() -> None:
+    """LLMModels allows extra keys, so a future role name must not slip past."""
+    with pytest.raises(ValueError, match=r"LLM__MODELS__REPORT"):
+        _make_settings(llm={"models": {"report": "quality-local"}})
+
+
+def test_fast_gateway_models_are_accepted_on_sync_roles() -> None:
+    s = _make_settings(llm={"models": {"briefing": "chat", "risk_analyst": "extract"}})
+    assert s.llm.models.briefing == "chat"
+    assert s.llm.models.risk_analyst == "extract"
+
+
+def test_llamacpp_role_timeout_rejects_non_positive() -> None:
+    with pytest.raises(ValueError, match=r"positive ceiling"):
+        _make_settings(llm={"llamacpp_role_timeout_seconds": {"Briefing": 0.0}})

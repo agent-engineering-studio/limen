@@ -30,8 +30,15 @@ services:
       POSTGRES_PASSWORD: limen
       POSTGRES_DB: limen
       PGDATA: /var/lib/postgresql/data/pgdata
+    # Docker publishes ports by writing its OWN iptables chains, which are
+    # consulted BEFORE ufw's — so the host's `default deny incoming` does not
+    # protect a published port. Bind defaults to loopback; override the
+    # variable (to 0.0.0.0 or a specific interface) only with something in
+    # front of it.
+    # Host-side `uv run limen ...` connects here, so keep it published — to
+    # loopback only.
     ports:
-      - "5432:5432"
+      - "${LIMEN_PG_BIND:-127.0.0.1}:5432:5432"
     volumes:
       - ${LIMEN_PGDATA_DIR:-limen-pgdata}:/var/lib/postgresql/data
     healthcheck:

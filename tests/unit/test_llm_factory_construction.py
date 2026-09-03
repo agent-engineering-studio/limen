@@ -94,11 +94,24 @@ def test_llamacpp_factory_create_returns_client() -> None:
 
 
 def test_llamacpp_factory_timeout_covers_a_model_swap() -> None:
-    """The default must survive a llama-swap load from spinning disk (~2 min),
-    otherwise callers time out and silently degrade to their fallback path."""
+    """The default must survive a llama-swap load plus generation on the GPU
+    models, otherwise callers time out and silently degrade to their fallback
+    path — but it must stay short enough that a *broken* engine surfaces
+    quickly instead of blocking the caller for minutes first."""
     factory = LlamaCppFactory(base_url="http://inference.test:8080", role_models={})
-    assert factory.timeout_seconds >= 300.0
+    assert 60.0 <= factory.timeout_seconds <= 180.0
     assert factory.create("Briefing").timeout_seconds == factory.timeout_seconds
+
+
+def test_llamacpp_factory_role_timeout_overrides_only_that_role() -> None:
+    factory = LlamaCppFactory(
+        base_url="http://inference.test:8080",
+        role_models=ROLE_MODELS,
+        role_timeouts={"Briefing": 5400.0},
+    )
+    assert factory.create("Briefing").timeout_seconds == 5400.0
+    # A role with no override must NOT inherit the slow ceiling.
+    assert factory.create("RiskAnalyst").timeout_seconds == factory.timeout_seconds
 
 
 def test_llamacpp_factory_passes_api_key_through() -> None:

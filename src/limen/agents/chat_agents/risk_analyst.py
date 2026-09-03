@@ -70,7 +70,11 @@ def _summarise_for_prompt(a: AggregateAssessment) -> str:
 
 
 def _neutral_fallback(reason: str) -> RiskAnalysis:
-    log.warning("risk_analyst.fallback", reason=reason)
+    # `llm.fallback` is the single event that says "the engine did not answer
+    # and the deterministic path took over". Always a warning, never info: it
+    # is how a broken engine is told apart from a working one, and a run that
+    # emits it produced a *degraded* analysis while otherwise looking normal.
+    log.warning("llm.fallback", role=RiskAnalystAgent.role_name, reason=reason)
     return RiskAnalysis(
         driver="static_susceptibility",
         anomalies=[f"LLM fallback: {reason}"],

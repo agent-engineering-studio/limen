@@ -42,7 +42,7 @@ services:
     ports:
       # Bind to a non-default port to avoid collision with the
       # operational Postgres on the same host.
-      - "55432:5432"
+      - "${LIMEN_GEODATA_PG_BIND:-127.0.0.1}:55432:5432"
     volumes:
       - limen-geodata-pgdata:/var/lib/postgresql/data
     deploy:
@@ -99,8 +99,11 @@ services:
       MCP_ADMIN_TOKEN: ${MCP_ADMIN_TOKEN:-}
       LOG_JSON: "true"
     command: ["geodata", "mcp", "--transport", "http"]
+    # scripts/setup_openclaw.sh points at 127.0.0.1:8765. A remote MCP client
+    # (see claude_desktop_config.example.json) needs an explicit override plus
+    # TLS in front — Docker's published port bypasses ufw either way.
     ports:
-      - "8765:8765"
+      - "${LIMEN_GEODATA_MCP_BIND:-127.0.0.1}:8765:8765"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8765/ || exit 1"]
       interval: 30s

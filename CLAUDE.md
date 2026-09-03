@@ -79,6 +79,9 @@
 | Geodata is self-contained | `geodata/` is a uv workspace member designed to be extracted into a standalone repo with one `mv`. Nothing in `geodata.*` imports from `limen.*`; Prompt-2 parsers are duplicated in `geodata/parsers.py`. |
 | Geodata URLs are official | The manifest schema refuses any URL outside `https://idrogeo.isprambiente.it/` by construction. To add a dataset, edit `datasets.yaml` (single source of truth) — no code change required. |
 | MCP refresh is admin-only | The `refresh` tool requires `MCP_ADMIN_TOKEN`. Env var **unset** = refresh disabled (fail-closed). |
+| `quality-local` never on a synchronous path | Colibrì/GLM-5.2 generate in *tens of minutes* (measured: 40 s for 3 tokens). Every `LLM__MODELS__*` role is synchronous — HTTP request, MCP tool call, or a scheduler tick shorter than the response — so mapping one there stalls the hourly sweep silently instead of just being slow. Enforced by `SLOW_GENERATION_MODELS` + a `model_validator` on `LLMSettings`: the process **refuses to start**. See `docs/inference.md`. |
+| One inference endpoint | All LLM traffic goes to the LiteLLM gateway (`:8091`), never to llama-swap (`:8083`) or colibrì (`:8070`) directly — routing, spend cap and local→cloud fallback all live in the gateway. `:8081` is GeoServer, not an LLM engine. From a container the host is `host.docker.internal`, never `127.0.0.1`. |
+| Published ports bind to loopback | Docker writes its own iptables chains ahead of ufw, so the host's `default deny incoming` does not protect a published port. Every `ports:` entry uses a `LIMEN_*_BIND` variable defaulting to `127.0.0.1`; public exposure goes through a reverse proxy on 443. |
 
 ---
 
