@@ -79,6 +79,18 @@
 
 Versione: implementazione completa, in fase di test. Feature mergiate di recente:
 
+- **Gateway di inferenza self-hosted** (2026-09-03, `ee83f2f`) — tutto il
+  traffico LLM passa dal gateway LiteLLM su `:8091`; mai llama-swap (`:8083`) o
+  colibrì (`:8070`) diretti. `LLM__MODELS__*` ora funziona sui motori locali
+  (dietro il gateway i nomi dei modelli sono chiavi di routing arbitrarie), ma
+  onora **solo i ruoli dichiarati** in environment: i default del codice sono id
+  Claude che il gateway rifiuterebbe con 400. Timeout 600→120 s + override
+  per-ruolo. Nuovo `limen llm-check`. Evento unico `llm.fallback` quando un ruolo
+  ripiega sul deterministico. **`quality-local`/`glm52` vietati sui percorsi
+  sincroni con rifiuto all'avvio** (vedi §5). Tutte le porte pubblicate su
+  `127.0.0.1`. Doc: `docs/inference.md`.
+  Repo collegati: `mcp-geo-server` `7ad6189` (provider `openai`),
+  `aes-inference-lab` `ec9824a` (alias `glm52`).
 - **Auth su database** (issue #49, PR #50-53) — **Clerk rimosso** (non ammesso per la
   PA). `src/limen/auth/`: password scrypt (stdlib), verifica email via codice
   (SMTP riusato dal canale email; in dev il codice va nei log), sessioni
@@ -119,6 +131,70 @@ una volta applicate (checksum SHA-256) — mai editarle, aggiungerne di nuove.
 
 ## 2. Lavoro in sospeso / da riprendere
 
+### Da fare adesso — gateway di inferenza (2026-09-03)
+
+Il codice è su `main` in tutti e tre i repo, ma **due azioni restano fuori dalla
+portata di una sessione Claude** (servono root / accesso al server):
+
+1. **[BLOCCANTE, serve `sudo`] Rendere `glm52` sul gateway in esecuzione.**
+   `setup/etc/litellm/config.yaml` in `aes-inference-lab` è il *template*:
+   `/etc/litellm/config.yaml` viene generato da lì con `envsubst`
+   (`setup/scripts/40-install-services.sh:122`). Finché non lo rendi, il gateway
+   continua ad annunciare 6 modelli e `glm52` non esiste per nessun client.
+   ```bash
+   cd /srv/appdata/git/aes-inference-lab && git checkout main && git pull
+   sudo bash setup/scripts/40-install-services.sh   # riavvia solo le unit cambiate
+   curl -s http://127.0.0.1:8091/v1/models \
+     | python3 -c 'import sys,json; print([m["id"] for m in json.load(sys.stdin)["data"]])'
+   ```
+   Lo script riavvia solo le unit il cui file è cambiato, quindi colibrì e i suoi
+   ~10 GB **non** vengono ricaricati.
+
+2. **[BLOCCANTE] Applicare limen sul server e verificare dal container.**
+   Il cambio di `ports:` richiede `up -d`, non `restart`.
+   ⚠️ **Le porte ora sono su `127.0.0.1`.** Se raggiungi API o frontend da
+   un'altra macchina senza reverse proxy, servono `LIMEN_API_BIND=0.0.0.0` /
+   `LIMEN_FRONTEND_BIND=0.0.0.0` in `.env` **prima** di ricreare i container,
+   altrimenti il servizio sparisce dalla rete e sembra un guasto.
+   ```bash
+   git checkout main && git pull
+   printf 'LLM__LLAMACPP_BASE_URL=http://127.0.0.1:8091\nAPI_LLM_LLAMACPP_BASE_URL=http://host.docker.internal:8091\n' >> .env
+   docker compose -f infra/docker/docker-compose.demo.yml up -d --build api
+   docker compose -f infra/docker/docker-compose.demo.yml exec api limen llm-check
+   ss -tlnp | grep -E '5432|1883|7800|8080'   # atteso 127.0.0.1, non 0.0.0.0
+   ```
+   `llm-check` va eseguito **dentro** il container: da host `127.0.0.1` funziona
+   e dal container no, quindi una verifica da host non prova niente.
+
+3. **[fatto, resta il pull] Immagini GeoServer.** Pubblicate su GHCR il
+   2026-09-03 (run `33781145378`, `:latest` 16:54 + `:bootstrap` 17:06,
+   multi-arch). Verificato dentro l'immagine pubblicata che
+   `GEO_LLM_PROVIDER=openai` costruisca un `OpenAIChatClient`. Sul server:
+   ```bash
+   docker compose -f infra/docker/docker-compose.geoserver.yml --profile geoserver pull
+   docker compose -f infra/docker/docker-compose.geoserver.yml --profile geoserver up -d
+   ```
+   Nota: sono **due tag distinti** — `geoserver-mcp` usa `:latest`,
+   `geoserver-webui` e `geoserver-init` usano `:bootstrap`. `make build` **non**
+   li costruisce: nel merge dei compose solo `api`, `mcp` e `postgres` hanno un
+   `build:` (verificato con `docker compose build --dry-run`), per la scelta
+   dichiarata «application images are pulled PRE-BUILT from GHCR».
+
+4. **Ruolo asincrono per colibrì — progettato, non implementato.** Un modello che
+   genera in decine di minuti è un modello *batch*: serve un ruolo dedicato
+   (`report`/`deep_analysis`) fuori da `LLM__MODELS__*` con allowlist propria, un
+   job asincrono che lo invoca, ed esito **persistito** con stato
+   `pending`/`done`/`failed` letto da un endpoint che risponde subito. Design
+   completo in `docs/inference.md` §«Come si userà colibrì». Finché non esiste,
+   colibrì è inutilizzabile da Limen **per costruzione** — ed è il comportamento
+   voluto.
+5. **`mcp-geo-server`: 47 file "modificati" di soli permessi** (`100644`→`100755`,
+   artefatto della migrazione) sporcano `git status` in quel clone e hanno già
+   bloccato un `git switch`. Rimedio: `git config core.fileMode false` in quel
+   repo. Non applicato: è una scelta sulla copia di lavoro locale.
+
+### Backlog precedente
+
 - **Pulizia disco (dataset statici)** — sul Mac occupavano ~93 GB, rigenerabili e
   non versionati (solo `data/README.md` è in git). Sul nuovo server con più spazio
   è meno urgente, ma per riferimento:
@@ -140,7 +216,14 @@ una volta applicate (checksum SHA-256) — mai editarle, aggiungerne di nuove.
   sistematicamente più basso del champion → probabile "non promuovere".
 - **Coastal flood signal**: `coastal_surge_norm` è None per centroidi interni
   (Marine API senza onde); follow-up = campionare un punto costiero.
-- Backlog storico in `docs/HANDOFF.md` §4 e nelle issue GitHub (`gh issue list`).
+- **Issue GitHub — 10 aperte, nessuna implementata** (audit del 2026-09-03,
+  verificato per grep sul codice, non per titolo; #65 FIRMS chiusa perché
+  completa). L'ordine è vincolato dalle dipendenze: **#57** (`hazard_type`,
+  registry dei motori, YAML per hazard) sblocca tutto il resto —
+  #61→#62→#66→#67/#68 per wildfire, #63→#64 per flood, #58 alla fine. **#59**
+  (governance alert: aggregazione comunale, rate limiting, digest) è l'unica che
+  può procedere in parallelo, e va chiusa **prima** di abilitare flood in
+  produzione. Dettaglio: `gh issue list --repo agent-engineering-studio/limen`.
 
 ---
 
@@ -209,3 +292,23 @@ PostGIS, **no ORM**; migrazioni SQL immutabili; geometrie EPSG:4326 (distanze in
 neutra in lettura; V1 deterministico resta il champion; refresh matview **solo**
 via `refresh_mv_latest_risk()`; alert mai inventati + dedup obbligatorio; geodata
 mai nel critical path. Leggerli prima di lavorare.
+
+Tre aggiunti il 2026-09-03 (dettaglio in `docs/inference.md`):
+
+- **`quality-local`/`glm52` mai su un percorso sincrono.** Misurato: colibrì ha
+  risposto 3 token in 40 s (~0,08 tok/s a freddo). *Ogni* ruolo di
+  `LLM__MODELS__*` è sincrono — richiesta HTTP, tool MCP, o un tick dello
+  scheduler più breve della risposta. Il caso peggiore non è l'HTTP ma la sweep
+  oraria: il loop è sequenziale su tutte le AOI e `_sweep_lock` **scarta** i tick
+  successivi, quindi un briefing da decine di minuti ferma il monitoraggio
+  nazionale senza un solo errore nei log. Imposto da `SLOW_GENERATION_MODELS` +
+  `model_validator` su `LLMSettings`: **il processo rifiuta di partire.**
+- **Un solo endpoint di inferenza**: il gateway LiteLLM `:8091`. Routing per nome
+  modello, tetto di spesa e fallback locale→cloud vivono lì; una porta diretta li
+  aggira. `:8081` è **GeoServer**, non un motore LLM. Dai container l'host è
+  `host.docker.internal`, mai `127.0.0.1` (che è il container stesso).
+- **Porte pubblicate su loopback**: Docker scrive nelle proprie catene iptables
+  *prima* di quelle di ufw, quindi il `default deny incoming` dell'host non
+  protegge una porta pubblicata. Ogni `ports:` usa una variabile `LIMEN_*_BIND`
+  con default `127.0.0.1`; l'esposizione pubblica passa da un reverse proxy su
+  443.
