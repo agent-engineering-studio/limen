@@ -11,6 +11,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
 
+from limen.core.models.hazard import DEFAULT_HAZARD
+
 _W = 280
 _H = 48
 _PAD = 4
@@ -19,6 +21,7 @@ _OBSERVED_SQL = """
 SELECT computed_at, score
 FROM risk_assessments
 WHERE cell_id = $1
+  AND hazard_type = $3
   AND horizon NOT LIKE '+%'
   AND computed_at >= now() - make_interval(hours => $2::int)
 ORDER BY computed_at
@@ -27,7 +30,7 @@ ORDER BY computed_at
 _FORECAST_SQL = """
 SELECT computed_at, horizon, score
 FROM risk_assessments
-WHERE cell_id = $1 AND pipeline_version LIKE 'v1-forecast+%'
+WHERE cell_id = $1 AND hazard_type = $2 AND pipeline_version LIKE 'v1-forecast+%'
 ORDER BY horizon
 """
 
@@ -93,10 +96,10 @@ async def read_cell_trend(
     """Observed (past ``hours``) + forecast (target time) for a cell."""
     obs = [
         (r["computed_at"], float(r["score"]))
-        for r in await conn.fetch(_OBSERVED_SQL, cell_id, hours)
+        for r in await conn.fetch(_OBSERVED_SQL, cell_id, hours, DEFAULT_HAZARD.value)
     ]
     forecast: list[TrendPoint] = []
-    for r in await conn.fetch(_FORECAST_SQL, cell_id):
+    for r in await conn.fetch(_FORECAST_SQL, cell_id, DEFAULT_HAZARD.value):
         offset_h = int(str(r["horizon"]).lstrip("+").rstrip("h") or 0)
         forecast.append((r["computed_at"] + timedelta(hours=offset_h), float(r["score"])))
     forecast.sort(key=lambda p: p[0])

@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from limen.core.logging import get_logger
+from limen.core.models.hazard import DEFAULT_HAZARD
 from limen.data.db import acquire
 
 log = get_logger(__name__)
@@ -68,11 +69,13 @@ async def risk_summary(aoi_id: str | None = None) -> list[dict[str, Any]]:
                    COUNT(*) FILTER (WHERE risk_level = 'Moderate') AS moderate
             FROM mv_latest_risk
             WHERE risk_score IS NOT NULL
+              AND hazard_type = $2
               AND ($1::text IS NULL OR aoi_id = $1)
             GROUP BY aoi_id
             ORDER BY high_or_above DESC, max_score DESC
             """,
             aoi_id,
+            DEFAULT_HAZARD.value,
         )
     return [
         {
@@ -97,12 +100,14 @@ async def top_risk_cells(limit: int = 10, aoi_id: str | None = None) -> list[dic
                    risk_level AS class, computed_at
             FROM mv_latest_risk
             WHERE risk_score IS NOT NULL
+              AND hazard_type = $3
               AND ($2::text IS NULL OR aoi_id = $2)
             ORDER BY risk_score DESC
             LIMIT $1
             """,
             limit,
             aoi_id,
+            DEFAULT_HAZARD.value,
         )
     return [
         {
@@ -123,11 +128,12 @@ async def cell_breakdown(cell_id: str) -> dict[str, Any]:
             """
             SELECT cell_id, computed_at, score, class, factors, explanation
             FROM risk_assessments
-            WHERE cell_id = $1
+            WHERE cell_id = $1 AND hazard_type = $2
             ORDER BY computed_at DESC
             LIMIT 1
             """,
             cell_id,
+            DEFAULT_HAZARD.value,
         )
     if row is None:
         return {"error": f"no assessment for cell {cell_id!r}"}
@@ -157,6 +163,7 @@ async def recent_alerts(
             FROM risk_assessments ra
             JOIN grid_cells g ON g.id = ra.cell_id
             WHERE ra.class = ANY($1::text[])
+              AND ra.hazard_type = $4
               AND ra.computed_at >= now() - ($2::int * interval '1 hour')
             ORDER BY ra.computed_at DESC, ra.score DESC
             LIMIT $3
@@ -164,6 +171,7 @@ async def recent_alerts(
             levels,
             since_hours,
             limit,
+            DEFAULT_HAZARD.value,
         )
     return [
         {
@@ -262,22 +270,28 @@ async def national_report() -> dict[str, Any]:
             """
             WITH latest AS (
                 SELECT aoi_id, MAX(computed_at) AS ts
-                FROM model_runs GROUP BY aoi_id
+                FROM model_runs WHERE hazard_type = $1 GROUP BY aoi_id
             )
             SELECT m.cell_id, m.aoi_id, m.probability, m.risk_class
             FROM model_runs m
             JOIN latest l ON l.aoi_id = m.aoi_id AND l.ts = m.computed_at
+            WHERE m.hazard_type = $1
             ORDER BY m.probability DESC
             LIMIT 10
-            """
+            """,
+            DEFAULT_HAZARD.value,
         )
         alerts_24h = await conn.fetchval(
             """SELECT COUNT(*) FROM alert_dispatches
-               WHERE dispatched_at >= now() - interval '24 hours'"""
+               WHERE dispatched_at >= now() - interval '24 hours'
+                 AND hazard_type = $1""",
+            DEFAULT_HAZARD.value,
         )
         forecast_24h = await conn.fetchval(
             """SELECT COUNT(*) FROM forecast_dispatches
-               WHERE dispatched_at >= now() - interval '24 hours'"""
+               WHERE dispatched_at >= now() - interval '24 hours'
+                 AND hazard_type = $1""",
+            DEFAULT_HAZARD.value,
         )
     from limen.integrations.geoserver_source.comuni import comuni_for_points
 

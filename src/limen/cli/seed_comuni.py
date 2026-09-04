@@ -76,9 +76,13 @@ async def run() -> int:
             )
             tagged = await conn.fetchval("SELECT COUNT(*) FROM cell_comune")
         async with acquire() as conn:
-            # First-time comune-matview population + the 312k-row latest refresh
-            # blow past the pool's default command timeout; give it room.
-            rc = await conn.fetchval("SELECT refresh_mv_latest_risk()", timeout=600)
+            # refresh_mv_comune_risk() directly, not the latest-risk chain:
+            # that one debounces to once per 5 minutes, so right after a sweep
+            # this first-time population would silently do nothing. The
+            # comune view is what this command actually needs populated.
+            # First-time population blows past the pool's default command
+            # timeout; give it room.
+            rc = await conn.fetchval("SELECT refresh_mv_comune_risk()", timeout=600)
     log.info("cli.seed_comuni.done", comuni=inserted, cells_tagged=tagged, refresh=rc)
     return 0
 

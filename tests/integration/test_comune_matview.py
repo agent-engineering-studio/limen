@@ -24,8 +24,10 @@ async def _seed_minimal() -> None:
             )
             await conn.execute(
                 "INSERT INTO risk_assessments "
-                "(cell_id, score, class, factors, computed_at, horizon, pipeline_version) "
-                "VALUES ($1,$2,$3, jsonb_build_object('e',$4::float), now(), 'now','v1')",
+                "(cell_id, hazard_type, score, class, factors, computed_at, horizon, "
+                " pipeline_version) "
+                "VALUES ($1,'landslide',$2,$3, jsonb_build_object('e',$4::float), "
+                "        now(), 'now','v1')",
                 cid,
                 score,
                 cls,

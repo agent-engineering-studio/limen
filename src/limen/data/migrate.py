@@ -55,6 +55,14 @@ def _discover_migrations() -> list[tuple[str, str]]:
     return out
 
 
+# The pool's DB__COMMAND_TIMEOUT_SECONDS (30 s by default) is sized for
+# operational queries. A migration that rebuilds a hot table copies millions
+# of rows and rebuilds its indexes inside one statement, so it needs its own
+# ceiling — without it the transaction is cancelled mid-rebuild and rolled
+# back, which looks like a broken migration rather than a timeout.
+_APPLY_TIMEOUT_SECONDS = 1800.0
+
+
 def _checksum(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -101,7 +109,7 @@ async def run_migrations(only: Iterable[str] | None = None) -> list[str]:
 
             log.info("migrate.apply", file=name)
             async with conn.transaction():
-                await conn.execute(sql)
+                await conn.execute(sql, timeout=_APPLY_TIMEOUT_SECONDS)
                 await conn.execute(
                     "INSERT INTO schema_migrations (name, checksum) VALUES ($1, $2)",
                     name,

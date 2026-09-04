@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
+
 
 @dataclass(frozen=True, slots=True)
 class RiskAssessment:
@@ -22,6 +24,7 @@ class RiskAssessment:
     pipeline_version: str
     computed_at: datetime
     dataset_versions: list[int]
+    hazard_type: HazardType = DEFAULT_HAZARD
 
 
 async def insert(_: RiskAssessment) -> int:  # pragma: no cover - stub

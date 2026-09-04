@@ -278,6 +278,10 @@ class SchedulerSettings(BaseSettings):
     hourly_monitoring_minutes: int = Field(default=60, ge=5)
     # Run the ISPRA IdroGEO sync every N hours.
     weekly_idrogeo_hours: int = Field(default=24 * 7, ge=1)
+    # Hot-table partition maintenance + retention. Partitions are created a
+    # week ahead, so anything well under that is safe; 6 h keeps retention
+    # responsive without hammering the catalogue.
+    partitions_interval_hours: int = Field(default=6, ge=1)
     enable_hourly_monitoring: bool = True
     enable_weekly_idrogeo: bool = True
 

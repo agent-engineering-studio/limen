@@ -79,6 +79,20 @@
 
 Versione: implementazione completa, in fase di test. Feature mergiate di recente:
 
+- **Fase 1a multi-hazard + partizionamento** (2026-09-04, issue #82, epic #57;
+  assorbe #79) — migrazioni `028_multi_hazard_partitioned.sql` e
+  `029_risk_at_stable_order.sql`. `hazard_type` su `risk_assessments`,
+  `model_runs`, `norm_stats`, `training_samples`, `alert_dispatches`,
+  `forecast_dispatches`; tabella di lookup `hazards` (solo `landslide`
+  abilitato). `mv_latest_risk` ha ora una riga per *(cella, hazard abilitato)*
+  e le sei viste/funzioni a valle sono fissate su `landslide`, quindi i numeri
+  della mappa pubblica non cambiano. `risk_assessments` e `model_runs` sono
+  partizionate per giorno su `computed_at`: la retention elimina partizioni.
+  **Tre difetti pre-esistenti corretti nello stesso passaggio** (dettaglio in
+  §2). Verificato sui dati reali del server: 3 418 556 righe conservate,
+  `mv_latest_risk` identica byte per byte, `v_region_tiles` identica,
+  migrazione applicata in 1 min 53 s.
+
 - **Gateway di inferenza self-hosted** (2026-09-03, `ee83f2f`) — tutto il
   traffico LLM passa dal gateway LiteLLM su `:8091`; mai llama-swap (`:8083`) o
   colibrì (`:8070`) diretti. `LLM__MODELS__*` ora funziona sui motori locali
@@ -141,6 +155,54 @@ una volta applicate (checksum SHA-256) — mai editarle, aggiungerne di nuove.
 ---
 
 ## 2. Lavoro in sospeso / da riprendere
+
+### Difetti pre-esistenti corretti in #82 (da tenere a mente)
+
+1. **La retention di `risk_assessments` non era mai girata.**
+   `_purge_old_assessments` in `api/jobs/cache_cleanup.py` era definita ma
+   nessuno la chiamava, quindi la tabella che cresce di ~15 GB/giorno non
+   veniva mai potata. Ora entrambe le tabelle calde passano da
+   `drop_expired_partitions()` dentro `run_cache_cleanup_job`.
+2. **Il debounce del refresh era inerte dalla migrazione 026.** La 017 aveva
+   introdotto la finestra di 5 minuti su `mv_refresh_state`; la 026 ha
+   ridefinito `refresh_mv_latest_risk()` per agganciare il rollup comunale
+   copiando il corpo dalla 007 e perdendo il debounce. Da allora *ogni*
+   chiamata di PersistResult rifaceva un refresh completo di 312k righe più
+   quello comunale, venti volte per sweep nazionale. Il debounce è
+   ripristinato; i test che si aspettano un refresh immediato azzerano
+   `mv_refresh_state` (il fixture `reset_db` lo fa da solo).
+3. **`DB__COMMAND_TIMEOUT_SECONDS` (30 s) uccideva le migrazioni lunghe.**
+   Nessuna migrazione lo aveva mai superato finché la 028 non ha dovuto
+   copiare 3,4 milioni di righe: la transazione veniva annullata a metà e
+   sembrava una migrazione rotta. `data/migrate.py` ora applica ogni file con
+   `_APPLY_TIMEOUT_SECONDS = 1800`.
+
+### Da sapere sulle partizioni
+
+- Le partizioni giornaliere vanno create **prima** che uno sweep scriva. Le
+  crea il job `limen-partitions` (registrato **sempre**, ogni
+  `SCHEDULER__PARTITIONS_INTERVAL_HOURS`, default 6), più un tentativo
+  best-effort all'avvio dell'API e `uv run limen partitions` a mano. Non
+  rimetterle dentro il job di cache-cleanup: quello **non viene registrato**
+  con `SCHEDULER__CACHE_CLEANUP=pg_cron`, e la retention resterebbe ferma.
+  Righe in `risk_assessments_default` sono un difetto, non uno stato normale:
+  la retention non le raggiunge. Il log `partitions.default_not_empty` le
+  segnala.
+- Quando #77 sposterà lo scheduler nel processo `worker`, il gancio
+  best-effort che oggi sta nel lifespan dell'API va portato lì: il primo tick
+  del job è differito di `SCHEDULER__PARTITIONS_INTERVAL_HOURS`, quindi senza
+  il gancio all'avvio le partizioni nascerebbero solo dopo 6 ore.
+- I confini delle partizioni sono in **UTC** (`now() AT TIME ZONE 'UTC'`), non
+  nel TimeZone della sessione: altrimenti su un server non-UTC il giorno a cui
+  una riga appartiene e il giorno che dà il nome alla partizione divergono.
+- `refresh_mv_latest_risk()` restituisce il timbro del debounce in caso di
+  errore, così un fallimento transitorio non silenzia i retry per 5 minuti.
+  `limen seed-comuni` chiama `refresh_mv_comune_risk()` **diretto**: passare
+  dalla catena con debounce rendeva la prima popolazione un no-op silenzioso.
+- `risk_at()` ordina le feature per `cell_id` (migrazione 029): senza
+  quell'ordine i byte del tile dipendevano dall'ordine fisico delle righe,
+  quindi cambiavano dopo un `VACUUM FULL` o una ricostruzione della tabella a
+  contenuto identico, rendendo inutile qualsiasi ETag.
 
 ### Da fare adesso — gateway di inferenza (2026-09-03)
 
@@ -285,6 +347,7 @@ make install                 # uv sync --all-groups
 make up-dev                  # Postgres 16 + PostGIS + pg_cron + pgvector
 make seed                    # migrazioni + AOI Puglia/Basilicata + griglia 1 km
 make migrate                 # solo migrazioni pendenti
+uv run limen partitions      # partizioni giornaliere mancanti + stato tabelle calde
 uv run limen seed-comuni     # confini ISTAT + tag celle (needs GEOSERVER_SOURCE__DB_DSN)
 uv run limen create-admin    # LIMEN_ADMIN_EMAIL / _PASSWORD / _FIRST / _LAST
 uv run limen bootstrap-static

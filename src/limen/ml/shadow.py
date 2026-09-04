@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
+
 # Rows before this instant carry rain features frozen at zero (fixed in
 # 7d19fe4) — judging them would smear the verdict.
 DEFAULT_SINCE = datetime(2026, 7, 6, 13, 0, tzinfo=UTC)
@@ -32,12 +34,14 @@ JOIN LATERAL (
     SELECT ra.score, ra.class
     FROM risk_assessments ra
     WHERE ra.cell_id = m.cell_id
+      AND ra.hazard_type = m.hazard_type
       AND ra.computed_at BETWEEN m.computed_at - interval '1 hour'
                              AND m.computed_at + interval '1 hour'
     ORDER BY abs(extract(epoch FROM ra.computed_at - m.computed_at))
     LIMIT 1
 ) r ON true
 WHERE m.role = 'challenger'
+  AND m.hazard_type = $3
   AND m.computed_at >= $1
   AND ($2::text IS NULL OR m.aoi_id = $2)
 """
@@ -81,6 +85,7 @@ _VERSIONS_SQL = """
 SELECT DISTINCT model_version
 FROM model_runs
 WHERE role = 'challenger'
+  AND hazard_type = $3
   AND computed_at >= $1
   AND ($2::text IS NULL OR aoi_id = $2)
 ORDER BY model_version
@@ -102,11 +107,13 @@ WITH events AS (
 SELECT ev.cell_id, ev.aoi_id, ev.aoi_name, ev.event_time,
        (SELECT m.probability FROM model_runs m
         WHERE m.cell_id = ev.cell_id AND m.role = 'challenger'
+          AND m.hazard_type = $3
           AND m.computed_at BETWEEN ev.event_time - interval '48 hours'
                                 AND ev.event_time
         ORDER BY m.computed_at DESC LIMIT 1) AS ml_probability,
        (SELECT ra.score FROM risk_assessments ra
         WHERE ra.cell_id = ev.cell_id
+          AND ra.hazard_type = $3
           AND ra.computed_at BETWEEN ev.event_time - interval '48 hours'
                                  AND ev.event_time
         ORDER BY ra.computed_at DESC LIMIT 1) AS champion_score
@@ -207,6 +214,7 @@ WITH pred AS (
     SELECT cell_id, max(probability) AS predicted
     FROM model_runs
     WHERE role = 'challenger' AND computed_at >= $1
+      AND hazard_type = $4
       AND ($2::text IS NULL OR aoi_id = $2)
     GROUP BY cell_id
 )
@@ -228,6 +236,7 @@ async def collect_reliability(
     aoi_filter: str | None,
     radius_m: float,
     min_positives: int = MIN_RELIABILITY_POSITIVES,
+    hazard: HazardType = DEFAULT_HAZARD,
 ) -> ReliabilitySummary:
     """Reliability (calibration) of the ML challenger over the window.
 
@@ -241,7 +250,7 @@ async def collect_reliability(
         return ReliabilitySummary(
             sufficient=False, n_positives=n_pos, min_positives=min_positives, bins=[]
         )
-    rows = await conn.fetch(_RELIABILITY_PAIRS_SQL, since, aoi_filter, radius_m)
+    rows = await conn.fetch(_RELIABILITY_PAIRS_SQL, since, aoi_filter, radius_m, hazard.value)
     pairs = [(float(r["predicted"]), bool(r["observed"])) for r in rows]
     return ReliabilitySummary(
         sufficient=True,
@@ -252,20 +261,25 @@ async def collect_reliability(
 
 
 async def collect_shadow_summary(
-    conn: _Conn, *, since: datetime, aoi_filter: str | None, with_top: bool = False
+    conn: _Conn,
+    *,
+    since: datetime,
+    aoi_filter: str | None,
+    with_top: bool = False,
+    hazard: HazardType = DEFAULT_HAZARD,
 ) -> ShadowSummary:
     """Aggregate the post-fix shadow window per AOI from an open connection.
 
     ``with_top`` runs a second LATERAL scan for the top-10 divergent cells per
     AOI (the CLI report); the API leaves it off to answer in a single scan.
     """
-    stat_rows = await conn.fetch(_STATS_SQL, since, aoi_filter)
-    truth_rows = [dict(r) for r in await conn.fetch(_TRUTH_SQL, since, aoi_filter)]
-    versions = await conn.fetch(_VERSIONS_SQL, since, aoi_filter)
+    stat_rows = await conn.fetch(_STATS_SQL, since, aoi_filter, hazard.value)
+    truth_rows = [dict(r) for r in await conn.fetch(_TRUTH_SQL, since, aoi_filter, hazard.value)]
+    versions = await conn.fetch(_VERSIONS_SQL, since, aoi_filter, hazard.value)
 
     top_by_aoi: dict[str, list[tuple[str, float, float, float]]] = {}
     if with_top:
-        for t in await conn.fetch(_TOP_SQL, since, aoi_filter):
+        for t in await conn.fetch(_TOP_SQL, since, aoi_filter, hazard.value):
             top_by_aoi.setdefault(str(t["aoi_id"]), []).append(
                 (
                     str(t["cell_id"]),

@@ -150,6 +150,11 @@ async def reset_db(pg_pool: asyncpg.Pool) -> AsyncIterator[None]:
     async with acquire() as conn:
         with contextlib.suppress(Exception):
             await conn.execute(f"TRUNCATE {', '.join(tables)} RESTART IDENTITY CASCADE")
+        # refresh_mv_latest_risk() debounces to one refresh per 5 minutes, so a
+        # test's explicit refresh would otherwise be swallowed because an
+        # earlier test in the same session already refreshed.
+        with contextlib.suppress(Exception):
+            await conn.execute("UPDATE mv_refresh_state SET refreshed_at = 'epoch'::timestamptz")
     yield
 
 

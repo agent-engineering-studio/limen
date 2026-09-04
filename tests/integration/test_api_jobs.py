@@ -70,20 +70,27 @@ async def test_hourly_monitoring_runs_against_seeded_aois(
 ) -> None:
     """Job iterates every seeded AOI and persists a RiskAssessment per cell."""
     await run_seed()
-    # Pre-seed empty cell_static_factors so static factors load cleanly.
     async with acquire() as conn:
+        # Trim the grids FIRST: the seed lays down ~312k cells across the 20
+        # AOIs and this test needs six. Deleting them with a `NOT IN`
+        # anti-join used to blow past the pool's 30 s command timeout, and
+        # pre-seeding cell_static_factors before the trim meant inserting
+        # 312k rows only to cascade-delete them a moment later. Ordered this
+        # way both statements touch a handful of rows.
+        await conn.execute(
+            """
+            DELETE FROM grid_cells g
+            USING (SELECT id FROM grid_cells ORDER BY id OFFSET 6) stale
+            WHERE g.id = stale.id
+            """,
+            timeout=300,
+        )
+        # Empty cell_static_factors rows so static factors load cleanly.
         await conn.execute(
             """
             INSERT INTO cell_static_factors (cell_id)
             SELECT id FROM grid_cells
             ON CONFLICT (cell_id) DO NOTHING
-            """
-        )
-        # Trim grids so the test doesn't score 60k cells per AOI.
-        await conn.execute(
-            """
-            DELETE FROM grid_cells
-            WHERE id NOT IN (SELECT id FROM grid_cells ORDER BY id LIMIT 6)
             """
         )
 

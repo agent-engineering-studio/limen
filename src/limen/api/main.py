@@ -36,6 +36,7 @@ from limen.config.settings import Settings, get_settings
 from limen.core.logging import configure_logging, get_logger
 from limen.data.db import close_pool, init_pool
 from limen.data.migrate import run_migrations
+from limen.data.repos import partitions_repo
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.iot.mqtt_ingestor import MqttIngestor
 from limen.observability.tracing import setup_tracing
@@ -53,6 +54,20 @@ async def _lifespan_default(app: FastAPI) -> AsyncIterator[None]:
 
     pool = await init_pool(settings.db)
     await run_migrations()
+    # A missing daily partition makes every INSERT land in the DEFAULT one,
+    # where retention cannot reach it. Cheap and idempotent, so it runs on
+    # every boot rather than only on the scheduler's first tick. Best-effort:
+    # the scheduled job retries within hours, and neither this nor the
+    # diagnostic below is a reason to refuse to serve the public map.
+    try:
+        await partitions_repo.ensure()
+        await partitions_repo.warn_on_default_rows()
+    except Exception as exc:
+        log.warning(
+            "api.lifespan.partitions_failed",
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
     deps = await AppDependencies.build(pool=pool, settings=settings)
     app.state.deps = deps
     app.state.ready = True

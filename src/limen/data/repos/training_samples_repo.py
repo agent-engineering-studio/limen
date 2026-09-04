@@ -19,6 +19,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from limen.core.logging import get_logger
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.data.db import acquire
 
 log = get_logger(__name__)
@@ -35,6 +36,7 @@ class TrainingSample:
     features: dict[str, Any]
     split_block: str
     dataset_version_id: int | None = None
+    hazard_type: HazardType = DEFAULT_HAZARD
 
 
 async def insert_many(items: Iterable[TrainingSample]) -> int:
@@ -46,10 +48,11 @@ async def insert_many(items: Iterable[TrainingSample]) -> int:
             await conn.execute(
                 """
                 INSERT INTO training_samples (
-                    cell_id, valuation_time, label, label_source,
+                    cell_id, hazard_type, valuation_time, label, label_source,
                     features, split_block, dataset_version_id
-                ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
-                ON CONFLICT (cell_id, valuation_time, label_source) DO UPDATE
+                ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
+                ON CONFLICT (cell_id, hazard_type, valuation_time, label_source)
+                DO UPDATE
                 SET label = EXCLUDED.label,
                     -- Re-extraction refreshes static/insar but must NEVER
                     -- wipe the expensive CERRA rain enrichment (13 h of
@@ -63,6 +66,7 @@ async def insert_many(items: Iterable[TrainingSample]) -> int:
                     dataset_version_id = EXCLUDED.dataset_version_id
                 """,
                 it.cell_id,
+                it.hazard_type.value,
                 it.valuation_time,
                 it.label,
                 it.label_source,
@@ -89,28 +93,33 @@ async def list_blocks() -> list[str]:
     return [r["split_block"] for r in rows]
 
 
-async def fetch_samples(*, blocks: list[str] | None = None) -> list[TrainingSample]:
-    """Return samples, optionally filtered to one or more spatial blocks."""
+async def fetch_samples(
+    *, blocks: list[str] | None = None, hazard: HazardType = DEFAULT_HAZARD
+) -> list[TrainingSample]:
+    """Return samples for one hazard, optionally filtered to spatial blocks."""
     async with acquire() as conn:
         if blocks:
             rows = await conn.fetch(
                 """
-                SELECT cell_id, valuation_time, label, label_source,
+                SELECT cell_id, hazard_type, valuation_time, label, label_source,
                        features, split_block, dataset_version_id
                 FROM training_samples
-                WHERE split_block = ANY($1::text[])
+                WHERE split_block = ANY($1::text[]) AND hazard_type = $2
                 ORDER BY id
                 """,
                 blocks,
+                hazard.value,
             )
         else:
             rows = await conn.fetch(
                 """
-                SELECT cell_id, valuation_time, label, label_source,
+                SELECT cell_id, hazard_type, valuation_time, label, label_source,
                        features, split_block, dataset_version_id
                 FROM training_samples
+                WHERE hazard_type = $1
                 ORDER BY id
-                """
+                """,
+                hazard.value,
             )
     return [
         TrainingSample(
@@ -121,6 +130,7 @@ async def fetch_samples(*, blocks: list[str] | None = None) -> list[TrainingSamp
             features=_coerce_features(r["features"]),
             split_block=r["split_block"],
             dataset_version_id=r["dataset_version_id"],
+            hazard_type=HazardType(r["hazard_type"]),
         )
         for r in rows
     ]

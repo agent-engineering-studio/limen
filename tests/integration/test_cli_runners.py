@@ -25,7 +25,9 @@ from limen.cli.bootstrap_static import run as run_bootstrap_static
 from limen.cli.calibrate import run as run_calibrate
 from limen.cli.migrate import run as run_migrate
 from limen.cli.monitor_once import run as run_monitor_once
+from limen.cli.partitions import run as run_partitions
 from limen.cli.seed import run as run_seed
+from limen.data.repos import partitions_repo
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.openmeteo.client import ARCHIVE_URL, FORECAST_URL
 from tests.conftest import register_flood_mocks
@@ -70,6 +72,13 @@ async def test_migrate_runs(reset_db: None, pg_pool: object) -> None:
 async def test_seed_runs(reset_db: None, pg_pool: object) -> None:
     rc = await run_seed()
     assert rc == 0
+
+
+async def test_partitions_runs(reset_db: None, pg_pool: object) -> None:
+    """`limen partitions` is idempotent: the migration already created them."""
+    rc = await run_partitions()
+    assert rc == 0
+    assert await partitions_repo.default_partition_rows("risk_assessments") == 0
 
 
 async def test_bootstrap_static_runs(reset_db: None, pg_pool: object) -> None:

@@ -14,6 +14,7 @@ from limen.api.schemas import (
     LatestAssessmentResponse,
 )
 from limen.core.models.context import CellRiskRecord, RiskAnalysisDTO
+from limen.core.models.hazard import DEFAULT_HAZARD
 from limen.core.models.risk import (
     MeteoBreakdown,
     RiskLevel,
@@ -68,9 +69,10 @@ async def latest_assessment(aoi_id: str, deps: DepsDep) -> LatestAssessmentRespo
             SELECT MAX(ra.computed_at)
             FROM risk_assessments ra
             JOIN grid_cells g ON g.id = ra.cell_id
-            WHERE g.aoi_id = $1
+            WHERE g.aoi_id = $1 AND ra.hazard_type = $2
             """,
             aoi_id,
+            DEFAULT_HAZARD.value,
         )
         if latest_ts is None:
             raise HTTPException(
@@ -83,11 +85,12 @@ async def latest_assessment(aoi_id: str, deps: DepsDep) -> LatestAssessmentRespo
                    ra.factors, ra.explanation, ra.pipeline_version
             FROM risk_assessments ra
             JOIN grid_cells g ON g.id = ra.cell_id
-            WHERE g.aoi_id = $1 AND ra.computed_at = $2
+            WHERE g.aoi_id = $1 AND ra.computed_at = $2 AND ra.hazard_type = $3
             ORDER BY ra.score DESC
             """,
             aoi_id,
             latest_ts,
+            DEFAULT_HAZARD.value,
         )
 
     if not rows:
@@ -126,11 +129,12 @@ async def cell_breakdown(cell_id: str, deps: DepsDep) -> CellBreakdownResponse: 
             SELECT cell_id, computed_at, horizon, score, class,
                    factors, explanation, pipeline_version
             FROM risk_assessments
-            WHERE cell_id = $1
+            WHERE cell_id = $1 AND hazard_type = $2
             ORDER BY computed_at DESC
             LIMIT 1
             """,
             cell_id,
+            DEFAULT_HAZARD.value,
         )
     if row is None:
         raise HTTPException(
@@ -302,6 +306,7 @@ _CELL_OBSERVED_SQL = """
 SELECT computed_at, score, class
 FROM risk_assessments
 WHERE cell_id = $1
+  AND hazard_type = $3
   AND horizon NOT LIKE '+%'
   AND computed_at >= now() - make_interval(hours => $2::int)
 ORDER BY computed_at
@@ -310,7 +315,7 @@ ORDER BY computed_at
 _CELL_FORECAST_SQL = """
 SELECT computed_at, horizon, score, class
 FROM risk_assessments
-WHERE cell_id = $1 AND pipeline_version LIKE 'v1-forecast+%'
+WHERE cell_id = $1 AND hazard_type = $2 AND pipeline_version LIKE 'v1-forecast+%'
 ORDER BY horizon
 """
 
@@ -326,8 +331,8 @@ async def cell_history(cell_id: str, response: Response, hours: int = 72) -> dic
 
     response.headers["Cache-Control"] = "public, max-age=120"
     async with acquire() as conn:
-        obs = await conn.fetch(_CELL_OBSERVED_SQL, cell_id, hours)
-        fc = await conn.fetch(_CELL_FORECAST_SQL, cell_id)
+        obs = await conn.fetch(_CELL_OBSERVED_SQL, cell_id, hours, DEFAULT_HAZARD.value)
+        fc = await conn.fetch(_CELL_FORECAST_SQL, cell_id, DEFAULT_HAZARD.value)
 
     observed = [
         {"t": r["computed_at"].isoformat(), "score": float(r["score"]), "level": r["class"]}

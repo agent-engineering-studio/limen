@@ -19,6 +19,7 @@ from limen.agents.workflows.forecast import run_forecast
 from limen.config.settings import Settings, get_settings
 from limen.core.logging import get_logger
 from limen.core.models.context import CellRiskRecord
+from limen.core.models.hazard import DEFAULT_HAZARD
 from limen.core.models.risk import RiskLevel
 from limen.data.db import acquire
 
@@ -37,14 +38,15 @@ _DEFAULT_HORIZONS = (24, 48, 72)
 
 _DELETE_PRIOR_SQL = """
 DELETE FROM risk_assessments
-WHERE horizon = $1 AND cell_id = ANY($2::text[]) AND pipeline_version LIKE 'v1-forecast+%'
+WHERE horizon = $1 AND cell_id = ANY($2::text[]) AND hazard_type = $3
+  AND pipeline_version LIKE 'v1-forecast+%'
 """
 
 _INSERT_SQL = """
 INSERT INTO risk_assessments (
-    cell_id, computed_at, horizon, score, class, factors,
+    cell_id, computed_at, hazard_type, horizon, score, class, factors,
     explanation, pipeline_version, dataset_versions
-) VALUES ($1, now(), $2, $3, $4, $5::jsonb, '{}'::jsonb, $6, ARRAY[]::bigint[])
+) VALUES ($1, now(), $2, $3, $4, $5, $6::jsonb, '{}'::jsonb, $7, ARRAY[]::bigint[])
 """
 
 
@@ -72,12 +74,13 @@ async def persist_forecast_run(
     pipeline_version = f"v1-forecast+{horizon_h}h"
     cell_ids = [c.cell_id for c in keep]
     async with conn.transaction():
-        await conn.execute(_DELETE_PRIOR_SQL, horizon, cell_ids)
+        await conn.execute(_DELETE_PRIOR_SQL, horizon, cell_ids, DEFAULT_HAZARD.value)
         for c in keep:
             factors = {"s": c.s, "m": c.m, "e": c.e, "f": c.f, "h": c.h}
             await conn.execute(
                 _INSERT_SQL,
                 c.cell_id,
+                DEFAULT_HAZARD.value,
                 horizon,
                 c.score,
                 c.level.value,

@@ -18,6 +18,7 @@ import json
 from limen.agents.workflow_runtime.executor import Executor, handler
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.data.db import acquire
 
 log = get_logger(__name__)
@@ -25,9 +26,9 @@ log = get_logger(__name__)
 
 _INSERT_SQL = """
 INSERT INTO risk_assessments (
-    cell_id, computed_at, horizon, score, class, factors,
+    cell_id, computed_at, hazard_type, horizon, score, class, factors,
     explanation, pipeline_version, dataset_versions
-) VALUES ($1, now(), $2, $3, $4, $5::jsonb, $6::jsonb, $7, ARRAY[]::bigint[])
+) VALUES ($1, now(), $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, ARRAY[]::bigint[])
 RETURNING id
 """
 
@@ -35,9 +36,10 @@ RETURNING id
 class PersistResultExecutor(Executor):
     """Writes one ``risk_assessments`` row per scored cell."""
 
-    def __init__(self, *, horizon: str = "24h") -> None:
+    def __init__(self, *, horizon: str = "24h", hazard: HazardType = DEFAULT_HAZARD) -> None:
         super().__init__(name="PersistResult")
         self._horizon = horizon
+        self._hazard = hazard
 
     @handler
     async def run(self, ctx: MonitoringContext) -> MonitoringContext:
@@ -73,6 +75,7 @@ class PersistResultExecutor(Executor):
                 row = await conn.fetchrow(
                     _INSERT_SQL,
                     cell.cell_id,
+                    self._hazard.value,
                     self._horizon,
                     cell.score,
                     cell.level.value,

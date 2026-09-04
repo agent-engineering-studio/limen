@@ -17,6 +17,7 @@ from typing import Any
 
 from limen.config.settings import Settings
 from limen.core.logging import get_logger
+from limen.core.models.hazard import DEFAULT_HAZARD
 from limen.core.models.risk import RiskLevel
 from limen.data.db import acquire
 from limen.report.archive import prune_archive, write_build
@@ -115,11 +116,12 @@ async def _latest_valuation(aoi_ids: list[str]) -> tuple[str, str]:
             """
             SELECT ra.computed_at AS ts, ra.pipeline_version AS pv
             FROM risk_assessments ra JOIN grid_cells g ON g.id = ra.cell_id
-            WHERE g.aoi_id = ANY($1::text[])
+            WHERE g.aoi_id = ANY($1::text[]) AND ra.hazard_type = $2
             ORDER BY ra.computed_at DESC
             LIMIT 1
             """,
             aoi_ids,
+            DEFAULT_HAZARD.value,
         )
     if row is None or row["ts"] is None:
         return ("", "")

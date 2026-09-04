@@ -26,6 +26,7 @@ from limen.api.jobs.html_report import run_html_report
 from limen.api.jobs.iot_partition_rollover import run_iot_partition_rollover_job
 from limen.api.jobs.iot_rollup import run_iot_rollup_job
 from limen.api.jobs.nowcast_monitoring import run_nowcast_monitoring
+from limen.api.jobs.partitions import run_partitions_job
 from limen.api.jobs.weekly_idrogeo_sync import run_weekly_idrogeo_sync
 from limen.config.settings import SchedulerBackend
 from limen.core.logging import get_logger
@@ -40,6 +41,7 @@ JOB_NOWCAST_MONITORING = "limen-nowcast-monitoring"
 JOB_FIRMS_MONITORING = "limen-firms-monitoring"
 JOB_WEEKLY_IDROGEO = "limen-weekly-idrogeo"
 JOB_CACHE_CLEANUP = "limen-cache-cleanup"
+JOB_PARTITIONS = "limen-partitions"
 JOB_IOT_ROLLUP = "limen-iot-rollup"
 JOB_IOT_PARTITION_ROLLOVER = "limen-iot-partition-rollover"
 JOB_DRIFT_MONITOR = "limen-drift-monitor"
@@ -194,6 +196,22 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
             job=JOB_WEEKLY_IDROGEO,
             cron="mon 03:15",
         )
+
+    # Unconditional: partitions must exist whatever the cache-cleanup
+    # backend is, and retention has nowhere else to run.
+    await scheduler.add_schedule(
+        run_partitions_job,
+        args=(deps,),
+        trigger=_deferred_interval(hours=cfg.partitions_interval_hours),
+        id=JOB_PARTITIONS,
+        conflict_policy=ConflictPolicy.replace,
+    )
+    registered.append(JOB_PARTITIONS)
+    log.info(
+        "scheduler.registered",
+        job=JOB_PARTITIONS,
+        interval_hours=cfg.partitions_interval_hours,
+    )
 
     if cfg.cache_cleanup is SchedulerBackend.APSCHEDULER:
         await scheduler.add_schedule(
