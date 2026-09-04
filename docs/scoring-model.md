@@ -238,7 +238,10 @@ per l'ultima esecuzione.
 
 ## Drop-in V2
 
-Il confine del motore è `score(bundle: CellFeatureBundle) -> RiskScore`.
+Il confine del motore è
+`score(bundle: CellFeatureBundle) -> RiskScore[ComponentBreakdown]`: `RiskScore`
+è generico sul breakdown del pericolo, `ComponentBreakdown` è quello delle
+frane.
 Il modello ML V2 implementerà la stessa firma e consumerà gli stessi
 bundle costruiti da `core/features/assembler.py`, cosicché lo scambio
 dei motori sia una singola riga in `WorkflowDeps`.
