@@ -280,3 +280,23 @@ async def test_partitions_job_creates_and_prunes(hazard_fixture: None) -> None:
             )
             == 1
         )
+
+
+async def test_config_drift_between_settings_and_database(hazard_fixture: None) -> None:
+    """`HAZARDS__ENABLED` e la tabella `hazards` sono due copie della stessa
+    verità, perché la vista materializzata incrocia la tabella e non può
+    leggere i Settings. Il disallineamento va segnalato, non fatto passare.
+    """
+    from limen.data.repos import hazards_repo
+
+    assert await hazards_repo.enabled_hazards() == {HazardType.LANDSLIDE}
+    # Allineati: nessuna deriva.
+    assert await hazards_repo.warn_on_config_drift([HazardType.LANDSLIDE]) is False
+
+    # I Settings dichiarano un pericolo che il database non ha abilitato.
+    assert await hazards_repo.warn_on_config_drift([HazardType.LANDSLIDE, HazardType.FLOOD]) is True
+
+    # E il contrario: il database ne abilita uno che i Settings non prevedono.
+    async with acquire() as conn:
+        await conn.execute("UPDATE hazards SET enabled = true WHERE hazard = 'flood'")
+    assert await hazards_repo.warn_on_config_drift([HazardType.LANDSLIDE]) is True

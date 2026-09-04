@@ -402,7 +402,7 @@ make check                   # ruff check + mypy --strict + pytest
 Sono in `CLAUDE.md` (tabella "Locked invariants"): Python 3.12 + `uv`; asyncpg +
 PostGIS, **no ORM**; migrazioni SQL immutabili; geometrie EPSG:4326 (distanze in
 3035); scoring engine **puro** (no DB/rete/LLM); costanti solo in
-`regional_thresholds.yaml`; HTTP esterno via `integrations/_http`; degradazione
+`hazards/landslide.yaml`; HTTP esterno via `integrations/_http`; degradazione
 neutra in lettura; V1 deterministico resta il champion; refresh matview **solo**
 via `refresh_mv_latest_risk()`; alert mai inventati + dedup obbligatorio; geodata
 mai nel critical path. Leggerli prima di lavorare.

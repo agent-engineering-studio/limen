@@ -34,9 +34,10 @@ from limen.api.jobs.html_report import run_html_report
 from limen.api.jobs.registration import register_jobs
 from limen.config.settings import Settings, get_settings
 from limen.core.logging import configure_logging, get_logger
+from limen.core.scoring.resolver import HazardNotScorableError, check_scorable
 from limen.data.db import close_pool, init_pool
 from limen.data.migrate import run_migrations
-from limen.data.repos import partitions_repo
+from limen.data.repos import hazards_repo, partitions_repo
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.iot.mqtt_ingestor import MqttIngestor
 from limen.observability.tracing import setup_tracing
@@ -68,6 +69,20 @@ async def _lifespan_default(app: FastAPI) -> AsyncIterator[None]:
             error=str(exc),
             error_type=type(exc).__name__,
         )
+    # HAZARDS__ENABLED and the `hazards` table are two copies of the same
+    # truth (the materialised view cross-joins the table and cannot read
+    # settings). A mismatch is a warning: during a deploy one side moves
+    # first, and the public map has to keep serving through the gap.
+    await hazards_repo.warn_on_config_drift(settings.hazards.enabled)
+    # An enabled hazard with no engine or no thresholds file cannot produce a
+    # number. Surfaced here rather than as an AttributeError halfway through
+    # the hourly sweep; a warning, because the other hazards still score and
+    # the public map has to keep serving.
+    for hazard in settings.hazards.enabled:
+        try:
+            check_scorable(hazard, settings.scoring.engine)
+        except HazardNotScorableError as exc:
+            log.warning("hazards.not_scorable", hazard=hazard.value, error=str(exc))
     deps = await AppDependencies.build(pool=pool, settings=settings)
     app.state.deps = deps
     app.state.ready = True

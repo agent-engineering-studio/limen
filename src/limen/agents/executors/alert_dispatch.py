@@ -67,7 +67,7 @@ async def _load_exposure_factors(cell_ids: list[str]) -> dict[str, float]:
     """Exposure multiplier for the candidate cells only.
 
     Same shared formula as ``/api/alerts`` (``limen.core.scoring.exposure``,
-    thresholds in ``regional_thresholds.yaml``): CORINE urban flags +
+    thresholds in ``hazards/landslide.yaml``): CORINE urban flags +
     distance from the OSM road/rail network, with the CORINE 12x flags
     as fallback. Cells without a factors row get 0 (priority == score).
     """

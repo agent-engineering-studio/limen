@@ -159,7 +159,7 @@ non possano ignorarle.
 * **Le migrazioni sono immutabili una volta applicate** (tracciate con
   checksum).
 * **Niente `print`** — `structlog.get_logger(__name__)` ovunque.
-* **Tutte le costanti di scoring** vivono in `regional_thresholds.yaml`.
+* **Tutte le costanti di scoring** vivono in `hazards/landslide.yaml`.
 * **`hazard_type` è una dimensione di prima classe** (migrazione 028):
   `mv_latest_risk` ha una riga per *(cella, hazard abilitato)*, le viste a
   valle sono fissate su `landslide`, i tile multi-hazard passano da

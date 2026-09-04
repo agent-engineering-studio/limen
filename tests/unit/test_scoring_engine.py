@@ -1,6 +1,6 @@
 """MultiFactorScoringEngine — aggregation, classification, monotonicity, YAML override.
 
-Tests rely on the packaged ``regional_thresholds.yaml``; one explicit
+Tests rely on the packaged ``hazards/landslide.yaml``; one explicit
 test (``test_engine_reads_all_constants_from_yaml``) overrides the
 config to prove there are no hard-coded magic numbers.
 """

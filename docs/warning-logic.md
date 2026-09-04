@@ -8,7 +8,7 @@
 >
 > Coerenza numerica e terminologica verificata contro
 > [`docs/scoring-model.md`](./scoring-model.md): ogni valore citato qui è
-> tracciabile lì o nel file dei parametri `regional_thresholds.yaml`.
+> tracciabile lì o nel file dei parametri `hazards/landslide.yaml`.
 
 ## 1. L'idea in una frase
 
@@ -69,7 +69,7 @@ flowchart LR
 Sotto il cofano il punteggio è una **combinazione lineare pesata** dei fattori:
 peso maggiore al meteo (`0.40`) e alla componente statica (`0.35`), poi sismica
 (`0.15`), post-incendio (`0.07`) e idraulica (`0.03`). I pesi e le soglie vivono
-in un file di configurazione leggibile (`regional_thresholds.yaml`), non nascosti
+in un file di configurazione leggibile (`hazards/landslide.yaml`), non nascosti
 nel codice: il sistema è **interpretabile per costruzione**, senza scatole nere
 nel percorso decisionale.
 

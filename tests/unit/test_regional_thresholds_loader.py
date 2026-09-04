@@ -76,3 +76,26 @@ def test_override_path_bypasses_cache(tmp_path: Path) -> None:
     default = load_regional_thresholds()
     assert override.model_version == "test-override"
     assert default.model_version != "test-override"
+
+
+def test_packaged_path_points_at_the_hazard_file() -> None:
+    """Il file di configurazione vive per pericolo (issue #84): il default
+    è quello delle frane, e la risoluzione via importlib.resources deve
+    funzionare in qualunque layout di installazione."""
+    from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
+    from limen.core.scoring.regional_thresholds import hazard_thresholds_path
+
+    assert DEFAULT_THRESHOLDS_PATH.name == "landslide.yaml"
+    assert DEFAULT_THRESHOLDS_PATH.parent.name == "hazards"
+    assert hazard_thresholds_path(DEFAULT_HAZARD) == DEFAULT_THRESHOLDS_PATH
+    assert hazard_thresholds_path(HazardType.FLOOD).name == "flood.yaml"
+
+
+def test_hazard_without_a_file_fails_instead_of_borrowing_landslide() -> None:
+    """Un pericolo senza YAML non deve silenziosamente ereditare le soglie
+    delle frane: sarebbero numeri sbagliati presentati come giusti."""
+    from limen.core.models.hazard import HazardType
+    from limen.core.scoring.regional_thresholds import load_hazard_thresholds
+
+    with pytest.raises(FileNotFoundError):
+        load_hazard_thresholds(HazardType.WILDFIRE)

@@ -19,6 +19,7 @@ from typing import Literal
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import RiskLevel
 
 
@@ -450,6 +451,21 @@ class ScoringSettings(BaseSettings):
     promotion_lead_time_hours_min: float = Field(default=18.0, ge=0.0)
 
 
+class HazardsSettings(BaseSettings):
+    """Which hazards the application scores.
+
+    The database has its own copy in the ``hazards`` table, because
+    ``mv_latest_risk`` cross-joins it and a view cannot read settings. The two
+    are checked for drift at startup and a mismatch is a warning, not a
+    refusal: during a deploy one side moves first, and the public map must
+    keep serving.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    enabled: list[HazardType] = Field(default_factory=lambda: [DEFAULT_HAZARD])
+
+
 class TrainingSettings(BaseSettings):
     """Feature-store + training pipeline knobs (V2)."""
 
@@ -826,6 +842,7 @@ class Settings(BaseSettings):
     nowcast: NowcastSettings = Field(default_factory=NowcastSettings)
     firms: FirmsSettings = Field(default_factory=FirmsSettings)
     iot: IotSettings = Field(default_factory=IotSettings)
+    hazards: HazardsSettings = Field(default_factory=HazardsSettings)
     scoring: ScoringSettings = Field(default_factory=ScoringSettings)
     training: TrainingSettings = Field(default_factory=TrainingSettings)
     egms: EgmsSettings = Field(default_factory=EgmsSettings)

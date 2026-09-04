@@ -6,7 +6,7 @@ project doc. Unmapped strings get the neutral value 0.5 so the row
 still imports.
 
 The list is deliberately small + opinionated: callers can override
-per-AOI via ``regional_thresholds.yaml`` if a regional study suggests
+per-AOI via ``hazards/landslide.yaml`` if a regional study suggests
 a different weight, but the default keeps demos sensible without YAML
 edits.
 """
