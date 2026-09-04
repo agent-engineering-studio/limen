@@ -6,10 +6,13 @@ from fastapi import APIRouter, Query, Response
 
 from limen.api.dependencies import DepsDep
 from limen.api.schemas import AlertItem, AlertsResponse
-from limen.core.models.hazard import DEFAULT_HAZARD
+from limen.core.logging import get_logger
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.scoring.exposure import exposure_factor_from_row
-from limen.core.scoring.regional_thresholds import load_regional_thresholds
+from limen.core.scoring.regional_thresholds import ExposureBlock, load_hazard_thresholds
 from limen.data.db import acquire
+
+log = get_logger(__name__)
 
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 
@@ -21,6 +24,7 @@ async def list_alerts(
     threshold: str = Query("High", description="Minimum risk level to include"),
     since_hours: int = Query(72, ge=1, le=24 * 30),
     limit: int = Query(200, ge=1, le=2000),
+    hazard: HazardType = DEFAULT_HAZARD,
 ) -> AlertsResponse:
     """Return the most recent persisted alerts above ``threshold``."""
     response.headers["Cache-Control"] = "public, max-age=30"
@@ -70,17 +74,32 @@ async def list_alerts(
             """,
             levels_to_include,
             since_hours,
-            DEFAULT_HAZARD.value,
+            hazard.value,
         )
 
+    if not rows:
+        # Nessuna riga da ordinare, quindi nessuna soglia da caricare. Uscire
+        # qui è ciò che rende un pericolo valido ma non abilitato una risposta
+        # vuota invece di un 500: la sua configurazione non esiste ancora, e
+        # chiederla per ordinare zero righe sarebbe lavoro inutile e fatale.
+        return AlertsResponse(items=[])
+
     # Priorità = rischio x (1 + esposizione): la stessa formula del
-    # dispatcher degli alert (limen.core.scoring.exposure, soglie in
-    # regional_thresholds.yaml). Una frana Moderate sopra un paese o una
-    # statale conta più di una identica su un versante disabitato.
-    cfg = load_regional_thresholds().exposure
+    # dispatcher degli alert (limen.core.scoring.exposure, soglie nel file
+    # del pericolo). Una frana Moderate sopra un paese o una statale conta
+    # più di una identica su un versante disabitato.
+    try:
+        cfg: ExposureBlock | None = load_hazard_thresholds(hazard).exposure
+    except FileNotFoundError:
+        # Righe di un pericolo la cui configurazione non è ancora nel pacchetto.
+        # L'elenco resta corretto, ordinato per solo punteggio: degradare a
+        # neutro è ciò che l'invariante chiede a una lettura senza sorgente,
+        # e sopprimere l'elenco sarebbe peggio che ordinarlo meno bene.
+        log.warning("integration.degraded", surface="alerts.exposure", hazard=hazard.value)
+        cfg = None
     scored = []
     for r in rows:
-        factor, tags = exposure_factor_from_row(r, cfg)
+        factor, tags = exposure_factor_from_row(r, cfg) if cfg is not None else (0.0, None)
         scored.append((float(r["score"]) * (1.0 + factor), tags, r))
     scored.sort(key=lambda t: t[0], reverse=True)
     scored = scored[:limit]
@@ -93,6 +112,7 @@ async def list_alerts(
         AlertItem(
             cell_id=str(r["cell_id"]),
             aoi_id=str(r["aoi_id"]),
+            hazard_type=hazard,
             score=float(r["score"]),
             level=str(r["class"]),
             computed_at=r["computed_at"],
@@ -112,6 +132,7 @@ async def list_forecast_alerts(
     deps: DepsDep,  # noqa: ARG001 — DI presence
     since_hours: int = Query(72, ge=1, le=24 * 30),
     limit: int = Query(50, ge=1, le=500),
+    hazard: HazardType = DEFAULT_HAZARD,
 ) -> dict[str, list[dict[str, object]]]:
     """Predictive (PREVISIONE) dispatches from the forecast sweep."""
     async with acquire() as conn:
@@ -127,7 +148,7 @@ async def list_forecast_alerts(
             """,
             since_hours,
             limit,
-            DEFAULT_HAZARD.value,
+            hazard.value,
         )
     return {
         "items": [

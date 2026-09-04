@@ -21,6 +21,7 @@ from limen.mcp.tools import (
     build_static_report,
     cell_breakdown,
     comune_risk,
+    hazards,
     national_report,
     recent_alerts,
     risk_summary,
@@ -35,28 +36,34 @@ log = get_logger(__name__)
 SERVER_NAME = "limen-ops"
 SERVER_INSTRUCTIONS = """limen-ops — operational tools over the Limen landslide-risk system.
 
+`hazard?` accepts landslide | flood | wildfire and defaults to landslide.
+Call hazards() first to see which ones this deployment actually scores: a
+valid name that is not enabled here returns an empty result, and an unknown
+name returns an error naming the valid ones.
+
 Read tools (open):
-* risk_summary(aoi_id?) → latest per-AOI assessment summary (cells per
-  level, max score, when).
-* top_risk_cells(limit?, aoi_id?) → national ranking of the highest-risk
-  cells from the latest assessments.
-* cell_breakdown(cell_id) → per-component breakdown (S/M/E/F/H/K) + the
-  Italian briefing for one cell.
-* recent_alerts(threshold?, since_hours?, limit?) → cells at/above a level
-  in the recent window.
+* risk_summary(aoi_id?, hazard?) → latest per-AOI assessment summary (cells
+  per level, max score, when).
+* top_risk_cells(limit?, aoi_id?, hazard?) → national ranking of the
+  highest-risk cells from the latest assessments.
+* cell_breakdown(cell_id, hazard?) → per-component breakdown (S/M/E/F/H/K) +
+  the Italian briefing for one cell.
+* recent_alerts(threshold?, since_hours?, limit?, hazard?) → cells at/above a
+  level in the recent window.
 * national_report() → aggregated national picture (per-region summary,
   national top cells, ML shadow top, 24h alert counts) + a deterministic
-  Italian rendering in `report_it`.
-* top_comuni(limit?, aoi_id?) → comuni with alerting cells, exposure-ranked.
-* comune_risk(istat_code) → one comune's rollup (worst class, counts, exposure).
+  Italian rendering in `report_it`. Landslide only.
+* top_comuni(limit?, aoi_id?) and comune_risk(istat_code) → comune rollups.
+  **Landslide only**: the rollup view is pinned to it, so passing another
+  hazard returns an error rather than mislabelled numbers.
 
 Admin tools (MCP_ADMIN_TOKEN, fail-closed):
-* run_monitor(aoi_id, admin_token, cell_limit?) → run the full monitoring
-  workflow once for an AOI.
+* run_monitor(aoi_id, admin_token, cell_limit?, hazard?) → run the full
+  monitoring workflow once for an AOI.
 * build_report(admin_token) → generate the static HTML risk report once
-  (idempotent). Recurring builds already run via APScheduler.
-* forecast_history(admin_token, aoi_ids?) → persist the per-cell forecast
-  trend (+24/48/72h) used by the sidebar / report charts.
+  (idempotent). Recurring builds already run via APScheduler. Landslide only.
+* forecast_history(admin_token, aoi_ids?, hazard?) → persist the per-cell
+  forecast trend (+24/48/72h) used by the sidebar / report charts.
 
 Scores come from the deterministic/ML engine and are never altered here:
 these tools read and trigger, they do not decide.
@@ -69,28 +76,40 @@ def _build_server() -> Any:
     mcp = FastMCP(name=SERVER_NAME, instructions=SERVER_INSTRUCTIONS)
 
     @mcp.tool()
-    async def tool_risk_summary(aoi_id: str | None = None) -> list[dict[str, Any]]:
+    async def tool_risk_summary(
+        aoi_id: str | None = None, hazard: str | None = None
+    ) -> list[dict[str, Any]]:
         """Latest assessment summary per AOI (all AOIs when omitted)."""
-        return await risk_summary(aoi_id)
+        return await risk_summary(aoi_id, hazard)
 
     @mcp.tool()
     async def tool_top_risk_cells(
-        limit: int = 10, aoi_id: str | None = None
+        limit: int = 10, aoi_id: str | None = None, hazard: str | None = None
     ) -> list[dict[str, Any]]:
         """Highest-risk cells from the latest assessments (national ranking)."""
-        return await top_risk_cells(limit=limit, aoi_id=aoi_id)
+        return await top_risk_cells(limit=limit, aoi_id=aoi_id, hazard=hazard)
 
     @mcp.tool()
-    async def tool_cell_breakdown(cell_id: str) -> dict[str, Any]:
+    async def tool_cell_breakdown(cell_id: str, hazard: str | None = None) -> dict[str, Any]:
         """Per-component breakdown + Italian briefing for one cell."""
-        return await cell_breakdown(cell_id)
+        return await cell_breakdown(cell_id, hazard)
 
     @mcp.tool()
     async def tool_recent_alerts(
-        threshold: str = "Moderate", since_hours: int = 24, limit: int = 50
+        threshold: str = "Moderate",
+        since_hours: int = 24,
+        limit: int = 50,
+        hazard: str | None = None,
     ) -> list[dict[str, Any]]:
         """Cells at/above a risk level in the recent window."""
-        return await recent_alerts(threshold=threshold, since_hours=since_hours, limit=limit)
+        return await recent_alerts(
+            threshold=threshold, since_hours=since_hours, limit=limit, hazard=hazard
+        )
+
+    @mcp.tool()
+    async def tool_hazards() -> dict[str, Any]:
+        """Hazards this deployment can score. Call before passing `hazard`."""
+        return await hazards()
 
     @mcp.tool()
     async def tool_national_report() -> dict[str, Any]:
@@ -98,22 +117,29 @@ def _build_server() -> Any:
         return await national_report()
 
     @mcp.tool()
-    async def tool_comune_risk(istat_code: str) -> dict[str, Any]:
-        """Comune rollup (worst class, class counts, exposure)."""
-        return await comune_risk(istat_code)
+    async def tool_comune_risk(istat_code: str, hazard: str | None = None) -> dict[str, Any]:
+        """Comune rollup (worst class, class counts, exposure). Landslide only."""
+        return await comune_risk(istat_code, hazard)
 
     @mcp.tool()
-    async def tool_top_comuni(limit: int = 10, aoi_id: str | None = None) -> list[dict[str, Any]]:
-        """Comuni with alerting cells, exposure-ranked."""
-        return await top_comuni(limit=limit, aoi_id=aoi_id)
+    async def tool_top_comuni(
+        limit: int = 10, aoi_id: str | None = None, hazard: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Comuni with alerting cells, exposure-ranked. Landslide only."""
+        return await top_comuni(limit=limit, aoi_id=aoi_id, hazard=hazard)
 
     @mcp.tool()
     async def tool_run_monitor(
-        aoi_id: str, admin_token: str, cell_limit: int | None = None
+        aoi_id: str,
+        admin_token: str,
+        cell_limit: int | None = None,
+        hazard: str | None = None,
     ) -> dict[str, Any]:
         """Run the monitoring workflow once for an AOI (admin only)."""
         try:
-            return await run_monitor(aoi_id, admin_token=admin_token, cell_limit=cell_limit)
+            return await run_monitor(
+                aoi_id, admin_token=admin_token, cell_limit=cell_limit, hazard=hazard
+            )
         except AdminAuthError as exc:
             log.warning("limen.mcp.run_monitor_denied", reason=str(exc))
             return {"aoi_id": aoi_id, "error": str(exc)}
@@ -129,11 +155,15 @@ def _build_server() -> Any:
 
     @mcp.tool()
     async def tool_forecast_history(
-        admin_token: str, aoi_ids: list[str] | None = None
+        admin_token: str,
+        aoi_ids: list[str] | None = None,
+        hazard: str | None = None,
     ) -> dict[str, Any]:
         """Persist the per-cell forecast trend for the UI charts (admin only)."""
         try:
-            return await run_forecast_history(admin_token=admin_token, aoi_ids=aoi_ids)
+            return await run_forecast_history(
+                admin_token=admin_token, aoi_ids=aoi_ids, hazard=hazard
+            )
         except AdminAuthError as exc:
             log.warning("limen.mcp.forecast_history_denied", reason=str(exc))
             return {"error": str(exc)}

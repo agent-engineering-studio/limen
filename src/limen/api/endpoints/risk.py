@@ -62,8 +62,16 @@ def _record_from_row(row: Any) -> CellRiskRecord:
 
 
 @router.get("/api/aoi/{aoi_id}/risk/latest", response_model=LatestAssessmentResponse)
-async def latest_assessment(aoi_id: str, deps: DepsDep) -> LatestAssessmentResponse:  # noqa: ARG001
-    """Return the latest persisted assessment (one row per cell) for ``aoi_id``."""
+async def latest_assessment(
+    aoi_id: str,
+    deps: DepsDep,  # noqa: ARG001 — DI presence
+    hazard: HazardType = DEFAULT_HAZARD,
+) -> LatestAssessmentResponse:
+    """Return the latest persisted assessment (one row per cell) for ``aoi_id``.
+
+    ``hazard`` is validated by FastAPI against the enum, so an unknown value
+    is a 422 and needs no hand-written check.
+    """
     async with acquire() as conn:
         latest_ts = await conn.fetchval(
             """
@@ -73,12 +81,12 @@ async def latest_assessment(aoi_id: str, deps: DepsDep) -> LatestAssessmentRespo
             WHERE g.aoi_id = $1 AND ra.hazard_type = $2
             """,
             aoi_id,
-            DEFAULT_HAZARD.value,
+            hazard.value,
         )
         if latest_ts is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"no assessment for AOI {aoi_id!r}",
+                detail=f"no {hazard.value} assessment for AOI {aoi_id!r}",
             )
         rows = await conn.fetch(
             """
@@ -92,13 +100,13 @@ async def latest_assessment(aoi_id: str, deps: DepsDep) -> LatestAssessmentRespo
             """,
             aoi_id,
             latest_ts,
-            DEFAULT_HAZARD.value,
+            hazard.value,
         )
 
     if not rows:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"no assessment for AOI {aoi_id!r}",
+            detail=f"no {hazard.value} assessment for AOI {aoi_id!r}",
         )
 
     records = [_record_from_row(r) for r in rows]
@@ -111,6 +119,7 @@ async def latest_assessment(aoi_id: str, deps: DepsDep) -> LatestAssessmentRespo
 
     return LatestAssessmentResponse(
         aoi_id=aoi_id,
+        hazard_type=hazard,
         horizon=str(rows[0]["horizon"]),
         pipeline_version=str(rows[0]["pipeline_version"]),
         computed_at=rows[0]["computed_at"],
@@ -123,12 +132,16 @@ async def latest_assessment(aoi_id: str, deps: DepsDep) -> LatestAssessmentRespo
 
 
 @router.get("/api/cell/{cell_id}/breakdown", response_model=CellBreakdownResponse)
-async def cell_breakdown(cell_id: str, deps: DepsDep) -> CellBreakdownResponse:  # noqa: ARG001
+async def cell_breakdown(
+    cell_id: str,
+    deps: DepsDep,  # noqa: ARG001 — DI presence
+    hazard: HazardType = DEFAULT_HAZARD,
+) -> CellBreakdownResponse:
     """Return the latest persisted breakdown for ``cell_id``."""
     async with acquire() as conn:
         row = await conn.fetchrow(
             """
-            SELECT cell_id, computed_at, horizon, score, class,
+            SELECT cell_id, hazard_type, computed_at, horizon, score, class,
                    factors, explanation, pipeline_version
             FROM risk_assessments
             WHERE cell_id = $1 AND hazard_type = $2
@@ -136,15 +149,16 @@ async def cell_breakdown(cell_id: str, deps: DepsDep) -> CellBreakdownResponse: 
             LIMIT 1
             """,
             cell_id,
-            DEFAULT_HAZARD.value,
+            hazard.value,
         )
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"no breakdown for cell {cell_id!r}",
+            detail=f"no {hazard.value} breakdown for cell {cell_id!r}",
         )
     return CellBreakdownResponse(
         cell_id=str(row["cell_id"]),
+        hazard_type=HazardType(row["hazard_type"]),
         computed_at=row["computed_at"],
         score=float(row["score"]),
         level=str(row["class"]),
@@ -155,13 +169,48 @@ async def cell_breakdown(cell_id: str, deps: DepsDep) -> CellBreakdownResponse: 
     )
 
 
+@router.get("/api/hazards")
+async def hazards(response: Response) -> dict[str, Any]:
+    """Hazards this deployment can actually score, with their Italian labels.
+
+    Read from the ``hazards`` table rather than from ``HAZARDS__ENABLED``
+    (the table is what ``mv_latest_risk`` cross-joins), and filtered to the
+    ones that are scorable: a hazard enabled in the table but missing its
+    thresholds file would be offered to the SPA selector and then 404 on its
+    own legend.
+    """
+    from limen.data.repos.hazards_repo import scorable_with_labels
+
+    response.headers["Cache-Control"] = "public, max-age=300"
+    return {
+        "items": [
+            {"hazard": hazard.value, "label_it": label}
+            for hazard, label in await scorable_with_labels()
+        ],
+        "default": DEFAULT_HAZARD.value,
+    }
+
+
 @router.get("/api/legend")
-async def legend(response: Response) -> dict[str, Any]:
-    """Class cutoffs + Protezione Civile alert colours (presentation only)."""
-    from limen.core.scoring.regional_thresholds import load_regional_thresholds
+async def legend(response: Response, hazard: HazardType = DEFAULT_HAZARD) -> dict[str, Any]:
+    """Class cutoffs + Protezione Civile alert colours (presentation only).
+
+    Per hazard: the class cutoffs and the civil-protection mapping live in
+    each hazard's own YAML, so a legend built from the landslide file would
+    mislabel another hazard's colours.
+    """
+    from limen.core.scoring.regional_thresholds import load_hazard_thresholds
 
     response.headers["Cache-Control"] = "public, max-age=3600"
-    t = load_regional_thresholds()
+    try:
+        t = load_hazard_thresholds(hazard)
+    except FileNotFoundError:
+        # Il nome è valido nell'enum ma questo deployment non lo configura:
+        # è un 404, non un errore del server.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"nessuna legenda per il pericolo {hazard.value!r} in questo deployment",
+        ) from None
     pc = t.pc_alert
     levels = {
         "none": "None",
@@ -227,7 +276,12 @@ async def legend(response: Response) -> dict[str, Any]:
 
 @router.get("/api/report/national")
 async def national_report_endpoint(response: Response) -> dict[str, Any]:
-    """Aggregated national picture — same payload as the MCP tool."""
+    """Aggregated national picture — same payload as the MCP tool.
+
+    Landslide only in Fase 1: the national rollup reads the comune view and
+    the shadow tables, both pinned to the default hazard by migration 028.
+    The multi-hazard national report is #58 (Fase 4).
+    """
     from limen.mcp.tools import national_report
 
     # The picture changes at most hourly; 60 s keeps repeat navigation
@@ -323,7 +377,12 @@ ORDER BY horizon
 
 
 @router.get("/api/cell/{cell_id}/history")
-async def cell_history(cell_id: str, response: Response, hours: int = 72) -> dict[str, Any]:
+async def cell_history(
+    cell_id: str,
+    response: Response,
+    hours: int = 72,
+    hazard: HazardType = DEFAULT_HAZARD,
+) -> dict[str, Any]:
     """Per-cell risk trend: observed (past `hours`) + forecast (+24/48/72h) (#41).
 
     Forecast rows carry the run time in ``computed_at`` and the offset in
@@ -333,8 +392,8 @@ async def cell_history(cell_id: str, response: Response, hours: int = 72) -> dic
 
     response.headers["Cache-Control"] = "public, max-age=120"
     async with acquire() as conn:
-        obs = await conn.fetch(_CELL_OBSERVED_SQL, cell_id, hours, DEFAULT_HAZARD.value)
-        fc = await conn.fetch(_CELL_FORECAST_SQL, cell_id, DEFAULT_HAZARD.value)
+        obs = await conn.fetch(_CELL_OBSERVED_SQL, cell_id, hours, hazard.value)
+        fc = await conn.fetch(_CELL_FORECAST_SQL, cell_id, hazard.value)
 
     observed = [
         {"t": r["computed_at"].isoformat(), "score": float(r["score"]), "level": r["class"]}

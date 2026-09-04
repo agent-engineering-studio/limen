@@ -110,7 +110,12 @@ async def _aoi_ids() -> list[str]:
 
 
 async def _latest_valuation(aoi_ids: list[str]) -> tuple[str, str]:
-    """(valuation_time_iso, pipeline_version) dell'assessment più recente, o ("", "")."""
+    """(valuation_time_iso, pipeline_version) dell'assessment più recente, o ("", "").
+
+    Fissato sull'hazard di default: il report HTML statico è un prodotto per
+    le frane in Fase 1, e le sue mappe leggono `v_risk_tiles`, anch'essa
+    fissata. Il report multi-rischio è oggetto di #58 (Fase 4).
+    """
     async with acquire() as conn:
         row = await conn.fetchrow(
             """

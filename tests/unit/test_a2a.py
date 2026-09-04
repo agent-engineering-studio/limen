@@ -61,8 +61,18 @@ def _stub_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     async def _nat() -> dict[str, Any]:
         return {"report_it": "Nessuna zona a rischio.", "totals": {"regions": 20}}
 
-    async def _summary(aoi_id: str | None = None) -> list[dict[str, Any]]:
-        return [{"aoi_id": aoi_id or "it-puglia", "high_or_above": 0}]
+    async def _summary(
+        aoi_id: str | None = None, hazard: str | None = None
+    ) -> list[dict[str, Any]]:
+        # Rispecchia la firma reale: il doppio deve seguire il tool, o un
+        # cambio di parametri passa i test e rompe la skill A2A in produzione.
+        return [
+            {
+                "aoi_id": aoi_id or "it-puglia",
+                "hazard": hazard or "landslide",
+                "high_or_above": 0,
+            }
+        ]
 
     monkeypatch.setattr(tools, "national_report", _nat)
     monkeypatch.setattr(tools, "risk_summary", _summary)

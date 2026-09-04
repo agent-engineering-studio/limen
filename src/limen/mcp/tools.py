@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from limen.core.logging import get_logger
-from limen.core.models.hazard import DEFAULT_HAZARD
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.data.db import acquire
 
 log = get_logger(__name__)
@@ -42,6 +42,39 @@ def check_admin_token(token: str | None) -> None:
         raise AdminAuthError("invalid admin token")
 
 
+def _coerce_hazard(value: str | None) -> HazardType:
+    """Parse an agent-supplied hazard name.
+
+    A tool boundary faces the outside, so validating here is right: an
+    unknown name must say what is valid rather than silently score
+    landslides and report them as something else.
+    """
+    if value is None:
+        return DEFAULT_HAZARD
+    try:
+        return HazardType(value)
+    except ValueError:
+        known = ", ".join(h.value for h in HazardType)
+        raise ValueError(f"unknown hazard {value!r}; known: {known}") from None
+
+
+def _require_default_hazard(hazard: str | None, surface: str) -> HazardType:
+    """Accept the parameter, refuse a value the surface cannot honour.
+
+    ``mv_comune_risk`` is pinned to the default hazard in SQL (migration 028),
+    because its ``exposure_rank`` reads a component key only the landslide
+    breakdown has. Silently ignoring a different value would let an agent
+    believe it got flood numbers, which is worse than saying no.
+    """
+    hz = _coerce_hazard(hazard)
+    if hz is not DEFAULT_HAZARD:
+        raise ValueError(
+            f"{surface} is {DEFAULT_HAZARD.value}-only: the comune rollup view is "
+            f"pinned to it until Fase 2 gives each hazard its own exposure term"
+        )
+    return hz
+
+
 def _coerce_json(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
@@ -54,7 +87,9 @@ def _coerce_json(value: Any) -> dict[str, Any]:
     return {}
 
 
-async def risk_summary(aoi_id: str | None = None) -> list[dict[str, Any]]:
+async def risk_summary(
+    aoi_id: str | None = None, hazard: str | None = None
+) -> list[dict[str, Any]]:
     """Latest assessment summary per AOI: when, cells per level, max score."""
     # mv_latest_risk (latest assessment per cell, tile pipeline) — the raw
     # risk_assessments table grows by millions of rows/day nationally and
@@ -72,10 +107,10 @@ async def risk_summary(aoi_id: str | None = None) -> list[dict[str, Any]]:
               AND hazard_type = $2
               AND ($1::text IS NULL OR aoi_id = $1)
             GROUP BY aoi_id
-            ORDER BY high_or_above DESC, max_score DESC
+            ORDER BY high_or_above DESC, max_score DESC, aoi_id
             """,
             aoi_id,
-            DEFAULT_HAZARD.value,
+            _coerce_hazard(hazard).value,
         )
     return [
         {
@@ -90,7 +125,9 @@ async def risk_summary(aoi_id: str | None = None) -> list[dict[str, Any]]:
     ]
 
 
-async def top_risk_cells(limit: int = 10, aoi_id: str | None = None) -> list[dict[str, Any]]:
+async def top_risk_cells(
+    limit: int = 10, aoi_id: str | None = None, hazard: str | None = None
+) -> list[dict[str, Any]]:
     """Highest-scoring cells from each AOI's latest assessment (national ranking)."""
     limit = max(1, min(int(limit), 100))
     async with acquire() as conn:
@@ -102,12 +139,16 @@ async def top_risk_cells(limit: int = 10, aoi_id: str | None = None) -> list[dic
             WHERE risk_score IS NOT NULL
               AND hazard_type = $3
               AND ($2::text IS NULL OR aoi_id = $2)
-            ORDER BY risk_score DESC
+            -- cell_id spareggia: senza di esso una griglia con molte celle
+            -- allo stesso punteggio (lo scenario normale in un giorno
+            -- tranquillo) restituisce N righe arbitrarie, e un agente che
+            -- ripete la domanda ottiene una risposta diversa senza motivo.
+            ORDER BY risk_score DESC, cell_id
             LIMIT $1
             """,
             limit,
             aoi_id,
-            DEFAULT_HAZARD.value,
+            _coerce_hazard(hazard).value,
         )
     return [
         {
@@ -121,7 +162,7 @@ async def top_risk_cells(limit: int = 10, aoi_id: str | None = None) -> list[dic
     ]
 
 
-async def cell_breakdown(cell_id: str) -> dict[str, Any]:
+async def cell_breakdown(cell_id: str, hazard: str | None = None) -> dict[str, Any]:
     """Latest persisted per-component breakdown + briefing for one cell."""
     async with acquire() as conn:
         row = await conn.fetchrow(
@@ -133,7 +174,7 @@ async def cell_breakdown(cell_id: str) -> dict[str, Any]:
             LIMIT 1
             """,
             cell_id,
-            DEFAULT_HAZARD.value,
+            _coerce_hazard(hazard).value,
         )
     if row is None:
         return {"error": f"no assessment for cell {cell_id!r}"}
@@ -148,7 +189,10 @@ async def cell_breakdown(cell_id: str) -> dict[str, Any]:
 
 
 async def recent_alerts(
-    threshold: str = "Moderate", since_hours: int = 24, limit: int = 50
+    threshold: str = "Moderate",
+    since_hours: int = 24,
+    limit: int = 50,
+    hazard: str | None = None,
 ) -> list[dict[str, Any]]:
     """Cells at/above ``threshold`` in the last ``since_hours`` hours."""
     if threshold not in _LEVELS:
@@ -171,7 +215,7 @@ async def recent_alerts(
             levels,
             since_hours,
             limit,
-            DEFAULT_HAZARD.value,
+            _coerce_hazard(hazard).value,
         )
     return [
         {
@@ -186,20 +230,34 @@ async def recent_alerts(
 
 
 async def run_monitor(
-    aoi_id: str, admin_token: str | None = None, cell_limit: int | None = None
+    aoi_id: str,
+    admin_token: str | None = None,
+    cell_limit: int | None = None,
+    hazard: str | None = None,
 ) -> dict[str, Any]:
-    """Run the full MAF workflow once for ``aoi_id`` (admin only)."""
+    """Run the full MAF workflow once for ``aoi_id`` (admin only).
+
+    ``hazard`` selects which danger to score. An unscorable one raises at
+    build time with a message naming what is missing.
+    """
     check_admin_token(admin_token)
-    from limen.agents.workflows.main_workflow import build_landslide_workflow
+    from limen.agents.workflows.main_workflow import build_hazard_workflow
     from limen.core.models.context import MonitoringContext
 
-    workflow = build_landslide_workflow(cell_limit=cell_limit)
-    ctx = MonitoringContext(aoi_id=aoi_id, valuation_time=datetime.now(UTC))
+    hz = _coerce_hazard(hazard)
+    workflow = build_hazard_workflow(hz, cell_limit=cell_limit)
+    ctx = MonitoringContext(aoi_id=aoi_id, hazard_type=hz, valuation_time=datetime.now(UTC))
     result = await workflow.run(ctx)
     out = result.context
-    log.info("mcp.run_monitor.done", aoi_id=aoi_id, cells=len(out.cell_results))
+    log.info(
+        "mcp.run_monitor.done",
+        aoi_id=aoi_id,
+        hazard=hz.value,
+        cells=len(out.cell_results),
+    )
     return {
         "aoi_id": aoi_id,
+        "hazard": hz.value,
         "assessment_id": out.assessment_id,
         "cells_scored": len(out.cell_results),
         "high_or_above": out.assessment.cells_high_or_above if out.assessment else 0,
@@ -229,7 +287,9 @@ async def build_static_report(admin_token: str | None = None) -> dict[str, Any]:
 
 
 async def run_forecast_history(
-    admin_token: str | None = None, aoi_ids: list[str] | None = None
+    admin_token: str | None = None,
+    aoi_ids: list[str] | None = None,
+    hazard: str | None = None,
 ) -> dict[str, Any]:
     """Persist the per-cell forecast trend (+24/48/72h, ≥Moderate). Admin only.
 
@@ -241,24 +301,41 @@ async def run_forecast_history(
         run_forecast_history as _run,
     )
 
-    total = await _run(aoi_ids=aoi_ids)
-    log.info("mcp.forecast_history.done", cells=total, aois=aoi_ids or "all")
-    return {"cells_persisted": total, "aoi_ids": aoi_ids}
+    hz = _coerce_hazard(hazard)
+    total = await _run(aoi_ids=aoi_ids, hazard=hz)
+    log.info("mcp.forecast_history.done", cells=total, hazard=hz.value, aois=aoi_ids or "all")
+    return {"cells_persisted": total, "aoi_ids": aoi_ids, "hazard": hz.value}
 
 
-async def comune_risk(istat_code: str) -> dict[str, Any]:
+async def comune_risk(istat_code: str, hazard: str | None = None) -> dict[str, Any]:
     """Comune rollup (worst class, counts, exposure) for one ISTAT code."""
     from limen.data.repos.comune_risk import comune_detail
 
+    _require_default_hazard(hazard, "comune_risk")
     detail = await comune_detail(istat_code)
     return detail["comune"] if detail else {"error": f"comune {istat_code!r} not found"}
 
 
-async def top_comuni(limit: int = 10, aoi_id: str | None = None) -> list[dict[str, Any]]:
+async def top_comuni(
+    limit: int = 10, aoi_id: str | None = None, hazard: str | None = None
+) -> list[dict[str, Any]]:
     """Comuni with alerting cells, ranked by exposure (national or per-AOI)."""
     from limen.data.repos.comune_risk import top_comuni as _top
 
+    _require_default_hazard(hazard, "top_comuni")
     return await _top(aoi_id=aoi_id, limit=limit)
+
+
+async def hazards() -> dict[str, Any]:
+    """Hazards this deployment can score, with their Italian labels."""
+    from limen.data.repos.hazards_repo import scorable_with_labels
+
+    return {
+        "items": [
+            {"hazard": h.value, "label_it": label} for h, label in await scorable_with_labels()
+        ],
+        "default": DEFAULT_HAZARD.value,
+    }
 
 
 async def national_report() -> dict[str, Any]:

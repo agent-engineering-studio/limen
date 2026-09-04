@@ -16,6 +16,7 @@ from limen.core.models.context import (
     CellRiskRecord,
     RiskAnalysisDTO,
 )
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 
 
 class HealthResponse(BaseModel):
@@ -80,6 +81,7 @@ class LatestAssessmentResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     aoi_id: str
+    hazard_type: HazardType = DEFAULT_HAZARD
     horizon: str
     pipeline_version: str
     computed_at: datetime
@@ -96,6 +98,7 @@ class CellBreakdownResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     cell_id: str
+    hazard_type: HazardType = DEFAULT_HAZARD
     computed_at: datetime
     score: float
     level: str
@@ -110,6 +113,7 @@ class AlertItem(BaseModel):
 
     cell_id: str
     aoi_id: str | None = None
+    hazard_type: HazardType = DEFAULT_HAZARD
     score: float
     level: str
     computed_at: datetime
