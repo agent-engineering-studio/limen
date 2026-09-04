@@ -19,7 +19,7 @@ from limen.agents.workflows.forecast import run_forecast
 from limen.config.settings import Settings, get_settings
 from limen.core.logging import get_logger
 from limen.core.models.context import CellRiskRecord
-from limen.core.models.hazard import DEFAULT_HAZARD
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import RiskLevel
 from limen.data.db import acquire
 
@@ -67,6 +67,7 @@ async def persist_forecast_run(
     cell_results: list[CellRiskRecord],
     *,
     floor: RiskLevel = _DEFAULT_FLOOR,
+    hazard: HazardType = DEFAULT_HAZARD,
 ) -> int:
     """Write the ≥floor cells of one forecast run; delete prior rows first."""
     keep = cells_to_persist(cell_results, floor=floor)
@@ -74,13 +75,13 @@ async def persist_forecast_run(
     pipeline_version = f"v1-forecast+{horizon_h}h"
     cell_ids = [c.cell_id for c in keep]
     async with conn.transaction():
-        await conn.execute(_DELETE_PRIOR_SQL, horizon, cell_ids, DEFAULT_HAZARD.value)
+        await conn.execute(_DELETE_PRIOR_SQL, horizon, cell_ids, hazard.value)
         for c in keep:
             factors = {"s": c.s, "m": c.m, "e": c.e, "f": c.f, "h": c.h}
             await conn.execute(
                 _INSERT_SQL,
                 c.cell_id,
-                DEFAULT_HAZARD.value,
+                hazard.value,
                 horizon,
                 c.score,
                 c.level.value,
@@ -95,6 +96,7 @@ async def run_forecast_history(
     aoi_ids: list[str] | None = None,
     horizons: tuple[int, ...] = _DEFAULT_HORIZONS,
     settings: Settings | None = None,
+    hazard: HazardType = DEFAULT_HAZARD,
 ) -> int:
     """Sweep all AOIs at the given horizons and persist ≥Moderate forecast cells."""
     settings = settings or get_settings()
@@ -107,10 +109,24 @@ async def run_forecast_history(
     total = 0
     for aoi_id in aoi_ids:
         for h in horizons:
-            run = await run_forecast(aoi_id=aoi_id, horizon_h=h, settings=settings)
+            run = await run_forecast(aoi_id=aoi_id, horizon_h=h, settings=settings, hazard=hazard)
             async with acquire() as conn:
-                n = await persist_forecast_run(conn, h, run.cell_results, floor=floor)
+                n = await persist_forecast_run(
+                    conn, h, run.cell_results, floor=floor, hazard=hazard
+                )
             total += n
-            log.info("forecast_history.persisted", aoi_id=aoi_id, horizon_h=h, cells=n)
-    log.info("forecast_history.done", aois=len(aoi_ids), horizons=list(horizons), cells=total)
+            log.info(
+                "forecast_history.persisted",
+                aoi_id=aoi_id,
+                hazard=hazard.value,
+                horizon_h=h,
+                cells=n,
+            )
+    log.info(
+        "forecast_history.done",
+        hazard=hazard.value,
+        aois=len(aoi_ids),
+        horizons=list(horizons),
+        cells=total,
+    )
     return total

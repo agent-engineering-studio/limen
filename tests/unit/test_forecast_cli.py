@@ -74,7 +74,9 @@ def test_forecast_payload_is_labelled_and_deterministic() -> None:
     payload = build_forecast_payload(run, triggered)
 
     assert payload.pipeline_version == "v1-forecast+48h"
-    assert payload.summary_it.startswith("PREVISIONE Limen a +48 ore")
+    # Il pericolo è nominato: con due pericoli attivi arrivano due previsioni
+    # per AOI, e senza il nome il destinatario non le distingue.
+    assert payload.summary_it.startswith("PREVISIONE Limen rischio frana a +48 ore")
     assert "0.71" in payload.summary_it
     assert payload.max_level is RiskLevel.High
     assert [c.cell_id for c in payload.cells][:2] == ["aoi|1|1", "aoi|2|2"]

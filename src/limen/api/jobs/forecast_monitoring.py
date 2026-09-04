@@ -18,22 +18,32 @@ from limen.agents.workflows.forecast import ForecastRun, run_forecast
 from limen.api.dependencies import AppDependencies
 from limen.core.logging import get_logger
 from limen.core.models.context import AggregateAssessment, CellRiskRecord
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import RiskLevel
+from limen.core.scoring.resolver import HazardNotScorableError, check_scorable
 from limen.data.repos.aoi_repo import list_aoi_ids
 from limen.data.repos.forecast_dispatches_repo import dispatched_within, record_dispatch
-from limen.notifications.base import AlertPayload, build_alert_payload, level_at_least
+from limen.notifications.base import (
+    _HAZARD_LABEL_IT,
+    AlertPayload,
+    build_alert_payload,
+    level_at_least,
+)
 
 log = get_logger(__name__)
 
 _LEVEL_FROM_STRING = {lvl.value: lvl for lvl in RiskLevel}
 
 
-def _forecast_summary_it(run: ForecastRun, triggered: list[CellRiskRecord]) -> str:
+def _forecast_summary_it(
+    run: ForecastRun, triggered: list[CellRiskRecord], hazard: HazardType = DEFAULT_HAZARD
+) -> str:
     """Deterministic Italian summary — only numbers from the forecast run."""
     counts = ", ".join(f"{lvl}: {n}" for lvl, n in sorted(run.by_level.items()))
     top = triggered[0]
+    hazard_label = _HAZARD_LABEL_IT.get(hazard, hazard.value)
     return (
-        f"PREVISIONE Limen a +{run.horizon_h} ore "
+        f"PREVISIONE Limen rischio {hazard_label} a +{run.horizon_h} ore "
         f"(valida al {run.valuation_time:%d/%m %H:%M} UTC) per AOI {run.aoi_id}: "
         f"{len(triggered)} celle previste a livello {top.level.value} o superiore "
         f"(distribuzione {counts}). Cella di picco {top.cell_id} con punteggio "
@@ -42,13 +52,18 @@ def _forecast_summary_it(run: ForecastRun, triggered: list[CellRiskRecord]) -> s
     )
 
 
-def build_forecast_payload(run: ForecastRun, triggered: list[CellRiskRecord]) -> AlertPayload:
+def build_forecast_payload(
+    run: ForecastRun,
+    triggered: list[CellRiskRecord],
+    hazard: HazardType = DEFAULT_HAZARD,
+) -> AlertPayload:
     """Assemble the predictive AlertPayload (deterministic, forecast-labelled)."""
     from limen.config.settings import get_settings
 
     pipeline_version = f"v1-forecast+{run.horizon_h}h"
     assessment = AggregateAssessment(
         aoi_id=run.aoi_id,
+        hazard_type=hazard,
         horizon=f"{run.horizon_h}h",
         model_version=pipeline_version,
         pipeline_version=pipeline_version,
@@ -68,7 +83,7 @@ def build_forecast_payload(run: ForecastRun, triggered: list[CellRiskRecord]) ->
     )
     return payload.model_copy(
         update={
-            "summary_it": _forecast_summary_it(run, triggered),
+            "summary_it": _forecast_summary_it(run, triggered, hazard),
             "pipeline_version": pipeline_version,
         }
     )
@@ -80,31 +95,53 @@ async def run_forecast_monitoring(deps: AppDependencies) -> dict[str, int]:
     min_level = _LEVEL_FROM_STRING.get(cfg.min_level, RiskLevel.High)
     out: dict[str, int] = {}
 
-    for aoi_id in await list_aoi_ids():
+    aoi_ids = await list_aoi_ids()
+    # Checked once per hazard, not once per (hazard, AOI): an unscorable
+    # hazard would otherwise raise for every AOI on every tick, filling the
+    # log with the same fault.
+    scorable: list[HazardType] = []
+    for hazard in deps.settings.hazards.enabled:
+        try:
+            check_scorable(hazard, deps.settings.scoring.engine)
+        except HazardNotScorableError as exc:
+            log.error("job.forecast.hazard_unavailable", hazard=hazard.value, error=str(exc))
+            continue
+        scorable.append(hazard)
+
+    for hazard, aoi_id in ((h, a) for h in scorable for a in aoi_ids):
         try:
             fc = await run_forecast(
                 aoi_id=aoi_id,
                 horizon_h=cfg.horizon_hours,
                 cell_limit=cfg.cell_limit,
                 settings=deps.settings,
+                hazard=hazard,
             )
             triggered = sorted(
                 (c for c in fc.cell_results if level_at_least(c.level, min_level)),
                 key=lambda c: c.score,
                 reverse=True,
             )
-            out[aoi_id] = len(triggered)
+            # Summed across hazards: with a single one enabled this is the
+            # same number this job has always returned.
+            out[aoi_id] = out.get(aoi_id, 0) + len(triggered)
             if not triggered:
                 continue
             if await dispatched_within(
                 aoi_id,
                 horizon_h=cfg.horizon_hours,
                 window=timedelta(hours=cfg.dedup_window_hours),
+                hazard=hazard,
             ):
-                log.info("job.forecast.deduped", aoi_id=aoi_id, horizon_h=cfg.horizon_hours)
+                log.info(
+                    "job.forecast.deduped",
+                    aoi_id=aoi_id,
+                    hazard=hazard.value,
+                    horizon_h=cfg.horizon_hours,
+                )
                 continue
 
-            payload = build_forecast_payload(fc, triggered)
+            payload = build_forecast_payload(fc, triggered, hazard)
             outcomes = await deps.notification_dispatcher.dispatch(payload)
             await record_dispatch(
                 aoi_id=aoi_id,
@@ -114,10 +151,12 @@ async def run_forecast_monitoring(deps: AppDependencies) -> dict[str, int]:
                 cells_alerted=len(triggered),
                 channels=outcomes,
                 summary=payload.summary_it,
+                hazard=hazard,
             )
             log.info(
                 "job.forecast.dispatched",
                 aoi_id=aoi_id,
+                hazard=hazard.value,
                 horizon_h=cfg.horizon_hours,
                 cells=len(triggered),
                 channels=outcomes,
@@ -126,6 +165,7 @@ async def run_forecast_monitoring(deps: AppDependencies) -> dict[str, int]:
             log.error(
                 "job.forecast.error",
                 aoi_id=aoi_id,
+                hazard=hazard.value,
                 error=str(exc),
                 error_type=type(exc).__name__,
             )

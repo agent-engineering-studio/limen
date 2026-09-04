@@ -25,6 +25,7 @@ from limen.config.settings import Settings, get_settings
 from limen.core.features.assembler import assemble_bundles
 from limen.core.logging import get_logger
 from limen.core.models.context import CellRiskRecord, MonitoringContext
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.scoring.resolver import resolve_challenger, resolve_scoring_engine
 from limen.data.caching.cached_openmeteo import CachedOpenMeteoClient
 
@@ -72,16 +73,17 @@ async def run_forecast(
     horizon_h: int,
     cell_limit: int | None = None,
     settings: Settings | None = None,
+    hazard: HazardType = DEFAULT_HAZARD,
 ) -> ForecastRun:
     """Score ``aoi_id`` at ``now + horizon_h`` with champion + ML challenger."""
     settings = settings or get_settings()
-    champion = resolve_scoring_engine(settings=settings)
-    challenger = resolve_challenger(settings=settings)
+    champion = resolve_scoring_engine(settings=settings, hazard=hazard)
+    challenger = resolve_challenger(settings=settings, hazard=hazard)
 
     builder = (
-        WorkflowBuilder("limen-landslide-forecast")
+        WorkflowBuilder(f"limen-{hazard.value}-forecast")
         .add(AreaResolverExecutor(cell_limit=cell_limit))
-        .add(StaticFactorsExecutor())
+        .add(StaticFactorsExecutor(hazard=hazard))
         .add(
             MeteoFetchExecutor(
                 client=ClampedApiClient(),
@@ -95,10 +97,10 @@ async def run_forecast(
     # the predictive H uplift is reflected in the forecast score too.
     if settings.enable_flood_forecast:
         builder = builder.add(FloodForecastFetchExecutor())
-    wf = builder.add(RiskScoringExecutor(engine=champion)).build()
+    wf = builder.add(RiskScoringExecutor(engine=champion, hazard=hazard)).build()
 
     valuation_time = datetime.now(UTC) + timedelta(hours=horizon_h)
-    ctx = MonitoringContext(aoi_id=aoi_id, valuation_time=valuation_time)
+    ctx = MonitoringContext(aoi_id=aoi_id, hazard_type=hazard, valuation_time=valuation_time)
     result = await wf.run(ctx)
     out = result.context
 

@@ -32,9 +32,10 @@ from limen.agents.workflow_runtime.executor import Executor, handler
 from limen.config.settings import AlertSettings, Settings, get_settings
 from limen.core.logging import get_logger
 from limen.core.models.context import CellRiskRecord, MonitoringContext
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import RiskLevel
 from limen.core.scoring.exposure import exposure_factor_from_row
-from limen.core.scoring.regional_thresholds import load_regional_thresholds
+from limen.core.scoring.regional_thresholds import load_hazard_thresholds
 from limen.data.db import acquire
 from limen.data.repos.alert_dispatches_repo import (
     AlertDispatchRow,
@@ -63,15 +64,22 @@ def _resolve_threshold(min_level: str) -> RiskLevel:
     return _LEVEL_FROM_STRING.get(min_level, RiskLevel.High)
 
 
-async def _load_exposure_factors(cell_ids: list[str]) -> dict[str, float]:
+async def _load_exposure_factors(
+    cell_ids: list[str], hazard: HazardType = DEFAULT_HAZARD
+) -> dict[str, float]:
     """Exposure multiplier for the candidate cells only.
 
-    Same shared formula as ``/api/alerts`` (``limen.core.scoring.exposure``,
-    thresholds in ``hazards/landslide.yaml``): CORINE urban flags +
-    distance from the OSM road/rail network, with the CORINE 12x flags
-    as fallback. Cells without a factors row get 0 (priority == score).
+    Same shared formula as ``/api/alerts`` (``limen.core.scoring.exposure``):
+    CORINE urban flags + distance from the OSM road/rail network, with the
+    CORINE 12x flags as fallback. Cells without a factors row get 0
+    (priority == score).
+
+    Weights come from **the hazard's own** YAML: what makes a cell exposed to
+    a flood is not what makes it exposed to a slope failure, and using the
+    landslide block for another hazard would order its alerts by the wrong
+    priority.
     """
-    cfg = load_regional_thresholds().exposure
+    cfg = load_hazard_thresholds(hazard).exposure
     async with acquire() as conn:
         rows = await conn.fetch(
             """
@@ -123,10 +131,14 @@ class AlertDispatchExecutor(Executor):
         dispatcher: NotificationDispatcher | None = None,
         *,
         alert_settings: AlertSettings | None = None,
+        hazard: HazardType = DEFAULT_HAZARD,
     ) -> None:
         super().__init__(name="AlertDispatch")
         self._dispatcher = dispatcher
         self._alert_settings = alert_settings
+        # Dedup is per hazard: a landslide alert must not suppress a flood
+        # alert on the same cell inside the window.
+        self._hazard = hazard
 
     def _settings(self, ctx_settings: Settings | None = None) -> AlertSettings:
         if self._alert_settings is not None:
@@ -170,7 +182,7 @@ class AlertDispatchExecutor(Executor):
             return ctx
 
         # Priority — exposure-weighted score.
-        exposure = await _load_exposure_factors([r.cell_id for r in above_threshold])
+        exposure = await _load_exposure_factors([r.cell_id for r in above_threshold], self._hazard)
         prioritised: list[tuple[CellRiskRecord, float]] = []
         for record in above_threshold:
             mult = 1.0 + exposure.get(record.cell_id, 0.0)
@@ -180,7 +192,9 @@ class AlertDispatchExecutor(Executor):
         # Dedup — skip cells alerted inside the window.
         window = timedelta(minutes=alert_settings.dedup_window_minutes)
         candidate_ids = [r.cell_id for r, _ in prioritised]
-        suppressed = await cells_dispatched_within(candidate_ids, window=window)
+        suppressed = await cells_dispatched_within(
+            candidate_ids, window=window, hazard=self._hazard
+        )
         deduped = [(r, p) for r, p in prioritised if r.cell_id not in suppressed]
         if not deduped:
             log.info(
@@ -220,6 +234,7 @@ class AlertDispatchExecutor(Executor):
         # Persist + emit metric.
         rows = [
             AlertDispatchRow(
+                hazard_type=self._hazard,
                 cell_id=record.cell_id,
                 aoi_id=ctx.aoi_id,
                 level=record.level.value,

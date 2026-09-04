@@ -85,6 +85,7 @@ def test_double_registration_is_refused() -> None:
             HazardType.LANDSLIDE,
             ScoringEngineKind.DETERMINISTIC,
             lambda _s, _t: MultiFactorScoringEngine(),
+            breakdown=ComponentBreakdown,
         )
 
 
@@ -121,6 +122,7 @@ def fake_flood_registered() -> Iterator[None]:
         HazardType.FLOOD,
         ScoringEngineKind.DETERMINISTIC,
         lambda _s, _t: _FakeFloodEngine(),
+        breakdown=_FakeFloodBreakdown,
     )
     yield
     unregister(HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
@@ -141,7 +143,7 @@ def test_registration_round_trip_leaves_no_residue() -> None:
     perché registra e ripulisce da sé."""
     key = (HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
     assert not is_registered(*key)
-    register(*key, lambda _s, _t: _FakeFloodEngine())
+    register(*key, lambda _s, _t: _FakeFloodEngine(), breakdown=_FakeFloodBreakdown)
     try:
         assert is_registered(*key)
         assert key in registered_pairs()
@@ -245,7 +247,7 @@ def test_injected_settings_reach_the_ml_factory() -> None:
         return MultiFactorScoringEngine()
 
     key = (HazardType.FLOOD, ScoringEngineKind.ML)
-    register(*key, _spy)
+    register(*key, _spy, breakdown=ComponentBreakdown)
     try:
         injected = Settings.model_validate(
             {"scoring": {"mlflow_tracking_uri": "file:///tmp/limen-iniettato"}}
@@ -258,13 +260,47 @@ def test_injected_settings_reach_the_ml_factory() -> None:
     assert seen[0].scoring.mlflow_tracking_uri == "file:///tmp/limen-iniettato"
 
 
-def test_a_hazard_without_a_yaml_is_not_scored_with_landslide_thresholds() -> None:
+def test_an_unregistered_hazard_is_refused_at_build_time() -> None:
     """Valutare una cella di alluvione con le soglie di versante darebbe
     numeri sbagliati presentati come giusti: peggio di un errore rumoroso."""
     from limen.core.scoring.resolver import HazardNotScorableError, resolve_scoring_engine
 
-    with pytest.raises(HazardNotScorableError):
+    # Il primo ostacolo che il resolver incontra per un pericolo mai
+    # configurato è il file di soglie: senza quello non c'è numero corretto da
+    # produrre, con o senza motore registrato.
+    with pytest.raises(HazardNotScorableError, match="no thresholds file"):
         resolve_scoring_engine(hazard=HazardType.FLOOD)
+
+
+def test_an_engine_with_an_unreadable_breakdown_is_refused_at_build_time() -> None:
+    """`RiskScoringExecutor` legge componenti con nome: un motore che produce
+    un breakdown diverso morirebbe come AttributeError a metà sweep, quindi la
+    incompatibilità va colta al build usando la classe dichiarata."""
+    from limen.core.scoring.resolver import HazardNotScorableError, resolve_scoring_engine
+
+    key = (HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
+    register(*key, lambda _s, _t: _FakeFloodEngine(), breakdown=_FakeFloodBreakdown)
+    try:
+        with pytest.raises(HazardNotScorableError, match="reads landslide components"):
+            resolve_scoring_engine(hazard=HazardType.FLOOD)
+    finally:
+        unregister(*key)
+
+
+def test_an_engine_with_a_readable_breakdown_is_accepted() -> None:
+    """Un primo motore flood che riusa la forma dei componenti delle frane
+    passa: è il controllo sulla forma, non sul nome del pericolo."""
+    key = (HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
+    register(
+        *key,
+        lambda _s, t: MultiFactorScoringEngine(t or load_regional_thresholds()),
+        breakdown=ComponentBreakdown,
+    )
+    try:
+        engine = resolve_scoring_engine(hazard=HazardType.FLOOD)
+        assert isinstance(engine, MultiFactorScoringEngine)
+    finally:
+        unregister(*key)
 
 
 def test_check_scorable_catches_a_misconfigured_hazard() -> None:
@@ -279,7 +315,7 @@ def test_check_scorable_catches_a_misconfigured_hazard() -> None:
 
     # Motore registrato ma senza file di soglie: va colto comunque.
     key = (HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
-    register(*key, lambda _s, _t: _FakeFloodEngine())
+    register(*key, lambda _s, _t: _FakeFloodEngine(), breakdown=_FakeFloodBreakdown)
     try:
         with pytest.raises(HazardNotScorableError, match="no thresholds file"):
             check_scorable(HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)

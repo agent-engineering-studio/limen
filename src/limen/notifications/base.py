@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from limen.config.settings import AlertSettings
 from limen.core.models.context import AggregateAssessment, CellRiskRecord
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import RiskLevel
 
 _LEVEL_RANK = {
@@ -31,6 +32,12 @@ _LEVEL_RANK = {
     RiskLevel.High: 3,
     RiskLevel.VeryHigh: 4,
 }
+_HAZARD_LABEL_IT: dict[HazardType, str] = {
+    HazardType.LANDSLIDE: "frana",
+    HazardType.FLOOD: "alluvione",
+    HazardType.WILDFIRE: "incendio",
+}
+
 _LEVEL_LABEL_IT = {
     RiskLevel.None_: "nessuno",
     RiskLevel.Low: "basso",
@@ -60,6 +67,10 @@ class AlertPayload(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     aoi_id: str
+    #: Which danger this alert is about. With more than one hazard enabled two
+    #: alerts land per AOI per tick, and a recipient has to be able to tell
+    #: them apart — in the payload and in the Italian text.
+    hazard_type: HazardType = DEFAULT_HAZARD
     max_level: RiskLevel
     max_score: float = Field(..., ge=0.0, le=1.0)
     cells: list[AlertedCell] = Field(default_factory=list)
@@ -133,8 +144,13 @@ def _format_summary_it(
         if isinstance(top_level, RiskLevel)
         else "n/d"
     )
+    hazard_label = _HAZARD_LABEL_IT.get(assessment.hazard_type, assessment.hazard_type.value)
+    # "allerta rischio frana, livello moderato": l'aggettivo concorda con
+    # "livello", non con il pericolo, che in italiano cambia genere
+    # (frana femminile, incendio maschile).
     text = (
-        f"Limen — allerta {top_level_label} per AOI {assessment.aoi_id}: "
+        f"Limen — allerta rischio {hazard_label}, livello {top_level_label}, "
+        f"per AOI {assessment.aoi_id}: "
         f"{n_high} celle a livello alto o superiore "
         f"(distribuzione {counts}). Cella di picco {top_id} "
         f"con punteggio {top_score:.2f}. Diagnosi prodotta dal modello "
@@ -194,6 +210,7 @@ def build_alert_payload(
 
     return AlertPayload(
         aoi_id=assessment.aoi_id,
+        hazard_type=assessment.hazard_type,
         max_level=max_level,
         max_score=max_score,
         cells=cells,

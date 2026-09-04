@@ -5,6 +5,7 @@ from __future__ import annotations
 from limen.agents.workflow_runtime.executor import Executor, handler
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import StaticFactors
 from limen.data.db import acquire
 
@@ -30,8 +31,12 @@ WHERE g.aoi_id = $1
 class StaticFactorsExecutor(Executor):
     """Materialise :class:`StaticFactors` for every cell in the AOI."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, hazard: HazardType = DEFAULT_HAZARD) -> None:
         super().__init__(name="StaticFactors")
+        # Fase 1 reads the same columns for every hazard; Fase 2 will select
+        # per-hazard ones (CORINE fuel for wildfire, pai_hydraulic for flood).
+        # Carried now so the workflow wiring is done once.
+        self._hazard = hazard
 
     @handler
     async def run(self, ctx: MonitoringContext) -> MonitoringContext:

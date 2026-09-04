@@ -16,6 +16,7 @@ from limen.agents.workflow_runtime.executor import Executor, handler
 from limen.core.features.assembler import assemble_bundles
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import HazardBreakdown
 from limen.core.scoring.base import ScoringEngine
 from limen.data.repos.model_runs_repo import ModelRunRow
@@ -27,9 +28,15 @@ log = get_logger(__name__)
 class ShadowChallengerExecutor(Executor):
     """Compute challenger predictions and log them — never mutate cell_results."""
 
-    def __init__(self, challenger: ScoringEngine[HazardBreakdown] | None) -> None:
+    def __init__(
+        self,
+        challenger: ScoringEngine[HazardBreakdown] | None,
+        *,
+        hazard: HazardType = DEFAULT_HAZARD,
+    ) -> None:
         super().__init__(name="ShadowChallenger")
         self._challenger = challenger
+        self._hazard = hazard
 
     def _score_all(
         self, ctx: MonitoringContext, model_uri: str, model_version: str
@@ -55,6 +62,7 @@ class ShadowChallengerExecutor(Executor):
             rows.append(
                 ModelRunRow(
                     cell_id=bundle.cell_id,
+                    hazard_type=self._hazard,
                     valuation_time=ctx.valuation_time,
                     aoi_id=ctx.aoi_id,
                     model_uri=model_uri,

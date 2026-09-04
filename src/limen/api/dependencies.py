@@ -19,6 +19,7 @@ from fastapi import Depends, Request
 from limen.agents.grounding.service import GroundingService
 from limen.agents.llm_factory.base import LlmClientFactory
 from limen.config.settings import Settings, get_settings
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import ComponentBreakdown, HazardBreakdown
 from limen.core.scoring.base import ScoringEngine
 from limen.core.scoring.engine import MultiFactorScoringEngine
@@ -107,20 +108,31 @@ class AppDependencies:
             grounding_service=grounding,
         )
 
-    def build_workflow(self, *, cell_limit: int | None = None) -> Workflow:
-        """Build a workflow bound to this container's LLM factory + settings."""
+    def build_workflow(
+        self,
+        *,
+        cell_limit: int | None = None,
+        hazard: HazardType = DEFAULT_HAZARD,
+    ) -> Workflow:
+        """Build a workflow for ``hazard``, bound to this container's factory."""
         from limen.agents.workflows.main_workflow import (
             WorkflowDeps,
-            build_landslide_workflow,
+            build_hazard_workflow,
         )
 
-        return build_landslide_workflow(
+        # The container resolved its engines for the default hazard at build
+        # time. Handing them to another hazard's workflow would score, say, a
+        # flood sweep with the landslide champion, so let the workflow resolve
+        # its own in that case.
+        same_hazard = hazard is DEFAULT_HAZARD
+        return build_hazard_workflow(
+            hazard,
             WorkflowDeps(
                 llm_factory=self.llm_factory,
                 settings=self.settings,
                 notification_dispatcher=self.notification_dispatcher,
-                scoring_engine=self.scoring_engine,
-                challenger_engine=self.challenger_engine,
+                scoring_engine=self.scoring_engine if same_hazard else None,
+                challenger_engine=self.challenger_engine if same_hazard else None,
                 grounding_service=self.grounding_service,
             ),
             cell_limit=cell_limit,
