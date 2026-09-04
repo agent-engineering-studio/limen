@@ -14,7 +14,7 @@ from limen.api.schemas import (
     LatestAssessmentResponse,
 )
 from limen.core.models.context import CellRiskRecord, RiskAnalysisDTO
-from limen.core.models.hazard import DEFAULT_HAZARD
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import (
     MeteoBreakdown,
     RiskLevel,
@@ -42,6 +42,7 @@ def _record_from_row(row: Any) -> CellRiskRecord:
         meteo_terms["measured_overrides"] = tuple(meteo_terms["measured_overrides"])
     return CellRiskRecord(
         cell_id=str(row["cell_id"]),
+        hazard_type=HazardType(row["hazard_type"]),
         score=float(row["score"]),
         level=RiskLevel(row["class"]),
         s=float(factors.get("s", 0.0)),
@@ -81,8 +82,9 @@ async def latest_assessment(aoi_id: str, deps: DepsDep) -> LatestAssessmentRespo
             )
         rows = await conn.fetch(
             """
-            SELECT ra.cell_id, ra.computed_at, ra.horizon, ra.score, ra.class,
-                   ra.factors, ra.explanation, ra.pipeline_version
+            SELECT ra.cell_id, ra.hazard_type, ra.computed_at, ra.horizon,
+                   ra.score, ra.class, ra.factors, ra.explanation,
+                   ra.pipeline_version
             FROM risk_assessments ra
             JOIN grid_cells g ON g.id = ra.cell_id
             WHERE g.aoi_id = $1 AND ra.computed_at = $2 AND ra.hazard_type = $3

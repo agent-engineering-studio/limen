@@ -97,8 +97,15 @@ export interface MeteoBreakdown {
   soil_factor: number;
 }
 
+/** Mirror di limen.core.models.hazard.HazardType. */
+export type HazardType = "landslide" | "flood" | "wildfire";
+
 export interface CellRiskRecord {
   cell_id: string;
+  // Sempre presente: il DTO Python lo serializza con un default. I campi
+  // hazard a livello di risposta (LatestAssessmentResponse, AlertItem)
+  // arrivano quando l'API espone il parametro (issue #86).
+  hazard_type: HazardType;
   score: number;
   level: RiskLevel;
   s: number;

@@ -19,6 +19,7 @@ from fastapi import Depends, Request
 from limen.agents.grounding.service import GroundingService
 from limen.agents.llm_factory.base import LlmClientFactory
 from limen.config.settings import Settings, get_settings
+from limen.core.models.risk import ComponentBreakdown, HazardBreakdown
 from limen.core.scoring.base import ScoringEngine
 from limen.core.scoring.engine import MultiFactorScoringEngine
 from limen.core.scoring.regional_thresholds import (
@@ -54,8 +55,8 @@ class AppDependencies:
     # V2 — the resolved engine (V1 by default, V2 when promoted) + the
     # shadow challenger. The workflow injects both into its scoring
     # executors via the settings-driven resolver.
-    scoring_engine: ScoringEngine | None = None
-    challenger_engine: ScoringEngine | None = None
+    scoring_engine: ScoringEngine[ComponentBreakdown] | None = None
+    challenger_engine: ScoringEngine[HazardBreakdown] | None = None
     # V2.x — KG grounding service, only constructed when `kg.enabled` is true.
     grounding_service: GroundingService | None = None
 

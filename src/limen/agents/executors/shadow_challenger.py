@@ -16,6 +16,7 @@ from limen.agents.workflow_runtime.executor import Executor, handler
 from limen.core.features.assembler import assemble_bundles
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
+from limen.core.models.risk import HazardBreakdown
 from limen.core.scoring.base import ScoringEngine
 from limen.data.repos.model_runs_repo import ModelRunRow
 from limen.data.repos.model_runs_repo import insert_many as insert_model_runs
@@ -26,7 +27,7 @@ log = get_logger(__name__)
 class ShadowChallengerExecutor(Executor):
     """Compute challenger predictions and log them — never mutate cell_results."""
 
-    def __init__(self, challenger: ScoringEngine | None) -> None:
+    def __init__(self, challenger: ScoringEngine[HazardBreakdown] | None) -> None:
         super().__init__(name="ShadowChallenger")
         self._challenger = challenger
 

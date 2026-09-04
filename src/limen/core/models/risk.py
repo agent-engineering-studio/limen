@@ -16,9 +16,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 from enum import StrEnum
+from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from limen.core.models.hazard import HazardType
 from limen.core.models.sensor import SensorFeatures
 
 
@@ -177,14 +179,34 @@ class KinematicBreakdown(_Frozen):
     hard_escalation: bool = False
 
 
-class ComponentBreakdown(_Frozen):
-    """All components + their normalised inputs, for auditability.
+class HazardBreakdown(_Frozen):
+    """Base of every per-hazard breakdown.
+
+    Carries only the discriminator. Component *names* are hazard-specific by
+    definition -- S/M/E/F/H/K describe how a slope fails and mean nothing for
+    a wildfire -- so this base deliberately holds no components. A consumer
+    that only needs to know which hazard it is looking at (the engine
+    registry, a persistence layer) types against this; one that reads the
+    numbers types against the concrete subclass.
+    """
+
+    hazard_type: HazardType
+
+
+class ComponentBreakdown(HazardBreakdown):
+    """Landslide components + their normalised inputs, for auditability.
 
     V1 ships five components (S/M/E/F/H, ``k`` always 0). V1.5 activates
     K on monitored cells and renormalises the others — but the same DTO
     shape carries both regimes so downstream consumers (ChatAgents,
     persistence, frontend) stay backwards-compatible.
+
+    The name is kept from before the hazard dimension existed: renaming it
+    would touch every scoring consumer for no gain. Fase 2 adds
+    ``FloodBreakdown`` and ``WildfireBreakdown`` alongside it.
     """
+
+    hazard_type: Literal[HazardType.LANDSLIDE] = HazardType.LANDSLIDE
 
     s: float = Field(..., ge=0.0, le=1.0)
     m: float = Field(..., ge=0.0, le=1.0)
@@ -198,12 +220,31 @@ class ComponentBreakdown(_Frozen):
     kinematic_terms: KinematicBreakdown | None = None
 
 
-class RiskScore(_Frozen):
-    """Engine output."""
+#: Covariant because :class:`RiskScore` is frozen: a
+#: ``RiskScore[ComponentBreakdown]`` is safely usable wherever a
+#: ``RiskScore[HazardBreakdown]`` is expected, which is what lets the engine
+#: registry hold engines for different hazards behind one type.
+BreakdownT_co = TypeVar("BreakdownT_co", bound=HazardBreakdown, covariant=True)
+
+
+# UP046 is suppressed below: PEP 695 (`class RiskScore[B: HazardBreakdown]`)
+# infers variance instead of declaring it, and mypy infers *invariant* here
+# because a Pydantic field reads as a mutable attribute. That breaks the
+# assignment this design depends on, RiskScore[ComponentBreakdown] into
+# RiskScore[HazardBreakdown], so the explicit covariant TypeVar has to stay.
+class RiskScore(_Frozen, Generic[BreakdownT_co]):  # noqa: UP046
+    """Engine output, parameterised by the hazard's breakdown shape.
+
+    Generic rather than pinned to :class:`ComponentBreakdown` so the
+    landslide engine can return ``RiskScore[ComponentBreakdown]`` and its
+    callers keep reading ``.breakdown.s`` with no cast and no narrowing,
+    while a flood or wildfire engine returns its own breakdown through the
+    same class.
+    """
 
     score: float = Field(..., ge=0.0, le=1.0)
     level: RiskLevel
-    breakdown: ComponentBreakdown
+    breakdown: BreakdownT_co
     model_version: str
     # V1.5 — operator-facing hint that the engine took the in-situ path
     # for this cell (raised confidence + the M' override + K active).
@@ -217,9 +258,11 @@ class RiskScore(_Frozen):
 
 
 __all__: Sequence[str] = (
+    "BreakdownT_co",
     "CellFeatureBundle",
     "ComponentBreakdown",
     "DynamicInputs",
+    "HazardBreakdown",
     "KinematicBreakdown",
     "MeteoBreakdown",
     "RainfallSample",

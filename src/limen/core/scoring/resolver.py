@@ -12,6 +12,7 @@ import structlog
 
 from limen.config.settings import ScoringEngineKind, Settings, get_settings
 from limen.core.logging import get_logger
+from limen.core.models.risk import ComponentBreakdown
 from limen.core.scoring.base import ScoringEngine
 from limen.core.scoring.engine import MultiFactorScoringEngine
 from limen.core.scoring.regional_thresholds import (
@@ -26,7 +27,7 @@ def resolve_scoring_engine(
     *,
     settings: Settings | None = None,
     thresholds: RegionalThresholds | None = None,
-) -> ScoringEngine:
+) -> ScoringEngine[ComponentBreakdown]:
     """Return the engine selected by ``settings.scoring.engine``.
 
     Falls back to the deterministic engine on V2 load errors and logs
@@ -73,7 +74,7 @@ def resolve_challenger(
     *,
     settings: Settings | None = None,
     thresholds: RegionalThresholds | None = None,
-) -> ScoringEngine | None:
+) -> ScoringEngine[ComponentBreakdown] | None:
     """Return the shadow challenger, if shadow mode is active.
 
     The champion (returned by :func:`resolve_scoring_engine`) stays the

@@ -850,6 +850,9 @@ class Settings(BaseSettings):
     # risk is a first-class output alongside landslides. Each signal degrades to
     # None where not applicable (inland ⇒ no marine, off-reach ⇒ no discharge),
     # so the assessment stays correct. Set False to disable the extra fetches.
+    # NOT the flood hazard. This gates the dynamic hydrology signals that feed
+    # component H of *landslide* scoring (issue #8). The flood hazard is a
+    # separate engine selected through HAZARDS__ENABLED (Fase 3, issue #63).
     enable_flood_forecast: bool = True
     # Rainfall sampling-node grid step (degrees) for the live MeteoFetch —
     # each cell gets the series of its nearest node instead of one AOI-wide
