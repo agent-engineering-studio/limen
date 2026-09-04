@@ -19,12 +19,13 @@ from limen.core.models.context import (
     CellRiskRecord,
     MonitoringContext,
 )
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import ComponentBreakdown, RiskLevel
 from limen.core.scoring.base import ScoringEngine
 from limen.core.scoring.engine import MultiFactorScoringEngine
 from limen.core.scoring.regional_thresholds import (
     RegionalThresholds,
-    load_regional_thresholds,
+    load_hazard_thresholds,
 )
 
 log = get_logger(__name__)
@@ -51,9 +52,13 @@ class RiskScoringExecutor(Executor):
         engine: ScoringEngine[ComponentBreakdown] | None = None,
         top_k: int = 10,
         macroregion: str = "italy_default",
+        hazard: HazardType = DEFAULT_HAZARD,
     ) -> None:
         super().__init__(name="RiskScoring")
-        self._thresholds = thresholds or load_regional_thresholds()
+        self._hazard = hazard
+        # Each hazard has its own YAML: loading the landslide file for a flood
+        # sweep would score with slope-failure thresholds.
+        self._thresholds = thresholds or load_hazard_thresholds(hazard)
         # ``engine`` lets the workflow inject the resolver-selected engine
         # (V1 by default, V2 ML when promoted). Without an injection we
         # fall back to the deterministic engine — the V1 champion stays
@@ -78,6 +83,7 @@ class RiskScoringExecutor(Executor):
             records.append(
                 CellRiskRecord(
                     cell_id=bundle.cell_id,
+                    hazard_type=self._hazard,
                     score=scored.score,
                     level=scored.level,
                     static_terms=scored.breakdown.static_terms,
@@ -108,6 +114,7 @@ class RiskScoringExecutor(Executor):
 
         assessment = AggregateAssessment(
             aoi_id=ctx.aoi_id,
+            hazard_type=self._hazard,
             model_version=self._thresholds.model_version,
             valuation_time=datetime.now(UTC),
             n_cells=len(records),

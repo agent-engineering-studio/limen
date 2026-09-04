@@ -43,9 +43,14 @@ from limen.agents.workflow_runtime.executor import Executor, handler
 from limen.config.settings import ScoringMode, Settings, get_settings
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import ComponentBreakdown, HazardBreakdown
 from limen.core.scoring.base import ScoringEngine
-from limen.core.scoring.resolver import resolve_challenger, resolve_scoring_engine
+from limen.core.scoring.resolver import (
+    check_scorable,
+    resolve_challenger,
+    resolve_scoring_engine,
+)
 from limen.notifications.dispatcher import NotificationDispatcher
 
 log = get_logger(__name__)
@@ -171,15 +176,23 @@ class BriefingNode(Executor):
 # ---------------------------------------------------------------------------
 # Builder
 # ---------------------------------------------------------------------------
-def build_landslide_workflow(
+def build_hazard_workflow(
+    hazard: HazardType = DEFAULT_HAZARD,
     deps: WorkflowDeps | None = None,
     *,
     cell_limit: int | None = None,
 ) -> Workflow:
-    """Assemble the sequential workflow.
+    """Assemble the sequential workflow for one hazard.
 
-    ``cell_limit`` is exposed mainly for tests / smoke runs where
-    scoring 60k cells per AOI would be wasteful.
+    Two kinds of step. **Shared** ones fetch the state of the territory —
+    rain, seismicity, fire hotspots, in-situ sensors, river discharge — and
+    say nothing about any particular danger, so with several hazards enabled
+    they are the same work done once per AOI. **Hazard-specific** ones read
+    that state through the hazard's own thresholds and engine, and write rows
+    tagged with it.
+
+    ``cell_limit`` is exposed mainly for tests / smoke runs where scoring 60k
+    cells per AOI would be wasteful.
     """
     deps = deps or WorkflowDeps(
         llm_factory=_default_factory(),
@@ -187,15 +200,24 @@ def build_landslide_workflow(
     )
     settings = deps.settings
 
-    champion = deps.scoring_engine or resolve_scoring_engine(settings=settings)
+    # Everything that can make a hazard unscorable, checked once and up front:
+    # no engine registered, an engine whose breakdown the executors cannot
+    # read, or a missing thresholds YAML. The alternative is discovering it as
+    # a FileNotFoundError or an AttributeError deep inside the sweep.
+    check_scorable(hazard, settings.scoring.engine)
+
+    # Resolved once per workflow, not per cell: for the ML engine this is the
+    # MLflow round trip.
+    champion = deps.scoring_engine or resolve_scoring_engine(settings=settings, hazard=hazard)
     challenger = deps.challenger_engine
     if challenger is None and settings.scoring.mode is ScoringMode.SHADOW:
-        challenger = resolve_challenger(settings=settings)
+        challenger = resolve_challenger(settings=settings, hazard=hazard)
 
+    name = f"limen-{hazard.value}-v1"
     builder = (
-        WorkflowBuilder("limen-landslide-v1")
+        WorkflowBuilder(name)
         .add(AreaResolverExecutor(cell_limit=cell_limit))
-        .add(StaticFactorsExecutor())
+        .add(StaticFactorsExecutor(hazard=hazard))
         .add(MeteoFetchExecutor(rain_node_deg=settings.meteo_rain_node_deg))
         .add(SeismicCheckExecutor())
         .add(FireCheckExecutor(min_hotspots=settings.firms.min_hotspots))
@@ -210,18 +232,19 @@ def build_landslide_workflow(
 
     # Issue #8 — opt-in dynamic flood signals (forecast rain + GloFAS river
     # discharge + marine surge) into the context before scoring assembles the
-    # bundles. Off by default ⇒ scores byte-identical to V1.
+    # bundles. Off by default ⇒ scores byte-identical to V1. NOT the flood
+    # hazard: this feeds the hydrology component H of landslide scoring.
     if settings.enable_flood_forecast:
         builder = builder.add(FloodForecastFetchExecutor())
 
-    builder = builder.add(RiskScoringExecutor(engine=champion))
+    builder = builder.add(RiskScoringExecutor(engine=champion, hazard=hazard))
     if challenger is not None:
         # The shadow executor runs AFTER the champion has computed
         # cell_results — it sees the same bundles but never touches the
         # authoritative state. Persisting to model_runs is best-effort.
-        builder = builder.add(ShadowChallengerExecutor(challenger))
+        builder = builder.add(ShadowChallengerExecutor(challenger, hazard=hazard))
     builder = (
-        builder.add(EscalationGateExecutor())
+        builder.add(EscalationGateExecutor(hazard=hazard))
         .add(RiskAnalystNode(deps.llm_factory, min_level=settings.llm.briefing_min_level))
         .add(
             BriefingNode(
@@ -230,12 +253,13 @@ def build_landslide_workflow(
                 min_level=settings.llm.briefing_min_level,
             )
         )
-        .add(PersistResultExecutor())
-        .add(AlertDispatchExecutor(deps.notification_dispatcher))
+        .add(PersistResultExecutor(hazard=hazard))
+        .add(AlertDispatchExecutor(deps.notification_dispatcher, hazard=hazard))
     )
     log.info(
         "workflow.built",
-        name="limen-landslide-v1",
+        name=name,
+        hazard=hazard.value,
         steps=builder.build().step_count,
         enable_insitu=settings.enable_insitu,
         llm_provider=deps.llm_factory.provider,
@@ -245,6 +269,15 @@ def build_landslide_workflow(
         kg_enabled=settings.kg.enabled,
     )
     return builder.build()
+
+
+def build_landslide_workflow(
+    deps: WorkflowDeps | None = None,
+    *,
+    cell_limit: int | None = None,
+) -> Workflow:
+    """Landslide workflow. Thin alias kept for the existing call sites."""
+    return build_hazard_workflow(DEFAULT_HAZARD, deps, cell_limit=cell_limit)
 
 
 def _default_factory() -> LlmClientFactory:

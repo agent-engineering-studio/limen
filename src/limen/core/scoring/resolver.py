@@ -33,10 +33,15 @@ import structlog
 from limen.config.settings import ScoringEngineKind, ScoringMode, Settings, get_settings
 from limen.core.logging import get_logger
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
-from limen.core.models.risk import ComponentBreakdown
+from limen.core.models.risk import ComponentBreakdown, HazardBreakdown
 from limen.core.scoring.base import ScoringEngine
 from limen.core.scoring.regional_thresholds import RegionalThresholds
-from limen.core.scoring.registry import EngineNotRegisteredError, is_registered, resolve
+from limen.core.scoring.registry import (
+    EngineNotRegisteredError,
+    is_registered,
+    registered_breakdown,
+    resolve,
+)
 
 _log: structlog.stdlib.BoundLogger = get_logger(__name__)
 
@@ -47,6 +52,19 @@ class HazardNotScorableError(RuntimeError):
     A misconfiguration, not an operational hiccup: it cannot be degraded
     around, because there is no correct number to produce.
     """
+
+
+def _as_component(
+    engine: ScoringEngine[HazardBreakdown],
+) -> ScoringEngine[ComponentBreakdown]:
+    """Narrow to the landslide breakdown after the compatibility check.
+
+    A heterogeneous registry cannot express "this hazard's engine yields this
+    hazard's breakdown" in the type system, so the narrowing is a cast. It is
+    sound because :func:`_require_component_breakdown` has already verified
+    the declared breakdown class.
+    """
+    return cast("ScoringEngine[ComponentBreakdown]", engine)
 
 
 def _deterministic(
@@ -94,21 +112,32 @@ def check_scorable(hazard: HazardType, kind: ScoringEngineKind) -> None:
             f"hazard {hazard.value!r} has no thresholds file "
             f"(expected config/hazards/{hazard.value}.yaml)"
         )
+    _require_component_breakdown(hazard, kind)
 
 
-def _require_landslide(hazard: HazardType) -> None:
-    """Fase 1 resolves champions for the default hazard only.
+def _require_component_breakdown(hazard: HazardType, kind: ScoringEngineKind) -> None:
+    """Refuse an engine whose breakdown the workflow cannot read.
 
-    The cast below narrows the registry's base breakdown to the landslide one,
-    and that narrowing is only sound while this holds. A flood engine resolved
-    through here would fail as an ``AttributeError`` on ``.static_terms``
-    inside ``RiskScoringExecutor``, mid-sweep. #85 parameterises the workflow
-    and lifts this.
+    ``RiskScoringExecutor`` reads named landslide components (``.s``,
+    ``.static_terms``, …) to build a ``CellRiskRecord``. An engine producing a
+    different breakdown would die on an ``AttributeError`` halfway through the
+    hourly sweep, so the mismatch is caught here, at build time, using the
+    breakdown class declared at registration. It is also what makes the cast
+    below sound rather than hopeful.
+
+    Fase 2 gives ``CellRiskRecord`` a hazard-agnostic component projection and
+    this check widens with it.
     """
-    if hazard is not DEFAULT_HAZARD:
+    try:
+        declared = registered_breakdown(hazard, kind)
+    except EngineNotRegisteredError as exc:
+        # One error type out of the resolver: callers should not have to know
+        # whether the pair was missing or merely incompatible.
+        raise HazardNotScorableError(str(exc)) from exc
+    if not issubclass(declared, ComponentBreakdown):
         raise HazardNotScorableError(
-            f"champion resolution is {DEFAULT_HAZARD.value}-only until the workflow "
-            f"is parameterised per hazard (#85); got {hazard.value!r}"
+            f"engine {hazard.value}/{kind.value} produces {declared.__name__}, but the "
+            "workflow reads landslide components; a hazard-agnostic record lands in Fase 2"
         )
 
 
@@ -119,7 +148,7 @@ def _try_registry(
     *,
     event: str,
     settings: Settings | None = None,
-) -> ScoringEngine[ComponentBreakdown] | None:
+) -> ScoringEngine[HazardBreakdown] | None:
     """Build from the registry, or log and return ``None``.
 
     Every failure mode collapses here on purpose: an unregistered pair, an
@@ -141,11 +170,7 @@ def _try_registry(
             error_type=type(exc).__name__,
         )
         return None
-    # A heterogeneous registry cannot express "this hazard's engine yields
-    # this hazard's breakdown" in the type system: it is typed on the base so
-    # it can hold engines for several hazards. The narrowing is guaranteed by
-    # the registration, and Fase 2 will move it into a per-hazard resolver.
-    return cast("ScoringEngine[ComponentBreakdown]", engine)
+    return engine
 
 
 def resolve_scoring_engine(
@@ -161,7 +186,7 @@ def resolve_scoring_engine(
     """
     s = settings or get_settings()
     kind = s.scoring.engine
-    _require_landslide(hazard)
+    _require_component_breakdown(hazard, kind)
 
     if kind is ScoringEngineKind.DETERMINISTIC:
         engine = _try_registry(
@@ -173,7 +198,7 @@ def resolve_scoring_engine(
         )
         if engine is not None:
             _log.info("scoring.resolved", hazard=hazard.value, engine=kind.value)
-            return engine
+            return _as_component(engine)
         # A missing deterministic registration is a programming error, not an
         # operational one, but the sweep still has to produce numbers.
         return _deterministic(hazard, thresholds)
@@ -185,7 +210,7 @@ def resolve_scoring_engine(
         _log.info("scoring.resolved", hazard=hazard.value, engine="deterministic-fallback")
         return _deterministic(hazard, thresholds)
     _log.info("scoring.resolved", hazard=hazard.value, engine=kind.value)
-    return engine
+    return _as_component(engine)
 
 
 def resolve_challenger(
@@ -193,17 +218,20 @@ def resolve_challenger(
     settings: Settings | None = None,
     thresholds: RegionalThresholds | None = None,
     hazard: HazardType = DEFAULT_HAZARD,
-) -> ScoringEngine[ComponentBreakdown] | None:
+) -> ScoringEngine[HazardBreakdown] | None:
     """Return the shadow challenger for ``hazard``, if shadow mode is active.
 
     The champion stays the authoritative engine; the challenger only
     computes-and-logs in parallel. ``None`` outside shadow mode, or when the
     challenger cannot be built.
+
+    Typed on the **base** breakdown, unlike the champion: the shadow executor
+    serialises whatever it gets, so it needs no named component and imposes no
+    compatibility requirement.
     """
     s = settings or get_settings()
     if s.scoring.mode is not ScoringMode.SHADOW:
         return None
-    _require_landslide(hazard)
     # In shadow mode the challenger is the OTHER implementation: champion
     # deterministic ⇒ challenger ML, and vice-versa.
     other = (

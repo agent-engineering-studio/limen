@@ -20,11 +20,12 @@ the V1 baseline.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from limen.config.settings import ScoringEngineKind, Settings
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
-from limen.core.models.risk import HazardBreakdown
+from limen.core.models.risk import ComponentBreakdown, HazardBreakdown
 from limen.core.scoring.base import ScoringEngine
 from limen.core.scoring.regional_thresholds import RegionalThresholds
 
@@ -42,7 +43,18 @@ HazardScoringEngine = ScoringEngine[HazardBreakdown]
 #: pointed at a missing registry ends up passing for the wrong reason.
 EngineFactory = Callable[["Settings | None", "RegionalThresholds | None"], HazardScoringEngine]
 
-_REGISTRY: dict[tuple[HazardType, ScoringEngineKind], EngineFactory] = {}
+
+@dataclass(frozen=True, slots=True)
+class _Entry:
+    factory: EngineFactory
+    #: The breakdown class the engine produces. Declared at registration
+    #: because it cannot be discovered without scoring a cell, and a consumer
+    #: that reads specific components has to know before the sweep starts
+    #: whether they will be there.
+    breakdown: type[HazardBreakdown]
+
+
+_REGISTRY: dict[tuple[HazardType, ScoringEngineKind], _Entry] = {}
 
 
 class EngineNotRegisteredError(LookupError):
@@ -54,9 +66,17 @@ def register(
     kind: ScoringEngineKind,
     factory: EngineFactory,
     *,
+    breakdown: type[HazardBreakdown],
     replace: bool = False,
 ) -> None:
     """Register ``factory`` as the engine for ``(hazard, kind)``.
+
+    ``breakdown`` declares which breakdown class the engine produces. It is
+    required because nothing can infer it without scoring a cell, and a
+    consumer that reads named components -- ``RiskScoringExecutor`` reads
+    ``.s``, ``.static_terms`` and the rest -- must be able to refuse an
+    incompatible engine at build time instead of dying on an
+    ``AttributeError`` halfway through the hourly sweep.
 
     Registering the same pair twice is refused unless ``replace`` is set: a
     silent overwrite would make the champion depend on module import order.
@@ -67,7 +87,7 @@ def register(
             f"engine already registered for {hazard.value}/{kind.value}; "
             "pass replace=True to override it deliberately"
         )
-    _REGISTRY[key] = factory
+    _REGISTRY[key] = _Entry(factory=factory, breakdown=breakdown)
 
 
 def unregister(hazard: HazardType, kind: ScoringEngineKind) -> None:
@@ -89,17 +109,31 @@ def resolve(
     startup, not silently score nothing.
     """
     try:
-        factory = _REGISTRY[(hazard, kind)]
+        entry = _REGISTRY[(hazard, kind)]
     except KeyError:
         available = ", ".join(sorted(f"{h.value}/{k.value}" for h, k in _REGISTRY))
         raise EngineNotRegisteredError(
             f"no scoring engine for {hazard.value}/{kind.value}; registered: {available}"
         ) from None
-    return factory(settings, thresholds)
+    return entry.factory(settings, thresholds)
 
 
 def is_registered(hazard: HazardType, kind: ScoringEngineKind) -> bool:
     return (hazard, kind) in _REGISTRY
+
+
+def registered_breakdown(hazard: HazardType, kind: ScoringEngineKind) -> type[HazardBreakdown]:
+    """The breakdown class the registered engine produces.
+
+    Lets a caller check compatibility *before* building the engine, which is
+    the whole point of declaring it at registration.
+    """
+    try:
+        return _REGISTRY[(hazard, kind)].breakdown
+    except KeyError:
+        raise EngineNotRegisteredError(
+            f"no scoring engine for {hazard.value}/{kind.value}"
+        ) from None
 
 
 def registered_hazards() -> frozenset[HazardType]:
@@ -144,8 +178,18 @@ def _landslide_ml(
     )
 
 
-register(HazardType.LANDSLIDE, ScoringEngineKind.DETERMINISTIC, _landslide_deterministic)
-register(HazardType.LANDSLIDE, ScoringEngineKind.ML, _landslide_ml)
+register(
+    HazardType.LANDSLIDE,
+    ScoringEngineKind.DETERMINISTIC,
+    _landslide_deterministic,
+    breakdown=ComponentBreakdown,
+)
+register(
+    HazardType.LANDSLIDE,
+    ScoringEngineKind.ML,
+    _landslide_ml,
+    breakdown=ComponentBreakdown,
+)
 
 
 __all__ = [
@@ -154,6 +198,7 @@ __all__ = [
     "HazardScoringEngine",
     "is_registered",
     "register",
+    "registered_breakdown",
     "registered_hazards",
     "registered_pairs",
     "resolve",

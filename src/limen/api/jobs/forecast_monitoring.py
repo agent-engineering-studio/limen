@@ -80,28 +80,38 @@ async def run_forecast_monitoring(deps: AppDependencies) -> dict[str, int]:
     min_level = _LEVEL_FROM_STRING.get(cfg.min_level, RiskLevel.High)
     out: dict[str, int] = {}
 
-    for aoi_id in await list_aoi_ids():
+    aoi_ids = await list_aoi_ids()
+    for hazard, aoi_id in ((h, a) for h in deps.settings.hazards.enabled for a in aoi_ids):
         try:
             fc = await run_forecast(
                 aoi_id=aoi_id,
                 horizon_h=cfg.horizon_hours,
                 cell_limit=cfg.cell_limit,
                 settings=deps.settings,
+                hazard=hazard,
             )
             triggered = sorted(
                 (c for c in fc.cell_results if level_at_least(c.level, min_level)),
                 key=lambda c: c.score,
                 reverse=True,
             )
-            out[aoi_id] = len(triggered)
+            # Summed across hazards: with a single one enabled this is the
+            # same number this job has always returned.
+            out[aoi_id] = out.get(aoi_id, 0) + len(triggered)
             if not triggered:
                 continue
             if await dispatched_within(
                 aoi_id,
                 horizon_h=cfg.horizon_hours,
                 window=timedelta(hours=cfg.dedup_window_hours),
+                hazard=hazard,
             ):
-                log.info("job.forecast.deduped", aoi_id=aoi_id, horizon_h=cfg.horizon_hours)
+                log.info(
+                    "job.forecast.deduped",
+                    aoi_id=aoi_id,
+                    hazard=hazard.value,
+                    horizon_h=cfg.horizon_hours,
+                )
                 continue
 
             payload = build_forecast_payload(fc, triggered)
@@ -114,10 +124,12 @@ async def run_forecast_monitoring(deps: AppDependencies) -> dict[str, int]:
                 cells_alerted=len(triggered),
                 channels=outcomes,
                 summary=payload.summary_it,
+                hazard=hazard,
             )
             log.info(
                 "job.forecast.dispatched",
                 aoi_id=aoi_id,
+                hazard=hazard.value,
                 horizon_h=cfg.horizon_hours,
                 cells=len(triggered),
                 channels=outcomes,
@@ -126,6 +138,7 @@ async def run_forecast_monitoring(deps: AppDependencies) -> dict[str, int]:
             log.error(
                 "job.forecast.error",
                 aoi_id=aoi_id,
+                hazard=hazard.value,
                 error=str(exc),
                 error_type=type(exc).__name__,
             )

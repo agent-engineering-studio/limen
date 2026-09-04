@@ -32,6 +32,7 @@ from limen.agents.workflow_runtime.executor import Executor, handler
 from limen.config.settings import AlertSettings, Settings, get_settings
 from limen.core.logging import get_logger
 from limen.core.models.context import CellRiskRecord, MonitoringContext
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import RiskLevel
 from limen.core.scoring.exposure import exposure_factor_from_row
 from limen.core.scoring.regional_thresholds import load_regional_thresholds
@@ -123,10 +124,14 @@ class AlertDispatchExecutor(Executor):
         dispatcher: NotificationDispatcher | None = None,
         *,
         alert_settings: AlertSettings | None = None,
+        hazard: HazardType = DEFAULT_HAZARD,
     ) -> None:
         super().__init__(name="AlertDispatch")
         self._dispatcher = dispatcher
         self._alert_settings = alert_settings
+        # Dedup is per hazard: a landslide alert must not suppress a flood
+        # alert on the same cell inside the window.
+        self._hazard = hazard
 
     def _settings(self, ctx_settings: Settings | None = None) -> AlertSettings:
         if self._alert_settings is not None:
@@ -180,7 +185,9 @@ class AlertDispatchExecutor(Executor):
         # Dedup — skip cells alerted inside the window.
         window = timedelta(minutes=alert_settings.dedup_window_minutes)
         candidate_ids = [r.cell_id for r, _ in prioritised]
-        suppressed = await cells_dispatched_within(candidate_ids, window=window)
+        suppressed = await cells_dispatched_within(
+            candidate_ids, window=window, hazard=self._hazard
+        )
         deduped = [(r, p) for r, p in prioritised if r.cell_id not in suppressed]
         if not deduped:
             log.info(
@@ -220,6 +227,7 @@ class AlertDispatchExecutor(Executor):
         # Persist + emit metric.
         rows = [
             AlertDispatchRow(
+                hazard_type=self._hazard,
                 cell_id=record.cell_id,
                 aoi_id=ctx.aoi_id,
                 level=record.level.value,

@@ -16,6 +16,7 @@ from __future__ import annotations
 from limen.agents.workflow_runtime.executor import Executor, handler
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 
 log = get_logger(__name__)
 
@@ -23,9 +24,10 @@ log = get_logger(__name__)
 class EscalationGateExecutor(Executor):
     """Tracks the escalation regime for observability + hard-escalation."""
 
-    def __init__(self, *, evidence_top_k: int = 5) -> None:
+    def __init__(self, *, evidence_top_k: int = 5, hazard: HazardType = DEFAULT_HAZARD) -> None:
         super().__init__(name="EscalationGate")
         self._evidence_top_k = evidence_top_k
+        self._hazard = hazard
 
     @handler
     async def run(self, ctx: MonitoringContext) -> MonitoringContext:
@@ -40,6 +42,7 @@ class EscalationGateExecutor(Executor):
         log.info(
             "executor.escalation_gate",
             aoi_id=ctx.aoi_id,
+            hazard=self._hazard.value,
             would_escalate=high > 0,
             high_or_above=high,
             hard_escalation_cells=len(hard_cells),
