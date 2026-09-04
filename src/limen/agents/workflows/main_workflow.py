@@ -186,10 +186,19 @@ def build_hazard_workflow(
 
     Two kinds of step. **Shared** ones fetch the state of the territory —
     rain, seismicity, fire hotspots, in-situ sensors, river discharge — and
-    say nothing about any particular danger, so with several hazards enabled
-    they are the same work done once per AOI. **Hazard-specific** ones read
+    say nothing about any particular danger. **Hazard-specific** ones read
     that state through the hazard's own thresholds and engine, and write rows
-    tagged with it.
+    tagged with it: StaticFactors, RiskScoring, EscalationGate, PersistResult,
+    AlertDispatch.
+
+    The shared steps are *identified* here but still **run once per (hazard,
+    AOI)**, because this builds one self-contained workflow per hazard. With a
+    single hazard enabled that is exactly today's behaviour; with two, the
+    meteo and GloFAS fetches happen twice. Hoisting them means splitting the
+    pipeline into a territory prefix and per-hazard tails, which changes this
+    function's contract and the sweep's shape — deliberately left out of Fase
+    1 rather than half-done, and worth doing before a second hazard is
+    actually enabled.
 
     ``cell_limit`` is exposed mainly for tests / smoke runs where scoring 60k
     cells per AOI would be wasteful.

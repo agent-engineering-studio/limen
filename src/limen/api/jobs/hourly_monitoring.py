@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from limen.api.dependencies import AppDependencies
@@ -45,6 +46,32 @@ async def _aois_stale_first(hazard: HazardType = DEFAULT_HAZARD) -> list[str]:
     return [str(r["id"]) for r in rows]
 
 
+async def _hazards_stale_first(enabled: Sequence[HazardType]) -> list[HazardType]:
+    """Hazards ordered by oldest assessment first.
+
+    The AOI loop is stale-first for a reason: the national sweep outlives the
+    tick, so a fixed order starves whatever comes last. With the hazard loop
+    outermost, a fixed hazard order brings the same starvation back one level
+    up — every restart would resume from the first hazard. Ordering both axes
+    by staleness closes it.
+    """
+    if len(enabled) < 2:
+        return list(enabled)
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT hazard_type, MAX(computed_at) AS ts
+            FROM mv_latest_risk
+            WHERE hazard_type = ANY($1::hazard_type[])
+            GROUP BY hazard_type
+            """,
+            [h.value for h in enabled],
+        )
+    seen = {HazardType(r["hazard_type"]): r["ts"] for r in rows}
+    # Never assessed sorts first; ties keep the configured order.
+    return sorted(enabled, key=lambda h: (seen.get(h) is not None, seen.get(h)))
+
+
 async def run_hourly_monitoring(deps: AppDependencies) -> dict[str, int]:
     """Run the workflow over every AOI; return per-AOI cell counts."""
     if _sweep_lock.locked():
@@ -63,7 +90,7 @@ async def _run_sweep(deps: AppDependencies) -> dict[str, int]:
     #75 ships.
     """
     out: dict[str, int] = {}
-    hazards = list(deps.settings.hazards.enabled)
+    hazards = await _hazards_stale_first(deps.settings.hazards.enabled)
     if not hazards:
         log.warning("job.hourly_monitoring.no_hazards")
         return out

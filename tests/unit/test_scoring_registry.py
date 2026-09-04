@@ -265,7 +265,10 @@ def test_an_unregistered_hazard_is_refused_at_build_time() -> None:
     numeri sbagliati presentati come giusti: peggio di un errore rumoroso."""
     from limen.core.scoring.resolver import HazardNotScorableError, resolve_scoring_engine
 
-    with pytest.raises(HazardNotScorableError, match="no scoring engine for flood"):
+    # Il primo ostacolo che il resolver incontra per un pericolo mai
+    # configurato è il file di soglie: senza quello non c'è numero corretto da
+    # produrre, con o senza motore registrato.
+    with pytest.raises(HazardNotScorableError, match="no thresholds file"):
         resolve_scoring_engine(hazard=HazardType.FLOOD)
 
 

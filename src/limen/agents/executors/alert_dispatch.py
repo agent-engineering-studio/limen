@@ -35,7 +35,7 @@ from limen.core.models.context import CellRiskRecord, MonitoringContext
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import RiskLevel
 from limen.core.scoring.exposure import exposure_factor_from_row
-from limen.core.scoring.regional_thresholds import load_regional_thresholds
+from limen.core.scoring.regional_thresholds import load_hazard_thresholds
 from limen.data.db import acquire
 from limen.data.repos.alert_dispatches_repo import (
     AlertDispatchRow,
@@ -64,15 +64,22 @@ def _resolve_threshold(min_level: str) -> RiskLevel:
     return _LEVEL_FROM_STRING.get(min_level, RiskLevel.High)
 
 
-async def _load_exposure_factors(cell_ids: list[str]) -> dict[str, float]:
+async def _load_exposure_factors(
+    cell_ids: list[str], hazard: HazardType = DEFAULT_HAZARD
+) -> dict[str, float]:
     """Exposure multiplier for the candidate cells only.
 
-    Same shared formula as ``/api/alerts`` (``limen.core.scoring.exposure``,
-    thresholds in ``hazards/landslide.yaml``): CORINE urban flags +
-    distance from the OSM road/rail network, with the CORINE 12x flags
-    as fallback. Cells without a factors row get 0 (priority == score).
+    Same shared formula as ``/api/alerts`` (``limen.core.scoring.exposure``):
+    CORINE urban flags + distance from the OSM road/rail network, with the
+    CORINE 12x flags as fallback. Cells without a factors row get 0
+    (priority == score).
+
+    Weights come from **the hazard's own** YAML: what makes a cell exposed to
+    a flood is not what makes it exposed to a slope failure, and using the
+    landslide block for another hazard would order its alerts by the wrong
+    priority.
     """
-    cfg = load_regional_thresholds().exposure
+    cfg = load_hazard_thresholds(hazard).exposure
     async with acquire() as conn:
         rows = await conn.fetch(
             """
@@ -175,7 +182,7 @@ class AlertDispatchExecutor(Executor):
             return ctx
 
         # Priority — exposure-weighted score.
-        exposure = await _load_exposure_factors([r.cell_id for r in above_threshold])
+        exposure = await _load_exposure_factors([r.cell_id for r in above_threshold], self._hazard)
         prioritised: list[tuple[CellRiskRecord, float]] = []
         for record in above_threshold:
             mult = 1.0 + exposure.get(record.cell_id, 0.0)

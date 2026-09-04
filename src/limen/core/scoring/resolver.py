@@ -99,19 +99,22 @@ def check_scorable(hazard: HazardType, kind: ScoringEngineKind) -> None:
     """
     from limen.core.scoring.regional_thresholds import hazard_thresholds_path
 
+    # The deterministic engine is the only hard requirement: the resolver
+    # degrades to it whenever the configured implementation is missing or
+    # fails, so demanding `kind` here would refuse a hazard that would in fact
+    # score perfectly well with V1.
     if not is_registered(hazard, ScoringEngineKind.DETERMINISTIC):
         raise HazardNotScorableError(
             f"hazard {hazard.value!r} has no deterministic engine registered"
-        )
-    if not is_registered(hazard, kind):
-        raise HazardNotScorableError(
-            f"hazard {hazard.value!r} has no {kind.value!r} engine registered"
         )
     if not hazard_thresholds_path(hazard).exists():
         raise HazardNotScorableError(
             f"hazard {hazard.value!r} has no thresholds file "
             f"(expected config/hazards/{hazard.value}.yaml)"
         )
+    # Both the baseline and, if present, the configured implementation must
+    # produce a breakdown the executors can read.
+    _require_component_breakdown(hazard, ScoringEngineKind.DETERMINISTIC)
     _require_component_breakdown(hazard, kind)
 
 
@@ -130,10 +133,12 @@ def _require_component_breakdown(hazard: HazardType, kind: ScoringEngineKind) ->
     """
     try:
         declared = registered_breakdown(hazard, kind)
-    except EngineNotRegisteredError as exc:
-        # One error type out of the resolver: callers should not have to know
-        # whether the pair was missing or merely incompatible.
-        raise HazardNotScorableError(str(exc)) from exc
+    except EngineNotRegisteredError:
+        # NOT an error here: a pair that is not registered is something the
+        # resolver degrades around (SCORING__ENGINE=ml on a hazard that only
+        # ships a deterministic engine must still score with V1). Only an
+        # engine that *is* registered and produces the wrong shape is fatal.
+        return
     if not issubclass(declared, ComponentBreakdown):
         raise HazardNotScorableError(
             f"engine {hazard.value}/{kind.value} produces {declared.__name__}, but the "
@@ -173,6 +178,31 @@ def _try_registry(
     return engine
 
 
+def _deterministic_champion(
+    hazard: HazardType,
+    thresholds: RegionalThresholds | None,
+    settings: Settings | None,
+) -> ScoringEngine[ComponentBreakdown]:
+    """The V1 baseline for ``hazard``, preferring its registered engine.
+
+    Going through the registry matters: a hazard with its own deterministic
+    engine must get *that* one, not the generic landslide formula. The direct
+    construction is the last resort, for a hazard whose registration is
+    missing entirely.
+    """
+    _require_component_breakdown(hazard, ScoringEngineKind.DETERMINISTIC)
+    engine = _try_registry(
+        hazard,
+        ScoringEngineKind.DETERMINISTIC,
+        thresholds,
+        event="scoring.deterministic_unavailable",
+        settings=settings,
+    )
+    if engine is not None:
+        return _as_component(engine)
+    return _deterministic(hazard, thresholds)
+
+
 def resolve_scoring_engine(
     *,
     settings: Settings | None = None,
@@ -181,36 +211,28 @@ def resolve_scoring_engine(
 ) -> ScoringEngine[ComponentBreakdown]:
     """Return the champion engine for ``hazard``.
 
-    Falls back to the deterministic engine on any V2 problem and logs the
-    reason — never raises during resolution.
+    Falls back to that hazard's deterministic engine on any V2 problem and
+    logs the reason. Raises only when an engine is registered but produces a
+    breakdown the workflow cannot read, which is a misconfiguration no
+    fallback can paper over.
     """
     s = settings or get_settings()
     kind = s.scoring.engine
-    _require_component_breakdown(hazard, kind)
 
     if kind is ScoringEngineKind.DETERMINISTIC:
-        engine = _try_registry(
-            hazard,
-            kind,
-            thresholds,
-            event="scoring.deterministic_unavailable",
-            settings=s,
-        )
-        if engine is not None:
-            _log.info("scoring.resolved", hazard=hazard.value, engine=kind.value)
-            return _as_component(engine)
-        # A missing deterministic registration is a programming error, not an
-        # operational one, but the sweep still has to produce numbers.
-        return _deterministic(hazard, thresholds)
+        engine = _deterministic_champion(hazard, thresholds, s)
+        _log.info("scoring.resolved", hazard=hazard.value, engine=kind.value)
+        return engine
 
-    engine = _try_registry(
+    _require_component_breakdown(hazard, kind)
+    engine_or_none = _try_registry(
         hazard, kind, thresholds, event="scoring.ml_load_failed_fallback", settings=s
     )
-    if engine is None:
+    if engine_or_none is None:
         _log.info("scoring.resolved", hazard=hazard.value, engine="deterministic-fallback")
-        return _deterministic(hazard, thresholds)
+        return _deterministic_champion(hazard, thresholds, s)
     _log.info("scoring.resolved", hazard=hazard.value, engine=kind.value)
-    return _as_component(engine)
+    return _as_component(engine_or_none)
 
 
 def resolve_challenger(

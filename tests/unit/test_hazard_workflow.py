@@ -22,7 +22,7 @@ from limen.core.models.risk import ComponentBreakdown
 from limen.core.scoring.engine import MultiFactorScoringEngine
 from limen.core.scoring.regional_thresholds import load_regional_thresholds
 from limen.core.scoring.registry import _REGISTRY, register, unregister
-from limen.core.scoring.resolver import HazardNotScorableError
+from limen.core.scoring.resolver import HazardNotScorableError, check_scorable
 
 
 def _deps(**overrides: object) -> WorkflowDeps:
@@ -126,3 +126,84 @@ def test_the_check_runs_even_with_an_injected_engine() -> None:
     )
     with pytest.raises(HazardNotScorableError):
         build_hazard_workflow(HazardType.FLOOD, deps)
+
+
+# ---------------------------------------------------------------------------
+# Difetti trovati in revisione (#85)
+# ---------------------------------------------------------------------------
+def test_ml_configured_but_unregistered_degrades_to_v1() -> None:
+    """L'invariante «V1 resta il baseline» non ammette eccezioni.
+
+    Con `SCORING__ENGINE=ml` su un pericolo che offre solo il motore
+    deterministico, il resolver deve degradare, non sollevare: un pericolo
+    non registrato è qualcosa attorno a cui si degrada, mentre solo un motore
+    registrato con la forma sbagliata è fatale.
+    """
+    from limen.core.scoring.resolver import resolve_scoring_engine
+
+    key = (DEFAULT_HAZARD, ScoringEngineKind.ML)
+    saved = _REGISTRY.pop(key)
+    try:
+        s = Settings.model_validate({"scoring": {"engine": "ml"}})
+        check_scorable(DEFAULT_HAZARD, s.scoring.engine)
+        assert isinstance(resolve_scoring_engine(settings=s), MultiFactorScoringEngine)
+    finally:
+        _REGISTRY[key] = saved
+
+
+def test_the_fallback_prefers_the_hazard_own_deterministic_engine() -> None:
+    """Degradare non vuol dire ricadere sulla formula generica.
+
+    Un pericolo con un proprio motore deterministico registrato deve ricevere
+    *quello*, non una costruzione diretta che ignora la registrazione.
+    """
+    from limen.core.scoring.resolver import resolve_scoring_engine
+
+    built: list[str] = []
+
+    class _OwnEngine(MultiFactorScoringEngine):
+        pass
+
+    def _own(_s: object, t: object) -> _OwnEngine:
+        built.append("own")
+        return _OwnEngine(t or load_regional_thresholds())  # type: ignore[arg-type]
+
+    key = (DEFAULT_HAZARD, ScoringEngineKind.DETERMINISTIC)
+    saved = _REGISTRY[key]
+    register(*key, _own, breakdown=ComponentBreakdown, replace=True)
+    try:
+        s = Settings.model_validate({"scoring": {"engine": "ml"}})
+        # ML non caricabile in questo ambiente ⇒ fallback.
+        engine = resolve_scoring_engine(settings=s)
+        assert isinstance(engine, _OwnEngine)
+        assert built == ["own"]
+    finally:
+        _REGISTRY[key] = saved
+
+
+def test_alert_summary_names_the_hazard() -> None:
+    """Con due pericoli attivi arrivano due alert per AOI: se il testo non
+    dice quale, il destinatario non li distingue."""
+    from datetime import UTC, datetime
+
+    from limen.config.settings import AlertSettings
+    from limen.core.models.context import AggregateAssessment
+    from limen.notifications.base import build_alert_payload
+
+    assessment = AggregateAssessment(
+        aoi_id="aoi-test",
+        hazard_type=HazardType.FLOOD,
+        model_version="test",
+        valuation_time=datetime(2026, 6, 1, tzinfo=UTC),
+        n_cells=1,
+        cells_high_or_above=1,
+        cells_by_level={"High": 1},
+    )
+    payload = build_alert_payload(
+        assessment=assessment,
+        prioritised=[],
+        settings=AlertSettings(),
+        dispatched_at=datetime(2026, 6, 1, tzinfo=UTC),
+    )
+    assert payload.hazard_type is HazardType.FLOOD
+    assert "alluvione" in payload.summary_it
