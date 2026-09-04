@@ -113,7 +113,17 @@ async def _run_workflow(
         )
         deps = WorkflowDeps(
             llm_factory=factory,
-            settings=Settings.model_validate({"enable_insitu": enable_insitu}),
+            settings=Settings.model_validate(
+                {
+                    "enable_insitu": enable_insitu,
+                    # These tests assert the briefing path. The default gate
+                    # (LLM__BRIEFING_MIN_LEVEL=Moderate) skips the LLM on a
+                    # quiet cycle to save minutes per sweep, and the minimal
+                    # seeded AOI never reaches Moderate, so `briefing_it`
+                    # would always be None here.
+                    "llm": {"briefing_min_level": "None"},
+                }
+            ),
         )
         wf = build_landslide_workflow(deps)
         ctx = MonitoringContext(
