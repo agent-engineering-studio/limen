@@ -66,7 +66,7 @@ Approfondimenti: [`docs/demo.md`](./docs/demo.md) (demo locale su un AOI piccolo
 
 Il motore V1 è una combinazione lineare pesata **pura** e interpretabile
 (§2.4 del project doc) che legge ogni peso, soglia e cutoff di classe da
-[`src/limen/config/regional_thresholds.yaml`](./src/limen/config/regional_thresholds.yaml).
+[`src/limen/config/hazards/landslide.yaml`](./src/limen/config/hazards/landslide.yaml).
 Nessuna costante cablata nel codice di scoring. Nessun LLM. Nessun I/O.
 La stessa interfaccia `CellFeatureBundle` accetta anche il motore ML V2.
 

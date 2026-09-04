@@ -3,7 +3,7 @@
 ``priority = score * (1 + fattore)``: una frana sopra un paese o una
 statale conta più di una identica su un versante disabitato. Funzione
 pura — il chiamante carica i dati da ``cell_static_factors``, le soglie
-vengono dal blocco ``exposure`` di ``regional_thresholds.yaml``. Unica
+vengono dal blocco ``exposure`` di ``hazards/landslide.yaml``. Unica
 implementazione condivisa da ``/api/alerts`` e dal dispatcher: NON tocca
 mai score o breakdown.
 """

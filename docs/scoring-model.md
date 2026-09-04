@@ -2,7 +2,7 @@
 
 §2.4 del documento di progetto. Il motore è una funzione pura di un
 `CellFeatureBundle`; ogni parametro numerico vive in
-[`regional_thresholds.yaml`](../src/limen/config/regional_thresholds.yaml)
+[`hazards/landslide.yaml`](../src/limen/config/hazards/landslide.yaml)
 ed è validato da
 [`RegionalThresholds`](../src/limen/core/scoring/regional_thresholds.py).
 Non esistono costanti hard-coded nel codice di scoring: ogni
@@ -168,7 +168,7 @@ La componente idraulica è **attiva**: alimentata dal mosaico idraulica
 ISPRA servito via GeoServer. Per ciascuna cella si ricava
 `flood_hazard_norm` mappando le classi di pericolosità sulla scala
 AA/P1..P4: pericolosità elevata → P3, media → P2, bassa → P1. Il peso
-top-level `hydrology` è `0.03` (vedi `regional_thresholds.yaml`).
+top-level `hydrology` è `0.03` (vedi `hazards/landslide.yaml`).
 
 **Componente dinamica multi-sorgente (issue #8, attiva di default).** `H`
 riceve un *uplift* additivo quando è **prevista** un'inondazione su una cella

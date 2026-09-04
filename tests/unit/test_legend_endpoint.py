@@ -1,4 +1,4 @@
-"""The /api/legend model card must mirror regional_thresholds.yaml exactly.
+"""The /api/legend model card must mirror hazards/landslide.yaml exactly.
 
 The public "Il modello, spiegato" page (issue #16) draws its charts from this
 payload, so the endpoint is the single source of truth — no numbers are

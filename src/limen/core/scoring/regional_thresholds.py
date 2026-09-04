@@ -1,20 +1,23 @@
-"""Regional thresholds loader.
+"""Per-hazard thresholds loader.
 
-Loads ``regional_thresholds.yaml`` and validates it with a strict
-Pydantic v2 schema. The YAML is the single source of truth for every
-numeric knob in the deterministic engine — there are no hard-coded
-constants in the scoring code.
+Loads one hazard's YAML and validates it with a strict Pydantic v2 schema.
+The YAML is the single source of truth for every numeric knob in the
+deterministic engine — there are no hard-coded constants in the scoring code.
 
-The file ships packaged at
-``limen.config.regional_thresholds.yaml``; the loader resolves it via
-:mod:`importlib.resources` so it works in any installation layout
-(editable, wheel, container). An explicit override path may be passed
-for tests or environment-specific calibrations.
+Files ship packaged at ``limen/config/hazards/<hazard>.yaml``, one per hazard
+named after the enum value, and the loader resolves them via
+:mod:`importlib.resources` so it works in any installation layout (editable,
+wheel, container). An explicit override path may be passed for tests or
+environment-specific calibrations.
+
+The schema here describes the **landslide** engine. Fase 2 will grow a common
+base for flood and wildfire; until a second hazard exists that abstraction
+would be guesswork.
 """
 
 from __future__ import annotations
 
-from functools import lru_cache
+from functools import cache
 from importlib import resources
 from itertools import pairwise
 from pathlib import Path
@@ -23,17 +26,29 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
+
 DEFAULT_THRESHOLDS_PACKAGE = "limen.config"
-DEFAULT_THRESHOLDS_FILE = "regional_thresholds.yaml"
+#: One file per hazard, named after the enum value: adding a hazard is a new
+#: YAML plus a registry entry, never a code change here. There is deliberately
+#: no shared-blocks file: `classes`, `exposure`, `pc_alert`,
+#: `target_distribution` and `calibration` are per-hazard in substance -- each
+#: danger has its own class cutoffs and its own civil-protection mapping -- so
+#: duplicating them in `flood.yaml` beats a merge layer nobody can debug.
+HAZARD_THRESHOLDS_DIR = "hazards"
 
 
-def _default_thresholds_path() -> Path:
-    """Resolve the packaged YAML to a filesystem path."""
-    ref = resources.files(DEFAULT_THRESHOLDS_PACKAGE).joinpath(DEFAULT_THRESHOLDS_FILE)
+def hazard_thresholds_path(hazard: HazardType) -> Path:
+    """Resolve a hazard's packaged YAML to a filesystem path."""
+    ref = (
+        resources.files(DEFAULT_THRESHOLDS_PACKAGE)
+        .joinpath(HAZARD_THRESHOLDS_DIR)
+        .joinpath(f"{hazard.value}.yaml")
+    )
     return Path(str(ref))
 
 
-DEFAULT_THRESHOLDS_PATH = _default_thresholds_path()
+DEFAULT_THRESHOLDS_PATH = hazard_thresholds_path(DEFAULT_HAZARD)
 
 
 # ---------------------------------------------------------------------------
@@ -404,22 +419,32 @@ def _coerce_class_ranges(raw: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def load_regional_thresholds(path: Path | str | None = None) -> RegionalThresholds:
-    """Load + validate the YAML and return a :class:`RegionalThresholds`.
+def load_hazard_thresholds(
+    hazard: HazardType = DEFAULT_HAZARD, path: Path | str | None = None
+) -> RegionalThresholds:
+    """Load + validate one hazard's YAML.
 
-    ``path`` defaults to the packaged file. Passing an explicit path bypasses
-    the cache, so tests can swap configurations without state leakage.
+    ``path`` defaults to the packaged file for ``hazard``. Passing an explicit
+    path bypasses the cache, so tests can swap configurations without state
+    leakage.
     """
     if path is None:
-        return _load_default_cached()
+        return _load_cached(hazard)
     raw_path = Path(path)
     text = raw_path.read_text(encoding="utf-8")
     raw = yaml.safe_load(text) or {}
     return RegionalThresholds.model_validate(_coerce_class_ranges(raw))
 
 
-@lru_cache(maxsize=1)
-def _load_default_cached() -> RegionalThresholds:
-    text = DEFAULT_THRESHOLDS_PATH.read_text(encoding="utf-8")
+def load_regional_thresholds(path: Path | str | None = None) -> RegionalThresholds:
+    """Landslide thresholds. Thin wrapper kept for the existing call sites."""
+    return load_hazard_thresholds(DEFAULT_HAZARD, path)
+
+
+# Cached per hazard, not globally: two hazards must never share a parsed
+# config, and `maxsize=None` is bounded by the enum.
+@cache
+def _load_cached(hazard: HazardType) -> RegionalThresholds:
+    text = hazard_thresholds_path(hazard).read_text(encoding="utf-8")
     raw = yaml.safe_load(text) or {}
     return RegionalThresholds.model_validate(_coerce_class_ranges(raw))
