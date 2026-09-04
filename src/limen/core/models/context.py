@@ -19,6 +19,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import (
     KinematicBreakdown,
     MeteoBreakdown,
@@ -36,6 +37,7 @@ class CellRiskRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     cell_id: str
+    hazard_type: HazardType = DEFAULT_HAZARD
     score: float = Field(..., ge=0.0, le=1.0)
     level: RiskLevel
     static_terms: StaticBreakdown
@@ -69,6 +71,7 @@ class AggregateAssessment(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     aoi_id: str
+    hazard_type: HazardType = DEFAULT_HAZARD
     horizon: str = "24h"
     pipeline_version: str = "v1-deterministic"
     model_version: str
@@ -88,6 +91,7 @@ class MonitoringContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     aoi_id: str
+    hazard_type: HazardType = DEFAULT_HAZARD
     valuation_time: datetime
     enable_insitu: bool = False
 

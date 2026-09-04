@@ -164,6 +164,12 @@ class FloodForecastMacroregion(_StrictModel):
 class FloodForecastBlock(_StrictModel):
     """Issue #8 — dynamic, multi-source flood uplift on the hydrology quota H.
 
+    **NOT the flood hazard.** This block tunes the hydrology component H of
+    *landslide* scoring: forecast rain, river discharge and coastal surge
+    raise the H term of a landslide score. The flood hazard is a separate
+    engine with its own config file (Fase 3, issue #63). Whoever implements it
+    will find these names first — do not reuse them.
+
     Combines three forward-looking signals, each scaled by the ISPRA static
     hydraulic hazard (``flood_hazard_norm``):
 

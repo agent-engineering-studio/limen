@@ -63,7 +63,7 @@ class _MLArtefacts:
     conformal: dict[str, float] | None = None
 
 
-class MLScoringEngine(ScoringEngine):
+class MLScoringEngine(ScoringEngine[ComponentBreakdown]):
     """V2 LightGBM-backed engine — same Protocol as V1.
 
     Instances are produced by :meth:`from_registry`. Until a model is
@@ -166,7 +166,7 @@ class MLScoringEngine(ScoringEngine):
         row = _bundle_to_feature_row(bundle, names=names)
         return dict(zip(names, row, strict=True))
 
-    def score(self, bundle: CellFeatureBundle) -> RiskScore:
+    def score(self, bundle: CellFeatureBundle) -> RiskScore[ComponentBreakdown]:
         """Predict the cell's calibrated probability + component breakdown.
 
         The SHAP explainer (when present) attributes the booster's

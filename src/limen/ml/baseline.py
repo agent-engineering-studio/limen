@@ -8,13 +8,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from limen.core.models.risk import HazardBreakdown
 from limen.core.scoring.base import ScoringEngine
 from limen.core.scoring.engine import MultiFactorScoringEngine
 from limen.data.repos.training_samples_repo import TrainingSample
 from limen.ml.feature_store import features_to_bundle
 
 
-def score_with_engine(engine: ScoringEngine, samples: list[TrainingSample]) -> Any:
+def score_with_engine(engine: ScoringEngine[HazardBreakdown], samples: list[TrainingSample]) -> Any:
     """Return an ``np.ndarray`` of V1 scores for each training sample."""
     import numpy as np
 

@@ -11,14 +11,22 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from limen.core.models.risk import CellFeatureBundle, RiskScore
+from limen.core.models.risk import BreakdownT_co, CellFeatureBundle, RiskScore
 
 
 @runtime_checkable
-class ScoringEngine(Protocol):
-    """Pure ``bundle → RiskScore`` mapping. No I/O. No network. No LLM."""
+class ScoringEngine(Protocol[BreakdownT_co]):
+    """Pure ``bundle → RiskScore`` mapping. No I/O. No network. No LLM.
 
-    def score(self, bundle: CellFeatureBundle) -> RiskScore: ...
+    Parameterised by the hazard's breakdown shape. A consumer that reads the
+    landslide components asks for ``ScoringEngine[ComponentBreakdown]`` and
+    keeps full typing; the engine registry, which holds engines for several
+    hazards, asks for ``ScoringEngine[HazardBreakdown]`` and sees only the
+    discriminator. The parameter is covariant, so the first is assignable to
+    the second.
+    """
+
+    def score(self, bundle: CellFeatureBundle) -> RiskScore[BreakdownT_co]: ...
 
 
 __all__ = ["ScoringEngine"]

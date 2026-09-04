@@ -269,7 +269,7 @@ class MultiFactorScoringEngine:
         wetness = _soil_sigmoid(bundle.dynamic.soil_moisture_0_7, soil=self._t.soil)
         return wetness >= floor.wetness_min
 
-    def score(self, bundle: CellFeatureBundle) -> RiskScore:
+    def score(self, bundle: CellFeatureBundle) -> RiskScore[ComponentBreakdown]:
         """Score one cell at one moment. Pure, deterministic.
 
         V1.5: when the bundle carries a :class:`SensorFeatures` *and*
@@ -372,6 +372,6 @@ def score(
     bundle: CellFeatureBundle,
     *,
     thresholds: RegionalThresholds | None = None,
-) -> RiskScore:
+) -> RiskScore[ComponentBreakdown]:
     """Functional convenience wrapper around :class:`MultiFactorScoringEngine`."""
     return MultiFactorScoringEngine(thresholds).score(bundle)

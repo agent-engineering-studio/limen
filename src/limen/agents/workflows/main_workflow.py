@@ -43,6 +43,7 @@ from limen.agents.workflow_runtime.executor import Executor, handler
 from limen.config.settings import ScoringMode, Settings, get_settings
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
+from limen.core.models.risk import ComponentBreakdown, HazardBreakdown
 from limen.core.scoring.base import ScoringEngine
 from limen.core.scoring.resolver import resolve_challenger, resolve_scoring_engine
 from limen.notifications.dispatcher import NotificationDispatcher
@@ -59,10 +60,10 @@ class WorkflowDeps:
     notification_dispatcher: NotificationDispatcher | None = None
     """Optional :class:`NotificationDispatcher`. When ``None`` the alert
     executor falls back to logging only (V1 stub behaviour)."""
-    scoring_engine: ScoringEngine | None = None
+    scoring_engine: ScoringEngine[ComponentBreakdown] | None = None
     """V2 — when set, the workflow's authoritative scoring uses this
     instance. When ``None`` we resolve from settings (V1 default)."""
-    challenger_engine: ScoringEngine | None = None
+    challenger_engine: ScoringEngine[HazardBreakdown] | None = None
     """V2 — shadow challenger. When set and ``settings.scoring.mode`` is
     ``shadow``, the workflow runs it in parallel and logs to ``model_runs``
     without touching ``cell_results``/``assessment``."""
