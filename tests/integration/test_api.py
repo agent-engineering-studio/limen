@@ -25,6 +25,7 @@ from limen.data.repos.aoi_repo import upsert_aoi
 from limen.data.repos.grid_repo import generate_and_store_grid
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.openmeteo.client import ARCHIVE_URL, FORECAST_URL
+from tests.conftest import register_flood_mocks
 
 pytestmark = pytest.mark.integration
 
@@ -50,7 +51,16 @@ async def _reset_http() -> None:
 
 @pytest.fixture
 async def app_client(reset_db: None, pg_pool: object) -> AsyncIterator[httpx.AsyncClient]:
-    settings = Settings.model_validate({"enable_insitu": False})
+    settings = Settings.model_validate(
+        {
+            "enable_insitu": False,
+            # Questi test asseriscono il percorso del briefing. Il gate di
+            # default (LLM__BRIEFING_MIN_LEVEL=Moderate) salta l'LLM su un
+            # ciclo tranquillo per risparmiare minuti per sweep, e l'AOI
+            # minimale seminata qui non raggiunge Moderate.
+            "llm": {"briefing_min_level": "None"},
+        }
+    )
     deps = await AppDependencies.build(
         pool=get_pool(),
         settings=settings,
@@ -138,6 +148,7 @@ async def test_monitor_endpoint_returns_full_assessment(app_client: httpx.AsyncC
     with respx.mock(assert_all_called=False) as mock:
         mock.get(FORECAST_URL).mock(return_value=httpx.Response(200, json=_hourly_payload()))
         mock.get(ARCHIVE_URL).mock(return_value=httpx.Response(200, json=_archive_payload()))
+        register_flood_mocks(mock)
 
         r = await app_client.post(f"/api/monitor/{_AOI_ID}", json={"cell_limit": 25})
     assert r.status_code == 200, r.text
@@ -159,6 +170,7 @@ async def test_latest_assessment_after_monitor(app_client: httpx.AsyncClient) ->
     with respx.mock(assert_all_called=False) as mock:
         mock.get(FORECAST_URL).mock(return_value=httpx.Response(200, json=_hourly_payload()))
         mock.get(ARCHIVE_URL).mock(return_value=httpx.Response(200, json=_archive_payload()))
+        register_flood_mocks(mock)
         run = await app_client.post(f"/api/monitor/{_AOI_ID}", json={"cell_limit": 25})
     assert run.status_code == 200
 
@@ -175,6 +187,7 @@ async def test_cell_breakdown_returns_jsonb(app_client: httpx.AsyncClient) -> No
     with respx.mock(assert_all_called=False) as mock:
         mock.get(FORECAST_URL).mock(return_value=httpx.Response(200, json=_hourly_payload()))
         mock.get(ARCHIVE_URL).mock(return_value=httpx.Response(200, json=_archive_payload()))
+        register_flood_mocks(mock)
         run = await app_client.post(f"/api/monitor/{_AOI_ID}", json={"cell_limit": 25})
     assert run.status_code == 200
     cell_id = run.json()["assessment"]["top_cells"][0]["cell_id"]
@@ -192,6 +205,7 @@ async def test_alerts_endpoint(app_client: httpx.AsyncClient) -> None:
     with respx.mock(assert_all_called=False) as mock:
         mock.get(FORECAST_URL).mock(return_value=httpx.Response(200, json=_hourly_payload()))
         mock.get(ARCHIVE_URL).mock(return_value=httpx.Response(200, json=_archive_payload()))
+        register_flood_mocks(mock)
         await app_client.post(f"/api/monitor/{_AOI_ID}", json={"cell_limit": 25})
 
     r = await app_client.get("/api/alerts?threshold=None&since_hours=24")

@@ -31,18 +31,22 @@ class Skill:
 
 
 async def _risk_summary(p: dict[str, Any]) -> Any:
-    return await tools.risk_summary(p.get("aoi_id"))
+    return await tools.risk_summary(p.get("aoi_id"), p.get("hazard"))
 
 
 async def _top_risk_cells(p: dict[str, Any]) -> Any:
-    return await tools.top_risk_cells(limit=int(p.get("limit", 10)), aoi_id=p.get("aoi_id"))
+    return await tools.top_risk_cells(
+        limit=int(p.get("limit", 10)),
+        aoi_id=p.get("aoi_id"),
+        hazard=p.get("hazard"),
+    )
 
 
 async def _cell_breakdown(p: dict[str, Any]) -> Any:
     cell_id = p.get("cell_id")
     if not isinstance(cell_id, str) or not cell_id:
         raise ValueError("cell_breakdown requires a 'cell_id' string param")
-    return await tools.cell_breakdown(cell_id)
+    return await tools.cell_breakdown(cell_id, p.get("hazard"))
 
 
 async def _recent_alerts(p: dict[str, Any]) -> Any:
@@ -50,6 +54,7 @@ async def _recent_alerts(p: dict[str, Any]) -> Any:
         threshold=str(p.get("threshold", "Moderate")),
         since_hours=int(p.get("since_hours", 24)),
         limit=int(p.get("limit", 50)),
+        hazard=p.get("hazard"),
     )
 
 
@@ -85,7 +90,8 @@ SKILLS: dict[str, Skill] = {
             id="risk_summary",
             name="Sintesi per regione",
             description="Ultimo assessment per regione: celle per classe, punteggio "
-            "massimo, quando. Passa 'aoi_id' (es. it-puglia) per una sola regione.",
+            "massimo, quando. Passa 'aoi_id' (es. it-puglia) per una sola regione e "
+            "'hazard' (landslide|flood|wildfire, default landslide) per il pericolo.",
             handler=_risk_summary,
             tags=("landslide", "flood", "region"),
             examples=("Riepilogo rischio per it-basilicata",),
@@ -94,7 +100,8 @@ SKILLS: dict[str, Skill] = {
             id="top_risk_cells",
             name="Celle a rischio più alto",
             description="Classifica nazionale (o per 'aoi_id') delle celle da 1 km² con "
-            "punteggio più alto. Parametri: 'limit' (default 10), 'aoi_id'.",
+            "punteggio più alto. Parametri: 'limit' (default 10), 'aoi_id', "
+            "'hazard' (default landslide).",
             handler=_top_risk_cells,
             tags=("landslide", "flood", "ranking"),
             examples=("Le 5 celle più a rischio in Italia",),
@@ -103,7 +110,7 @@ SKILLS: dict[str, Skill] = {
             id="cell_breakdown",
             name="Scomposizione di una cella",
             description="Scomposizione per componente (S/M/E/F/H/K) + briefing italiano "
-            "di una cella. Richiede 'cell_id'.",
+            "di una cella. Richiede 'cell_id'; 'hazard' opzionale (default landslide).",
             handler=_cell_breakdown,
             tags=("landslide", "flood", "explain"),
             examples=("Perché la cella it-puglia|12|34 è a rischio?",),
@@ -112,7 +119,8 @@ SKILLS: dict[str, Skill] = {
             id="recent_alerts",
             name="Allerte recenti",
             description="Celle al/sopra una soglia nella finestra recente. Parametri: "
-            "'threshold' (Moderate|High|VeryHigh), 'since_hours', 'limit'.",
+            "'threshold' (Moderate|High|VeryHigh), 'since_hours', 'limit', "
+            "'hazard' (default landslide).",
             handler=_recent_alerts,
             tags=("landslide", "flood", "alerts"),
             examples=("Allerte High delle ultime 12 ore",),

@@ -14,6 +14,7 @@ the gap.
 
 from __future__ import annotations
 
+from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
 from limen.data.db import acquire
@@ -26,6 +27,33 @@ async def enabled_hazards() -> frozenset[HazardType]:
     async with acquire() as conn:
         rows = await conn.fetch("SELECT hazard FROM hazards WHERE enabled ORDER BY hazard")
     return frozenset(HazardType(r["hazard"]) for r in rows)
+
+
+async def scorable_with_labels() -> list[tuple[HazardType, str]]:
+    """Enabled hazards this deployment can actually score, with their labels.
+
+    Two filters, both necessary. The table says which hazards the views carry;
+    :func:`check_scorable` says which ones have an engine and a thresholds
+    file. Offering a hazard that satisfies only the first would let a client
+    pick one whose legend 404s and whose sweep never ran.
+    """
+    from limen.core.scoring.resolver import HazardNotScorableError, check_scorable
+
+    settings = get_settings()
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT hazard, label_it FROM hazards WHERE enabled ORDER BY hazard"
+        )
+    out: list[tuple[HazardType, str]] = []
+    for row in rows:
+        hazard = HazardType(row["hazard"])
+        try:
+            check_scorable(hazard, settings.scoring.engine)
+        except HazardNotScorableError as exc:
+            log.warning("hazards.enabled_but_not_scorable", hazard=hazard.value, error=str(exc))
+            continue
+        out.append((hazard, str(row["label_it"])))
+    return out
 
 
 async def warn_on_config_drift(configured: list[HazardType] | frozenset[HazardType]) -> bool:
@@ -58,4 +86,4 @@ async def warn_on_config_drift(configured: list[HazardType] | frozenset[HazardTy
     return True
 
 
-__all__ = ["enabled_hazards", "warn_on_config_drift"]
+__all__ = ["enabled_hazards", "scorable_with_labels", "warn_on_config_drift"]
