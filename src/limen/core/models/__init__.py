@@ -6,6 +6,7 @@ from limen.core.models.context import (
     MonitoringContext,
     RiskAnalysisDTO,
 )
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import (
     CellFeatureBundle,
     ComponentBreakdown,
@@ -20,11 +21,13 @@ from limen.core.models.risk import (
 from limen.core.models.sensor import SensorFeatures
 
 __all__ = [
+    "DEFAULT_HAZARD",
     "AggregateAssessment",
     "CellFeatureBundle",
     "CellRiskRecord",
     "ComponentBreakdown",
     "DynamicInputs",
+    "HazardType",
     "KinematicBreakdown",
     "MonitoringContext",
     "RainfallSeries",

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from limen.core.logging import get_logger
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.data.db import acquire
 
 log = get_logger(__name__)
@@ -26,6 +27,7 @@ class AlertDispatchRow:
     channels: dict[str, bool]
     summary: str | None
     dispatched_at: datetime | None = None
+    hazard_type: HazardType = DEFAULT_HAZARD
 
 
 async def insert_many(rows: Iterable[AlertDispatchRow]) -> int:
@@ -38,11 +40,13 @@ async def insert_many(rows: Iterable[AlertDispatchRow]) -> int:
             await conn.execute(
                 """
                 INSERT INTO alert_dispatches (
-                    cell_id, aoi_id, level, score, priority, channels, summary
-                ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
+                    cell_id, aoi_id, hazard_type, level, score, priority,
+                    channels, summary
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
                 """,
                 r.cell_id,
                 r.aoi_id,
+                r.hazard_type.value,
                 r.level,
                 r.score,
                 r.priority,
@@ -58,10 +62,13 @@ async def cells_dispatched_within(
     *,
     window: timedelta,
     now: datetime | None = None,
+    hazard: HazardType = DEFAULT_HAZARD,
 ) -> set[str]:
     """Return the subset of ``cell_ids`` already alerted inside the window.
 
-    ``now`` is exposed for tests that want a deterministic clock.
+    Scoped to one hazard: a landslide alert must not suppress a flood alert
+    on the same cell. ``now`` is exposed for tests that want a deterministic
+    clock.
     """
     cells = list(cell_ids)
     if not cells:
@@ -75,11 +82,13 @@ async def cells_dispatched_within(
             SELECT DISTINCT cell_id
             FROM alert_dispatches
             WHERE cell_id = ANY($1::text[])
+              AND hazard_type = $4
               AND dispatched_at >= COALESCE($2, now()) - $3::interval
             """,
             cells,
             now,
             window,
+            hazard.value,
         )
     return {str(r["cell_id"]) for r in rows}
 

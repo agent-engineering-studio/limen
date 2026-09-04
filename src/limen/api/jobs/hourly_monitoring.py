@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from limen.api.dependencies import AppDependencies
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
+from limen.core.models.hazard import DEFAULT_HAZARD
 from limen.data.db import acquire
 
 log = get_logger(__name__)
@@ -33,10 +34,13 @@ async def _aois_stale_first() -> list[str]:
             FROM aoi a
             LEFT JOIN (
                 SELECT aoi_id, MAX(computed_at) AS ts
-                FROM mv_latest_risk GROUP BY aoi_id
+                FROM mv_latest_risk
+                WHERE hazard_type = $1
+                GROUP BY aoi_id
             ) m ON m.aoi_id = a.id
             ORDER BY m.ts ASC NULLS FIRST, a.id
-            """
+            """,
+            DEFAULT_HAZARD.value,
         )
     return [str(r["id"]) for r in rows]
 

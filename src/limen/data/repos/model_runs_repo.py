@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from limen.core.logging import get_logger
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.data.db import acquire
 
 log = get_logger(__name__)
@@ -33,6 +34,7 @@ class ModelRunRow:
     probability: float
     risk_class: str
     breakdown: dict[str, Any]
+    hazard_type: HazardType = DEFAULT_HAZARD
 
 
 async def insert_many(rows: Iterable[ModelRunRow]) -> int:
@@ -44,15 +46,17 @@ async def insert_many(rows: Iterable[ModelRunRow]) -> int:
             await conn.execute(
                 """
                 INSERT INTO model_runs (
-                    cell_id, valuation_time, aoi_id,
+                    cell_id, valuation_time, aoi_id, hazard_type,
                     model_uri, model_version, role,
                     probability, risk_class, breakdown
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
-                ON CONFLICT (cell_id, computed_at, role, model_uri) DO NOTHING
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+                ON CONFLICT (cell_id, hazard_type, computed_at, role, model_uri)
+                DO NOTHING
                 """,
                 it.cell_id,
                 it.valuation_time,
                 it.aoi_id,
+                it.hazard_type.value,
                 it.model_uri,
                 it.model_version,
                 it.role,
@@ -70,16 +74,18 @@ async def recent_for_role(
     since: datetime,
     limit: int = 10_000,
     require_features: bool = False,
+    hazard: HazardType = DEFAULT_HAZARD,
 ) -> list[ModelRunRow]:
     """Newest runs for a role. ``require_features`` keeps only rows whose
     breakdown carries the canonical feature vector (drift monitoring)."""
     async with acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT cell_id, valuation_time, aoi_id, model_uri, model_version,
-                   role, probability, risk_class, breakdown
+            SELECT cell_id, valuation_time, aoi_id, hazard_type, model_uri,
+                   model_version, role, probability, risk_class, breakdown
             FROM model_runs
             WHERE role = $1 AND computed_at >= $2
+              AND hazard_type = $5
               AND (NOT $4 OR breakdown ? 'features')
             ORDER BY computed_at DESC
             LIMIT $3
@@ -88,6 +94,7 @@ async def recent_for_role(
             since,
             limit,
             require_features,
+            hazard.value,
         )
     return [_to_row(r) for r in rows]
 
@@ -106,6 +113,7 @@ def _to_row(r: Any) -> ModelRunRow:
         probability=float(r["probability"]),
         risk_class=r["risk_class"],
         breakdown=breakdown or {},
+        hazard_type=HazardType(r["hazard_type"]),
     )
 
 

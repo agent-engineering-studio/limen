@@ -42,6 +42,7 @@ from limen.cli.llm_check import run as _run_llm_check
 from limen.cli.mcp_serve import run as _run_mcp_serve
 from limen.cli.migrate import run as _run_migrate
 from limen.cli.monitor_once import run as _run_monitor_once
+from limen.cli.partitions import run as _run_partitions
 from limen.cli.report import run as _run_report_build
 from limen.cli.seed import run as _run_seed
 from limen.cli.seed_comuni import run as _run_seed_comuni
@@ -65,6 +66,10 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("migrate", help="apply pending SQL migrations")
+    sub.add_parser(
+        "partitions",
+        help="create the upcoming daily partitions of the hot tables and report their state",
+    )
     sub.add_parser("seed", help="apply migrations and seed AOIs + grids")
     sub.add_parser(
         "seed-comuni",
@@ -181,6 +186,7 @@ def main(argv: list[str] | None = None) -> int:
 
     runners: dict[str, Runner] = {
         "migrate": _run_migrate,
+        "partitions": _run_partitions,
         "seed": _run_seed,
         "seed-comuni": _run_seed_comuni,
         "bootstrap-static": _run_bootstrap_static,

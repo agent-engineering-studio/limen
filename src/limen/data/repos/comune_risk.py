@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from limen.core.models.hazard import DEFAULT_HAZARD
 from limen.data.db import acquire
 
 _COLS = (
@@ -59,12 +60,14 @@ async def comune_detail(istat_code: str) -> dict[str, Any] | None:
             """
             SELECT m.cell_id, m.risk_score AS score, m.risk_level AS level
             FROM cell_comune cc
-            JOIN mv_latest_risk m ON m.cell_id = cc.cell_id
+            JOIN mv_latest_risk m
+              ON m.cell_id = cc.cell_id AND m.hazard_type = $2
             WHERE cc.istat_code = $1 AND m.risk_score IS NOT NULL
             ORDER BY m.risk_score DESC
             LIMIT 500
             """,
             istat_code,
+            DEFAULT_HAZARD.value,
         )
     return {
         "comune": _to_comune(row),

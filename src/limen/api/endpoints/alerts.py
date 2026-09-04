@@ -6,6 +6,7 @@ from fastapi import APIRouter, Query, Response
 
 from limen.api.dependencies import DepsDep
 from limen.api.schemas import AlertItem, AlertsResponse
+from limen.core.models.hazard import DEFAULT_HAZARD
 from limen.core.scoring.exposure import exposure_factor_from_row
 from limen.core.scoring.regional_thresholds import load_regional_thresholds
 from limen.data.db import acquire
@@ -43,6 +44,7 @@ async def list_alerts(
                        ra.cell_id, ra.score, ra.class, ra.computed_at
                 FROM risk_assessments ra
                 WHERE ra.class = ANY($1::text[])
+                  AND ra.hazard_type = $3
                   AND ra.computed_at >= now() - ($2::int * interval '1 hour')
                 ORDER BY ra.cell_id, ra.computed_at DESC
             )
@@ -68,6 +70,7 @@ async def list_alerts(
             """,
             levels_to_include,
             since_hours,
+            DEFAULT_HAZARD.value,
         )
 
     # Priorità = rischio x (1 + esposizione): la stessa formula del
@@ -118,11 +121,13 @@ async def list_forecast_alerts(
                    cells_alerted, summary, dispatched_at
             FROM forecast_dispatches
             WHERE dispatched_at >= now() - make_interval(hours => $1)
+              AND hazard_type = $3
             ORDER BY dispatched_at DESC
             LIMIT $2
             """,
             since_hours,
             limit,
+            DEFAULT_HAZARD.value,
         )
     return {
         "items": [

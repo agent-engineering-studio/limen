@@ -30,6 +30,7 @@ from limen.data.repos.aoi_repo import upsert_aoi
 from limen.data.repos.grid_repo import generate_and_store_grid
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.openmeteo.client import ARCHIVE_URL, FORECAST_URL
+from tests.conftest import register_flood_mocks
 
 pytestmark = pytest.mark.integration
 
@@ -102,6 +103,10 @@ async def _run_workflow(
     with respx.mock(assert_all_called=False) as mock:
         mock.get(FORECAST_URL).mock(return_value=httpx.Response(200, json=_hourly_payload()))
         mock.get(ARCHIVE_URL).mock(return_value=httpx.Response(200, json=_archive_payload()))
+        # ENABLE_FLOOD_FORECAST defaults on, so the workflow also reaches GloFAS
+        # and the marine API; without these routes respx raises inside the
+        # executor and the sweep scores zero cells.
+        register_flood_mocks(mock)
 
         factory = StubLlmClientFactory(
             canned_by_role={"Briefing": canned_briefing} if canned_briefing else {},

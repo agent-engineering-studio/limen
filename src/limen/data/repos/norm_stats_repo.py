@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.data.db import acquire
 
 
@@ -21,6 +22,7 @@ class NormStat:
     sample_size: int | None = None
     extras: dict[str, Any] | None = None
     computed_at: datetime | None = None
+    hazard_type: HazardType = DEFAULT_HAZARD
 
 
 async def upsert_many(items: Iterable[NormStat]) -> int:
@@ -33,10 +35,10 @@ async def upsert_many(items: Iterable[NormStat]) -> int:
             await conn.execute(
                 """
                 INSERT INTO norm_stats (
-                    aoi_id, factor, min_value, max_value, model_version,
-                    sample_size, extras
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
-                ON CONFLICT (aoi_id, factor, model_version) DO UPDATE
+                    aoi_id, hazard_type, factor, min_value, max_value,
+                    model_version, sample_size, extras
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+                ON CONFLICT (aoi_id, hazard_type, factor, model_version) DO UPDATE
                 SET min_value   = EXCLUDED.min_value,
                     max_value   = EXCLUDED.max_value,
                     sample_size = EXCLUDED.sample_size,
@@ -44,6 +46,7 @@ async def upsert_many(items: Iterable[NormStat]) -> int:
                     computed_at = now()
                 """,
                 it.aoi_id,
+                it.hazard_type.value,
                 it.factor,
                 it.min_value,
                 it.max_value,
@@ -58,17 +61,20 @@ async def fetch_for_aoi(
     aoi_id: str,
     *,
     model_version: str,
+    hazard: HazardType = DEFAULT_HAZARD,
 ) -> list[NormStat]:
-    """Fetch all norm stats for a given AOI + model version."""
+    """Fetch all norm stats for a given AOI + model version + hazard."""
     async with acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT aoi_id, factor, min_value, max_value, model_version,
-                   sample_size, extras, computed_at
-            FROM norm_stats WHERE aoi_id = $1 AND model_version = $2
+            SELECT aoi_id, hazard_type, factor, min_value, max_value,
+                   model_version, sample_size, extras, computed_at
+            FROM norm_stats
+            WHERE aoi_id = $1 AND model_version = $2 AND hazard_type = $3
             """,
             aoi_id,
             model_version,
+            hazard.value,
         )
     out: list[NormStat] = []
     for r in rows:
@@ -85,6 +91,7 @@ async def fetch_for_aoi(
                 sample_size=r["sample_size"],
                 extras=extras or {},
                 computed_at=r["computed_at"],
+                hazard_type=HazardType(r["hazard_type"]),
             )
         )
     return out

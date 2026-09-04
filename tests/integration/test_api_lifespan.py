@@ -11,6 +11,7 @@ from limen.api.jobs.registration import (
     JOB_CACHE_CLEANUP,
     JOB_HOURLY_MONITORING,
     JOB_HTML_REPORT,
+    JOB_PARTITIONS,
     JOB_WEEKLY_IDROGEO,
     register_jobs,
 )
@@ -41,6 +42,7 @@ async def test_register_jobs_schedules_enabled_jobs(reset_db: None, pg_pool: obj
         JOB_WEEKLY_IDROGEO,
         JOB_CACHE_CLEANUP,
         JOB_HTML_REPORT,
+        JOB_PARTITIONS,
     }.issubset(registered_set)
     assert len(registered) == len(registered_set)  # no duplicate ids
     assert registered == registered_again  # idempotent re-registration
@@ -87,3 +89,27 @@ async def test_register_jobs_skips_disabled(reset_db: None, pg_pool: object) -> 
     assert JOB_WEEKLY_IDROGEO not in registered
     assert JOB_CACHE_CLEANUP in registered
     assert JOB_HTML_REPORT in registered  # report job still enabled by default
+
+
+async def test_partitions_job_registers_under_pg_cron_backend(
+    reset_db: None, pg_pool: object
+) -> None:
+    """Partition maintenance must not depend on the cache-cleanup backend.
+
+    With ``SCHEDULER__CACHE_CLEANUP=pg_cron`` the cleanup job is deliberately
+    not registered, and partition creation used to ride along inside it: after
+    a week of uptime every hot-table write would land in the DEFAULT partition,
+    which retention never drops.
+    """
+    settings = Settings.model_validate({"scheduler": {"cache_cleanup": "pg_cron"}})
+    deps = await AppDependencies.build(
+        pool=get_pool(),
+        settings=settings,
+        llm_factory=StubLlmClientFactory(),
+    )
+
+    async with AsyncScheduler() as scheduler:
+        registered = await register_jobs(scheduler, deps)
+
+    assert JOB_CACHE_CLEANUP not in registered
+    assert JOB_PARTITIONS in registered

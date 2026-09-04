@@ -160,6 +160,13 @@ non possano ignorarle.
   checksum).
 * **Niente `print`** — `structlog.get_logger(__name__)` ovunque.
 * **Tutte le costanti di scoring** vivono in `regional_thresholds.yaml`.
+* **`hazard_type` è una dimensione di prima classe** (migrazione 028):
+  `mv_latest_risk` ha una riga per *(cella, hazard abilitato)*, le viste a
+  valle sono fissate su `landslide`, i tile multi-hazard passano da
+  `risk_at(z,x,y,hours_ago,hazard)`.
+* **Tabelle calde partizionate per giorno** su `computed_at`
+  (`risk_assessments`, `model_runs`): la retention elimina partizioni, non
+  righe.
 * **Gli endpoint non contengono business logic** — chiamano workflow /
   repo.
 * **APScheduler** in-process, così lo stesso code path funziona su Neon.

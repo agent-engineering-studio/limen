@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from limen.core.logging import get_logger
+from limen.core.models.hazard import DEFAULT_HAZARD
 from limen.core.models.risk import RiskLevel
 from limen.data.db import acquire
 
@@ -25,7 +26,8 @@ SELECT ST_ClusterDBSCAN(centroid, eps := $2, minpoints := 1) OVER () AS cluster_
        ST_X(centroid) AS lon, ST_Y(centroid) AS lat,
        ST_AsGeoJSON(geom) AS geom_json
 FROM   mv_latest_risk
-WHERE  aoi_id = $1 AND risk_level = ANY($3::text[]) AND risk_score >= $4
+WHERE  aoi_id = $1 AND hazard_type = $5
+   AND risk_level = ANY($3::text[]) AND risk_score >= $4
 """
 
 
@@ -141,7 +143,12 @@ async def load_clusters(
     # floor >= 0 tiene solo le celle saliente (salienza calcolata a monte).
     async with acquire() as conn:
         records = await conn.fetch(
-            _CLUSTER_SQL, aoi_id, eps_deg, _levels_at_least(min_level), score_floor
+            _CLUSTER_SQL,
+            aoi_id,
+            eps_deg,
+            _levels_at_least(min_level),
+            score_floor,
+            DEFAULT_HAZARD.value,
         )
     rows = []
     for r in records:

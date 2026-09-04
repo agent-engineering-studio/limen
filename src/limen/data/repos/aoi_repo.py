@@ -12,6 +12,7 @@ from typing import Any
 from shapely.geometry import MultiPolygon, Polygon
 from shapely.geometry.base import BaseGeometry
 
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.data.db import acquire
 
 
@@ -106,7 +107,9 @@ def _from_jsonb(value: Any) -> dict[str, Any]:
     return dict(json.loads(value))
 
 
-async def assessed_within(aoi_id: str, *, minutes: int) -> bool:
+async def assessed_within(
+    aoi_id: str, *, minutes: int, hazard: HazardType = DEFAULT_HAZARD
+) -> bool:
     """True when any cell of ``aoi_id`` was assessed in the last ``minutes``.
 
     Event-driven triggers (radar nowcast, FIRMS hotspots) use this as a
@@ -119,10 +122,12 @@ async def assessed_within(aoi_id: str, *, minutes: int) -> bool:
             FROM risk_assessments ra
             JOIN grid_cells g ON g.id = ra.cell_id
             WHERE g.aoi_id = $1
+              AND ra.hazard_type = $3
               AND ra.computed_at >= now() - make_interval(mins => $2)
             LIMIT 1
             """,
             aoi_id,
             minutes,
+            hazard.value,
         )
     return row is not None
