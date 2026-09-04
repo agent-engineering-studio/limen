@@ -84,7 +84,7 @@ def test_double_registration_is_refused() -> None:
         register(
             HazardType.LANDSLIDE,
             ScoringEngineKind.DETERMINISTIC,
-            lambda _thresholds: MultiFactorScoringEngine(),
+            lambda _s, _t: MultiFactorScoringEngine(),
         )
 
 
@@ -120,7 +120,7 @@ def fake_flood_registered() -> Iterator[None]:
     register(
         HazardType.FLOOD,
         ScoringEngineKind.DETERMINISTIC,
-        lambda _thresholds: _FakeFloodEngine(),
+        lambda _s, _t: _FakeFloodEngine(),
     )
     yield
     unregister(HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
@@ -141,7 +141,7 @@ def test_registration_round_trip_leaves_no_residue() -> None:
     perché registra e ripulisce da sé."""
     key = (HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
     assert not is_registered(*key)
-    register(*key, lambda _thresholds: _FakeFloodEngine())
+    register(*key, lambda _s, _t: _FakeFloodEngine())
     try:
         assert is_registered(*key)
         assert key in registered_pairs()
@@ -225,3 +225,63 @@ def test_component_breakdown_survives_the_registry_round_trip() -> None:
     scored = engine.score(_bundle())
     assert isinstance(scored.breakdown, ComponentBreakdown)
     assert scored.breakdown.hazard_type is HazardType.LANDSLIDE
+
+
+# ---------------------------------------------------------------------------
+# Difetti trovati in revisione (#84)
+# ---------------------------------------------------------------------------
+def test_injected_settings_reach_the_ml_factory() -> None:
+    """La factory non deve leggere i Settings globali.
+
+    Il motore ML prende da lì le coordinate MLflow: pescare le globali
+    scarterebbe in silenzio una configurazione iniettata, ed è così che un
+    test puntato a un registry inesistente finisce per passare per il motivo
+    sbagliato.
+    """
+    seen: list[Settings | None] = []
+
+    def _spy(settings: Settings | None, _thresholds: object) -> MultiFactorScoringEngine:
+        seen.append(settings)
+        return MultiFactorScoringEngine()
+
+    key = (HazardType.FLOOD, ScoringEngineKind.ML)
+    register(*key, _spy)
+    try:
+        injected = Settings.model_validate(
+            {"scoring": {"mlflow_tracking_uri": "file:///tmp/limen-iniettato"}}
+        )
+        resolve(*key, settings=injected)
+    finally:
+        unregister(*key)
+
+    assert seen and seen[0] is injected
+    assert seen[0].scoring.mlflow_tracking_uri == "file:///tmp/limen-iniettato"
+
+
+def test_a_hazard_without_a_yaml_is_not_scored_with_landslide_thresholds() -> None:
+    """Valutare una cella di alluvione con le soglie di versante darebbe
+    numeri sbagliati presentati come giusti: peggio di un errore rumoroso."""
+    from limen.core.scoring.resolver import HazardNotScorableError, resolve_scoring_engine
+
+    with pytest.raises(HazardNotScorableError):
+        resolve_scoring_engine(hazard=HazardType.FLOOD)
+
+
+def test_check_scorable_catches_a_misconfigured_hazard() -> None:
+    """Chiamata all'avvio su ogni voce di HAZARDS__ENABLED, così un errore di
+    battitura si vede al boot e non come AttributeError a metà sweep."""
+    from limen.core.scoring.resolver import HazardNotScorableError, check_scorable
+
+    check_scorable(HazardType.LANDSLIDE, ScoringEngineKind.DETERMINISTIC)
+
+    with pytest.raises(HazardNotScorableError, match="no deterministic engine"):
+        check_scorable(HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
+
+    # Motore registrato ma senza file di soglie: va colto comunque.
+    key = (HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
+    register(*key, lambda _s, _t: _FakeFloodEngine())
+    try:
+        with pytest.raises(HazardNotScorableError, match="no thresholds file"):
+            check_scorable(HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
+    finally:
+        unregister(*key)

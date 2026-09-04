@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from limen.config.settings import ScoringEngineKind
+from limen.config.settings import ScoringEngineKind, Settings
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
 from limen.core.models.risk import HazardBreakdown
@@ -34,11 +34,13 @@ log = get_logger(__name__)
 #: registered for one hazard is usable wherever the base breakdown is enough.
 HazardScoringEngine = ScoringEngine[HazardBreakdown]
 
-#: A factory takes one optional argument: a thresholds override. Everything
-#: else an engine needs comes from its hazard's YAML and the settings. The
-#: override exists because `AppDependencies` and the tests inject a config
-#: without writing it to disk; passing ``None`` means "load the hazard's own".
-EngineFactory = Callable[["RegionalThresholds | None"], HazardScoringEngine]
+#: A factory takes the two things a caller may inject: the settings and a
+#: thresholds override, each optional. `AppDependencies` and the tests supply
+#: a config without writing it to disk, and the ML engine reads its MLflow
+#: coordinates from the settings -- reaching for the global ones inside a
+#: factory would silently discard an injected config, which is how a test
+#: pointed at a missing registry ends up passing for the wrong reason.
+EngineFactory = Callable[["Settings | None", "RegionalThresholds | None"], HazardScoringEngine]
 
 _REGISTRY: dict[tuple[HazardType, ScoringEngineKind], EngineFactory] = {}
 
@@ -77,6 +79,7 @@ def resolve(
     hazard: HazardType,
     kind: ScoringEngineKind,
     *,
+    settings: Settings | None = None,
     thresholds: RegionalThresholds | None = None,
 ) -> HazardScoringEngine:
     """Build the engine registered for ``(hazard, kind)``.
@@ -92,7 +95,7 @@ def resolve(
         raise EngineNotRegisteredError(
             f"no scoring engine for {hazard.value}/{kind.value}; registered: {available}"
         ) from None
-    return factory(thresholds)
+    return factory(settings, thresholds)
 
 
 def is_registered(hazard: HazardType, kind: ScoringEngineKind) -> bool:
@@ -112,6 +115,7 @@ def registered_pairs() -> frozenset[tuple[HazardType, ScoringEngineKind]]:
 # Built-in registrations
 # ---------------------------------------------------------------------------
 def _landslide_deterministic(
+    settings: Settings | None = None,  # noqa: ARG001 — part of the EngineFactory shape
     thresholds: RegionalThresholds | None = None,
 ) -> HazardScoringEngine:
     from limen.core.scoring.engine import MultiFactorScoringEngine
@@ -120,7 +124,10 @@ def _landslide_deterministic(
     return MultiFactorScoringEngine(thresholds or load_hazard_thresholds(HazardType.LANDSLIDE))
 
 
-def _landslide_ml(thresholds: RegionalThresholds | None = None) -> HazardScoringEngine:
+def _landslide_ml(
+    settings: Settings | None = None,
+    thresholds: RegionalThresholds | None = None,
+) -> HazardScoringEngine:
     # Imported inside the factory: the `ml` dependency group is optional and
     # `from_registry` reaches out to MLflow, so neither cost belongs at import
     # time. A failure here is caught by the resolver, which falls back to V1.
@@ -128,7 +135,7 @@ def _landslide_ml(thresholds: RegionalThresholds | None = None) -> HazardScoring
     from limen.core.scoring.ml_engine import MLScoringEngine
     from limen.core.scoring.regional_thresholds import load_hazard_thresholds
 
-    s = get_settings()
+    s = settings or get_settings()
     return MLScoringEngine.from_registry(
         tracking_uri=s.scoring.mlflow_tracking_uri,
         registered_model=s.scoring.mlflow_registered_model,
