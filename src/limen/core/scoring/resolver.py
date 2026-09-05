@@ -16,9 +16,9 @@ with no YAML, is a misconfiguration and raises: scoring flood with landslide
 thresholds would be wrong numbers presented as right, which is worse than a
 loud failure. ``check_scorable`` surfaces that at startup instead of mid-sweep.
 
-Fase 1 champion resolution is landslide-only by construction: the workflow is
-parameterised by hazard in #85, and until then a non-default hazard reaching
-here is a bug, not a configuration choice.
+Champion resolution is hazard-generic from Fase 2: the record the workflow
+builds carries the hazard's own breakdown, so the resolver no longer has to
+refuse an engine whose components it cannot name.
 
 The public API is unchanged from before the registry existed, so the workflow
 and ``AppDependencies`` did not have to move.
@@ -26,20 +26,17 @@ and ``AppDependencies`` did not have to move.
 
 from __future__ import annotations
 
-from typing import cast
-
 import structlog
 
 from limen.config.settings import ScoringEngineKind, ScoringMode, Settings, get_settings
 from limen.core.logging import get_logger
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
-from limen.core.models.risk import ComponentBreakdown, HazardBreakdown
+from limen.core.models.risk import HazardBreakdown
 from limen.core.scoring.base import ScoringEngine
 from limen.core.scoring.regional_thresholds import RegionalThresholds
 from limen.core.scoring.registry import (
     EngineNotRegisteredError,
     is_registered,
-    registered_breakdown,
     resolve,
 )
 
@@ -54,22 +51,9 @@ class HazardNotScorableError(RuntimeError):
     """
 
 
-def _as_component(
-    engine: ScoringEngine[HazardBreakdown],
-) -> ScoringEngine[ComponentBreakdown]:
-    """Narrow to the landslide breakdown after the compatibility check.
-
-    A heterogeneous registry cannot express "this hazard's engine yields this
-    hazard's breakdown" in the type system, so the narrowing is a cast. It is
-    sound because :func:`_require_component_breakdown` has already verified
-    the declared breakdown class.
-    """
-    return cast("ScoringEngine[ComponentBreakdown]", engine)
-
-
 def _deterministic(
     hazard: HazardType, thresholds: RegionalThresholds | None
-) -> ScoringEngine[ComponentBreakdown]:
+) -> ScoringEngine[HazardBreakdown]:
     """The V1 baseline for ``hazard``.
 
     Raises :class:`HazardNotScorableError` when the hazard has no YAML. It
@@ -99,12 +83,17 @@ def _deterministic(
     return MultiFactorScoringEngine(loaded)
 
 
-def check_scorable(hazard: HazardType, kind: ScoringEngineKind) -> None:
+def check_scorable(hazard: HazardType) -> None:
     """Raise unless ``hazard`` can actually be scored.
 
-    Called at startup for every entry of ``HAZARDS__ENABLED`` so a typo or a
-    half-finished hazard shows up there, not as an ``AttributeError`` in the
-    middle of the hourly sweep.
+    Called at startup for every enabled hazard so a typo or a half-finished
+    one shows up there, not as a ``FileNotFoundError`` in the middle of the
+    hourly sweep.
+
+    It takes no implementation: the resolver degrades to the deterministic
+    baseline whenever the configured one is missing or fails, so a hazard
+    that scores fine with V1 must not be refused because its ML challenger
+    is absent.
     """
     from limen.core.scoring.regional_thresholds import hazard_thresholds_path
 
@@ -121,38 +110,10 @@ def check_scorable(hazard: HazardType, kind: ScoringEngineKind) -> None:
             f"hazard {hazard.value!r} has no thresholds file "
             f"(expected config/hazards/{hazard.value}.yaml)"
         )
-    # Both the baseline and, if present, the configured implementation must
-    # produce a breakdown the executors can read.
-    _require_component_breakdown(hazard, ScoringEngineKind.DETERMINISTIC)
-    _require_component_breakdown(hazard, kind)
-
-
-def _require_component_breakdown(hazard: HazardType, kind: ScoringEngineKind) -> None:
-    """Refuse an engine whose breakdown the workflow cannot read.
-
-    ``RiskScoringExecutor`` reads named landslide components (``.s``,
-    ``.static_terms``, …) to build a ``CellRiskRecord``. An engine producing a
-    different breakdown would die on an ``AttributeError`` halfway through the
-    hourly sweep, so the mismatch is caught here, at build time, using the
-    breakdown class declared at registration. It is also what makes the cast
-    below sound rather than hopeful.
-
-    Fase 2 gives ``CellRiskRecord`` a hazard-agnostic component projection and
-    this check widens with it.
-    """
-    try:
-        declared = registered_breakdown(hazard, kind)
-    except EngineNotRegisteredError:
-        # NOT an error here: a pair that is not registered is something the
-        # resolver degrades around (SCORING__ENGINE=ml on a hazard that only
-        # ships a deterministic engine must still score with V1). Only an
-        # engine that *is* registered and produces the wrong shape is fatal.
-        return
-    if not issubclass(declared, ComponentBreakdown):
-        raise HazardNotScorableError(
-            f"engine {hazard.value}/{kind.value} produces {declared.__name__}, but the "
-            "workflow reads landslide components; a hazard-agnostic record lands in Fase 2"
-        )
+    # No breakdown-shape check any more: `CellRiskRecord` carries whatever
+    # the engine produced, and every consumer reads it through the
+    # projections on `HazardBreakdown`. What remains fatal is having no
+    # engine or no configuration, which is checked above.
 
 
 def _try_registry(
@@ -191,7 +152,7 @@ def _deterministic_champion(
     hazard: HazardType,
     thresholds: RegionalThresholds | None,
     settings: Settings | None,
-) -> ScoringEngine[ComponentBreakdown]:
+) -> ScoringEngine[HazardBreakdown]:
     """The V1 baseline for ``hazard``, preferring its registered engine.
 
     Going through the registry matters: a hazard with its own deterministic
@@ -199,7 +160,6 @@ def _deterministic_champion(
     construction is the last resort, for a hazard whose registration is
     missing entirely.
     """
-    _require_component_breakdown(hazard, ScoringEngineKind.DETERMINISTIC)
     engine = _try_registry(
         hazard,
         ScoringEngineKind.DETERMINISTIC,
@@ -208,7 +168,7 @@ def _deterministic_champion(
         settings=settings,
     )
     if engine is not None:
-        return _as_component(engine)
+        return engine
     return _deterministic(hazard, thresholds)
 
 
@@ -217,13 +177,11 @@ def resolve_scoring_engine(
     settings: Settings | None = None,
     thresholds: RegionalThresholds | None = None,
     hazard: HazardType = DEFAULT_HAZARD,
-) -> ScoringEngine[ComponentBreakdown]:
+) -> ScoringEngine[HazardBreakdown]:
     """Return the champion engine for ``hazard``.
 
     Falls back to that hazard's deterministic engine on any V2 problem and
-    logs the reason. Raises only when an engine is registered but produces a
-    breakdown the workflow cannot read, which is a misconfiguration no
-    fallback can paper over.
+    logs the reason.
     """
     s = settings or get_settings()
     kind = s.scoring.engine
@@ -233,7 +191,6 @@ def resolve_scoring_engine(
         _log.info("scoring.resolved", hazard=hazard.value, engine=kind.value)
         return engine
 
-    _require_component_breakdown(hazard, kind)
     engine_or_none = _try_registry(
         hazard, kind, thresholds, event="scoring.ml_load_failed_fallback", settings=s
     )
@@ -241,7 +198,7 @@ def resolve_scoring_engine(
         _log.info("scoring.resolved", hazard=hazard.value, engine="deterministic-fallback")
         return _deterministic_champion(hazard, thresholds, s)
     _log.info("scoring.resolved", hazard=hazard.value, engine=kind.value)
-    return _as_component(engine_or_none)
+    return engine_or_none
 
 
 def resolve_challenger(

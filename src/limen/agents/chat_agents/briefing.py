@@ -25,7 +25,8 @@ from limen.agents.grounding.format import format_citations
 from limen.agents.grounding.service import GroundingService
 from limen.agents.llm_factory.base import ChatClient, ChatMessage
 from limen.core.logging import get_logger
-from limen.core.models.context import AggregateAssessment
+from limen.core.models.context import AggregateAssessment, CellRiskRecord
+from limen.core.models.risk import ComponentBreakdown
 from limen.knowledge.schema import GroundingQuery, GroundingResult
 
 log = get_logger(__name__)
@@ -97,6 +98,19 @@ def _fallback_briefing(assessment: AggregateAssessment, *, reason: str) -> str:
     return trim_to_max(base, MAX_WORDS)
 
 
+def _caine_note(cell: CellRiskRecord) -> str:
+    """La menzione della soglia Caine, solo dove esiste.
+
+    È una soglia intensità-durata per l'innesco di frane: scriverla accanto a
+    un punteggio d'incendio sarebbe rumore, non contesto.
+    """
+    breakdown = cell.breakdown
+    if not isinstance(breakdown, ComponentBreakdown):
+        return ""
+    superata = "sì" if breakdown.meteo_terms.caine_excess > 0 else "no"
+    return f" soglia_caine_superata={superata}"
+
+
 class BriefingAgent:
     """Generates the 150-250 word Italian narrative briefing.
 
@@ -129,13 +143,13 @@ class BriefingAgent:
             # Top-3 component drivers + Caine exceedance: anchors the
             # narrative to the quantitative breakdown (issue #2 P2) so the
             # LLM cites real drivers instead of paraphrasing the score.
-            components = {"S": c.s, "M": c.m, "E": c.e, "F": c.f, "H": c.h}
-            drivers = sorted(components.items(), key=lambda kv: kv[1], reverse=True)[:3]
+            drivers = sorted(
+                c.breakdown.components().items(), key=lambda kv: kv[1], reverse=True
+            )[:3]
             drivers_txt = ", ".join(f"{name}={value:.2f}" for name, value in drivers)
-            caine = "sì" if c.meteo_terms.caine_excess > 0 else "no"
             top_lines.append(
                 f"- {c.cell_id} score={c.score:.3f} level={c.level.value} "
-                f"driver=[{drivers_txt}] soglia_caine_superata={caine}"
+                f"driver=[{drivers_txt}]{_caine_note(c)}"
             )
         analysis_part = ""
         if analysis is not None:

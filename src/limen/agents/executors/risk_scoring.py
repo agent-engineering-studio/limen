@@ -20,10 +20,11 @@ from limen.core.models.context import (
     MonitoringContext,
 )
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
-from limen.core.models.risk import ComponentBreakdown, RiskLevel
+from limen.core.models.risk import HazardBreakdown, RiskLevel
 from limen.core.scoring.base import ScoringEngine
 from limen.core.scoring.engine import MultiFactorScoringEngine
 from limen.core.scoring.regional_thresholds import (
+    HazardThresholds,
     RegionalThresholds,
     load_hazard_thresholds,
 )
@@ -42,21 +43,20 @@ def _level_rank(level: RiskLevel) -> int:
     return order.index(level)
 
 
-def _landslide_shaped(hazard: HazardType) -> RegionalThresholds:
-    """This executor's thresholds, refusing a hazard it cannot read.
+def _default_engine(thresholds: HazardThresholds) -> ScoringEngine[HazardBreakdown]:
+    """The V1 landslide engine, for callers that inject no engine.
 
-    It builds a ``CellRiskRecord`` out of named landslide components, so a
-    wildfire configuration reaching here would fail on the first attribute
-    access mid-sweep. Refusing at construction turns that into a startup
-    error naming the hazard.
+    Only the landslide baseline can be built without going through the
+    registry, because it is the only one this module knows how to construct.
+    Any other hazard reaching here without an injected engine is a wiring
+    bug: the workflow resolves one per hazard before building the executor.
     """
-    loaded = load_hazard_thresholds(hazard)
-    if not isinstance(loaded, RegionalThresholds):
+    if not isinstance(thresholds, RegionalThresholds):
         raise TypeError(
-            f"RiskScoringExecutor reads landslide components; hazard {hazard.value!r} "
-            f"configures {type(loaded).__name__}"
+            "RiskScoringExecutor can only build the landslide baseline itself; "
+            f"pass engine= for a hazard configured by {type(thresholds).__name__}"
         )
-    return loaded
+    return MultiFactorScoringEngine(thresholds)
 
 
 class RiskScoringExecutor(Executor):
@@ -65,8 +65,8 @@ class RiskScoringExecutor(Executor):
     def __init__(
         self,
         *,
-        thresholds: RegionalThresholds | None = None,
-        engine: ScoringEngine[ComponentBreakdown] | None = None,
+        thresholds: HazardThresholds | None = None,
+        engine: ScoringEngine[HazardBreakdown] | None = None,
         top_k: int = 10,
         macroregion: str = "italy_default",
         hazard: HazardType = DEFAULT_HAZARD,
@@ -75,12 +75,12 @@ class RiskScoringExecutor(Executor):
         self._hazard = hazard
         # Each hazard has its own YAML: loading the landslide file for a flood
         # sweep would score with slope-failure thresholds.
-        self._thresholds = thresholds or _landslide_shaped(hazard)
+        self._thresholds: HazardThresholds = thresholds or load_hazard_thresholds(hazard)
         # ``engine`` lets the workflow inject the resolver-selected engine
         # (V1 by default, V2 ML when promoted). Without an injection we
         # fall back to the deterministic engine — the V1 champion stays
         # the only behaviour any consumer sees by default.
-        self._engine: ScoringEngine[ComponentBreakdown] = engine or MultiFactorScoringEngine(
+        self._engine: ScoringEngine[HazardBreakdown] = engine or _default_engine(
             self._thresholds
         )
         self._top_k = top_k
@@ -103,15 +103,7 @@ class RiskScoringExecutor(Executor):
                     hazard_type=self._hazard,
                     score=scored.score,
                     level=scored.level,
-                    static_terms=scored.breakdown.static_terms,
-                    meteo_terms=scored.breakdown.meteo_terms,
-                    s=scored.breakdown.s,
-                    m=scored.breakdown.m,
-                    e=scored.breakdown.e,
-                    f=scored.breakdown.f,
-                    h=scored.breakdown.h,
-                    k=scored.breakdown.k,
-                    kinematic_terms=scored.breakdown.kinematic_terms,
+                    breakdown=scored.breakdown,
                     monitored=scored.monitored,
                     hard_escalation=scored.hard_escalation,
                 )

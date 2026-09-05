@@ -8,31 +8,13 @@ import pytest
 
 from limen.config.settings import AlertSettings
 from limen.core.models.context import AggregateAssessment, CellRiskRecord
-from limen.core.models.risk import (
-    MeteoBreakdown,
-    RiskLevel,
-    StaticBreakdown,
-)
+from limen.core.models.risk import RiskLevel
 from limen.notifications.base import build_alert_payload, level_at_least
+from tests.factories import landslide_record
 
 
 def _cell(cell_id: str, *, score: float, level: RiskLevel) -> CellRiskRecord:
-    return CellRiskRecord(
-        cell_id=cell_id,
-        score=score,
-        level=level,
-        s=score,
-        m=score,
-        e=0.0,
-        f=0.0,
-        h=0.0,
-        static_terms=StaticBreakdown(
-            susc_ispra=0.0, iffi_density=0.0, slope=0.0, pai=0.0, litho_weight=0.0
-        ),
-        meteo_terms=MeteoBreakdown(
-            caine_excess=0.0, caine_norm=0.0, api_factor=0.5, soil_factor=0.5
-        ),
-    )
+    return landslide_record(cell_id, score=score, level=level, s=score, m=score)
 
 
 def _assessment(top: list[CellRiskRecord]) -> AggregateAssessment:

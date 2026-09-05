@@ -14,7 +14,6 @@ the gap.
 
 from __future__ import annotations
 
-from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
 from limen.data.db import acquire
@@ -39,7 +38,6 @@ async def scorable_with_labels() -> list[tuple[HazardType, str]]:
     """
     from limen.core.scoring.resolver import HazardNotScorableError, check_scorable
 
-    settings = get_settings()
     async with acquire() as conn:
         rows = await conn.fetch(
             "SELECT hazard, label_it FROM hazards WHERE enabled ORDER BY hazard"
@@ -48,7 +46,7 @@ async def scorable_with_labels() -> list[tuple[HazardType, str]]:
     for row in rows:
         hazard = HazardType(row["hazard"])
         try:
-            check_scorable(hazard, settings.scoring.engine)
+            check_scorable(hazard)
         except HazardNotScorableError as exc:
             log.warning("hazards.enabled_but_not_scorable", hazard=hazard.value, error=str(exc))
             continue

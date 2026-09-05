@@ -61,35 +61,17 @@ def test_a_hazard_with_no_engine_is_refused_at_build_time() -> None:
         build_hazard_workflow(HazardType.FLOOD, _deps())
 
 
-def test_an_unreadable_breakdown_is_refused_at_build_time() -> None:
-    """Il controllo è sulla forma del breakdown, non sul nome del pericolo.
+def test_a_hazard_with_its_own_breakdown_builds() -> None:
+    """Fino alla Fase 2 il build rifiutava ogni motore che non producesse i
+    componenti delle frane, perché `CellRiskRecord` li leggeva per nome.
 
-    Esercitato su `landslide`, l'unico pericolo con un file di soglie in Fase
-    1, sostituendone la registrazione: è l'unico modo di arrivare al terzo
-    controllo passando per i due precedenti.
+    Ora il record porta il breakdown del pericolo e ogni consumatore lo
+    interroga tramite le proiezioni, quindi un motore con una forma tutta sua
+    è normale — ed è ciò che rende aggiungibile un pericolo senza toccare
+    workflow, alert e report.
     """
-    from limen.core.models.risk import HazardBreakdown
-
-    class _OtherShape(HazardBreakdown):
-        hazard_type: HazardType = DEFAULT_HAZARD
-
-    key = (DEFAULT_HAZARD, ScoringEngineKind.DETERMINISTIC)
-    # Snapshot dell'entry vera, non solo del breakdown: il registry è stato
-    # globale di processo, e rimettere al suo posto una lambda equivalente
-    # lascerebbe i test successivi a girare su una factory diversa da quella
-    # di produzione.
-    original = _REGISTRY[key]
-    register(
-        *key,
-        original.factory,
-        breakdown=_OtherShape,
-        replace=True,
-    )
-    try:
-        with pytest.raises(HazardNotScorableError, match="reads landslide components"):
-            build_hazard_workflow(DEFAULT_HAZARD, _deps())
-    finally:
-        _REGISTRY[key] = original
+    wf = build_hazard_workflow(HazardType.WILDFIRE, _deps())
+    assert wf.step_count > 0
 
 
 def test_a_hazard_without_its_yaml_is_refused_at_build_time() -> None:
@@ -145,7 +127,7 @@ def test_ml_configured_but_unregistered_degrades_to_v1() -> None:
     saved = _REGISTRY.pop(key)
     try:
         s = Settings.model_validate({"scoring": {"engine": "ml"}})
-        check_scorable(DEFAULT_HAZARD, s.scoring.engine)
+        check_scorable(DEFAULT_HAZARD)
         assert isinstance(resolve_scoring_engine(settings=s), MultiFactorScoringEngine)
     finally:
         _REGISTRY[key] = saved

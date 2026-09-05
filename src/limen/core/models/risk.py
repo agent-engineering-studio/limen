@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import date, datetime
 from enum import StrEnum
-from typing import Generic, Literal, TypeVar
+from typing import Annotated, Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -207,15 +207,43 @@ class FireWeatherState(_Frozen):
 class HazardBreakdown(_Frozen):
     """Base of every per-hazard breakdown.
 
-    Carries only the discriminator. Component *names* are hazard-specific by
-    definition -- S/M/E/F/H/K describe how a slope fails and mean nothing for
-    a wildfire -- so this base deliberately holds no components. A consumer
-    that only needs to know which hazard it is looking at (the engine
-    registry, a persistence layer) types against this; one that reads the
-    numbers types against the concrete subclass.
+    Carries the discriminator plus three **projections**. Component *names*
+    are hazard-specific by definition -- S/M/E/F/H/K describe how a slope
+    fails and mean nothing for a wildfire -- so the base holds no components
+    of its own; instead it declares the three questions every consumer that
+    must work for any hazard actually asks. Each subclass answers them in its
+    own terms, and no consumer grows a branch per danger.
     """
 
     hazard_type: HazardType
+
+    def components(self) -> dict[str, float]:
+        """Named drivers, for a narrative or a generic breakdown view.
+
+        Labels are the hazard's own: the briefing quotes the top three and
+        must not have to know which danger it is describing.
+        """
+        return {}
+
+    def factors_payload(self) -> dict[str, Any]:
+        """What goes into ``risk_assessments.factors``.
+
+        Owned here rather than by the persistence executor so the stored
+        shape follows the breakdown that produced it. The landslide payload
+        is byte-identical to the one written before this method existed --
+        rows and the ``/api/cell/{id}/breakdown`` reader are untouched.
+        """
+        return self.model_dump(mode="json")
+
+    def predisposition(self) -> float:
+        """Static susceptibility in [0, 1] -- terrain, not weather.
+
+        The alert gate uses it to keep below-High alerts to cells that are
+        actually predisposed ("moderate rain on a susceptible slope", not
+        "moderate rain anywhere"). Every hazard has such a notion; which
+        component carries it is the subclass's business.
+        """
+        return 0.0
 
 
 class ComponentBreakdown(HazardBreakdown):
@@ -244,6 +272,26 @@ class ComponentBreakdown(HazardBreakdown):
     meteo_terms: MeteoBreakdown
     kinematic_terms: KinematicBreakdown | None = None
 
+    def components(self) -> dict[str, float]:
+        return {"S": self.s, "M": self.m, "E": self.e, "F": self.f, "H": self.h, "K": self.k}
+
+    def factors_payload(self) -> dict[str, Any]:
+        # Exactly the keys `PersistResultExecutor` wrote before the projection
+        # existed: changing them would silently reshape every stored row and
+        # break the breakdown endpoint's reader.
+        return {
+            "s": self.s,
+            "m": self.m,
+            "e": self.e,
+            "f": self.f,
+            "h": self.h,
+            "static_terms": self.static_terms.model_dump(),
+            "meteo_terms": self.meteo_terms.model_dump(),
+        }
+
+    def predisposition(self) -> float:
+        return self.s
+
 
 class WildfireBreakdown(HazardBreakdown):
     """Componenti del pericolo incendio (#61).
@@ -262,9 +310,57 @@ class WildfireBreakdown(HazardBreakdown):
     #: La catena grezza, per verificabilità: un operatore che contesta un
     #: punteggio deve poter risalire ai sei numeri di Van Wagner.
     fire_weather: FireWeatherState | None = None
-    #: Vero quando la catena non ha ancora abbastanza giorni alle spalle.
-    #: Il punteggio esiste comunque, ma va letto sapendolo.
+    #: Vero quando la catena non ha ancora abbastanza giorni alle spalle,
+    #: o non c'è affatto. Il punteggio esiste comunque, ma va letto sapendolo.
     spinup: bool = False
+
+    def components(self) -> dict[str, float]:
+        return {"FWI": self.fwi_norm, "Combustibile": self.fuel, "Pendenza": self.slope}
+
+    def factors_payload(self) -> dict[str, Any]:
+        return {
+            "fwi_norm": self.fwi_norm,
+            "fuel": self.fuel,
+            "slope": self.slope,
+            "spinup": self.spinup,
+            "fire_weather": (
+                self.fire_weather.model_dump(mode="json")
+                if self.fire_weather is not None
+                else None
+            ),
+        }
+
+    def predisposition(self) -> float:
+        # Il combustibile è ciò che una cella *è*, indipendentemente dal
+        # tempo del giorno: è l'analogo della suscettibilità di un versante.
+        return self.fuel
+
+
+#: The concrete breakdowns, discriminated by ``hazard_type``. Pydantic needs
+#: the closed union to round-trip a nested breakdown; the base class alone
+#: would serialise only the discriminator and drop every number.
+AnyHazardBreakdown = Annotated[
+    ComponentBreakdown | WildfireBreakdown, Field(discriminator="hazard_type")
+]
+
+_BREAKDOWN_BY_HAZARD: dict[HazardType, type[HazardBreakdown]] = {
+    HazardType.LANDSLIDE: ComponentBreakdown,
+    HazardType.WILDFIRE: WildfireBreakdown,
+}
+
+
+def breakdown_from_factors(hazard: HazardType, payload: dict[str, Any]) -> HazardBreakdown:
+    """Rebuild a breakdown from a persisted ``factors`` blob.
+
+    The inverse of :meth:`HazardBreakdown.factors_payload`, for the API
+    reading rows back. Missing keys are filled with neutral values rather
+    than refused: rows written by an older pipeline version are still worth
+    showing, and a 500 on a historical cell helps nobody.
+    """
+    cls = _BREAKDOWN_BY_HAZARD.get(hazard)
+    if cls is None:
+        raise ValueError(f"no breakdown class for hazard {hazard.value!r}")
+    return cls.model_validate({**payload, "hazard_type": hazard.value})
 
 
 #: Covariant because :class:`RiskScore` is frozen: a
@@ -305,6 +401,7 @@ class RiskScore(_Frozen, Generic[BreakdownT_co]):  # noqa: UP046
 
 
 __all__: Sequence[str] = (
+    "AnyHazardBreakdown",
     "BreakdownT_co",
     "CellFeatureBundle",
     "ComponentBreakdown",
@@ -322,4 +419,5 @@ __all__: Sequence[str] = (
     "StaticBreakdown",
     "StaticFactors",
     "WildfireBreakdown",
+    "breakdown_from_factors",
 )

@@ -16,9 +16,8 @@ from limen.api.schemas import (
 from limen.core.models.context import CellRiskRecord, RiskAnalysisDTO
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import (
-    MeteoBreakdown,
     RiskLevel,
-    StaticBreakdown,
+    breakdown_from_factors,
 )
 from limen.data.db import acquire
 
@@ -33,31 +32,47 @@ def _coerce_json(value: Any) -> dict[str, Any]:
     return dict(json.loads(value))
 
 
+_NEUTRAL_LANDSLIDE_FACTORS: dict[str, Any] = {
+    "s": 0.0,
+    "m": 0.0,
+    "e": 0.0,
+    "f": 0.0,
+    "h": 0.0,
+    "static_terms": {
+        "susc_ispra": 0.0,
+        "iffi_density": 0.0,
+        "slope": 0.0,
+        "pai": 0.0,
+        "litho_weight": 0.0,
+    },
+    "meteo_terms": {
+        "caine_excess": 0.0,
+        "caine_norm": 0.0,
+        "api_factor": 0.5,
+        "soil_factor": 0.5,
+    },
+}
+
+
 def _record_from_row(row: Any) -> CellRiskRecord:
+    hazard = HazardType(row["hazard_type"])
     factors = _coerce_json(row["factors"])
-    static_terms = factors.get("static_terms") or {}
-    meteo_terms = dict(factors.get("meteo_terms") or {})
-    # measured_overrides round-trips through JSON as a list; the DTO is a tuple.
-    if "measured_overrides" in meteo_terms:
-        meteo_terms["measured_overrides"] = tuple(meteo_terms["measured_overrides"])
+    if hazard is HazardType.LANDSLIDE:
+        # Rows written before a field existed still deserve to be shown: a
+        # historical cell is worth reading with neutral gaps, and a 500 on it
+        # helps nobody.
+        factors = {**_NEUTRAL_LANDSLIDE_FACTORS, **factors}
+        meteo = dict(factors["meteo_terms"])
+        # measured_overrides round-trips through JSON as a list; the DTO is a tuple.
+        if "measured_overrides" in meteo:
+            meteo["measured_overrides"] = tuple(meteo["measured_overrides"])
+        factors["meteo_terms"] = meteo
     return CellRiskRecord(
         cell_id=str(row["cell_id"]),
-        hazard_type=HazardType(row["hazard_type"]),
+        hazard_type=hazard,
         score=float(row["score"]),
         level=RiskLevel(row["class"]),
-        s=float(factors.get("s", 0.0)),
-        m=float(factors.get("m", 0.0)),
-        e=float(factors.get("e", 0.0)),
-        f=float(factors.get("f", 0.0)),
-        h=float(factors.get("h", 0.0)),
-        static_terms=StaticBreakdown(**static_terms)
-        if static_terms
-        else StaticBreakdown(
-            susc_ispra=0.0, iffi_density=0.0, slope=0.0, pai=0.0, litho_weight=0.0
-        ),
-        meteo_terms=MeteoBreakdown(**meteo_terms)
-        if meteo_terms
-        else MeteoBreakdown(caine_excess=0.0, caine_norm=0.0, api_factor=0.5, soil_factor=0.5),
+        breakdown=breakdown_from_factors(hazard, factors),
     )
 
 

@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from limen.agents.llm_factory.base import ChatClient, ChatMessage
 from limen.core.logging import get_logger
-from limen.core.models.context import AggregateAssessment
+from limen.core.models.context import AggregateAssessment, CellRiskRecord
 
 log = get_logger(__name__)
 
@@ -53,9 +53,13 @@ class RiskAnalysis(BaseModel):
 
 
 def _summarise_for_prompt(a: AggregateAssessment) -> str:
+    def _components(cell: CellRiskRecord) -> str:
+        return " ".join(
+            f"{name.lower()}={value:.3f}" for name, value in cell.breakdown.components().items()
+        )
+
     top_lines = [
-        f"  - cell={c.cell_id} score={c.score:.3f} level={c.level.value} "
-        f"s={c.s:.3f} m={c.m:.3f} e={c.e:.3f} f={c.f:.3f} h={c.h:.3f}"
+        f"  - cell={c.cell_id} score={c.score:.3f} level={c.level.value} " + _components(c)
         for c in a.top_cells[:5]
     ]
     return (

@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from limen.agents.executors.shadow_challenger import ShadowChallengerExecutor
-from limen.core.models.context import CellRiskRecord, MonitoringContext
+from limen.core.models.context import MonitoringContext
 from limen.core.models.risk import (
     CellFeatureBundle,
     ComponentBreakdown,
@@ -17,6 +17,7 @@ from limen.core.models.risk import (
     RiskScore,
     StaticBreakdown,
 )
+from tests.factories import landslide_record
 
 
 class _StubChallenger:
@@ -70,21 +71,18 @@ async def test_shadow_does_not_mutate_cell_results(monkeypatch: pytest.MonkeyPat
 
     executor = ShadowChallengerExecutor(_StubChallenger())
     initial_records = [
-        CellRiskRecord(
-            cell_id="c-1",
+        landslide_record(
+            "c-1",
             score=0.7,
             level=RiskLevel.High,
+            s=0.4,
+            m=0.4,
             static_terms=StaticBreakdown(
                 susc_ispra=0.4, iffi_density=0.0, slope=0.5, pai=0.3, litho_weight=0.1
             ),
             meteo_terms=MeteoBreakdown(
                 caine_excess=0.2, caine_norm=0.3, api_factor=0.4, soil_factor=0.5
             ),
-            s=0.4,
-            m=0.4,
-            e=0.0,
-            f=0.0,
-            h=0.0,
         )
     ]
     ctx = MonitoringContext(

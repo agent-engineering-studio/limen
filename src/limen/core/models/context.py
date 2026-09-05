@@ -21,11 +21,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import (
-    KinematicBreakdown,
-    MeteoBreakdown,
+    AnyHazardBreakdown,
     RiskLevel,
     SeismicHistoryEvent,
-    StaticBreakdown,
     StaticFactors,
 )
 from limen.core.models.sensor import SensorFeatures
@@ -40,18 +38,19 @@ class CellRiskRecord(BaseModel):
     hazard_type: HazardType = DEFAULT_HAZARD
     score: float = Field(..., ge=0.0, le=1.0)
     level: RiskLevel
-    static_terms: StaticBreakdown
-    meteo_terms: MeteoBreakdown
-    s: float = Field(..., ge=0.0, le=1.0)
-    m: float = Field(..., ge=0.0, le=1.0)
-    e: float = Field(..., ge=0.0, le=1.0)
-    f: float = Field(..., ge=0.0, le=1.0)
-    h: float = Field(..., ge=0.0, le=1.0)
-    # V1.5 — present only on monitored cells (in-situ regime).
-    k: float = Field(default=0.0, ge=0.0, le=1.0)
-    kinematic_terms: KinematicBreakdown | None = None
+    #: The hazard's own breakdown, typed. Before Fase 2 this record carried
+    #: the landslide components flattened onto itself, which is why every
+    #: consumer of a scored cell had to be a landslide consumer. They now ask
+    #: the breakdown for what they need (`components`, `factors_payload`,
+    #: `predisposition`), and adding a hazard touches none of them.
+    breakdown: AnyHazardBreakdown
     monitored: bool = False
     hard_escalation: bool = False
+
+    @property
+    def predisposition(self) -> float:
+        """Static susceptibility, whatever carries it for this hazard."""
+        return self.breakdown.predisposition()
 
 
 class RiskAnalysisDTO(BaseModel):

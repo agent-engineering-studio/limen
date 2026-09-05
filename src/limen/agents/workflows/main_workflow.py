@@ -44,7 +44,7 @@ from limen.config.settings import ScoringMode, Settings, get_settings
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
-from limen.core.models.risk import ComponentBreakdown, HazardBreakdown
+from limen.core.models.risk import HazardBreakdown
 from limen.core.scoring.base import ScoringEngine
 from limen.core.scoring.resolver import (
     check_scorable,
@@ -65,7 +65,7 @@ class WorkflowDeps:
     notification_dispatcher: NotificationDispatcher | None = None
     """Optional :class:`NotificationDispatcher`. When ``None`` the alert
     executor falls back to logging only (V1 stub behaviour)."""
-    scoring_engine: ScoringEngine[ComponentBreakdown] | None = None
+    scoring_engine: ScoringEngine[HazardBreakdown] | None = None
     """V2 — when set, the workflow's authoritative scoring uses this
     instance. When ``None`` we resolve from settings (V1 default)."""
     challenger_engine: ScoringEngine[HazardBreakdown] | None = None
@@ -213,7 +213,7 @@ def build_hazard_workflow(
     # no engine registered, an engine whose breakdown the executors cannot
     # read, or a missing thresholds YAML. The alternative is discovering it as
     # a FileNotFoundError or an AttributeError deep inside the sweep.
-    check_scorable(hazard, settings.scoring.engine)
+    check_scorable(hazard)
 
     # Resolved once per workflow, not per cell: for the ML engine this is the
     # MLflow round trip.

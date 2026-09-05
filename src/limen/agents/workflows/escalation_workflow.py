@@ -41,28 +41,19 @@ class EscalationEvidence:
     dominant_component: str
 
 
-_COMPONENTS: tuple[str, ...] = ("S", "M", "E", "F", "H", "K")
-
-
 def _dominant_component(record: CellRiskRecord) -> str:
-    """Return the single-letter id of the component with the highest contribution.
+    """The name of the component that contributed most.
 
-    Ties resolve in the order ``_COMPONENTS`` is declared; ``K`` only
-    surfaces when V1.5 hard escalation pushed it above the others.
+    The names come from the hazard's own breakdown -- S/M/E/F/H/K for a
+    slope, FWI/Combustibile/Pendenza for a fire -- so an operator reads a
+    driver in the vocabulary of the danger in front of them.
+
+    Ties resolve in declaration order, which the breakdown fixes, so the hint
+    is deterministic across runs.
     """
-    contributions = {
-        "S": float(record.s),
-        "M": float(record.m),
-        "E": float(record.e),
-        "F": float(record.f),
-        "H": float(record.h),
-        "K": float(getattr(record, "k", 0.0) or 0.0),
-    }
-    best = "S"
+    best = ""
     best_value = -1.0
-    # Iterate in declaration order so ties are deterministic.
-    for label in _COMPONENTS:
-        value = contributions.get(label, 0.0)
+    for label, value in record.breakdown.components().items():
         if value > best_value:
             best = label
             best_value = value

@@ -102,7 +102,7 @@ async def run_forecast_monitoring(deps: AppDependencies) -> dict[str, int]:
     scorable: list[HazardType] = []
     for hazard in deps.settings.hazards.enabled:
         try:
-            check_scorable(hazard, deps.settings.scoring.engine)
+            check_scorable(hazard)
         except HazardNotScorableError as exc:
             log.error("job.forecast.hazard_unavailable", hazard=hazard.value, error=str(exc))
             continue
