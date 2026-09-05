@@ -167,12 +167,22 @@ non possano ignorarle.
   soglia pluviale di Caine non dice nulla a un incendio. La scheda del
   modello la costruisce la configurazione (`model_card()`), così la legenda
   non ha un ramo per pericolo.
-* **Incendio = FWI × combustibile × pendenza** (#61): la catena canadese di
-  Van Wagner (1987) in `core/scoring/wildfire/fwi.py` è pura e verificata sul
-  giorno di riferimento pubblicato a 1e-9. I tre codici di umidità sono
-  ricorsivi, quindi lo stato vive in `fwi_state` — **per nodo meteo**, non per
-  cella: dipende solo dal tempo, che Open-Meteo dà a ~9 km, e per cella
-  sarebbero ~500 copie identiche degli stessi sei numeri ogni giorno.
+* **Incendio: il tempo fa da cancello** (#61, #62):
+  `score = fwi_norm × (base + fuel·combustibile + slope·pendenza)`. Il terreno
+  modula il meteo, non si somma: una somma darebbe a un bosco di conifere un
+  fondo indipendente dal tempo, e sotto un acquazzone di gennaio leggerebbe
+  "Moderata". La catena di Van Wagner (1987) in `core/scoring/wildfire/fwi.py`
+  è pura e verificata sul giorno di riferimento pubblicato a 1e-9. I tre
+  codici di umidità sono ricorsivi, quindi lo stato vive in `fwi_state` —
+  **per nodo meteo**, non per cella: dipende solo dal tempo, che Open-Meteo dà
+  a ~9 km, e per cella sarebbero ~500 copie identiche degli stessi sei numeri
+  ogni giorno. Lo step `FwiUpdate` lo avanza a ogni sweep incendio.
+* **I consumatori leggono il breakdown per proiezioni** (#62):
+  `CellRiskRecord` porta il breakdown tipizzato del pericolo, e chi deve
+  funzionare per qualunque pericolo chiede `components()`, `factors_payload()`
+  o `predisposition()`. Prima i componenti delle frane erano appiattiti sul
+  record, quindi ogni consumatore era per costruzione un consumatore di frane:
+  è la ragione per cui un secondo pericolo non poteva girare nel workflow.
 * **Registry dei motori bidimensionale**: `core/scoring/registry.py` indicizza
   per *(pericolo, implementazione)*, perché i due assi sono ortogonali;
   `resolver.py` resta lo strato operativo che sceglie l'implementazione e

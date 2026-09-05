@@ -28,6 +28,7 @@ from limen.agents.executors import (
     EscalationGateExecutor,
     FireCheckExecutor,
     FloodForecastFetchExecutor,
+    FwiUpdateExecutor,
     MeteoFetchExecutor,
     PersistResultExecutor,
     RiskScoringExecutor,
@@ -245,6 +246,13 @@ def build_hazard_workflow(
     # hazard: this feeds the hydrology component H of landslide scoring.
     if settings.enable_flood_forecast:
         builder = builder.add(FloodForecastFetchExecutor())
+
+    # Hazard-specific input step (#62): the recursive FWI codes have to be
+    # advanced and persisted before anything can score a fire. Only in the
+    # wildfire pipeline — stepping the chain during a landslide sweep would
+    # spend a write per node per tick on numbers nobody reads.
+    if hazard is HazardType.WILDFIRE:
+        builder = builder.add(FwiUpdateExecutor())
 
     builder = builder.add(RiskScoringExecutor(engine=champion, hazard=hazard))
     if challenger is not None:

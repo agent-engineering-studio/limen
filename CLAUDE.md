@@ -63,11 +63,12 @@
 | Tile pipeline | `mv_latest_risk` materialised view: `grid_cells` CROSS JOIN the enabled rows of `hazards`, LEFT JOIN the latest `risk_assessments` per **(cell, hazard)**. **Always refresh via `refresh_mv_latest_risk()`** (PersistResult executor calls it; it debounces to one refresh per 5 min and chains the comune rollup). Never `REFRESH MATERIALIZED VIEW mv_latest_risk` directly. |
 | Engine registry is 2-D | Engines are registered per **(hazard, implementation)** in `core/scoring/registry.py` — hazard and implementation are orthogonal axes, so `(wildfire, ml)` has a home. Registering a factory plus adding `config/hazards/<hazard>.yaml` and its schema is the **only** production change a new hazard needs. Each factory narrows the base `HazardThresholds` to its own schema and raises on a mismatch. `resolver.py` stays the operational layer: it reads `SCORING__ENGINE` and degrades to the V1 baseline on any V2 failure, never raising. |
 | Breakdown is per hazard | `RiskScore` is generic over a `HazardBreakdown` subclass, with a **covariant** TypeVar so `RiskScore[ComponentBreakdown]` is usable as `RiskScore[HazardBreakdown]`. `ScoringEngine` is `Protocol[BreakdownT_co]`: read the numbers ⇒ ask for the concrete breakdown, only serialise ⇒ ask for the base. PEP 695 syntax is **not** usable here (it infers the parameter as invariant and breaks that assignment) — UP046 is suppressed on the class with the reason next to it. |
+| Consumers read breakdowns through projections | `CellRiskRecord` carries `breakdown: AnyHazardBreakdown`, never flattened components. Anything that must work for any hazard asks the breakdown: `components()` (named drivers, for narrative and escalation), `factors_payload()` (what goes into `risk_assessments.factors` — landslide's is byte-identical to the pre-Fase-2 shape, so stored rows and the breakdown endpoint are untouched), `predisposition()` (static susceptibility, for the below-High alert gate). Adding a hazard touches none of them. |
 | `flood_forecast` ≠ the flood hazard | The `flood_forecast` YAML block and `ENABLE_FLOOD_FORECAST` tune the **hydrology component H of landslide scoring** (forecast rain + GloFAS discharge + coastal surge raise a *landslide* score). The flood hazard is a separate engine with its own `config/hazards/flood.yaml` (Fase 3, #63). Whoever implements it meets these names first — do not reuse them. |
 | Hazard is a dimension | `hazard_type` (`landslide`, `flood`, `wildfire`) is on `risk_assessments`, `model_runs`, `norm_stats`, `training_samples` and both dedup ledgers. `HazardType`/`DEFAULT_HAZARD` in `limen.core.models.hazard` is the only place the default is written. Enabling a hazard = a row in `hazards`, not a DDL change. |
 | Wildfire: the weather gates the score | `score = fwi_norm × (base + fuel·f + slope·s)` — the terrain **modulates** the weather, never adds to it. A sum gave a conifer cell a weather-independent floor, so it read "Moderate" under a January downpour and the low classes were unreachable. `base` is why it is not a plain product: it is the danger a cell carries because fire arrives from outside it, so bare rock in extreme weather still scores. The three weights sum to 1, so a conifer cell on a saturated slope scores exactly its normalised FWI and the class cutoffs stay readable as EFFIS bands. The chain itself (Van Wagner 1987, `wildfire/fwi.py`) is pure and verified against the published reference day to 1e-9. |
 | The FWI chain is per weather node | The three moisture codes depend only on the weather, which Open-Meteo serves at ~9 km, so `fwi_state` is keyed by `(node_lon, node_lat, day)` — NUMERIC, because float equality in a PK opens a second chain on rounding noise. Keying it by cell would store the same six numbers ~500 times a day per region. Nodes come from `build_snapped_nodes` (a **global** lattice), never `build_rain_nodes` (bbox-anchored): a persisted chain's identity must not move when an AOI boundary is redrawn. The grid step is `fwi.node_spacing_deg` in `wildfire.yaml`, **not** an env knob: changing it starts fresh chains and restarts the spin-up. A stored state older than `fwi.max_gap_days` is discarded rather than carried — `chain_days` would otherwise keep climbing until `spinup` called a broken chain settled. Retention must never delete past days: the recursion walks through them. |
-| Views pin the default hazard | `mv_latest_risk` is one row per cell **per hazard**, so every consumer that counts cells filters on `hazard_type`. `v_risk_tiles`, `v_region_tiles` and `mv_comune_risk` are pinned to `landslide`; the multi-hazard tile surface is `risk_at(z,x,y,hours_ago,hazard)`. Adding a hazard means revisiting all six dependent objects (migrations 016, 018, 019, 020, 023, 026). |
+| Views pin the default hazard | `mv_latest_risk` is one row per cell **per hazard**, so every consumer that counts cells filters on `hazard_type`. `v_risk_tiles`, `v_region_tiles` and `mv_comune_risk` are pinned to `landslide`; the multi-hazard tile surface is `risk_at(z,x,y,hours_ago,hazard)`, which pg_tileserv serves with the parameter in the query string. The SPA map uses the view for the default hazard and the function for any other — deliberately two paths, because switching the working default onto the function buys only symmetry. `ComuneLeaderboard` and `NationalStrip` still cannot follow the selector and say so with `LandslideOnlyBadge`. |
 | Hot tables are partitioned | `risk_assessments` and `model_runs` are RANGE-partitioned by **UTC** day on `computed_at`; the PK includes the partition key. Retention is `drop_expired_partitions()`, never `DELETE`. `ensure_partitions()` must run before a sweep writes: the `limen-partitions` job owns it (registered **unconditionally** — never fold it back into the cache-cleanup job, which is skipped under the pg_cron backend), the API retries it best-effort on boot, `limen partitions` runs it on demand. Rows in a `*_default` partition are a bug: retention cannot reach them. |
 | Risk palette = ColorBrewer YlOrRd, **not colour-only** | The 5-class legend pairs every colour with the Italian label and the score range. Don't introduce green/red without checking WCAG-AA contrast and a colourblind simulator. |
 | Notifications = Strategy + safe gather | New channels implement `NotificationChannel` (see `notifications/base.py`). The dispatcher MUST run them via `asyncio.gather` with a `_send_safe` wrapper — one channel raising can NEVER abort the others or the workflow. |
@@ -163,6 +164,8 @@ uv run limen backtest           # replay historical window; §2.5 hit rate / FAR
                                 # (env knobs: LIMEN_BACKTEST_AOI / START / END / HIGH_LEVEL)
 uv run limen fwi-backfill       # rebuild the recursive FWI chain from the ERA5 archive
                                 # (env knobs: LIMEN_FWI_AOI / LIMEN_FWI_DAYS)
+uv run limen backtest-wildfire  # replay the FWI chain against EFFIS burnt-area perimeters
+                                # (env: LIMEN_BACKTEST_WILDFIRE_AOI / _START / _END / _LEVEL)
 uv run limen monitor-once       # run the MAF workflow once for an AOI
                                 # (env knobs: LIMEN_MONITOR_AOI / CELL_LIMIT)
 uv run limen serve              # start the FastAPI server on API__HOST:API__PORT (default :8080)
@@ -262,13 +265,17 @@ extension points already:
 - **Fase 1 hazard-agnostic (#57) is DONE**: `hazard_type` is a first-class
   dimension, engines resolve from a 2-D registry, config is per hazard, and
   API/MCP/A2A take an optional `hazard`.
-- **Fase 2a wildfire (#61) is DONE**: the FWI chain, `wildfire.yaml`, the
-  engine and `limen fwi-backfill`. The hazard is registered but the row in
-  `hazards` is still `enabled = false`: the workflow that would score it is
-  #62, and enabling it before that would put a hazard in `mv_latest_risk`
-  that nothing ever writes. Flood (#63-#64) still has no YAML and no engine.
-  The six dependent view objects listed above must be revisited when a second
-  hazard is enabled.
+- **Fase 2a-2b wildfire (#61, #62) is DONE and the hazard is ENABLED**: the
+  FWI chain, `wildfire.yaml`, the engine, the `FwiUpdate` workflow step,
+  `limen fwi-backfill`, `limen backtest-wildfire`, the WUI static factor and
+  the SPA's per-hazard palette. Two caveats an operator must know:
+  `landuse_code` (CORINE) and `slope_deg` (DEM) are unpopulated in most
+  deployments, so the terrain term is constant and the wildfire map is
+  effectively the FWI map — which is what EFFIS publishes, but not yet
+  territory-modulated risk. And the EFFIS perimeter endpoint answers **403**
+  without accreditation, so `backtest-wildfire` has no ground truth until
+  someone ingests it; the report says so instead of reporting zeros.
+- Flood (#63-#64) still has no YAML and no engine.
 - V2 ML scoring engine (drop-in replacement of
   `MultiFactorScoringEngine` consuming the same `CellFeatureBundle`).
 - Knowledge-graph grounding of the briefing — V2.x.

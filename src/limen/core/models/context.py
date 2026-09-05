@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import (
     AnyHazardBreakdown,
+    FireWeatherState,
     RiskLevel,
     SeismicHistoryEvent,
     StaticFactors,
@@ -119,6 +120,13 @@ class MonitoringContext(BaseModel):
     flood_forecast_rain_72h_mm: float | None = None
     river_discharge_ratio: float | None = None
     coastal_surge_norm: float | None = None
+    # Fase 2 (#62) — la catena FWI del giorno, per nodo del reticolo globale.
+    # Popolata dallo step FwiUpdate solo nel workflow incendio; l'assembler dà
+    # a ogni cella la catena del nodo più vicino. `None` in una posizione =
+    # nessuna catena per quel nodo, che il motore dichiara invece di
+    # sostituire con uno zero.
+    fwi_nodes: Sequence[tuple[float, float]] = Field(default_factory=tuple)
+    fwi_by_node: Sequence[FireWeatherState | None] = Field(default_factory=tuple)
     seismic_events: Sequence[SeismicHistoryEvent] = Field(default_factory=tuple)
     months_since_fire: float | None = None
     sensor_payload: dict[str, Any] | None = None

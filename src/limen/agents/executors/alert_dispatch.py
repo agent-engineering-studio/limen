@@ -89,7 +89,8 @@ async def _load_exposure_factors(
                    c.near_urban AS urban_near,
                    c.near_infra AS infra_near,
                    c.distance_to_road_m, c.distance_to_rail_m,
-                   c.nearest_road_class
+                   c.nearest_road_class,
+                   c.wui_proximity_norm
             FROM cell_static_factors c
             WHERE c.cell_id = ANY($1::text[])
             """,

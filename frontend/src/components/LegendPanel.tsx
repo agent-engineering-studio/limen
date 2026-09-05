@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
 import { useHazard } from "../lib/hazard";
-import { RISK_CLASSES } from "../lib/risk-colors";
+import { riskClassesFor } from "../lib/risk-colors";
 import type { LegendClass } from "../types";
 
 const PC_COLOR: Record<string, string> = {
@@ -58,7 +58,7 @@ export function LegendPanel(): JSX.Element {
     <section className="legend-panel" aria-label="Legenda classi di rischio">
       <h2>Classi di rischio</h2>
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-        {RISK_CLASSES.map((c) => (
+        {riskClassesFor(selected).map((c) => (
           <li key={c.level} className="legend-row">
             <span
               className="legend-swatch"

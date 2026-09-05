@@ -215,6 +215,83 @@ WHERE c.cell_id = d.cell_id
 """
 
 
+# Interfaccia urbano-vegetazione (#62).
+#
+# Una cella è *di interfaccia* quando è urbana (CLC 1xx) e confina con una
+# cella vegetata (CLC 3xx). Non "urbana" e basta: un isolato circondato da
+# altri isolati non ha bosco da cui prendere fuoco, ed è la distinzione che
+# separa questo termine dal `near_urban` che le frane già usano.
+#
+# Ogni cella riceve poi la prossimità all'interfaccia più vicina, lineare e
+# azzerata oltre il raggio: 1 sull'interfaccia, 0 a `$2` metri.
+_WUI_PROXIMITY_SQL = """
+WITH cells AS (
+    SELECT g.id, g.geom, ST_Centroid(g.geom) AS centroid, c.landuse_code
+    FROM grid_cells g
+    JOIN cell_static_factors c ON c.cell_id = g.id
+    WHERE g.aoi_id = $1
+),
+interface AS (
+    SELECT u.id, u.centroid
+    FROM cells u
+    WHERE u.landuse_code LIKE '1%'
+      AND EXISTS (
+          SELECT 1 FROM cells v
+          WHERE v.landuse_code LIKE '3%'
+            AND ST_Intersects(v.geom, u.geom)
+      )
+),
+prox AS (
+    SELECT c.id AS cell_id,
+           CASE
+               WHEN near.dist IS NULL THEN 0.0
+               ELSE GREATEST(0.0, 1.0 - near.dist / $2)
+           END AS wui
+    FROM cells c
+    LEFT JOIN LATERAL (
+        SELECT ST_Distance(c.centroid::geography, i.centroid::geography) AS dist
+        FROM interface i
+        ORDER BY c.centroid <-> i.centroid
+        LIMIT 1
+    ) near ON near.dist <= $2
+)
+UPDATE cell_static_factors c
+SET wui_proximity_norm = prox.wui,
+    updated_at = now()
+FROM prox
+WHERE c.cell_id = prox.cell_id
+"""
+
+#: Oltre ~3 km dall'interfaccia il fronte non è più un problema di
+#: protezione dell'abitato ma di lotta in bosco: due priorità diverse.
+_WUI_RADIUS_M = 3000.0
+
+
+async def compute_wui_proximity_for_aoi(aoi_id: str) -> None:
+    """Fill ``wui_proximity_norm`` for one AOI.
+
+    A clean no-op until CORINE has populated ``landuse_code``: the column
+    stays NULL, which the wildfire exposure term reads as *unknown* and
+    ignores — different from 0, which would mean "far from any interface".
+    """
+    async with acquire() as conn:
+        coded = await conn.fetchval(
+            """
+            SELECT count(*) FROM cell_static_factors c
+            JOIN grid_cells g ON g.id = c.cell_id
+            WHERE g.aoi_id = $1 AND c.landuse_code IS NOT NULL
+            """,
+            aoi_id,
+        )
+        if not coded:
+            log.info("static_bootstrap.wui.skip", aoi_id=aoi_id, reason="no landuse_code")
+            return
+        await conn.execute(
+            _WUI_PROXIMITY_SQL, aoi_id, _WUI_RADIUS_M, timeout=_BOOTSTRAP_STMT_TIMEOUT_S
+        )
+        log.info("static_bootstrap.wui.done", aoi_id=aoi_id, cells_with_landuse=coded)
+
+
 async def compute_osm_distances_for_aoi(aoi_id: str) -> None:
     """Fill distance_to_road_m / distance_to_rail_m for one AOI.
 
@@ -305,6 +382,10 @@ async def bootstrap_static_for_aoi(aoi_id: str) -> dict[str, int]:
             aoi_id=aoi_id,
             rows_written=corine_written,
         )
+
+    # Dopo CORINE, perché legge `landuse_code`: invertirli lascerebbe la
+    # colonna WUI ferma di un giro rispetto alla copertura del suolo.
+    await compute_wui_proximity_for_aoi(aoi_id)
 
     # ISPRA Carta Geologica — vector shapefile + faults; runs when
     # LIMEN_GEOLOGICAL_SHAPEFILE points at a polygon file.

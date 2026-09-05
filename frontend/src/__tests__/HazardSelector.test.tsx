@@ -148,3 +148,18 @@ describe("LegendPanel", () => {
     expect(await screen.findByText("0.52-0.71")).toBeInTheDocument();
   });
 });
+
+describe("palette per pericolo", () => {
+  it("l'incendio non riusa i colori delle frane", async () => {
+    // Con due pericoli sulla stessa mappa il colore è l'unico indizio
+    // immediato di cosa si sta guardando: due rampe rosso-arancio identiche
+    // si confondono. Classi ed etichette restano le stesse, cambia la tinta.
+    const { riskClassesFor } = await import("../lib/risk-colors");
+    const frane = riskClassesFor("landslide");
+    const incendio = riskClassesFor("wildfire");
+
+    expect(incendio.map((c) => c.level)).toEqual(frane.map((c) => c.level));
+    expect(incendio.map((c) => c.label)).toEqual(frane.map((c) => c.label));
+    expect(incendio.every((c, i) => c.color !== frane[i]?.color)).toBe(true);
+  });
+});

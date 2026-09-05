@@ -133,3 +133,7 @@ exposure:
   road_medium_m: 1000.0
   rail_strong_m: 250.0
   rail_medium_m: 1000.0
+  # Interfaccia urbano-bosco: un fronte che avanza verso case affacciate sul
+  # bosco va affrontato prima di uno identico in mezzo alla foresta. Per una
+  # frana il bosco accanto non cambia nulla, quindi il peso è solo qui.
+  wui:           0.7

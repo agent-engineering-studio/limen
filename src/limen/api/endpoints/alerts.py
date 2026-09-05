@@ -67,7 +67,8 @@ async def list_alerts(
                    csf.near_infra AS infra_near,
                    csf.distance_to_road_m,
                    csf.distance_to_rail_m,
-                   csf.nearest_road_class
+                   csf.nearest_road_class,
+                   csf.wui_proximity_norm
             FROM latest l
             JOIN grid_cells g ON g.id = l.cell_id
             LEFT JOIN cell_static_factors csf ON csf.cell_id = l.cell_id

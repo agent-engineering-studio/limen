@@ -27,6 +27,7 @@ from typing import Any
 
 from limen import __version__
 from limen.cli.backtest import run as _run_backtest
+from limen.cli.backtest_wildfire import run as _run_backtest_wildfire
 from limen.cli.bootstrap_static import run as _run_bootstrap_static
 from limen.cli.calibrate import run as _run_calibrate
 from limen.cli.create_admin import run as _run_create_admin
@@ -87,6 +88,13 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "backtest",
         help="replay a historical window and write a §2.5 metrics report",
+    )
+    sub.add_parser(
+        "backtest-wildfire",
+        help=(
+            "replay the FWI chain against EFFIS burnt-area perimeters "
+            "(env: LIMEN_BACKTEST_WILDFIRE_AOI / _START / _END / _LEVEL)"
+        ),
     )
     sub.add_parser(
         "fwi-backfill",
@@ -200,6 +208,7 @@ def main(argv: list[str] | None = None) -> int:
         "bootstrap-static": _run_bootstrap_static,
         "calibrate": _run_calibrate,
         "backtest": _run_backtest,
+        "backtest-wildfire": _run_backtest_wildfire,
         "fwi-backfill": _run_fwi_backfill,
         "monitor-once": _run_monitor_once,
         "forecast": _run_forecast,

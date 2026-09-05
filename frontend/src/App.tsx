@@ -10,7 +10,6 @@ import ForecastList from "./components/ForecastList";
 import HomePage from "./components/HomePage";
 import IntegrationsPage from "./components/IntegrationsPage";
 import HazardSelector from "./components/HazardSelector";
-import LandslideOnlyBadge from "./components/LandslideOnlyBadge";
 import LegendPanel from "./components/LegendPanel";
 import NationalStrip from "./components/NationalStrip";
 import OverlayControl from "./components/OverlayControl";
@@ -177,9 +176,6 @@ export function App(): JSX.Element {
         <ShadowPanel />
       </aside>
       <div className="map-area">
-        <div className="map-pin-note">
-          <LandslideOnlyBadge />
-        </div>
         <RiskMap
           mapRef={mapRef}
           onCellClick={onMapClick}

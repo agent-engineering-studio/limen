@@ -4,6 +4,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { Protocol } from "pmtiles";
 
 import { config } from "../lib/env";
+import { useHazard } from "../lib/hazard";
 import { maplibreColorMatch } from "../lib/risk-colors";
 
 const SOURCE_ID = "limen-risk";
@@ -104,12 +105,25 @@ export interface RiskMapProps {
 export function RiskMap(props: RiskMapProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const tileserv = (props.tileservUrl ?? config.tileservUrl).replace(/\/+$/, "");
-  // `v_risk_tiles` è fissata sull'hazard di default in SQL (migrazione 028):
-  // una sorgente di tile deve dare una geometria per cella, e la vista ne ha
-  // una per (cella, pericolo). Il layer per pericolo arriverà in Fase 2
-  // passando da `risk_at(z,x,y,hours_ago,hazard)`, che il parametro già ce
-  // l'ha; qui non si anticipa nulla.
-  const tileLayer = props.tileLayer ?? "public.v_risk_tiles";
+  const { selected: hazard, available } = useHazard();
+  // Due sorgenti, non una. `v_risk_tiles` è fissata sul pericolo di default
+  // in SQL (migrazione 028) perché una sorgente di tile deve dare una
+  // geometria per cella e la vista ne ha una per (cella, pericolo): resta la
+  // strada del caso di default, immutata. Per ogni altro pericolo si passa da
+  // `risk_at(z,x,y,hours_ago,hazard)`, che pg_tileserv espone con i parametri
+  // in query string.
+  //
+  // Non si è unificato tutto su `risk_at`: cambierebbe la sorgente della
+  // mappa che oggi funziona, in cambio di simmetria e nient'altro.
+  const isDefaultHazard = hazard === "landslide";
+  const tileLayer =
+    props.tileLayer ?? (isDefaultHazard ? "public.v_risk_tiles" : "public.risk_at");
+  const tileQuery = isDefaultHazard ? "" : `?p_hazard=${encodeURIComponent(hazard)}`;
+  // Il nome lo dà il backend (`/api/hazards`); il ripiego serve al primo
+  // render e a un backend irraggiungibile.
+  const hazardLabel =
+    available.find((h) => h.hazard === hazard)?.label_it ??
+    (isDefaultHazard ? "frane" : hazard);
   const onCellClick = props.onCellClick;
 
   useEffect(() => {
@@ -121,7 +135,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       ensurePmtilesProtocol();
     }
 
-    const tilesUrl = `${tileserv}/${tileLayer}/{z}/{x}/{y}.pbf`;
+    const tilesUrl = `${tileserv}/${tileLayer}/{z}/{x}/{y}.pbf${tileQuery}`;
 
     // Build the source set lazily so optional PMTiles overlays only
     // appear when their env URL is set — see `docs/geodata.md`.
@@ -186,6 +200,9 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         "source-layer": "public.v_region_tiles",
         maxzoom: CELL_MIN_ZOOM,
         paint: {
+          // `v_region_tiles` è fissata sul pericolo di default in SQL, quindi
+          // tiene la palette di default anche quando il selettore dice altro:
+          // colorarla come l'incendio direbbe che mostra l'incendio.
           "fill-color": maplibreColorMatch() as never,
           "fill-opacity": 0.45,
           "fill-outline-color": "#555",
@@ -230,7 +247,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         "source-layer": tileLayer,
         minzoom: CELL_MIN_ZOOM,
         paint: {
-          "fill-color": maplibreColorMatch() as never,
+          "fill-color": maplibreColorMatch("risk_level", hazard) as never,
           "fill-opacity": 0.55,
           "fill-outline-color": "#333",
         },
@@ -347,7 +364,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tileserv, tileLayer]);
+  }, [tileserv, tileLayer, tileQuery, hazard]);
 
   // Update the selection outline without rebuilding the map.
   useEffect(() => {
@@ -370,9 +387,9 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       ref={containerRef}
       className="map-container"
       data-testid="risk-map"
-      data-tile-url={`${tileserv}/${tileLayer}/{z}/{x}/{y}.pbf`}
+      data-tile-url={`${tileserv}/${tileLayer}/{z}/{x}/{y}.pbf${tileQuery}`}
       style={{ width: "100%", height: "100%" }}
-      aria-label="Mappa interattiva del rischio frane"
+      aria-label={`Mappa interattiva del rischio: ${hazardLabel}`}
     />
   );
 }
