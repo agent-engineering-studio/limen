@@ -97,10 +97,12 @@ Versione: implementazione completa, in fase di test. Feature mergiate di recente
      lo dichiara. `limen fwi-backfill` ricostruisce la storia dall'archivio
      ERA5 e va eseguito prima di mettere la mappa davanti a un operatore.
 
-  **Backtest senza ground truth**: l'endpoint pubblico EFFIS risponde **403**
-  senza accreditamento, quindi `fire_perimeters` resta vuota e il report lo
-  dichiara invece di stampare zeri. La logica di valutazione è verificata con
-  perimetri sintetici in `tests/integration/test_backtest_wildfire.py`.
+  **Backtest su ground truth vero**: EFFIS è pubblico e non richiede
+  credenziali. Per un anno il client ha creduto il contrario perché parlava
+  dialetto GeoServer a un servizio MapServer — vedi l'invariante «EFFIS is
+  MapServer» in CLAUDE.md. Misurato su Basilicata con perimetri reali: hit
+  rate **79 %** contro un tasso di base del **43 %** nel 2025 (1.82 volte),
+  **100 %** contro **28 %** nel 2024 (3.61 volte), preavviso medio ~55 h.
 
 - **Fase 1 hazard-agnostic COMPLETA** (2026-09-05, epic #57, PR #88 #89 #91 #92
   #93 + #94). L'architettura è multi-rischio nella struttura: `hazard_type`

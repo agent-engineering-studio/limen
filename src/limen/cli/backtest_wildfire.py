@@ -12,9 +12,15 @@ rainfall hour by hour and re-scores every cell; the fire chain is *daily* and
 exactly as the operational step does. Forcing the two through one function
 would make both harder to read than either is alone.
 
-Truth is ``fire_perimeters`` — the EFFIS burnt areas Limen already ingests.
-The public EFFIS endpoint now answers 403 without accreditation, so an
-un-ingested deployment gets an honest empty report rather than a crash.
+Truth is ``fire_perimeters`` — the EFFIS burnt areas Limen ingests. The
+service is public and needs no credentials; an un-ingested deployment still
+gets an honest empty report rather than a crash.
+
+The report pairs the hit rate with the **base rate**: the share of days a
+burnt cell was in alert anyway. Without it the hit rate is unreadable,
+because a model that calls every summer day dangerous maximises it while
+discriminating nothing. Measured on Basilicata against real perimeters: 79 %
+against a 43 % base in 2025, 100 % against 28 % in 2024.
 
 Env knobs:
 
@@ -88,6 +94,12 @@ class WildfireBacktestMetrics:
     hit_rate: float
     far: float
     mean_lead_hours: float
+    #: Quota di giornate della finestra in cui una cella poi bruciata era
+    #: comunque in allerta. È il metro dell'hit rate: un modello che dice
+    #: "pericolo alto" tutti i giorni d'estate ottiene un hit rate altissimo
+    #: senza discriminare nulla, e senza questo numero il report lo
+    #: presenterebbe come bravura.
+    base_rate: float
     report_path: Path | None
 
 
@@ -218,6 +230,7 @@ def evaluate(
     days: list[date],
     thresholds: WildfireThresholds,
     alert_level: RiskLevel,
+    season: tuple[date, date] | None = None,
 ) -> WildfireBacktestMetrics:
     """Score every burnt cell across the window and measure the warning.
 
@@ -232,6 +245,27 @@ def evaluate(
     engine = WildfireScoringEngine(thresholds)
     horizon_days = int(_LEAD_MAX_HOURS // 24)
     scored_days = set(days)
+
+    def alerted(cell_id: str, sf: StaticFactors, fw: FireWeatherState, day: date) -> bool:
+        scored = engine.score(
+            CellFeatureBundle(
+                aoi_id=aoi_id,
+                cell_id=cell_id,
+                static=sf,
+                dynamic=DynamicInputs(
+                    valuation_time=datetime.combine(day, time(12), UTC),
+                    fire_weather=fw,
+                ),
+            )
+        )
+        return _at_least(scored.level, alert_level)
+
+    # Il tasso di base si misura sulla **stagione degli incendi**, non sui
+    # giorni di spin-up che la precedono: quelli sono primavera, il pericolo è
+    # basso, e includerli abbasserebbe il metro gonfiando la discriminazione.
+    first, last = season or (days[0], days[-1])
+    base_days = 0
+    base_alerted = 0
 
     hits = 0
     misses = 0
@@ -251,23 +285,24 @@ def evaluate(
             for d in range(horizon_days, -1, -1)
             if (fire_date - timedelta(days=d)) in scored_days
         ]
+        # Il metro: quanto spesso questa cella sarebbe stata in allerta in un
+        # giorno qualunque della finestra, non solo prima del suo incendio.
+        for day in days:
+            if not first <= day <= last:
+                continue
+            fw = chain.get(day)
+            if fw is None:
+                continue
+            base_days += 1
+            if alerted(cell_id, sf, fw, day):
+                base_alerted += 1
+
         earliest: date | None = None
         for day in window:
             fw = chain.get(day)
             if fw is None:
                 continue
-            scored = engine.score(
-                CellFeatureBundle(
-                    aoi_id=aoi_id,
-                    cell_id=cell_id,
-                    static=sf,
-                    dynamic=DynamicInputs(
-                        valuation_time=datetime.combine(day, time(12), UTC),
-                        fire_weather=fw,
-                    ),
-                )
-            )
-            if _at_least(scored.level, alert_level):
+            if alerted(cell_id, sf, fw, day):
                 earliest = day
                 break
         if earliest is None:
@@ -295,8 +330,14 @@ def evaluate(
         hit_rate=hit_rate,
         far=far,
         mean_lead_hours=mean_lead,
+        base_rate=base_alerted / base_days if base_days else 0.0,
         report_path=None,
     )
+
+
+def _lift(metrics: WildfireBacktestMetrics) -> float:
+    """Quante volte l'hit rate supera il tasso di base. 0 se non misurabile."""
+    return metrics.hit_rate / metrics.base_rate if metrics.base_rate > 0 else 0.0
 
 
 def write_report(
@@ -320,9 +361,16 @@ def write_report(
         "## Metriche §2.5",
         "",
         f"- **Hit rate**: {metrics.hit_rate:.2%}",
+        f"- **Tasso di base**: {metrics.base_rate:.2%} "
+        f"(quota di giornate in allerta a prescindere dagli incendi)",
+        f"- **Discriminazione**: {_lift(metrics):.2f} volte il tasso di base",
         "- **FAR**: non misurato (vedi nota)",
         f"- **Preavviso medio**: {metrics.mean_lead_hours:.1f} h",
         "",
+        "> L'hit rate da solo non dice nulla: un modello che dichiara pericolo",
+        "> alto tutti i giorni d'estate lo massimizza senza discriminare. Il",
+        "> confronto con il tasso di base è ciò che separa la bravura dalla",
+        "> frequenza — sotto 1.0 il modello è peggio del caso.",
         "> Il replay guarda solo le celle che hanno bruciato, e solo",
         f"> l'orizzonte di {_LEAD_MAX_HOURS:.0f} h prima di ciascun incendio. Hit rate e",
         "> preavviso sono quindi misurati; il **FAR no**: un falso allarme è",
@@ -334,9 +382,10 @@ def write_report(
     if metrics.truth_fires == 0:
         lines.insert(
             5,
-            "> **Nessun perimetro EFFIS nella finestra.** L'endpoint pubblico "
-            "risponde 403 senza accreditamento: senza ingest non c'è ground "
-            "truth e le metriche sotto sono vuote per costruzione, non zero.",
+            "> **Nessun perimetro EFFIS nella finestra.** Il servizio è "
+            "pubblico e non richiede credenziali: se `fire_perimeters` è vuota "
+            "va eseguito l'ingest. Le metriche sotto sono vuote per "
+            "costruzione, non zero.",
         )
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return out
@@ -364,6 +413,7 @@ async def backtest_aoi(
             hit_rate=0.0,
             far=0.0,
             mean_lead_hours=0.0,
+            base_rate=0.0,
             report_path=None,
         )
         path = write_report(metrics, start=start, end=end, alert_level=alert_level)
@@ -409,6 +459,7 @@ async def backtest_aoi(
         days=days,
         thresholds=thresholds,
         alert_level=alert_level,
+        season=(start, end),
     )
     path = write_report(metrics, start=start, end=end, alert_level=alert_level)
     log.info(
@@ -418,6 +469,8 @@ async def backtest_aoi(
         hit_rate=round(metrics.hit_rate, 4),
         far=round(metrics.far, 4),
         mean_lead_hours=round(metrics.mean_lead_hours, 1),
+        base_rate=round(metrics.base_rate, 4),
+        lift=round(_lift(metrics), 2),
         report=str(path),
     )
     return replace(metrics, report_path=path)

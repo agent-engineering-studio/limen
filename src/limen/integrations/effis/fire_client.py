@@ -41,8 +41,26 @@ log = get_logger(__name__)
 
 # Default WFS endpoint and typeName. Override at construction time if
 # Copernicus moves endpoints.
-DEFAULT_WFS_URL = "https://maps.effis.emergency.copernicus.eu/gwis/ows"
-DEFAULT_TYPENAME = "effis:ba.fires"
+#
+# The endpoint is **MapServer**, not GeoServer, and that shapes every choice
+# below. Verified against the live service:
+#
+# * the base path is ``/gwis``, not ``/gwis/ows`` — the latter hangs;
+# * the layer is ``nrt.ba.poly``. ``effis:ba.fires`` does not exist, and a
+#   request for it makes MapServer close the connection mid-response, which
+#   surfaces as a transport error rather than a 404;
+# * ``CQL_FILTER`` is a GeoServer vendor parameter. MapServer ignores it, so
+#   a date range expressed that way silently filtered nothing;
+# * ``bbox`` and ``filter`` are mutually exclusive in WFS (and combining them
+#   here kills the connection), so the bbox goes on the wire and the dates are
+#   applied locally. Cheap in practice: one AOI's whole history is a single
+#   response — Basilicata is 515 perimeters across 2012-2026, 305 KB.
+DEFAULT_WFS_URL = "https://maps.effis.emergency.copernicus.eu/gwis"
+DEFAULT_TYPENAME = "nrt.ba.poly"
+
+#: Server-side cap. Above the largest per-AOI history we measured, so the
+#: local date filter never sees a truncated set.
+DEFAULT_MAX_FEATURES = 5000
 
 _DEGRADATION_EXC: tuple[type[BaseException], ...] = (
     httpx.HTTPError,
@@ -50,6 +68,30 @@ _DEGRADATION_EXC: tuple[type[BaseException], ...] = (
     TimeoutError,
     OSError,
 )
+
+
+def _feature_date(feat: dict[str, Any]) -> date | None:
+    """The day a fire started, from whichever field this layer carries."""
+    props = feat.get("properties") or {}
+    for key in ("initialdate", "firedate", "FIREDATE", "fire_date"):
+        raw = props.get(key)
+        if raw:
+            try:
+                return date.fromisoformat(str(raw)[:10])
+            except ValueError:
+                return None
+    return None
+
+
+def _within(feat: dict[str, Any], start: date, end: date) -> bool:
+    """Keep a feature whose start date falls in the window.
+
+    A feature with no readable date is **kept**: the sync stores it with a
+    NULL date, which a backtest ignores, and dropping it here would lose a
+    perimeter that is still real.
+    """
+    when = _feature_date(feat)
+    return when is None or start <= when <= end
 
 
 class EffisHttpClient:
@@ -61,10 +103,12 @@ class EffisHttpClient:
         wfs_url: str = DEFAULT_WFS_URL,
         typename: str = DEFAULT_TYPENAME,
         http_client: httpx.AsyncClient | None = None,
+        max_features: int = DEFAULT_MAX_FEATURES,
     ) -> None:
         self._wfs_url = wfs_url
         self._typename = typename
         self._http = http_client
+        self._max_features = max_features
 
     async def _client(self) -> httpx.AsyncClient:
         return self._http if self._http is not None else await SharedHttpClient.get()
@@ -82,15 +126,15 @@ class EffisHttpClient:
         """
         params: dict[str, Any] = {
             "service": "WFS",
-            "version": "2.0.0",
+            "version": "1.1.0",
             "request": "GetFeature",
-            "typeNames": self._typename,
-            "outputFormat": "application/json",
-            "srsName": "EPSG:4326",
-            "bbox": f"{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]},EPSG:4326",
-            "CQL_FILTER": (
-                f"firedate >= '{start.isoformat()}' AND firedate <= '{end.isoformat()}'"
-            ),
+            # Lowercase keys: MapServer's WFS 1.1.0 does not accept the
+            # camelCase spellings GeoServer tolerates.
+            "typename": self._typename,
+            "outputformat": "geojson",
+            "srsname": "EPSG:4326",
+            "bbox": f"{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}",
+            "maxfeatures": str(self._max_features),
         }
         log.info(
             "effis.perimeters.fetch",
@@ -120,8 +164,23 @@ class EffisHttpClient:
             log.warning("effis.perimeters.bad_payload", status=resp.status_code)
             return []
         features = list(payload.get("features") or [])
-        log.info("effis.perimeters.fetched", count=len(features))
-        return features
+        if len(features) >= self._max_features:
+            # The local date filter below would then be working on a truncated
+            # set, and the gap would look like "no fires that summer".
+            log.warning(
+                "effis.perimeters.truncated",
+                count=len(features),
+                max_features=self._max_features,
+            )
+        in_window = [f for f in features if _within(f, start, end)]
+        log.info(
+            "effis.perimeters.fetched",
+            fetched=len(features),
+            in_window=len(in_window),
+            start=start.isoformat(),
+            end=end.isoformat(),
+        )
+        return in_window
 
     async def fetch_perimeters_bulk(
         self,

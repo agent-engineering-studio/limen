@@ -245,3 +245,103 @@ def test_the_replay_starts_from_the_seed_not_from_operational_state() -> None:
     # Il DC parte dal seme e sale di qualche unità al giorno, non dai
     # ~400 che la catena operativa porta a settembre.
     assert chain[days[0]].dc < t.fwi.dc_start + 12.0
+
+
+async def test_the_report_measures_the_base_rate_not_just_the_hit_rate(
+    reset_db: None, pg_pool: object
+) -> None:
+    """Un hit rate senza metro non dice nulla.
+
+    Un modello che dichiara pericolo alto tutti i giorni d'estate lo
+    massimizza senza discriminare niente: il confronto con la quota di
+    giornate in allerta a prescindere dagli incendi è ciò che separa la
+    bravura dalla frequenza. Misurato sulla Basilicata 2025 con perimetri
+    EFFIS veri: 79% di hit rate contro un 43% di base, cioè 1.8 volte.
+    """
+    cell = f"{AOI}|0|0"
+    fire = dt.date(2026, 8, 10)
+    await _seed({cell: fire})
+    truth = await fetch_burnt_cells(AOI, start=dt.date(2026, 1, 1), end=dt.date(2026, 12, 31))
+    days = [fire - dt.timedelta(days=d) for d in range(10, -1, -1)]
+
+    # Sempre estremo: hit rate 1.0, ma anche tasso di base 1.0 — cioè nessuna
+    # discriminazione, ed è esattamente ciò che il report deve mostrare.
+    always = _chain(days, dict.fromkeys(days, 48.0))
+    m = evaluate(
+        aoi_id=AOI,
+        truth=truth,
+        static={cell: StaticFactors(cell_id=cell, landuse_code="312", slope_deg=30.0)},
+        nodes=[NODE],
+        chains=[always],
+        days=days,
+        thresholds=_thresholds(),
+        alert_level=RiskLevel.High,
+        season=(days[0], days[-1]),
+    )
+    assert m.hit_rate == 1.0
+    assert m.base_rate == 1.0
+
+    # Estremo solo nelle 72 h prima: stesso hit rate, ma il metro crolla.
+    focused = _chain(
+        days,
+        {fire - dt.timedelta(days=d): 48.0 for d in range(3)},
+    )
+    m2 = evaluate(
+        aoi_id=AOI,
+        truth=truth,
+        static={cell: StaticFactors(cell_id=cell, landuse_code="312", slope_deg=30.0)},
+        nodes=[NODE],
+        chains=[focused],
+        days=days,
+        thresholds=_thresholds(),
+        alert_level=RiskLevel.High,
+        season=(days[0], days[-1]),
+    )
+    assert m2.hit_rate == 1.0
+    assert m2.base_rate < 0.5
+    # Stesso hit rate, discriminazione molto diversa: è il punto.
+    assert m2.base_rate < m.base_rate
+
+
+async def test_the_base_rate_ignores_the_spin_up_days(reset_db: None, pg_pool: object) -> None:
+    """Lo spin-up cade in primavera, quando il pericolo è basso: includerlo
+    abbasserebbe il metro e gonfierebbe la discriminazione.
+
+    Misurato: includendo i 30 giorni di avviamento il tasso di base della
+    Basilicata 2025 scendeva da 43% a 35%, e la discriminazione saliva da
+    1.82 a 2.27 senza che il modello fosse migliorato di nulla.
+    """
+    cell = f"{AOI}|0|0"
+    fire = dt.date(2026, 8, 10)
+    await _seed({cell: fire})
+    truth = await fetch_burnt_cells(AOI, start=dt.date(2026, 1, 1), end=dt.date(2026, 12, 31))
+
+    days = [fire - dt.timedelta(days=d) for d in range(20, -1, -1)]
+    # Mite nei primi dieci giorni (lo "spin-up"), estremo negli ultimi.
+    chain = _chain(days, dict.fromkeys(days[10:], 48.0))
+    season = (days[10], days[-1])
+
+    with_spinup = evaluate(
+        aoi_id=AOI,
+        truth=truth,
+        static={cell: StaticFactors(cell_id=cell, landuse_code="312", slope_deg=30.0)},
+        nodes=[NODE],
+        chains=[chain],
+        days=days,
+        thresholds=_thresholds(),
+        alert_level=RiskLevel.High,
+        season=(days[0], days[-1]),
+    )
+    season_only = evaluate(
+        aoi_id=AOI,
+        truth=truth,
+        static={cell: StaticFactors(cell_id=cell, landuse_code="312", slope_deg=30.0)},
+        nodes=[NODE],
+        chains=[chain],
+        days=days,
+        thresholds=_thresholds(),
+        alert_level=RiskLevel.High,
+        season=season,
+    )
+    assert season_only.base_rate > with_spinup.base_rate
+    assert season_only.base_rate == 1.0
