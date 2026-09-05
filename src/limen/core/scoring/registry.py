@@ -25,9 +25,9 @@ from dataclasses import dataclass
 from limen.config.settings import ScoringEngineKind, Settings
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
-from limen.core.models.risk import ComponentBreakdown, HazardBreakdown
+from limen.core.models.risk import ComponentBreakdown, HazardBreakdown, WildfireBreakdown
 from limen.core.scoring.base import ScoringEngine
-from limen.core.scoring.regional_thresholds import RegionalThresholds
+from limen.core.scoring.regional_thresholds import HazardThresholds, RegionalThresholds
 
 log = get_logger(__name__)
 
@@ -41,7 +41,23 @@ HazardScoringEngine = ScoringEngine[HazardBreakdown]
 #: coordinates from the settings -- reaching for the global ones inside a
 #: factory would silently discard an injected config, which is how a test
 #: pointed at a missing registry ends up passing for the wrong reason.
-EngineFactory = Callable[["Settings | None", "RegionalThresholds | None"], HazardScoringEngine]
+EngineFactory = Callable[["Settings | None", "HazardThresholds | None"], HazardScoringEngine]
+
+
+#: Config classes are per hazard, but the factory signature cannot be: one
+#: registry holds them all. Each factory narrows to the schema it needs, and
+#: a mismatch is a wiring bug worth a loud failure -- scoring wildfire with
+#: landslide thresholds would be wrong numbers presented as right.
+def _narrow[T: HazardThresholds](
+    thresholds: HazardThresholds | None, expected: type[T], hazard: HazardType
+) -> T | None:
+    if thresholds is None:
+        return None
+    if not isinstance(thresholds, expected):
+        raise TypeError(
+            f"{hazard.value} engine needs {expected.__name__}, got {type(thresholds).__name__}"
+        )
+    return thresholds
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,32 +166,52 @@ def registered_pairs() -> frozenset[tuple[HazardType, ScoringEngineKind]]:
 # ---------------------------------------------------------------------------
 def _landslide_deterministic(
     settings: Settings | None = None,  # noqa: ARG001 — part of the EngineFactory shape
-    thresholds: RegionalThresholds | None = None,
+    thresholds: HazardThresholds | None = None,
 ) -> HazardScoringEngine:
     from limen.core.scoring.engine import MultiFactorScoringEngine
-    from limen.core.scoring.regional_thresholds import load_hazard_thresholds
+    from limen.core.scoring.regional_thresholds import load_regional_thresholds
 
-    return MultiFactorScoringEngine(thresholds or load_hazard_thresholds(HazardType.LANDSLIDE))
+    narrowed = _narrow(thresholds, RegionalThresholds, HazardType.LANDSLIDE)
+    return MultiFactorScoringEngine(narrowed or load_regional_thresholds())
 
 
 def _landslide_ml(
     settings: Settings | None = None,
-    thresholds: RegionalThresholds | None = None,
+    thresholds: HazardThresholds | None = None,
 ) -> HazardScoringEngine:
     # Imported inside the factory: the `ml` dependency group is optional and
     # `from_registry` reaches out to MLflow, so neither cost belongs at import
     # time. A failure here is caught by the resolver, which falls back to V1.
     from limen.config.settings import get_settings
     from limen.core.scoring.ml_engine import MLScoringEngine
-    from limen.core.scoring.regional_thresholds import load_hazard_thresholds
+    from limen.core.scoring.regional_thresholds import load_regional_thresholds
 
     s = settings or get_settings()
+    narrowed = _narrow(thresholds, RegionalThresholds, HazardType.LANDSLIDE)
     return MLScoringEngine.from_registry(
         tracking_uri=s.scoring.mlflow_tracking_uri,
         registered_model=s.scoring.mlflow_registered_model,
         stage=s.scoring.mlflow_model_stage,
-        thresholds=thresholds or load_hazard_thresholds(HazardType.LANDSLIDE),
+        thresholds=narrowed or load_regional_thresholds(),
     )
+
+
+def _wildfire_deterministic(
+    settings: Settings | None = None,  # noqa: ARG001 — part of the EngineFactory shape
+    thresholds: HazardThresholds | None = None,
+) -> HazardScoringEngine:
+    from limen.core.scoring.regional_thresholds import (
+        WildfireThresholds,
+        load_hazard_thresholds,
+    )
+    from limen.core.scoring.wildfire import WildfireScoringEngine
+
+    narrowed = _narrow(thresholds, WildfireThresholds, HazardType.WILDFIRE)
+    if narrowed is None:
+        loaded = load_hazard_thresholds(HazardType.WILDFIRE)
+        narrowed = _narrow(loaded, WildfireThresholds, HazardType.WILDFIRE)
+        assert narrowed is not None  # `load` never returns None
+    return WildfireScoringEngine(narrowed)
 
 
 register(
@@ -189,6 +225,12 @@ register(
     ScoringEngineKind.ML,
     _landslide_ml,
     breakdown=ComponentBreakdown,
+)
+register(
+    HazardType.WILDFIRE,
+    ScoringEngineKind.DETERMINISTIC,
+    _wildfire_deterministic,
+    breakdown=WildfireBreakdown,
 )
 
 

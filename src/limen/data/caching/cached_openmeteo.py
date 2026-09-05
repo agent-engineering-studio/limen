@@ -34,7 +34,11 @@ def _snapshot_key(
     window_start: datetime,
     window_end: datetime,
 ) -> str:
-    return f"meteo:{aoi_id}:{window_start.isoformat()}:{window_end.isoformat()}"
+    # `v2` = the sample shape that carries fire weather (#61). Without a
+    # version in the key, an entry written before those columns existed would
+    # be replayed as a snapshot with no temperature/humidity/wind and the FWI
+    # step would degrade for a whole TTL with nothing saying why.
+    return f"meteo:v2:{aoi_id}:{window_start.isoformat()}:{window_end.isoformat()}"
 
 
 def _api_key(*, aoi_id: str, as_of: date, days: int) -> str:

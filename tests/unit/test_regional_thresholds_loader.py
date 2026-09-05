@@ -97,5 +97,6 @@ def test_hazard_without_a_file_fails_instead_of_borrowing_landslide() -> None:
     from limen.core.models.hazard import HazardType
     from limen.core.scoring.regional_thresholds import load_hazard_thresholds
 
+    # `flood` è l'unico pericolo dell'enum ancora senza YAML (#63).
     with pytest.raises(FileNotFoundError):
-        load_hazard_thresholds(HazardType.WILDFIRE)
+        load_hazard_thresholds(HazardType.FLOOD)
