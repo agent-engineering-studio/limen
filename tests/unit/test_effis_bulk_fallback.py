@@ -174,3 +174,112 @@ async def test_fetch_perimeters_bulk_degrades_on_bad_archive() -> None:
     client = EffisHttpClient()
     features = list(await client.fetch_perimeters_bulk(bulk_url=_BULK_URL))
     assert features == []
+
+
+# ---------------------------------------------------------------------------
+# Il dialetto del servizio vero (correzione dell'accreditamento presunto)
+# ---------------------------------------------------------------------------
+def test_the_client_speaks_mapserver_not_geoserver() -> None:
+    """EFFIS gira su **MapServer**, e per un anno il client gli ha parlato
+    GeoServer.
+
+    Il risultato era che ogni sync tornava a mani vuote, e la conclusione
+    scritta in tre issue era «serve l'accreditamento CEMS». Non era vero: il
+    servizio è pubblico. Il client chiedeva un layer inesistente
+    (`effis:ba.fires`) con un parametro proprietario (`CQL_FILTER`) su un path
+    che va in timeout.
+
+    Questo test blocca le tre cose insieme, perché sbagliarne una sola
+    riporta al silenzio da cui si era partiti.
+    """
+    from limen.integrations.effis.fire_client import (
+        DEFAULT_TYPENAME,
+        DEFAULT_WFS_URL,
+    )
+
+    assert DEFAULT_WFS_URL.endswith("/gwis")
+    assert not DEFAULT_WFS_URL.endswith("/ows")
+    assert DEFAULT_TYPENAME == "nrt.ba.poly"
+
+
+@pytest.mark.asyncio
+async def test_the_request_carries_no_geoserver_vendor_parameters() -> None:
+    """`CQL_FILTER` viene ignorato da MapServer: una finestra temporale
+    espressa così non filtra nulla e nessuno se ne accorge."""
+    import httpx
+    import respx
+
+    from limen.integrations.effis.fire_client import DEFAULT_WFS_URL, EffisHttpClient
+
+    seen: dict[str, str] = {}
+
+    with respx.mock(assert_all_called=False) as mock:
+
+        def _capture(request: httpx.Request) -> httpx.Response:
+            seen.update(dict(request.url.params))
+            return httpx.Response(200, json={"type": "FeatureCollection", "features": []})
+
+        mock.get(url__startswith=DEFAULT_WFS_URL).mock(side_effect=_capture)
+        await EffisHttpClient().fetch_perimeters(
+            bbox=(15.0, 40.0, 16.0, 41.0),
+            start=date(2025, 6, 1),
+            end=date(2025, 9, 30),
+        )
+
+    assert "CQL_FILTER" not in seen
+    assert seen["typename"] == "nrt.ba.poly"
+    # bbox e filter sono mutuamente esclusivi in WFS, e insieme qui chiudono
+    # la connessione: il bbox va sulla rete, le date si applicano in locale.
+    assert "filter" not in seen
+    assert seen["bbox"] == "15.0,40.0,16.0,41.0"
+
+
+@pytest.mark.asyncio
+async def test_dates_are_filtered_locally_and_undated_features_survive() -> None:
+    """Il filtro temporale è locale, e una feature senza data resta.
+
+    Scartarla perderebbe un perimetro reale; conservarla con data nulla la
+    rende invisibile al backtest, che è il comportamento giusto per un dato
+    che c'è ma non si sa quando.
+    """
+    import httpx
+    import respx
+
+    from limen.integrations.effis.fire_client import DEFAULT_WFS_URL, EffisHttpClient
+
+    def feat(fid: str, when: str | None) -> dict[str, object]:
+        props: dict[str, object] = {"id": fid}
+        if when is not None:
+            props["initialdate"] = when
+        return {
+            "type": "Feature",
+            "id": fid,
+            "properties": props,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [[[15.0, 40.0], [15.1, 40.0], [15.1, 40.1], [15.0, 40.0]]],
+            },
+        }
+
+    payload = {
+        "type": "FeatureCollection",
+        "features": [
+            feat("dentro", "2025-07-15 10:00:00"),
+            feat("prima", "2024-08-01 10:00:00"),
+            feat("dopo", "2026-01-05 10:00:00"),
+            feat("senza-data", None),
+        ],
+    }
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get(url__startswith=DEFAULT_WFS_URL).mock(
+            return_value=httpx.Response(200, json=payload)
+        )
+        got = list(
+            await EffisHttpClient().fetch_perimeters(
+                bbox=(15.0, 40.0, 16.0, 41.0),
+                start=date(2025, 6, 1),
+                end=date(2025, 9, 30),
+            )
+        )
+
+    assert {f["id"] for f in got} == {"dentro", "senza-data"}

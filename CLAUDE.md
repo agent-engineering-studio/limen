@@ -90,6 +90,8 @@
 | Geodata image carries no data | The Docker image bundles Python + GDAL/PROJ + tippecanoe + the code. Datasets land in the named PostGIS volume at first `limen geodata init`. Verify with `docker image inspect` — image size ≪ data size. |
 | Geodata never in critical path | The operational API reads pre-computed numeric per-cell features. `limen geodata export-features` ships those across with one upsert per cell. The MCP server is for agents; nothing in the hourly scoring path waits on it. |
 | Geodata is self-contained | `geodata/` is a uv workspace member designed to be extracted into a standalone repo with one `mv`. Nothing in `geodata.*` imports from `limen.*`; Prompt-2 parsers are duplicated in `geodata/parsers.py`. |
+| EFFIS is MapServer, not GeoServer | `maps.effis.emergency.copernicus.eu/gwis` is a **MapServer** CGI, and every GeoServer habit fails differently: `/gwis/ows` hangs (use `/gwis`), a wrong `typeNames` closes the connection mid-response instead of 404ing, `CQL_FILTER` is silently ignored, and `bbox` + `filter` together kill the connection. The layer is `nrt.ba.poly` with `initialdate`/`area`; dates are filtered **client-side** after a bbox request, which is cheap because one AOI's whole history is a single response (Basilicata: 515 perimeters 2012-2026, 305 KB). A sync that returns zero is a client bug, not missing credentials — that mistake cost this project a year of an empty `fire_perimeters` and three issues blocked on an accreditation nobody needed. |
+| A hit rate without a base rate is unreadable | `backtest-wildfire` reports both, plus their ratio. A model that calls every summer day dangerous scores a perfect hit rate while discriminating nothing, and the base rate is what exposes it. Measure it over the **fire season only**, never the spin-up days: including them dropped Basilicata's 2025 base from 43 % to 35 % and inflated the discrimination from 1.82 to 2.27 for free. |
 | Geodata URLs are official | The manifest schema refuses any URL outside `https://idrogeo.isprambiente.it/` by construction. To add a dataset, edit `datasets.yaml` (single source of truth) — no code change required. |
 | MCP refresh is admin-only | The `refresh` tool requires `MCP_ADMIN_TOKEN`. Env var **unset** = refresh disabled (fail-closed). |
 | `quality-local` never on a synchronous path | Colibrì/GLM-5.2 generate in *tens of minutes* (measured: 40 s for 3 tokens). Every `LLM__MODELS__*` role is synchronous — HTTP request, MCP tool call, or a scheduler tick shorter than the response — so mapping one there stalls the hourly sweep silently instead of just being slow. Enforced by `SLOW_GENERATION_MODELS` + a `model_validator` on `LLMSettings`: the process **refuses to start**. See `docs/inference.md`. |
@@ -286,9 +288,11 @@ extension points already:
   `landuse_code` (CORINE) and `slope_deg` (DEM) are unpopulated in most
   deployments, so the terrain term is constant and the wildfire map is
   effectively the FWI map — which is what EFFIS publishes, but not yet
-  territory-modulated risk. And the EFFIS perimeter endpoint answers **403**
-  without accreditation, so `backtest-wildfire` has no ground truth until
-  someone ingests it; the report says so instead of reporting zeros.
+  territory-modulated risk. The EFFIS perimeter service, on the other hand,
+  **needs no credentials** — the earlier conclusion that it required CEMS
+  accreditation was wrong, and the fix was in our own client. Measured on
+  Basilicata against real perimeters: hit rate 79 % against a 43 % base rate
+  in 2025, 100 % against 28 % in 2024.
 - Flood (#63-#64) still has no YAML and no engine.
 - V2 ML scoring engine (drop-in replacement of
   `MultiFactorScoringEngine` consuming the same `CellFeatureBundle`).

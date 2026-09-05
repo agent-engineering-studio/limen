@@ -61,7 +61,14 @@ def _parse_feature(feat: dict[str, Any]) -> FirePerimeter | None:
         log.warning("effis.feature.skip", reason="non-polygon geometry", feat_id=feat_id)
         return None
 
-    fire_date_str = props.get("firedate") or props.get("FIREDATE") or props.get("fire_date")
+    # `initialdate` è il campo del layer `nrt.ba.poly`; gli altri restano per
+    # il fallback bulk, che è un altro dataset con un'altra intestazione.
+    fire_date_str = (
+        props.get("initialdate")
+        or props.get("firedate")
+        or props.get("FIREDATE")
+        or props.get("fire_date")
+    )
     fire_date: date | None = None
     if fire_date_str:
         try:
@@ -69,8 +76,17 @@ def _parse_feature(feat: dict[str, Any]) -> FirePerimeter | None:
         except ValueError:
             log.warning("effis.feature.bad_date", value=fire_date_str, feat_id=feat_id)
 
-    area_ha_raw = props.get("area_ha") or props.get("AREA_HA") or props.get("AREA")
-    area_ha = float(area_ha_raw) if area_ha_raw is not None else None
+    # `area` sul WFS, già in ettari; `area_ha` sui file bulk. Arriva come
+    # stringa, quindi la conversione è esplicita e tollera un valore illeggibile.
+    area_raw = (
+        props.get("area") or props.get("area_ha") or props.get("AREA_HA") or props.get("AREA")
+    )
+    area_ha: float | None = None
+    if area_raw is not None:
+        try:
+            area_ha = float(area_raw)
+        except (TypeError, ValueError):
+            log.warning("effis.feature.bad_area", value=area_raw, feat_id=feat_id)
 
     return FirePerimeter(
         id=str(feat_id),
