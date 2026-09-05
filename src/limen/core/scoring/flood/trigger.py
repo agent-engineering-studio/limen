@@ -49,9 +49,12 @@ def pluvial_trigger(
     ground is sealed whatever the soil under it is doing, so the multiplier
     applies after the damping rather than fighting with it.
 
-    Unknown soil moisture is treated as *neither* dry nor saturated -- the
-    trigger passes through undamped. Guessing dry would suppress a real
-    warning; guessing wet would invent one.
+    Unknown soil moisture is treated as *neither* dry nor saturated: the
+    damping lands halfway between the two extremes the configuration already
+    defines. Skipping the damping entirely would be numerically identical to
+    "fully saturated", the most alarming reading of all -- so a degraded
+    Open-Meteo response would silently raise the trigger across a whole AOI.
+    Guessing dry would suppress a real warning; guessing wet invents one.
     """
     if rain_mm is None:
         return 0.0
@@ -60,11 +63,14 @@ def pluvial_trigger(
     if base <= 0.0:
         return 0.0
 
-    if soil_moisture is not None:
-        # Dry ground absorbs the first rain; saturated ground sheds all of it.
-        wetness = min(soil_moisture / pluvial.wet_soil, 1.0) if pluvial.wet_soil > 0 else 1.0
-        damping = pluvial.dry_soil_factor + (1.0 - pluvial.dry_soil_factor) * wetness
-        base *= damping
+    # Dry ground absorbs the first rain; saturated ground sheds all of it.
+    if soil_moisture is None:
+        wetness = 0.5
+    elif pluvial.wet_soil > 0:
+        wetness = min(soil_moisture / pluvial.wet_soil, 1.0)
+    else:
+        wetness = 1.0
+    base *= pluvial.dry_soil_factor + (1.0 - pluvial.dry_soil_factor) * wetness
 
     if imperviousness is not None:
         multiplier = 1.0 + (imperviousness_cfg.max_multiplier - 1.0) * imperviousness

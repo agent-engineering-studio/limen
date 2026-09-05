@@ -13,8 +13,8 @@ factor in :mod:`limen.core.scoring.flood_forecast`.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timedelta
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -45,6 +45,31 @@ class FloodSignals:
     rain_72h_mm: float | None = None
     river_discharge_ratio: float | None = None
     coastal_surge_norm: float | None = None
+    #: Per-node signals, present only when ``per_node`` was requested. The
+    #: AOI-level scalars above stay for the landslide H component, which has
+    #: always used them; the flood hazard reads these, because a single number
+    #: copied onto every cell of a region is exactly the failure this repo
+    #: already documented for rainfall (13 mm at the Puglia centroid against
+    #: 77 mm at the cells that actually failed).
+    nodes: tuple[tuple[float, float], ...] = ()
+    rain_by_node: tuple[float | None, ...] = ()
+    river_ratio_by_node: tuple[float | None, ...] = ()
+
+
+#: Passo del reticolo su cui i due segnali dell'alluvione sono campionati.
+#: Misurato sulla Basilicata: a 0.25° (~25 km) solo 2 nodi su 35 cadono su un
+#: corso d'acqua modellato da GloFAS, quindi quasi nessuna cella riceverebbe il
+#: segnale fluviale; a 0.1° sono 20 su 176. Più fitto non regge una sola
+#: richiesta — 0.05° fa 677 punti e l'API risponde con qualcosa che non è
+#: JSON — ed è anche il motivo per cui le richieste vanno a lotti.
+_NODE_SPACING_DEG = 0.1
+
+#: Punti per richiesta. Lo stesso limite che usa la griglia di pioggia.
+_GRID_BATCH = 100
+
+#: Come la degradazione condivisa, più `ValueError`: una richiesta troppo
+#: grande risponde con un corpo che non è JSON, e `resp.json()` alza di lì.
+_GRID_DEGRADATION_EXC: tuple[type[BaseException], ...] = (*_DEGRADATION_EXC, ValueError)
 
 
 def _centroid(bbox: tuple[float, float, float, float]) -> tuple[float, float]:
@@ -78,23 +103,65 @@ class OpenMeteoFloodClient:
         payload = resp.json()
         return payload if isinstance(payload, dict) else None
 
-    async def _get_many(self, url: str, params: dict[str, Any], label: str) -> list[dict[str, Any]]:
-        """A multi-coordinate request. Open-Meteo answers with a JSON **array**.
+    async def _get_many(
+        self,
+        url: str,
+        nodes: list[tuple[float, float]],
+        params: dict[str, Any],
+        label: str,
+    ) -> list[dict[str, Any]]:
+        """A multi-coordinate request, in batches. Open-Meteo answers with an array.
 
         Separate from :meth:`_get`, which narrows to ``dict`` and would drop
         the whole response on the floor.
+
+        Batched because the coordinates travel in the query string: 677 points
+        came back as something that was not JSON at all. A failed batch
+        contributes empty dicts rather than shortening the list, so the
+        caller's positional mapping onto nodes stays aligned.
         """
-        try:
-            resp = await fetch_with_retry("GET", url, client=await self._client(), params=params)
-        except _DEGRADATION_EXC as exc:
-            log.warning(
-                "integration.degraded", label=label, error=str(exc), error_type=type(exc).__name__
-            )
-            return []
-        payload = resp.json()
-        if isinstance(payload, list):
-            return [p for p in payload if isinstance(p, dict)]
-        return [payload] if isinstance(payload, dict) else []
+        out: list[dict[str, Any]] = []
+        for i in range(0, len(nodes), _GRID_BATCH):
+            batch = nodes[i : i + _GRID_BATCH]
+            batch_params = {
+                **params,
+                "latitude": ",".join(f"{lat:.4f}" for _, lat in batch),
+                "longitude": ",".join(f"{lon:.4f}" for lon, _ in batch),
+            }
+            try:
+                resp = await fetch_with_retry(
+                    "GET", url, client=await self._client(), params=batch_params
+                )
+                payload = resp.json()
+            except _GRID_DEGRADATION_EXC as exc:
+                # ValueError copre un corpo che non è JSON: una richiesta
+                # sovradimensionata risponde così, e uno sweep deve degradare.
+                log.warning(
+                    "integration.degraded",
+                    label=label,
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                    batch_size=len(batch),
+                )
+                out.extend({} for _ in batch)
+                continue
+            if isinstance(payload, list):
+                points: list[dict[str, Any]] = [p if isinstance(p, dict) else {} for p in payload]
+            elif isinstance(payload, dict):
+                points = [payload]
+            else:
+                points = []
+            if len(points) != len(batch):
+                log.warning(
+                    "openmeteo.flood.batch_size_mismatch",
+                    label=label,
+                    expected=len(batch),
+                    got=len(points),
+                )
+                out.extend({} for _ in batch)
+                continue
+            out.extend(points)
+        return out
 
     async def fetch_signals(
         self,
@@ -102,28 +169,39 @@ class OpenMeteoFloodClient:
         bbox: tuple[float, float, float, float],
         valuation_time: datetime,
         horizon_hours: int = 72,
-        basin_max: bool = False,
+        per_node: bool = False,
     ) -> FloodSignals:
-        """The three signals for an AOI.
+        """The three AOI-level signals, plus per-node ones when asked.
 
-        ``basin_max`` changes only the fluvial term, and exists because the
-        centroid of a region almost never sits on a river GloFAS models: a
-        measurement there reads 0 or nothing, which is fine as an optional
-        bonus to the landslide H component and useless as one of the two
-        triggers of the flood hazard.
+        ``per_node`` exists because both dynamic signals are useless as a
+        single number per region once they *are* the engine. The centroid of
+        an AOI almost never sits on a river GloFAS models (measured: 0.0 for
+        Basilicata), and a centroid rain reading misses the convective cell
+        that actually floods somewhere else.
 
         Off by default **on purpose**: the landslide champion has been scored
-        with the centroid signal, and changing it under the same name would
-        move V1's numbers without a backtest.
+        with the centroid scalars, and changing them under the same names
+        would move V1's numbers without a backtest.
         """
         lon, lat = _centroid(bbox)
-        fluvial = (
-            await self._fluvial_basin_max(bbox) if basin_max else await self._fluvial(lon, lat)
-        )
-        return FloodSignals(
+        signals = FloodSignals(
             rain_72h_mm=await self._pluvial(lon, lat, valuation_time, horizon_hours),
-            river_discharge_ratio=fluvial,
+            river_discharge_ratio=await self._fluvial(lon, lat),
             coastal_surge_norm=await self._coastal(lon, lat),
+        )
+        if not per_node:
+            return signals
+
+        from limen.integrations.openmeteo.grid import build_snapped_nodes
+
+        nodes = build_snapped_nodes(bbox, spacing=_NODE_SPACING_DEG)
+        rain = await self._pluvial_by_node(nodes, valuation_time, horizon_hours)
+        rivers = await self._fluvial_by_node(nodes)
+        return replace(
+            signals,
+            nodes=tuple(nodes),
+            rain_by_node=tuple(rain),
+            river_ratio_by_node=tuple(rivers),
         )
 
     async def _pluvial(
@@ -172,61 +250,98 @@ class OpenMeteoFloodClient:
             return None
         return max(future) / baseline
 
-    async def _fluvial_basin_max(
-        self,
-        bbox: tuple[float, float, float, float],
-        *,
-        spacing: float = 0.25,
-        min_baseline_fraction: float = 0.1,
-    ) -> float | None:
-        """The worst discharge ratio among the AOI's *real* rivers, in one request.
+    async def _pluvial_by_node(
+        self, nodes: list[tuple[float, float]], t0: datetime, horizon_hours: int
+    ) -> list[float | None]:
+        """Forecast rain over ``horizon_hours`` at each node, in one request.
 
-        Probes a lattice over the bbox. "Is the region's main river in flood?"
-        is the question a basin-scale signal can honestly answer; the per-cell
-        answer needs river points joined to the grid at bootstrap, which is a
-        heavier job and belongs with EFAS.
+        Hour-bounded, not day-bounded: summing whole calendar days from
+        ``t0.date()`` would stretch a 72 h window to as much as 96 h, and the
+        thresholds it feeds are stated per window.
+        """
+        end = t0 + timedelta(hours=horizon_hours)
+        results = await self._get_many(
+            FORECAST_URL,
+            nodes,
+            {
+                "hourly": "precipitation",
+                "start_date": t0.date().isoformat(),
+                "end_date": end.date().isoformat(),
+                "timezone": "UTC",
+            },
+            "openmeteo.flood.pluvial_grid",
+        )
+        if len(results) != len(nodes):
+            return [None] * len(nodes)
+        out: list[float | None] = []
+        for point in results:
+            hourly = point.get("hourly") or {}
+            stamps = hourly.get("time") if isinstance(hourly.get("time"), list) else []
+            values = _floats(hourly.get("precipitation"))
+            if not stamps or len(values) != len(stamps):
+                out.append(sum(values) if values else None)
+                continue
+            total = 0.0
+            seen = False
+            for stamp, mm in zip(stamps, values, strict=False):
+                when = datetime.fromisoformat(str(stamp))
+                if when.tzinfo is None:
+                    when = when.replace(tzinfo=UTC)
+                if t0 <= when <= end:
+                    total += mm
+                    seen = True
+            out.append(total if seen else None)
+        return out
+
+    async def _fluvial_by_node(
+        self,
+        nodes: list[tuple[float, float]],
+        *,
+        min_baseline_fraction: float = 0.1,
+    ) -> list[float | None]:
+        """Discharge ratio at each node, ``None`` where there is no river.
 
         The ratio is pathological on trickles: a watercourse averaging 0.01
-        m³/s that peaks at 0.6 scores 62, and a plain maximum over the lattice
-        picks exactly those. Measured on Basilicata: max-over-everything gave
-        62.0, which is a ditch, not a flood. So only points whose trailing
-        baseline is at least ``min_baseline_fraction`` of the AOI's largest
-        count as rivers -- keeping tributaries, dropping ditches.
+        m³/s that peaks at 0.6 scores 62. Measured on Basilicata, a plain
+        maximum over the lattice gave 62.0 where the real rivers sat at 1.25.
+        So a node counts as carrying a river only if its trailing baseline is
+        at least ``min_baseline_fraction`` of the AOI's largest -- keeping
+        tributaries, dropping ditches -- and the others report ``None``.
 
-        ``None`` when no probe finds a river: an AOI with no modelled
-        watercourse has no fluvial risk, which is different from a river
-        running low.
+        Per node and not an AOI-wide maximum: one basin in flood must not push
+        cells in a different catchment past the alert gate.
         """
-        from limen.integrations.openmeteo.grid import build_snapped_nodes
-
-        nodes = build_snapped_nodes(bbox, spacing=spacing)
         results = await self._get_many(
             FLOOD_URL,
+            nodes,
             {
-                "latitude": ",".join(f"{lat:.4f}" for _, lat in nodes),
-                "longitude": ",".join(f"{lon:.4f}" for lon, _ in nodes),
                 "daily": "river_discharge",
                 "past_days": 31,
                 "forecast_days": 7,
                 "timezone": "UTC",
             },
-            "openmeteo.flood.fluvial_basin",
+            "openmeteo.flood.fluvial_grid",
         )
-        measured: list[tuple[float, float]] = []  # (baseline, ratio)
+        if len(results) != len(nodes):
+            return [None] * len(nodes)
+        measured: list[tuple[float, float] | None] = []
         for point in results:
             vals = _floats((point.get("daily") or {}).get("river_discharge"))
             if len(vals) < 8:
+                measured.append(None)
                 continue
             past, future = vals[:-7], vals[-7:]
             baseline = sum(past) / len(past) if past else 0.0
             if baseline <= 0.0 or not future:
+                measured.append(None)
                 continue
             measured.append((baseline, max(future) / baseline))
-        if not measured:
-            return None
-        floor = max(b for b, _ in measured) * min_baseline_fraction
-        rivers = [ratio for baseline, ratio in measured if baseline >= floor]
-        return max(rivers) if rivers else None
+
+        baselines = [m[0] for m in measured if m is not None]
+        if not baselines:
+            return [None] * len(nodes)
+        floor = max(baselines) * min_baseline_fraction
+        return [m[1] if m is not None and m[0] >= floor else None for m in measured]
 
     async def _coastal(self, lon: float, lat: float) -> float | None:
         """Marine wave height normalised; None for inland points (no marine data)."""

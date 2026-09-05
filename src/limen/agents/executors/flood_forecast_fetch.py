@@ -26,7 +26,7 @@ class _FloodClient(Protocol):
         bbox: tuple[float, float, float, float],
         valuation_time: datetime,
         horizon_hours: int = 72,
-        basin_max: bool = False,
+        per_node: bool = False,
     ) -> FloodSignals: ...
 
 
@@ -38,16 +38,16 @@ class FloodForecastFetchExecutor(Executor):
         *,
         client: _FloodClient | None = None,
         horizon_hours: int = 72,
-        basin_max: bool = False,
+        per_node: bool = False,
     ) -> None:
         super().__init__(name="FloodForecastFetch")
-        self._client: _FloodClient = client or OpenMeteoFloodClient()
+        self._client: _FloodClient = client if client is not None else OpenMeteoFloodClient()
         self._horizon_hours = horizon_hours
-        # Il ramo fluviale campionato sul bacino invece che sul centroide.
-        # Acceso per il pericolo alluvione, dove è metà del motore; spento per
-        # le frane, dove è un bonus opzionale al componente H e cambiarlo
-        # sposterebbe i numeri del campione V1 senza un backtest.
-        self._basin_max = basin_max
+        # I due segnali campionati per nodo invece che al centroide dell'AOI.
+        # Acceso per il pericolo alluvione, dove sono il motore; spento per le
+        # frane, dove il centroide alimenta un bonus opzionale al componente H
+        # e cambiarlo sposterebbe i numeri del campione V1 senza un backtest.
+        self._per_node = per_node
 
     @handler
     async def run(self, ctx: MonitoringContext) -> MonitoringContext:
@@ -58,7 +58,7 @@ class FloodForecastFetchExecutor(Executor):
             bbox=ctx.bbox,
             valuation_time=ctx.valuation_time,
             horizon_hours=self._horizon_hours,
-            basin_max=self._basin_max,
+            per_node=self._per_node,
         )
         log.info(
             "executor.flood_forecast.done",
@@ -66,10 +66,15 @@ class FloodForecastFetchExecutor(Executor):
             rain_72h_mm=sig.rain_72h_mm,
             river_discharge_ratio=sig.river_discharge_ratio,
             coastal_surge_norm=sig.coastal_surge_norm,
-            basin_max=self._basin_max,
+            per_node=self._per_node,
+            nodes=len(sig.nodes),
+            nodes_with_river=sum(1 for r in sig.river_ratio_by_node if r is not None),
         )
         return ctx.with_update(
             flood_forecast_rain_72h_mm=sig.rain_72h_mm,
             river_discharge_ratio=sig.river_discharge_ratio,
             coastal_surge_norm=sig.coastal_surge_norm,
+            flood_nodes=sig.nodes,
+            flood_rain_by_node=sig.rain_by_node,
+            flood_river_ratio_by_node=sig.river_ratio_by_node,
         )

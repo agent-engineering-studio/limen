@@ -110,13 +110,15 @@ def test_a_hazard_without_its_yaml_is_refused_at_build_time(
     e tre ce l'hanno, quindi l'assenza si simula sul risolutore di percorso.
     """
     key = (HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
+    # Lo snapshot va preso **prima** della sostituzione: catturarlo dopo
+    # rimetterebbe lo stub come motore flood permanente per tutta la sessione.
+    original = _REGISTRY[key]
     register(
         *key,
         lambda _s, t: MultiFactorScoringEngine(t or load_regional_thresholds()),
         breakdown=ComponentBreakdown,
         replace=True,
     )
-    original = _REGISTRY[key]
     _missing_thresholds(monkeypatch)
     try:
         with pytest.raises(HazardNotScorableError, match="no thresholds file"):

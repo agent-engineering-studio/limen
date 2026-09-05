@@ -161,12 +161,15 @@ def test_a_new_hazard_only_needs_a_registration(fake_flood_registered: None) -> 
     assert scored.model_version == "fake-flood-v1"
 
 
-def test_registration_round_trip_leaves_no_residue() -> None:
+def test_registration_round_trip_leaves_no_residue(flood_unregistered: None) -> None:
     """Il registry è stato globale di processo: una registrazione dimenticata
-    falserebbe ogni test successivo della sessione. Indipendente dall'ordine,
-    perché registra e ripulisce da sé."""
+    falserebbe ogni test successivo della sessione.
+
+    La fixture toglie e rimette il motore vero, così il test resta
+    indipendente dall'ordine senza lasciare residui — che è esattamente ciò
+    che verifica.
+    """
     key = (HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
-    unregister(*key)
     assert not is_registered(*key)
     register(*key, lambda _s, _t: _FakeFloodEngine(), breakdown=_FakeFloodBreakdown)
     try:

@@ -14,7 +14,6 @@ from datetime import UTC, date, datetime, timedelta
 from limen.agents.executors import (
     AreaResolverExecutor,
     FireCheckExecutor,
-    FloodForecastFetchExecutor,
     FwiUpdateExecutor,
     MeteoFetchExecutor,
     RiskScoringExecutor,
@@ -22,6 +21,7 @@ from limen.agents.executors import (
     StaticFactorsExecutor,
 )
 from limen.agents.workflow_runtime.builder import WorkflowBuilder
+from limen.agents.workflows.main_workflow import _flood_signals_step
 from limen.config.settings import Settings, get_settings
 from limen.core.features.assembler import assemble_bundles
 from limen.core.logging import get_logger
@@ -99,7 +99,7 @@ async def run_forecast(
     # Come nello sweep orario: opzionale per le frane, obbligatorio per
     # l'alluvione — sono i suoi due trigger.
     if settings.enable_flood_forecast or hazard is HazardType.FLOOD:
-        builder = builder.add(FloodForecastFetchExecutor(basin_max=hazard is HazardType.FLOOD))
+        builder = builder.add(_flood_signals_step(hazard))
     # Senza questo passo la catena FWI non esisterebbe alla data prevista e
     # ogni cella incendio uscirebbe a zero: previsione sempre vuota, in
     # silenzio. Lo step cammina la catena fino al giorno chiesto e **non**

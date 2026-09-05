@@ -25,15 +25,23 @@ susceptibility:
   floor: 0.05
 
 pluvial:
-  # Soglia intensità-durata per l'allagamento locale. Stessa meccanica della
-  # soglia di Caine e numeri suoi: la pioggia che satura un versante in due
-  # giorni non è quella che manda in crisi una caditoia in un'ora.
+  # Soglia intensità-durata per l'allagamento. Stessa meccanica della soglia
+  # di Caine e numeri suoi: la pioggia che satura un versante non è quella
+  # che riempie un alveo.
   #
-  # 40 mm/24 h è l'ordine di grandezza sotto cui il drenaggio urbano italiano
-  # regge; 150 mm/24 h è il nubifragio che lo travolge ovunque.
-  threshold_mm:  40.0
-  saturation_mm: 150.0
-  window_hours:  24
+  # **La finestra è 72 h e i numeri sono per 72 h.** Non è un dettaglio: il
+  # segnale disponibile è l'accumulo previsto a 72 h (`DynamicInputs.
+  # flood_forecast_rain_72h_mm`, condiviso con il componente H delle frane), e
+  # confrontarlo con soglie calibrate su 24 h farebbe scattare il trigger su un
+  # autunno normale. Il workflow legge `window_hours` e va a prendere
+  # esattamente quella finestra, così le due cose non possono divergere.
+  #
+  # 80 mm/72 h è l'ordine di grandezza sotto cui il reticolo italiano regge;
+  # 250 mm/72 h è l'evento che lo travolge — la scala degli episodi che
+  # producono le esondazioni mappate dal mosaico.
+  threshold_mm:  80.0
+  saturation_mm: 250.0
+  window_hours:  72
 
   # Suolo già saturo ⇒ la stessa pioggia scorre invece di infiltrarsi.
   wet_soil: 0.35

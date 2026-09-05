@@ -164,25 +164,33 @@ def test_dry_soil_damps_the_same_rain() -> None:
     assert 0.0 < dry < wet
 
 
-def test_unknown_soil_moisture_neither_damps_nor_amplifies() -> None:
+def test_unknown_soil_moisture_sits_between_dry_and_saturated() -> None:
     """Indovinare "asciutto" sopprimerebbe un'allerta vera, indovinare
-    "bagnato" ne inventerebbe una."""
+    "bagnato" ne inventerebbe una.
+
+    Saltare del tutto lo smorzamento è numericamente identico a "suolo
+    saturo", cioè la lettura più allarmante: una risposta Open-Meteo degradata
+    alzerebbe il trigger su un'intera AOI senza che nulla lo dicesse. Lo
+    smorzamento per l'ignoto sta a metà fra i due estremi che la
+    configurazione già definisce.
+    """
     t = _thresholds()
-    unknown = pluvial_trigger(
-        100.0,
-        soil_moisture=None,
-        imperviousness=None,
-        pluvial=t.pluvial,
-        imperviousness_cfg=t.imperviousness,
-    )
-    saturated = pluvial_trigger(
-        100.0,
-        soil_moisture=t.pluvial.wet_soil,
-        imperviousness=None,
-        pluvial=t.pluvial,
-        imperviousness_cfg=t.imperviousness,
-    )
-    assert unknown == saturated
+
+    def trigger(soil: float | None) -> float:
+        return pluvial_trigger(
+            200.0,
+            soil_moisture=soil,
+            imperviousness=None,
+            pluvial=t.pluvial,
+            imperviousness_cfg=t.imperviousness,
+        )
+
+    dry = trigger(0.0)
+    unknown = trigger(None)
+    saturated = trigger(t.pluvial.wet_soil)
+
+    assert dry < unknown < saturated
+    assert unknown == pytest.approx((dry + saturated) / 2.0)
 
 
 def test_sealed_ground_amplifies_only_the_pluvial_branch() -> None:
@@ -262,3 +270,79 @@ def test_every_enum_hazard_now_has_a_schema_and_an_engine() -> None:
     for hazard in HazardType:
         assert hazard in SCHEMA_BY_HAZARD, hazard
         check_scorable(hazard)
+
+
+# ---------------------------------------------------------------------------
+# I segnali arrivano per nodo, non uno per AOI
+# ---------------------------------------------------------------------------
+def test_each_cell_reads_the_signals_of_its_nearest_node() -> None:
+    """Un numero solo copiato su ogni cella di una regione è l'errore che
+    questo repo documenta già per la pioggia: 13 mm al centroide della Puglia
+    contro 77 mm sulle celle che avevano davvero ceduto.
+
+    Per l'alluvione è peggio, perché i due segnali *sono* il motore: un bacino
+    in piena spingerebbe oltre la soglia di allerta celle di un bacino
+    diverso.
+    """
+    from limen.core.features.assembler import assemble_bundles
+    from limen.core.models.context import MonitoringContext
+
+    ctx = MonitoringContext(
+        aoi_id="aoi",
+        hazard_type=HazardType.FLOOD,
+        valuation_time=dt.datetime(2026, 11, 3, 12, tzinfo=dt.UTC),
+        cell_ids=("ovest", "est"),
+        cell_centroids={"ovest": (15.0, 41.0), "est": (17.0, 41.0)},
+        # Il nodo ovest è in piena, quello est asciutto.
+        flood_nodes=((15.0, 41.0), (17.0, 41.0)),
+        flood_rain_by_node=(300.0, 0.0),
+        flood_river_ratio_by_node=(9.0, None),
+        # Gli scalari di AOI restano quelli storici e non devono vincere.
+        flood_forecast_rain_72h_mm=0.0,
+        river_discharge_ratio=1.0,
+    )
+    by_cell = {b.cell_id: b.dynamic for b in assemble_bundles(ctx)}
+
+    assert by_cell["ovest"].flood_forecast_rain_72h_mm == 300.0
+    assert by_cell["ovest"].river_discharge_ratio == 9.0
+    assert by_cell["est"].flood_forecast_rain_72h_mm == 0.0
+    # Nessun fiume su quel nodo: `None`, non il rapporto del vicino.
+    assert by_cell["est"].river_discharge_ratio is None
+
+
+def test_without_the_grid_the_cells_fall_back_to_the_aoi_scalars() -> None:
+    """Il workflow frane non popola la griglia: lì i due segnali restano il
+    bonus opzionale al componente H che sono sempre stati, e i punteggi del
+    campione V1 non si muovono."""
+    from limen.core.features.assembler import assemble_bundles
+    from limen.core.models.context import MonitoringContext
+
+    ctx = MonitoringContext(
+        aoi_id="aoi",
+        valuation_time=dt.datetime(2026, 11, 3, 12, tzinfo=dt.UTC),
+        cell_ids=("c",),
+        cell_centroids={"c": (15.0, 41.0)},
+        flood_forecast_rain_72h_mm=42.0,
+        river_discharge_ratio=1.7,
+    )
+    dyn = assemble_bundles(ctx)[0].dynamic
+    assert dyn.flood_forecast_rain_72h_mm == 42.0
+    assert dyn.river_discharge_ratio == 1.7
+
+
+def test_the_configured_rain_window_is_the_one_fetched() -> None:
+    """La soglia dichiara una finestra; lo step va a prendere quella.
+
+    Confrontare 72 h di accumulo con una soglia calibrata su 24 h farebbe
+    scattare il trigger su un autunno normale — e `window_hours` sarebbe
+    configurazione validata, pubblicata nella scheda del modello, e mai letta.
+    """
+    from limen.agents.workflows.main_workflow import _flood_signals_step
+
+    step = _flood_signals_step(HazardType.FLOOD)
+    assert step._horizon_hours == _thresholds().pluvial.window_hours
+    assert step._per_node is True
+
+    # Per le frane resta il default storico.
+    landslide = _flood_signals_step(HazardType.LANDSLIDE)
+    assert landslide._per_node is False
