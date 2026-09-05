@@ -14,7 +14,7 @@ so:
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Generic, Literal, TypeVar
 
@@ -121,6 +121,11 @@ class DynamicInputs(_Frozen):
     coastal_surge_norm: float | None = Field(default=None, ge=0.0, le=1.0)
     seismic_history: tuple[SeismicHistoryEvent, ...] = ()
     months_since_fire: float | None = Field(default=None, ge=0.0)
+    # Fase 2a (#61) — i sei numeri della catena FWI per questa cella, già
+    # avanzati al giorno di valutazione dallo step FwiUpdate. Assente sulle
+    # celle senza stato ricorsivo: il motore incendio lo dichiara invece di
+    # inventare un indice da uno stato che non c'è.
+    fire_weather: FireWeatherState | None = None
     # V1.5 — per-cell in-situ aggregate. Absent on cells without sensors;
     # the engine then runs the pure V1 path for that cell.
     sensor_features: SensorFeatures | None = None
@@ -179,6 +184,26 @@ class KinematicBreakdown(_Frozen):
     hard_escalation: bool = False
 
 
+class FireWeatherState(_Frozen):
+    """La catena FWI di una cella in un giorno (Van Wagner 1987).
+
+    Input del motore incendio, non output: i tre codici ricorsivi vivono in
+    `fwi_state` e attraversano i riavvii, e questa è la loro lettura del
+    giorno insieme ai tre indici derivati.
+    """
+
+    day: date
+    ffmc: float = Field(..., ge=0.0, le=101.0)
+    dmc: float = Field(..., ge=0.0)
+    dc: float = Field(..., ge=0.0)
+    isi: float = Field(..., ge=0.0)
+    bui: float = Field(..., ge=0.0)
+    fwi: float = Field(..., ge=0.0)
+    #: Giorni consecutivi di catena alle spalle. Sotto lo spin-up i codici
+    #: non sono ancora significativi e il motore lo segnala.
+    chain_days: int = Field(default=0, ge=0)
+
+
 class HazardBreakdown(_Frozen):
     """Base of every per-hazard breakdown.
 
@@ -218,6 +243,28 @@ class ComponentBreakdown(HazardBreakdown):
     static_terms: StaticBreakdown
     meteo_terms: MeteoBreakdown
     kinematic_terms: KinematicBreakdown | None = None
+
+
+class WildfireBreakdown(HazardBreakdown):
+    """Componenti del pericolo incendio (#61).
+
+    Nessuna sovrapposizione con `ComponentBreakdown`: `fwi` è meteo del
+    giorno, `fuel` è copertura del suolo, `slope` è morfologia. Chiamarli
+    S/M/E sarebbe una coincidenza di lettere, non di significato.
+    """
+
+    hazard_type: Literal[HazardType.WILDFIRE] = HazardType.WILDFIRE
+
+    fwi_norm: float = Field(..., ge=0.0, le=1.0)
+    fuel: float = Field(..., ge=0.0, le=1.0)
+    slope: float = Field(..., ge=0.0, le=1.0)
+
+    #: La catena grezza, per verificabilità: un operatore che contesta un
+    #: punteggio deve poter risalire ai sei numeri di Van Wagner.
+    fire_weather: FireWeatherState | None = None
+    #: Vero quando la catena non ha ancora abbastanza giorni alle spalle.
+    #: Il punteggio esiste comunque, ma va letto sapendolo.
+    spinup: bool = False
 
 
 #: Covariant because :class:`RiskScore` is frozen: a
@@ -262,6 +309,7 @@ __all__: Sequence[str] = (
     "CellFeatureBundle",
     "ComponentBreakdown",
     "DynamicInputs",
+    "FireWeatherState",
     "HazardBreakdown",
     "KinematicBreakdown",
     "MeteoBreakdown",
@@ -273,4 +321,5 @@ __all__: Sequence[str] = (
     "SensorFeatures",
     "StaticBreakdown",
     "StaticFactors",
+    "WildfireBreakdown",
 )

@@ -10,9 +10,18 @@ named after the enum value, and the loader resolves them via
 wheel, container). An explicit override path may be passed for tests or
 environment-specific calibrations.
 
-The schema here describes the **landslide** engine. Fase 2 will grow a common
-base for flood and wildfire; until a second hazard exists that abstraction
-would be guesswork.
+Each hazard has its **own schema**, selected by :data:`SCHEMA_BY_HAZARD`.
+:class:`HazardThresholds` holds only what every danger has -- a version, five
+class cutoffs, a civil-protection mapping and the alert-priority knob;
+:class:`RegionalThresholds` adds the landslide blocks (S/M/E/F/H/K, Caine,
+seismic decay, post-fire) and :class:`WildfireThresholds` the FWI ones. They
+share no scoring block because they share no physics: a Caine rainfall
+threshold means nothing to a fire, and a drought code means nothing to a
+slope.
+
+A surface that must work for any hazard -- the legend, the alert priority --
+types against the base and asks for :meth:`HazardThresholds.model_card`
+rather than reaching for blocks only one hazard has.
 """
 
 from __future__ import annotations
@@ -372,10 +381,34 @@ class PcAlertMapping(_StrictModel):
         return str(getattr(self, key, "verde"))
 
 
-class RegionalThresholds(_StrictModel):
-    """Top-level config object — strict validation, immutable."""
+class HazardThresholds(_StrictModel):
+    """What every hazard's configuration has, whatever the danger is.
+
+    A score in [0, 1], five classes, a colour for the civil-protection scale,
+    and a way to rank which alerts matter more. Everything else is physics,
+    and physics is per hazard.
+    """
 
     model_version: str = Field(..., min_length=1)
+    classes: ClassCutoffs
+    # Alert-priority knob (not scoring) — older YAMLs without it validate.
+    exposure: ExposureBlock = Field(default_factory=lambda: ExposureBlock())
+    # Optional presentational block — older YAMLs without it validate.
+    pc_alert: PcAlertMapping = Field(default_factory=lambda: PcAlertMapping())
+
+    def model_card(self) -> dict[str, Any]:
+        """The versioned numbers the public "how it works" page draws.
+
+        Lives here so the API stays free of scoring knowledge: an endpoint
+        that reached into ``.weights`` would have to grow a branch per hazard,
+        and would break the moment a hazard has no such block.
+        """
+        return {}
+
+
+class RegionalThresholds(HazardThresholds):
+    """Landslide configuration — strict validation, immutable."""
+
     weights: TopWeights
     static: StaticBlock
     meteo: MeteoBlock
@@ -396,13 +429,195 @@ class RegionalThresholds(_StrictModel):
     # V1.5: optional. Older YAMLs without a `kinematic` block still
     # validate; K simply stays inactive everywhere.
     kinematic: KinematicBlock | None = None
-    classes: ClassCutoffs
-    # Alert-priority knob (not scoring) — older YAMLs without it validate.
-    exposure: ExposureBlock = Field(default_factory=lambda: ExposureBlock())
-    # Optional presentational block — older YAMLs without it validate.
-    pc_alert: PcAlertMapping = Field(default_factory=lambda: PcAlertMapping())
     target_distribution: TargetDistribution
     calibration: CalibrationBlock
+
+    def model_card(self) -> dict[str, Any]:
+        return {
+            "weights": {
+                "static": self.weights.static,
+                "meteo": self.weights.meteo,
+                "seismic": self.weights.seismic,
+                "fire": self.weights.fire,
+                "hydrology": self.weights.hydrology,
+            },
+            "meteo_weights": {
+                "caine": self.meteo.weights.caine,
+                "api": self.meteo.weights.api,
+                "soil": self.meteo.weights.soil,
+            },
+            "caine": {
+                "macroregions": {
+                    name: {"alpha": mr.alpha, "beta": mr.beta}
+                    for name, mr in self.caine.macroregions.items()
+                },
+            },
+            "api": {
+                "sigmoid_sigma_mm": self.api.sigmoid_sigma_mm,
+                "baseline_fallback_mm": self.api.baseline.fallback_mm,
+            },
+            "soil": {
+                "sigmoid_center": self.soil.sigmoid_center,
+                "sigmoid_steepness": self.soil.sigmoid_steepness,
+            },
+            "seismic": {
+                "tau_days": self.seismic.tau_days,
+                "pga_threshold_g": self.seismic.pga_threshold_g,
+                "pga_scale_g": self.seismic.pga_scale_g,
+            },
+            "post_fire": {
+                "peak_months": self.post_fire.peak_months,
+                "curve_denominator": self.post_fire.curve_denominator,
+                "window_months_max": self.post_fire.window_months_max,
+            },
+        }
+
+
+# ---------------------------------------------------------------------------
+# Wildfire (#61)
+# ---------------------------------------------------------------------------
+class FwiBlock(_StrictModel):
+    """Everything the FWI chain needs that a deployment may legitimately set.
+
+    Van Wagner's own coefficients are *not* here: they are the equations, not
+    a calibration, and putting them in YAML would invite someone to "tune" a
+    published standard. What is here is the starting point of the recursive
+    codes and the latitude-dependent day-length tables.
+    """
+
+    ffmc_start: float = Field(..., ge=0.0, le=101.0)
+    dmc_start: float = Field(..., ge=0.0)
+    dc_start: float = Field(..., ge=0.0)
+    #: Twelve monthly factors, January first (Van Wagner Table 2, 46°N).
+    day_length_dmc: tuple[float, ...]
+    #: Twelve monthly factors, January first (Van Wagner Table 3).
+    day_length_dc: tuple[float, ...]
+    #: FWI value mapped to a normalised 1.0. EFFIS calls ≥ 50 "extreme"; above
+    #: it the index keeps climbing but the operational answer stops changing.
+    normalisation_max: float = Field(..., gt=0.0)
+    #: Days of spin-up below which the codes are not yet meaningful. The
+    #: engine still scores, but flags the breakdown so nobody reads a
+    #: three-day-old chain as a seasoned one.
+    spinup_days: int = Field(..., ge=0)
+    #: Longest interruption a chain survives. Beyond it the stored state is a
+    #: fiction -- carrying a code across three weeks of missing weather as if
+    #: the days were consecutive is worse than restarting from the seed and
+    #: saying so. Well under the DC's ~52-day memory, so a short outage still
+    #: keeps the drought signal it took weeks to build.
+    max_gap_days: int = Field(..., ge=1)
+    #: Weather-node grid step, in degrees. It is the key of `fwi_state`, so
+    #: changing it starts fresh chains and restarts the spin-up: a
+    #: configuration decision, not a per-run knob.
+    node_spacing_deg: float = Field(..., gt=0.0, le=5.0)
+
+    # YAML has no tuple, and the schema is in strict mode: coerce before
+    # validation so the parsed table stays immutable like every other block.
+    @field_validator("day_length_dmc", "day_length_dc", mode="before")
+    @classmethod
+    def _twelve_months(cls, v: object) -> object:
+        if isinstance(v, list):
+            v = tuple(v)
+        if isinstance(v, tuple) and len(v) != 12:
+            raise ValueError(f"day-length tables need 12 monthly entries, got {len(v)}")
+        return v
+
+
+class FuelBlock(_StrictModel):
+    """CORINE Land Cover class → flammability in [0, 1].
+
+    Keyed by CLC code prefix, longest match wins, so ``312`` (coniferous
+    forest) can differ from the ``31`` it lives under. A cell whose land cover
+    is unknown gets ``default``, not zero: absent data must not read as
+    "cannot burn".
+    """
+
+    default: float = Field(..., ge=0.0, le=1.0)
+    by_clc_prefix: dict[str, float] = Field(default_factory=dict)
+
+    @field_validator("by_clc_prefix")
+    @classmethod
+    def _in_unit_interval(cls, v: dict[str, float]) -> dict[str, float]:
+        for code, value in v.items():
+            if not 0.0 <= value <= 1.0:
+                raise ValueError(f"fuel.by_clc_prefix[{code}] must be in [0, 1], got {value}")
+        return v
+
+    def for_code(self, landuse_code: str | None) -> float:
+        """Flammability for a CLC code, longest prefix wins."""
+        if not landuse_code:
+            return self.default
+        matches = [p for p in self.by_clc_prefix if landuse_code.startswith(p)]
+        if not matches:
+            return self.default
+        return self.by_clc_prefix[max(matches, key=len)]
+
+
+class WildfireWeights(_StrictModel):
+    """How the terrain modulates the weather. Must sum to 1.
+
+    These weight the *terrain* factor that multiplies the FWI term, so a cell
+    with the maximum of every one of them scores exactly its normalised FWI.
+    That is what keeps the class cutoffs readable as EFFIS danger bands.
+    """
+
+    #: Weight given to nothing in particular -- the share of the danger a cell
+    #: carries because fire arrives from outside it. It is why bare rock in
+    #: extreme fire weather is not zero.
+    base: float = Field(..., ge=0.0, le=1.0)
+    fuel: float = Field(..., ge=0.0, le=1.0)
+    slope: float = Field(..., ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _sum_to_one(self) -> WildfireWeights:
+        total = self.base + self.fuel + self.slope
+        if abs(total - 1.0) > 1e-9:
+            raise ValueError(f"wildfire weights must sum to 1, got {total}")
+        return self
+
+
+class SlopeBlock(_StrictModel):
+    """Slope amplification: fire climbs, so steepness raises the rate of spread."""
+
+    #: Degrees mapped to a normalised 1.0. Above ~35° Mediterranean slopes are
+    #: rock more often than fuel, so the curve saturating there is physical.
+    saturation_deg: float = Field(..., gt=0.0, le=90.0)
+
+
+class WildfireThresholds(HazardThresholds):
+    """Wildfire configuration (#61).
+
+    Shares nothing with the landslide schema beyond the base: the score is
+    ``FWI × fuel × slope``, not S/M/E/F/H, so a common block would be a
+    coincidence of names rather than of meaning.
+    """
+
+    weights: WildfireWeights
+    fwi: FwiBlock
+    fuel: FuelBlock
+    slope: SlopeBlock
+    calibration: CalibrationBlock | None = None
+
+    def model_card(self) -> dict[str, Any]:
+        return {
+            "weights": {
+                "base": self.weights.base,
+                "fuel": self.weights.fuel,
+                "slope": self.weights.slope,
+            },
+            "fwi": {
+                "normalisation_max": self.fwi.normalisation_max,
+                "spinup_days": self.fwi.spinup_days,
+            },
+            "slope": {"saturation_deg": self.slope.saturation_deg},
+        }
+
+
+#: Which schema validates which hazard's YAML. Adding a hazard is an entry
+#: here plus the file -- the loader has no branch of its own.
+SCHEMA_BY_HAZARD: dict[HazardType, type[HazardThresholds]] = {
+    HazardType.LANDSLIDE: RegionalThresholds,
+    HazardType.WILDFIRE: WildfireThresholds,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -419,32 +634,50 @@ def _coerce_class_ranges(raw: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _schema_for(hazard: HazardType) -> type[HazardThresholds]:
+    try:
+        return SCHEMA_BY_HAZARD[hazard]
+    except KeyError:
+        raise FileNotFoundError(
+            f"no thresholds schema registered for hazard {hazard.value!r}"
+        ) from None
+
+
 def load_hazard_thresholds(
     hazard: HazardType = DEFAULT_HAZARD, path: Path | str | None = None
-) -> RegionalThresholds:
-    """Load + validate one hazard's YAML.
+) -> HazardThresholds:
+    """Load + validate one hazard's YAML with that hazard's own schema.
 
     ``path`` defaults to the packaged file for ``hazard``. Passing an explicit
     path bypasses the cache, so tests can swap configurations without state
     leakage.
+
+    Returns the **base** type. A caller that needs landslide blocks calls
+    :func:`load_regional_thresholds`, which is typed for them: widening the
+    return here and narrowing at each site would push an ``isinstance`` into
+    every consumer for no gain.
     """
     if path is None:
         return _load_cached(hazard)
-    raw_path = Path(path)
-    text = raw_path.read_text(encoding="utf-8")
-    raw = yaml.safe_load(text) or {}
-    return RegionalThresholds.model_validate(_coerce_class_ranges(raw))
+    raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    return _schema_for(hazard).model_validate(_coerce_class_ranges(raw))
 
 
 def load_regional_thresholds(path: Path | str | None = None) -> RegionalThresholds:
-    """Landslide thresholds. Thin wrapper kept for the existing call sites."""
-    return load_hazard_thresholds(DEFAULT_HAZARD, path)
+    """Landslide thresholds, typed for the landslide engine."""
+    loaded = load_hazard_thresholds(DEFAULT_HAZARD, path)
+    if not isinstance(loaded, RegionalThresholds):
+        raise TypeError(
+            f"landslide YAML validated as {type(loaded).__name__}; "
+            "SCHEMA_BY_HAZARD is misconfigured"
+        )
+    return loaded
 
 
 # Cached per hazard, not globally: two hazards must never share a parsed
 # config, and `maxsize=None` is bounded by the enum.
 @cache
-def _load_cached(hazard: HazardType) -> RegionalThresholds:
+def _load_cached(hazard: HazardType) -> HazardThresholds:
     text = hazard_thresholds_path(hazard).read_text(encoding="utf-8")
     raw = yaml.safe_load(text) or {}
-    return RegionalThresholds.model_validate(_coerce_class_ranges(raw))
+    return _schema_for(hazard).model_validate(_coerce_class_ranges(raw))

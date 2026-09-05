@@ -1,0 +1,135 @@
+# Wildfire hazard configuration (issue #61).
+#
+# Lo score è FWI × combustibile × pendenza, non S/M/E/F/H: un incendio non
+# ha nulla in comune con la meccanica di un versante che cede, e le due
+# configurazioni condividono solo classi, colori PC ed esposizione.
+#
+# I coefficienti delle equazioni FWI NON sono qui: sono lo standard di Van
+# Wagner (1987), non una calibrazione, e metterli in YAML inviterebbe a
+# "tararli". Qui c'è solo ciò che un deployment può legittimamente scegliere.
+
+model_version: "wildfire-v1.0.0"
+
+# Il terreno **modula** il tempo, non si somma ad esso:
+#
+#     score = fwi_norm × (base + fuel·combustibile + pendenza·pendenza_norm)
+#
+# I tre pesi sommano a 1, quindi una cella massimamente infiammabile e ripida
+# vale esattamente il suo FWI normalizzato — ed è ciò che rende i cutoff di
+# classe leggibili come bande di pericolo EFFIS.
+#
+# Una somma dei tre termini darebbe a un bosco di conifere un punteggio di
+# fondo indipendente dal tempo: sotto un acquazzone di gennaio leggerebbe
+# comunque "Moderata / allerta gialla", che è fisicamente falso.
+weights:
+  # La quota di pericolo che una cella ha perché il fuoco le arriva da fuori.
+  # È il motivo per cui la roccia nuda in condizioni estreme non è zero.
+  base:  0.25
+  fuel:  0.60
+  slope: 0.15
+
+fwi:
+  # Valori iniziali standard di letteratura per l'avvio primaverile
+  # (Van Wagner 1987 §4): suolo umido dopo lo scioglimento nevoso.
+  ffmc_start: 85.0
+  dmc_start:   6.0
+  dc_start:   15.0
+
+  # Fattori di lunghezza del giorno, gennaio per primo.
+  # DMC: Van Wagner Tabella 2, banda 46°N — l'Italia va da 36°N a 47°N e la
+  # tabella pubblicata è quella dell'Europa centrale, quindi è il default
+  # giusto; un deployment più a sud può sovrascriverla senza toccare codice.
+  day_length_dmc: [6.5, 7.5, 9.0, 12.8, 13.9, 13.9, 12.4, 10.9, 9.4, 8.0, 7.0, 6.0]
+  # DC: Van Wagner Tabella 3.
+  day_length_dc: [-1.6, -1.6, -1.6, 0.9, 3.8, 5.8, 6.4, 5.0, 2.4, 0.4, -1.6, -1.6]
+
+  # EFFIS chiama "extreme" un FWI ≥ 50. Sopra quella soglia l'indice continua
+  # a salire ma la risposta operativa non cambia più, quindi è lì che la
+  # normalizzazione satura.
+  normalisation_max: 50.0
+
+  # I tre codici sono ricorsivi: partiti dai valori standard servono
+  # settimane prima di significare qualcosa. Sotto questa soglia il motore
+  # scora comunque, ma lo dichiara nel breakdown.
+  spinup_days: 30
+
+  # Interruzione massima che una catena sopravvive. Oltre, lo stato salvato è
+  # una finzione: portarsi un codice attraverso tre settimane di meteo
+  # mancante come se i giorni fossero consecutivi è peggio che ripartire dal
+  # seme e dirlo. Ben sotto la memoria di ~52 giorni del DC, così una breve
+  # interruzione non butta via il segnale di siccità costruito in settimane.
+  max_gap_days: 5
+
+  # Passo della griglia dei nodi meteo, in gradi. È la chiave della tabella
+  # `fwi_state`: cambiarlo apre catene nuove e fa ripartire lo spin-up da
+  # zero, quindi vive qui e non in una variabile d'ambiente. 0.25° ≈ 25 km,
+  # coerente con i ~9 km del modello sottostante senza moltiplicare le
+  # chiamate.
+  node_spacing_deg: 0.25
+
+# CORINE Land Cover 2018 → infiammabilità. Prefisso più lungo vince.
+# Ordine fisico: conifere > macchia/sclerofille > latifoglie/misti >
+# pascolo/incolto > agricolo > urbano > acqua.
+fuel:
+  # Copertura ignota non vuol dire "non può bruciare": il default è il
+  # valore di un'area agricola, non zero.
+  default: 0.35
+  by_clc_prefix:
+    "1":    0.10   # superfici artificiali
+    "11":   0.05   # tessuto urbano continuo/discontinuo
+    "2":    0.35   # aree agricole
+    "231":  0.45   # prati stabili
+    "244":  0.55   # aree agroforestali
+    "3":    0.70   # aree boscate e seminaturali
+    "311":  0.65   # latifoglie
+    # Le conifere sono a 1.00 non per enfasi ma per costruzione: sono il
+    # combustibile di riferimento, e una cella di conifere su versante saturo
+    # deve valere esattamente il suo FWI normalizzato perché i cutoff di
+    # classe restino leggibili come bande EFFIS.
+    "312":  1.00   # conifere — il combustibile più pericoloso del Mediterraneo
+    "313":  0.80   # bosco misto
+    "321":  0.70   # praterie naturali
+    "322":  0.85   # brughiere e cespuglieti
+    "323":  0.90   # sclerofille (macchia mediterranea)
+    "324":  0.85   # vegetazione in evoluzione
+    "331":  0.15   # spiagge, dune, sabbie
+    "332":  0.05   # rocce nude
+    "333":  0.30   # aree con vegetazione rada
+    "334":  0.60   # aree percorse da incendi
+    "335":  0.00   # ghiacciai e nevi perenni
+    "4":    0.20   # zone umide
+    "5":    0.00   # corpi idrici
+
+slope:
+  # Il fuoco risale il pendio: la velocità di propagazione cresce con la
+  # pendenza. Oltre i ~35° i versanti mediterranei sono roccia più spesso che
+  # combustibile, quindi la curva satura lì.
+  saturation_deg: 35.0
+
+# Cutoff di classe, allineati alle classi di pericolo EFFIS
+# (Very Low / Low / Moderate / High / Very High-Extreme) una volta che il FWI
+# è normalizzato su normalisation_max.
+classes:
+  none:      [0.00, 0.12]   # FWI < 6      — Very low
+  low:       [0.12, 0.24]   # FWI 6-12     — Low
+  moderate:  [0.24, 0.42]   # FWI 12-21    — Moderate
+  high:      [0.42, 0.76]   # FWI 21-38    — High
+  very_high: [0.76, 1.00]   # FWI ≥ 38     — Very high / Extreme
+
+# Mappatura presentazionale sulla scala di allerta della Protezione Civile.
+pc_alert:
+  none:      verde
+  low:       verde
+  moderate:  gialla
+  high:      arancione
+  very_high: rossa
+
+# Priorità degli alert (non scoring): stesse bande dell'altro pericolo —
+# una casa a 200 m da una cella che brucia conta quanto una sotto una frana.
+exposure:
+  urban_here:    1.0
+  urban_near:    0.5
+  road_strong_m: 250.0
+  road_medium_m: 1000.0
+  rail_strong_m: 250.0
+  rail_medium_m: 1000.0

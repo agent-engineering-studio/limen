@@ -45,8 +45,29 @@ async def test_legend_of_an_unconfigured_hazard_is_a_404() -> None:
     from fastapi import HTTPException
 
     with pytest.raises(HTTPException) as exc:
-        await legend(Response(), HazardType.WILDFIRE)
+        await legend(Response(), HazardType.FLOOD)
     assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_legend_of_wildfire_carries_its_own_model_card() -> None:
+    """Aggiungere un pericolo non ha richiesto un ramo nell'endpoint (#61).
+
+    La scheda del modello la costruisce la configurazione: se la legenda
+    leggesse i blocchi, un pericolo senza soglia pluviale la romperebbe.
+    """
+    payload = await legend(Response(), HazardType.WILDFIRE)
+    assert payload["model_version"].startswith("wildfire-")
+    assert "fwi" in payload["model"]
+    assert "caine" not in payload["model"]
+    # Cinque classi con i loro cutoff, come per ogni altro pericolo.
+    assert [c["level"] for c in payload["classes"]] == [
+        "None",
+        "Low",
+        "Moderate",
+        "High",
+        "VeryHigh",
+    ]
 
 
 # ---------------------------------------------------------------------------

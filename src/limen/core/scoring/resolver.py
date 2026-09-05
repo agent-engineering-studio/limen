@@ -82,12 +82,21 @@ def _deterministic(
     if thresholds is not None:
         return MultiFactorScoringEngine(thresholds)
     try:
-        return MultiFactorScoringEngine(load_hazard_thresholds(hazard))
+        loaded = load_hazard_thresholds(hazard)
     except FileNotFoundError as exc:
         raise HazardNotScorableError(
             f"hazard {hazard.value!r} has no thresholds file "
             f"(expected config/hazards/{hazard.value}.yaml)"
         ) from exc
+    if not isinstance(loaded, RegionalThresholds):
+        # Reached only for a hazard with its own schema but no registered
+        # engine. Building the landslide formula on its config is not a
+        # degradation, it is a wrong answer, so it is refused.
+        raise HazardNotScorableError(
+            f"hazard {hazard.value!r} has no deterministic engine registered, and its "
+            f"configuration ({type(loaded).__name__}) is not the landslide baseline's"
+        )
+    return MultiFactorScoringEngine(loaded)
 
 
 def check_scorable(hazard: HazardType, kind: ScoringEngineKind) -> None:

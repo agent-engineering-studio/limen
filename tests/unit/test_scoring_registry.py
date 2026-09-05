@@ -70,9 +70,9 @@ def test_unregistered_pair_fails_loudly_and_says_what_exists() -> None:
     """Un pericolo scritto male in configurazione deve rompere subito e a voce
     alta, non valutare silenziosamente zero celle."""
     with pytest.raises(EngineNotRegisteredError) as exc:
-        resolve(HazardType.WILDFIRE, ScoringEngineKind.DETERMINISTIC)
+        resolve(HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
     message = str(exc.value)
-    assert "wildfire/deterministic" in message
+    assert "flood/deterministic" in message
     # L'errore elenca cosa c'è, così chi legge il log capisce cosa manca.
     assert "landslide/deterministic" in message
 
@@ -205,9 +205,11 @@ def test_cache_is_keyed_per_hazard() -> None:
     second = load_hazard_thresholds(HazardType.LANDSLIDE)
     # Stesso pericolo ⇒ stesso oggetto in cache.
     assert first is second
+    # Pericoli diversi ⇒ configurazioni diverse, non la stessa riusata.
+    assert load_hazard_thresholds(HazardType.WILDFIRE) is not first
     # Un pericolo senza file non deve restituire quello delle frane.
     with pytest.raises(FileNotFoundError):
-        load_hazard_thresholds(HazardType.WILDFIRE)
+        load_hazard_thresholds(HazardType.FLOOD)
 
 
 def test_explicit_path_bypasses_the_cache() -> None:

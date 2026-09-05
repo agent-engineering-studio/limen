@@ -33,6 +33,7 @@ from limen.cli.create_admin import run as _run_create_admin
 from limen.cli.firms_sync import run as _run_firms_sync
 from limen.cli.forecast import run as _run_forecast
 from limen.cli.forecast_history import run as _run_forecast_history
+from limen.cli.fwi_backfill import run as _run_fwi_backfill
 from limen.cli.geodata import build_subparser as _build_geodata_subparser
 from limen.cli.geodata import run as _run_geodata
 from limen.cli.geoserver_sync import run as _run_geoserver_sync
@@ -86,6 +87,13 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "backtest",
         help="replay a historical window and write a §2.5 metrics report",
+    )
+    sub.add_parser(
+        "fwi-backfill",
+        help=(
+            "rebuild the recursive FWI chain from the ERA5 archive "
+            "(env: LIMEN_FWI_AOI / LIMEN_FWI_DAYS)"
+        ),
     )
     sub.add_parser(
         "monitor-once",
@@ -192,6 +200,7 @@ def main(argv: list[str] | None = None) -> int:
         "bootstrap-static": _run_bootstrap_static,
         "calibrate": _run_calibrate,
         "backtest": _run_backtest,
+        "fwi-backfill": _run_fwi_backfill,
         "monitor-once": _run_monitor_once,
         "forecast": _run_forecast,
         "serve": _run_server,

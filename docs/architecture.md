@@ -160,6 +160,19 @@ non possano ignorarle.
   checksum).
 * **Niente `print`** — `structlog.get_logger(__name__)` ovunque.
 * **Tutte le costanti di scoring** vivono in `hazards/landslide.yaml`.
+* **Un pericolo, uno schema di configurazione**: `HazardThresholds` tiene ciò
+  che ogni pericolo ha (versione, cinque classi, colori PC, esposizione);
+  `RegionalThresholds` aggiunge i blocchi frana, `WildfireThresholds` quelli
+  FWI. Non condividono blocchi di scoring perché non condividono fisica: una
+  soglia pluviale di Caine non dice nulla a un incendio. La scheda del
+  modello la costruisce la configurazione (`model_card()`), così la legenda
+  non ha un ramo per pericolo.
+* **Incendio = FWI × combustibile × pendenza** (#61): la catena canadese di
+  Van Wagner (1987) in `core/scoring/wildfire/fwi.py` è pura e verificata sul
+  giorno di riferimento pubblicato a 1e-9. I tre codici di umidità sono
+  ricorsivi, quindi lo stato vive in `fwi_state` — **per nodo meteo**, non per
+  cella: dipende solo dal tempo, che Open-Meteo dà a ~9 km, e per cella
+  sarebbero ~500 copie identiche degli stessi sei numeri ogni giorno.
 * **Registry dei motori bidimensionale**: `core/scoring/registry.py` indicizza
   per *(pericolo, implementazione)*, perché i due assi sono ortogonali;
   `resolver.py` resta lo strato operativo che sceglie l'implementazione e

@@ -29,11 +29,11 @@ from limen.core.models.risk import (
     ComponentBreakdown,
     KinematicBreakdown,
     MeteoBreakdown,
-    RiskLevel,
     RiskScore,
     StaticBreakdown,
 )
 from limen.core.scoring.api import api_factor
+from limen.core.scoring.base import classify_score
 from limen.core.scoring.caine import compute_caine
 from limen.core.scoring.flood_forecast import flood_forecast_bonus
 from limen.core.scoring.kinematic import compute_kinematic
@@ -41,7 +41,6 @@ from limen.core.scoring.post_fire import post_fire_factor
 from limen.core.scoring.regional_thresholds import (
     CaineBlock,
     CaineMacroregion,
-    ClassCutoffs,
     RegionalThresholds,
     SnowBlock,
     SoilBlock,
@@ -109,16 +108,10 @@ def _soil_sigmoid(value: float | None, *, soil: SoilBlock) -> float:
     return ez / (1.0 + ez)
 
 
-def _classify(score: float, cutoffs: ClassCutoffs) -> RiskLevel:
-    if score < cutoffs.low.lo:
-        return RiskLevel.None_
-    if score < cutoffs.moderate.lo:
-        return RiskLevel.Low
-    if score < cutoffs.high.lo:
-        return RiskLevel.Moderate
-    if score < cutoffs.very_high.lo:
-        return RiskLevel.High
-    return RiskLevel.VeryHigh
+#: Shared with the wildfire engine — the cutoffs differ, the boundary logic
+#: does not. Kept as a module-level alias so the existing call sites and the
+#: tests that patch `_classify` keep working.
+_classify = classify_score
 
 
 @dataclass(frozen=True, slots=True)

@@ -42,6 +42,23 @@ def _level_rank(level: RiskLevel) -> int:
     return order.index(level)
 
 
+def _landslide_shaped(hazard: HazardType) -> RegionalThresholds:
+    """This executor's thresholds, refusing a hazard it cannot read.
+
+    It builds a ``CellRiskRecord`` out of named landslide components, so a
+    wildfire configuration reaching here would fail on the first attribute
+    access mid-sweep. Refusing at construction turns that into a startup
+    error naming the hazard.
+    """
+    loaded = load_hazard_thresholds(hazard)
+    if not isinstance(loaded, RegionalThresholds):
+        raise TypeError(
+            f"RiskScoringExecutor reads landslide components; hazard {hazard.value!r} "
+            f"configures {type(loaded).__name__}"
+        )
+    return loaded
+
+
 class RiskScoringExecutor(Executor):
     """Build bundles → score every cell → roll up an :class:`AggregateAssessment`."""
 
@@ -58,7 +75,7 @@ class RiskScoringExecutor(Executor):
         self._hazard = hazard
         # Each hazard has its own YAML: loading the landslide file for a flood
         # sweep would score with slope-failure thresholds.
-        self._thresholds = thresholds or load_hazard_thresholds(hazard)
+        self._thresholds = thresholds or _landslide_shaped(hazard)
         # ``engine`` lets the workflow inject the resolver-selected engine
         # (V1 by default, V2 ML when promoted). Without an injection we
         # fall back to the deterministic engine — the V1 champion stays

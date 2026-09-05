@@ -38,6 +38,12 @@ HOURLY_VARS = [
     "soil_moisture_7_to_28cm",
     "snowfall",
     "snow_depth",
+    # Fire weather (#61). Same request, three more columns: the FWI chain
+    # needs temperature, humidity and wind at local noon, and Open-Meteo
+    # charges per call, not per variable.
+    "temperature_2m",
+    "relative_humidity_2m",
+    "wind_speed_10m",
 ]
 
 # Exceptions classified as "external source unreachable" — degraded path.
@@ -73,6 +79,9 @@ def _parse_hourly(payload: dict[str, Any]) -> list[WeatherSample]:
     sm728 = list(hourly.get("soil_moisture_7_to_28cm") or [])
     snowfall = list(hourly.get("snowfall") or [])
     snow_depth = list(hourly.get("snow_depth") or [])
+    temp = list(hourly.get("temperature_2m") or [])
+    rh = list(hourly.get("relative_humidity_2m") or [])
+    wind = list(hourly.get("wind_speed_10m") or [])
 
     out: list[WeatherSample] = []
     for i, ts in enumerate(times):
@@ -91,6 +100,9 @@ def _parse_hourly(payload: dict[str, Any]) -> list[WeatherSample]:
                 soil_moisture_7_28_cm=_maybe_float(sm728, i),
                 snowfall_cm=_maybe_float(snowfall, i),
                 snow_depth_m=_maybe_float(snow_depth, i),
+                temperature_c=_maybe_float(temp, i),
+                relative_humidity_pct=_maybe_float(rh, i),
+                wind_speed_kmh=_maybe_float(wind, i),
             )
         )
     return out
@@ -243,6 +255,62 @@ class OpenMeteoHttpClient:
         raises). Callers give each grid cell the rainfall of its nearest node
         instead of a single AOI-centroid series.
         """
+        return await self._hourly_grid(
+            nodes=nodes,
+            variables=("precipitation",),
+            window_start=window_start,
+            window_end=window_end,
+            batch_size=batch_size,
+            model=model,
+            use_archive=use_archive,
+            label="openmeteo.rainfall_grid",
+        )
+
+    async def get_fire_weather_grid(
+        self,
+        *,
+        nodes: list[tuple[float, float]],
+        window_start: datetime,
+        window_end: datetime,
+        batch_size: int = 100,
+        use_archive: bool = True,
+    ) -> list[list[WeatherSample]]:
+        """The four FWI inputs for many nodes in one batch (#61).
+
+        Same shape as :meth:`get_rainfall_grid`, four variables instead of
+        one. Separate from the snapshot path because the FWI chain is driven
+        by weather at Open-Meteo's ~9 km resolution: computing it per node and
+        giving each cell its nearest one is both cheaper and physically right,
+        the same reasoning the rainfall grid already follows.
+        """
+        return await self._hourly_grid(
+            nodes=nodes,
+            variables=(
+                "temperature_2m",
+                "relative_humidity_2m",
+                "wind_speed_10m",
+                "precipitation",
+            ),
+            window_start=window_start,
+            window_end=window_end,
+            batch_size=batch_size,
+            model=None,
+            use_archive=use_archive,
+            label="openmeteo.fire_weather_grid",
+        )
+
+    async def _hourly_grid(
+        self,
+        *,
+        nodes: list[tuple[float, float]],
+        variables: tuple[str, ...],
+        window_start: datetime,
+        window_end: datetime,
+        batch_size: int,
+        model: str | None,
+        use_archive: bool,
+        label: str,
+    ) -> list[list[WeatherSample]]:
         url = ARCHIVE_URL if use_archive else FORECAST_URL
         out: list[list[WeatherSample]] = []
         for i in range(0, len(nodes), batch_size):
@@ -250,7 +318,7 @@ class OpenMeteoHttpClient:
             params: dict[str, Any] = {
                 "latitude": ",".join(f"{lat:.4f}" for _, lat in batch),
                 "longitude": ",".join(f"{lon:.4f}" for lon, _ in batch),
-                "hourly": "precipitation",
+                "hourly": ",".join(variables),
                 "start_date": window_start.date().isoformat(),
                 "end_date": window_end.date().isoformat(),
                 "timezone": "UTC",
@@ -262,7 +330,7 @@ class OpenMeteoHttpClient:
                     "GET", url, client=await self._client(), params=params
                 )
             except _DEGRADATION_EXC as exc:
-                log.warning("integration.degraded", label="openmeteo.rainfall_grid", error=str(exc))
+                log.warning("integration.degraded", label=label, error=str(exc))
                 out.extend([] for _ in batch)
                 continue
             payload = resp.json()
