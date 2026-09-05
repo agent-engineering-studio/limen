@@ -100,6 +100,18 @@ export interface MeteoBreakdown {
 /** Mirror di limen.core.models.hazard.HazardType. */
 export type HazardType = "landslide" | "flood" | "wildfire";
 
+export interface Hazard {
+  hazard: HazardType;
+  /** Etichetta italiana dal database, non hard-coded qui. */
+  label_it: string;
+}
+
+/** GET /api/hazards — solo i pericoli che questo deployment sa valutare. */
+export interface HazardsResponse {
+  items: Hazard[];
+  default: HazardType;
+}
+
 export interface CellRiskRecord {
   cell_id: string;
   // Sempre presente: il DTO Python lo serializza con un default. I campi

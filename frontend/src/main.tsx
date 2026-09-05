@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 
 import App from "./App";
 import { AuthProvider } from "./lib/auth";
+import { HazardProvider } from "./lib/hazard";
 import "./styles.css";
 
 const root = document.getElementById("root");
@@ -13,7 +14,9 @@ if (!root) {
 ReactDOM.createRoot(root).render(
     <React.StrictMode>
         <AuthProvider>
-            <App />
+            <HazardProvider>
+                <App />
+            </HazardProvider>
         </AuthProvider>
     </React.StrictMode>,
 );

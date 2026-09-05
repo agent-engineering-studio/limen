@@ -104,6 +104,11 @@ export interface RiskMapProps {
 export function RiskMap(props: RiskMapProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const tileserv = (props.tileservUrl ?? config.tileservUrl).replace(/\/+$/, "");
+  // `v_risk_tiles` è fissata sull'hazard di default in SQL (migrazione 028):
+  // una sorgente di tile deve dare una geometria per cella, e la vista ne ha
+  // una per (cella, pericolo). Il layer per pericolo arriverà in Fase 2
+  // passando da `risk_at(z,x,y,hours_ago,hazard)`, che il parametro già ce
+  // l'ha; qui non si anticipa nulla.
   const tileLayer = props.tileLayer ?? "public.v_risk_tiles";
   const onCellClick = props.onCellClick;
 

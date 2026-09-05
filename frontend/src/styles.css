@@ -1810,3 +1810,55 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   color: #9aa1ad;
   margin: 2px 0 6px;
 }
+
+/* Selettore del pericolo — reso solo con due o più pericoli disponibili.
+   Stessa gerarchia visiva della navigazione, così non compete con essa. */
+.hazard-selector {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 12px;
+  border: 1px solid var(--border, #d7d2ca);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.hazard-selector button {
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 0.82rem;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: inherit;
+}
+.hazard-selector button.on {
+  background: var(--accent, #8c3b12);
+  color: #fff;
+}
+
+/* Marchio dei pannelli fissati sul pericolo di default (#87). Reso solo
+   quando il pericolo scelto è un altro, quindi in Fase 1 non compare mai. */
+.pinned-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border: 1px solid var(--border, #d7d2ca);
+  border-radius: 999px;
+  background: var(--surface-2, #f3efe9);
+  color: var(--muted, #6b6459);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+  text-transform: none;
+}
+.map-pin-note {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 10;
+}
+.map-pin-note .pinned-badge {
+  margin-left: 0;
+  background: var(--surface, #fffdf9);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 18%);
+}

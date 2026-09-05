@@ -66,9 +66,16 @@ Approfondimenti: [`docs/demo.md`](./docs/demo.md) (demo locale su un AOI piccolo
 
 Il motore V1 è una combinazione lineare pesata **pura** e interpretabile
 (§2.4 del project doc) che legge ogni peso, soglia e cutoff di classe da
-[`src/limen/config/hazards/landslide.yaml`](./src/limen/config/hazards/landslide.yaml).
+[`src/limen/config/hazards/landslide.yaml`](./src/limen/config/hazards/landslide.yaml)
+— un file per pericolo, nominato come il valore dell'enum.
 Nessuna costante cablata nel codice di scoring. Nessun LLM. Nessun I/O.
 La stessa interfaccia `CellFeatureBundle` accetta anche il motore ML V2.
+
+L'architettura è **multi-rischio nella struttura** e mono-rischio nei dati:
+`hazard_type` attraversa tabelle, viste, API, MCP e A2A, ma l'unico pericolo
+configurato è la frana. Incendio (#61) e alluvione (#63) portano ciascuno il
+proprio file di soglie e il proprio motore, senza toccare workflow, API o
+persistenza.
 
 ---
 
@@ -82,6 +89,7 @@ La stessa interfaccia `CellFeatureBundle` accetta anche il motore ML V2.
 | **EFFIS** | perimetri aree bruciate; fallback bulk Shapefile | batch settimanale | `integrations/effis/` |
 | **Bootstrap statico** | per cella: `iffi_density_500` (entro 500 m dalla cella), `distance_to_iffi_m`, `pai_class_norm`, `slope_deg` (DTM) — SQL PostGIS set-based | one-shot CLI | `integrations/static_bootstrap/` + `limen bootstrap-static` |
 | **Motore di scoring (V1)** | soglia Caine I/D (ri-tarata su ITALICA), API sigmoide, finestra post-incendio, decadimento sismico, aggregatore pesato + 5 classi | puro (no I/O) | `core/scoring/` + `MultiFactorScoringEngine` |
+| **Dimensione pericolo** | `hazard_type` su ogni riga di rischio e su entrambi i ledger di dedup; motori registrati per coppia *(pericolo, implementazione)*; un file di soglie per pericolo. Oggi ne è abilitato uno, `landslide`: aggiungerne uno è uno YAML più una registrazione | trasversale | `core/models/hazard.py`, `core/scoring/registry.py`, `config/hazards/` |
 | **Calibrate** | stat di normalizzazione per-AOI; precompute `s_static` | one-shot | `limen calibrate` + `reports/calibrate_<aoi>.md` |
 | **Ingest eventi** | catalogo **e-ITALICA** (frane innescate da pioggia, datate, tutta Italia) — truth set del backtest | one-shot, auto-download Zenodo | `limen ingest-events` |
 | **Backtest** | replay di una finestra storica con pioggia antecedente **CERRA** (5.5 km) + truth set e-ITALICA → hit rate / FAR / lead time vs target §2.5 | one-shot | `limen backtest` + `reports/backtest_*.md` |

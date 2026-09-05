@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
+import { useHazard } from "../lib/hazard";
 import { RISK_COLOR_BY_LEVEL, RISK_LABEL_IT_BY_LEVEL } from "../lib/risk-colors";
 import type { AlertItem } from "../types";
 import CellTrendSparkline from "./CellTrendSparkline";
@@ -192,11 +193,16 @@ function ComuneSection({
 function RegionalAnalysis({ aoiId }: { aoiId: string }): JSX.Element {
   const [text, setText] = useState<string | null | undefined>(undefined);
 
+  const { selected: hazard } = useHazard();
+  // Il briefing è per pericolo: senza questo, quello caricato per il
+  // precedente resterebbe mostrato come analisi del nuovo.
+  useEffect(() => setText(undefined), [hazard]);
+
   const load = (): void => {
     if (text !== undefined) return;
     setText(null);
     defaultApiClient
-      .getLatestRisk(aoiId)
+      .getLatestRisk(aoiId, undefined, hazard)
       .then((resp) => setText(resp.briefing_it ?? ""))
       .catch(() => setText(""));
   };
@@ -228,18 +234,27 @@ export function RegionAccordion(props: RegionAccordionProps): JSX.Element {
   const { onCellSelect, selectedCellId } = props;
   const [items, setItems] = useState<AlertItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { selected: hazard } = useHazard();
 
   useEffect(() => {
+    // Azzerare prima della nuova fetch: senza, un errore su un pericolo
+    // resterebbe a schermo per sempre (il render corto-circuita su `error`)
+    // e le righe del pericolo precedente si spaccerebbero per quelle nuove.
+    setError(null);
+    setItems(null);
     const ctrl = new AbortController();
     defaultApiClient
-      .getAlerts({ threshold: "Moderate", sinceHours: 72, limit: 500 }, ctrl.signal)
+      .getAlerts(
+        { threshold: "Moderate", sinceHours: 72, limit: 500, hazard },
+        ctrl.signal,
+      )
       .then((resp) => setItems(resp.items))
       .catch((err: unknown) => {
         if (!ctrl.signal.aborted)
           setError(err instanceof Error ? err.message : String(err));
       });
     return () => ctrl.abort();
-  }, []);
+  }, [hazard]);
 
   const groups = useMemo(() => (items ? groupByRegion(items) : []), [items]);
 

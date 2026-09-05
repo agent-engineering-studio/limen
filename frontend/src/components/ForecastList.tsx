@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
+import { useHazard } from "../lib/hazard";
 import { RISK_COLOR_BY_LEVEL } from "../lib/risk-colors";
 import type { ForecastAlertItem, RiskLevel } from "../types";
 
@@ -12,18 +13,21 @@ import type { ForecastAlertItem, RiskLevel } from "../types";
 export function ForecastList(): JSX.Element {
   const [items, setItems] = useState<ForecastAlertItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { selected: hazard } = useHazard();
 
   useEffect(() => {
+    setError(null);
+    setItems(null);
     const ctrl = new AbortController();
     defaultApiClient
-      .getForecastAlerts({ sinceHours: 72 }, ctrl.signal)
+      .getForecastAlerts({ sinceHours: 72, hazard }, ctrl.signal)
       .then((resp) => setItems(resp.items))
       .catch((err: unknown) => {
         if (!ctrl.signal.aborted)
           setError(err instanceof Error ? err.message : String(err));
       });
     return () => ctrl.abort();
-  }, []);
+  }, [hazard]);
 
   return (
     <section className="alert-list" aria-label="Previsioni">

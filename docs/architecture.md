@@ -160,10 +160,19 @@ non possano ignorarle.
   checksum).
 * **Niente `print`** — `structlog.get_logger(__name__)` ovunque.
 * **Tutte le costanti di scoring** vivono in `hazards/landslide.yaml`.
+* **Registry dei motori bidimensionale**: `core/scoring/registry.py` indicizza
+  per *(pericolo, implementazione)*, perché i due assi sono ortogonali;
+  `resolver.py` resta lo strato operativo che sceglie l'implementazione e
+  degrada al baseline V1. Il workflow è parametrico sul pericolo
+  (`build_hazard_workflow`), con gli step che leggono lo stato del territorio
+  distinti da quelli che lo interpretano.
 * **`hazard_type` è una dimensione di prima classe** (migrazione 028):
   `mv_latest_risk` ha una riga per *(cella, hazard abilitato)*, le viste a
   valle sono fissate su `landslide`, i tile multi-hazard passano da
-  `risk_at(z,x,y,hours_ago,hazard)`.
+  `risk_at(z,x,y,hours_ago,hazard)`. I pannelli della SPA che leggono quelle
+  viste (mappa, rollup comunale, quadro nazionale) mostrano il marchio
+  `LandslideOnlyBadge` quando il pericolo scelto è un altro, invece di
+  restare fermi facendo credere di aver cambiato.
 * **Tabelle calde partizionate per giorno** su `computed_at`
   (`risk_assessments`, `model_runs`): la retention elimina partizioni, non
   righe.

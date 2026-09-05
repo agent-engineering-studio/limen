@@ -5,12 +5,17 @@
 import { useEffect, useState } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
+import LandslideOnlyBadge from "./LandslideOnlyBadge";
 import { RISK_COLOR_BY_LEVEL, RISK_LABEL_IT_BY_LEVEL } from "../lib/risk-colors";
 import type { ComuneRisk } from "../types";
 
 export default function ComuneLeaderboard(): JSX.Element | null {
   const [comuni, setComuni] = useState<ComuneRisk[]>([]);
 
+  // Nessun pericolo passato di proposito: `/api/comuni` lo rifiuta se diverso
+  // dal default, perché `mv_comune_risk` è fissata su di esso (il suo
+  // exposure_rank legge una chiave che solo il breakdown delle frane ha).
+  // Il rollup comunale multi-rischio è #58.
   useEffect(() => {
     const ctrl = new AbortController();
     defaultApiClient
@@ -24,7 +29,9 @@ export default function ComuneLeaderboard(): JSX.Element | null {
 
   return (
     <section className="comuni-board" aria-label="Comuni a maggior rischio">
-      <h3>Comuni a maggior rischio</h3>
+      <h3>
+        Comuni a maggior rischio <LandslideOnlyBadge />
+      </h3>
       <ol>
         {comuni.map((c) => (
           <li key={c.istat_code}>
