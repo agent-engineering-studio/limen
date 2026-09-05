@@ -189,3 +189,27 @@ def test_alert_summary_names_the_hazard() -> None:
     )
     assert payload.hazard_type is HazardType.FLOOD
     assert "alluvione" in payload.summary_it
+
+
+def test_the_llm_narrative_runs_only_where_a_prompt_exists() -> None:
+    """I prompt sono scritti per una minaccia precisa.
+
+    Quello del briefing si apre con "spiega il rischio frane" e l'enum
+    `driver` del RiskAnalyst elenca solo cause di dissesto: girarli su un
+    incendio dà una persona da frane che racconta un incendio — a volte ci
+    azzecca, a volte spiega una soglia pluviale mai calcolata. Nessuna prosa
+    è meglio di prosa sbagliata, e punteggi, alert e mappa non dipendono
+    dall'LLM.
+
+    Effetto collaterale voluto: lo sweep incendio non paga i due passi lenti,
+    quindi abilitare il secondo pericolo non raddoppia il budget orario.
+    """
+    from limen.agents.chat_agents.prompts_registry import has_narrative
+
+    assert has_narrative(DEFAULT_HAZARD) is True
+    assert has_narrative(HazardType.WILDFIRE) is False
+
+    landslide = build_hazard_workflow(DEFAULT_HAZARD, _deps())
+    wildfire = build_hazard_workflow(HazardType.WILDFIRE, _deps())
+    # Incendio: +1 per FwiUpdate, -2 per i nodi LLM.
+    assert wildfire.step_count == landslide.step_count - 1

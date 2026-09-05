@@ -21,6 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from limen.agents.chat_agents.briefing import BriefingAgent
+from limen.agents.chat_agents.prompts_registry import has_narrative
 from limen.agents.chat_agents.risk_analyst import RiskAnalystAgent
 from limen.agents.executors import (
     AlertDispatchExecutor,
@@ -260,17 +261,28 @@ def build_hazard_workflow(
         # cell_results — it sees the same bundles but never touches the
         # authoritative state. Persisting to model_runs is best-effort.
         builder = builder.add(ShadowChallengerExecutor(challenger, hazard=hazard))
-    builder = (
-        builder.add(EscalationGateExecutor(hazard=hazard))
-        .add(RiskAnalystNode(deps.llm_factory, min_level=settings.llm.briefing_min_level))
-        .add(
+    builder = builder.add(EscalationGateExecutor(hazard=hazard))
+    # I due nodi LLM solo dove esiste un prompt per il pericolo. I prompt sono
+    # scritti per una minaccia precisa — quello del briefing si apre con
+    # "spiega il rischio frane" e l'enum `driver` del RiskAnalyst elenca solo
+    # cause di dissesto — quindi girarli su un incendio dà una persona da
+    # frane che racconta un incendio: a volte ci azzecca, a volte spiega una
+    # soglia pluviale mai calcolata. Nessuna prosa è meglio di prosa
+    # sbagliata, e punteggi, alert e mappa non ne dipendono.
+    if has_narrative(hazard):
+        builder = builder.add(
+            RiskAnalystNode(deps.llm_factory, min_level=settings.llm.briefing_min_level)
+        ).add(
             BriefingNode(
                 deps.llm_factory,
                 grounding=deps.grounding_service,
                 min_level=settings.llm.briefing_min_level,
             )
         )
-        .add(PersistResultExecutor(hazard=hazard))
+    else:
+        log.info("workflow.narrative.skipped", hazard=hazard.value, reason="no prompt")
+    builder = (
+        builder.add(PersistResultExecutor(hazard=hazard))
         .add(AlertDispatchExecutor(deps.notification_dispatcher, hazard=hazard))
     )
     log.info(
@@ -282,6 +294,7 @@ def build_hazard_workflow(
         llm_provider=deps.llm_factory.provider,
         scoring_engine=type(champion).__name__,
         scoring_mode=settings.scoring.mode.value,
+        narrative=has_narrative(hazard),
         challenger=type(challenger).__name__ if challenger is not None else None,
         kg_enabled=settings.kg.enabled,
     )
