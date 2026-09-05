@@ -216,7 +216,7 @@ src/limen/
 │   ├── main.py          # FastAPI app factory + lifespan
 │   ├── dependencies.py  # AppDependencies + typed Depends() providers
 │   ├── schemas.py       # Pydantic request/response DTOs
-│   ├── endpoints/       # health/ready, aoi, monitor, risk, alerts, tiles
+│   ├── endpoints/       # health/ready, aoi, risk, alerts, tiles
 │   └── jobs/            # APScheduler: hourly_monitoring, weekly_idrogeo_sync,
 │                        # cache_cleanup, registration
 ├── notifications/       # NotificationChannel Protocol + AlertPayload + Telegram/MQTT/Email + dispatcher

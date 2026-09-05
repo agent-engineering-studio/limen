@@ -16,7 +16,6 @@ from limen.api.endpoints import (
     auth,
     comuni,
     health,
-    monitor,
     risk,
     tiles,
 )
@@ -26,7 +25,6 @@ def all_routers() -> Iterable[APIRouter]:
     return (
         health.router,
         aoi.router,
-        monitor.router,
         risk.router,
         alerts.router,
         tiles.router,

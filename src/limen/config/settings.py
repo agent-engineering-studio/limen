@@ -594,27 +594,6 @@ class KgSettings(BaseSettings):
     top_k: int = Field(default=4, ge=1, le=20)
 
 
-class ClerkSettings(BaseSettings):
-    """Clerk JWT validation for protected FastAPI endpoints.
-
-    Off by default so the public, read-only map endpoints stay open and dev
-    /test need no Clerk config. When ``enabled``, operator endpoints (e.g.
-    ``POST /api/monitor``) require a valid Clerk session JWT verified against
-    the instance JWKS (public RSA keys) — the secret key is never needed.
-    """
-
-    model_config = SettingsConfigDict(extra="ignore")
-
-    enabled: bool = False
-    # Clerk instance JWKS endpoint (public keys):
-    # https://<frontend-api-domain>/.well-known/jwks.json
-    jwks_url: str | None = None
-    # Expected `iss` claim (the Clerk Frontend API origin). None ⇒ unchecked.
-    issuer: str | None = None
-    # Accepted `azp` (authorized party) origins; empty ⇒ unchecked.
-    authorized_parties: list[str] = Field(default_factory=list)
-
-
 class AuthSettings(BaseSettings):
     """Database-backed auth (replaces Clerk — PA-compliant, self-hosted).
 
@@ -855,7 +834,6 @@ class Settings(BaseSettings):
     kg: KgSettings = Field(default_factory=KgSettings)
     geodata: GeodataSettings = Field(default_factory=GeodataSettings)
     geoserver_source: GeoServerSourceSettings = Field(default_factory=GeoServerSourceSettings)
-    clerk: ClerkSettings = Field(default_factory=ClerkSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
     spid: SpidSettings = Field(default_factory=SpidSettings)
 
