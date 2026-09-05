@@ -38,15 +38,33 @@ async def test_legend_reads_the_requested_hazard_thresholds() -> None:
 
 
 @pytest.mark.asyncio
-async def test_legend_of_an_unconfigured_hazard_is_a_404() -> None:
-    """Il nome è valido nell'enum ma questo deployment non lo configura: è una
-    risorsa che non c'è, non un guasto del server. Meglio così che colori
-    sbagliati presentati come giusti."""
+async def test_legend_of_an_unconfigured_hazard_is_a_404(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Un deployment che non configura un pericolo: è una risorsa che non c'è,
+    non un guasto del server. Meglio così che colori sbagliati presentati
+    come giusti.
+
+    Dalla Fase 3 tutti e tre i file esistono nel pacchetto, quindi il
+    deployment senza configurazione si simula spostando il percorso.
+    """
+    from pathlib import Path
+
     from fastapi import HTTPException
 
-    with pytest.raises(HTTPException) as exc:
-        await legend(Response(), HazardType.FLOOD)
-    assert exc.value.status_code == 404
+    from limen.core.scoring.regional_thresholds import _load_cached
+
+    _load_cached.cache_clear()
+    monkeypatch.setattr(
+        "limen.core.scoring.regional_thresholds.hazard_thresholds_path",
+        lambda _h: Path("/nonexistent/flood.yaml"),
+    )
+    try:
+        with pytest.raises(HTTPException) as exc:
+            await legend(Response(), HazardType.FLOOD)
+        assert exc.value.status_code == 404
+    finally:
+        _load_cached.cache_clear()
 
 
 @pytest.mark.asyncio

@@ -25,7 +25,12 @@ from dataclasses import dataclass
 from limen.config.settings import ScoringEngineKind, Settings
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
-from limen.core.models.risk import ComponentBreakdown, HazardBreakdown, WildfireBreakdown
+from limen.core.models.risk import (
+    ComponentBreakdown,
+    FloodBreakdown,
+    HazardBreakdown,
+    WildfireBreakdown,
+)
 from limen.core.scoring.base import ScoringEngine
 from limen.core.scoring.regional_thresholds import HazardThresholds, RegionalThresholds
 
@@ -226,11 +231,37 @@ register(
     _landslide_ml,
     breakdown=ComponentBreakdown,
 )
+
+
+def _flood_deterministic(
+    settings: Settings | None = None,  # noqa: ARG001 — part of the EngineFactory shape
+    thresholds: HazardThresholds | None = None,
+) -> HazardScoringEngine:
+    from limen.core.scoring.flood import FloodScoringEngine
+    from limen.core.scoring.regional_thresholds import (
+        FloodThresholds,
+        load_hazard_thresholds,
+    )
+
+    narrowed = _narrow(thresholds, FloodThresholds, HazardType.FLOOD)
+    if narrowed is None:
+        loaded = load_hazard_thresholds(HazardType.FLOOD)
+        narrowed = _narrow(loaded, FloodThresholds, HazardType.FLOOD)
+        assert narrowed is not None  # `load` never returns None
+    return FloodScoringEngine(narrowed)
+
+
 register(
     HazardType.WILDFIRE,
     ScoringEngineKind.DETERMINISTIC,
     _wildfire_deterministic,
     breakdown=WildfireBreakdown,
+)
+register(
+    HazardType.FLOOD,
+    ScoringEngineKind.DETERMINISTIC,
+    _flood_deterministic,
+    breakdown=FloodBreakdown,
 )
 
 

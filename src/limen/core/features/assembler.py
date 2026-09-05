@@ -73,6 +73,16 @@ def assemble_bundles(
     fwi_nodes = [(float(lon), float(lat)) for lon, lat in ctx.fwi_nodes]
     use_fwi_grid = bool(fwi_nodes) and len(ctx.fwi_by_node) == len(fwi_nodes)
 
+    # Same for the flood signals (#63): forecast rain and river discharge are
+    # the flood engine's two triggers, so each cell reads the node nearest to
+    # it rather than one number for the whole AOI.
+    flood_nodes = [(float(lon), float(lat)) for lon, lat in ctx.flood_nodes]
+    use_flood_grid = (
+        bool(flood_nodes)
+        and len(ctx.flood_rain_by_node) == len(flood_nodes)
+        and len(ctx.flood_river_ratio_by_node) == len(flood_nodes)
+    )
+
     bundles: list[CellFeatureBundle] = []
     for cell_id in ctx.cell_ids:
         rainfall = fallback
@@ -87,6 +97,16 @@ def assemble_bundles(
             centroid = ctx.cell_centroids.get(cell_id)
             if centroid is not None:
                 fire_weather = ctx.fwi_by_node[nearest_node(centroid[0], centroid[1], fwi_nodes)]
+
+        flood_rain = ctx.flood_forecast_rain_72h_mm
+        flood_river = ctx.river_discharge_ratio
+        if use_flood_grid:
+            centroid = ctx.cell_centroids.get(cell_id)
+            if centroid is not None:
+                i = nearest_node(centroid[0], centroid[1], flood_nodes)
+                flood_rain = ctx.flood_rain_by_node[i]
+                flood_river = ctx.flood_river_ratio_by_node[i]
+
         sf = ctx.static_by_cell.get(cell_id) or StaticFactors(cell_id=cell_id)
         dyn = DynamicInputs(
             valuation_time=ctx.valuation_time,
@@ -94,8 +114,8 @@ def assemble_bundles(
             api_30_mm=ctx.api_30_mm,
             soil_moisture_0_7=ctx.soil_moisture_0_7,
             snow_depth_m=ctx.snow_depth_m,
-            flood_forecast_rain_72h_mm=ctx.flood_forecast_rain_72h_mm,
-            river_discharge_ratio=ctx.river_discharge_ratio,
+            flood_forecast_rain_72h_mm=flood_rain,
+            river_discharge_ratio=flood_river,
             coastal_surge_norm=ctx.coastal_surge_norm,
             seismic_history=seismic,
             months_since_fire=ctx.months_since_fire,

@@ -69,9 +69,15 @@ class StaticFactors(_Frozen):
     landuse_code: str | None = None
     pai_class_norm: float | None = Field(default=None, ge=0.0, le=1.0)
     # Phase 12+ — ISPRA Mosaicatura Idraulica, mapped onto the same
-    # AA/P1..P4 ladder as PAI. NULL = unknown; the engine treats unknown
-    # as H = 0 (V1 baseline behaviour).
+    # AA/P1..P4 ladder as PAI. NULL = unknown; the landslide engine treats
+    # unknown as H = 0, the flood engine as its `susceptibility.unmapped`
+    # floor -- "not studied" is not "not floodable".
     flood_hazard_norm: float | None = Field(default=None, ge=0.0, le=1.0)
+    # Fase 3a (#63) — CLMS Imperviousness Density, frazione di suolo
+    # impermeabilizzato. Amplifica il solo ramo pluviale: il cemento non fa
+    # crescere un fiume, fa scorrere la stessa pioggia invece di lasciarla
+    # infiltrare. NULL = ignoto, che non è 0 (= suolo tutto permeabile).
+    imperviousness_norm: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class RainfallSample(_Frozen):
@@ -358,16 +364,63 @@ class WildfireBreakdown(HazardBreakdown):
         return super().from_factors(raw)
 
 
+class FloodBreakdown(HazardBreakdown):
+    """Componenti del pericolo alluvione (#63).
+
+    `susceptibility` è ciò che la cella *è* — dal mosaico idraulico ISPRA —
+    e i due trigger sono i due modi in cui l'acqua ci arriva. Tenuti
+    distinti, non sommati: sono mitigati da cose diverse, e un operatore
+    deve sapere quale dei due sta guardando.
+    """
+
+    hazard_type: Literal[HazardType.FLOOD] = HazardType.FLOOD
+
+    susceptibility: float = Field(..., ge=0.0, le=1.0)
+    pluvial: float = Field(..., ge=0.0, le=1.0)
+    fluvial: float = Field(..., ge=0.0, le=1.0)
+
+    #: Falso quando la cella è fuori dalle zone mappate e la suscettibilità
+    #: è il valore di ripiego: il punteggio esiste ma poggia su meno.
+    mapped: bool = True
+    #: I segnali grezzi, per verificabilità.
+    discharge_ratio: float | None = None
+    rain_mm: float | None = None
+
+    def components(self) -> dict[str, float]:
+        return {
+            "Suscettibilità": self.susceptibility,
+            "Pioggia": self.pluvial,
+            "Fiume": self.fluvial,
+        }
+
+    def factors_payload(self) -> dict[str, Any]:
+        return {
+            "susceptibility": self.susceptibility,
+            "pluvial": self.pluvial,
+            "fluvial": self.fluvial,
+            "mapped": self.mapped,
+            "discharge_ratio": self.discharge_ratio,
+            "rain_mm": self.rain_mm,
+        }
+
+    def predisposition(self) -> float:
+        # La suscettibilità idraulica è ciò che la cella è a prescindere dal
+        # tempo: l'analogo della fragilità di un versante.
+        return self.susceptibility
+
+
 #: The concrete breakdowns, discriminated by ``hazard_type``. Pydantic needs
 #: the closed union to round-trip a nested breakdown; the base class alone
 #: would serialise only the discriminator and drop every number.
 AnyHazardBreakdown = Annotated[
-    ComponentBreakdown | WildfireBreakdown, Field(discriminator="hazard_type")
+    ComponentBreakdown | WildfireBreakdown | FloodBreakdown,
+    Field(discriminator="hazard_type"),
 ]
 
 _BREAKDOWN_BY_HAZARD: dict[HazardType, type[HazardBreakdown]] = {
     HazardType.LANDSLIDE: ComponentBreakdown,
     HazardType.WILDFIRE: WildfireBreakdown,
+    HazardType.FLOOD: FloodBreakdown,
 }
 
 
@@ -429,6 +482,7 @@ __all__: Sequence[str] = (
     "ComponentBreakdown",
     "DynamicInputs",
     "FireWeatherState",
+    "FloodBreakdown",
     "HazardBreakdown",
     "KinematicBreakdown",
     "MeteoBreakdown",

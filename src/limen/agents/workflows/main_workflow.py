@@ -241,12 +241,14 @@ def build_hazard_workflow(
     sensor = SensorFetchExecutor()
     builder = builder.add_if(lambda ctx: bool(getattr(ctx, "enable_insitu", False)), sensor)
 
-    # Issue #8 — opt-in dynamic flood signals (forecast rain + GloFAS river
-    # discharge + marine surge) into the context before scoring assembles the
-    # bundles. Off by default ⇒ scores byte-identical to V1. NOT the flood
-    # hazard: this feeds the hydrology component H of landslide scoring.
-    if settings.enable_flood_forecast:
-        builder = builder.add(FloodForecastFetchExecutor())
+    # Pioggia prevista + portata GloFAS + mareggiata. Per le frane sono un
+    # contributo opzionale al componente H (issue #8, off ⇒ punteggi
+    # byte-identici a V1); per l'**alluvione** sono i due trigger, quindi lì
+    # lo step non è negoziabile: senza, ogni cella uscirebbe a zero e la
+    # previsione sarebbe vuota in silenzio — lo stesso difetto che l'incendio
+    # aveva con la catena FWI mancante nello sweep previsionale.
+    if settings.enable_flood_forecast or hazard is HazardType.FLOOD:
+        builder = builder.add(_flood_signals_step(hazard))
 
     # Hazard-specific input step (#62): the recursive FWI codes have to be
     # advanced and persisted before anything can score a fire. Only in the
@@ -281,9 +283,8 @@ def build_hazard_workflow(
         )
     else:
         log.info("workflow.narrative.skipped", hazard=hazard.value, reason="no prompt")
-    builder = (
-        builder.add(PersistResultExecutor(hazard=hazard))
-        .add(AlertDispatchExecutor(deps.notification_dispatcher, hazard=hazard))
+    builder = builder.add(PersistResultExecutor(hazard=hazard)).add(
+        AlertDispatchExecutor(deps.notification_dispatcher, hazard=hazard)
     )
     log.info(
         "workflow.built",
@@ -299,6 +300,28 @@ def build_hazard_workflow(
         kg_enabled=settings.kg.enabled,
     )
     return builder.build()
+
+
+def _flood_signals_step(hazard: HazardType) -> FloodForecastFetchExecutor:
+    """Lo step dei segnali idrologici, tarato sul pericolo che lo consuma.
+
+    Per l'alluvione la finestra di accumulo è quella che la sua soglia
+    intensità-durata dichiara: prendere 72 h di pioggia e confrontarla con
+    una soglia calibrata su 24 h farebbe scattare il trigger su un autunno
+    normale. Per le frane resta il default storico, perché cambiarlo
+    sposterebbe i numeri del campione V1.
+    """
+    if hazard is not HazardType.FLOOD:
+        return FloodForecastFetchExecutor()
+
+    from limen.core.scoring.regional_thresholds import (
+        FloodThresholds,
+        load_hazard_thresholds,
+    )
+
+    loaded = load_hazard_thresholds(HazardType.FLOOD)
+    window = loaded.pluvial.window_hours if isinstance(loaded, FloodThresholds) else 72
+    return FloodForecastFetchExecutor(horizon_hours=window, per_node=True)
 
 
 def build_landslide_workflow(

@@ -1,0 +1,94 @@
+# Flood hazard configuration (issue #63).
+#
+#     score = suscettibilità × max(pluviale, fluviale)
+#
+# Un massimo, non una somma: i due sono modi diversi perché la stessa cella
+# finisca sott'acqua, e una cella non è più allagata perché potrebbero
+# accadere entrambi — conta il peggiore, che è quello su cui un operatore
+# deve pianificare.
+#
+# La suscettibilità viene dal mosaico idraulico ISPRA, già ingerito in
+# `flood_hazard_subdiv` e normalizzato per cella in `flood_hazard_norm`: è il
+# layer che il progetto ha in casa da più tempo, e qui smette di essere solo
+# il componente H del motore frane per diventare la base di un pericolo suo.
+
+model_version: "flood-v1.0.0"
+
+susceptibility:
+  # Una cella fuori dalle zone mappate. Non zero: il mosaico copre i bacini
+  # ufficialmente studiati, e "non studiato" non vuol dire "non allagabile".
+  # Abbastanza basso da non far arrivare in classe alta una cella non mappata
+  # con la sola pioggia, abbastanza alto da non farla sparire dalla mappa.
+  unmapped: 0.15
+  # Sotto questa soglia la cella è terra asciutta e il motore va a zero: un
+  # crinale non si allaga, qualunque pioggia faccia.
+  floor: 0.05
+
+pluvial:
+  # Soglia intensità-durata per l'allagamento. Stessa meccanica della soglia
+  # di Caine e numeri suoi: la pioggia che satura un versante non è quella
+  # che riempie un alveo.
+  #
+  # **La finestra è 72 h e i numeri sono per 72 h.** Non è un dettaglio: il
+  # segnale disponibile è l'accumulo previsto a 72 h (`DynamicInputs.
+  # flood_forecast_rain_72h_mm`, condiviso con il componente H delle frane), e
+  # confrontarlo con soglie calibrate su 24 h farebbe scattare il trigger su un
+  # autunno normale. Il workflow legge `window_hours` e va a prendere
+  # esattamente quella finestra, così le due cose non possono divergere.
+  #
+  # 80 mm/72 h è l'ordine di grandezza sotto cui il reticolo italiano regge;
+  # 250 mm/72 h è l'evento che lo travolge — la scala degli episodi che
+  # producono le esondazioni mappate dal mosaico.
+  threshold_mm:  80.0
+  saturation_mm: 250.0
+  window_hours:  72
+
+  # Suolo già saturo ⇒ la stessa pioggia scorre invece di infiltrarsi.
+  wet_soil: 0.35
+  # Suolo completamente asciutto: la prima pioggia se la beve il terreno.
+  dry_soil_factor: 0.45
+
+fluvial:
+  # Portata prevista rapportata alla normale recente (GloFAS via Open-Meteo:
+  # picco dei prossimi 7 giorni / media dei 31 precedenti).
+  #
+  # Le soglie di tempo di ritorno di EFAS (2/5/20 anni) sarebbero il segnale
+  # migliore, ma richiedono un account CDS e una dipendenza NetCDF: un client
+  # che non si può eseguire non è un client. Il rapporto è ciò che è
+  # disponibile senza credenziali, ed è già ingerito.
+  normal_ratio:     1.5
+  saturation_ratio: 4.0
+
+imperviousness:
+  # Suolo impermeabilizzato: amplifica **solo** il ramo pluviale. Il cemento
+  # non fa crescere un fiume, fa scorrere la stessa pioggia invece di
+  # lasciarla infiltrare — è il meccanismo del flash flood urbano.
+  max_multiplier: 1.6
+
+# Cutoff di classe. Più stretti in alto rispetto alle frane: un allagamento è
+# un evento a soglia — o l'acqua esce dall'alveo o non esce — quindi la fascia
+# alta deve scattare prima di quanto farebbe una scala lineare.
+classes:
+  none:      [0.00, 0.10]
+  low:       [0.10, 0.25]
+  moderate:  [0.25, 0.45]
+  high:      [0.45, 0.70]
+  very_high: [0.70, 1.00]
+
+pc_alert:
+  none:      verde
+  low:       verde
+  moderate:  gialla
+  high:      arancione
+  very_high: rossa
+
+# Priorità degli alert (non scoring). Un allagamento colpisce ciò che sta in
+# basso e vicino: le stesse bande degli altri pericoli, senza il termine WUI
+# che ha senso solo per il fuoco.
+exposure:
+  urban_here:    1.0
+  urban_near:    0.5
+  road_strong_m: 250.0
+  road_medium_m: 1000.0
+  rail_strong_m: 250.0
+  rail_medium_m: 1000.0

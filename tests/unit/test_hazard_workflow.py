@@ -53,12 +53,18 @@ def test_workflow_name_carries_the_hazard() -> None:
 def test_a_hazard_with_no_engine_is_refused_at_build_time() -> None:
     """Non a metà sweep: lì sarebbe una riga di log fra migliaia.
 
-    L'ordine dei controlli segue quello in cui si sistemano le cose:
-    registrazione, poi file di soglie, poi compatibilità del breakdown. Il
-    messaggio nomina il primo ostacolo, non l'ultimo.
+    Dalla Fase 3 ogni pericolo ha un motore, quindi lo scenario si costruisce
+    togliendolo — il controllo che conta è che il build lo colga, non che
+    esista ancora un pericolo scoperto.
     """
-    with pytest.raises(HazardNotScorableError, match="no deterministic engine registered"):
-        build_hazard_workflow(HazardType.FLOOD, _deps())
+    key = (HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
+    original = _REGISTRY[key]
+    unregister(*key)
+    try:
+        with pytest.raises(HazardNotScorableError, match="no deterministic engine registered"):
+            build_hazard_workflow(HazardType.FLOOD, _deps())
+    finally:
+        _REGISTRY[key] = original
 
 
 def test_a_hazard_with_its_own_breakdown_builds() -> None:
@@ -74,30 +80,56 @@ def test_a_hazard_with_its_own_breakdown_builds() -> None:
     assert wf.step_count > 0
 
 
-def test_a_hazard_without_its_yaml_is_refused_at_build_time() -> None:
+def _missing_thresholds(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fa sparire il file di soglie di `flood` per la durata del test."""
+    from pathlib import Path
+
+    from limen.core.scoring.regional_thresholds import _load_cached
+
+    _load_cached.cache_clear()
+    monkeypatch.setattr(
+        "limen.core.scoring.regional_thresholds.hazard_thresholds_path",
+        lambda _h: Path("/nonexistent/flood.yaml"),
+    )
+    monkeypatch.setattr(
+        "limen.core.scoring.regional_thresholds._load_cached",
+        lambda _h: (_ for _ in ()).throw(FileNotFoundError("/nonexistent/flood.yaml")),
+    )
+
+
+def test_a_hazard_without_its_yaml_is_refused_at_build_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """In Fase 1 esiste solo `hazards/landslide.yaml`. Registrare un motore
     flood non basta: gli executor caricano le soglie di quel pericolo, e senza
     quel file il build deve dirlo con un messaggio che nomina il file atteso,
     non lasciar passare un FileNotFoundError da dentro un executor.
 
-    I file degli altri pericoli arrivano con #61 (wildfire) e #63 (flood):
     #84 ha rifiutato di proposito un file di blocchi condivisi, quindi ogni
-    pericolo ha bisogno della sua configurazione completa.
+    pericolo ha bisogno della sua configurazione completa. Dalla Fase 3 tutti
+    e tre ce l'hanno, quindi l'assenza si simula sul risolutore di percorso.
     """
     key = (HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
+    # Lo snapshot va preso **prima** della sostituzione: catturarlo dopo
+    # rimetterebbe lo stub come motore flood permanente per tutta la sessione.
+    original = _REGISTRY[key]
     register(
         *key,
         lambda _s, t: MultiFactorScoringEngine(t or load_regional_thresholds()),
         breakdown=ComponentBreakdown,
+        replace=True,
     )
+    _missing_thresholds(monkeypatch)
     try:
         with pytest.raises(HazardNotScorableError, match="no thresholds file"):
             build_hazard_workflow(HazardType.FLOOD, _deps())
     finally:
-        unregister(*key)
+        _REGISTRY[key] = original
 
 
-def test_the_check_runs_even_with_an_injected_engine() -> None:
+def test_the_check_runs_even_with_an_injected_engine(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Iniettare il motore non salta il controllo: gli executor caricano
     comunque le soglie del pericolo, quindi un pericolo senza YAML resta non
     valutabile anche se il chiamante porta il proprio motore."""
@@ -106,6 +138,7 @@ def test_the_check_runs_even_with_an_injected_engine() -> None:
         settings=Settings.model_validate({}),
         scoring_engine=MultiFactorScoringEngine(load_regional_thresholds()),
     )
+    _missing_thresholds(monkeypatch)
     with pytest.raises(HazardNotScorableError):
         build_hazard_workflow(HazardType.FLOOD, deps)
 

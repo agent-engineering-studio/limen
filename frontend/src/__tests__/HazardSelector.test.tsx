@@ -163,3 +163,20 @@ describe("palette per pericolo", () => {
     expect(incendio.every((c, i) => c.color !== frane[i]?.color)).toBe(true);
   });
 });
+
+describe("palette dei tre pericoli", () => {
+  it("nessuna rampa è riusata da due pericoli", async () => {
+    // Con tre pericoli sulla stessa mappa il colore è l'unico indizio
+    // immediato di cosa si sta guardando. L'acqua è l'unica delle tre che non
+    // si legge come "caldo", ed è giusto che sia l'unica fredda.
+    const { riskClassesFor } = await import("../lib/risk-colors");
+    const rampe = (["landslide", "wildfire", "flood"] as const).map((h) =>
+      riskClassesFor(h).map((c) => c.color).join(","),
+    );
+    expect(new Set(rampe).size).toBe(3);
+
+    // Classi ed etichette restano identiche: cambia solo la tinta.
+    const livelli = riskClassesFor("flood").map((c) => c.level);
+    expect(livelli).toEqual(riskClassesFor("landslide").map((c) => c.level));
+  });
+});

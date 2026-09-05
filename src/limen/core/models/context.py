@@ -120,6 +120,15 @@ class MonitoringContext(BaseModel):
     flood_forecast_rain_72h_mm: float | None = None
     river_discharge_ratio: float | None = None
     coastal_surge_norm: float | None = None
+    # Fase 3a (#63) — gli stessi due segnali **per nodo**, popolati solo nel
+    # workflow alluvione. Lì sono il motore, e un numero solo copiato su ogni
+    # cella di una regione è l'errore che questo repo documenta già per la
+    # pioggia: 13 mm al centroide della Puglia contro 77 mm sulle celle che
+    # hanno davvero ceduto. `None` in una posizione = nessun dato per quel
+    # nodo, che per il fiume significa "nessun corso d'acqua qui".
+    flood_nodes: Sequence[tuple[float, float]] = Field(default_factory=tuple)
+    flood_rain_by_node: Sequence[float | None] = Field(default_factory=tuple)
+    flood_river_ratio_by_node: Sequence[float | None] = Field(default_factory=tuple)
     # Fase 2 (#62) — la catena FWI del giorno, per nodo del reticolo globale.
     # Popolata dallo step FwiUpdate solo nel workflow incendio; l'assembler dà
     # a ogni cella la catena del nodo più vicino. `None` in una posizione =

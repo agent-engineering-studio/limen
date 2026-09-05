@@ -93,6 +93,9 @@ const DRIVER_PROSE: Record<string, string> = {
   fwi_norm: "dalle condizioni meteo: caldo, secco e vento",
   fuel: "da quanto è infiammabile la vegetazione qui",
   slope: "dalla pendenza, che fa correre il fuoco verso l'alto",
+  susceptibility: "da dove si trova: è una zona che l'acqua raggiunge",
+  pluvial: "dalla pioggia prevista, più di quanta il terreno ne assorba",
+  fluvial: "dalla portata prevista del fiume, sopra la sua normale",
 };
 
 /** Spiegazione della cella in linguaggio piano — deterministica, dal
@@ -109,7 +112,28 @@ function plainSummary(
     parts.push(`Il punteggio nasce soprattutto ${DRIVER_PROSE[top.key]}.`);
   }
 
-  if (hazard === "wildfire") {
+  if (hazard === "flood") {
+    const pluvial = pickScalar(factors, "pluvial");
+    const fluvial = pickScalar(factors, "fluvial");
+    if (pluvial === 0 && fluvial === 0) {
+      parts.push(
+        "Nessun segnale in corso: il punteggio riflette solo dove si trova " +
+          "la cella, non un pericolo in atto.",
+      );
+    } else if (fluvial > pluvial) {
+      parts.push("Il segnale viene dal fiume, non dalla pioggia che cade qui.");
+    } else {
+      parts.push("Il segnale viene dalla pioggia locale, non da un fiume in piena.");
+    }
+    if (factors["mapped"] === false) {
+      // Il mosaico ISPRA copre i bacini ufficialmente studiati: dirlo è più
+      // onesto che presentare un valore di ripiego come una perimetrazione.
+      parts.push(
+        "Questa cella è fuori dalle zone idrauliche mappate: il valore di " +
+          "base è prudenziale, non una perimetrazione ufficiale.",
+      );
+    }
+  } else if (hazard === "wildfire") {
     const fwi = pickScalar(factors, "fwi_norm");
     if (fwi < 0.05) {
       parts.push(
@@ -209,6 +233,11 @@ const COMPONENTS_BY_HAZARD: Record<
     { key: "fwi_norm", label: "FWI (tempo)", color: "#d95f0e" },
     { key: "fuel", label: "Combustibile", color: "#238b45" },
     { key: "slope", label: "Pendenza", color: "#7a5cc0" },
+  ],
+  flood: [
+    { key: "susceptibility", label: "Suscettibilità", color: "#045a8d" },
+    { key: "pluvial", label: "Pioggia", color: "#2b8cbe" },
+    { key: "fluvial", label: "Fiume", color: "#74a9cf" },
   ],
 };
 

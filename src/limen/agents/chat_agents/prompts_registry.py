@@ -31,9 +31,7 @@ def prompt_file(agent: str, hazard: HazardType) -> str | None:
     The default hazard keeps the unsuffixed filename the repo already ships,
     so nothing about the landslide path moves.
     """
-    candidate = (
-        f"{agent}.it.md" if hazard is DEFAULT_HAZARD else f"{agent}.{hazard.value}.it.md"
-    )
+    candidate = f"{agent}.it.md" if hazard is DEFAULT_HAZARD else f"{agent}.{hazard.value}.it.md"
     if resources.files(PROMPT_PACKAGE).joinpath(candidate).is_file():
         return candidate
     return None

@@ -91,12 +91,31 @@ def test_packaged_path_points_at_the_hazard_file() -> None:
     assert hazard_thresholds_path(HazardType.FLOOD).name == "flood.yaml"
 
 
-def test_hazard_without_a_file_fails_instead_of_borrowing_landslide() -> None:
+def test_hazard_without_a_file_fails_instead_of_borrowing_landslide(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Un pericolo senza YAML non deve silenziosamente ereditare le soglie
-    delle frane: sarebbero numeri sbagliati presentati come giusti."""
-    from limen.core.models.hazard import HazardType
-    from limen.core.scoring.regional_thresholds import load_hazard_thresholds
+    delle frane: sarebbero numeri sbagliati presentati come giusti.
 
-    # `flood` è l'unico pericolo dell'enum ancora senza YAML (#63).
-    with pytest.raises(FileNotFoundError):
-        load_hazard_thresholds(HazardType.FLOOD)
+    Dalla Fase 3 ogni membro dell'enum ha il suo file, quindi lo scenario si
+    costruisce spostando il risolutore di percorso: la garanzia da provare è
+    che il loader non ripieghi, non che esista ancora un pericolo scoperto.
+    """
+    from pathlib import Path
+
+    from limen.core.models.hazard import HazardType
+    from limen.core.scoring.regional_thresholds import (
+        _load_cached,
+        load_hazard_thresholds,
+    )
+
+    _load_cached.cache_clear()
+    monkeypatch.setattr(
+        "limen.core.scoring.regional_thresholds.hazard_thresholds_path",
+        lambda _h: Path("/nonexistent/flood.yaml"),
+    )
+    try:
+        with pytest.raises(FileNotFoundError):
+            load_hazard_thresholds(HazardType.FLOOD)
+    finally:
+        _load_cached.cache_clear()
