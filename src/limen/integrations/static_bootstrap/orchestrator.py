@@ -387,6 +387,18 @@ async def bootstrap_static_for_aoi(aoi_id: str) -> dict[str, int]:
     # colonna WUI ferma di un giro rispetto alla copertura del suolo.
     await compute_wui_proximity_for_aoi(aoi_id)
 
+    # CLMS Imperviousness — gira quando LIMEN_IMPERVIOUSNESS_RASTER punta a un
+    # GeoTIFF; senza, no-op pulito con log strutturato, come DEM e CORINE.
+    from limen.integrations.imperviousness import sync_imperviousness_for_aois
+
+    imperv_written = await sync_imperviousness_for_aois(aoi_ids=[aoi_id])
+    if imperv_written:
+        log.info(
+            "static_bootstrap.imperviousness_done",
+            aoi_id=aoi_id,
+            rows_written=imperv_written,
+        )
+
     # ISPRA Carta Geologica — vector shapefile + faults; runs when
     # LIMEN_GEOLOGICAL_SHAPEFILE points at a polygon file.
     from limen.integrations.geological import sync_geological_for_aois

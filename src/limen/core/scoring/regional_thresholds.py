@@ -616,11 +616,134 @@ class WildfireThresholds(HazardThresholds):
         }
 
 
+# ---------------------------------------------------------------------------
+# Flood (#63)
+# ---------------------------------------------------------------------------
+class SusceptibilityBlock(_StrictModel):
+    """How the ISPRA hydraulic mosaic becomes a susceptibility in [0, 1].
+
+    The mosaic already ships a normalised class (``flood_hazard_norm``), so
+    this block only says what to do at its edges: what an *unmapped* cell is
+    worth, and whether to keep scoring one at all.
+    """
+
+    #: A cell outside the mapped hazard zones. Not zero: the mosaic covers
+    #: officially studied basins, and "not studied" is not "not floodable".
+    #: Low enough that an unmapped cell cannot reach the top classes on rain
+    #: alone, high enough that it does not vanish from the map.
+    unmapped: float = Field(..., ge=0.0, le=1.0)
+    #: Below this the cell is treated as effectively dry land and the engine
+    #: short-circuits to zero -- ridge tops do not flood, whatever the rain.
+    floor: float = Field(..., ge=0.0, le=1.0)
+
+
+class ImperviousnessBlock(_StrictModel):
+    """Sealed-soil amplification of the *pluvial* branch only.
+
+    Concrete does not make a river rise, so this never touches the fluvial
+    term: it makes the same rain run off instead of soaking in, which is the
+    urban flash-flood mechanism.
+    """
+
+    #: Multiplier at 100 % sealed. 1.0 = no amplification.
+    max_multiplier: float = Field(..., ge=1.0)
+
+
+class PluvialBlock(_StrictModel):
+    """Intensity-duration threshold for local (flash) flooding.
+
+    Same shape as the Caine landslide threshold and deliberately its own
+    numbers: the rain that saturates a slope over two days is not the rain
+    that overwhelms a storm drain in an hour.
+    """
+
+    #: Rain over the window below which nothing happens, mm.
+    threshold_mm: float = Field(..., gt=0.0)
+    #: Rain at which the trigger saturates at 1.0, mm.
+    saturation_mm: float = Field(..., gt=0.0)
+    #: Hours the accumulation is measured over.
+    window_hours: int = Field(..., gt=0)
+    #: Antecedent soil moisture at or above which the ground is already full
+    #: and the same rain runs off. Below it the trigger is damped.
+    wet_soil: float = Field(..., ge=0.0, le=1.0)
+    #: Damping applied to a completely dry soil. 1.0 = no damping.
+    dry_soil_factor: float = Field(..., ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _saturation_above_threshold(self) -> PluvialBlock:
+        if self.saturation_mm <= self.threshold_mm:
+            raise ValueError(
+                f"pluvial.saturation_mm ({self.saturation_mm}) must exceed "
+                f"threshold_mm ({self.threshold_mm})"
+            )
+        return self
+
+
+class FluvialBlock(_StrictModel):
+    """River discharge, as a ratio to the recent seasonal normal.
+
+    GloFAS through Open-Meteo gives forecast peak discharge over the coming
+    week against the trailing month; a ratio is what is actually available
+    without credentials. EFAS return periods (2/5/20 y) would be the better
+    signal and are a follow-up -- they need a CDS account and a NetCDF
+    dependency, so a client for them could not be exercised here.
+    """
+
+    #: Ratio at or below which the river is behaving normally.
+    normal_ratio: float = Field(..., ge=1.0)
+    #: Ratio at which the fluvial trigger saturates at 1.0.
+    saturation_ratio: float = Field(..., gt=1.0)
+
+    @model_validator(mode="after")
+    def _ordered(self) -> FluvialBlock:
+        if self.saturation_ratio <= self.normal_ratio:
+            raise ValueError(
+                f"fluvial.saturation_ratio ({self.saturation_ratio}) must exceed "
+                f"normal_ratio ({self.normal_ratio})"
+            )
+        return self
+
+
+class FloodThresholds(HazardThresholds):
+    """Flood configuration (#63).
+
+    ``score = susceptibility x max(pluvial, fluvial)``. A maximum, not a sum:
+    the two are different ways for the same cell to end up under water, and a
+    cell does not become more flooded because both could happen -- whichever
+    is worse is what an operator has to plan for.
+    """
+
+    susceptibility: SusceptibilityBlock
+    pluvial: PluvialBlock
+    fluvial: FluvialBlock
+    imperviousness: ImperviousnessBlock
+    calibration: CalibrationBlock | None = None
+
+    def model_card(self) -> dict[str, Any]:
+        return {
+            "susceptibility": {
+                "unmapped": self.susceptibility.unmapped,
+                "floor": self.susceptibility.floor,
+            },
+            "pluvial": {
+                "threshold_mm": self.pluvial.threshold_mm,
+                "saturation_mm": self.pluvial.saturation_mm,
+                "window_hours": self.pluvial.window_hours,
+            },
+            "fluvial": {
+                "normal_ratio": self.fluvial.normal_ratio,
+                "saturation_ratio": self.fluvial.saturation_ratio,
+            },
+            "imperviousness": {"max_multiplier": self.imperviousness.max_multiplier},
+        }
+
+
 #: Which schema validates which hazard's YAML. Adding a hazard is an entry
 #: here plus the file -- the loader has no branch of its own.
 SCHEMA_BY_HAZARD: dict[HazardType, type[HazardThresholds]] = {
     HazardType.LANDSLIDE: RegionalThresholds,
     HazardType.WILDFIRE: WildfireThresholds,
+    HazardType.FLOOD: FloodThresholds,
 }
 
 

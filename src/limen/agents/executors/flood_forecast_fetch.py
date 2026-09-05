@@ -26,16 +26,28 @@ class _FloodClient(Protocol):
         bbox: tuple[float, float, float, float],
         valuation_time: datetime,
         horizon_hours: int = 72,
+        basin_max: bool = False,
     ) -> FloodSignals: ...
 
 
 class FloodForecastFetchExecutor(Executor):
     """Populate the context's dynamic flood signals (opt-in, degrades to None)."""
 
-    def __init__(self, *, client: _FloodClient | None = None, horizon_hours: int = 72) -> None:
+    def __init__(
+        self,
+        *,
+        client: _FloodClient | None = None,
+        horizon_hours: int = 72,
+        basin_max: bool = False,
+    ) -> None:
         super().__init__(name="FloodForecastFetch")
         self._client: _FloodClient = client or OpenMeteoFloodClient()
         self._horizon_hours = horizon_hours
+        # Il ramo fluviale campionato sul bacino invece che sul centroide.
+        # Acceso per il pericolo alluvione, dove è metà del motore; spento per
+        # le frane, dove è un bonus opzionale al componente H e cambiarlo
+        # sposterebbe i numeri del campione V1 senza un backtest.
+        self._basin_max = basin_max
 
     @handler
     async def run(self, ctx: MonitoringContext) -> MonitoringContext:
@@ -46,6 +58,7 @@ class FloodForecastFetchExecutor(Executor):
             bbox=ctx.bbox,
             valuation_time=ctx.valuation_time,
             horizon_hours=self._horizon_hours,
+            basin_max=self._basin_max,
         )
         log.info(
             "executor.flood_forecast.done",
@@ -53,6 +66,7 @@ class FloodForecastFetchExecutor(Executor):
             rain_72h_mm=sig.rain_72h_mm,
             river_discharge_ratio=sig.river_discharge_ratio,
             coastal_surge_norm=sig.coastal_surge_norm,
+            basin_max=self._basin_max,
         )
         return ctx.with_update(
             flood_forecast_rain_72h_mm=sig.rain_72h_mm,

@@ -14,12 +14,17 @@ import { defaultApiClient } from "../lib/api-client";
 import { HazardProvider } from "../lib/hazard";
 import type { CellBreakdownResponse, HazardsResponse } from "../types";
 
+// Il selettore resta sul default. È voluto: il popup deve seguire il
+// **pericolo della riga letta**, non quello selezionato — le due cose
+// divergono per un istante ogni volta che una fetch è in volo, e far
+// decidere al selettore significherebbe etichettare numeri d'incendio come
+// frane finché la risposta non arriva.
 const HAZARDS: HazardsResponse = {
   items: [
     { hazard: "landslide", label_it: "Frana" },
     { hazard: "wildfire", label_it: "Incendio" },
   ],
-  default: "wildfire",
+  default: "landslide",
 };
 
 const WILDFIRE_ROW: CellBreakdownResponse = {
@@ -55,7 +60,10 @@ describe("CellPopup per pericolo", () => {
       </HazardProvider>,
     );
 
-    expect(await screen.findByText("FWI (tempo)")).toBeInTheDocument();
+    // La riga dice `wildfire`, il selettore dice `landslide`: vincono i dati.
+    await waitFor(() =>
+      expect(screen.getByText("FWI (tempo)")).toBeInTheDocument(),
+    );
     expect(screen.getByText("Combustibile")).toBeInTheDocument();
     // Le etichette delle frane non devono comparire su una cella d'incendio.
     expect(screen.queryByText("S statico")).toBeNull();
@@ -79,6 +87,81 @@ describe("CellPopup per pericolo", () => {
 
     await waitFor(() =>
       expect(screen.getByText(/in avviamento/i)).toBeInTheDocument(),
+    );
+  });
+});
+
+describe("CellPopup alluvione", () => {
+  it("distingue il segnale del fiume da quello della pioggia", async () => {
+    // I due trigger sono mitigati da cose diverse — un argine e una caditoia
+    // — quindi dire quale dei due sta parlando è metà dell'informazione.
+    vi.spyOn(defaultApiClient, "getHazards").mockResolvedValue(HAZARDS);
+    vi.spyOn(defaultApiClient, "getCellBreakdown").mockResolvedValue({
+      cell_id: "it-basilicata|2|2",
+      hazard_type: "flood",
+      computed_at: "2026-11-03T12:00:00Z",
+      score: 0.62,
+      level: "High",
+      horizon: "24h",
+      pipeline_version: "v1-deterministic",
+      factors: {
+        susceptibility: 0.8,
+        pluvial: 0.1,
+        fluvial: 0.78,
+        mapped: true,
+        discharge_ratio: 3.4,
+        rain_mm: 12.0,
+      },
+      explanation: {},
+    });
+
+    render(
+      <HazardProvider>
+        <CellPopup cellId="it-basilicata|2|2" />
+      </HazardProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText("Suscettibilità")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("Fiume")).toBeInTheDocument();
+    expect(screen.getByText(/viene dal fiume/i)).toBeInTheDocument();
+    // Nessuna etichetta degli altri due pericoli.
+    expect(screen.queryByText("S statico")).toBeNull();
+    expect(screen.queryByText("FWI (tempo)")).toBeNull();
+  });
+
+  it("dichiara quando la cella è fuori dalle zone mappate", async () => {
+    // Il mosaico ISPRA copre i bacini ufficialmente studiati: presentare il
+    // valore di ripiego come una perimetrazione sarebbe una falsa precisione.
+    vi.spyOn(defaultApiClient, "getHazards").mockResolvedValue(HAZARDS);
+    vi.spyOn(defaultApiClient, "getCellBreakdown").mockResolvedValue({
+      cell_id: "it-basilicata|3|3",
+      hazard_type: "flood",
+      computed_at: "2026-11-03T12:00:00Z",
+      score: 0.15,
+      level: "Low",
+      horizon: "24h",
+      pipeline_version: "v1-deterministic",
+      factors: {
+        susceptibility: 0.15,
+        pluvial: 1.0,
+        fluvial: 0.0,
+        mapped: false,
+        discharge_ratio: null,
+        rain_mm: 200.0,
+      },
+      explanation: {},
+    });
+
+    render(
+      <HazardProvider>
+        <CellPopup cellId="it-basilicata|3|3" />
+      </HazardProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText(/fuori dalle zone idrauliche mappate/i)).toBeInTheDocument(),
     );
   });
 });

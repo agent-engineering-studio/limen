@@ -177,6 +177,13 @@ non possano ignorarle.
   **per nodo meteo**, non per cella: dipende solo dal tempo, che Open-Meteo dà
   a ~9 km, e per cella sarebbero ~500 copie identiche degli stessi sei numeri
   ogni giorno. Lo step `FwiUpdate` lo avanza a ogni sweep incendio.
+* **Alluvione: suscettibilità × max(pluviale, fluviale)** (#63). Un massimo e
+  non una somma — sono due modi diversi perché la stessa cella finisca
+  sott'acqua, e sommarli lascerebbe che due segnali moderati ne inventino uno
+  grave. La suscettibilità **moltiplica** invece di sommarsi, al contrario del
+  termine `base` dell'incendio: l'acqua va in basso, quindi un crinale non si
+  allaga per quanto piova accanto. Il mosaico idraulico ISPRA, che alimentava
+  il componente H delle frane da tempo, diventa qui la base di un pericolo suo.
 * **I consumatori leggono il breakdown per proiezioni** (#62):
   `CellRiskRecord` porta il breakdown tipizzato del pericolo, e chi deve
   funzionare per qualunque pericolo chiede `components()`, `factors_payload()`

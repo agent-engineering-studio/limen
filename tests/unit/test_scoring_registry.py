@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Literal
 
 import pytest
@@ -32,6 +33,7 @@ from limen.core.scoring.regional_thresholds import (
     load_regional_thresholds,
 )
 from limen.core.scoring.registry import (
+    _REGISTRY,
     EngineNotRegisteredError,
     is_registered,
     register,
@@ -68,11 +70,15 @@ def test_resolve_returns_the_v1_engine() -> None:
 
 def test_unregistered_pair_fails_loudly_and_says_what_exists() -> None:
     """Un pericolo scritto male in configurazione deve rompere subito e a voce
-    alta, non valutare silenziosamente zero celle."""
+    alta, non valutare silenziosamente zero celle.
+
+    La coppia scelta è *(flood, ml)*: nessun pericolo ha un challenger ML
+    tranne le frane, quindi è un buco vero e non uno costruito.
+    """
     with pytest.raises(EngineNotRegisteredError) as exc:
-        resolve(HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
+        resolve(HazardType.FLOOD, ScoringEngineKind.ML)
     message = str(exc.value)
-    assert "flood/deterministic" in message
+    assert "flood/ml" in message
     # L'errore elenca cosa c'è, così chi legge il log capisce cosa manca.
     assert "landslide/deterministic" in message
 
@@ -99,8 +105,26 @@ def test_thresholds_override_reaches_the_engine() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Un pericolo nuovo: nessun file di produzione lo conosce
+# Un pericolo nuovo, costruito togliendone uno vero
 # ---------------------------------------------------------------------------
+# Fino alla Fase 3 questi test usavano `flood` come "pericolo che nessun file
+# di produzione conosce". Ora tutti e tre i membri dell'enum hanno motore e
+# configurazione (#63), quindi lo scenario va **costruito**: si smonta il
+# pericolo vero per la durata del test e lo si rimette. È anche più fedele —
+# prova il meccanismo, non la coincidenza di quale pericolo è ancora scoperto.
+
+
+@pytest.fixture()
+def flood_unregistered() -> Iterator[None]:
+    """Toglie il motore flood registrato, e lo rimette esattamente com'era."""
+    key = (HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
+    original = _REGISTRY.get(key)
+    unregister(*key)
+    yield
+    if original is not None:
+        _REGISTRY[key] = original
+
+
 class _FakeFloodBreakdown(HazardBreakdown):
     hazard_type: Literal[HazardType.FLOOD] = HazardType.FLOOD
     depth_norm: float
@@ -117,7 +141,7 @@ class _FakeFloodEngine:
 
 
 @pytest.fixture()
-def fake_flood_registered() -> Iterator[None]:
+def fake_flood_registered(flood_unregistered: None) -> Iterator[None]:
     register(
         HazardType.FLOOD,
         ScoringEngineKind.DETERMINISTIC,
@@ -142,6 +166,7 @@ def test_registration_round_trip_leaves_no_residue() -> None:
     falserebbe ogni test successivo della sessione. Indipendente dall'ordine,
     perché registra e ripulisce da sé."""
     key = (HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
+    unregister(*key)
     assert not is_registered(*key)
     register(*key, lambda _s, _t: _FakeFloodEngine(), breakdown=_FakeFloodBreakdown)
     try:
@@ -206,10 +231,28 @@ def test_cache_is_keyed_per_hazard() -> None:
     # Stesso pericolo ⇒ stesso oggetto in cache.
     assert first is second
     # Pericoli diversi ⇒ configurazioni diverse, non la stessa riusata.
-    assert load_hazard_thresholds(HazardType.WILDFIRE) is not first
-    # Un pericolo senza file non deve restituire quello delle frane.
-    with pytest.raises(FileNotFoundError):
-        load_hazard_thresholds(HazardType.FLOOD)
+    for other in (HazardType.WILDFIRE, HazardType.FLOOD):
+        assert load_hazard_thresholds(other) is not first
+    # Un pericolo senza schema non deve restituire quello delle frane. Ogni
+    # membro dell'enum ne ha uno dalla Fase 3, quindi lo scenario si costruisce
+    # togliendolo — la garanzia è che il loader non ripieghi, non che esista
+    # ancora un pericolo scoperto.
+    from limen.core.scoring.regional_thresholds import (
+        SCHEMA_BY_HAZARD,
+        _load_cached,
+    )
+
+    removed = SCHEMA_BY_HAZARD.pop(HazardType.FLOOD)
+    # La cache è per pericolo e già calda: senza svuotarla il loader
+    # restituirebbe la configurazione interpretata prima della rimozione, e il
+    # test passerebbe senza provare nulla.
+    _load_cached.cache_clear()
+    try:
+        with pytest.raises(FileNotFoundError):
+            load_hazard_thresholds(HazardType.FLOOD)
+    finally:
+        SCHEMA_BY_HAZARD[HazardType.FLOOD] = removed
+        _load_cached.cache_clear()
 
 
 def test_explicit_path_bypasses_the_cache() -> None:
@@ -262,19 +305,23 @@ def test_injected_settings_reach_the_ml_factory() -> None:
     assert seen[0].scoring.mlflow_tracking_uri == "file:///tmp/limen-iniettato"
 
 
-def test_an_unregistered_hazard_is_refused_at_build_time() -> None:
+def test_an_unregistered_hazard_falls_back_to_nothing_it_can_score(
+    flood_unregistered: None,
+) -> None:
     """Valutare una cella di alluvione con le soglie di versante darebbe
-    numeri sbagliati presentati come giusti: peggio di un errore rumoroso."""
+    numeri sbagliati presentati come giusti: peggio di un errore rumoroso.
+
+    Il motore flood esiste, quindi lo scenario si costruisce togliendolo. Il
+    resolver trova la configurazione (che c'è) ma nessun motore, e rifiuta
+    invece di costruire la formula delle frane sopra soglie di alluvione.
+    """
     from limen.core.scoring.resolver import HazardNotScorableError, resolve_scoring_engine
 
-    # Il primo ostacolo che il resolver incontra per un pericolo mai
-    # configurato è il file di soglie: senza quello non c'è numero corretto da
-    # produrre, con o senza motore registrato.
-    with pytest.raises(HazardNotScorableError, match="no thresholds file"):
+    with pytest.raises(HazardNotScorableError, match="no deterministic engine registered"):
         resolve_scoring_engine(hazard=HazardType.FLOOD)
 
 
-def test_an_engine_with_its_own_breakdown_resolves() -> None:
+def test_an_engine_with_its_own_breakdown_resolves(flood_unregistered: None) -> None:
     """Nessun vincolo sulla forma del breakdown, dalla Fase 2.
 
     Prima il resolver rifiutava un motore che non producesse i componenti
@@ -286,14 +333,13 @@ def test_an_engine_with_its_own_breakdown_resolves() -> None:
     from limen.core.scoring.resolver import resolve_scoring_engine
 
     key = (HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
-    register(*key, lambda _s, _t: _FakeFloodEngine(), breakdown=_FakeFloodBreakdown)
-    try:
-        assert isinstance(resolve_scoring_engine(hazard=HazardType.FLOOD), _FakeFloodEngine)
-    finally:
-        unregister(*key)
+    register(*key, lambda _s, _t: _FakeFloodEngine(), breakdown=_FakeFloodBreakdown, replace=True)
+    assert isinstance(resolve_scoring_engine(hazard=HazardType.FLOOD), _FakeFloodEngine)
 
 
-def test_an_engine_reusing_the_landslide_breakdown_is_accepted() -> None:
+def test_an_engine_reusing_the_landslide_breakdown_is_accepted(
+    flood_unregistered: None,
+) -> None:
     """Un motore che riusa la forma dei componenti delle frane resta valido:
     la forma non è più un vincolo, ma neanche un divieto."""
     key = (HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
@@ -302,16 +348,15 @@ def test_an_engine_reusing_the_landslide_breakdown_is_accepted() -> None:
         lambda _s, t: MultiFactorScoringEngine(t or load_regional_thresholds()),
         breakdown=ComponentBreakdown,
     )
-    try:
-        engine = resolve_scoring_engine(hazard=HazardType.FLOOD)
-        assert isinstance(engine, MultiFactorScoringEngine)
-    finally:
-        unregister(*key)
+    engine = resolve_scoring_engine(hazard=HazardType.FLOOD)
+    assert isinstance(engine, MultiFactorScoringEngine)
 
 
-def test_check_scorable_catches_a_misconfigured_hazard() -> None:
-    """Chiamata all'avvio su ogni voce di HAZARDS__ENABLED, così un errore di
-    battitura si vede al boot e non come AttributeError a metà sweep."""
+def test_check_scorable_catches_a_misconfigured_hazard(
+    flood_unregistered: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Chiamata all'avvio su ogni pericolo abilitato, così un errore di
+    configurazione si vede al boot e non come AttributeError a metà sweep."""
     from limen.core.scoring.resolver import HazardNotScorableError, check_scorable
 
     check_scorable(HazardType.LANDSLIDE)
@@ -319,10 +364,16 @@ def test_check_scorable_catches_a_misconfigured_hazard() -> None:
     with pytest.raises(HazardNotScorableError, match="no deterministic engine"):
         check_scorable(HazardType.FLOOD)
 
-    # Motore registrato ma senza file di soglie: va colto comunque.
+    # Motore registrato ma senza file di soglie: va colto comunque. Tutti e
+    # tre i file esistono dalla Fase 3, quindi l'assenza si simula sul
+    # risolutore di percorso — è quello che `check_scorable` interroga.
     key = (HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
     register(*key, lambda _s, _t: _FakeFloodEngine(), breakdown=_FakeFloodBreakdown)
     try:
+        monkeypatch.setattr(
+            "limen.core.scoring.regional_thresholds.hazard_thresholds_path",
+            lambda _h: Path("/nonexistent/flood.yaml"),
+        )
         with pytest.raises(HazardNotScorableError, match="no thresholds file"):
             check_scorable(HazardType.FLOOD)
     finally:

@@ -96,8 +96,10 @@ async def run_forecast(
     )
     # Flood is a first-class output (#8): include the forecast flood signals so
     # the predictive H uplift is reflected in the forecast score too.
-    if settings.enable_flood_forecast:
-        builder = builder.add(FloodForecastFetchExecutor())
+    # Come nello sweep orario: opzionale per le frane, obbligatorio per
+    # l'alluvione — sono i suoi due trigger.
+    if settings.enable_flood_forecast or hazard is HazardType.FLOOD:
+        builder = builder.add(FloodForecastFetchExecutor(basin_max=hazard is HazardType.FLOOD))
     # Senza questo passo la catena FWI non esisterebbe alla data prevista e
     # ogni cella incendio uscirebbe a zero: previsione sempre vuota, in
     # silenzio. Lo step cammina la catena fino al giorno chiesto e **non**
