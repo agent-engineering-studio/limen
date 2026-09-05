@@ -11,6 +11,7 @@ from limen.agents.executors.area_resolver import AreaResolverExecutor
 from limen.agents.executors.escalation_gate import EscalationGateExecutor
 from limen.agents.executors.fire_check import FireCheckExecutor
 from limen.agents.executors.flood_forecast_fetch import FloodForecastFetchExecutor
+from limen.agents.executors.fwi_update import FwiUpdateExecutor
 from limen.agents.executors.meteo_fetch import MeteoFetchExecutor
 from limen.agents.executors.persist_result import PersistResultExecutor
 from limen.agents.executors.risk_scoring import RiskScoringExecutor
@@ -25,6 +26,7 @@ __all__ = [
     "EscalationGateExecutor",
     "FireCheckExecutor",
     "FloodForecastFetchExecutor",
+    "FwiUpdateExecutor",
     "MeteoFetchExecutor",
     "PersistResultExecutor",
     "RiskScoringExecutor",

@@ -12,10 +12,9 @@ from limen.agents.workflows.escalation_workflow import (
 )
 from limen.core.models.context import CellRiskRecord, MonitoringContext
 from limen.core.models.risk import (
-    MeteoBreakdown,
     RiskLevel,
-    StaticBreakdown,
 )
+from tests.factories import landslide_record
 
 
 def _record(
@@ -31,16 +30,10 @@ def _record(
     k: float = 0.0,
     hard_escalation: bool = False,
 ) -> CellRiskRecord:
-    return CellRiskRecord(
-        cell_id=cell_id,
+    return landslide_record(
+        cell_id,
         score=score,
         level=level,
-        static_terms=StaticBreakdown(
-            susc_ispra=0.0, iffi_density=0.0, slope=0.0, pai=0.0, litho_weight=0.0
-        ),
-        meteo_terms=MeteoBreakdown(
-            caine_excess=0.0, caine_norm=0.0, api_factor=0.0, soil_factor=0.0
-        ),
         s=s,
         m=m,
         e=e,

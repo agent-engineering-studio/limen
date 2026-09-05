@@ -19,9 +19,7 @@ from limen.core.models.context import (
     MonitoringContext,
 )
 from limen.core.models.risk import (
-    MeteoBreakdown,
     RiskLevel,
-    StaticBreakdown,
 )
 from limen.data.db import acquire
 from limen.data.repos.alert_dispatches_repo import count_dispatches, fetch_recent
@@ -29,6 +27,7 @@ from limen.data.repos.aoi_repo import upsert_aoi
 from limen.data.repos.grid_repo import generate_and_store_grid
 from limen.notifications.base import AlertPayload, NotificationChannel
 from limen.notifications.dispatcher import NotificationDispatcher
+from tests.factories import landslide_record
 
 pytestmark = pytest.mark.integration
 
@@ -59,22 +58,7 @@ class _CaptureChannel(NotificationChannel):
 
 
 def _cell(cell_id: str, *, score: float, level: RiskLevel) -> CellRiskRecord:
-    return CellRiskRecord(
-        cell_id=cell_id,
-        score=score,
-        level=level,
-        s=score,
-        m=score,
-        e=0.0,
-        f=0.0,
-        h=0.0,
-        static_terms=StaticBreakdown(
-            susc_ispra=0.0, iffi_density=0.0, slope=0.0, pai=0.0, litho_weight=0.0
-        ),
-        meteo_terms=MeteoBreakdown(
-            caine_excess=0.0, caine_norm=0.0, api_factor=0.5, soil_factor=0.5
-        ),
-    )
+    return landslide_record(cell_id, score=score, level=level, s=score, m=score)
 
 
 async def _seed_aoi_with_cells() -> list[str]:

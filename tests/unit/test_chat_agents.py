@@ -25,31 +25,29 @@ from limen.agents.chat_agents.risk_analyst import (
 from limen.agents.llm_factory.stub import StubChatClient
 from limen.core.models.context import (
     AggregateAssessment,
-    CellRiskRecord,
 )
 from limen.core.models.risk import (
     MeteoBreakdown,
     RiskLevel,
     StaticBreakdown,
 )
+from tests.factories import landslide_record
 
 
 def _assessment() -> AggregateAssessment:
-    top_cell = CellRiskRecord(
-        cell_id="aoi|0|0",
+    top_cell = landslide_record(
+        "aoi|0|0",
         score=0.55,
         level=RiskLevel.High,
+        s=0.48,
+        m=0.42,
+        e=0.05,
         static_terms=StaticBreakdown(
             susc_ispra=0.4, iffi_density=0.5, slope=0.6, pai=0.4, litho_weight=0.5
         ),
         meteo_terms=MeteoBreakdown(
             caine_excess=0.1, caine_norm=0.1, api_factor=0.6, soil_factor=0.5
         ),
-        s=0.48,
-        m=0.42,
-        e=0.05,
-        f=0.0,
-        h=0.0,
     )
     return AggregateAssessment(
         aoi_id="aoi-test",

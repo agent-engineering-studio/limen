@@ -274,24 +274,28 @@ def test_an_unregistered_hazard_is_refused_at_build_time() -> None:
         resolve_scoring_engine(hazard=HazardType.FLOOD)
 
 
-def test_an_engine_with_an_unreadable_breakdown_is_refused_at_build_time() -> None:
-    """`RiskScoringExecutor` legge componenti con nome: un motore che produce
-    un breakdown diverso morirebbe come AttributeError a metà sweep, quindi la
-    incompatibilità va colta al build usando la classe dichiarata."""
-    from limen.core.scoring.resolver import HazardNotScorableError, resolve_scoring_engine
+def test_an_engine_with_its_own_breakdown_resolves() -> None:
+    """Nessun vincolo sulla forma del breakdown, dalla Fase 2.
+
+    Prima il resolver rifiutava un motore che non producesse i componenti
+    delle frane, perché `CellRiskRecord` li leggeva per nome; ora il record
+    porta il breakdown del pericolo e i consumatori lo interrogano tramite le
+    proiezioni. Il vincolo era la ragione per cui un secondo pericolo non
+    poteva girare nel workflow.
+    """
+    from limen.core.scoring.resolver import resolve_scoring_engine
 
     key = (HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
     register(*key, lambda _s, _t: _FakeFloodEngine(), breakdown=_FakeFloodBreakdown)
     try:
-        with pytest.raises(HazardNotScorableError, match="reads landslide components"):
-            resolve_scoring_engine(hazard=HazardType.FLOOD)
+        assert isinstance(resolve_scoring_engine(hazard=HazardType.FLOOD), _FakeFloodEngine)
     finally:
         unregister(*key)
 
 
-def test_an_engine_with_a_readable_breakdown_is_accepted() -> None:
-    """Un primo motore flood che riusa la forma dei componenti delle frane
-    passa: è il controllo sulla forma, non sul nome del pericolo."""
+def test_an_engine_reusing_the_landslide_breakdown_is_accepted() -> None:
+    """Un motore che riusa la forma dei componenti delle frane resta valido:
+    la forma non è più un vincolo, ma neanche un divieto."""
     key = (HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
     register(
         *key,
@@ -310,16 +314,16 @@ def test_check_scorable_catches_a_misconfigured_hazard() -> None:
     battitura si vede al boot e non come AttributeError a metà sweep."""
     from limen.core.scoring.resolver import HazardNotScorableError, check_scorable
 
-    check_scorable(HazardType.LANDSLIDE, ScoringEngineKind.DETERMINISTIC)
+    check_scorable(HazardType.LANDSLIDE)
 
     with pytest.raises(HazardNotScorableError, match="no deterministic engine"):
-        check_scorable(HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
+        check_scorable(HazardType.FLOOD)
 
     # Motore registrato ma senza file di soglie: va colto comunque.
     key = (HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
     register(*key, lambda _s, _t: _FakeFloodEngine(), breakdown=_FakeFloodBreakdown)
     try:
         with pytest.raises(HazardNotScorableError, match="no thresholds file"):
-            check_scorable(HazardType.FLOOD, ScoringEngineKind.DETERMINISTIC)
+            check_scorable(HazardType.FLOOD)
     finally:
         unregister(*key)

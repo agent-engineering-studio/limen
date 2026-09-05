@@ -57,15 +57,10 @@ class PersistResultExecutor(Executor):
         last_id: int | None = None
         async with acquire() as conn, conn.transaction():
             for cell in ctx.cell_results:
-                factors = {
-                    "s": cell.s,
-                    "m": cell.m,
-                    "e": cell.e,
-                    "f": cell.f,
-                    "h": cell.h,
-                    "static_terms": cell.static_terms.model_dump(),
-                    "meteo_terms": cell.meteo_terms.model_dump(),
-                }
+                # Il payload lo decide il breakdown, non questo executor: la
+                # forma segue il pericolo che l'ha prodotta, e per le frane è
+                # identica a quella scritta prima che la proiezione esistesse.
+                factors = cell.breakdown.factors_payload()
                 explanation = {
                     "model_version": assessment.model_version,
                     "valuation_time": assessment.valuation_time.isoformat(),

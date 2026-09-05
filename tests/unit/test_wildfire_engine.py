@@ -246,3 +246,76 @@ def test_wildfire_weights_must_sum_to_one() -> None:
                 "weights": {"base": 0.5, "fuel": 0.3, "slope": 0.3},
             }
         )
+
+
+# ---------------------------------------------------------------------------
+# Round-trip attraverso JSONB
+# ---------------------------------------------------------------------------
+def test_a_wildfire_breakdown_survives_the_trip_through_jsonb() -> None:
+    """`factors` è JSONB: le date tornano come stringhe e i modelli sono
+    strict.
+
+    Senza la conversione nel `from_factors` del pericolo, ogni lettura di una
+    cella d'incendio con una catena sarebbe un 500 — cioè
+    `/api/aoi/{id}/risk/latest?hazard=wildfire` rotto appena lo sweep scrive
+    la prima riga.
+    """
+    import datetime as dt
+    import json
+
+    from limen.core.models.risk import FireWeatherState, breakdown_from_factors
+
+    original = WildfireBreakdown(
+        fwi_norm=0.96,
+        fuel=0.35,
+        slope=0.0,
+        fire_weather=FireWeatherState(
+            day=dt.date(2026, 9, 5),
+            ffmc=94.9,
+            dmc=172.9,
+            dc=426.9,
+            isi=14.4,
+            bui=172.9,
+            fwi=47.9,
+            chain_days=46,
+        ),
+    )
+    through_postgres = json.loads(json.dumps(original.factors_payload()))
+    assert breakdown_from_factors(HazardType.WILDFIRE, through_postgres) == original
+
+
+def test_a_landslide_breakdown_still_round_trips_unchanged() -> None:
+    """Il payload delle frane è byte-identico a prima della proiezione: le
+    righe già scritte e il lettore dell'endpoint breakdown non si toccano."""
+    import json
+
+    from limen.core.models.risk import (
+        ComponentBreakdown,
+        MeteoBreakdown,
+        StaticBreakdown,
+        breakdown_from_factors,
+    )
+
+    original = ComponentBreakdown(
+        s=0.4,
+        m=0.3,
+        e=0.1,
+        f=0.0,
+        h=0.0,
+        static_terms=StaticBreakdown(
+            susc_ispra=0.1, iffi_density=0.1, slope=0.1, pai=0.1, litho_weight=0.1
+        ),
+        meteo_terms=MeteoBreakdown(
+            caine_excess=0.0, caine_norm=0.1, api_factor=0.5, soil_factor=0.5
+        ),
+    )
+    payload = original.factors_payload()
+    assert set(payload) == {"s", "m", "e", "f", "h", "static_terms", "meteo_terms"}
+
+    through_postgres = json.loads(json.dumps(payload))
+    # `measured_overrides` va in JSON come lista, il DTO vuole una tupla:
+    # è la conversione che l'endpoint fa già.
+    through_postgres["meteo_terms"]["measured_overrides"] = tuple(
+        through_postgres["meteo_terms"]["measured_overrides"]
+    )
+    assert breakdown_from_factors(HazardType.LANDSLIDE, through_postgres) == original

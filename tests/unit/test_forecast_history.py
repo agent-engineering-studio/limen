@@ -4,25 +4,12 @@ from __future__ import annotations
 
 from limen.agents.workflows.forecast_history import at_or_above, cells_to_persist
 from limen.core.models.context import CellRiskRecord
-from limen.core.models.risk import MeteoBreakdown, RiskLevel, StaticBreakdown
-
-_STATIC = StaticBreakdown(susc_ispra=0.0, iffi_density=0.0, slope=0.0, pai=0.0, litho_weight=0.0)
-_METEO = MeteoBreakdown(caine_excess=0.0, caine_norm=0.0, api_factor=0.5, soil_factor=0.5)
+from limen.core.models.risk import RiskLevel
+from tests.factories import landslide_record
 
 
 def _cell(cell_id: str, level: RiskLevel, score: float) -> CellRiskRecord:
-    return CellRiskRecord(
-        cell_id=cell_id,
-        score=score,
-        level=level,
-        static_terms=_STATIC,
-        meteo_terms=_METEO,
-        s=0.1,
-        m=0.1,
-        e=0.0,
-        f=0.0,
-        h=0.0,
-    )
+    return landslide_record(cell_id, score=score, level=level, s=0.1, m=0.1)
 
 
 def test_at_or_above_ordering() -> None:

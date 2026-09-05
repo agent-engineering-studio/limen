@@ -304,6 +304,10 @@ class ExposureBlock(_StrictModel):
     rail_medium: float = Field(default=0.25, ge=0.0)
     infra_here_fallback: float = Field(default=0.6, ge=0.0)
     infra_near_fallback: float = Field(default=0.3, ge=0.0)
+    #: Peso della prossimità all'interfaccia urbano-vegetazione (#62).
+    #: Default 0 = termine spento, che è il comportamento di ogni pericolo
+    #: che non sia il fuoco: per una frana il bosco accanto non cambia nulla.
+    wui: float = Field(default=0.0, ge=0.0)
     cap: float = Field(default=2.0, gt=0.0)
 
     @model_validator(mode="after")

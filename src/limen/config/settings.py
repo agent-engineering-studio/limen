@@ -463,7 +463,10 @@ class HazardsSettings(BaseSettings):
 
     model_config = SettingsConfigDict(extra="ignore")
 
-    enabled: list[HazardType] = Field(default_factory=lambda: [DEFAULT_HAZARD])
+    # Frane e incendio (#62). Non tutti e tre: `flood` non ha né motore né
+    # YAML (Fase 3, #63), e listarlo qui lo farebbe solo scartare a ogni avvio
+    # da `check_scorable` con un warning per AOI.
+    enabled: list[HazardType] = Field(default_factory=lambda: [DEFAULT_HAZARD, HazardType.WILDFIRE])
 
 
 class TrainingSettings(BaseSettings):

@@ -38,6 +38,7 @@ def exposure_factor(
     dist_rail_m: float | None,
     road_class: str | None,
     cfg: ExposureBlock,
+    wui_proximity: float | None = None,
 ) -> tuple[float, list[str]]:
     """Fattore in ``[0, cfg.cap]`` + tag italiani per la UI.
 
@@ -83,6 +84,14 @@ def exposure_factor(
             factor += cfg.infra_near_fallback
             tags.append("infrastrutture vicine")
 
+    # Interfaccia urbano-vegetazione (#62): pesa solo dove il blocco del
+    # pericolo le dà un peso, cioè oggi solo l'incendio. `None` è *ignoto*
+    # (CORINE non caricata) e non contribuisce, che è diverso da 0.0 =
+    # lontano da qualunque interfaccia.
+    if cfg.wui > 0.0 and wui_proximity is not None and wui_proximity > 0.0:
+        factor += cfg.wui * wui_proximity
+        tags.append("interfaccia urbano-bosco")
+
     return min(factor, cfg.cap), tags
 
 
@@ -91,7 +100,7 @@ def exposure_factor_from_row(row: Any, cfg: ExposureBlock) -> tuple[float, list[
 
     Colonne attese: ``urban_here``, ``urban_near``, ``infra_here``,
     ``infra_near``, ``distance_to_road_m``, ``distance_to_rail_m``,
-    ``nearest_road_class``.
+    ``nearest_road_class``; opzionale ``wui_proximity_norm``.
     """
     return exposure_factor(
         urban_here=bool(row["urban_here"]),
@@ -106,7 +115,22 @@ def exposure_factor_from_row(row: Any, cfg: ExposureBlock) -> tuple[float, list[
         ),
         road_class=row["nearest_road_class"],
         cfg=cfg,
+        wui_proximity=(
+            float(row["wui_proximity_norm"])
+            if _has(row, "wui_proximity_norm") and row["wui_proximity_norm"] is not None
+            else None
+        ),
     )
+
+
+def _has(row: Any, column: str) -> bool:
+    """Le due query che condividono questo adapter non selezionano sempre le
+    stesse colonne; chiederne una assente su un Record asyncpg è un errore."""
+    try:
+        row[column]
+    except (KeyError, IndexError):
+        return False
+    return True
 
 
 __all__ = ["exposure_factor", "exposure_factor_from_row"]

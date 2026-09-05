@@ -89,7 +89,8 @@ async def _load_exposure_factors(
                    c.near_urban AS urban_near,
                    c.near_infra AS infra_near,
                    c.distance_to_road_m, c.distance_to_rail_m,
-                   c.nearest_road_class
+                   c.nearest_road_class,
+                   c.wui_proximity_norm
             FROM cell_static_factors c
             WHERE c.cell_id = ANY($1::text[])
             """,
@@ -163,11 +164,15 @@ class AlertDispatchExecutor(Executor):
         for r in ctx.cell_results:
             if r.cell_id in seen:
                 continue
-            # Below-High levels alert only on genuinely susceptible slopes
-            # (S ≥ min_static_s): "moderate rain on a susceptible slope", not
-            # "moderate rain anywhere". High+ and hard escalation bypass.
+            # Below-High levels alert only on genuinely predisposed cells:
+            # "moderate rain on a susceptible slope", not "moderate rain
+            # anywhere". Which component carries the predisposition is the
+            # hazard's business — S for a slope, fuel for a wildfire — so the
+            # gate asks the breakdown instead of naming one. High+ and hard
+            # escalation bypass it.
             selective = (
-                level_at_least(r.level, RiskLevel.High) or r.s >= alert_settings.min_static_s
+                level_at_least(r.level, RiskLevel.High)
+                or r.predisposition >= alert_settings.min_static_s
             )
             if r.hard_escalation or (level_at_least(r.level, threshold) and selective):
                 above_threshold.append(r)

@@ -12,6 +12,7 @@ from limen.api.jobs.forecast_monitoring import build_forecast_payload
 from limen.core.models.context import CellRiskRecord
 from limen.core.models.risk import MeteoBreakdown, RiskLevel, StaticBreakdown
 from limen.data.caching.cached_openmeteo import CachedOpenMeteoClient
+from tests.factories import landslide_record
 
 _BBOX = (6.8, 45.5, 7.9, 46.0)
 
@@ -39,21 +40,19 @@ async def test_future_as_of_is_clamped_to_today(monkeypatch: pytest.MonkeyPatch)
 
 
 def _cell(cell_id: str, score: float, level: RiskLevel) -> CellRiskRecord:
-    return CellRiskRecord(
-        cell_id=cell_id,
+    return landslide_record(
+        cell_id,
         score=score,
         level=level,
+        s=0.8,
+        m=0.5,
+        e=0.1,
         static_terms=StaticBreakdown(
             susc_ispra=0.5, iffi_density=0.5, slope=0.5, pai=0.5, litho_weight=0.5
         ),
         meteo_terms=MeteoBreakdown(
             caine_excess=0.0, caine_norm=0.5, api_factor=0.5, soil_factor=0.5
         ),
-        s=0.8,
-        m=0.5,
-        e=0.1,
-        f=0.0,
-        h=0.0,
     )
 
 

@@ -7,7 +7,7 @@
 // We use **labels** in the legend (not just colours) so the map stays
 // readable without colour vision.
 
-import type { RiskLevel } from "../types";
+import type { HazardType, RiskLevel } from "../types";
 
 export interface RiskClass {
   level: RiskLevel;
@@ -73,10 +73,38 @@ export const RISK_LABEL_IT_BY_LEVEL: Record<RiskLevel, string> =
  * `worst_class` for the comune rollup). Features without an assessment yet
  * fall through to a neutral light grey.
  */
-export function maplibreColorMatch(prop = "risk_level"): unknown {
+// Una rampa per pericolo (#62). Non decorazione: con due pericoli sulla
+// stessa mappa il colore è l'unico indizio immediato di *cosa* si sta
+// guardando, e due mappe rosso-arancio identiche si confondono. YlOrBr per
+// l'incendio è la sequenza ColorBrewer accanto a YlOrRd — stessa struttura
+// percettiva, stessa sicurezza per i daltonici, tonalità distinguibile.
+//
+// Le classi, le etichette e i range restano quelli: cambia solo la tinta.
+const WILDFIRE_COLORS: Record<RiskLevel, string> = {
+  None: "#ffffd4",
+  Low: "#fed98e",
+  Moderate: "#fe9929",
+  High: "#d95f0e",
+  VeryHigh: "#993404",
+};
+
+export function riskClassesFor(hazard: HazardType): readonly RiskClass[] {
+  if (hazard !== "wildfire") return RISK_CLASSES;
+  return RISK_CLASSES.map((c) => ({ ...c, color: WILDFIRE_COLORS[c.level] }));
+}
+
+export function riskColorsFor(hazard: HazardType): Record<RiskLevel, string> {
+  return hazard === "wildfire" ? WILDFIRE_COLORS : RISK_COLOR_BY_LEVEL;
+}
+
+export function maplibreColorMatch(
+  prop = "risk_level",
+  hazard: HazardType = "landslide",
+): unknown {
+  const colors = riskColorsFor(hazard);
   const stops: unknown[] = ["match", ["get", prop]];
   for (const c of RISK_CLASSES) {
-    stops.push(c.level, c.color);
+    stops.push(c.level, colors[c.level]);
   }
   stops.push("#dadcdf");
   return stops;

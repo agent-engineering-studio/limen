@@ -21,6 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from limen.agents.chat_agents.briefing import BriefingAgent
+from limen.agents.chat_agents.prompts_registry import has_narrative
 from limen.agents.chat_agents.risk_analyst import RiskAnalystAgent
 from limen.agents.executors import (
     AlertDispatchExecutor,
@@ -28,6 +29,7 @@ from limen.agents.executors import (
     EscalationGateExecutor,
     FireCheckExecutor,
     FloodForecastFetchExecutor,
+    FwiUpdateExecutor,
     MeteoFetchExecutor,
     PersistResultExecutor,
     RiskScoringExecutor,
@@ -44,7 +46,7 @@ from limen.config.settings import ScoringMode, Settings, get_settings
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
-from limen.core.models.risk import ComponentBreakdown, HazardBreakdown
+from limen.core.models.risk import HazardBreakdown
 from limen.core.scoring.base import ScoringEngine
 from limen.core.scoring.resolver import (
     check_scorable,
@@ -65,7 +67,7 @@ class WorkflowDeps:
     notification_dispatcher: NotificationDispatcher | None = None
     """Optional :class:`NotificationDispatcher`. When ``None`` the alert
     executor falls back to logging only (V1 stub behaviour)."""
-    scoring_engine: ScoringEngine[ComponentBreakdown] | None = None
+    scoring_engine: ScoringEngine[HazardBreakdown] | None = None
     """V2 — when set, the workflow's authoritative scoring uses this
     instance. When ``None`` we resolve from settings (V1 default)."""
     challenger_engine: ScoringEngine[HazardBreakdown] | None = None
@@ -213,7 +215,7 @@ def build_hazard_workflow(
     # no engine registered, an engine whose breakdown the executors cannot
     # read, or a missing thresholds YAML. The alternative is discovering it as
     # a FileNotFoundError or an AttributeError deep inside the sweep.
-    check_scorable(hazard, settings.scoring.engine)
+    check_scorable(hazard)
 
     # Resolved once per workflow, not per cell: for the ML engine this is the
     # MLflow round trip.
@@ -246,23 +248,41 @@ def build_hazard_workflow(
     if settings.enable_flood_forecast:
         builder = builder.add(FloodForecastFetchExecutor())
 
+    # Hazard-specific input step (#62): the recursive FWI codes have to be
+    # advanced and persisted before anything can score a fire. Only in the
+    # wildfire pipeline — stepping the chain during a landslide sweep would
+    # spend a write per node per tick on numbers nobody reads.
+    if hazard is HazardType.WILDFIRE:
+        builder = builder.add(FwiUpdateExecutor())
+
     builder = builder.add(RiskScoringExecutor(engine=champion, hazard=hazard))
     if challenger is not None:
         # The shadow executor runs AFTER the champion has computed
         # cell_results — it sees the same bundles but never touches the
         # authoritative state. Persisting to model_runs is best-effort.
         builder = builder.add(ShadowChallengerExecutor(challenger, hazard=hazard))
-    builder = (
-        builder.add(EscalationGateExecutor(hazard=hazard))
-        .add(RiskAnalystNode(deps.llm_factory, min_level=settings.llm.briefing_min_level))
-        .add(
+    builder = builder.add(EscalationGateExecutor(hazard=hazard))
+    # I due nodi LLM solo dove esiste un prompt per il pericolo. I prompt sono
+    # scritti per una minaccia precisa — quello del briefing si apre con
+    # "spiega il rischio frane" e l'enum `driver` del RiskAnalyst elenca solo
+    # cause di dissesto — quindi girarli su un incendio dà una persona da
+    # frane che racconta un incendio: a volte ci azzecca, a volte spiega una
+    # soglia pluviale mai calcolata. Nessuna prosa è meglio di prosa
+    # sbagliata, e punteggi, alert e mappa non ne dipendono.
+    if has_narrative(hazard):
+        builder = builder.add(
+            RiskAnalystNode(deps.llm_factory, min_level=settings.llm.briefing_min_level)
+        ).add(
             BriefingNode(
                 deps.llm_factory,
                 grounding=deps.grounding_service,
                 min_level=settings.llm.briefing_min_level,
             )
         )
-        .add(PersistResultExecutor(hazard=hazard))
+    else:
+        log.info("workflow.narrative.skipped", hazard=hazard.value, reason="no prompt")
+    builder = (
+        builder.add(PersistResultExecutor(hazard=hazard))
         .add(AlertDispatchExecutor(deps.notification_dispatcher, hazard=hazard))
     )
     log.info(
@@ -274,6 +294,7 @@ def build_hazard_workflow(
         llm_provider=deps.llm_factory.provider,
         scoring_engine=type(champion).__name__,
         scoring_mode=settings.scoring.mode.value,
+        narrative=has_narrative(hazard),
         challenger=type(challenger).__name__ if challenger is not None else None,
         kg_enabled=settings.kg.enabled,
     )

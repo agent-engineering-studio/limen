@@ -16,7 +16,6 @@ from limen.agents.llm_factory.base import ChatMessage
 from limen.config.settings import KgSettings
 from limen.core.models.context import (
     AggregateAssessment,
-    CellRiskRecord,
 )
 from limen.core.models.risk import (
     MeteoBreakdown,
@@ -24,6 +23,7 @@ from limen.core.models.risk import (
     StaticBreakdown,
 )
 from limen.knowledge.schema import GroundingQuery, GroundingResult, Passage
+from tests.factories import landslide_record
 
 
 # ---------------------------------------------------------------------------
@@ -109,10 +109,12 @@ def _assessment() -> AggregateAssessment:
         cells_high_or_above=0,
         cells_by_level={"None": 2, "Low": 1},
         top_cells=[
-            CellRiskRecord(
-                cell_id="it-puglia|0|0",
+            landslide_record(
+                "it-puglia|0|0",
                 score=0.12,
                 level=RiskLevel.Low,
+                s=0.27,
+                m=0.21,
                 static_terms=StaticBreakdown(
                     susc_ispra=0.3,
                     iffi_density=0.1,
@@ -126,11 +128,6 @@ def _assessment() -> AggregateAssessment:
                     api_factor=0.3,
                     soil_factor=0.4,
                 ),
-                s=0.27,
-                m=0.21,
-                e=0.0,
-                f=0.0,
-                h=0.0,
             )
         ],
     )

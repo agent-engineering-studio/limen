@@ -21,11 +21,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import (
-    KinematicBreakdown,
-    MeteoBreakdown,
+    AnyHazardBreakdown,
+    FireWeatherState,
     RiskLevel,
     SeismicHistoryEvent,
-    StaticBreakdown,
     StaticFactors,
 )
 from limen.core.models.sensor import SensorFeatures
@@ -40,18 +39,19 @@ class CellRiskRecord(BaseModel):
     hazard_type: HazardType = DEFAULT_HAZARD
     score: float = Field(..., ge=0.0, le=1.0)
     level: RiskLevel
-    static_terms: StaticBreakdown
-    meteo_terms: MeteoBreakdown
-    s: float = Field(..., ge=0.0, le=1.0)
-    m: float = Field(..., ge=0.0, le=1.0)
-    e: float = Field(..., ge=0.0, le=1.0)
-    f: float = Field(..., ge=0.0, le=1.0)
-    h: float = Field(..., ge=0.0, le=1.0)
-    # V1.5 — present only on monitored cells (in-situ regime).
-    k: float = Field(default=0.0, ge=0.0, le=1.0)
-    kinematic_terms: KinematicBreakdown | None = None
+    #: The hazard's own breakdown, typed. Before Fase 2 this record carried
+    #: the landslide components flattened onto itself, which is why every
+    #: consumer of a scored cell had to be a landslide consumer. They now ask
+    #: the breakdown for what they need (`components`, `factors_payload`,
+    #: `predisposition`), and adding a hazard touches none of them.
+    breakdown: AnyHazardBreakdown
     monitored: bool = False
     hard_escalation: bool = False
+
+    @property
+    def predisposition(self) -> float:
+        """Static susceptibility, whatever carries it for this hazard."""
+        return self.breakdown.predisposition()
 
 
 class RiskAnalysisDTO(BaseModel):
@@ -120,6 +120,13 @@ class MonitoringContext(BaseModel):
     flood_forecast_rain_72h_mm: float | None = None
     river_discharge_ratio: float | None = None
     coastal_surge_norm: float | None = None
+    # Fase 2 (#62) — la catena FWI del giorno, per nodo del reticolo globale.
+    # Popolata dallo step FwiUpdate solo nel workflow incendio; l'assembler dà
+    # a ogni cella la catena del nodo più vicino. `None` in una posizione =
+    # nessuna catena per quel nodo, che il motore dichiara invece di
+    # sostituire con uno zero.
+    fwi_nodes: Sequence[tuple[float, float]] = Field(default_factory=tuple)
+    fwi_by_node: Sequence[FireWeatherState | None] = Field(default_factory=tuple)
     seismic_events: Sequence[SeismicHistoryEvent] = Field(default_factory=tuple)
     months_since_fire: float | None = None
     sensor_payload: dict[str, Any] | None = None

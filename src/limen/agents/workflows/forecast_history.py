@@ -77,7 +77,7 @@ async def persist_forecast_run(
     async with conn.transaction():
         await conn.execute(_DELETE_PRIOR_SQL, horizon, cell_ids, hazard.value)
         for c in keep:
-            factors = {"s": c.s, "m": c.m, "e": c.e, "f": c.f, "h": c.h}
+            factors = c.breakdown.factors_payload()
             await conn.execute(
                 _INSERT_SQL,
                 c.cell_id,

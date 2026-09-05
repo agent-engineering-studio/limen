@@ -80,7 +80,7 @@ async def _lifespan_default(app: FastAPI) -> AsyncIterator[None]:
     # the public map has to keep serving.
     for hazard in settings.hazards.enabled:
         try:
-            check_scorable(hazard, settings.scoring.engine)
+            check_scorable(hazard)
         except HazardNotScorableError as exc:
             log.warning("hazards.not_scorable", hazard=hazard.value, error=str(exc))
     deps = await AppDependencies.build(pool=pool, settings=settings)

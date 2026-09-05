@@ -68,6 +68,11 @@ def assemble_bundles(
     use_grid = bool(nodes) and len(node_series) == len(nodes)
     seismic: tuple[SeismicHistoryEvent, ...] = tuple(ctx.seismic_events)
 
+    # The FWI chain lives on its own lattice (#62), so it gets its own
+    # nearest-node lookup rather than reusing the rainfall one.
+    fwi_nodes = [(float(lon), float(lat)) for lon, lat in ctx.fwi_nodes]
+    use_fwi_grid = bool(fwi_nodes) and len(ctx.fwi_by_node) == len(fwi_nodes)
+
     bundles: list[CellFeatureBundle] = []
     for cell_id in ctx.cell_ids:
         rainfall = fallback
@@ -77,6 +82,11 @@ def assemble_bundles(
                 series = node_series[nearest_node(centroid[0], centroid[1], nodes)]
                 if series.samples:
                     rainfall = series
+        fire_weather = None
+        if use_fwi_grid:
+            centroid = ctx.cell_centroids.get(cell_id)
+            if centroid is not None:
+                fire_weather = ctx.fwi_by_node[nearest_node(centroid[0], centroid[1], fwi_nodes)]
         sf = ctx.static_by_cell.get(cell_id) or StaticFactors(cell_id=cell_id)
         dyn = DynamicInputs(
             valuation_time=ctx.valuation_time,
@@ -89,6 +99,7 @@ def assemble_bundles(
             coastal_surge_norm=ctx.coastal_surge_norm,
             seismic_history=seismic,
             months_since_fire=ctx.months_since_fire,
+            fire_weather=fire_weather,
             sensor_features=ctx.sensor_features_by_cell.get(cell_id),
         )
         bundles.append(
