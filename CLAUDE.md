@@ -63,6 +63,7 @@
 | Tile pipeline | `mv_latest_risk` materialised view: `grid_cells` CROSS JOIN the enabled rows of `hazards`, LEFT JOIN the latest `risk_assessments` per **(cell, hazard)**. **Always refresh via `refresh_mv_latest_risk()`** (PersistResult executor calls it; it debounces to one refresh per 5 min and chains the comune rollup). Never `REFRESH MATERIALIZED VIEW mv_latest_risk` directly. |
 | Engine registry is 2-D | Engines are registered per **(hazard, implementation)** in `core/scoring/registry.py` — hazard and implementation are orthogonal axes, so `(wildfire, ml)` has a home. Registering a factory plus adding `config/hazards/<hazard>.yaml` is the **only** production change a new hazard needs. `resolver.py` stays the operational layer: it reads `SCORING__ENGINE` and degrades to the V1 baseline on any V2 failure, never raising. |
 | Breakdown is per hazard | `RiskScore` is generic over a `HazardBreakdown` subclass, with a **covariant** TypeVar so `RiskScore[ComponentBreakdown]` is usable as `RiskScore[HazardBreakdown]`. `ScoringEngine` is `Protocol[BreakdownT_co]`: read the numbers ⇒ ask for the concrete breakdown, only serialise ⇒ ask for the base. PEP 695 syntax is **not** usable here (it infers the parameter as invariant and breaks that assignment) — UP046 is suppressed on the class with the reason next to it. |
+| `flood_forecast` ≠ the flood hazard | The `flood_forecast` YAML block and `ENABLE_FLOOD_FORECAST` tune the **hydrology component H of landslide scoring** (forecast rain + GloFAS discharge + coastal surge raise a *landslide* score). The flood hazard is a separate engine with its own `config/hazards/flood.yaml` (Fase 3, #63). Whoever implements it meets these names first — do not reuse them. |
 | Hazard is a dimension | `hazard_type` (`landslide`, `flood`, `wildfire`) is on `risk_assessments`, `model_runs`, `norm_stats`, `training_samples` and both dedup ledgers. `HazardType`/`DEFAULT_HAZARD` in `limen.core.models.hazard` is the only place the default is written. Enabling a hazard = a row in `hazards`, not a DDL change. |
 | Views pin the default hazard | `mv_latest_risk` is one row per cell **per hazard**, so every consumer that counts cells filters on `hazard_type`. `v_risk_tiles`, `v_region_tiles` and `mv_comune_risk` are pinned to `landslide`; the multi-hazard tile surface is `risk_at(z,x,y,hours_ago,hazard)`. Adding a hazard means revisiting all six dependent objects (migrations 016, 018, 019, 020, 023, 026). |
 | Hot tables are partitioned | `risk_assessments` and `model_runs` are RANGE-partitioned by **UTC** day on `computed_at`; the PK includes the partition key. Retention is `drop_expired_partitions()`, never `DELETE`. `ensure_partitions()` must run before a sweep writes: the `limen-partitions` job owns it (registered **unconditionally** — never fold it back into the cache-cleanup job, which is skipped under the pg_cron backend), the API retries it best-effort on boot, `limen partitions` runs it on demand. Rows in a `*_default` partition are a bug: retention cannot reach them. |
@@ -188,7 +189,8 @@ no arm64 manifest). Override with `LIMEN_TEST_POSTGIS_IMAGE`.
 ```
 src/limen/
 ├── cli/                 # `limen` entry point + subcommands (migrate, seed, bootstrap-static)
-├── config/              # pydantic-settings (DB, OBJECT_STORE, LLM, SCHEDULER)
+├── config/              # pydantic-settings (DB, OBJECT_STORE, LLM, SCHEDULER, HAZARDS)
+│   └── hazards/         # one YAML per hazard — landslide.yaml today
 ├── agents/
 │   ├── llm_factory/     # ChatClient Protocol + Anthropic/OpenAI/Foundry/Ollama + Stub + resolver
 │   ├── workflow_runtime/# MAF-shaped shim: Executor, @handler, WorkflowBuilder
@@ -220,6 +222,7 @@ frontend/                # Vite + TypeScript + React + MapLibre SPA
 │   ├── features/        # CellFeatureBundle assembler (single V1+V2 path)
 │   ├── models/          # risk DTOs + MonitoringContext + Assessment
 │   ├── scoring/         # deterministic V1 engine + Caine / API / seismic / post-fire
+│   │                    # registry.py (hazard×implementation) + resolver.py (policy)
 │   ├── logging.py
 │   ├── scheduling.py    # APScheduler (Neon path)
 │   └── llm_resolver.py
@@ -252,6 +255,12 @@ tests/{unit,integration}
 Do not start implementing — these land in later prompts and have explicit
 extension points already:
 
+- **Fase 1 hazard-agnostic (#57) is DONE**: `hazard_type` is a first-class
+  dimension, engines resolve from a 2-D registry, config is per hazard, and
+  API/MCP/A2A take an optional `hazard`. What remains is *adding* hazards:
+  wildfire (#61-#68) and flood (#63-#64), each needing its own
+  `config/hazards/<hazard>.yaml` and a registry entry. The six dependent
+  view objects listed above must be revisited when one is enabled.
 - V2 ML scoring engine (drop-in replacement of
   `MultiFactorScoringEngine` consuming the same `CellFeatureBundle`).
 - Knowledge-graph grounding of the briefing — V2.x.

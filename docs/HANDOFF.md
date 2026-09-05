@@ -79,6 +79,31 @@
 
 Versione: implementazione completa, in fase di test. Feature mergiate di recente:
 
+- **Fase 1 hazard-agnostic COMPLETA** (2026-09-05, epic #57, PR #88 #89 #91 #92
+  #93 + questa). L'architettura è multi-rischio nella struttura e mono-rischio
+  nei dati: `hazard_type` attraversa tabelle, viste, API, MCP e A2A, ma
+  l'unico pericolo configurato è `landslide`. Aggiungerne uno è **uno YAML in
+  `config/hazards/` più una registrazione nel registry**, senza toccare
+  workflow, API o persistenza — è il criterio di accettazione dell'epic, e un
+  test lo dimostra registrando un motore fittizio.
+  Cosa sapere prima di abilitarne un secondo:
+  1. serve `config/hazards/<hazard>.yaml` **completo**: #84 ha rifiutato di
+     proposito un file di blocchi condivisi, perché soglie di classe e
+     mappatura di allerta sono per-pericolo nella sostanza;
+  2. vanno rivisti i **sei oggetti dipendenti** da `mv_latest_risk`
+     (migrazioni 016, 018, 019, 020, 023, 026), tutti fissati su `landslide`
+     perché con un solo pericolo nulla si rompe a runtime e un errore
+     resterebbe invisibile fino alla Fase 2;
+  3. `mv_comune_risk` e il report nazionale restano mono-rischio: il loro
+     `exposure_rank` legge una chiave che solo il breakdown delle frane ha
+     (#58, Fase 4). API e tool MCP **rifiutano** un pericolo diverso lì,
+     invece di restituire numeri delle frane sotto un'altra etichetta;
+  4. gli step condivisi del workflow girano una volta per *(pericolo, AOI)*,
+     non una per AOI: con due pericoli i fetch meteo e GloFAS raddoppiano.
+     Condividerli richiede di spezzare la pipeline in prefisso territoriale e
+     code per pericolo. Documentato nella docstring di
+     `build_hazard_workflow`, non fatto a metà.
+
 - **Fase 1a multi-hazard + partizionamento** (2026-09-04, issue #82, epic #57;
   assorbe #79) — migrazioni `028_multi_hazard_partitioned.sql` e
   `029_risk_at_stable_order.sql`. `hazard_type` su `risk_assessments`,

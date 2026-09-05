@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { defaultApiClient, ApiClientError } from "../lib/api-client";
+import { useHazard } from "../lib/hazard";
 import { RISK_COLOR_BY_LEVEL, RISK_LABEL_IT_BY_LEVEL } from "../lib/risk-colors";
 import type { CellBreakdownResponse, RiskLevel } from "../types";
 
@@ -194,6 +195,8 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
     return () => ctrl.abort();
   }, [cellId, props.lon, props.lat]);
 
+  const { selected: hazard } = useHazard();
+
   useEffect(() => {
     if (!cellId) {
       setData(null);
@@ -204,7 +207,7 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
     setData(null);
     setError(null);
     defaultApiClient
-      .getCellBreakdown(cellId, ctrl.signal)
+      .getCellBreakdown(cellId, ctrl.signal, hazard)
       .then(setData)
       .catch((err: unknown) => {
         if (ctrl.signal.aborted) return;
@@ -223,7 +226,7 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
         }
       });
     return () => ctrl.abort();
-  }, [cellId]);
+  }, [cellId, hazard]);
 
   if (!cellId) return null;
 

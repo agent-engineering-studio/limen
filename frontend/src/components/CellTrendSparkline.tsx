@@ -5,10 +5,15 @@
 import { useEffect, useState } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
+import { useHazard } from "../lib/hazard";
 import type { CellHistoryPoint, CellHistoryResponse } from "../types";
 
-// Cache per-cella: riaprire un comune non rifà la fetch.
+// Cache per (cella, pericolo): riaprire un comune non rifà la fetch. La
+// chiave include il pericolo perché la cache è di modulo e sopravvive allo
+// smontaggio: senza, un cambio di pericolo mostrerebbe per sempre la serie
+// dell'altro.
 const _cache = new Map<string, CellHistoryResponse>();
+const cacheKey = (cellId: string, hazard: string): string => `${cellId}|${hazard}`;
 
 const W = 200;
 const H = 40;
@@ -35,16 +40,21 @@ function path(pts: Pt[]): string {
 }
 
 export default function CellTrendSparkline({ cellId }: { cellId: string }): JSX.Element {
-  const [data, setData] = useState<CellHistoryResponse | null>(_cache.get(cellId) ?? null);
+  const { selected: hazard } = useHazard();
+  const cached = _cache.get(cacheKey(cellId, hazard)) ?? null;
+  const [data, setData] = useState<CellHistoryResponse | null>(cached);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    if (data) return;
+    const hit = _cache.get(cacheKey(cellId, hazard)) ?? null;
+    setData(hit);
+    setFailed(false);
+    if (hit) return;
     const ctrl = new AbortController();
     defaultApiClient
-      .getCellHistory(cellId, 72, ctrl.signal)
+      .getCellHistory(cellId, 72, ctrl.signal, hazard)
       .then((resp) => {
-        _cache.set(cellId, resp);
+        _cache.set(cacheKey(cellId, hazard), resp);
         setData(resp);
       })
       .catch((e: unknown) => {
@@ -52,7 +62,7 @@ export default function CellTrendSparkline({ cellId }: { cellId: string }): JSX.
         setFailed(true);
       });
     return () => ctrl.abort();
-  }, [cellId, data]);
+  }, [cellId, hazard]);
 
   if (failed) return <span className="trend-note">andamento non disponibile</span>;
   if (!data) return <span className="trend-note">andamento…</span>;

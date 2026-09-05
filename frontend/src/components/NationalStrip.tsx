@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
+import LandslideOnlyBadge from "./LandslideOnlyBadge";
 import type { NationalReportResponse } from "../types";
 
 /**
@@ -43,7 +44,9 @@ export function NationalStrip(): JSX.Element {
 
   return (
     <section className="national-strip" aria-label="Quadro nazionale">
-      <h2>Italia · quadro nazionale</h2>
+      <h2>
+        Italia · quadro nazionale <LandslideOnlyBadge />
+      </h2>
       <p className="alert-meta">
         {new Date(report.generated_at).toLocaleString("it-IT")} ·{" "}
         {report.totals.cells.toLocaleString("it-IT")} celle ·{" "}

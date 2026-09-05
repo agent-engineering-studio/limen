@@ -14,6 +14,8 @@ import type {
   AdminUser,
   AuthConfig,
   ComuneListResponse,
+  HazardType,
+  HazardsResponse,
   HealthResponse,
   LatestAssessmentResponse,
   MeResponse,
@@ -93,12 +95,27 @@ export class ApiClient {
     return this.request<AoiListResponse>("/api/aoi", {}, signal);
   }
 
+  /**
+   * `hazard` è l'ultimo parametro di ogni metodo, non il primo: le firme
+   * esistenti restano valide e ometterlo produce la stessa richiesta di
+   * prima, che è il contratto di retrocompatibilità di #86.
+   */
+  private static hazardQuery(hazard?: HazardType, prefix = "?"): string {
+    return hazard ? `${prefix}hazard=${encodeURIComponent(hazard)}` : "";
+  }
+
+  getHazards(signal?: AbortSignal): Promise<HazardsResponse> {
+    return this.request<HazardsResponse>("/api/hazards", {}, signal);
+  }
+
   getLatestRisk(
     aoiId: string,
     signal?: AbortSignal,
+    hazard?: HazardType,
   ): Promise<LatestAssessmentResponse> {
     return this.request<LatestAssessmentResponse>(
-      `/api/aoi/${encodeURIComponent(aoiId)}/risk/latest`,
+      `/api/aoi/${encodeURIComponent(aoiId)}/risk/latest` +
+        ApiClient.hazardQuery(hazard),
       {},
       signal,
     );
@@ -107,9 +124,11 @@ export class ApiClient {
   getCellBreakdown(
     cellId: string,
     signal?: AbortSignal,
+    hazard?: HazardType,
   ): Promise<CellBreakdownResponse> {
     return this.request<CellBreakdownResponse>(
-      `/api/cell/${encodeURIComponent(cellId)}/breakdown`,
+      `/api/cell/${encodeURIComponent(cellId)}/breakdown` +
+        ApiClient.hazardQuery(hazard),
       {},
       signal,
     );
@@ -119,16 +138,23 @@ export class ApiClient {
     cellId: string,
     hours = 72,
     signal?: AbortSignal,
+    hazard?: HazardType,
   ): Promise<CellHistoryResponse> {
     return this.request<CellHistoryResponse>(
-      `/api/cell/${encodeURIComponent(cellId)}/history?hours=${hours}`,
+      `/api/cell/${encodeURIComponent(cellId)}/history?hours=${hours}` +
+        ApiClient.hazardQuery(hazard, "&"),
       {},
       signal,
     );
   }
 
   getAlerts(
-    opts: { threshold?: string; sinceHours?: number; limit?: number } = {},
+    opts: {
+      threshold?: string;
+      sinceHours?: number;
+      limit?: number;
+      hazard?: HazardType;
+    } = {},
     signal?: AbortSignal,
   ): Promise<AlertsResponse> {
     const params = new URLSearchParams();
@@ -136,18 +162,20 @@ export class ApiClient {
     if (opts.sinceHours != null)
       params.set("since_hours", String(opts.sinceHours));
     if (opts.limit != null) params.set("limit", String(opts.limit));
+    if (opts.hazard) params.set("hazard", opts.hazard);
     const query = params.toString() ? `?${params.toString()}` : "";
     return this.request<AlertsResponse>(`/api/alerts${query}`, {}, signal);
   }
 
   getForecastAlerts(
-    opts: { sinceHours?: number; limit?: number } = {},
+    opts: { sinceHours?: number; limit?: number; hazard?: HazardType } = {},
     signal?: AbortSignal,
   ): Promise<ForecastAlertsResponse> {
     const params = new URLSearchParams();
     if (opts.sinceHours != null)
       params.set("since_hours", String(opts.sinceHours));
     if (opts.limit != null) params.set("limit", String(opts.limit));
+    if (opts.hazard) params.set("hazard", opts.hazard);
     const query = params.toString() ? `?${params.toString()}` : "";
     return this.request<ForecastAlertsResponse>(
       `/api/alerts/forecast${query}`,
@@ -156,8 +184,12 @@ export class ApiClient {
     );
   }
 
-  getLegend(signal?: AbortSignal): Promise<LegendResponse> {
-    return this.request<LegendResponse>("/api/legend", {}, signal);
+  getLegend(signal?: AbortSignal, hazard?: HazardType): Promise<LegendResponse> {
+    return this.request<LegendResponse>(
+      `/api/legend${ApiClient.hazardQuery(hazard)}`,
+      {},
+      signal,
+    );
   }
 
   getNationalReport(signal?: AbortSignal): Promise<NationalReportResponse> {
