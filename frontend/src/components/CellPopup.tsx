@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { defaultApiClient, ApiClientError } from "../lib/api-client";
 import { useHazard } from "../lib/hazard";
 import { RISK_COLOR_BY_LEVEL, RISK_LABEL_IT_BY_LEVEL } from "../lib/risk-colors";
-import type { CellBreakdownResponse, RiskLevel } from "../types";
+import type { CellBreakdownResponse, HazardType, RiskLevel } from "../types";
 
 export interface CellPopupProps {
   readonly cellId: string | null;
@@ -84,34 +84,67 @@ function verdict(
   };
 }
 
+const DRIVER_PROSE: Record<string, string> = {
+  s: "dalla natura del versante: geologia, pendenza e frane del passato",
+  m: "dalla spinta della pioggia recente",
+  e: "dalle scosse sismiche recenti",
+  f: "dall'effetto di incendi recenti",
+  h: "dalla pericolosità idraulica della zona",
+  fwi_norm: "dalle condizioni meteo: caldo, secco e vento",
+  fuel: "da quanto è infiammabile la vegetazione qui",
+  slope: "dalla pendenza, che fa correre il fuoco verso l'alto",
+};
+
 /** Spiegazione della cella in linguaggio piano — deterministica, dal
  * breakdown: niente LLM, niente numeri inventati. */
-function plainSummary(b: BreakdownView, exposure?: string | null): string {
-  const drivers: [keyof BreakdownView, string][] = [
-    ["s", "dalla natura del versante: geologia, pendenza e frane del passato"],
-    ["m", "dalla spinta della pioggia recente"],
-    ["e", "dalle scosse sismiche recenti"],
-    ["f", "dall'effetto di incendi recenti"],
-    ["h", "dalla pericolosità idraulica della zona"],
-  ];
-  const sorted = [...drivers].sort((x, y) => b[y[0]] - b[x[0]]);
-  const top = sorted[0];
+function plainSummary(
+  hazard: HazardType,
+  components: Component[],
+  factors: Record<string, unknown>,
+  exposure?: string | null,
+): string {
   const parts: string[] = [];
-  if (top && b[top[0]] > 0.05) {
-    parts.push(`Il punteggio nasce soprattutto ${top[1]}.`);
+  const top = [...components].sort((x, y) => y.value - x.value)[0];
+  if (top && top.value > 0.05 && DRIVER_PROSE[top.key]) {
+    parts.push(`Il punteggio nasce soprattutto ${DRIVER_PROSE[top.key]}.`);
   }
-  if (b.m < 0.05) {
-    parts.push(
-      "Non c'è pioggia in corso: il punteggio riflette la fragilità " +
-        "storica del versante, non un pericolo in atto.",
-    );
-  } else if (b.m < 0.2) {
-    parts.push("La pioggia recente incide poco.");
-  } else if (b.m < 0.5) {
-    parts.push("La pioggia recente contribuisce in modo moderato.");
+
+  if (hazard === "wildfire") {
+    const fwi = pickScalar(factors, "fwi_norm");
+    if (fwi < 0.05) {
+      parts.push(
+        "Le condizioni meteo non favoriscono il fuoco: combustibile umido " +
+          "o aria fresca.",
+      );
+    } else if (fwi < 0.42) {
+      parts.push("Il tempo è secco ma non estremo.");
+    } else {
+      parts.push("Caldo, siccità e vento stanno spingendo il pericolo in alto.");
+    }
+    if (factors["spinup"] === true) {
+      // I tre codici di umidità sono ricorsivi: dirlo è più onesto che
+      // presentare un indice appena avviato come uno consolidato.
+      parts.push(
+        "L'indice è in avviamento: si basa su pochi giorni di storia meteo " +
+          "e va letto con prudenza.",
+      );
+    }
   } else {
-    parts.push("La pioggia recente sta spingendo il rischio verso l'alto.");
+    const m = pickScalar(factors, "m");
+    if (m < 0.05) {
+      parts.push(
+        "Non c'è pioggia in corso: il punteggio riflette la fragilità " +
+          "storica del versante, non un pericolo in atto.",
+      );
+    } else if (m < 0.2) {
+      parts.push("La pioggia recente incide poco.");
+    } else if (m < 0.5) {
+      parts.push("La pioggia recente contribuisce in modo moderato.");
+    } else {
+      parts.push("La pioggia recente sta spingendo il rischio verso l'alto.");
+    }
   }
+
   const exp = exposureText(exposure);
   if (exp) {
     parts.push(`Nelle vicinanze: ${exp}.`);
@@ -145,20 +178,46 @@ async function fetchRainOutlook(
   };
 }
 
-interface BreakdownView {
-  s: number;
-  m: number;
-  e: number;
-  f: number;
-  h: number;
+interface Component {
+  key: string;
+  label: string;
+  color: string;
+  value: number;
 }
 
-function pickScalar(
-  factors: Record<string, unknown>,
-  key: keyof BreakdownView,
-): number {
+function pickScalar(factors: Record<string, unknown>, key: string): number {
   const value = factors[key];
   return typeof value === "number" ? value : 0;
+}
+
+// I componenti hanno nomi diversi per pericolo perché descrivono cose
+// diverse: S/M/E/F/H dicono come cede un versante e non significano nulla per
+// un incendio. Prima il popup leggeva solo i primi, quindi una cella
+// d'incendio mostrava cinque barre a 0.000 accanto a un punteggio non nullo.
+const COMPONENTS_BY_HAZARD: Record<
+  string,
+  readonly { key: string; label: string; color: string }[]
+> = {
+  landslide: [
+    { key: "s", label: "S statico", color: "#2456a3" },
+    { key: "m", label: "M meteo", color: "#e8720c" },
+    { key: "e", label: "E sismico", color: "#7a5cc0" },
+    { key: "f", label: "F post-incendio", color: "#b34a04" },
+    { key: "h", label: "H idrologico", color: "#2a8fb5" },
+  ],
+  wildfire: [
+    { key: "fwi_norm", label: "FWI (tempo)", color: "#d95f0e" },
+    { key: "fuel", label: "Combustibile", color: "#238b45" },
+    { key: "slope", label: "Pendenza", color: "#7a5cc0" },
+  ],
+};
+
+function readComponents(
+  hazard: HazardType,
+  factors: Record<string, unknown>,
+): Component[] {
+  const spec = COMPONENTS_BY_HAZARD[hazard] ?? COMPONENTS_BY_HAZARD["landslide"] ?? [];
+  return spec.map((c) => ({ ...c, value: pickScalar(factors, c.key) }));
 }
 
 function asLevel(level: string): RiskLevel {
@@ -253,29 +312,12 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
   }
 
   const factors = data.factors;
-  const breakdown: BreakdownView = {
-    s: pickScalar(factors, "s"),
-    m: pickScalar(factors, "m"),
-    e: pickScalar(factors, "e"),
-    f: pickScalar(factors, "f"),
-    h: pickScalar(factors, "h"),
-  };
+  // Il pericolo lo dice la riga letta, non il selettore: se la fetch è
+  // arrivata mentre l'utente cambiava, le due cose divergono per un istante e
+  // le etichette seguirebbero il selettore invece dei numeri.
+  const rowHazard: HazardType = data.hazard_type ?? hazard;
+  const components = readComponents(rowHazard, factors);
   const level = asLevel(data.level);
-
-  const COMP_COLORS: Record<keyof BreakdownView, string> = {
-    s: "#2456a3",
-    m: "#e8720c",
-    e: "#7a5cc0",
-    f: "#b34a04",
-    h: "#2a8fb5",
-  };
-  const COMP_LABELS: Record<keyof BreakdownView, string> = {
-    s: "S statico",
-    m: "M meteo",
-    e: "E sismico",
-    f: "F post-incendio",
-    h: "H idrologico",
-  };
 
   return (
     <aside className="popup-card" role="dialog" aria-labelledby="cell-id">
@@ -300,7 +342,7 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
           </p>
         );
       })()}
-      <p className="plain-summary">{plainSummary(breakdown, props.exposure)}</p>
+      <p className="plain-summary">{plainSummary(rowHazard, components, factors, props.exposure)}</p>
       {props.priority != null && props.exposure ? (
         <p className="priority-line">
           <span className="eyebrow" style={{ marginBottom: 2 }}>
@@ -311,19 +353,19 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
         </p>
       ) : null}
       <div className="comp-bars">
-        {(Object.keys(COMP_LABELS) as (keyof BreakdownView)[]).map((k) => (
-          <div className="comp-bar" key={k}>
-            <span>{COMP_LABELS[k]}</span>
+        {components.map((c) => (
+          <div className="comp-bar" key={c.key}>
+            <span>{c.label}</span>
             <span className="track">
               <span
                 className="fill"
                 style={{
-                  width: `${Math.min(100, breakdown[k] * 100)}%`,
-                  background: COMP_COLORS[k],
+                  width: `${Math.min(100, c.value * 100)}%`,
+                  background: c.color,
                 }}
               />
             </span>
-            <span className="val">{breakdown[k].toFixed(3)}</span>
+            <span className="val">{c.value.toFixed(3)}</span>
           </div>
         ))}
       </div>

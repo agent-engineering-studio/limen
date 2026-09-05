@@ -120,13 +120,12 @@ export interface CellRiskRecord {
   hazard_type: HazardType;
   score: number;
   level: RiskLevel;
-  s: number;
-  m: number;
-  e: number;
-  f: number;
-  h: number;
-  static_terms: StaticBreakdown;
-  meteo_terms: MeteoBreakdown;
+  // Il breakdown del pericolo, con la sua forma (#62). Non più S/M/E/F/H
+  // appiattiti: i componenti hanno nomi diversi per pericolo, e leggerli per
+  // nome qui rimetterebbe la conoscenza delle frane nel client.
+  breakdown: Record<string, unknown>;
+  monitored?: boolean;
+  hard_escalation?: boolean;
 }
 
 export interface RiskAnalysisDTO {
@@ -150,6 +149,9 @@ export interface LatestAssessmentResponse {
 
 export interface CellBreakdownResponse {
   cell_id: string;
+  // Il pericolo della riga letta, che può differire dal selettore per un
+  // istante mentre una fetch è in volo.
+  hazard_type: HazardType;
   computed_at: string;
   score: number;
   level: RiskLevel;

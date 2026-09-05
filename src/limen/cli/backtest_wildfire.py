@@ -123,9 +123,7 @@ async def fetch_burnt_cells(
             start,
             end,
         )
-    return {
-        str(r["cell_id"]): (r["first_fire"], float(r["lon"]), float(r["lat"])) for r in rows
-    }
+    return {str(r["cell_id"]): (r["first_fire"], float(r["lon"]), float(r["lat"])) for r in rows}
 
 
 async def _static_by_cell(cell_ids: list[str]) -> dict[str, StaticFactors]:
@@ -179,9 +177,7 @@ def replay_chain(
     live step skips them.
     """
     params = params_from(thresholds)
-    state = FwiState(
-        ffmc=params.ffmc_start, dmc=params.dmc_start, dc=params.dc_start
-    )
+    state = FwiState(ffmc=params.ffmc_start, dmc=params.dmc_start, dc=params.dc_start)
     chain_days = 0
     out: dict[date, FireWeatherState] = {}
     for day in days:
@@ -225,18 +221,38 @@ def evaluate(
 ) -> WildfireBacktestMetrics:
     """Score every burnt cell across the window and measure the warning.
 
-    Only the burnt cells are scored, not the whole grid. That bounds what can
-    be claimed: hit rate and lead time are honest, but the false-alarm rate is
-    computed over *cells that eventually burned*, so it counts warnings that
-    fired too early or too late, not warnings on ground that never burned. A
-    grid-wide FAR needs the whole AOI replayed and is a heavier job than this.
+    Only the burnt cells are scored, not the whole grid, and only across the
+    lead horizon before each fire. That bounds what can be claimed: hit rate
+    and lead time are honest, the **false-alarm rate is not measured at all**
+    and is reported as zero, because a false alarm is by definition a warning
+    on ground that did not burn — and this replay never looks at such ground.
+    A real FAR needs the whole AOI replayed across the season, which is a much
+    heavier job; the report says so rather than printing a flattering number.
     """
     engine = WildfireScoringEngine(thresholds)
-    earliest: dict[str, date] = {}
-    for cell_id, (_fire_date, lon, lat) in truth.items():
+    horizon_days = int(_LEAD_MAX_HOURS // 24)
+    scored_days = set(days)
+
+    hits = 0
+    misses = 0
+    warned_cells = 0
+    leads: list[float] = []
+    for cell_id, (fire_date, lon, lat) in truth.items():
         chain = chains[nearest_node(lon, lat, nodes)]
         sf = static.get(cell_id) or StaticFactors(cell_id=cell_id)
-        for day in days:
+        # Solo i giorni dentro l'orizzonte di preavviso, dal più lontano al
+        # giorno stesso. Scandire l'intera finestra prenderebbe la prima
+        # allerta della *stagione*: con la finestra di default (400 giorni)
+        # ogni incendio risulterebbe allertato un anno prima, cioè mancato e
+        # falso allarme insieme, e il report direbbe 0% di hit rate qualunque
+        # sia la bravura del modello.
+        window = [
+            fire_date - timedelta(days=d)
+            for d in range(horizon_days, -1, -1)
+            if (fire_date - timedelta(days=d)) in scored_days
+        ]
+        earliest: date | None = None
+        for day in window:
             fw = chain.get(day)
             if fw is None:
                 continue
@@ -252,25 +268,19 @@ def evaluate(
                 )
             )
             if _at_least(scored.level, alert_level):
-                earliest.setdefault(cell_id, day)
+                earliest = day
                 break
-
-    hits = 0
-    misses = 0
-    leads: list[float] = []
-    for cell_id, (fire_date, _lon, _lat) in truth.items():
-        warned = earliest.get(cell_id)
-        if warned is None:
+        if earliest is None:
             misses += 1
             continue
-        lead_hours = (fire_date - warned).days * 24.0
-        if 0 <= lead_hours <= _LEAD_MAX_HOURS:
-            hits += 1
-            leads.append(lead_hours)
-        else:
-            misses += 1
+        warned_cells += 1
+        hits += 1
+        leads.append((fire_date - earliest).days * 24.0)
 
-    false_alarms = max(0, len(earliest) - hits)
+    # Un'allerta dentro l'orizzonte è per costruzione un hit, quindi qui i
+    # falsi allarmi sono sempre zero: contarli richiede di rigiocare le celle
+    # che *non* hanno bruciato, che è il limite dichiarato nel report.
+    false_alarms = 0
     hit_rate = hits / len(truth) if truth else 0.0
     far = false_alarms / (hits + false_alarms) if (hits + false_alarms) else 0.0
     mean_lead = sum(leads) / len(leads) if leads else 0.0
@@ -278,7 +288,7 @@ def evaluate(
     return WildfireBacktestMetrics(
         aoi_id=aoi_id,
         truth_fires=len(truth),
-        cells_warned=len(earliest),
+        cells_warned=warned_cells,
         hits=hits,
         false_alarms=false_alarms,
         misses=misses,
@@ -310,13 +320,15 @@ def write_report(
         "## Metriche §2.5",
         "",
         f"- **Hit rate**: {metrics.hit_rate:.2%}",
-        f"- **FAR**: {metrics.far:.2%}",
+        "- **FAR**: non misurato (vedi nota)",
         f"- **Preavviso medio**: {metrics.mean_lead_hours:.1f} h",
         "",
-        "> Il FAR è calcolato sulle sole celle che hanno poi bruciato, quindi",
-        "> conta le allerte scattate troppo presto o troppo tardi, non quelle",
-        "> su terreno che non ha mai preso fuoco. Un FAR sull'intera griglia",
-        "> richiede di rigiocare tutte le celle dell'AOI.",
+        "> Il replay guarda solo le celle che hanno bruciato, e solo",
+        f"> l'orizzonte di {_LEAD_MAX_HOURS:.0f} h prima di ciascun incendio. Hit rate e",
+        "> preavviso sono quindi misurati; il **FAR no**: un falso allarme è",
+        "> per definizione un'allerta su terreno che non ha preso fuoco, e qui",
+        "> quel terreno non viene mai valutato. Misurarlo richiede di rigiocare",
+        "> l'intera AOI per tutta la stagione.",
         "",
     ]
     if metrics.truth_fires == 0:
@@ -364,10 +376,7 @@ async def backtest_aoi(
     # A month of spin-up before the window: the codes have to mean something
     # by the time the first fire is judged.
     spinup = timedelta(days=thresholds.fwi.spinup_days)
-    days = [
-        (start - spinup) + timedelta(days=i)
-        for i in range((end - (start - spinup)).days + 1)
-    ]
+    days = [(start - spinup) + timedelta(days=i) for i in range((end - (start - spinup)).days + 1)]
     nodes = build_snapped_nodes(bbox, spacing=thresholds.fwi.node_spacing_deg)
     series = await client.get_fire_weather_grid(
         nodes=nodes,

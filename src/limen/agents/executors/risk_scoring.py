@@ -80,9 +80,7 @@ class RiskScoringExecutor(Executor):
         # (V1 by default, V2 ML when promoted). Without an injection we
         # fall back to the deterministic engine — the V1 champion stays
         # the only behaviour any consumer sees by default.
-        self._engine: ScoringEngine[HazardBreakdown] = engine or _default_engine(
-            self._thresholds
-        )
+        self._engine: ScoringEngine[HazardBreakdown] = engine or _default_engine(self._thresholds)
         self._top_k = top_k
         self._macroregion = macroregion
 

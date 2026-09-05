@@ -51,7 +51,10 @@ def _dominant_component(record: CellRiskRecord) -> str:
     Ties resolve in declaration order, which the breakdown fixes, so the hint
     is deterministic across runs.
     """
-    best = ""
+    # "?" e non "": un breakdown senza componenti è un motore che non li
+    # espone, e una stringa vuota nella colonna "driver" si legge come un
+    # difetto della UI invece che come un dato mancante.
+    best = "?"
     best_value = -1.0
     for label, value in record.breakdown.components().items():
         if value > best_value:

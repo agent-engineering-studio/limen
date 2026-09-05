@@ -86,9 +86,7 @@ def assemble_bundles(
         if use_fwi_grid:
             centroid = ctx.cell_centroids.get(cell_id)
             if centroid is not None:
-                fire_weather = ctx.fwi_by_node[
-                    nearest_node(centroid[0], centroid[1], fwi_nodes)
-                ]
+                fire_weather = ctx.fwi_by_node[nearest_node(centroid[0], centroid[1], fwi_nodes)]
         sf = ctx.static_by_cell.get(cell_id) or StaticFactors(cell_id=cell_id)
         dyn = DynamicInputs(
             valuation_time=ctx.valuation_time,

@@ -143,9 +143,9 @@ class BriefingAgent:
             # Top-3 component drivers + Caine exceedance: anchors the
             # narrative to the quantitative breakdown (issue #2 P2) so the
             # LLM cites real drivers instead of paraphrasing the score.
-            drivers = sorted(
-                c.breakdown.components().items(), key=lambda kv: kv[1], reverse=True
-            )[:3]
+            drivers = sorted(c.breakdown.components().items(), key=lambda kv: kv[1], reverse=True)[
+                :3
+            ]
             drivers_txt = ", ".join(f"{name}={value:.2f}" for name, value in drivers)
             top_lines.append(
                 f"- {c.cell_id} score={c.score:.3f} level={c.level.value} "

@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import date, datetime
 from enum import StrEnum
-from typing import Annotated, Any, Generic, Literal, TypeVar
+from typing import Annotated, Any, Generic, Literal, Self, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -245,6 +245,19 @@ class HazardBreakdown(_Frozen):
         """
         return 0.0
 
+    @classmethod
+    def from_factors(cls, payload: dict[str, Any]) -> Self:
+        """Rebuild from a persisted ``factors`` blob.
+
+        The inverse of :meth:`factors_payload`. It exists as a method, not as
+        a plain ``model_validate`` at the call site, because JSONB does not
+        round-trip Python types: these models are ``strict=True``, so a date
+        comes back as a string and is refused. Each subclass restores what its
+        own payload lost.
+        """
+        discriminator = cls.model_fields["hazard_type"].default
+        return cls.model_validate({**payload, "hazard_type": discriminator})
+
 
 class ComponentBreakdown(HazardBreakdown):
     """Landslide components + their normalised inputs, for auditability.
@@ -324,9 +337,7 @@ class WildfireBreakdown(HazardBreakdown):
             "slope": self.slope,
             "spinup": self.spinup,
             "fire_weather": (
-                self.fire_weather.model_dump(mode="json")
-                if self.fire_weather is not None
-                else None
+                self.fire_weather.model_dump(mode="json") if self.fire_weather is not None else None
             ),
         }
 
@@ -334,6 +345,17 @@ class WildfireBreakdown(HazardBreakdown):
         # Il combustibile è ciò che una cella *è*, indipendentemente dal
         # tempo del giorno: è l'analogo della suscettibilità di un versante.
         return self.fuel
+
+    @classmethod
+    def from_factors(cls, payload: dict[str, Any]) -> Self:
+        # `day` torna da JSONB come stringa, e il modello è strict: senza
+        # questa conversione ogni riga incendio farebbe 500 sulla lettura.
+        raw = dict(payload)
+        fw = raw.get("fire_weather")
+        if isinstance(fw, dict) and isinstance(fw.get("day"), str):
+            fw = {**fw, "day": date.fromisoformat(fw["day"])}
+            raw["fire_weather"] = fw
+        return super().from_factors(raw)
 
 
 #: The concrete breakdowns, discriminated by ``hazard_type``. Pydantic needs
@@ -352,15 +374,15 @@ _BREAKDOWN_BY_HAZARD: dict[HazardType, type[HazardBreakdown]] = {
 def breakdown_from_factors(hazard: HazardType, payload: dict[str, Any]) -> HazardBreakdown:
     """Rebuild a breakdown from a persisted ``factors`` blob.
 
-    The inverse of :meth:`HazardBreakdown.factors_payload`, for the API
-    reading rows back. Missing keys are filled with neutral values rather
-    than refused: rows written by an older pipeline version are still worth
-    showing, and a 500 on a historical cell helps nobody.
+    Dispatches to the hazard's own :meth:`HazardBreakdown.from_factors`, which
+    restores whatever JSONB flattened. Callers that read historical rows are
+    responsible for supplying defaults for keys a newer pipeline added --
+    :mod:`limen.api.endpoints.risk` does that for landslide.
     """
     cls = _BREAKDOWN_BY_HAZARD.get(hazard)
     if cls is None:
         raise ValueError(f"no breakdown class for hazard {hazard.value!r}")
-    return cls.model_validate({**payload, "hazard_type": hazard.value})
+    return cls.from_factors(payload)
 
 
 #: Covariant because :class:`RiskScore` is frozen: a

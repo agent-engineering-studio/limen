@@ -15,6 +15,7 @@ from limen.agents.executors import (
     AreaResolverExecutor,
     FireCheckExecutor,
     FloodForecastFetchExecutor,
+    FwiUpdateExecutor,
     MeteoFetchExecutor,
     RiskScoringExecutor,
     SeismicCheckExecutor,
@@ -97,6 +98,12 @@ async def run_forecast(
     # the predictive H uplift is reflected in the forecast score too.
     if settings.enable_flood_forecast:
         builder = builder.add(FloodForecastFetchExecutor())
+    # Senza questo passo la catena FWI non esisterebbe alla data prevista e
+    # ogni cella incendio uscirebbe a zero: previsione sempre vuota, in
+    # silenzio. Lo step cammina la catena fino al giorno chiesto e **non**
+    # scrive i giorni futuri.
+    if hazard is HazardType.WILDFIRE:
+        builder = builder.add(FwiUpdateExecutor())
     wf = builder.add(RiskScoringExecutor(engine=champion, hazard=hazard)).build()
 
     valuation_time = datetime.now(UTC) + timedelta(hours=horizon_h)

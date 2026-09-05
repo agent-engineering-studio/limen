@@ -119,6 +119,12 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   const tileLayer =
     props.tileLayer ?? (isDefaultHazard ? "public.v_risk_tiles" : "public.risk_at");
   const tileQuery = isDefaultHazard ? "" : `?p_hazard=${encodeURIComponent(hazard)}`;
+  // Il nome del layer *dentro* il tile non è il path da cui lo si scarica.
+  // `risk_at()` serializza con `ST_AsMVT(..., 'public.v_risk_tiles', ...)`
+  // (migrazione 029), quindi puntare `source-layer` a "public.risk_at" darebbe
+  // tile validi e una mappa vuota — un guasto silenzioso, perché la richiesta
+  // riesce. Il layer MVT è sempre quello, qualunque sia la sorgente.
+  const sourceLayer = props.tileLayer ?? "public.v_risk_tiles";
   // Il nome lo dà il backend (`/api/hazards`); il ripiego serve al primo
   // render e a un backend irraggiungibile.
   const hazardLabel =
@@ -244,7 +250,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         id: LAYER_ID,
         type: "fill",
         source: SOURCE_ID,
-        "source-layer": tileLayer,
+        "source-layer": sourceLayer,
         minzoom: CELL_MIN_ZOOM,
         paint: {
           "fill-color": maplibreColorMatch("risk_level", hazard) as never,
@@ -258,7 +264,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         id: SELECTED_LAYER_ID,
         type: "line",
         source: SOURCE_ID,
-        "source-layer": tileLayer,
+        "source-layer": sourceLayer,
         paint: {
           "line-color": "#2456a3",
           "line-width": 3,
@@ -364,7 +370,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tileserv, tileLayer, tileQuery, hazard]);
+  }, [tileserv, tileLayer, sourceLayer, tileQuery, hazard]);
 
   // Update the selection outline without rebuilding the map.
   useEffect(() => {

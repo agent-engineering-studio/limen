@@ -64,9 +64,7 @@ async def _seed(fire_dates: dict[str, dt.date]) -> None:
             )
 
 
-async def test_only_cells_inside_a_perimeter_are_truth(
-    reset_db: None, pg_pool: object
-) -> None:
+async def test_only_cells_inside_a_perimeter_are_truth(reset_db: None, pg_pool: object) -> None:
     """Il ground truth è l'intersezione geometrica, non l'AOI intera."""
     await _seed({f"{AOI}|0|0": dt.date(2026, 8, 10)})
     async with acquire() as conn:
@@ -81,9 +79,7 @@ async def test_only_cells_inside_a_perimeter_are_truth(
     assert set(truth) == {f"{AOI}|0|0"}
 
 
-async def test_a_cell_that_burned_twice_counts_once(
-    reset_db: None, pg_pool: object
-) -> None:
+async def test_a_cell_that_burned_twice_counts_once(reset_db: None, pg_pool: object) -> None:
     """Altrimenti un'area ben allertata gonfierebbe l'hit rate quante volte
     ha preso fuoco."""
     cell = f"{AOI}|0|0"
@@ -101,63 +97,94 @@ async def test_a_cell_that_burned_twice_counts_once(
     assert truth[cell][0] == dt.date(2026, 8, 10)
 
 
-async def test_a_warning_inside_the_horizon_is_a_hit(
-    reset_db: None, pg_pool: object
-) -> None:
-    """La domanda dell'issue: nelle 72 h prima dell'incendio la cella era
-    già in classe alta?"""
-    cell = f"{AOI}|0|0"
-    fire = dt.date(2026, 8, 10)
-    await _seed({cell: fire})
-    truth = await fetch_burnt_cells(AOI, start=dt.date(2026, 1, 1), end=dt.date(2026, 12, 31))
-
-    t = _thresholds()
-    days = [fire - dt.timedelta(days=d) for d in range(6, -1, -1)]
-    # Catena piatta ed estrema: la cella è in allerta ogni giorno, quindi il
-    # primo giorno della finestra è quello che conta — sette giorni prima,
-    # cioè fuori dall'orizzonte di 72 h.
-    extreme = {
+def _chain(
+    days: list[dt.date], fwi_by_day: dict[dt.date, float]
+) -> dict[dt.date, FireWeatherState]:
+    return {
         d: FireWeatherState(
-            day=d, ffmc=95.0, dmc=150.0, dc=500.0, isi=15.0, bui=150.0, fwi=48.0,
+            day=d,
+            ffmc=95.0,
+            dmc=150.0,
+            dc=500.0,
+            isi=15.0,
+            bui=150.0,
+            fwi=fwi_by_day.get(d, 2.0),
             chain_days=90,
         )
         for d in days
     }
+
+
+async def test_only_the_lead_horizon_counts(reset_db: None, pg_pool: object) -> None:
+    """La domanda dell'issue è sulle 72 h prima dell'innesco, non sulla
+    stagione.
+
+    Scandire l'intera finestra prenderebbe la prima allerta dell'estate: con
+    la finestra di default (400 giorni) ogni incendio risulterebbe allertato
+    un anno prima, e il report direbbe 0% di hit rate qualunque sia la bravura
+    del modello. Qui il pericolo è estremo **solo** sette giorni prima e mite
+    nei tre che contano.
+    """
+    cell = f"{AOI}|0|0"
+    fire = dt.date(2026, 8, 10)
+    await _seed({cell: fire})
+    truth = await fetch_burnt_cells(AOI, start=dt.date(2026, 1, 1), end=dt.date(2026, 12, 31))
+    days = [fire - dt.timedelta(days=d) for d in range(10, -1, -1)]
+
+    far_back = _chain(days, {fire - dt.timedelta(days=7): 48.0})
     m = evaluate(
         aoi_id=AOI,
         truth=truth,
         static={cell: StaticFactors(cell_id=cell, landuse_code="312", slope_deg=30.0)},
         nodes=[NODE],
-        chains=[extreme],
+        chains=[far_back],
         days=days,
-        thresholds=t,
+        thresholds=_thresholds(),
         alert_level=RiskLevel.High,
     )
-    assert m.truth_fires == 1
-    # Allerta sei giorni prima: è "l'estate è calda", non preavviso.
     assert m.hits == 0
     assert m.misses == 1
 
-    # Stessa catena, ma la finestra parte due giorni prima dell'incendio.
-    near = days[-3:]
-    m2 = evaluate(
+
+async def test_a_warning_inside_the_horizon_is_a_hit_with_its_lead(
+    reset_db: None, pg_pool: object
+) -> None:
+    """Il preavviso è la distanza fra la prima allerta *dentro* l'orizzonte e
+    l'incendio, e si prende la più lontana delle due utili: due giorni di
+    anticipo valgono più di zero."""
+    cell = f"{AOI}|0|0"
+    fire = dt.date(2026, 8, 10)
+    await _seed({cell: fire})
+    truth = await fetch_burnt_cells(AOI, start=dt.date(2026, 1, 1), end=dt.date(2026, 12, 31))
+    days = [fire - dt.timedelta(days=d) for d in range(10, -1, -1)]
+
+    # Estremo da due giorni prima in poi: la prima allerta utile è a 48 h.
+    hot = _chain(
+        days,
+        {
+            fire - dt.timedelta(days=2): 48.0,
+            fire - dt.timedelta(days=1): 48.0,
+            fire: 48.0,
+        },
+    )
+    m = evaluate(
         aoi_id=AOI,
         truth=truth,
         static={cell: StaticFactors(cell_id=cell, landuse_code="312", slope_deg=30.0)},
         nodes=[NODE],
-        chains=[{d: extreme[d] for d in near}],
-        days=near,
-        thresholds=t,
+        chains=[hot],
+        days=days,
+        thresholds=_thresholds(),
         alert_level=RiskLevel.High,
     )
-    assert m2.hits == 1
-    assert m2.hit_rate == 1.0
-    assert m2.mean_lead_hours == pytest.approx(48.0)
+    assert m.hits == 1
+    assert m.hit_rate == 1.0
+    assert m.mean_lead_hours == pytest.approx(48.0)
+    # Il FAR non è misurato da questo replay e non deve fingere di esserlo.
+    assert m.false_alarms == 0
 
 
-async def test_a_cell_never_reaching_the_level_is_a_miss(
-    reset_db: None, pg_pool: object
-) -> None:
+async def test_a_cell_never_reaching_the_level_is_a_miss(reset_db: None, pg_pool: object) -> None:
     """Una catena mite non deve produrre allerte, e l'incendio resta mancato:
     è il caso che tiene onesto l'hit rate."""
     cell = f"{AOI}|0|0"
