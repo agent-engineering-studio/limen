@@ -116,7 +116,7 @@ def resolve(
     kind: ScoringEngineKind,
     *,
     settings: Settings | None = None,
-    thresholds: RegionalThresholds | None = None,
+    thresholds: HazardThresholds | None = None,
 ) -> HazardScoringEngine:
     """Build the engine registered for ``(hazard, kind)``.
 

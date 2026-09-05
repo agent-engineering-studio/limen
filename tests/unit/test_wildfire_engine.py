@@ -83,32 +83,68 @@ def test_scoring_the_same_bundle_twice_gives_the_same_answer() -> None:
 # ---------------------------------------------------------------------------
 # I tre termini
 # ---------------------------------------------------------------------------
-def test_the_three_terms_are_weighted_not_multiplied() -> None:
-    """Roccia nuda in condizioni estreme non deve dare zero.
+def test_the_weather_gates_the_score() -> None:
+    """Un bosco di conifere sotto un acquazzone di gennaio non è pericoloso.
 
-    Un prodotto azzererebbe il punteggio di una cella senza combustibile, e
-    la cella accanto brucerà lo stesso: il fuoco ci arriva da fuori. La somma
-    pesata è la scelta, e questo test la difende da una "semplificazione".
+    È il difetto che la forma additiva aveva: combustibile e pendenza davano
+    un fondo indipendente dal tempo, e una cella di conifere leggeva
+    "Moderata / allerta gialla" con il FWI a zero. Le classi basse erano
+    irraggiungibili per qualunque cella boscata.
     """
     engine = WildfireScoringEngine(_thresholds())
-    bare_rock = engine.score(_bundle(landuse="332", slope_deg=0.0))
-    assert bare_rock.score > 0.0
+    for landuse in ("312", "323", "211", "332"):
+        soaked = engine.score(_bundle(fwi=0.0, landuse=landuse, slope_deg=25.0))
+        assert soaked.score == 0.0
+        assert soaked.level is RiskLevel.None_
 
 
-def test_a_cell_without_a_chain_scores_but_cannot_reach_the_top() -> None:
-    """Senza catena FWI il termine meteo è ignoto, non zero.
+def test_a_cell_with_nothing_to_burn_still_scores_in_extreme_weather() -> None:
+    """Il termine `base` è il motivo per cui non è un prodotto puro.
 
-    La cella conserva il punteggio che combustibile e pendenza le danno —
-    lasciarla al buio sarebbe peggio — ma senza il termine dominante non può
-    finire in classe alta, che è la risposta onesta quando manca l'unico
-    ingresso che varia nel tempo.
+    Roccia nuda in condizioni estreme non è zero: il fuoco le arriva da
+    fuori. Ma resta ben sotto un versante di conifere, che è il punto.
     """
     engine = WildfireScoringEngine(_thresholds())
-    t = _thresholds()
+    rock = engine.score(_bundle(fwi=50.0, landuse="332", slope_deg=0.0))
+    conifer = engine.score(_bundle(fwi=50.0, landuse="312", slope_deg=35.0))
+    assert 0.0 < rock.score < conifer.score
+    assert rock.level is RiskLevel.Moderate
+
+
+def test_the_reference_cell_scores_exactly_its_normalised_fwi() -> None:
+    """I cutoff di classe sono bande EFFIS, e restano leggibili come tali.
+
+    I tre pesi sommano a 1, quindi una cella di conifere su versante saturo
+    vale esattamente `fwi / normalisation_max`: i confini di classe cadono
+    sui valori FWI di EFFIS (6 / 12 / 21 / 38) invece che su un numero
+    che dipende dalla taratura del terreno.
+    """
+    engine = WildfireScoringEngine(_thresholds())
+    for fwi, expected in (
+        (6.0, RiskLevel.Low),
+        (12.0, RiskLevel.Moderate),
+        (21.0, RiskLevel.High),
+        (38.0, RiskLevel.VeryHigh),
+    ):
+        got = engine.score(_bundle(fwi=fwi, landuse="312", slope_deg=35.0))
+        assert got.score == pytest.approx(fwi / 50.0)
+        assert got.level is expected
+
+
+def test_a_cell_without_a_chain_is_dark_and_says_so() -> None:
+    """Senza catena il termine meteo è *ignoto*, e con una forma
+    moltiplicativa non resta nulla da dire.
+
+    Il punteggio è zero e il breakdown dichiara la catena inaffidabile: una
+    cella spenta che spiega perché è meglio di un numero plausibile di cui
+    nessuno può risalire la fonte.
+    """
+    engine = WildfireScoringEngine(_thresholds())
     worst = engine.score(_bundle(fwi=None, landuse="312", slope_deg=90.0))
+    assert worst.score == 0.0
     assert worst.breakdown.fwi_norm == 0.0
-    assert worst.score <= t.weights.fuel + t.weights.slope
-    assert worst.level is not RiskLevel.VeryHigh
+    # Il caso peggiore non deve leggersi come una catena consolidata.
+    assert worst.breakdown.spinup is True
 
 
 def test_the_fwi_term_saturates_at_the_configured_maximum() -> None:
@@ -197,6 +233,7 @@ def test_the_model_card_is_built_by_the_configuration_not_the_endpoint() -> None
     assert "caine" in landslide
     assert "caine" not in wildfire
     assert wildfire["fwi"]["normalisation_max"] == 50.0
+    assert wildfire["weights"]["base"] > 0.0
 
 
 def test_wildfire_weights_must_sum_to_one() -> None:
@@ -206,6 +243,6 @@ def test_wildfire_weights_must_sum_to_one() -> None:
         WildfireThresholds.model_validate(
             {
                 **load_hazard_thresholds(HazardType.WILDFIRE).model_dump(),
-                "weights": {"fwi": 0.5, "fuel": 0.3, "slope": 0.3},
+                "weights": {"base": 0.5, "fuel": 0.3, "slope": 0.3},
             }
         )

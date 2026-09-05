@@ -50,9 +50,19 @@ def _hot_days(
     return days, obs
 
 
-async def _write(days: list[dt.date], obs: dict[dt.date, FireWeatherObservation]) -> int:
+async def _write(
+    days: list[dt.date],
+    obs: dict[dt.date, FireWeatherObservation],
+    *,
+    max_gap_days: int = 5,
+) -> int:
     rows = await advance_node(
-        lon=NODE[0], lat=NODE[1], observations=obs, days=days, params=_params()
+        lon=NODE[0],
+        lat=NODE[1],
+        observations=obs,
+        days=days,
+        params=_params(),
+        max_gap_days=max_gap_days,
     )
     return await fwi_state_repo.upsert_many(rows)
 
@@ -129,3 +139,49 @@ async def test_float_noise_in_a_node_coordinate_does_not_open_a_second_chain(
     noisy = (NODE[0] + 1e-12, NODE[1] - 1e-12)
     got = await fwi_state_repo.read_day([noisy], dt.date(2026, 7, 3))
     assert got[0] is not None
+
+
+async def test_a_chain_broken_for_too_long_restarts_instead_of_pretending(
+    reset_db: None, pg_pool: object
+) -> None:
+    """Uno stato più vecchio del massimo scarto è una finzione.
+
+    Portarsi un Drought Code attraverso tre settimane di meteo mancante come
+    se i giorni fossero consecutivi produce un numero senza storia dietro, e
+    `chain_days` continuerebbe a salire finché `spinup` dichiarerebbe
+    consolidata una catena rotta. Meglio ripartire dal seme e dirlo.
+    """
+    first_days, first_obs = _hot_days(dt.date(2026, 7, 1), 10)
+    await _write(first_days, first_obs)
+
+    # Tre settimane dopo, ben oltre max_gap_days.
+    late_days, late_obs = _hot_days(dt.date(2026, 7, 31), 5)
+    await _write(late_days, late_obs)
+
+    resumed = await fwi_state_repo.read_day([NODE], dt.date(2026, 8, 4))
+    assert resumed[0] is not None
+    # Catena ripartita: cinque giorni, non quindici.
+    assert resumed[0].chain_days == 5
+    # E il DC riparte dal seme più cinque giorni di asciugatura, non dai ~90
+    # che dieci giorni di luglio avevano accumulato.
+    assert resumed[0].dc < 100.0
+
+
+async def test_a_short_interruption_keeps_the_chain(reset_db: None, pg_pool: object) -> None:
+    """Una breve interruzione non deve buttare via settimane di siccità.
+
+    Lo scarto massimo è ben sotto la memoria di ~52 giorni del DC proprio
+    perché un fermo di due giorni non cambia il significato del codice.
+    """
+    first_days, first_obs = _hot_days(dt.date(2026, 7, 1), 10)
+    await _write(first_days, first_obs)
+    before = await fwi_state_repo.read_day([NODE], dt.date(2026, 7, 10))
+    assert before[0] is not None
+
+    gap_days, gap_obs = _hot_days(dt.date(2026, 7, 13), 3)
+    await _write(gap_days, gap_obs)
+
+    after = await fwi_state_repo.read_day([NODE], dt.date(2026, 7, 15))
+    assert after[0] is not None
+    assert after[0].chain_days == 13
+    assert after[0].dc > before[0].dc

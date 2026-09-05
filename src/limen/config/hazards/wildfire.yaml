@@ -10,12 +10,23 @@
 
 model_version: "wildfire-v1.0.0"
 
-# Quanto pesano i tre termini. Il FWI domina perché è il segnale che cambia
-# ogni giorno; combustibile e pendenza dicono *dove* quel segnale conta.
+# Il terreno **modula** il tempo, non si somma ad esso:
+#
+#     score = fwi_norm × (base + fuel·combustibile + pendenza·pendenza_norm)
+#
+# I tre pesi sommano a 1, quindi una cella massimamente infiammabile e ripida
+# vale esattamente il suo FWI normalizzato — ed è ciò che rende i cutoff di
+# classe leggibili come bande di pericolo EFFIS.
+#
+# Una somma dei tre termini darebbe a un bosco di conifere un punteggio di
+# fondo indipendente dal tempo: sotto un acquazzone di gennaio leggerebbe
+# comunque "Moderata / allerta gialla", che è fisicamente falso.
 weights:
-  fwi:   0.60
-  fuel:  0.28
-  slope: 0.12
+  # La quota di pericolo che una cella ha perché il fuoco le arriva da fuori.
+  # È il motivo per cui la roccia nuda in condizioni estreme non è zero.
+  base:  0.25
+  fuel:  0.60
+  slope: 0.15
 
 fwi:
   # Valori iniziali standard di letteratura per l'avvio primaverile
@@ -39,8 +50,15 @@ fwi:
 
   # I tre codici sono ricorsivi: partiti dai valori standard servono
   # settimane prima di significare qualcosa. Sotto questa soglia il motore
-  # scora comunque — lasciare una cella al buio sarebbe peggio — ma lo dichiara.
+  # scora comunque, ma lo dichiara nel breakdown.
   spinup_days: 30
+
+  # Interruzione massima che una catena sopravvive. Oltre, lo stato salvato è
+  # una finzione: portarsi un codice attraverso tre settimane di meteo
+  # mancante come se i giorni fossero consecutivi è peggio che ripartire dal
+  # seme e dirlo. Ben sotto la memoria di ~52 giorni del DC, così una breve
+  # interruzione non butta via il segnale di siccità costruito in settimane.
+  max_gap_days: 5
 
   # Passo della griglia dei nodi meteo, in gradi. È la chiave della tabella
   # `fwi_state`: cambiarlo apre catene nuove e fa ripartire lo spin-up da
@@ -64,7 +82,11 @@ fuel:
     "244":  0.55   # aree agroforestali
     "3":    0.70   # aree boscate e seminaturali
     "311":  0.65   # latifoglie
-    "312":  0.95   # conifere — il combustibile più pericoloso del Mediterraneo
+    # Le conifere sono a 1.00 non per enfasi ma per costruzione: sono il
+    # combustibile di riferimento, e una cella di conifere su versante saturo
+    # deve valere esattamente il suo FWI normalizzato perché i cutoff di
+    # classe restino leggibili come bande EFFIS.
+    "312":  1.00   # conifere — il combustibile più pericoloso del Mediterraneo
     "313":  0.80   # bosco misto
     "321":  0.70   # praterie naturali
     "322":  0.85   # brughiere e cespuglieti

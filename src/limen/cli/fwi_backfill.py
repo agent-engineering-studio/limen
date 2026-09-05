@@ -44,7 +44,7 @@ from limen.data.repos.fwi_state_repo import NodeDay
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.openmeteo.client import OpenMeteoHttpClient
 from limen.integrations.openmeteo.dtos import FireWeatherObservation, MeteoSnapshot
-from limen.integrations.openmeteo.grid import build_rain_nodes
+from limen.integrations.openmeteo.grid import build_snapped_nodes
 
 log = get_logger(__name__)
 
@@ -61,6 +61,10 @@ class BackfillResult:
     aoi_id: str
     nodes: int
     days_written: int
+    #: The most recent day any node actually covered. The reanalysis archive
+    #: lags real time by a few days and the lag moves, so the requested end
+    #: and the achieved end are different facts and both are reported.
+    last_day: date | None = None
 
 
 def params_from(thresholds: WildfireThresholds) -> FwiParams:
@@ -89,9 +93,7 @@ async def _aoi_bbox(aoi_id: str) -> tuple[float, float, float, float] | None:
     return (float(row["x0"]), float(row["y0"]), float(row["x1"]), float(row["y1"]))
 
 
-def _observations(
-    snapshot: MeteoSnapshot, days: list[date]
-) -> dict[date, FireWeatherObservation]:
+def _observations(snapshot: MeteoSnapshot, days: list[date]) -> dict[date, FireWeatherObservation]:
     out: dict[date, FireWeatherObservation] = {}
     for day in days:
         obs = snapshot.noon_observation(day)
@@ -107,6 +109,7 @@ async def advance_node(
     observations: dict[date, FireWeatherObservation],
     days: list[date],
     params: FwiParams,
+    max_gap_days: int,
 ) -> list[NodeDay]:
     """Walk one node's chain over ``days``, returning the rows to write.
 
@@ -114,8 +117,25 @@ async def advance_node(
     second run extends the chain instead of restarting it. A day with no
     observation is **skipped, not zeroed**: inventing a reading would inject
     a fake drying day that the recursion would carry for weeks.
+
+    A stored state older than ``max_gap_days`` is discarded. Carrying a
+    drought code across three weeks of missing weather as if the days were
+    consecutive produces a number with no history behind it, and
+    ``chain_days`` would keep climbing until ``spinup`` called the broken
+    chain settled.
     """
     stored = await fwi_state_repo.latest_before(lon, lat, days[0])
+    if stored is not None and (days[0] - stored.day).days > max_gap_days:
+        log.warning(
+            "fwi.chain.gap_too_long",
+            lon=lon,
+            lat=lat,
+            last_day=stored.day.isoformat(),
+            resuming_at=days[0].isoformat(),
+            gap_days=(days[0] - stored.day).days,
+            max_gap_days=max_gap_days,
+        )
+        stored = None
     state: FwiState = stored.state if stored else params.initial_state
     chain_days = stored.chain_days if stored else 0
 
@@ -170,7 +190,7 @@ async def backfill_aoi(
     first = last - timedelta(days=days_back - 1)
     days = [first + timedelta(days=i) for i in range(days_back)]
 
-    nodes = build_rain_nodes(bbox, spacing=thresholds.fwi.node_spacing_deg)
+    nodes = build_snapped_nodes(bbox, spacing=thresholds.fwi.node_spacing_deg)
     # One day of margin before the window: the 24 h rain of the first day is
     # drawn from the hours preceding its noon, which are in the day before.
     series = await client.get_fire_weather_grid(
@@ -197,7 +217,12 @@ async def backfill_aoi(
             continue
         rows.extend(
             await advance_node(
-                lon=lon, lat=lat, observations=observations, days=days, params=params
+                lon=lon,
+                lat=lat,
+                observations=observations,
+                days=days,
+                params=params,
+                max_gap_days=thresholds.fwi.max_gap_days,
             )
         )
 
@@ -208,14 +233,29 @@ async def backfill_aoi(
         return BackfillResult(aoi_id=aoi_id, nodes=len(nodes), days_written=0)
 
     written = await fwi_state_repo.upsert_many(rows)
+    covered = max(r.day for r in rows)
+    lag = (last - covered).days
+    if lag > 0:
+        # Not an error: the reanalysis archive is behind real time by a few
+        # days and the lag moves. Saying how far behind the chain actually
+        # ends beats a silent gap that the next run would then treat as an
+        # interruption.
+        log.warning(
+            "fwi.backfill.archive_lag",
+            aoi_id=aoi_id,
+            requested_end=last.isoformat(),
+            covered_to=covered.isoformat(),
+            lag_days=lag,
+        )
     log.info(
         "fwi.backfill.aoi.done",
         aoi_id=aoi_id,
         nodes=len(nodes),
         days=days_back,
         days_written=written,
+        covered_to=covered.isoformat(),
     )
-    return BackfillResult(aoi_id=aoi_id, nodes=len(nodes), days_written=written)
+    return BackfillResult(aoi_id=aoi_id, nodes=len(nodes), days_written=written, last_day=covered)
 
 
 def _int_env(name: str, default: int) -> int:
@@ -244,9 +284,7 @@ async def run() -> int:
             log.warning("fwi.backfill.no_aoi")
             return 0
         for aoi_id in aoi_ids:
-            await backfill_aoi(
-                aoi_id=aoi_id, days_back=days_back, thresholds=loaded, client=client
-            )
+            await backfill_aoi(aoi_id=aoi_id, days_back=days_back, thresholds=loaded, client=client)
     await SharedHttpClient.aclose()
     return 0
 

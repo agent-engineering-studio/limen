@@ -496,8 +496,15 @@ class FwiBlock(_StrictModel):
     #: it the index keeps climbing but the operational answer stops changing.
     normalisation_max: float = Field(..., gt=0.0)
     #: Days of spin-up below which the codes are not yet meaningful. The
-    #: engine still scores -- refusing would leave a cell dark -- but says so.
+    #: engine still scores, but flags the breakdown so nobody reads a
+    #: three-day-old chain as a seasoned one.
     spinup_days: int = Field(..., ge=0)
+    #: Longest interruption a chain survives. Beyond it the stored state is a
+    #: fiction -- carrying a code across three weeks of missing weather as if
+    #: the days were consecutive is worse than restarting from the seed and
+    #: saying so. Well under the DC's ~52-day memory, so a short outage still
+    #: keeps the drought signal it took weeks to build.
+    max_gap_days: int = Field(..., ge=1)
     #: Weather-node grid step, in degrees. It is the key of `fwi_state`, so
     #: changing it starts fresh chains and restarts the spin-up: a
     #: configuration decision, not a per-run knob.
@@ -546,15 +553,23 @@ class FuelBlock(_StrictModel):
 
 
 class WildfireWeights(_StrictModel):
-    """How the danger and the terrain combine. Must sum to 1."""
+    """How the terrain modulates the weather. Must sum to 1.
 
-    fwi: float = Field(..., ge=0.0, le=1.0)
+    These weight the *terrain* factor that multiplies the FWI term, so a cell
+    with the maximum of every one of them scores exactly its normalised FWI.
+    That is what keeps the class cutoffs readable as EFFIS danger bands.
+    """
+
+    #: Weight given to nothing in particular -- the share of the danger a cell
+    #: carries because fire arrives from outside it. It is why bare rock in
+    #: extreme fire weather is not zero.
+    base: float = Field(..., ge=0.0, le=1.0)
     fuel: float = Field(..., ge=0.0, le=1.0)
     slope: float = Field(..., ge=0.0, le=1.0)
 
     @model_validator(mode="after")
     def _sum_to_one(self) -> WildfireWeights:
-        total = self.fwi + self.fuel + self.slope
+        total = self.base + self.fuel + self.slope
         if abs(total - 1.0) > 1e-9:
             raise ValueError(f"wildfire weights must sum to 1, got {total}")
         return self
@@ -585,7 +600,7 @@ class WildfireThresholds(HazardThresholds):
     def model_card(self) -> dict[str, Any]:
         return {
             "weights": {
-                "fwi": self.weights.fwi,
+                "base": self.weights.base,
                 "fuel": self.weights.fuel,
                 "slope": self.weights.slope,
             },
