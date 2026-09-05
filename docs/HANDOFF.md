@@ -79,13 +79,35 @@
 
 Versione: implementazione completa, in fase di test. Feature mergiate di recente:
 
+- **Incendio operativo** (2026-09-05, issue #61 + #62, PR #95 + questa).
+  Il secondo pericolo di Limen è abilitato: catena FWI di Van Wagner (1987)
+  verificata sul giorno di riferimento pubblicato a 1e-9, motore
+  `FWI × (base + combustibile + pendenza)`, step `FwiUpdate` nello sweep orario
+  e in quello previsionale, `limen fwi-backfill`, `limen backtest-wildfire`,
+  palette dedicata sulla mappa.
+
+  **Due cose da sapere prima di guardare la mappa incendio:**
+  1. `landuse_code` (CORINE) e `slope_deg` (DEM) sono vuoti nella maggior parte
+     dei deployment, quindi il termine di terreno è **costante** e la mappa
+     incendio coincide con la mappa FWI. È il prodotto che EFFIS pubblica per
+     l'Europa — utile, ma non è rischio modulato dal territorio. Il caricamento
+     è dati, non codice: `LIMEN_CORINE_RASTER` e il DEM.
+  2. La catena parte dai valori standard e il Drought Code ha ~52 giorni di
+     memoria: le prime settimane il breakdown porta `spinup: true` e il popup
+     lo dichiara. `limen fwi-backfill` ricostruisce la storia dall'archivio
+     ERA5 e va eseguito prima di mettere la mappa davanti a un operatore.
+
+  **Backtest senza ground truth**: l'endpoint pubblico EFFIS risponde **403**
+  senza accreditamento, quindi `fire_perimeters` resta vuota e il report lo
+  dichiara invece di stampare zeri. La logica di valutazione è verificata con
+  perimetri sintetici in `tests/integration/test_backtest_wildfire.py`.
+
 - **Fase 1 hazard-agnostic COMPLETA** (2026-09-05, epic #57, PR #88 #89 #91 #92
-  #93 + questa). L'architettura è multi-rischio nella struttura e mono-rischio
-  nei dati: `hazard_type` attraversa tabelle, viste, API, MCP e A2A, ma
-  l'unico pericolo configurato è `landslide`. Aggiungerne uno è **uno YAML in
-  `config/hazards/` più una registrazione nel registry**, senza toccare
-  workflow, API o persistenza — è il criterio di accettazione dell'epic, e un
-  test lo dimostra registrando un motore fittizio.
+  #93 + #94). L'architettura è multi-rischio nella struttura: `hazard_type`
+  attraversa tabelle, viste, API, MCP e A2A. Aggiungere un pericolo è **uno
+  YAML in `config/hazards/` più una registrazione nel registry**, senza
+  toccare workflow, API o persistenza — è il criterio di accettazione
+  dell'epic, e la Fase 2 lo ha messo alla prova aggiungendo l'incendio.
   Cosa sapere prima di abilitarne un secondo:
   1. serve `config/hazards/<hazard>.yaml` **completo**: #84 ha rifiutato di
      proposito un file di blocchi condivisi, perché soglie di classe e
@@ -97,7 +119,9 @@ Versione: implementazione completa, in fase di test. Feature mergiate di recente
   3. `mv_comune_risk` e il report nazionale restano mono-rischio: il loro
      `exposure_rank` legge una chiave che solo il breakdown delle frane ha
      (#58, Fase 4). API e tool MCP **rifiutano** un pericolo diverso lì,
-     invece di restituire numeri delle frane sotto un'altra etichetta;
+     invece di restituire numeri delle frane sotto un'altra etichetta, e la
+     SPA lo dichiara con `LandslideOnlyBadge`. La mappa invece segue il
+     selettore dalla Fase 2, passando da `risk_at(z,x,y,hours_ago,hazard)`;
   4. gli step condivisi del workflow girano una volta per *(pericolo, AOI)*,
      non una per AOI: con due pericoli i fetch meteo e GloFAS raddoppiano.
      Condividerli richiede di spezzare la pipeline in prefisso territoriale e
