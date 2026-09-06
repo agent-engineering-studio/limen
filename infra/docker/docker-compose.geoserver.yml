@@ -112,6 +112,16 @@ services:
     container_name: limen-geoserver-init
     restart: "no"
     profiles: ["geoserver"]
+    # L'immagine gira come uid 10001, ma i dati montati appartengono a chi ha
+    # clonato il repo dei dataset — tipicamente l'utente che lancia `make`, e
+    # una directory a 700 rende `/data` illeggibile. Il Makefile passa il
+    # proprio uid/gid; il default resta l'utente dell'immagine, così un
+    # `docker compose` lanciato a mano si comporta come prima.
+    #
+    # Il montaggio è `:ro`, quindi al container serve solo lettura. Senza
+    # questo il bootstrap chiude con «0 shapefile(s) found» ed esce con
+    # successo: un fallimento travestito da riuscita.
+    user: "${GEO_INIT_UID:-10001}:${GEO_INIT_GID:-10001}"
     depends_on:
       geoserver-postgis:
         condition: service_healthy

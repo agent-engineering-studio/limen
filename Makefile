@@ -26,6 +26,12 @@ COMPOSE_ALL  := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_DEMO) -f $(C
 # `infra/docker/.env`, che non esiste, e GEOSERVER_SHAPEFILE_DIR resta al
 # default — che punta a una directory vuota.
 COMPOSE_GS   := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_GEOSERVER) -p limen
+
+# Il bootstrap GeoServer legge una directory di dataset montata dall'host. Chi
+# l'ha clonata è di norma chi lancia `make`, quindi gli si passa il proprio
+# uid: l'immagine gira come 10001 e una directory a 700 le sarebbe illeggibile.
+export GEO_INIT_UID := $(shell id -u)
+export GEO_INIT_GID := $(shell id -g)
 UP_PROFILES  := --profile geoserver --profile frontend
 
 # `make build` spans EVERY compose file, not just the ones `make up` starts:
