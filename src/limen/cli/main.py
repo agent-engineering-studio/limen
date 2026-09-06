@@ -31,6 +31,7 @@ from limen.cli.backtest_wildfire import run as _run_backtest_wildfire
 from limen.cli.bootstrap_static import run as _run_bootstrap_static
 from limen.cli.calibrate import run as _run_calibrate
 from limen.cli.create_admin import run as _run_create_admin
+from limen.cli.data_status import run as _run_data_status
 from limen.cli.firms_sync import run as _run_firms_sync
 from limen.cli.forecast import run as _run_forecast
 from limen.cli.forecast_history import run as _run_forecast_history
@@ -68,6 +69,10 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("migrate", help="apply pending SQL migrations")
+    sub.add_parser(
+        "data-status",
+        help="report which per-cell static layers are loaded and what gates the rest",
+    )
     sub.add_parser(
         "partitions",
         help="create the upcoming daily partitions of the hot tables and report their state",
@@ -202,6 +207,7 @@ def main(argv: list[str] | None = None) -> int:
 
     runners: dict[str, Runner] = {
         "migrate": _run_migrate,
+        "data-status": _run_data_status,
         "partitions": _run_partitions,
         "seed": _run_seed,
         "seed-comuni": _run_seed_comuni,

@@ -36,6 +36,7 @@ BUILD_PROFILES ?= --profile geoserver --profile frontend --profile geodata
 .PHONY: help install \
         up down build rebuild up-host-ollama \
         up-dev down-dev logs migrate seed bootstrap-static calibrate backtest serve \
+        data-status static-data flood-data \
         demo demo-down demo-walkthrough \
         observability observability-down \
         geoserver-up geoserver-down geoserver-init geoserver-logs geoserver-sync dtm-vrt osm-data \
@@ -60,6 +61,12 @@ help:
 	@echo "  make migrate            apply pending SQL migrations"
 	@echo "  make seed               apply migrations + seed Puglia/Basilicata AOIs + grids"
 	@echo "  make bootstrap-static   fill cell_static_factors (IFFI density + PAI + distance)"
+	@echo ""
+	@echo "Dati per cella (quali layer ci sono, e come caricarli)"
+	@echo "  make data-status        quali layer statici sono caricati e cosa blocca gli altri"
+	@echo "  make static-data        carica tutti i layer configurati + riepilogo"
+	@echo "  make flood-data         come static-data, con il focus sull'alluvione"
+	@echo "  make dtm-vrt            mosaico virtuale sulle tessere DTM (serve GDAL sull'host)"
 	@echo "  make calibrate          run §2.5 calibration (s_static + S↔ISPRA gate)"
 	@echo "  make backtest           replay the Oct 2018 storm and write the report"
 	@echo "  make serve              FastAPI on :8080"
@@ -184,6 +191,22 @@ seed:
 
 bootstrap-static:
 	$(UV) run limen bootstrap-static
+
+# Quali fattori per cella sono popolati, e quale variabile blocca i mancanti.
+# Sola lettura: sicuro anche in produzione.
+data-status:
+	$(UV) run limen data-status
+
+# Carica ogni layer la cui sorgente è configurata, e dice a voce alta quali
+# non lo sono e perché. Non scarica i dataset che richiedono registrazione
+# (TINITALY, CORINE, CLMS): li nomina, con dove prenderli.
+static-data:
+	@bash scripts/load_static_data.sh
+
+# Stesso percorso, con la nota sul layer che per l'alluvione è decisivo: senza
+# il mosaico idraulico ISPRA la mappa alluvione resta uniforme.
+flood-data:
+	@bash scripts/load_static_data.sh flood
 
 calibrate:
 	$(UV) run limen calibrate

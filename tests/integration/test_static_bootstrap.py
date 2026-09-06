@@ -327,3 +327,24 @@ async def test_osm_unset_leaves_distances_null(
             _AOI_ID,
         )
     assert int(non_null) == 0
+
+
+async def test_data_status_columns_exist_in_the_schema(reset_db: None, pg_pool: object) -> None:
+    """Le colonne che il rapporto interroga devono esistere davvero.
+
+    `limen data-status` costruisce le query da una tabella di costanti: una
+    rinominata nello schema e non lì diventa un errore SQL alla prima
+    esecuzione, cioè esattamente quando qualcuno sta cercando di capire
+    perché una mappa è vuota.
+    """
+    from limen.cli.data_status import LAYERS
+    from limen.data.db import acquire
+
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = 'cell_static_factors'"
+        )
+    present = {str(r["column_name"]) for r in rows}
+    missing = {layer.column for layer in LAYERS} - present
+    assert not missing, f"colonne dichiarate ma assenti dallo schema: {missing}"
