@@ -374,10 +374,12 @@ async def test_wui_interface_is_urban_touching_vegetation(reset_db: None, pg_poo
             "ST_Multi(ST_MakeEnvelope(16.0, 41.0, 16.1, 41.1, 4326)))",
             aoi,
         )
-        # Una fila di cinque celle contigue:
-        #   0 urbano (isolato)  1 urbano  2 bosco  3 bosco  4 urbano lontano
-        # Solo la 1 è interfaccia: tocca la 2.
-        codici = {0: "112", 1: "112", 2: "312", 3: "312", 4: "112"}
+        # Una fila di sette celle contigue da 1 km:
+        #   0 urb   1 urb   2 bosco   3 bosco   4 urb   5 urb   6 urb
+        # Interfacce: la 1 (tocca la 2) e la 4 (tocca la 3). La 0 e la 5 sono
+        # urbane accanto a un'interfaccia ma non lo sono; la 6 dista due celle
+        # dalla più vicina, quindi deve valere meno della 0.
+        codici = {0: "112", 1: "112", 2: "312", 3: "312", 4: "112", 5: "112", 6: "112"}
         for i, code in codici.items():
             x = 16.0 + i * 0.01
             cid = f"{aoi}|0|{i}"
@@ -408,13 +410,17 @@ async def test_wui_interface_is_urban_touching_vegetation(reset_db: None, pg_poo
 
     # Ogni cella riceve un valore: NULL significherebbe "non calcolato".
     assert all(v is not None for v in valori.values()), valori
-    # La cella 1 è l'interfaccia: prossimità massima.
+    # Le due interfacce valgono il massimo.
     assert valori[f"{aoi}|0|1"] == 1.0
-    # La 0, urbana ma circondata da urbano, non è interfaccia — però le è
-    # vicina, quindi ha un valore positivo minore di 1.
+    assert valori[f"{aoi}|0|4"] == 1.0
+    # Il bosco non è interfaccia — è ciò che l'interfaccia tocca — ma le è
+    # adiacente, quindi ha prossimità alta senza essere 1.
+    assert 0.0 < valori[f"{aoi}|0|2"] < 1.0
+    # Urbano accanto a un'interfaccia: positivo, non massimo.
     assert 0.0 < valori[f"{aoi}|0|0"] < 1.0
-    # E la prossimità decresce allontanandosi dall'interfaccia.
-    assert valori[f"{aoi}|0|0"] > valori[f"{aoi}|0|4"]
+    # E la prossimità decresce allontanandosi: la 6 dista due celle
+    # dall'interfaccia più vicina, la 0 una sola.
+    assert valori[f"{aoi}|0|0"] > valori[f"{aoi}|0|6"]
 
 
 async def test_wui_is_skipped_without_land_cover(reset_db: None, pg_pool: object) -> None:
