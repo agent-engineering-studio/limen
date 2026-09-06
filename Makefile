@@ -19,6 +19,13 @@ COMPOSE_GEODATA := infra/docker/docker-compose.geodata.yml
 # Repo-root .env feeds compose ${VAR} interpolation (e.g. SCORING__MODE);
 # without --env-file compose only reads infra/docker/.env, which doesn't exist.
 COMPOSE_ALL  := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_DEMO) -f $(COMPOSE_GEOSERVER) -p limen
+# Il solo stack GeoServer, con lo stesso progetto e lo stesso .env dello stack
+# completo. Entrambi servono: `-p limen` perché i container hanno un
+# `container_name` fisso e senza progetto compose ne creerebbe di nuovi con lo
+# stesso nome; `--env-file .env` perché altrimenti compose legge
+# `infra/docker/.env`, che non esiste, e GEOSERVER_SHAPEFILE_DIR resta al
+# default — che punta a una directory vuota.
+COMPOSE_GS   := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_GEOSERVER) -p limen
 UP_PROFILES  := --profile geoserver --profile frontend
 
 # `make build` spans EVERY compose file, not just the ones `make up` starts:
@@ -284,18 +291,16 @@ observability-down:
 # GeoServer vector-data layer (opt-in — mcp-geo-server integration)
 # ---------------------------------------------------------------------------
 geoserver-up: gs-volumes
-	docker compose -f $(COMPOSE_GEOSERVER) --profile geoserver up -d
+	docker compose $(COMPOSE_GS) --profile geoserver up -d
 
 geoserver-init:
-	# Same project (-p limen) as `make up`: a standalone project name would
-	# collide with the running limen-geoserver-postgis container.
-	docker compose $(COMPOSE_ALL) --profile geoserver run --rm geoserver-init
+	docker compose $(COMPOSE_GS) --profile geoserver run --rm geoserver-init
 
 geoserver-logs:
-	docker compose -f $(COMPOSE_GEOSERVER) --profile geoserver logs -f
+	docker compose $(COMPOSE_GS) --profile geoserver logs -f
 
 geoserver-down:
-	docker compose -f $(COMPOSE_GEOSERVER) --profile geoserver down
+	docker compose $(COMPOSE_GS) --profile geoserver down
 
 # DTM tiles live in the /data folder shared with the GeoServer container.
 GEOSERVER_DTM_DIR ?= ../mcp-geoserver/data/dtm
