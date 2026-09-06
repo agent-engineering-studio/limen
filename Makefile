@@ -136,8 +136,9 @@ up: gs-volumes
 	@echo "   API      http://localhost:8080/docs      Frontend  http://localhost:5173"
 	@echo "   GeoServer http://localhost:8081/geoserver Web UI    http://localhost:8000"
 	@echo ""
-	@echo "[up] One-off: per-cell static factors incl. DTM slope (~40 min on the 5 m DTM),"
-	@echo "     run on the HOST so it reads the DTM + .env:  make bootstrap-static"
+	@echo "[up] One-off: per-cell static factors incl. DTM slope. Misurato sul DTM 5 m:"
+	@echo "     ~2m45s ogni 11k celle, cioè ~1.5-2h sulle 312k delle 20 regioni."
+	@echo "     Va lanciato sull'HOST, che legge il DTM e .env:  make static-data"
 
 down:
 	docker compose $(COMPOSE_ALL) $(UP_PROFILES) down
