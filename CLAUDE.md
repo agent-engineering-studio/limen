@@ -172,6 +172,11 @@ uv run limen fwi-backfill       # rebuild the recursive FWI chain from the ERA5 
                                 # (env knobs: LIMEN_FWI_AOI / LIMEN_FWI_DAYS)
 uv run limen backtest-wildfire  # replay the FWI chain against EFFIS burnt-area perimeters
                                 # (env: LIMEN_BACKTEST_WILDFIRE_AOI / _START / _END / _LEVEL)
+uv run limen data-status        # which per-cell static layers are loaded, and what gates the rest
+
+make data-status            # the same report
+make static-data            # load every configured layer, then report
+make flood-data             # same, with the note on the layer flood actually needs
 uv run limen monitor-once       # run the MAF workflow once for an AOI
                                 # (env knobs: LIMEN_MONITOR_AOI / CELL_LIMIT)
 uv run limen serve              # start the FastAPI server on API__HOST:API__PORT (default :8080)
