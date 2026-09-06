@@ -14,6 +14,17 @@ set -uo pipefail
 UV="${UV:-uv}"
 FOCUS="${1:-tutti}"
 
+# I comandi `limen` leggono `.env` da soli (pydantic-settings + python-dotenv),
+# la shell no. Senza questo il preflight direbbe "manca" per variabili che il
+# lavoro vero trova senza problemi — un modo perfetto per far cercare a
+# qualcuno un dato che è già configurato.
+if [ -f .env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
+fi
+
 say()  { printf '\n\033[1m%s\033[0m\n' "$*"; }
 ok()   { printf '  [ok]      %s\n' "$*"; }
 skip() { printf '  [manca]   %s\n' "$*"; }
@@ -22,8 +33,20 @@ say "1/4  Cosa è configurato in questo ambiente"
 
 have_geoserver=0; have_dem=0; have_imperv=0; have_corine=0
 if [ -n "${GEOSERVER_SOURCE__DB_DSN:-}" ]; then
-  have_geoserver=1
-  ok "GeoServer PostGIS — mosaico idraulico ISPRA, PAI, inventario IFFI"
+  # La variabile impostata non basta: se lo stack non è acceso il sync degrada
+  # in silenzio e la mappa resta vuota. Meglio provarci qui, dove si può
+  # ancora dire cosa fare, che scoprirlo in venti righe di warning.
+  gs_host=$(printf '%s' "$GEOSERVER_SOURCE__DB_DSN" | sed -E 's#.*@([^:/]+).*#\1#')
+  gs_port=$(printf '%s' "$GEOSERVER_SOURCE__DB_DSN" | sed -E 's#.*:([0-9]+)/.*#\1#')
+  if timeout 3 bash -c "</dev/tcp/${gs_host}/${gs_port}" 2>/dev/null; then
+    have_geoserver=1
+    ok "GeoServer PostGIS raggiungibile su ${gs_host}:${gs_port}"
+  else
+    skip "GEOSERVER_SOURCE__DB_DSN impostata ma ${gs_host}:${gs_port} non risponde"
+    echo "            → lo stack non è acceso. Avvialo con 'make geoserver-up' e,"
+    echo "              la prima volta, 'make geoserver-init' per caricare gli"
+    echo "              shapefile ISPRA in PostGIS."
+  fi
 else
   skip "GEOSERVER_SOURCE__DB_DSN non impostata"
   echo "            → senza, la suscettibilità idraulica resta vuota e la mappa"
