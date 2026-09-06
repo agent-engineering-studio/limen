@@ -224,41 +224,67 @@ WHERE c.cell_id = d.cell_id
 #
 # Ogni cella riceve poi la prossimità all'interfaccia più vicina, lineare e
 # azzerata oltre il raggio: 1 sull'interfaccia, 0 a `$2` metri.
+# Le celle dell'AOI in una tabella temporanea con i suoi indici. La versione
+# precedente teneva tutto in CTE: senza indici, l'`EXISTS` con `ST_Intersects`
+# diventava un prodotto cartesiano di test geometrici (~15k x 15k per AOI) e
+# la query moriva nel timeout del pool. Non si era mai visto perché il passo
+# si saltava finché `landuse_code` era vuoto.
+_WUI_TEMP_SQL = """
+CREATE TEMP TABLE _wui_cells ON COMMIT DROP AS
+SELECT g.id, g.row_idx, g.col_idx, ST_Centroid(g.geom) AS centroid, c.landuse_code
+FROM grid_cells g
+JOIN cell_static_factors c ON c.cell_id = g.id
+WHERE g.aoi_id = $1
+"""
+
+_WUI_TEMP_INDEX_SQL = """
+CREATE INDEX ON _wui_cells (row_idx, col_idx);
+CREATE INDEX ON _wui_cells USING GIST (centroid);
+ANALYZE _wui_cells;
+"""
+
+# L'adiacenza si legge dagli indici di riga e colonna, non dalla geometria: la
+# griglia è regolare, quindi due celle confinano se differiscono di al più uno
+# su entrambi gli assi. È un confronto fra interi al posto di un test
+# topologico, e dà lo stesso risultato su una griglia che per costruzione non
+# ha buchi né sovrapposizioni.
+_WUI_INTERFACE_SQL = """
+CREATE TEMP TABLE _wui_interface ON COMMIT DROP AS
+SELECT DISTINCT u.id, u.centroid
+FROM _wui_cells u
+JOIN _wui_cells v
+  ON abs(v.row_idx - u.row_idx) <= 1
+ AND abs(v.col_idx - u.col_idx) <= 1
+ AND v.id <> u.id
+WHERE u.landuse_code LIKE '1%'
+  AND v.landuse_code LIKE '3%'
+"""
+
+_WUI_INTERFACE_INDEX_SQL = """
+CREATE INDEX ON _wui_interface USING GIST (centroid);
+ANALYZE _wui_interface;
+"""
+
+# Con l'indice GiST sui centroidi dell'interfaccia il `<->` è una vera ricerca
+# del vicino più prossimo invece di una scansione per cella.
 _WUI_PROXIMITY_SQL = """
-WITH cells AS (
-    SELECT g.id, g.geom, ST_Centroid(g.geom) AS centroid, c.landuse_code
-    FROM grid_cells g
-    JOIN cell_static_factors c ON c.cell_id = g.id
-    WHERE g.aoi_id = $1
-),
-interface AS (
-    SELECT u.id, u.centroid
-    FROM cells u
-    WHERE u.landuse_code LIKE '1%'
-      AND EXISTS (
-          SELECT 1 FROM cells v
-          WHERE v.landuse_code LIKE '3%'
-            AND ST_Intersects(v.geom, u.geom)
-      )
-),
-prox AS (
-    SELECT c.id AS cell_id,
-           CASE
-               WHEN near.dist IS NULL THEN 0.0
-               ELSE GREATEST(0.0, 1.0 - near.dist / $2)
-           END AS wui
-    FROM cells c
-    LEFT JOIN LATERAL (
-        SELECT ST_Distance(c.centroid::geography, i.centroid::geography) AS dist
-        FROM interface i
-        ORDER BY c.centroid <-> i.centroid
-        LIMIT 1
-    ) near ON near.dist <= $2
-)
 UPDATE cell_static_factors c
 SET wui_proximity_norm = prox.wui,
     updated_at = now()
-FROM prox
+FROM (
+    SELECT cl.id AS cell_id,
+           CASE
+               WHEN near.dist IS NULL THEN 0.0
+               ELSE GREATEST(0.0, 1.0 - near.dist / $1)
+           END AS wui
+    FROM _wui_cells cl
+    LEFT JOIN LATERAL (
+        SELECT ST_Distance(cl.centroid::geography, i.centroid::geography) AS dist
+        FROM _wui_interface i
+        ORDER BY cl.centroid <-> i.centroid
+        LIMIT 1
+    ) near ON near.dist <= $1
+) prox
 WHERE c.cell_id = prox.cell_id
 """
 
@@ -286,9 +312,16 @@ async def compute_wui_proximity_for_aoi(aoi_id: str) -> None:
         if not coded:
             log.info("static_bootstrap.wui.skip", aoi_id=aoi_id, reason="no landuse_code")
             return
-        await conn.execute(
-            _WUI_PROXIMITY_SQL, aoi_id, _WUI_RADIUS_M, timeout=_BOOTSTRAP_STMT_TIMEOUT_S
-        )
+        # In transazione: le tabelle temporanee sono `ON COMMIT DROP`, quindi
+        # devono vivere abbastanza da servire l'UPDATE finale.
+        async with conn.transaction():
+            await conn.execute(_WUI_TEMP_SQL, aoi_id, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
+            await conn.execute(_WUI_TEMP_INDEX_SQL, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
+            await conn.execute(_WUI_INTERFACE_SQL, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
+            await conn.execute(_WUI_INTERFACE_INDEX_SQL, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
+            await conn.execute(
+                _WUI_PROXIMITY_SQL, _WUI_RADIUS_M, timeout=_BOOTSTRAP_STMT_TIMEOUT_S
+            )
         log.info("static_bootstrap.wui.done", aoi_id=aoi_id, cells_with_landuse=coded)
 
 

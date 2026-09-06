@@ -348,3 +348,105 @@ async def test_data_status_columns_exist_in_the_schema(reset_db: None, pg_pool: 
     present = {str(r["column_name"]) for r in rows}
     missing = {layer.column for layer in LAYERS} - present
     assert not missing, f"colonne dichiarate ma assenti dallo schema: {missing}"
+
+
+async def test_wui_interface_is_urban_touching_vegetation(reset_db: None, pg_pool: object) -> None:
+    """L'interfaccia è urbano **che confina con** vegetazione, non urbano.
+
+    Un isolato circondato da altri isolati non ha bosco da cui prendere fuoco:
+    è la distinzione che separa questo termine dal `near_urban` che le frane
+    già usano.
+
+    L'adiacenza si legge da `row_idx`/`col_idx` invece che da `ST_Intersects`:
+    la griglia è regolare, quindi due celle confinano se differiscono di al
+    più uno su entrambi gli assi. La versione geometrica moriva nel timeout
+    del pool — un prodotto cartesiano di test topologici su ~15k celle per
+    AOI — e questo test fissa che le due letture diano lo stesso risultato.
+    """
+    from limen.integrations.static_bootstrap.orchestrator import (
+        compute_wui_proximity_for_aoi,
+    )
+
+    aoi = "wui-test"
+    async with acquire() as conn:
+        await conn.execute(
+            "INSERT INTO aoi (id, name, kind, geom) VALUES ($1,'WUI','region',"
+            "ST_Multi(ST_MakeEnvelope(16.0, 41.0, 16.1, 41.1, 4326)))",
+            aoi,
+        )
+        # Una fila di cinque celle contigue:
+        #   0 urbano (isolato)  1 urbano  2 bosco  3 bosco  4 urbano lontano
+        # Solo la 1 è interfaccia: tocca la 2.
+        codici = {0: "112", 1: "112", 2: "312", 3: "312", 4: "112"}
+        for i, code in codici.items():
+            x = 16.0 + i * 0.01
+            cid = f"{aoi}|0|{i}"
+            await conn.execute(
+                "INSERT INTO grid_cells (id, aoi_id, row_idx, col_idx, geom, area_km2) "
+                "VALUES ($1,$2,0,$3, ST_MakeEnvelope($4,41.0,$5,41.01,4326), 1.0)",
+                cid,
+                aoi,
+                i,
+                x,
+                x + 0.01,
+            )
+            await conn.execute(
+                "INSERT INTO cell_static_factors (cell_id, landuse_code) VALUES ($1,$2)",
+                cid,
+                code,
+            )
+
+    await compute_wui_proximity_for_aoi(aoi)
+
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT cell_id, wui_proximity_norm FROM cell_static_factors "
+            "WHERE cell_id LIKE $1 ORDER BY cell_id",
+            f"{aoi}|%",
+        )
+    valori = {r["cell_id"]: r["wui_proximity_norm"] for r in rows}
+
+    # Ogni cella riceve un valore: NULL significherebbe "non calcolato".
+    assert all(v is not None for v in valori.values()), valori
+    # La cella 1 è l'interfaccia: prossimità massima.
+    assert valori[f"{aoi}|0|1"] == 1.0
+    # La 0, urbana ma circondata da urbano, non è interfaccia — però le è
+    # vicina, quindi ha un valore positivo minore di 1.
+    assert 0.0 < valori[f"{aoi}|0|0"] < 1.0
+    # E la prossimità decresce allontanandosi dall'interfaccia.
+    assert valori[f"{aoi}|0|0"] > valori[f"{aoi}|0|4"]
+
+
+async def test_wui_is_skipped_without_land_cover(reset_db: None, pg_pool: object) -> None:
+    """Senza CORINE la colonna resta NULL, che non è 0.
+
+    Zero significherebbe "lontano da qualunque interfaccia" — un'affermazione
+    che senza copertura del suolo non si può fare.
+    """
+    from limen.integrations.static_bootstrap.orchestrator import (
+        compute_wui_proximity_for_aoi,
+    )
+
+    aoi = "wui-vuoto"
+    async with acquire() as conn:
+        await conn.execute(
+            "INSERT INTO aoi (id, name, kind, geom) VALUES ($1,'WUI','region',"
+            "ST_Multi(ST_MakeEnvelope(16.0, 41.0, 16.1, 41.1, 4326)))",
+            aoi,
+        )
+        await conn.execute(
+            "INSERT INTO grid_cells (id, aoi_id, row_idx, col_idx, geom, area_km2) "
+            "VALUES ($1,$2,0,0, ST_MakeEnvelope(16.0,41.0,16.01,41.01,4326), 1.0)",
+            f"{aoi}|0|0",
+            aoi,
+        )
+        await conn.execute("INSERT INTO cell_static_factors (cell_id) VALUES ($1)", f"{aoi}|0|0")
+
+    await compute_wui_proximity_for_aoi(aoi)
+
+    async with acquire() as conn:
+        val = await conn.fetchval(
+            "SELECT wui_proximity_norm FROM cell_static_factors WHERE cell_id = $1",
+            f"{aoi}|0|0",
+        )
+    assert val is None
