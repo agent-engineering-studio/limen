@@ -140,8 +140,6 @@ async def test_list_aoi(app_client: httpx.AsyncClient) -> None:
     assert _AOI_ID in ids
 
 
-
-
 async def test_tiles_returns_503_when_unconfigured(app_client: httpx.AsyncClient) -> None:
     r = await app_client.get("/api/tiles/risk/10/512/512.pbf")
     assert r.status_code == 503

@@ -127,3 +127,39 @@ export function maplibreColorMatch(
   stops.push("#dadcdf");
   return stops;
 }
+
+/**
+ * Colore per la vista "tutti i pericoli".
+ *
+ * Due informazioni in un colore: la **tinta** dice quale pericolo domina la
+ * cella, l'**intensità** dice quanto è grave. Una sola rampa per la classe
+ * massima direbbe solo la seconda, e su una mappa dove le tre rampe per
+ * pericolo esistono già sarebbe anche in contrasto con loro — la stessa cella
+ * cambierebbe colore passando dalla vista d'insieme a quella del pericolo che
+ * la determina.
+ *
+ * `worst_hazard` e `worst_level` sono gli attributi di `v_multi_hazard`
+ * (migrazione 037); il ripiego copre le celle senza valutazione.
+ */
+export function maplibreMultiHazardColorMatch(): unknown {
+  const ladder = (hazard: HazardType): unknown[] => {
+    const colors = riskColorsFor(hazard);
+    const stops: unknown[] = ["match", ["get", "worst_level"]];
+    for (const c of RISK_CLASSES) {
+      stops.push(c.level, colors[c.level]);
+    }
+    stops.push("#dadcdf");
+    return stops;
+  };
+  return [
+    "match",
+    ["get", "worst_hazard"],
+    "wildfire",
+    ladder("wildfire"),
+    "flood",
+    ladder("flood"),
+    // Le frane sono anche il ramo di default: una cella senza `worst_hazard`
+    // non è ancora valutata, e la classe cade sul grigio del ripiego sopra.
+    ladder("landslide"),
+  ];
+}

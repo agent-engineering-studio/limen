@@ -10,6 +10,7 @@ import type {
   AoiListResponse,
   CellBreakdownResponse,
   CellHistoryResponse,
+  CellMultiHazardResponse,
   AdminCreateBody,
   AdminUser,
   AuthConfig,
@@ -192,8 +193,26 @@ export class ApiClient {
     );
   }
 
-  getNationalReport(signal?: AbortSignal): Promise<NationalReportResponse> {
-    return this.request<NationalReportResponse>("/api/report/national", {}, signal);
+  getNationalReport(
+    signal?: AbortSignal,
+    hazard?: HazardType,
+  ): Promise<NationalReportResponse> {
+    return this.request<NationalReportResponse>(
+      `/api/report/national${ApiClient.hazardQuery(hazard)}`,
+      {},
+      signal,
+    );
+  }
+
+  getCellMultiHazard(
+    cellId: string,
+    signal?: AbortSignal,
+  ): Promise<CellMultiHazardResponse> {
+    return this.request<CellMultiHazardResponse>(
+      `/api/cell/${encodeURIComponent(cellId)}/multi-hazard`,
+      {},
+      signal,
+    );
   }
 
   getShadowSummary(signal?: AbortSignal): Promise<ShadowSummaryResponse> {

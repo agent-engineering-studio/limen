@@ -8,9 +8,10 @@ import pytest
 
 from limen.config.settings import AlertSettings
 from limen.core.models.context import AggregateAssessment, CellRiskRecord
+from limen.core.models.hazard import HazardType
 from limen.core.models.risk import RiskLevel
 from limen.notifications.base import build_alert_payload, level_at_least
-from tests.factories import landslide_record
+from tests.factories import flood_record, landslide_record
 
 
 def _cell(cell_id: str, *, score: float, level: RiskLevel) -> CellRiskRecord:
@@ -96,3 +97,104 @@ def test_payload_handles_empty_prioritised() -> None:
     assert payload.cell_count == 0
     assert payload.max_level == RiskLevel.None_
     assert payload.max_score == 0.0
+
+
+# --- cascate cross-hazard nel payload (#58) ---------------------------------
+
+
+def _flood_assessment(top: list[CellRiskRecord]) -> AggregateAssessment:
+    a = _assessment(top)
+    return a.model_copy(update={"hazard_type": HazardType.FLOOD})
+
+
+def _settings() -> AlertSettings:
+    return AlertSettings(
+        min_level="High",
+        dedup_window_minutes=60,
+        top_k=5,
+        map_base_url="http://map.test",
+    )
+
+
+def test_cascade_note_when_alerted_cells_have_burnt() -> None:
+    cells = [
+        flood_record(
+            "aoi|0|0",
+            score=0.7,
+            level=RiskLevel.High,
+            susceptibility=0.9,
+            pluvial=0.78,
+            post_fire_multiplier=1.55,
+            months_since_fire=4.0,
+        ),
+        flood_record(
+            "aoi|0|1",
+            score=0.6,
+            level=RiskLevel.High,
+            susceptibility=0.9,
+            pluvial=0.66,
+            post_fire_multiplier=1.2,
+            months_since_fire=11.0,
+        ),
+        flood_record("aoi|0|2", score=0.58, level=RiskLevel.High, susceptibility=0.8),
+    ]
+    payload = build_alert_payload(
+        assessment=_flood_assessment(cells),
+        prioritised=[(c, 1.0) for c in cells],
+        settings=_settings(),
+        dispatched_at=datetime(2026, 6, 1, 12, 30, tzinfo=UTC),
+    )
+    assert len(payload.cascade) == 1
+    note = payload.cascade[0]
+    assert note.rule == "post_fire_flood"
+    # Solo le due bruciate, non tutte e tre le celle allertate.
+    assert note.cells == 2
+    assert "4-11 mesi fa" in note.detail_it
+
+
+def test_no_cascade_note_without_a_multiplier() -> None:
+    """Il campo esiste sempre e resta vuoto: non è un opzionale da dedurre."""
+    cells = [flood_record("aoi|0|0", score=0.6, level=RiskLevel.High, susceptibility=0.8)]
+    payload = build_alert_payload(
+        assessment=_flood_assessment(cells),
+        prioritised=[(cells[0], 1.0)],
+        settings=_settings(),
+        dispatched_at=datetime(2026, 6, 1, 12, 30, tzinfo=UTC),
+    )
+    assert payload.cascade == []
+
+
+def test_landslide_alerts_carry_no_cascade_note() -> None:
+    cells = [_cell("aoi|0|0", score=0.7, level=RiskLevel.High)]
+    payload = build_alert_payload(
+        assessment=_assessment(cells),
+        prioritised=[(cells[0], 1.0)],
+        settings=_settings(),
+        dispatched_at=datetime(2026, 6, 1, 12, 30, tzinfo=UTC),
+    )
+    assert payload.cascade == []
+
+
+def test_cascade_note_reaches_the_webhook_body() -> None:
+    """Il webhook serializza il payload intero: il campo arriva al gateway."""
+    cells = [
+        flood_record(
+            "aoi|0|0",
+            score=0.7,
+            level=RiskLevel.High,
+            susceptibility=0.9,
+            pluvial=0.78,
+            post_fire_multiplier=1.4,
+            months_since_fire=5.0,
+        )
+    ]
+    payload = build_alert_payload(
+        assessment=_flood_assessment(cells),
+        prioritised=[(cells[0], 1.0)],
+        settings=_settings(),
+        dispatched_at=datetime(2026, 6, 1, 12, 30, tzinfo=UTC),
+    )
+    body = payload.model_dump(mode="json")
+    assert body["hazard_type"] == "flood"
+    assert body["cascade"][0]["rule"] == "post_fire_flood"
+    assert body["cascade"][0]["cells"] == 1

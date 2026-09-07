@@ -18,14 +18,23 @@ import {
   type ReactNode,
 } from "react";
 
-import type { Hazard, HazardType } from "../types";
+import type { Hazard, HazardType, HazardView } from "../types";
 import { defaultApiClient } from "./api-client";
 
 interface HazardContextValue {
   /** Pericoli disponibili. Vuoto finché la prima fetch non risponde. */
   available: Hazard[];
+  /**
+   * Il pericolo per cui i pannelli chiedono dati. Sempre un pericolo vero,
+   * anche in vista multi: i pannelli per pericolo continuano a mostrare
+   * qualcosa invece di svuotarsi, e nessuno di loro ha bisogno di sapere
+   * che esiste una vista d'insieme.
+   */
   selected: HazardType;
-  select: (hazard: HazardType) => void;
+  /** Cosa mostra il selettore: un pericolo, oppure tutti insieme. */
+  view: HazardView;
+  multi: boolean;
+  select: (view: HazardView) => void;
 }
 
 // Il default statico serve solo per il primo render e per un backend
@@ -41,6 +50,7 @@ export function HazardProvider({ children }: { children: ReactNode }): JSX.Eleme
   // che oggi ha un solo elemento. Se il backend annuncia un default diverso,
   // l'effetto si ri-esegue con quello — una richiesta in più, non un errore.
   const [selected, setSelected] = useState<HazardType>(FALLBACK);
+  const [multi, setMulti] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -64,11 +74,27 @@ export function HazardProvider({ children }: { children: ReactNode }): JSX.Eleme
     return () => controller.abort();
   }, []);
 
-  const select = useCallback((hazard: HazardType) => setSelected(hazard), []);
+  // Passando a "multi" il pericolo scelto **non** si azzera: è quello che i
+  // pannelli per pericolo continuano a leggere, e tornare indietro dalla
+  // vista d'insieme riporta alla scelta di prima invece che al default.
+  const select = useCallback((next: HazardView) => {
+    if (next === "multi") {
+      setMulti(true);
+      return;
+    }
+    setMulti(false);
+    setSelected(next);
+  }, []);
 
   const value = useMemo(
-    () => ({ available, selected, select }),
-    [available, selected, select],
+    () => ({
+      available,
+      selected,
+      view: multi ? ("multi" as const) : selected,
+      multi,
+      select,
+    }),
+    [available, selected, multi, select],
   );
   return <HazardContext.Provider value={value}>{children}</HazardContext.Provider>;
 }
@@ -79,7 +105,13 @@ export function useHazard(): HazardContextValue {
     // Fuori dal provider (pagine statiche, test di un singolo componente):
     // il default, invece di far esplodere un albero che non ha bisogno del
     // pericolo per rendersi.
-    return { available: [], selected: FALLBACK, select: () => {} };
+    return {
+      available: [],
+      selected: FALLBACK,
+      view: FALLBACK,
+      multi: false,
+      select: () => {},
+    };
   }
   return ctx;
 }

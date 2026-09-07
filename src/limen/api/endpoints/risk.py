@@ -256,19 +256,40 @@ async def legend(response: Response, hazard: HazardType = DEFAULT_HAZARD) -> dic
 
 
 @router.get("/api/report/national")
-async def national_report_endpoint(response: Response) -> dict[str, Any]:
+async def national_report_endpoint(
+    response: Response, hazard: HazardType = DEFAULT_HAZARD
+) -> dict[str, Any]:
     """Aggregated national picture — same payload as the MCP tool.
 
-    Landslide only in Fase 1: the national rollup reads the comune view and
-    the shadow tables, both pinned to the default hazard by migration 028.
-    The multi-hazard national report is #58 (Fase 4).
+    ``hazard`` picks the leading one (the headline totals and the top cells);
+    the ``hazards`` and ``cascades`` sections cover every scorable hazard no
+    matter what is passed, so a client that wants the whole picture does not
+    need one call per danger.
     """
     from limen.mcp.tools import national_report
 
     # The picture changes at most hourly; 60 s keeps repeat navigation
     # instant without hiding fresh sweeps.
     response.headers["Cache-Control"] = "public, max-age=60"
-    return await national_report()
+    return await national_report(hazard.value)
+
+
+@router.get("/api/cell/{cell_id}/multi-hazard")
+async def cell_multi_hazard(response: Response, cell_id: str) -> dict[str, Any]:
+    """Every hazard scored on one cell, worst first — the map's multi view.
+
+    The tile carries the worst hazard and the class, which is enough to colour
+    a cell but not to explain it: a popup opened from the "tutti i pericoli"
+    view needs all of them, and asking per hazard would be N requests for one
+    click.
+    """
+    from limen.mcp.tools import multi_hazard_summary
+
+    response.headers["Cache-Control"] = "public, max-age=60"
+    try:
+        return await multi_hazard_summary(cell_id=cell_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from None
 
 
 @router.get("/api/shadow/summary")

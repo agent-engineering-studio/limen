@@ -13,13 +13,26 @@ goes downhill, so a cell that the hydraulic mosaic puts on high ground does
 not flood however hard it rains next door. Below ``susceptibility.floor`` the
 engine short-circuits to zero.
 
-Pure: no DB, no network, no LLM. The susceptibility comes from the ISPRA
-hydraulic mosaic already normalised per cell, and the two dynamic signals are
-fetched by the workflow.
+**La cascata incendio → alluvione** (#58) entra qui e non dopo il motore: un
+suolo percorso dal fuoco è idrofobico, quindi la stessa pioggia scorre invece
+di infiltrarsi. È fisica del ramo pluviale, e applicarla come correzione a
+punteggio già calcolato lascerebbe `score` e `breakdown` a raccontare due
+cose diverse. Il moltiplicatore finisce nel breakdown, così un operatore vede
+di quanto e perché.
+
+Amplifica il **solo** ramo pluviale: un incendio a valle non fa crescere un
+fiume a monte.
+
+Pure: no DB, no network, no LLM. La suscettibilità viene dal mosaico
+idraulico ISPRA già normalizzato per cella, i due segnali dinamici li
+recupera il workflow, e i mesi dall'incendio arrivano da FireCheck — che gira
+in ogni workflow, quindi la cascata non ha bisogno di uno sweep in più.
 """
 
 from __future__ import annotations
 
+from limen.core.cascades import CascadeRules, load_cascades
+from limen.core.cascades.rules import post_fire_flood_multiplier
 from limen.core.models.risk import (
     CellFeatureBundle,
     FloodBreakdown,
@@ -33,8 +46,12 @@ from limen.core.scoring.regional_thresholds import FloodThresholds
 class FloodScoringEngine:
     """``ScoringEngine[FloodBreakdown]`` — the V1 baseline for flood."""
 
-    def __init__(self, thresholds: FloodThresholds) -> None:
+    def __init__(
+        self, thresholds: FloodThresholds, *, cascades: CascadeRules | None = None
+    ) -> None:
         self._t = thresholds
+        # Caricate qui e non a ogni cella: sono configurazione, non stato.
+        self._cascades = cascades if cascades is not None else load_cascades()
 
     @property
     def model_version(self) -> str:
@@ -61,6 +78,12 @@ class FloodScoringEngine:
             pluvial=t.pluvial,
             imperviousness_cfg=t.imperviousness,
         )
+        # Cascata incendio → alluvione, sul solo ramo pluviale.
+        post_fire = post_fire_flood_multiplier(
+            dyn.months_since_fire, rule=self._cascades.post_fire_flood
+        )
+        pluvial = min(pluvial * post_fire, 1.0)
+
         fluvial = fluvial_trigger(dyn.river_discharge_ratio, fluvial=t.fluvial)
 
         dry_land = susceptibility < t.susceptibility.floor
@@ -76,6 +99,8 @@ class FloodScoringEngine:
                 mapped=static.flood_hazard_norm is not None,
                 discharge_ratio=dyn.river_discharge_ratio,
                 rain_mm=dyn.flood_forecast_rain_72h_mm,
+                post_fire_multiplier=post_fire,
+                months_since_fire=dyn.months_since_fire,
             ),
             model_version=t.model_version,
         )

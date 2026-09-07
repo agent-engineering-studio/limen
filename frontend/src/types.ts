@@ -100,6 +100,13 @@ export interface MeteoBreakdown {
 /** Mirror di limen.core.models.hazard.HazardType. */
 export type HazardType = "landslide" | "flood" | "wildfire";
 
+/**
+ * Cosa il selettore sta mostrando. Non è un `HazardType`: "multi" non è un
+ * pericolo, e allargare `HazardType` lo farebbe finire nei parametri `hazard`
+ * delle richieste API, dove il backend lo rifiuterebbe.
+ */
+export type HazardView = HazardType | "multi";
+
 export interface Hazard {
   hazard: HazardType;
   /** Etichetta italiana dal database, non hard-coded qui. */
@@ -307,8 +314,61 @@ export interface NationalMlCell {
   place?: string | null;
 }
 
+/** Un blocco per pericolo dentro il report nazionale (#58). */
+export interface NationalHazardBlock {
+  hazard: HazardType;
+  label_it: string;
+  regions: NationalRegionSummary[];
+  totals: {
+    regions: number;
+    cells: number;
+    high_or_above: number;
+    moderate: number;
+  };
+  top_cells: NationalTopCell[];
+}
+
+/** Sezione cascate del report nazionale. Le chiavi mancano quando la regola
+ *  corrispondente è disattivata in `cascades.yaml`. */
+export interface NationalCascades {
+  post_fire_flood?: {
+    window_months: number;
+    cells: number;
+    max_multiplier: number | null;
+    months_since_fire_min: number | null;
+  };
+  joint_rain?: {
+    min_level: RiskLevel;
+    window_hours: number;
+    cells: number;
+    top_cells: {
+      cell_id: string;
+      aoi_id: string;
+      score: number;
+      hazards: HazardType[];
+    }[];
+  };
+}
+
+export interface CellMultiHazardResponse {
+  scope: "cell";
+  cell_id: string;
+  aoi_id: string;
+  worst_hazard: HazardType | null;
+  worst_level: RiskLevel | null;
+  hazards_at_moderate: HazardType[];
+  hazards_at_high: HazardType[];
+  per_hazard: {
+    hazard: HazardType;
+    score: number | null;
+    level: RiskLevel | null;
+    computed_at: string | null;
+  }[];
+}
+
 export interface NationalReportResponse {
   generated_at: string;
+  hazard: HazardType;
   regions: NationalRegionSummary[];
   totals: {
     regions: number;
@@ -320,6 +380,8 @@ export interface NationalReportResponse {
   ml_top_cells: NationalMlCell[];
   alerts_24h: number;
   forecast_alerts_24h: number;
+  hazards: NationalHazardBlock[];
+  cascades: NationalCascades;
   report_it: string;
 }
 

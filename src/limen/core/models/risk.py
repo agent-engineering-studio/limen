@@ -386,6 +386,13 @@ class FloodBreakdown(HazardBreakdown):
     discharge_ratio: float | None = None
     rain_mm: float | None = None
 
+    #: Cascata incendio → alluvione (#58). 1.0 = nessuna amplificazione.
+    #: Nel breakdown e non solo nel punteggio: un operatore che vede un
+    #: rischio pluviale più alto del previsto deve poter risalire al fatto che
+    #: quella cella ha bruciato, e a quanti mesi fa.
+    post_fire_multiplier: float = Field(default=1.0, ge=1.0)
+    months_since_fire: float | None = Field(default=None, ge=0.0)
+
     def components(self) -> dict[str, float]:
         return {
             "Suscettibilità": self.susceptibility,
@@ -401,6 +408,8 @@ class FloodBreakdown(HazardBreakdown):
             "mapped": self.mapped,
             "discharge_ratio": self.discharge_ratio,
             "rain_mm": self.rain_mm,
+            "post_fire_multiplier": self.post_fire_multiplier,
+            "months_since_fire": self.months_since_fire,
         }
 
     def predisposition(self) -> float:

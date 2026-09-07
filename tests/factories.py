@@ -13,6 +13,7 @@ from limen.core.models.hazard import HazardType
 from limen.core.models.risk import (
     ComponentBreakdown,
     FireWeatherState,
+    FloodBreakdown,
     KinematicBreakdown,
     MeteoBreakdown,
     RiskLevel,
@@ -115,9 +116,36 @@ def wildfire_record(
     )
 
 
+def flood_record(
+    cell_id: str,
+    *,
+    score: float,
+    level: RiskLevel,
+    susceptibility: float = 0.0,
+    pluvial: float = 0.0,
+    fluvial: float = 0.0,
+    post_fire_multiplier: float = 1.0,
+    months_since_fire: float | None = None,
+) -> CellRiskRecord:
+    return CellRiskRecord(
+        cell_id=cell_id,
+        hazard_type=HazardType.FLOOD,
+        score=score,
+        level=level,
+        breakdown=FloodBreakdown(
+            susceptibility=susceptibility,
+            pluvial=pluvial,
+            fluvial=fluvial,
+            post_fire_multiplier=post_fire_multiplier,
+            months_since_fire=months_since_fire,
+        ),
+    )
+
+
 __all__ = [
     "NEUTRAL_METEO",
     "NEUTRAL_STATIC",
+    "flood_record",
     "landslide_breakdown",
     "landslide_record",
     "wildfire_record",

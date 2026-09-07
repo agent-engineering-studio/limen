@@ -22,6 +22,7 @@ from limen.mcp.tools import (
     cell_breakdown,
     comune_risk,
     hazards,
+    multi_hazard_summary,
     national_report,
     recent_alerts,
     risk_summary,
@@ -50,9 +51,12 @@ Read tools (open):
   the Italian briefing for one cell.
 * recent_alerts(threshold?, since_hours?, limit?, hazard?) → cells at/above a
   level in the recent window.
-* national_report() → aggregated national picture (per-region summary,
-  national top cells, ML shadow top, 24h alert counts) + a deterministic
-  Italian rendering in `report_it`. Landslide only.
+* national_report(hazard?) → aggregated national picture (per-region
+  summary, national top cells, ML shadow top, 24h alert counts) + a
+  deterministic Italian rendering in `report_it`. `hazard` picks the leading
+  one; `hazards` and `cascades` cover all of them regardless.
+* multi_hazard_summary(cell_id? | aoi_id?) → one place, every hazard. Use
+  this for "what is threatening here", not N calls to the per-hazard tools.
 * top_comuni(limit?, aoi_id?) and comune_risk(istat_code) → comune rollups.
   **Landslide only**: the rollup view is pinned to it, so passing another
   hazard returns an error rather than mislabelled numbers.
@@ -112,9 +116,16 @@ def _build_server() -> Any:
         return await hazards()
 
     @mcp.tool()
-    async def tool_national_report() -> dict[str, Any]:
+    async def tool_national_report(hazard: str | None = None) -> dict[str, Any]:
         """Aggregated national picture + Italian rendering (report_it)."""
-        return await national_report()
+        return await national_report(hazard)
+
+    @mcp.tool()
+    async def tool_multi_hazard_summary(
+        cell_id: str | None = None, aoi_id: str | None = None
+    ) -> dict[str, Any]:
+        """Cross-hazard picture for one cell or one AOI. Give exactly one."""
+        return await multi_hazard_summary(cell_id=cell_id, aoi_id=aoi_id)
 
     @mcp.tool()
     async def tool_comune_risk(istat_code: str, hazard: str | None = None) -> dict[str, Any]:
