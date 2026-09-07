@@ -30,7 +30,22 @@ log = get_logger(__name__)
 # separate tables (HPH elevata / MPH media / LPH bassa). We discover them by
 # name pattern so the loader works whether they were bootstrapped with the
 # full sanitized basename or a short alias. Severity → shared AA/P1..P4 class.
-_IDRAULICA_SEVERITY: dict[str, str] = {"elevata": "P3", "media": "P2", "bassa": "P1"}
+# Le tre severità del mosaico idraulico, ciascuna con i nomi sotto cui la
+# tabella può presentarsi. La parola italiana è quella del file sorgente; il
+# codice a tre lettere è quello della Direttiva Alluvioni (High/Medium/Low
+# Probability Hazard) e sopravvive dove la parola no.
+#
+# Serve entrambi perché il nome della tabella nasce dal nome dello shapefile e
+# PostgreSQL tronca gli identificatori a 63 byte. Misurato:
+# `HPH_Mosaicatura_ISPRA_2020_pericolosita_idraulica_elevata.shp` diventa
+# `mosaicatura_ispra_2020_aree_pericolosita_idraulica_hph_4c7713bb` — la
+# parola «elevata» è stata tagliata via, il codice `hph` no. Cercando solo la
+# parola il sync tornava `flood: 0` con 85.000 poligoni già in tabella.
+_IDRAULICA_SEVERITY: dict[str, tuple[str, ...]] = {
+    "P3": ("elevata", "hph"),
+    "P2": ("media", "mph"),
+    "P1": ("bassa", "lph"),
+}
 
 # Landslide-inventory families published per region as
 # ``<family>_<region>_opendata`` (polygons, lines, points).
@@ -161,20 +176,34 @@ async def _load_pai(
 
 
 async def _idraulica_tables(conn: asyncpg.Connection, schema: str) -> dict[str, str]:
-    """Discover the idraulica tables by severity keyword → class token."""
+    """Discover the idraulica tables by severity → class token.
+
+    Prova i nomi accettati per ciascuna severità e si ferma al primo che
+    trova, saltando le tabelle già assegnate: due severità che puntano alla
+    stessa tabella produrrebbero classi sovrapposte, e la peggiore vincerebbe
+    per caso invece che per criterio.
+    """
     found: dict[str, str] = {}
-    for keyword, cls in _IDRAULICA_SEVERITY.items():
-        row = await conn.fetchrow(
-            """
-            SELECT tablename FROM pg_tables
-            WHERE schemaname = $1 AND tablename ILIKE $2
-            ORDER BY tablename LIMIT 1
-            """,
-            schema,
-            f"%idraulica%{keyword}%",
-        )
-        if row is not None:
-            found[str(row["tablename"])] = cls
+    for cls, keywords in _IDRAULICA_SEVERITY.items():
+        for keyword in keywords:
+            row = await conn.fetchrow(
+                """
+                SELECT tablename FROM pg_tables
+                WHERE schemaname = $1 AND tablename ILIKE $2
+                ORDER BY tablename LIMIT 1
+                """,
+                schema,
+                f"%idraulica%{keyword}%",
+            )
+            if row is None:
+                continue
+            table = str(row["tablename"])
+            if table in found:
+                continue
+            found[table] = cls
+            break
+    if not found:
+        log.warning("geoserver_source.idraulica.no_tables", schema=schema)
     return found
 
 
