@@ -23,8 +23,7 @@ precedenza.
 > temporale, da affiancare — mai sostituire — alle fonti e alle procedure
 > ufficiali. Vedi anche [`docs/warning-logic.md`](./warning-logic.md).
 
-Gli esempi seguenti usano solo endpoint **read-only** (l'unico che scrive è
-`POST /api/monitor/{aoi}`, mostrato a parte). Ogni esempio riassume la **forma
+Gli esempi seguenti usano solo endpoint **read-only**.Ogni esempio riassume la **forma
 attesa della risposta**.
 
 ## Salute e prontezza
@@ -60,51 +59,6 @@ Restituisce ogni riga della tabella `aoi`:
 ```
 
 ## Esegui un ciclo di monitoraggio
-
-```
-curl -s -X POST http://localhost:8080/api/monitor/it-puglia \
-  -H 'content-type: application/json' \
-  -d '{"cell_limit": 25}' | jq
-```
-
-Corpo (opzionale):
-
-```json
-{
-  "cell_limit": 25,
-  "valuation_time": "2026-06-01T12:00:00+00:00"
-}
-```
-
-Risposta:
-
-```json
-{
-  "aoi_id": "it-puglia",
-  "assessment_id": 4567,
-  "assessment": {
-    "aoi_id": "it-puglia",
-    "model_version": "limen-deterministic-v1",
-    "valuation_time": "2026-06-01T12:00:03.412678+00:00",
-    "n_cells": 25,
-    "cells_high_or_above": 2,
-    "cells_by_level": {"None": 21, "Low": 2, "High": 1, "VeryHigh": 1},
-    "top_cells": [
-      {"cell_id": "it-puglia|12|7", "score": 0.81, "level": "VeryHigh", ...}
-    ],
-    "analysis": {"driver": "meteo_trigger", "anomalies": [...], ...},
-    "briefing_it": "Le condizioni osservate ..."
-  },
-  "cells_scored": 25,
-  "high_or_above": 2,
-  "dispatched_alerts": [...]
-}
-```
-
-Un AOI mancante restituisce `404`. Il workflow stesso non solleva mai
-eccezioni sui fallimenti delle sorgenti esterne — degrada.
-
-## Ultima valutazione per-AOI
 
 ```
 curl -s http://localhost:8080/api/aoi/it-puglia/risk/latest | jq
@@ -208,7 +162,6 @@ I codici rilevanti:
 
 | Codice | Quando |
 |---|---|
-| `404` | `POST /api/monitor/{aoi_id}` con un AOI sconosciuto |
 | `404` | `GET /api/aoi/{id}/risk/latest` senza alcuna valutazione persistita |
 | `503` | `/ready` mentre il lifespan è in fase di bootstrap |
 | `503` | `/api/tiles/...` quando `API__PG_TILESERV_URL` non è configurato |

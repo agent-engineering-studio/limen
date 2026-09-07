@@ -9,10 +9,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from limen.core.models.context import (
-    AggregateAssessment,
     CellRiskRecord,
     RiskAnalysisDTO,
 )
@@ -49,30 +48,6 @@ class AoiListResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     items: list[AoiSummary]
-
-
-class MonitorRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    cell_limit: int | None = Field(
-        default=None,
-        ge=1,
-        description="Optional cap on the number of cells scored (smoke runs).",
-    )
-    valuation_time: datetime | None = None
-
-
-class MonitorResponse(BaseModel):
-    """Wrap-up of one workflow run."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    aoi_id: str
-    assessment_id: int | None = None
-    assessment: AggregateAssessment | None = None
-    cells_scored: int = 0
-    high_or_above: int = 0
-    dispatched_alerts: list[str] = Field(default_factory=list)
 
 
 class LatestAssessmentResponse(BaseModel):

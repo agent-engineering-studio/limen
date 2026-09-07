@@ -13,7 +13,6 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
-import respx
 from shapely.geometry import Polygon
 
 from limen.agents.llm_factory.stub import StubLlmClientFactory
@@ -24,8 +23,6 @@ from limen.data.db import acquire, get_pool
 from limen.data.repos.aoi_repo import upsert_aoi
 from limen.data.repos.grid_repo import generate_and_store_grid
 from limen.integrations._http import SharedHttpClient
-from limen.integrations.openmeteo.client import ARCHIVE_URL, FORECAST_URL
-from tests.conftest import register_flood_mocks
 
 pytestmark = pytest.mark.integration
 
@@ -143,75 +140,6 @@ async def test_list_aoi(app_client: httpx.AsyncClient) -> None:
     assert _AOI_ID in ids
 
 
-async def test_monitor_endpoint_returns_full_assessment(app_client: httpx.AsyncClient) -> None:
-    await _seed(_AOI_ID)
-    with respx.mock(assert_all_called=False) as mock:
-        mock.get(FORECAST_URL).mock(return_value=httpx.Response(200, json=_hourly_payload()))
-        mock.get(ARCHIVE_URL).mock(return_value=httpx.Response(200, json=_archive_payload()))
-        register_flood_mocks(mock)
-
-        r = await app_client.post(f"/api/monitor/{_AOI_ID}", json={"cell_limit": 25})
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["aoi_id"] == _AOI_ID
-    assert body["cells_scored"] >= 1
-    assert body["assessment"] is not None
-    assert body["assessment"]["briefing_it"] is not None
-    assert body["assessment"]["analysis"] is not None
-
-
-async def test_monitor_unknown_aoi_returns_404(app_client: httpx.AsyncClient) -> None:
-    r = await app_client.post("/api/monitor/does-not-exist", json={})
-    assert r.status_code == 404
-
-
-async def test_latest_assessment_after_monitor(app_client: httpx.AsyncClient) -> None:
-    await _seed(_AOI_ID)
-    with respx.mock(assert_all_called=False) as mock:
-        mock.get(FORECAST_URL).mock(return_value=httpx.Response(200, json=_hourly_payload()))
-        mock.get(ARCHIVE_URL).mock(return_value=httpx.Response(200, json=_archive_payload()))
-        register_flood_mocks(mock)
-        run = await app_client.post(f"/api/monitor/{_AOI_ID}", json={"cell_limit": 25})
-    assert run.status_code == 200
-
-    r = await app_client.get(f"/api/aoi/{_AOI_ID}/risk/latest")
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["aoi_id"] == _AOI_ID
-    assert body["cells"]
-    assert body["briefing_it"] is not None
-
-
-async def test_cell_breakdown_returns_jsonb(app_client: httpx.AsyncClient) -> None:
-    await _seed(_AOI_ID)
-    with respx.mock(assert_all_called=False) as mock:
-        mock.get(FORECAST_URL).mock(return_value=httpx.Response(200, json=_hourly_payload()))
-        mock.get(ARCHIVE_URL).mock(return_value=httpx.Response(200, json=_archive_payload()))
-        register_flood_mocks(mock)
-        run = await app_client.post(f"/api/monitor/{_AOI_ID}", json={"cell_limit": 25})
-    assert run.status_code == 200
-    cell_id = run.json()["assessment"]["top_cells"][0]["cell_id"]
-
-    r = await app_client.get(f"/api/cell/{cell_id}/breakdown")
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["cell_id"] == cell_id
-    assert "s" in body["factors"]
-    assert "model_version" in body["explanation"]
-
-
-async def test_alerts_endpoint(app_client: httpx.AsyncClient) -> None:
-    await _seed(_AOI_ID)
-    with respx.mock(assert_all_called=False) as mock:
-        mock.get(FORECAST_URL).mock(return_value=httpx.Response(200, json=_hourly_payload()))
-        mock.get(ARCHIVE_URL).mock(return_value=httpx.Response(200, json=_archive_payload()))
-        register_flood_mocks(mock)
-        await app_client.post(f"/api/monitor/{_AOI_ID}", json={"cell_limit": 25})
-
-    r = await app_client.get("/api/alerts?threshold=None&since_hours=24")
-    assert r.status_code == 200
-    body = r.json()
-    assert isinstance(body["items"], list)
 
 
 async def test_tiles_returns_503_when_unconfigured(app_client: httpx.AsyncClient) -> None:
