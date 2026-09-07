@@ -45,3 +45,37 @@ def test_majority_all_nodata_returns_none() -> None:
     code, n = _majority_class(np.array([[-1, -1, -1]], dtype=np.int16), nodata=-1)
     assert code is None
     assert n == 0
+
+
+# --- riproiezione costruita una volta per ciclo ------------------------------
+
+
+def test_geom_reprojector_matches_a_per_geometry_reprojection() -> None:
+    """Il ciclo veloce deve dare gli stessi numeri di quello lento.
+
+    ``Transformer.from_crs`` costava 67 ms per cella (misurato: 5,9 ore su
+    312.550 celle, contro 5 minuti costruendolo fuori dal ciclo). Il
+    trasformatore è però lo stesso per ogni cella, quindi spostarlo fuori è
+    solo lavoro risparmiato: questo test è ciò che lo dimostra invece di
+    lasciarlo alla fiducia.
+    """
+    from pyproj import Transformer
+    from shapely.geometry import box
+    from shapely.ops import transform as shp_transform
+
+    from limen.integrations.dem.zonal import geom_reprojector
+
+    celle = [box(16.0 + i * 0.01, 41.0, 16.01 + i * 0.01, 41.01) for i in range(5)]
+    riusato = geom_reprojector(src_crs=4326, dst_crs=3035)
+    for g in celle:
+        uno = shp_transform(Transformer.from_crs(4326, 3035, always_xy=True).transform, g)
+        assert riusato(g).equals_exact(uno, tolerance=1e-9)
+
+
+def test_geom_reprojector_is_the_identity_when_the_crs_matches() -> None:
+    from shapely.geometry import box
+
+    from limen.integrations.dem.zonal import geom_reprojector
+
+    g = box(16.0, 41.0, 16.01, 41.01)
+    assert geom_reprojector(src_crs=4326, dst_crs=4326)(g) is g

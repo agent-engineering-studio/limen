@@ -70,8 +70,8 @@ if [ -n "${LIMEN_IMPERVIOUSNESS_RASTER:-}" ] && [ -e "${LIMEN_IMPERVIOUSNESS_RAS
   ok "CLMS Imperviousness — amplificazione del ramo pluviale"
 else
   skip "LIMEN_IMPERVIOUSNESS_RASTER non impostata o file assente"
-  echo "            → Copernicus Land, richiede registrazione. Facoltativa: senza,"
-  echo "              il ramo pluviale non viene amplificato, ma funziona."
+  echo "            → 'make imperviousness-data' lo scarica: l'EEA serve lo stesso"
+  echo "              prodotto CLMS senza account. Poi punta la variabile al file."
 fi
 
 if [ -n "${LIMEN_CORINE_RASTER:-}" ] && [ -e "${LIMEN_CORINE_RASTER}" ]; then
