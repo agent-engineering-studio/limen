@@ -5,7 +5,10 @@ import { Protocol } from "pmtiles";
 
 import { config } from "../lib/env";
 import { useHazard } from "../lib/hazard";
-import { maplibreColorMatch } from "../lib/risk-colors";
+import {
+  maplibreColorMatch,
+  maplibreMultiHazardColorMatch,
+} from "../lib/risk-colors";
 
 const SOURCE_ID = "limen-risk";
 const LAYER_ID = "limen-risk-fill";
@@ -105,7 +108,7 @@ export interface RiskMapProps {
 export function RiskMap(props: RiskMapProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const tileserv = (props.tileservUrl ?? config.tileservUrl).replace(/\/+$/, "");
-  const { selected: hazard, available } = useHazard();
+  const { selected: hazard, view, multi, available } = useHazard();
   // Due sorgenti, non una. `v_risk_tiles` è fissata sul pericolo di default
   // in SQL (migrazione 028) perché una sorgente di tile deve dare una
   // geometria per cella e la vista ne ha una per (cella, pericolo): resta la
@@ -116,20 +119,37 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   // Non si è unificato tutto su `risk_at`: cambierebbe la sorgente della
   // mappa che oggi funziona, in cambio di simmetria e nient'altro.
   const isDefaultHazard = hazard === "landslide";
+  // Tre sorgenti, non due: la vista d'insieme non è "un pericolo qualunque"
+  // ma un'aggregazione, e `v_multi_hazard` (migrazione 037) è l'unica che dà
+  // una riga per cella su tutti i pericoli insieme.
   const tileLayer =
-    props.tileLayer ?? (isDefaultHazard ? "public.v_risk_tiles" : "public.risk_at");
-  const tileQuery = isDefaultHazard ? "" : `?p_hazard=${encodeURIComponent(hazard)}`;
+    props.tileLayer ??
+    (multi
+      ? "public.multi_hazard_at"
+      : isDefaultHazard
+        ? "public.v_risk_tiles"
+        : "public.risk_at");
+  const tileQuery =
+    multi || isDefaultHazard ? "" : `?p_hazard=${encodeURIComponent(hazard)}`;
   // Il nome del layer *dentro* il tile non è il path da cui lo si scarica.
   // `risk_at()` serializza con `ST_AsMVT(..., 'public.v_risk_tiles', ...)`
   // (migrazione 029), quindi puntare `source-layer` a "public.risk_at" darebbe
   // tile validi e una mappa vuota — un guasto silenzioso, perché la richiesta
   // riesce. Il layer MVT è sempre quello, qualunque sia la sorgente.
-  const sourceLayer = props.tileLayer ?? "public.v_risk_tiles";
+  const sourceLayer =
+    props.tileLayer ?? (multi ? "public.v_multi_hazard" : "public.v_risk_tiles");
+  // In vista d'insieme la classe sta in `worst_level`, non in `risk_level`:
+  // sono due sorgenti diverse, e il layer di selezione legge `cell_id` in
+  // entrambe.
+  const cellFillColor = multi
+    ? maplibreMultiHazardColorMatch()
+    : maplibreColorMatch("risk_level", hazard);
   // Il nome lo dà il backend (`/api/hazards`); il ripiego serve al primo
   // render e a un backend irraggiungibile.
-  const hazardLabel =
-    available.find((h) => h.hazard === hazard)?.label_it ??
-    (isDefaultHazard ? "frane" : hazard);
+  const hazardLabel = multi
+    ? "tutti i pericoli"
+    : (available.find((h) => h.hazard === hazard)?.label_it ??
+      (isDefaultHazard ? "frane" : hazard));
   const onCellClick = props.onCellClick;
 
   useEffect(() => {
@@ -253,7 +273,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         "source-layer": sourceLayer,
         minzoom: CELL_MIN_ZOOM,
         paint: {
-          "fill-color": maplibreColorMatch("risk_level", hazard) as never,
+          "fill-color": cellFillColor as never,
           "fill-opacity": 0.55,
           "fill-outline-color": "#333",
         },
@@ -370,7 +390,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tileserv, tileLayer, sourceLayer, tileQuery, hazard]);
+  }, [tileserv, tileLayer, sourceLayer, tileQuery, hazard, view]);
 
   // Update the selection outline without rebuilding the map.
   useEffect(() => {

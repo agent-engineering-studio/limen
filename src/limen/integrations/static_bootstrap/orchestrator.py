@@ -319,9 +319,7 @@ async def compute_wui_proximity_for_aoi(aoi_id: str) -> None:
             await conn.execute(_WUI_TEMP_INDEX_SQL, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
             await conn.execute(_WUI_INTERFACE_SQL, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
             await conn.execute(_WUI_INTERFACE_INDEX_SQL, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
-            await conn.execute(
-                _WUI_PROXIMITY_SQL, _WUI_RADIUS_M, timeout=_BOOTSTRAP_STMT_TIMEOUT_S
-            )
+            await conn.execute(_WUI_PROXIMITY_SQL, _WUI_RADIUS_M, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
         log.info("static_bootstrap.wui.done", aoi_id=aoi_id, cells_with_landuse=coded)
 
 

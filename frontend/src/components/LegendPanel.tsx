@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
 import { useHazard } from "../lib/hazard";
-import { riskClassesFor } from "../lib/risk-colors";
+import { RISK_CLASSES, riskClassesFor, riskColorsFor } from "../lib/risk-colors";
 import type { LegendClass } from "../types";
 
 const PC_COLOR: Record<string, string> = {
@@ -28,7 +28,7 @@ export function LegendPanel(): JSX.Element {
   // altro pericolo etichetterebbe male i suoi colori. Restano solo come
   // ripiego finché la prima risposta non arriva, o se l'API è irraggiungibile.
   const [ranges, setRanges] = useState<Record<string, [number, number]>>({});
-  const { selected } = useHazard();
+  const { selected, multi, available } = useHazard();
 
   useEffect(() => {
     // I chip di allerta sono per pericolo: senza azzerarli, una legenda che
@@ -53,6 +53,57 @@ export function LegendPanel(): JSX.Element {
       });
     return () => controller.abort();
   }, [selected]);
+
+  // In vista d'insieme i cutoff sono diversi per pericolo, quindi la colonna
+  // dei numeri non esiste: quello che serve leggere è la corrispondenza fra
+  // tinta e pericolo, che nella vista d'insieme è l'unico modo di sapere
+  // *cosa* colora una cella.
+  if (multi) {
+    return (
+      <section className="legend-panel" aria-label="Legenda classi di rischio">
+        <h2>Classi di rischio · tutti i pericoli</h2>
+        <table className="legend-matrix">
+          <thead>
+            <tr>
+              <th scope="col">classe</th>
+              {available.map((h) => (
+                <th key={h.hazard} scope="col">
+                  {h.label_it}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {RISK_CLASSES.map((c) => (
+              <tr key={c.level}>
+                <th scope="row">
+                  {c.label} <small style={{ color: "#5e6473" }}>({c.short})</small>
+                </th>
+                {available.map((h) => (
+                  <td key={h.hazard}>
+                    <span
+                      className="legend-swatch"
+                      role="presentation"
+                      aria-hidden
+                      style={{ background: riskColorsFor(h.hazard)[c.level] }}
+                    />
+                    <span className="sr-only">
+                      {h.label_it}: {c.label}
+                    </span>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="legend-note">
+          Ogni cella prende il colore del pericolo peggiore in quel punto: la
+          tinta dice quale, l'intensità quanto. Le soglie numeriche cambiano da
+          un pericolo all'altro — scegli un pericolo per vederle.
+        </p>
+      </section>
+    );
+  }
 
   return (
     <section className="legend-panel" aria-label="Legenda classi di rischio">

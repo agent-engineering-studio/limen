@@ -55,3 +55,116 @@ def test_payload_wraps_report() -> None:
     assert payload.max_level is RiskLevel.High
     assert payload.cells[0].cell_id == "it-campania|1|1"
     assert payload.summary_it == report["report_it"]
+
+
+# --- sezioni multi-pericolo e cascate (#58) ---------------------------------
+
+_HAZARDS = [
+    {
+        "hazard": "landslide",
+        "label_it": "Frana",
+        "regions": [],
+        "totals": {"regions": 2, "cells": 300, "high_or_above": 3, "moderate": 15},
+        "top_cells": [
+            {
+                "cell_id": "it-campania|1|1",
+                "aoi_id": "it-campania",
+                "score": 0.81,
+                "level": "High",
+                "place": "Amalfi",
+            }
+        ],
+    },
+    {
+        "hazard": "wildfire",
+        "label_it": "Incendio",
+        "regions": [],
+        "totals": {"regions": 1, "cells": 200, "high_or_above": 0, "moderate": 40},
+        "top_cells": [
+            {
+                "cell_id": "it-puglia|3|3",
+                "aoi_id": "it-puglia",
+                "score": 0.42,
+                "level": "Moderate",
+                "place": "Gravina",
+            }
+        ],
+    },
+]
+
+
+def test_hazard_sections_name_each_hazard() -> None:
+    text = render_national_report_it({**_REPORT, "hazards": _HAZARDS})
+    assert "Per tipo di pericolo:" in text
+    assert "· frana: 3 zone a rischio alto, 15 moderate" in text
+    assert "· incendio: 40 moderate" in text
+    # Il punto peggiore si nomina solo se è alto: quello dell'incendio è
+    # moderato, e leggerlo accanto a un nome di paese sembrerebbe un avviso.
+    assert "Amalfi" in text
+    assert "Gravina" not in text
+
+
+def test_hazard_sections_absent_with_a_single_hazard() -> None:
+    """Con un pericolo solo la sezione ripeterebbe il paragrafo principale."""
+    text = render_national_report_it({**_REPORT, "hazards": _HAZARDS[:1]})
+    assert "Per tipo di pericolo" not in text
+    # E il report resta quello di prima, parola per parola.
+    assert text == render_national_report_it(_REPORT)
+
+
+def test_cascade_section_explains_the_post_fire_effect() -> None:
+    text = render_national_report_it(
+        {
+            **_REPORT,
+            "cascades": {
+                "post_fire_flood": {
+                    "window_months": 18.0,
+                    "cells": 12,
+                    "max_multiplier": 1.58,
+                    "months_since_fire_min": 3.0,
+                },
+                "joint_rain": {
+                    "min_level": "High",
+                    "window_hours": 6.0,
+                    "cells": 2,
+                    "top_cells": [
+                        {
+                            "cell_id": "it-puglia|9|9",
+                            "aoi_id": "it-puglia",
+                            "score": 0.7,
+                            "hazards": ["flood", "landslide"],
+                        }
+                    ],
+                },
+            },
+        }
+    )
+    assert "12 aree bruciate" in text
+    assert "1.6 volte" in text
+    assert "2 aree sono sopra la soglia" in text
+    assert "flood e landslide" in text
+
+
+def test_cascade_section_silent_when_nothing_is_firing() -> None:
+    """Zero celle non è una cascata: dirlo suggerirebbe che qualcosa accade."""
+    quiet = {
+        "post_fire_flood": {
+            "window_months": 18.0,
+            "cells": 0,
+            "max_multiplier": None,
+            "months_since_fire_min": None,
+        },
+        "joint_rain": {
+            "min_level": "High",
+            "window_hours": 6.0,
+            "cells": 0,
+            "top_cells": [],
+        },
+    }
+    text = render_national_report_it({**_REPORT, "cascades": quiet})
+    assert text == render_national_report_it(_REPORT)
+
+
+def test_render_tolerates_a_report_without_the_new_sections() -> None:
+    """Il payload di un deployment che non ha ancora la #58 non deve rompere."""
+    assert render_national_report_it(_REPORT)

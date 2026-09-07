@@ -61,6 +61,21 @@ class AlertedCell(BaseModel):
     comune: str | None = None
 
 
+class CascadeNote(BaseModel):
+    """One cross-hazard rule that shaped this alert (#58).
+
+    Structured *and* rendered: an agentic gateway wants the rule name and the
+    count, a human reading the forwarded JSON wants the sentence. Neither is
+    derivable from the other without duplicating the wording.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    rule: str
+    cells: int = Field(..., ge=1)
+    detail_it: str
+
+
 class AlertPayload(BaseModel):
     """Channel-agnostic alert envelope."""
 
@@ -75,6 +90,9 @@ class AlertPayload(BaseModel):
     max_score: float = Field(..., ge=0.0, le=1.0)
     cells: list[AlertedCell] = Field(default_factory=list)
     summary_it: str
+    #: Cascate cross-hazard attive fra le celle allertate. Vuoto quando
+    #: nessuna regola ha inciso — non è un campo opzionale da interpretare.
+    cascade: list[CascadeNote] = Field(default_factory=list)
     map_url: str | None = None
     pipeline_version: str
     dispatched_at: datetime
@@ -160,6 +178,41 @@ def _format_summary_it(
     return _truncate_words(text, max_words)
 
 
+def _cascade_notes(records: list[CellRiskRecord]) -> list[CascadeNote]:
+    """Which cascades actually applied to these cells.
+
+    Read off the persisted breakdowns rather than re-evaluated: the alert must
+    describe the score it is sending, and a rule re-run here could disagree
+    with the engine that produced it.
+    """
+    from limen.core.models.risk import FloodBreakdown
+
+    burnt = [
+        r
+        for r in records
+        if isinstance(r.breakdown, FloodBreakdown) and r.breakdown.post_fire_multiplier > 1.0
+    ]
+    if not burnt:
+        return []
+    mesi = [
+        r.breakdown.months_since_fire
+        for r in burnt
+        if isinstance(r.breakdown, FloodBreakdown) and r.breakdown.months_since_fire is not None
+    ]
+    quando = f" (incendio {min(mesi):.0f}-{max(mesi):.0f} mesi fa)" if mesi else ""
+    return [
+        CascadeNote(
+            rule="post_fire_flood",
+            cells=len(burnt),
+            detail_it=(
+                f"{len(burnt)} delle aree allertate sono state percorse dal fuoco"
+                f"{quando}: il terreno assorbe meno acqua, quindi il rischio di "
+                f"allagamento è più alto del normale a parità di pioggia."
+            ),
+        )
+    ]
+
+
 def build_alert_payload(
     *,
     assessment: AggregateAssessment,
@@ -216,6 +269,7 @@ def build_alert_payload(
         cells=cells,
         summary_it=summary,
         map_url=map_url,
+        cascade=_cascade_notes([r for r, _ in take]),
         pipeline_version=assessment.pipeline_version,
         dispatched_at=dispatched_at,
     )
@@ -229,6 +283,7 @@ def level_at_least(level: RiskLevel, threshold: RiskLevel) -> bool:
 __all__ = [
     "AlertPayload",
     "AlertedCell",
+    "CascadeNote",
     "NotificationChannel",
     "build_alert_payload",
     "level_at_least",

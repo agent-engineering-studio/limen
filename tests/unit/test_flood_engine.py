@@ -346,3 +346,101 @@ def test_the_configured_rain_window_is_the_one_fetched() -> None:
     # Per le frane resta il default storico.
     landslide = _flood_signals_step(HazardType.LANDSLIDE)
     assert landslide._per_node is False
+
+
+# ---------------------------------------------------------------------------
+# Cascata incendio → alluvione (#58)
+# ---------------------------------------------------------------------------
+def test_a_burnt_cell_takes_the_same_rain_worse() -> None:
+    """Il differenziatore multi-rischio, in un numero.
+
+    Un suolo percorso dal fuoco è idrofobico: la stessa pioggia scorre invece
+    di infiltrarsi. Misurato con la configurazione di default: una cella P3
+    con 140 mm previsti passa da Moderate a High se ha bruciato al mese di
+    picco.
+    """
+    engine = FloodScoringEngine(_thresholds())
+
+    def score(mesi: float | None) -> tuple[float, RiskLevel, float]:
+        b = CellFeatureBundle(
+            aoi_id="aoi",
+            cell_id="cell",
+            static=StaticFactors(cell_id="cell", flood_hazard_norm=0.8),
+            dynamic=DynamicInputs(
+                valuation_time=dt.datetime(2026, 11, 3, 12, tzinfo=dt.UTC),
+                flood_forecast_rain_72h_mm=140.0,
+                soil_moisture_0_7=0.35,
+                months_since_fire=mesi,
+            ),
+        )
+        r = engine.score(b)
+        return r.score, r.level, r.breakdown.post_fire_multiplier
+
+    intatta, livello_intatta, molt_intatta = score(None)
+    bruciata, livello_bruciata, molt_bruciata = score(4.0)
+    vecchia, _, molt_vecchia = score(24.0)
+
+    assert molt_intatta == 1.0
+    assert molt_bruciata > 1.0
+    assert bruciata > intatta
+    assert livello_bruciata is RiskLevel.High
+    assert livello_intatta is RiskLevel.Moderate
+    # Finestra chiusa: la vegetazione è ricresciuta, l'effetto è finito.
+    assert molt_vecchia == 1.0
+    assert vecchia == intatta
+
+
+def test_the_cascade_touches_only_the_pluvial_branch() -> None:
+    """Un incendio a valle non fa crescere un fiume a monte.
+
+    A parità di tutto, una cella bruciata il cui trigger dominante è il fiume
+    prende lo stesso punteggio di una intatta.
+    """
+    engine = FloodScoringEngine(_thresholds())
+
+    def score(mesi: float | None) -> float:
+        b = CellFeatureBundle(
+            aoi_id="aoi",
+            cell_id="cell",
+            static=StaticFactors(cell_id="cell", flood_hazard_norm=0.8),
+            dynamic=DynamicInputs(
+                valuation_time=dt.datetime(2026, 11, 3, 12, tzinfo=dt.UTC),
+                river_discharge_ratio=10.0,
+                months_since_fire=mesi,
+            ),
+        )
+        return engine.score(b).score
+
+    assert score(4.0) == score(None)
+
+
+def test_the_breakdown_says_why_the_score_is_higher() -> None:
+    """Il moltiplicatore sta nel breakdown, non solo dentro il punteggio.
+
+    Un operatore che vede un rischio pluviale più alto del previsto deve poter
+    risalire al fatto che quella cella ha bruciato, e a quanti mesi fa —
+    altrimenti la cascata è una correzione invisibile.
+    """
+    engine = FloodScoringEngine(_thresholds())
+    b = CellFeatureBundle(
+        aoi_id="aoi",
+        cell_id="cell",
+        static=StaticFactors(cell_id="cell", flood_hazard_norm=0.8),
+        dynamic=DynamicInputs(
+            valuation_time=dt.datetime(2026, 11, 3, 12, tzinfo=dt.UTC),
+            flood_forecast_rain_72h_mm=140.0,
+            months_since_fire=4.0,
+        ),
+    )
+    bd = engine.score(b).breakdown
+    assert bd.months_since_fire == 4.0
+    assert bd.post_fire_multiplier > 1.0
+
+    # E sopravvive al giro attraverso JSONB, come il resto del breakdown.
+    import json
+
+    from limen.core.models.risk import breakdown_from_factors
+
+    assert (
+        breakdown_from_factors(HazardType.FLOOD, json.loads(json.dumps(bd.factors_payload()))) == bd
+    )

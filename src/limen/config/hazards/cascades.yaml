@@ -1,0 +1,73 @@
+# Regole di cascata fra pericoli (issue #58).
+#
+# Un file a sé e non un blocco dentro un pericolo, perché una cascata non
+# appartiene a nessuno dei due: dice cosa un pericolo *passato* fa a un
+# pericolo *futuro*, e vive fra i due.
+#
+# Nessun numero di queste regole sta nel codice. Le funzioni che le applicano
+# sono pure e prendono questa configurazione come argomento.
+
+# ---------------------------------------------------------------------------
+# Incendio → alluvione
+# ---------------------------------------------------------------------------
+# Un suolo percorso dal fuoco diventa idrofobico: la combustione della
+# lettiera lascia una crosta che respinge l'acqua, e la stessa pioggia scorre
+# invece di infiltrarsi. È il meccanismo che produce le colate post-incendio,
+# e per l'alluvione amplifica il **solo ramo pluviale** — un incendio non fa
+# crescere un fiume a monte.
+#
+# L'effetto non è massimo subito: serve che la pioggia trovi la crosta ancora
+# intatta e la vegetazione non ancora ricresciuta. Cresce nei primi mesi,
+# poi decade con la ricolonizzazione.
+post_fire_flood:
+  enabled: true
+  # Oltre questa finestra la vegetazione è ricresciuta e l'effetto è chiuso.
+  # 18 mesi è l'ordine di grandezza della letteratura mediterranea, più
+  # corto della finestra di 24 mesi che le frane usano per il fattore F:
+  # l'idrofobicità del suolo si esaurisce prima della perdita di radici.
+  window_months: 18
+  # Mese in cui l'amplificazione è massima.
+  peak_months: 4.0
+  # Denominatore della campana gaussiana, come nel post-incendio delle frane.
+  curve_denominator: 40.0
+  # Moltiplicatore al picco. 1.0 = nessuna amplificazione.
+  max_multiplier: 1.6
+
+# ---------------------------------------------------------------------------
+# Pioggia estrema → frana + alluvione
+# ---------------------------------------------------------------------------
+# Quando la stessa cella supera la soglia di entrambi i pericoli nella stessa
+# finestra, un operatore deve ricevere **un** messaggio con due rischi, non
+# due messaggi che sembrano eventi distinti.
+joint_rain:
+  enabled: true
+  # Classe minima che ciascuno dei due pericoli deve raggiungere.
+  min_level: High
+  # Finestra entro cui le due valutazioni contano come contemporanee. Lo
+  # sweep gira ogni ora per pericolo, quindi due valutazioni della stessa
+  # cella distano al più un ciclo; sei ore lasciano margine a uno sweep lento
+  # senza accettare come "contemporanee" letture di ieri.
+  window_hours: 6
+
+# ---------------------------------------------------------------------------
+# Incendio → frana: **non** qui
+# ---------------------------------------------------------------------------
+# La #58 chiedeva di migrare anche questa regola in questo file. Non è stato
+# fatto, e la ragione va scritta dove qualcuno la cercherà.
+#
+# Le altre due regole sono moltiplicatori applicati *dopo* i motori: le
+# funzioni in `core/cascades/rules.py` prendono un punteggio e lo modificano,
+# quindi la loro configurazione non appartiene a nessun pericolo. Il
+# post-incendio delle frane non è così: è il **fattore F**, un addendo dentro
+# la somma pesata del V1, con il suo peso accanto a quelli di S, M, E, H, K.
+#
+# Spostare i suoi numeri qui li separerebbe dal peso che li moltiplica e dal
+# `model_version` che li versiona — la stessa regola diventerebbe leggibile
+# solo aprendo due file. Spostare il *fattore* fuori dalla somma cambierebbe
+# il campione di produzione, e il campione si cambia con un backtest, non con
+# un riordino di file.
+#
+# Dove sono: `config/hazards/landslide.yaml`, blocco `post_fire`
+# (peak_months 6.0, curve_denominator 50.0, window_months_max 24.0). Finestra
+# più lunga di quella dell'alluvione qui sopra, ed è corretto: le radici
+# perdono coesione più a lungo di quanto il suolo resti idrofobico.

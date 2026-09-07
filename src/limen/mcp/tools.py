@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -338,10 +339,19 @@ async def hazards() -> dict[str, Any]:
     }
 
 
-async def national_report() -> dict[str, Any]:
-    """Aggregate national picture: regions, top cells, ML shadow, 24h alerts."""
-    regions = await risk_summary()
-    top = await top_risk_cells(limit=10)
+async def national_report(hazard: str | None = None) -> dict[str, Any]:
+    """Aggregate national picture: regions, top cells, ML shadow, 24h alerts.
+
+    One hazard leads — ``hazard`` picks it, the default leads when omitted —
+    and the payload keeps the shape it had when landslide was the only one, so
+    a client that predates the hazard dimension reads it unchanged. Two
+    sections are added on top (#58): ``hazards``, one block per hazard this
+    deployment can score, and ``cascades``, the cross-hazard rules currently
+    firing. Both are additive: nothing that existed moved.
+    """
+    hz = _coerce_hazard(hazard)
+    regions = await risk_summary(hazard=hz.value)
+    top = await top_risk_cells(limit=10, hazard=hz.value)
     async with acquire() as conn:
         ml_rows = await conn.fetch(
             """
@@ -356,19 +366,19 @@ async def national_report() -> dict[str, Any]:
             ORDER BY m.probability DESC
             LIMIT 10
             """,
-            DEFAULT_HAZARD.value,
+            hz.value,
         )
         alerts_24h = await conn.fetchval(
             """SELECT COUNT(*) FROM alert_dispatches
                WHERE dispatched_at >= now() - interval '24 hours'
                  AND hazard_type = $1""",
-            DEFAULT_HAZARD.value,
+            hz.value,
         )
         forecast_24h = await conn.fetchval(
             """SELECT COUNT(*) FROM forecast_dispatches
                WHERE dispatched_at >= now() - interval '24 hours'
                  AND hazard_type = $1""",
-            DEFAULT_HAZARD.value,
+            hz.value,
         )
     from limen.integrations.geoserver_source.comuni import comuni_for_points
 
@@ -394,8 +404,12 @@ async def national_report() -> dict[str, Any]:
     ml_cells = [str(r["cell_id"]) for r in ml_rows]
     ml_places = await _places(ml_cells)
 
+    per_hazard = await _per_hazard_blocks(_places)
+    cascades = await active_cascades()
+
     report = {
         "generated_at": datetime.now(UTC).isoformat(),
+        "hazard": hz.value,
         "regions": regions,
         "totals": {
             "regions": len(regions),
@@ -416,9 +430,310 @@ async def national_report() -> dict[str, Any]:
         ],
         "alerts_24h": int(alerts_24h or 0),
         "forecast_alerts_24h": int(forecast_24h or 0),
+        "hazards": per_hazard,
+        "cascades": cascades,
     }
     report["report_it"] = render_national_report_it(report)
     return report
+
+
+async def _per_hazard_blocks(
+    places: Callable[[list[str]], Awaitable[list[str | None]]],
+) -> list[dict[str, Any]]:
+    """One summary block per scorable hazard, for the report's hazard sections.
+
+    ``places`` is threaded in rather than called here so the whole report
+    resolves comune names in one batch: the lookup goes to GeoServer, and one
+    call per hazard would triple that traffic for a page that already has the
+    points in hand.
+    """
+    from limen.data.repos.hazards_repo import scorable_with_labels
+
+    labelled = await scorable_with_labels()
+    blocks: list[dict[str, Any]] = []
+    for hazard, label in labelled:
+        summary = await risk_summary(hazard=hazard.value)
+        top = await top_risk_cells(limit=5, hazard=hazard.value)
+        blocks.append(
+            {
+                "hazard": hazard.value,
+                "label_it": label,
+                "regions": summary,
+                "totals": {
+                    "regions": len(summary),
+                    "cells": sum(r["cells_scored"] for r in summary),
+                    "high_or_above": sum(r["high_or_above"] for r in summary),
+                    "moderate": sum(r["moderate"] for r in summary),
+                },
+                "top_cells": top,
+            }
+        )
+
+    flat = [c["cell_id"] for b in blocks for c in b["top_cells"]]
+    names = await places(flat)
+    it = iter(names)
+    for b in blocks:
+        for c in b["top_cells"]:
+            c["place"] = next(it)
+    return blocks
+
+
+async def active_cascades() -> dict[str, Any]:
+    """Cross-hazard rules currently firing, read from persisted scores (#58).
+
+    Not recomputed: the post-fire multiplier is a field of the flood
+    breakdown, so the report says what the engine actually applied rather than
+    what it would apply now. A disabled rule reports nothing at all — the
+    section must not imply a cascade is watching when ``cascades.yaml`` turned
+    it off.
+    """
+    from limen.core.cascades import load_cascades
+
+    rules = load_cascades()
+    out: dict[str, Any] = {}
+
+    if rules.post_fire_flood.enabled:
+        async with acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT count(*) AS cells,
+                       max((factors->>'post_fire_multiplier')::float) AS max_multiplier,
+                       min((factors->>'months_since_fire')::float) AS min_months
+                FROM risk_assessments
+                WHERE hazard_type = 'flood'
+                  -- Ultimo giorno: limita la scansione alle partizioni
+                  -- correnti, e una cascata "attiva" è per definizione
+                  -- quella dell'ultimo passaggio.
+                  AND computed_at >= now() - interval '24 hours'
+                  AND (factors->>'post_fire_multiplier')::float > 1.0
+                """
+            )
+        out["post_fire_flood"] = {
+            "window_months": rules.post_fire_flood.window_months,
+            "cells": int(row["cells"] or 0) if row else 0,
+            "max_multiplier": (
+                round(float(row["max_multiplier"]), 3)
+                if row and row["max_multiplier"] is not None
+                else None
+            ),
+            "months_since_fire_min": (
+                round(float(row["min_months"]), 1)
+                if row and row["min_months"] is not None
+                else None
+            ),
+        }
+
+    if rules.joint_rain.enabled:
+        # La soglia della regola, non quella della vista: `v_multi_hazard`
+        # pubblica due livelli precotti (Moderate+ e High+) e `min_level` può
+        # essere qualunque classe, quindi il conteggio si fa sui livelli
+        # espansi dalla scala — esatto per ogni valore configurato.
+        at_or_above = list(_LEVELS[_LEVELS.index(rules.joint_rain.min_level.value) :])
+        async with acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT cell_id, aoi_id,
+                       max(risk_score) AS worst_score,
+                       array_agg(hazard_type::text ORDER BY hazard_type::text) AS hazards
+                FROM mv_latest_risk
+                WHERE risk_level::text = ANY($1::text[])
+                GROUP BY cell_id, aoi_id
+                HAVING count(*) >= 2
+                ORDER BY max(risk_score) DESC NULLS LAST, cell_id
+                LIMIT 10
+                """,
+                at_or_above,
+            )
+            total = await conn.fetchval(
+                """
+                SELECT count(*) FROM (
+                    SELECT cell_id FROM mv_latest_risk
+                    WHERE risk_level::text = ANY($1::text[])
+                    GROUP BY cell_id HAVING count(*) >= 2
+                ) j
+                """,
+                at_or_above,
+            )
+        out["joint_rain"] = {
+            "min_level": rules.joint_rain.min_level.value,
+            "window_hours": rules.joint_rain.window_hours,
+            "cells": int(total or 0),
+            "top_cells": [
+                {
+                    "cell_id": str(r["cell_id"]),
+                    "aoi_id": str(r["aoi_id"]),
+                    "score": round(float(r["worst_score"]), 3),
+                    "hazards": list(r["hazards"] or []),
+                }
+                for r in rows
+            ],
+        }
+
+    return out
+
+
+async def multi_hazard_summary(
+    cell_id: str | None = None, aoi_id: str | None = None
+) -> dict[str, Any]:
+    """Quadro di una cella o di un'AOI su tutti i pericoli valutati (#58).
+
+    The one tool that answers "what is threatening this place", as opposed to
+    "how bad is this hazard here" — every other read tool takes a hazard and
+    reports on that one alone, which makes the cross-hazard question N calls
+    and a client-side join.
+    """
+    if not cell_id and not aoi_id:
+        raise ValueError("serve cell_id oppure aoi_id")
+
+    async with acquire() as conn:
+        if cell_id:
+            rows = await conn.fetch(
+                """
+                SELECT hazard_type, risk_score, risk_level, computed_at
+                FROM mv_latest_risk
+                WHERE cell_id = $1
+                ORDER BY hazard_type
+                """,
+                cell_id,
+            )
+            worst = await conn.fetchrow(
+                """
+                SELECT aoi_id, worst_hazard, worst_level, worst_score,
+                       hazards_at_moderate, hazards_at_high
+                FROM v_multi_hazard WHERE cell_id = $1
+                """,
+                cell_id,
+            )
+            if worst is None:
+                raise ValueError(f"cella sconosciuta: {cell_id!r}")
+            return {
+                "scope": "cell",
+                "cell_id": cell_id,
+                "aoi_id": str(worst["aoi_id"]),
+                "worst_hazard": (
+                    str(worst["worst_hazard"]) if worst["worst_level"] is not None else None
+                ),
+                "worst_level": (
+                    str(worst["worst_level"]) if worst["worst_level"] is not None else None
+                ),
+                "hazards_at_moderate": list(worst["hazards_at_moderate"] or []),
+                "hazards_at_high": list(worst["hazards_at_high"] or []),
+                "per_hazard": [
+                    {
+                        "hazard": str(r["hazard_type"]),
+                        "score": (
+                            round(float(r["risk_score"]), 3)
+                            if r["risk_score"] is not None
+                            else None
+                        ),
+                        "level": str(r["risk_level"]) if r["risk_level"] is not None else None,
+                        "computed_at": (r["computed_at"].isoformat() if r["computed_at"] else None),
+                    }
+                    for r in rows
+                ],
+            }
+
+        agg = await conn.fetch(
+            """
+            SELECT hazard_type,
+                   count(*) FILTER (WHERE risk_score IS NOT NULL) AS cells_scored,
+                   max(risk_score) AS max_score,
+                   count(*) FILTER (WHERE risk_level IN ('High','VeryHigh')) AS high_or_above,
+                   count(*) FILTER (WHERE risk_level = 'Moderate') AS moderate,
+                   max(computed_at) AS computed_at
+            FROM mv_latest_risk
+            WHERE aoi_id = $1
+            GROUP BY hazard_type
+            ORDER BY hazard_type
+            """,
+            aoi_id,
+        )
+        joint = await conn.fetchval(
+            """SELECT count(*) FROM v_multi_hazard
+               WHERE aoi_id = $1 AND array_length(hazards_at_high, 1) >= 2""",
+            aoi_id,
+        )
+    if not agg:
+        raise ValueError(f"AOI sconosciuta o senza valutazioni: {aoi_id!r}")
+    return {
+        "scope": "aoi",
+        "aoi_id": aoi_id,
+        "cells_multi_hazard_high": int(joint or 0),
+        "per_hazard": [
+            {
+                "hazard": str(r["hazard_type"]),
+                "cells_scored": int(r["cells_scored"] or 0),
+                "max_score": (
+                    round(float(r["max_score"]), 3) if r["max_score"] is not None else None
+                ),
+                "high_or_above": int(r["high_or_above"] or 0),
+                "moderate": int(r["moderate"] or 0),
+                "computed_at": r["computed_at"].isoformat() if r["computed_at"] else None,
+            }
+            for r in agg
+        ],
+    }
+
+
+def _render_hazard_sections_it(report: dict[str, Any]) -> list[str]:
+    """Una riga per pericolo. Solo numeri già nel report, come il resto."""
+    blocks = report.get("hazards") or []
+    # Con un solo pericolo valutato le sezioni ripeterebbero il paragrafo
+    # principale parola per parola.
+    if len(blocks) < 2:
+        return []
+    lines = ["", "Per tipo di pericolo:"]
+    for b in blocks:
+        t = b["totals"]
+        label = str(b["label_it"]).lower()
+        if t["cells"] == 0:
+            lines.append(f"· {label}: nessuna valutazione disponibile.")
+            continue
+        pezzi = []
+        if t["high_or_above"]:
+            pezzi.append(f"{t['high_or_above']} zone a rischio alto")
+        if t["moderate"]:
+            pezzi.append(f"{t['moderate']} moderate")
+        stato = ", ".join(pezzi) if pezzi else "nessuna zona sopra il livello basso"
+        riga = f"· {label}: {stato}"
+        top = b["top_cells"][0] if b["top_cells"] else None
+        # Il punto peggiore si nomina solo se merita attenzione: a rischio
+        # basso sarebbe il massimo di una lista tranquilla, e leggerlo
+        # accanto a un nome di paese lo fa sembrare un avviso.
+        if top and top["level"] in ("High", "VeryHigh"):
+            dove = top.get("place") or "una zona non abitata"
+            riga += f" — il punto peggiore è {dove} ({top['score']:.2f})"
+        lines.append(riga + ".")
+    return lines
+
+
+def _render_cascade_section_it(report: dict[str, Any]) -> list[str]:
+    """Sezione cascate: cosa un pericolo sta facendo a un altro, in italiano."""
+    casc = report.get("cascades") or {}
+    lines: list[str] = []
+
+    pff = casc.get("post_fire_flood")
+    if pff and pff["cells"]:
+        lines.append(
+            f"Effetto post-incendio: {pff['cells']} aree bruciate negli ultimi "
+            f"{pff['window_months']:.0f} mesi hanno il terreno che assorbe meno, "
+            f"quindi il rischio di allagamento è più alto del normale "
+            f"(fino a {pff['max_multiplier']:.1f} volte)."
+        )
+
+    jr = casc.get("joint_rain")
+    if jr and jr["cells"]:
+        top = jr["top_cells"][0] if jr["top_cells"] else None
+        riga = (
+            f"Rischio combinato: {jr['cells']} aree sono sopra la soglia per "
+            f"più di un pericolo contemporaneamente"
+        )
+        if top:
+            quali = " e ".join(top["hazards"])
+            riga += f" (la più critica: {quali})"
+        lines.append(riga + ".")
+
+    return ["", *lines] if lines else []
 
 
 def render_national_report_it(report: dict[str, Any]) -> str:
@@ -445,9 +760,10 @@ def render_national_report_it(report: dict[str, Any]) -> str:
     def _it(n: int) -> str:
         return f"{n:,}".replace(",", ".")
 
+    regioni = "1 regione" if t["regions"] == 1 else f"{t['regions']} regioni"
     lines.append(
         f"{_it(t['moderate'])} aree da 1 km² mostrano un rischio moderato, "
-        f"su {_it(t['cells'])} monitorate in {t['regions']} regioni."
+        f"su {_it(t['cells'])} monitorate in {regioni}."
     )
 
     if report["top_cells"]:
@@ -466,6 +782,9 @@ def render_national_report_it(report: dict[str, Any]) -> str:
             f"osservazione, non genera allerte — indica {dove} come probabilità "
             f"più alta ({m['probability']:.0%})."
         )
+
+    lines.extend(_render_hazard_sections_it(report))
+    lines.extend(_render_cascade_section_it(report))
 
     lines.append("")
     prev = report["forecast_alerts_24h"]
