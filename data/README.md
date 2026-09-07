@@ -33,6 +33,7 @@ data/
 ├── inventory/iffi/{regione}/{frane_poly,frane_line,frane_piff,aree_poly,dgpv_poly}/
 ├── events/italica/ITALICA_v4.csv  # catalogo eventi datati → backtest + ML
 ├── landcover/                     # slot pronto (CORINE quando prodotto)
+├── sealing/clms_imd_2018/         # suolo sigillato → ramo pluviale (make imperviousness-data)
 ├── geology/                       # slot pronto (carta geolitologica)
 ├── osm/                           # rete strade/ferrovie OSM (make osm-data)
 └── backups/                       # dump training ML (make dump-training)
@@ -49,6 +50,7 @@ data/
 | `hazard/hydraulic/` | opzionale | H | poligoni con classi | manifest `geodata/datasets.yaml` | H neutra |
 | `events/` | per backtest/ML | truth set §2.5 + feature store | CSV con data+lat/lon | `LIMEN_ITALICA_CSV` | niente backtest/training |
 | `landcover/` | opzionale | S/K | GeoTIFF Int16 codici classe | `LIMEN_CORINE_RASTER` | skip |
+| `sealing/` | opzionale | ramo pluviale (alluvione) | GeoTIFF uint8, % sigillato 0-100 | `LIMEN_IMPERVIOUSNESS_RASTER` | nessuna amplificazione urbana |
 | `geology/` | opzionale | S (litho_weight) | shapefile con campo litologia | `LIMEN_GEOLOGICAL_SHAPEFILE` + `_FIELD` | skip |
 | `osm/` | opzionale | esposizione alert (priorità) | GPKG linee (estratti PBF) | `LIMEN_OSM_ROADS` + `LIMEN_OSM_RAILWAYS` | fallback flag CORINE 12x |
 
@@ -120,6 +122,25 @@ GeoTIFF Int16 con codici classe (rasterizzare il vettoriale a ~100 m).
 **Italia**: CORINE CLC2018 Italia (SINAnet/ISPRA, CC-BY). **Altrove**:
 CORINE europeo, ESA WorldCover 10 m (globale, CC-BY 4.0).
 Attivazione: `LIMEN_CORINE_RASTER`.
+
+### `sealing/` — suolo sigillato (impermeabilizzazione)
+
+GeoTIFF **uint8** con la percentuale di superficie sigillata per pixel
+(0-100); qualunque valore fuori intervallo è "non so" e viene scartato,
+mai letto come 0 — zero affermerebbe suolo permeabile dove il dato
+manca. Amplifica il **solo** ramo pluviale dell'alluvione: il cemento
+non fa crescere un fiume, fa scorrere la stessa pioggia invece di
+lasciarla infiltrare.
+
+**Italia** (e tutta l'area EEA): `make imperviousness-data` scarica
+l'HRL Imperviousness Density 2018 di Copernicus Land dall'ImageServer
+pubblico dell'EEA — **senza account**, a differenza di quanto suggerisce
+la pagina del prodotto. Copre il riquadro delle AOI seminate a 100 m in
+EPSG:3035; l'Italia intera sta in ~4,6 MB. **Altrove**: GHSL BUILT-S
+(JRC, globale, superficie costruita in m² per pixel — va riscalata a
+0-100), oppure la classe "built-up" di ESA WorldCover come frazione.
+
+Attivazione: `LIMEN_IMPERVIOUSNESS_RASTER=./data/sealing/<slug>/<file>.tif`.
 
 ### `geology/` — litologia
 

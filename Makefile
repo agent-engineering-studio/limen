@@ -79,6 +79,7 @@ help:
 	@echo "  make data-status        quali layer statici sono caricati e cosa blocca gli altri"
 	@echo "  make static-data        carica tutti i layer configurati + riepilogo"
 	@echo "  make flood-data         come static-data, con il focus sull'alluvione"
+	@echo "  make imperviousness-data  scarica il raster CLMS del suolo sigillato (EEA, aperto)"
 	@echo "  make dtm-vrt            mosaico virtuale sulle tessere DTM (serve GDAL sull'host)"
 	@echo "  make calibrate          run §2.5 calibration (s_static + S↔ISPRA gate)"
 	@echo "  make backtest           replay the Oct 2018 storm and write the report"
@@ -221,6 +222,17 @@ static-data:
 # il mosaico idraulico ISPRA la mappa alluvione resta uniforme.
 flood-data:
 	@bash scripts/load_static_data.sh flood
+
+# Suolo sigillato per l'amplificazione del ramo pluviale. Il prodotto è quello
+# di Copernicus Land, che chiede un account; l'EEA serve lo stesso layer su un
+# ImageServer aperto, quindi qui non serve nessuna credenziale.
+# Idempotente: con il file già presente non scarica niente.
+imperviousness-data:
+	$(UV) run limen imperviousness-fetch
+	@echo
+	@echo "  Ora punta la variabile al file e riempi le celle:"
+	@echo "    LIMEN_IMPERVIOUSNESS_RASTER=$(CURDIR)/data/sealing/clms_imd_2018/imd_2018_100m.tif"
+	@echo "    make bootstrap-static"
 
 calibrate:
 	$(UV) run limen calibrate

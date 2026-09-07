@@ -31,6 +31,11 @@ class Layer:
     gate: str | None
     #: Nota per i layer che dipendono da un altro layer invece che da un file.
     derived_from: str | None = None
+    #: Comando che procura la sorgente, per i layer che si scaricano da soli.
+    #: Vale la pena stamparlo qui: questo è il posto dove si guarda quando la
+    #: mappa è uniforme, e sapere che manca una variabile non dice come
+    #: riempirla.
+    fetch_with: str | None = None
 
 
 LAYERS: tuple[Layer, ...] = (
@@ -39,7 +44,12 @@ LAYERS: tuple[Layer, ...] = (
     Layer("flood_hazard_norm", "pericolosità idraulica ISPRA", "GEOSERVER_SOURCE__DB_DSN"),
     Layer("slope_deg", "pendenza (DTM)", "LIMEN_DEM_RASTER"),
     Layer("landuse_code", "copertura del suolo (CORINE)", "LIMEN_CORINE_RASTER"),
-    Layer("imperviousness_norm", "suolo impermeabilizzato (CLMS)", "LIMEN_IMPERVIOUSNESS_RASTER"),
+    Layer(
+        "imperviousness_norm",
+        "suolo impermeabilizzato (CLMS)",
+        "LIMEN_IMPERVIOUSNESS_RASTER",
+        fetch_with="make imperviousness-data",
+    ),
     Layer(
         "wui_proximity_norm",
         "interfaccia urbano-bosco",
@@ -112,8 +122,10 @@ async def run() -> int:
     )
     if unset:
         print("\nVariabili non impostate in questo ambiente:")
+        comandi = {layer.gate: layer.fetch_with for layer in LAYERS if layer.fetch_with}
         for var in unset:
-            print(f"  {var}")
+            comando = comandi.get(var)
+            print(f"  {var}" + (f"   → {comando}" if comando else ""))
     print()
     return 0
 

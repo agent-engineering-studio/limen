@@ -11,6 +11,7 @@ whatever projection it ships with (TINITALY is in ETRS89 / UTM 32N).
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -55,10 +56,23 @@ def _nanmean_or_none(arr: Any) -> float | None:
     return _finite_or_none(float(np.nanmean(arr)))
 
 
-def _reproject_geom(geom: BaseGeometry, *, src_crs: Any, dst_crs: Any) -> BaseGeometry:
-    """Reproject a shapely geometry from EPSG:4326 to the raster's CRS."""
+def geom_reprojector(*, src_crs: Any, dst_crs: Any) -> Callable[[BaseGeometry], BaseGeometry]:
+    """Build the 4326 → raster-CRS reprojection **once**, for a whole loop.
+
+    Costruito una volta e non per geometria perché ``Transformer.from_crs``
+    non è gratis: pyproj deve ricostruire il CRS di destinazione dal WKT che
+    rasterio gli passa, e la cache non aiuta perché la chiave è l'oggetto CRS
+    di rasterio, non un codice EPSG. Misurato su questa macchina, sullo stesso
+    raster e le stesse celle: **67,4 ms per cella** costruendolo nel ciclo,
+    **0,07 ms** costruendolo fuori, contro 0,9 ms del lavoro raster vero.
+    Su 312.550 celle sono 5,9 ore invece di 5 minuti, per cella e per raster.
+
+    Il risultato numerico è identico: il trasformatore è deterministico e
+    uguale per ogni cella, quindi qui non c'è un compromesso fra velocità e
+    precisione — c'era solo lavoro ripetuto.
+    """
     if src_crs == dst_crs:
-        return geom
+        return lambda geom: geom
     try:
         from pyproj import Transformer
         from shapely.ops import transform
@@ -66,7 +80,12 @@ def _reproject_geom(geom: BaseGeometry, *, src_crs: Any, dst_crs: Any) -> BaseGe
         raise RuntimeError("pyproj required for DEM zonal stats") from exc
 
     transformer = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
-    return transform(transformer.transform, geom)
+    return lambda geom: transform(transformer.transform, geom)
+
+
+def _reproject_geom(geom: BaseGeometry, *, src_crs: Any, dst_crs: Any) -> BaseGeometry:
+    """Reproject one geometry. In un ciclo usa :func:`geom_reprojector`."""
+    return geom_reprojector(src_crs=src_crs, dst_crs=dst_crs)(geom)
 
 
 def _cellsize_from_transform(transform: Any) -> float:
@@ -116,8 +135,9 @@ def compute_cell_stats(
         from rasterio.crs import CRS as _CRS
 
         src_crs = _CRS.from_epsg(src_crs_epsg)
+        reproject = geom_reprojector(src_crs=src_crs, dst_crs=src.crs)
         for cell_id, geom in cells.items():
-            projected = _reproject_geom(geom, src_crs=src_crs, dst_crs=src.crs)
+            projected = reproject(geom)
             try:
                 data, _ = raster_mask(src, [projected], crop=True, filled=False)
             except (ValueError, Exception) as exc:  # pragma: no cover — rasterio errors

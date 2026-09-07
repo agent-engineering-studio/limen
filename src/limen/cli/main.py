@@ -9,6 +9,7 @@ Usage:
     limen monitor-once       Run the MAF landslide workflow once for an AOI.
     limen forecast           Predictive run at now+H hours (forecast rain, no persistence).
     limen firms-sync         Ingest NASA FIRMS active-fire hotspots (FIRMS__MAP_KEY).
+    limen imperviousness-fetch  Download the CLMS sealed-soil raster (public EEA service).
     limen serve              Start the FastAPI HTTP server (uvicorn on :8080).
     limen llm-check          Probe the inference engine: model + latency per agent role.
     limen train              Extract training samples and train the V2 ML model (MLflow).
@@ -39,6 +40,7 @@ from limen.cli.fwi_backfill import run as _run_fwi_backfill
 from limen.cli.geodata import build_subparser as _build_geodata_subparser
 from limen.cli.geodata import run as _run_geodata
 from limen.cli.geoserver_sync import run as _run_geoserver_sync
+from limen.cli.imperviousness_fetch import run as _run_imperviousness_fetch
 from limen.cli.ingest_events import run as _run_ingest_events
 from limen.cli.ingest_kb import run as _run_ingest_kb
 from limen.cli.llm_check import run as _run_llm_check
@@ -72,6 +74,10 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "data-status",
         help="report which per-cell static layers are loaded and what gates the rest",
+    )
+    sub.add_parser(
+        "imperviousness-fetch",
+        help="scarica il raster CLMS del suolo sigillato dal servizio pubblico EEA",
     )
     sub.add_parser(
         "partitions",
@@ -208,6 +214,7 @@ def main(argv: list[str] | None = None) -> int:
     runners: dict[str, Runner] = {
         "migrate": _run_migrate,
         "data-status": _run_data_status,
+        "imperviousness-fetch": _run_imperviousness_fetch,
         "partitions": _run_partitions,
         "seed": _run_seed,
         "seed-comuni": _run_seed_comuni,

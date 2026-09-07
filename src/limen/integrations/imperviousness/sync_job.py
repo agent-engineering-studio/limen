@@ -13,10 +13,13 @@ log = get_logger(__name__)
 
 IMPERVIOUSNESS_RASTER_ENV = "LIMEN_IMPERVIOUSNESS_RASTER"
 
-#: CLMS ships the layer as a percentage, 0-100, with 254 = "unclassifiable"
-#: and 255 = nodata. Both are sentinels far outside the valid range, so a
-#: plain range filter drops them without needing the raster's own nodata tag,
-#: which the mosaics do not always carry.
+#: CLMS ships the layer as a percentage, 0-100. Its raster attribute table
+#: declares exactly one sentinel, 255 = "outside area", but the EEA export path
+#: also emits 240 in places (measured: 0.17 % of the Italian mosaic, absent
+#: from the RAT). So the filter is a **range**, not a list of known sentinels:
+#: anything outside 0-100 is "unknown", which is the only safe reading of a
+#: value the product does not define — and it needs no nodata tag, which the
+#: mosaics do not always carry.
 _VALID_MAX = 100.0
 
 
@@ -51,7 +54,7 @@ def cell_means(
     except ImportError as exc:  # pragma: no cover — rasterio is a core dep
         raise RuntimeError("rasterio required for imperviousness zonal stats") from exc
 
-    from limen.integrations.dem.zonal import _reproject_geom
+    from limen.integrations.dem.zonal import geom_reprojector
 
     path = Path(raster_path)
     if not path.exists():
@@ -60,8 +63,9 @@ def cell_means(
     out: dict[str, float] = {}
     with rasterio.open(path) as src:
         src_crs = CRS.from_epsg(src_crs_epsg)
+        reproject = geom_reprojector(src_crs=src_crs, dst_crs=src.crs)
         for cell_id, geom in cells.items():
-            projected = _reproject_geom(geom, src_crs=src_crs, dst_crs=src.crs)
+            projected = reproject(geom)
             try:
                 data, _ = raster_mask(src, [projected], crop=True, filled=False)
             except Exception as exc:  # pragma: no cover — rasterio errors

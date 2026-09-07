@@ -16,6 +16,7 @@ import structlog
 from shapely.geometry.base import BaseGeometry
 
 from limen.core.logging import get_logger
+from limen.integrations.dem.zonal import geom_reprojector
 
 _log: structlog.stdlib.BoundLogger = get_logger(__name__)
 
@@ -25,16 +26,6 @@ class CellLandUseStats:
     cell_id: str
     landuse_code: str | None
     pixel_count: int
-
-
-def _reproject_geom(geom: BaseGeometry, *, src_crs: Any, dst_crs: Any) -> BaseGeometry:
-    if src_crs == dst_crs:
-        return geom
-    from pyproj import Transformer
-    from shapely.ops import transform
-
-    transformer = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
-    return transform(transformer.transform, geom)
 
 
 def _majority_class(values: Any, *, nodata: float | None) -> tuple[str | None, int]:
@@ -82,8 +73,9 @@ def compute_landuse_stats(
     with rasterio.open(path) as src:
         nodata = src.nodata
         src_crs = _CRS.from_epsg(src_crs_epsg)
+        reproject = geom_reprojector(src_crs=src_crs, dst_crs=src.crs)
         for cell_id, geom in cells.items():
-            projected = _reproject_geom(geom, src_crs=src_crs, dst_crs=src.crs)
+            projected = reproject(geom)
             try:
                 data, _ = raster_mask(src, [projected], crop=True, filled=False)
             except Exception as exc:  # pragma: no cover
