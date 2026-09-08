@@ -91,6 +91,23 @@ async def upsert_many(items: Iterable[PAIHazard]) -> int:
                 item.dataset_version_id,
                 attrs_json,
             )
+            # Tiene in passo il compagno suddiviso (migrazione 038), nella
+            # stessa transazione: l'aggregazione per cella si unisce a quello,
+            # non ai poligoni da un milione di vertici del mosaico grezzo.
+            await conn.execute(
+                "DELETE FROM pai_hazard_subdiv WHERE id = $1",
+                item.id,
+            )
+            await conn.execute(
+                """
+                INSERT INTO pai_hazard_subdiv (id, hazard_class, hazard_class_norm, geom)
+                SELECT id, hazard_class, hazard_class_norm,
+                       ST_Subdivide(ST_CollectionExtract(ST_MakeValid(geom), 3), 256)
+                FROM pai_hazard
+                WHERE id = $1
+                """,
+                item.id,
+            )
     log.info("pai.upsert_many", count=len(items_list))
     return len(items_list)
 

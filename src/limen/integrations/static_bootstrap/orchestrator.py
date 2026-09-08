@@ -99,12 +99,18 @@ WHERE c.cell_id = d.cell_id
 
 # PAI: take the maximum normalised hazard class of any PAI polygon
 # intersecting the cell. NULL if no polygon intersects.
+# Frana (PAI): come l'idraulica qui sotto, si unisce al compagno suddiviso
+# (migrazione 038) e non al mosaico grezzo. 36 poligoni sopra i 100.000
+# vertici, il peggiore a 1,3 milioni: il loro bbox copre migliaia di celle,
+# quindi l'indice li propone per ognuna e il test esatto si rifà ogni volta.
+# Misurato su 200 celle della Toscana: 5.878 ms sul grezzo contro 133 ms
+# sulla tabella suddivisa.
 _PAI_CLASS_SQL = """
 WITH p AS (
     SELECT g.id AS cell_id,
            MAX(pai.hazard_class_norm) AS pai_max
     FROM grid_cells g
-    LEFT JOIN pai_hazard pai
+    LEFT JOIN pai_hazard_subdiv pai
       ON ST_Intersects(g.geom, pai.geom)
     WHERE g.aoi_id = $1
     GROUP BY g.id
@@ -114,6 +120,16 @@ SET pai_class_norm = p.pai_max,
     updated_at = now()
 FROM p
 WHERE c.cell_id = p.cell_id
+"""
+
+# Righe entrate in pai_hazard prima della migrazione 038: si sanano una
+# volta, idempotenti. Le nuove le tiene in passo pai_repo.upsert_many.
+_PAI_SUBDIV_BACKFILL_SQL = """
+INSERT INTO pai_hazard_subdiv (id, hazard_class, hazard_class_norm, geom)
+SELECT p.id, p.hazard_class, p.hazard_class_norm,
+       ST_Subdivide(ST_CollectionExtract(ST_MakeValid(p.geom), 3), 256)
+FROM pai_hazard p
+WHERE NOT EXISTS (SELECT 1 FROM pai_hazard_subdiv s WHERE s.id = p.id)
 """
 
 # Rows synced into flood_hazard before migration 014 have no subdivided
@@ -369,6 +385,7 @@ async def bootstrap_static_for_aoi(aoi_id: str) -> dict[str, int]:
     # Outside the factors transaction: the backfill's work stays committed
     # even if a later aggregation times out and rolls back.
     async with acquire() as conn:
+        await conn.execute(_PAI_SUBDIV_BACKFILL_SQL, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
         await conn.execute(_FLOOD_SUBDIV_BACKFILL_SQL, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
 
     async with acquire() as conn, conn.transaction():
