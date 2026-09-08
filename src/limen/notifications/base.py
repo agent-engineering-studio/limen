@@ -61,6 +61,25 @@ class AlertedCell(BaseModel):
     comune: str | None = None
 
 
+class ComuneSummary(BaseModel):
+    """Il rollup di un comune dentro il payload (#59).
+
+    Il messaggio parla di comuni, la cella resta nel dettaglio: un centro
+    operativo comunale deve sapere quante aree del *suo* territorio sono sopra
+    soglia, non ricevere un elenco di identificatori di griglia.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    istat_code: str | None = None
+    comune: str | None = None
+    hazard_type: HazardType = DEFAULT_HAZARD
+    max_level: RiskLevel
+    max_score: float = Field(..., ge=0.0, le=1.0)
+    cells_count: int = Field(..., ge=1)
+    top_cell_ids: list[str] = Field(default_factory=list)
+
+
 class CascadeNote(BaseModel):
     """One cross-hazard rule that shaped this alert (#58).
 
@@ -89,6 +108,9 @@ class AlertPayload(BaseModel):
     max_level: RiskLevel
     max_score: float = Field(..., ge=0.0, le=1.0)
     cells: list[AlertedCell] = Field(default_factory=list)
+    #: Rollup per comune (#59). Vuoto quando l'aggregazione non è stata
+    #: calcolata — il payload resta quello di prima, per cella.
+    aggregates: list[ComuneSummary] = Field(default_factory=list)
     summary_it: str
     #: Cascate cross-hazard attive fra le celle allertate. Vuoto quando
     #: nessuna regola ha inciso — non è un campo opzionale da interpretare.
@@ -220,6 +242,8 @@ def build_alert_payload(
     settings: AlertSettings,
     dispatched_at: datetime,
     comuni: dict[str, str] | None = None,
+    aggregates: list[ComuneSummary] | None = None,
+    summary_override: str | None = None,
 ) -> AlertPayload:
     """Assemble an :class:`AlertPayload`.
 
@@ -252,7 +276,11 @@ def build_alert_payload(
     top_record = take[0][0] if take else None
     max_level = top_record.level if top_record is not None else RiskLevel.None_
     max_score = top_record.score if top_record is not None else 0.0
-    summary = _format_summary_it(
+    # Con il rollup comunale il riassunto lo scrive il modulo di governo: la
+    # frase per comune è ciò che il destinatario legge, e la cella di picco
+    # da sola non gli dice in quale paese guardare. Senza rollup resta la
+    # frase per cella, identica a prima.
+    summary = summary_override or _format_summary_it(
         assessment=assessment,
         top_cells=[r for r, _ in take],
     )
@@ -269,6 +297,7 @@ def build_alert_payload(
         cells=cells,
         summary_it=summary,
         map_url=map_url,
+        aggregates=list(aggregates or []),
         cascade=_cascade_notes([r for r, _ in take]),
         pipeline_version=assessment.pipeline_version,
         dispatched_at=dispatched_at,
@@ -284,6 +313,7 @@ __all__ = [
     "AlertPayload",
     "AlertedCell",
     "CascadeNote",
+    "ComuneSummary",
     "NotificationChannel",
     "build_alert_payload",
     "level_at_least",

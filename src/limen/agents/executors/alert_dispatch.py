@@ -29,7 +29,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from limen.agents.workflow_runtime.executor import Executor, handler
-from limen.config.settings import AlertSettings, Settings, get_settings
+from limen.config.settings import AlertSettings, RateLimitSettings, Settings, get_settings
 from limen.core.logging import get_logger
 from limen.core.models.context import CellRiskRecord, MonitoringContext
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
@@ -37,6 +37,13 @@ from limen.core.models.risk import RiskLevel
 from limen.core.scoring.exposure import exposure_factor_from_row
 from limen.core.scoring.regional_thresholds import load_hazard_thresholds
 from limen.data.db import acquire
+from limen.data.repos.alert_aggregates_repo import (
+    comuni_alerted_within,
+    comuni_queued,
+    insert_aggregates,
+    record_sends,
+    sends_last_hour,
+)
 from limen.data.repos.alert_dispatches_repo import (
     AlertDispatchRow,
     cells_dispatched_within,
@@ -46,8 +53,16 @@ from limen.data.repos.alert_dispatches_repo import (
 )
 from limen.notifications.base import (
     AlertPayload,
+    ComuneSummary,
     build_alert_payload,
     level_at_least,
+)
+from limen.notifications.governance import (
+    ComuneAggregate,
+    aggregate_by_comune,
+    rate_limit_verdict,
+    summarise_comuni_it,
+    worst_level,
 )
 from limen.observability.metrics import get_metrics
 
@@ -115,6 +130,45 @@ async def _comuni_for_cells(cell_ids: list[str]) -> dict[str, str]:
     return {str(r["cell_id"]): str(r["name"]) for r in rows}
 
 
+async def _comune_tags(cell_ids: list[str]) -> tuple[dict[str, str], dict[str, str]]:
+    """``(cella → codice ISTAT, codice ISTAT → nome)`` per le celle date.
+
+    Due mappe e non una: la dedup e il rollup si fanno sul **codice**, che è
+    stabile, mentre il nome serve solo alla frase italiana. Due comuni possono
+    chiamarsi allo stesso modo in regioni diverse, e raggrupparli per nome
+    unirebbe territori che non si toccano.
+    """
+    if not cell_ids:
+        return {}, {}
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT cc.cell_id, cc.istat_code, c.name
+            FROM cell_comune cc JOIN comuni c ON c.istat_code = cc.istat_code
+            WHERE cc.cell_id = ANY($1::text[])
+            """,
+            cell_ids,
+        )
+    per_cella = {str(r["cell_id"]): str(r["istat_code"]) for r in rows}
+    nomi = {str(r["istat_code"]): str(r["name"]) for r in rows}
+    return per_cella, nomi
+
+
+def _to_summaries(aggregates: list[ComuneAggregate]) -> list[ComuneSummary]:
+    return [
+        ComuneSummary(
+            istat_code=a.istat_code,
+            comune=a.comune,
+            hazard_type=a.hazard,
+            max_level=a.max_level,
+            max_score=a.max_score,
+            cells_count=a.cells_count,
+            top_cell_ids=[cid for cid, _, _ in a.top_cells],
+        )
+        for a in aggregates
+    ]
+
+
 class AlertDispatchExecutor(Executor):
     """V1 alert dispatcher.
 
@@ -132,11 +186,16 @@ class AlertDispatchExecutor(Executor):
         dispatcher: NotificationDispatcher | None = None,
         *,
         alert_settings: AlertSettings | None = None,
+        rate_limit: RateLimitSettings | None = None,
         hazard: HazardType = DEFAULT_HAZARD,
     ) -> None:
         super().__init__(name="AlertDispatch")
         self._dispatcher = dispatcher
         self._alert_settings = alert_settings
+        # Il governo del volume (#59) è iniettabile come le soglie: un test
+        # che verifica il digest deve poter fissare il limite senza toccare
+        # l'ambiente.
+        self._rate_limit = rate_limit
         # Dedup is per hazard: a landslide alert must not suppress a flood
         # alert on the same cell inside the window.
         self._hazard = hazard
@@ -145,6 +204,11 @@ class AlertDispatchExecutor(Executor):
         if self._alert_settings is not None:
             return self._alert_settings
         return (ctx_settings or get_settings()).alert
+
+    def _governance(self, ctx_settings: Settings | None = None) -> RateLimitSettings:
+        if self._rate_limit is not None:
+            return self._rate_limit
+        return (ctx_settings or get_settings()).notifications.rate_limit
 
     @handler
     async def run(self, ctx: MonitoringContext) -> MonitoringContext:
@@ -215,8 +279,92 @@ class AlertDispatchExecutor(Executor):
                 ]
             )
 
-        # Build the payload + dispatch.
+        # --- governo degli alert (#59) -----------------------------------
+        # Il rollup per comune viene *prima* del dispatch, perché è ciò che
+        # decide quanti messaggi escono. Migliaia di celle sopra soglia in un
+        # fronte esteso sono decine di comuni, non migliaia di avvisi.
         now = datetime.now(UTC)
+        istat_per_cella, nomi_comuni = await _comune_tags([r.cell_id for r, _ in deduped])
+
+        # Dedup comunale: due celle vicine dello stesso paese sono lo stesso
+        # avviso ricevuto due volte. Resta per pericolo.
+        gov = self._governance()
+        comune_window = timedelta(minutes=alert_settings.dedup_window_minutes)
+        comuni_soppressi = await comuni_alerted_within(
+            set(istat_per_cella.values()), window=comune_window, hazard=self._hazard
+        )
+        rimasti = [
+            (r, p) for r, p in deduped if istat_per_cella.get(r.cell_id) not in comuni_soppressi
+        ]
+        if not rimasti:
+            log.info(
+                "alert_dispatch.comune_dedup_all",
+                aoi_id=ctx.aoi_id,
+                comuni_suppressed=len(comuni_soppressi),
+                window_minutes=alert_settings.dedup_window_minutes,
+            )
+            return ctx.with_update(
+                dispatched_alerts=[
+                    f"dedup-suppressed comune={c} hazard={self._hazard.value}"
+                    for c in sorted(comuni_soppressi)
+                ]
+            )
+
+        aggregates = aggregate_by_comune(
+            rimasti,
+            comuni=nomi_comuni,
+            istat_codes=istat_per_cella,
+            aoi_id=ctx.aoi_id,
+            hazard=self._hazard,
+        )
+        livello_max = worst_level(aggregates)
+
+        # Rate limit: il conteggio è per canale, quindi il verdetto lo decide
+        # il canale **più carico**. Spedire a metà dei canali e accodare per
+        # l'altra metà darebbe due messaggi diversi sullo stesso evento.
+        canali = self._dispatcher.channel_names if self._dispatcher is not None else []
+        carico = max([await sends_last_hour(c, now=now) for c in canali], default=0)
+        verdict = rate_limit_verdict(
+            sends_last_hour=carico,
+            max_per_hour=gov.max_per_hour,
+            level=livello_max,
+            bypass_level=_resolve_threshold(gov.bypass_level),
+            enabled=gov.enabled,
+        )
+
+        if verdict == "queue":
+            # Già in coda dal ciclo precedente: il riepilogo li nominerebbe
+            # due volte con lo stesso numero. La dedup per cella non li ha
+            # fermati perché un ciclo trattenuto non scrive in
+            # `alert_dispatches` — non è uscito niente.
+            gia_in_coda = await comuni_queued(
+                {a.istat_code for a in aggregates if a.istat_code}, hazard=self._hazard
+            )
+            nuovi = [a for a in aggregates if a.istat_code not in gia_in_coda]
+            await insert_aggregates(nuovi, state="queued")
+            log.info(
+                "alert_dispatch.queued",
+                aoi_id=ctx.aoi_id,
+                hazard=self._hazard.value,
+                comuni=len(nuovi),
+                comuni_already_queued=len(aggregates) - len(nuovi),
+                cells=len(rimasti),
+                level=livello_max.value,
+                sends_last_hour=carico,
+                max_per_hour=gov.max_per_hour,
+            )
+            # Nessuna riga in `alert_dispatches`: non è uscito niente, e
+            # registrarlo come spedito farebbe sopprimere dalla dedup un
+            # avviso che nessuno ha ricevuto.
+            return ctx.with_update(
+                dispatched_alerts=[
+                    f"digest-queued comune={a.label} hazard={a.hazard.value} "
+                    f"cells={a.cells_count} level={a.max_level.value}"
+                    for a in nuovi
+                ]
+            )
+
+        deduped = rimasti
         comuni = await _comuni_for_cells([r.cell_id for r, _ in deduped[: alert_settings.top_k]])
         payload: AlertPayload = build_alert_payload(
             assessment=ctx.assessment,
@@ -224,6 +372,8 @@ class AlertDispatchExecutor(Executor):
             settings=alert_settings,
             dispatched_at=now,
             comuni=comuni,
+            aggregates=_to_summaries(aggregates),
+            summary_override=summarise_comuni_it(aggregates),
         )
         outcomes: dict[str, bool] = {}
         if self._dispatcher is not None:
@@ -235,6 +385,8 @@ class AlertDispatchExecutor(Executor):
                 cells=len(deduped),
                 note="no notification dispatcher configured; logging only",
             )
+        await insert_aggregates(aggregates, state="sent", channels=outcomes)
+        await record_sends(outcomes, kind="alert", aggregates=len(aggregates))
 
         # Persist + emit metric.
         rows = [

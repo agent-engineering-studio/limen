@@ -10,6 +10,7 @@ Usage:
     limen forecast           Predictive run at now+H hours (forecast rain, no persistence).
     limen firms-sync         Ingest NASA FIRMS active-fire hotspots (FIRMS__MAP_KEY).
     limen imperviousness-fetch  Download the CLMS sealed-soil raster (public EEA service).
+    limen review-alerts      Sampled manual-review checklist for the alert FAR protocol.
     limen serve              Start the FastAPI HTTP server (uvicorn on :8080).
     limen llm-check          Probe the inference engine: model + latency per agent role.
     limen train              Extract training samples and train the V2 ML model (MLflow).
@@ -49,6 +50,7 @@ from limen.cli.migrate import run as _run_migrate
 from limen.cli.monitor_once import run as _run_monitor_once
 from limen.cli.partitions import run as _run_partitions
 from limen.cli.report import run as _run_report_build
+from limen.cli.review_alerts import run as _run_review_alerts
 from limen.cli.seed import run as _run_seed
 from limen.cli.seed_comuni import run as _run_seed_comuni
 from limen.cli.server import run as _run_server
@@ -74,6 +76,10 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "data-status",
         help="report which per-cell static layers are loaded and what gates the rest",
+    )
+    sub.add_parser(
+        "review-alerts",
+        help="checklist markdown per la verifica manuale di un campione di alert (#59)",
     )
     sub.add_parser(
         "imperviousness-fetch",
@@ -215,6 +221,7 @@ def main(argv: list[str] | None = None) -> int:
         "migrate": _run_migrate,
         "data-status": _run_data_status,
         "imperviousness-fetch": _run_imperviousness_fetch,
+        "review-alerts": _run_review_alerts,
         "partitions": _run_partitions,
         "seed": _run_seed,
         "seed-comuni": _run_seed_comuni,

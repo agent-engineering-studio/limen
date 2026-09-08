@@ -14,6 +14,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from limen.api.dependencies import AppDependencies
+from limen.api.jobs.alert_digest import run_alert_digest
 from limen.api.jobs.cache_cleanup import run_cache_cleanup_job
 from limen.api.jobs.daily_report import run_daily_report
 from limen.api.jobs.drift_monitor import run_drift_monitor_job
@@ -40,6 +41,7 @@ JOB_DAILY_REPORT = "limen-daily-report"
 JOB_NOWCAST_MONITORING = "limen-nowcast-monitoring"
 JOB_FIRMS_MONITORING = "limen-firms-monitoring"
 JOB_WEEKLY_IDROGEO = "limen-weekly-idrogeo"
+JOB_ALERT_DIGEST = "limen-alert-digest"
 JOB_CACHE_CLEANUP = "limen-cache-cleanup"
 JOB_PARTITIONS = "limen-partitions"
 JOB_IOT_ROLLUP = "limen-iot-rollup"
@@ -116,6 +118,26 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
         )
         registered.append(JOB_FORECAST_HISTORY)
         log.info("scheduler.registered", job=JOB_FORECAST_HISTORY)
+
+    # Digest degli alert (#59). Registrato quando il rate limit è attivo: è
+    # l'unica cosa che svuota la coda, e senza di esso un ciclo trattenuto
+    # resterebbe in `alert_aggregates` per sempre — silenzio che sembra calma.
+    if deps.settings.notifications.rate_limit.enabled:
+        await scheduler.add_schedule(
+            run_alert_digest,
+            args=(deps,),
+            trigger=_deferred_interval(
+                minutes=deps.settings.notifications.rate_limit.digest_interval_minutes
+            ),
+            id=JOB_ALERT_DIGEST,
+            conflict_policy=ConflictPolicy.replace,
+        )
+        registered.append(JOB_ALERT_DIGEST)
+        log.info(
+            "scheduler.registered",
+            job=JOB_ALERT_DIGEST,
+            interval_minutes=deps.settings.notifications.rate_limit.digest_interval_minutes,
+        )
 
     if deps.settings.report.enabled:
         await scheduler.add_schedule(
