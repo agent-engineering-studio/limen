@@ -154,3 +154,19 @@ def test_paste_refuses_a_tile_of_the_wrong_size(tmp_path: object) -> None:
         pytest.raises(RuntimeError, match="non combacia"),
     ):
         _paste(dst, _tiff_bytes(3, 4, 10), Tile(0, 0, 4, 4))
+
+
+def test_snap_bounds_covers_the_curved_south_edge() -> None:
+    """In LAEA il punto più a sud non sta in un angolo del riquadro.
+
+    Prendendo solo i quattro angoli il bordo meridionale rientrava di 6,8 km:
+    abbastanza da lasciare Lampedusa fuori dal raster e 28 celle siciliane
+    senza dato.
+    """
+    from pyproj import Transformer
+
+    box = snap_bounds((6.627, 35.494, 18.519, 47.092))
+    t = Transformer.from_crs(4326, 3035, always_xy=True)
+    x, y = t.transform(12.6288, 35.4984)  # Lampedusa, il punto più a sud d'Italia
+    assert box[0] <= x <= box[2]
+    assert box[1] <= y <= box[3]

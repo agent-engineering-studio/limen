@@ -25,6 +25,11 @@ services:
     image: limen/postgres:16-3.5
     container_name: limen-postgres
     restart: unless-stopped
+    # I worker paralleli sulle aggregazioni nazionali (312k celle, 1,6 M parti
+    # PAI) sfondano i 64 MB di /dev/shm che Docker dà per default, e Postgres
+    # muore con «could not resize shared memory segment». Il compose demo lo
+    # alzava già; questo, che è quello che gira in operativo, no.
+    shm_size: 1gb
     environment:
       POSTGRES_USER: limen
       POSTGRES_PASSWORD: limen

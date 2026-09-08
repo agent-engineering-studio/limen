@@ -144,6 +144,52 @@ async def test_bootstrap_writes_pai_class_norm(reset_db: None) -> None:
     assert float(row["max_pai"]) == pytest.approx(0.80)
 
 
+async def test_pai_upsert_keeps_the_subdivided_companion_in_lockstep(reset_db: None) -> None:
+    """L'aggregazione per cella legge `pai_hazard_subdiv`, non il mosaico grezzo.
+
+    Il mosaico nazionale ha 36 poligoni sopra i 100.000 vertici (il peggiore a
+    1,3 milioni) i cui bbox coprono migliaia di celle: sul grezzo la stessa
+    aggregazione costava 5.878 ms per 200 celle contro 133 ms sulla tabella
+    suddivisa, e sfondava il timeout di 900 s (migrazione 038).
+    """
+    await _seed(reset_db)
+    async with acquire() as conn:
+        parti = await conn.fetchval(
+            "SELECT count(*) FROM pai_hazard_subdiv WHERE id = $1", _PAI_P3.id
+        )
+    assert int(parti) >= 1
+
+
+async def test_bootstrap_backfills_pai_subdiv(reset_db: None) -> None:
+    """Righe entrate prima della migrazione 038 (solo `pai_hazard`) si sanano."""
+    await _seed(reset_db)
+    async with acquire() as conn:
+        # Simula la riga vecchia: presente nel grezzo, assente nel suddiviso.
+        await conn.execute("DELETE FROM pai_hazard_subdiv WHERE id = $1", _PAI_P3.id)
+        await conn.execute(
+            "UPDATE cell_static_factors SET pai_class_norm = NULL "
+            "WHERE cell_id IN (SELECT id FROM grid_cells WHERE aoi_id = $1)",
+            _AOI_ID,
+        )
+    await bootstrap_static_for_aoi(_AOI_ID)
+
+    async with acquire() as conn:
+        parti = await conn.fetchval(
+            "SELECT count(*) FROM pai_hazard_subdiv WHERE id = $1", _PAI_P3.id
+        )
+        max_pai = await conn.fetchval(
+            """
+            SELECT MAX(pai_class_norm)
+            FROM cell_static_factors c
+            JOIN grid_cells g ON g.id = c.cell_id
+            WHERE g.aoi_id = $1
+            """,
+            _AOI_ID,
+        )
+    assert int(parti) >= 1
+    assert float(max_pai) == pytest.approx(0.80)
+
+
 _FLOOD_GEOM = MultiPolygon(
     [
         Polygon(

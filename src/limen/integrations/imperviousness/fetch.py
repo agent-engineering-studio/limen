@@ -114,19 +114,18 @@ def snap_bounds(
     """
     from pyproj import Transformer
 
-    lon0, lat0, lon1, lat1 = bounds_4326
     t = Transformer.from_crs(4326, _TARGET_EPSG, always_xy=True)
-    # I quattro angoli, non due: la proiezione curva i lati, e prendere solo
-    # gli estremi opposti perderebbe una striscia lungo il bordo nord o sud.
-    xs, ys = zip(
-        *[t.transform(lon, lat) for lon in (lon0, lon1) for lat in (lat0, lat1)],
-        strict=True,
-    )
+    # `transform_bounds` con densificazione, non i quattro angoli: in LAEA i
+    # lati del riquadro geografico si incurvano, e il punto più a sud non sta
+    # in un angolo. Misurato sull'Italia: gli angoli da soli tagliavano
+    # **6,8 km** lungo il bordo meridionale, cioè Lampedusa fuori dal raster
+    # e 28 celle senza dato con un «Input shapes do not overlap raster».
+    x0, y0, x1, y1 = t.transform_bounds(*bounds_4326, densify_pts=101)
     return (
-        math.floor(min(xs) / res) * res,
-        math.floor(min(ys) / res) * res,
-        math.ceil(max(xs) / res) * res,
-        math.ceil(max(ys) / res) * res,
+        math.floor(x0 / res) * res,
+        math.floor(y0 / res) * res,
+        math.ceil(x1 / res) * res,
+        math.ceil(y1 / res) * res,
     )
 
 
