@@ -364,10 +364,37 @@ class WebhookChannelSettings(BaseSettings):
     token: SecretStr | None = None
 
 
+class RateLimitSettings(BaseSettings):
+    """Quanto può uscire, e cosa succede oltre (issue #59).
+
+    Il limite è **per canale**: Telegram e la posta hanno soglie di tolleranza
+    diverse, e un unico contatore condiviso farebbe tacere il canale lento per
+    colpa di quello veloce.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    enabled: bool = True
+    # Messaggi in uscita per canale nell'ultima ora, oltre i quali si accoda.
+    # Sei: un centro operativo può leggere un messaggio ogni dieci minuti
+    # senza smettere di leggerli.
+    max_per_hour: int = Field(default=6, ge=0)
+    # Classe oltre la quale il limite non si applica. Il digest è una risposta
+    # al volume, non alla gravità.
+    bypass_level: Literal["Low", "Moderate", "High", "VeryHigh"] = "VeryHigh"
+    # Ogni quanto la coda viene svuotata in un messaggio riepilogativo.
+    digest_interval_minutes: int = Field(default=60, ge=5)
+    # Età oltre la quale una voce in coda si scarta invece di spedirla: un
+    # riepilogo di allerte di ieri è disinformazione, non ritardo.
+    digest_max_age_minutes: int = Field(default=360, ge=10)
+
+
 class NotificationsSettings(BaseSettings):
     """Top-level notifications block — enabled channels + per-channel config."""
 
     model_config = SettingsConfigDict(extra="ignore")
+
+    rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
 
     # When the list is empty no channels are constructed; the workflow
     # logs alerts as if `alert_dispatch` were still the V1 stub.
