@@ -10,10 +10,8 @@ from fastapi import APIRouter
 
 from limen.api.endpoints import (
     a2a,
-    admin,
     alerts,
     aoi,
-    auth,
     comuni,
     health,
     risk,
@@ -29,8 +27,6 @@ def all_routers() -> Iterable[APIRouter]:
         alerts.router,
         tiles.router,
         a2a.router,
-        auth.router,
-        admin.router,
         comuni.router,
     )
 
