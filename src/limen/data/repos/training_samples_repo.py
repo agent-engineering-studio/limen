@@ -24,10 +24,11 @@ from limen.data.db import acquire
 
 log = get_logger(__name__)
 
-#: Da dove viene l'etichetta. `copernicus-ems` sono i perimetri allagati
-#: osservati del truth set flood (#64): una fonte per pericolo, perché i
-#: cataloghi non si somigliano (punti datati contro poligoni osservati).
-LabelSource = Literal["italica", "iffi", "background", "copernicus-ems"]
+#: Da dove viene l'etichetta. Una fonte per pericolo, perché i cataloghi
+#: non si somigliano: punti datati (`italica`), poligoni allagati
+#: osservati (`copernicus-ems`, #64), giorni-incendio da hotspot
+#: (`firms`, #66).
+LabelSource = Literal["italica", "iffi", "background", "copernicus-ems", "firms"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +97,33 @@ async def list_blocks() -> list[str]:
     return [r["split_block"] for r in rows]
 
 
+async def fetch_wildfire_ready_samples(*, blocks: list[str] | None = None) -> list[TrainingSample]:
+    """Campioni incendio con la parte **meteo** del blocco `fire` presente.
+
+    Il resto della pipeline degrada una feature assente a 0.0, ed è giusto per
+    la pioggia: zero millimetri è una lettura possibile. Per il FWI no — zero
+    significa "nessun pericolo", quindi un positivo non arricchito
+    insegnerebbe al modello che quella cella ha bruciato in un giorno senza
+    pericolo, che è il contrario di ciò che deve imparare (#68).
+
+    Meglio un dataset più piccolo di uno che contiene la lezione sbagliata.
+    """
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT cell_id, hazard_type, valuation_time, label, label_source,
+                   features, split_block, dataset_version_id
+            FROM training_samples
+            WHERE hazard_type = 'wildfire'
+              AND features -> 'fire' ? 'fwi'
+              AND ($1::text[] IS NULL OR split_block = ANY($1::text[]))
+            ORDER BY id
+            """,
+            blocks,
+        )
+    return [_row_to_sample(r) for r in rows]
+
+
 async def fetch_samples(
     *, blocks: list[str] | None = None, hazard: HazardType = DEFAULT_HAZARD
 ) -> list[TrainingSample]:
@@ -124,19 +152,20 @@ async def fetch_samples(
                 """,
                 hazard.value,
             )
-    return [
-        TrainingSample(
-            cell_id=r["cell_id"],
-            valuation_time=r["valuation_time"],
-            label=int(r["label"]),
-            label_source=r["label_source"],
-            features=_coerce_features(r["features"]),
-            split_block=r["split_block"],
-            dataset_version_id=r["dataset_version_id"],
-            hazard_type=HazardType(r["hazard_type"]),
-        )
-        for r in rows
-    ]
+    return [_row_to_sample(r) for r in rows]
+
+
+def _row_to_sample(r: Any) -> TrainingSample:
+    return TrainingSample(
+        cell_id=r["cell_id"],
+        valuation_time=r["valuation_time"],
+        label=int(r["label"]),
+        label_source=r["label_source"],
+        features=_coerce_features(r["features"]),
+        split_block=r["split_block"],
+        dataset_version_id=r["dataset_version_id"],
+        hazard_type=HazardType(r["hazard_type"]),
+    )
 
 
 def _coerce_features(raw: Any) -> dict[str, Any]:
@@ -152,6 +181,7 @@ __all__ = [
     "TrainingSample",
     "count_samples",
     "fetch_samples",
+    "fetch_wildfire_ready_samples",
     "insert_many",
     "list_blocks",
 ]

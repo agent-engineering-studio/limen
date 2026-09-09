@@ -1,12 +1,16 @@
 """`limen train` — extract samples then run the ML training pipeline.
 
-``LIMEN_TRAIN_HAZARD=flood`` estrae **solo** i campioni (#64): il feature
-store sa già etichettare gli allagamenti osservati, ma `run_training` e
-`enrich_rain_features` sono modellati sulle frane — finestre di pioggia
-antecedente e feature InSAR di versante. Addestrare un challenger alluvione
-con quella pipeline non darebbe un modello peggiore, darebbe un modello che
-misura un altro fenomeno. I campioni restano pronti per quando la pipeline
-del pericolo esisterà; la promozione resta manuale, come per tutti.
+``LIMEN_TRAIN_HAZARD`` sceglie il pericolo:
+
+* ``landslide`` (default) — arricchimento pioggia CERRA + addestramento;
+* ``wildfire`` (#68) — arricchimento della catena FWI + addestramento, con il
+  suo schema di feature e la baseline FWI-only;
+* ``flood`` (#64) — estrae **solo** i campioni: il feature store sa già
+  etichettare gli allagamenti osservati, ma nessuna pipeline di
+  addestramento è modellata su quel pericolo, e usare quella delle frane
+  darebbe un modello che misura un altro fenomeno.
+
+La promozione resta manuale per tutti.
 """
 
 from __future__ import annotations
@@ -44,22 +48,31 @@ async def run() -> int:
         await run_migrations()
         written = await extract_training_samples(settings=settings, hazard=hazard)
         log.info("train.samples_extracted", count=written, hazard=hazard.value)
-        if hazard is not DEFAULT_HAZARD:
+        if hazard is HazardType.WILDFIRE:
+            # L'incendio ha il suo enricher: il FWI del giorno va ricostruito
+            # camminando la catena, e senza quello i campioni entrerebbero con
+            # zero — cioè con la lezione sbagliata (#68).
+            from limen.ml.fire_features import enrich_fire_features
+
+            enriched = await enrich_fire_features()
+            log.info("train.fire_enriched", count=enriched)
+        elif hazard is not DEFAULT_HAZARD:
             log.info(
                 "train.extract_only",
                 hazard=hazard.value,
-                note="pipeline di addestramento disponibile solo per il pericolo di default",
+                note="pipeline di addestramento disponibile solo per landslide e wildfire",
             )
             return 0
-        enriched = await enrich_rain_features()
-        log.info("train.rain_enriched", count=enriched)
+        else:
+            enriched = await enrich_rain_features()
+            log.info("train.rain_enriched", count=enriched)
         if written == 0:
             log.warning(
                 "train.no_samples",
                 hint="seed IFFI via `limen` (Phase 2 sync) before training",
             )
             return 0
-        result = await run_training(settings=settings)
+        result = await run_training(settings=settings, hazard=hazard)
         log.info(
             "train.done",
             run_id=result.run_id,
