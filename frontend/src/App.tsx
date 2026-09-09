@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type maplibregl from "maplibre-gl";
 
-import AdminUsersPage from "./components/AdminUsersPage";
-import { LoginPage, RegisterPage, VerifyEmailPage } from "./components/AuthPages";
 import CellPopup from "./components/CellPopup";
 import ComuneLeaderboard from "./components/ComuneLeaderboard";
 import ExplainerPage from "./components/ExplainerPage";
@@ -19,7 +17,6 @@ import RiskMap from "./components/RiskMap";
 import SciencePage from "./components/SciencePage";
 import ShadowDiagnosticsPage from "./components/ShadowDiagnosticsPage";
 import ShadowPanel from "./components/ShadowPanel";
-import { useAuth } from "./lib/auth";
 
 type Page =
   | "home"
@@ -27,11 +24,7 @@ type Page =
   | "explainer"
   | "science"
   | "shadow"
-  | "integrations"
-  | "login"
-  | "register"
-  | "verify"
-  | "admin";
+  | "integrations";
 
 function pageFromHash(): Page {
   switch (window.location.hash) {
@@ -46,99 +39,18 @@ function pageFromHash(): Page {
       return "shadow";
     case "#/integrazioni":
       return "integrations";
-    case "#/accedi":
-      return "login";
-    case "#/registrati":
-      return "register";
-    case "#/verifica":
-      return "verify";
-    case "#/admin":
-      return "admin";
+    // Un hash sconosciuto — compresi i vecchi #/accedi, #/registrati,
+    // #/verifica e #/admin — va sulla home: la mappa è pubblica e non c'è
+    // più niente dietro cui mettere una porta.
     default:
       return "home";
   }
-}
-
-/** Auth wall for the operational dashboard (DB-backed session). */
-function RequireAuth({ children }: { children: JSX.Element }): JSX.Element {
-  const { ready, user } = useAuth();
-  if (!ready) {
-    return <div className="auth-wall">Caricamento…</div>;
-  }
-  if (user) {
-    return children;
-  }
-  return (
-    <div className="auth-wall">
-      <h2>Area riservata</h2>
-      <p>
-        La dashboard operativa è accessibile agli utenti registrati. Accedi per
-        consultare la mappa del rischio, il quadro nazionale e le allerte.
-      </p>
-      <div className="auth-wall-actions">
-        <a className="btn-primary" href="#/accedi">
-          Accedi
-        </a>
-        <a className="btn-ghost" href="#/">
-          ← Torna alla home
-        </a>
-      </div>
-    </div>
-  );
-}
-
-/** Role wall for admin-only areas. */
-function RequireRole({ role, children }: { role: string; children: JSX.Element }): JSX.Element {
-  const { ready, user, hasRole } = useAuth();
-  if (!ready) {
-    return <div className="auth-wall">Caricamento…</div>;
-  }
-  if (user && hasRole(role)) {
-    return children;
-  }
-  return (
-    <div className="auth-wall">
-      <h2>Accesso negato</h2>
-      <p>Questa area è riservata agli amministratori.</p>
-      <a className="btn-ghost" href="#/">
-        ← Torna alla home
-      </a>
-    </div>
-  );
-}
-
-/** Header account controls — driven by the DB session. */
-function AuthControls(): JSX.Element {
-  const { ready, user, logout } = useAuth();
-  if (!ready) {
-    return <span className="auth-controls" />;
-  }
-  if (!user) {
-    return (
-      <div className="auth-controls">
-        <a href="#/accedi" className="btn-signin">
-          Accedi
-        </a>
-      </div>
-    );
-  }
-  return (
-    <div className="auth-controls">
-      <span className="auth-who" title={user.email}>
-        {user.first_name} {user.last_name}
-      </span>
-      <button type="button" className="btn-signin" onClick={() => void logout()}>
-        Esci
-      </button>
-    </div>
-  );
 }
 
 export function App(): JSX.Element {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [selected, setSelected] = useState<CellSelection | null>(null);
   const [page, setPage] = useState<Page>(pageFromHash);
-  const { hasRole } = useAuth();
 
   useEffect(() => {
     const onHash = (): void => setPage(pageFromHash());
@@ -221,15 +133,9 @@ export function App(): JSX.Element {
           <a href="#/integrazioni" className={page === "integrations" ? "on" : ""}>
             Integrazioni
           </a>
-          {hasRole("admin") && (
-            <a href="#/admin" className={page === "admin" ? "on" : ""}>
-              Admin
-            </a>
-          )}
         </nav>
         <HazardSelector />
         <span className="header-meta">agg. 1h · 20 regioni</span>
-        <AuthControls />
       </header>
 
       {page === "home" ? (
@@ -250,26 +156,8 @@ export function App(): JSX.Element {
         <div className="explainer-area">
           <IntegrationsPage />
         </div>
-      ) : page === "login" ? (
-        <div className="explainer-area">
-          <LoginPage />
-        </div>
-      ) : page === "register" ? (
-        <div className="explainer-area">
-          <RegisterPage />
-        </div>
-      ) : page === "verify" ? (
-        <div className="explainer-area">
-          <VerifyEmailPage />
-        </div>
-      ) : page === "admin" ? (
-        <div className="explainer-area">
-          <RequireRole role="admin">
-            <AdminUsersPage />
-          </RequireRole>
-        </div>
       ) : (
-        <RequireAuth>{dashboard}</RequireAuth>
+        dashboard
       )}
     </div>
   );

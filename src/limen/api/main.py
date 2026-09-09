@@ -163,24 +163,21 @@ def _apply_middleware(app: FastAPI, settings: Settings) -> None:
     # The national report and alert lists are tens-of-KB JSON: gzip cuts
     # them ~5-10x for browsers on slow links.
     app.add_middleware(GZipMiddleware, minimum_size=1024)
+    # Nessuna credenziale: `allow_credentials=True` esisteva solo per il
+    # cookie di sessione, e l'autenticazione utente non c'è più (#69). Una
+    # mappa pubblica in sola lettura non ha niente da mandare cross-origin
+    # oltre alla richiesta stessa.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.api.cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
-        # Session cookie is sent cross-origin from the SPA — requires
-        # credentialed CORS (and thus explicit, non-wildcard origins above).
-        allow_credentials=True,
     )
 
 
 def _register_routes(app: FastAPI) -> None:
-    from limen.api.endpoints.auth import auth_error_handler
-    from limen.auth.service import AuthError
-
     for router in all_routers():
         app.include_router(router)
-    app.add_exception_handler(AuthError, auth_error_handler)
 
 
 def build_app(

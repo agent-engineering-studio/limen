@@ -8,24 +8,6 @@ import ShadowDiagnosticsPage, {
 import { defaultApiClient } from "../lib/api-client";
 import type { ShadowSummaryResponse } from "../types";
 
-// Role is switchable per test via the hoisted holder; the real useMlOps reads
-// it from the mocked AuthContext.
-const h = vi.hoisted(() => ({ role: "ml-ops" as string | undefined }));
-vi.mock("../lib/auth", () => ({
-  useAuth: () => ({
-    ready: true,
-    user: {
-      id: "u1",
-      email: "x@y.it",
-      first_name: "A",
-      last_name: "B",
-      email_verified: true,
-      status: "active",
-      roles: h.role ? [h.role] : [],
-    },
-  }),
-}));
-
 const SUMMARY: ShadowSummaryResponse = {
   since: "2026-07-06T13:00:00+00:00",
   aoi_filter: null,
@@ -40,7 +22,6 @@ const SUMMARY: ShadowSummaryResponse = {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  h.role = "ml-ops";
 });
 
 describe("champion classification (pure)", () => {
@@ -52,23 +33,25 @@ describe("champion classification (pure)", () => {
   });
 });
 
-describe("ShadowDiagnosticsPage — didactic intro (public)", () => {
-  it("always shows the intro explaining the shadow model", () => {
-    h.role = undefined; // non ml-ops
+describe("ShadowDiagnosticsPage — didactic intro", () => {
+  it("shows the intro explaining the shadow model", () => {
     render(<ShadowDiagnosticsPage />);
     expect(
       screen.getByRole("heading", { name: /modello in ombra/i }),
     ).toBeInTheDocument();
     expect(screen.getByText(/Perché due modelli/)).toBeInTheDocument();
-    // live data is NOT shown, but a note explains it's gated
-    expect(screen.getByText(/riservati agli operatori con ruolo/)).toBeInTheDocument();
-    expect(screen.queryByText(/Accordo complessivo/)).not.toBeInTheDocument();
+  });
+
+  it("keeps saying the decisions stay with V1", () => {
+    // Il disclaimer sopravvive all'apertura della pagina (#71): renderla
+    // pubblica è trasparenza sul modello, non una promozione del suo output.
+    render(<ShadowDiagnosticsPage />);
+    expect(screen.getByText(/le decisioni restano al V1/)).toBeInTheDocument();
   });
 });
 
-describe("ShadowDiagnosticsPage — live data (ml-ops)", () => {
+describe("ShadowDiagnosticsPage — live data (public)", () => {
   it("shows agreement + per-region table with human region names + calibration", async () => {
-    h.role = "ml-ops";
     vi.spyOn(defaultApiClient, "getShadowSummary").mockResolvedValue(SUMMARY);
     vi.spyOn(defaultApiClient, "getShadowReliability").mockResolvedValue({
       sufficient: false,

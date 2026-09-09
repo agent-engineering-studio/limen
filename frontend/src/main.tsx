@@ -2,7 +2,6 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 
 import App from "./App";
-import { AuthProvider } from "./lib/auth";
 import { HazardProvider } from "./lib/hazard";
 import "./styles.css";
 
@@ -13,10 +12,8 @@ if (!root) {
 
 ReactDOM.createRoot(root).render(
     <React.StrictMode>
-        <AuthProvider>
-            <HazardProvider>
-                <App />
-            </HazardProvider>
-        </AuthProvider>
+        <HazardProvider>
+            <App />
+        </HazardProvider>
     </React.StrictMode>,
 );

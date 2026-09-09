@@ -73,31 +73,9 @@ html, body, #root {
   letter-spacing: 0.01em;
 }
 
-.btn-signin {
-  background: transparent;
-  color: #f2f0ea;
-  border: 1px solid #4a4e59;
-  border-radius: 8px;
-  padding: 6px 16px;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.btn-signin:hover {
-  border-color: var(--amber);
-  color: var(--amber);
-}
-
 .app-logo {
   border-radius: 8px;
   display: block;
-}
-
-.app-header .auth-controls {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 .app-header h1 {
@@ -323,77 +301,6 @@ html, body, #root {
 .int-table td:first-child {
   white-space: nowrap;
   padding-right: 16px;
-}
-
-/* auth (accedi / registrati / verifica) */
-.auth-form {
-  max-width: 420px;
-  margin: 48px auto;
-  padding: 28px 26px 32px;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 14px;
-}
-.auth-form h2 {
-  margin: 0 0 16px;
-  font-size: 22px;
-}
-.auth-form form {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.auth-form label {
-  font-size: 13px;
-  font-weight: 600;
-  margin-top: 10px;
-}
-.auth-form input {
-  padding: 9px 11px;
-  border: 1px solid var(--panel-border);
-  border-radius: 8px;
-  font-size: 15px;
-}
-.auth-form .btn-primary {
-  margin-top: 18px;
-}
-.auth-error {
-  color: #bd0026;
-  font-size: 13.5px;
-  margin: 10px 0 0;
-}
-.auth-notice {
-  color: #2e7d32;
-  font-size: 13.5px;
-  margin: 10px 0 0;
-}
-.auth-alt {
-  margin-top: 14px;
-}
-.auth-spid {
-  width: 100%;
-}
-.auth-soon {
-  opacity: 0.7;
-  font-size: 0.85em;
-}
-.auth-links {
-  margin-top: 16px;
-  font-size: 14px;
-}
-.auth-linkbtn {
-  background: none;
-  border: none;
-  color: var(--accent);
-  cursor: pointer;
-  padding: 0;
-  font: inherit;
-  text-decoration: underline;
-}
-.auth-who {
-  font-size: 13px;
-  color: #3d4654;
-  margin-right: 10px;
 }
 
 /* classifica comuni + headline sidebar */
@@ -913,39 +820,6 @@ html, body, #root {
 }
 
 /* ============================ Auth wall ============================ */
-.auth-wall {
-  grid-column: 1 / span 2;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  text-align: center;
-  padding: 48px 24px;
-}
-
-.auth-wall h2 {
-  font-size: 1.6rem;
-  margin: 0;
-}
-
-.auth-wall p {
-  max-width: 36rem;
-  color: var(--muted);
-  line-height: 1.6;
-  margin: 0;
-}
-
-.auth-wall-actions {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.auth-wall .btn-ghost {
-  border-color: var(--panel-border);
-  color: var(--text);
-}
 
 /* Responsive: header nav on small screens */
 @media (max-width: 720px) {
@@ -1037,7 +911,6 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   color: #7c828e;
   margin-left: auto;
 }
-.app-header .auth-controls { margin-left: 12px; }
 .app-nav a { color: #c8c5bc; font-size: 13.5px; }
 .app-nav a.on {
   background: var(--amber);

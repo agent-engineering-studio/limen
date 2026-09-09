@@ -294,13 +294,14 @@ class ApiSettings(BaseSettings):
 
     host: str = "0.0.0.0"
     port: int = Field(default=8080, ge=1, le=65535)
-    # Cookie-based auth needs credentialed CORS, which browsers forbid with a
-    # wildcard origin — so we list explicit origins (the Vite dev server by
-    # default). In a same-origin deploy (frontend served by the API/nginx) CORS
-    # is moot. Override for a real domain via API__CORS_ORIGINS.
-    cors_origins: list[str] = Field(
-        default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"]
-    )
+    # Jolly, dopo la rimozione dell'auth (#69). Le origini esplicite non erano
+    # una protezione dei dati: erano il vincolo che il browser impone al CORS
+    # **credenziato**, e le credenziali esistevano solo per il cookie di
+    # sessione. Le API sono una mappa pubblica in sola lettura, quindi elencare
+    # i domini sarebbe una cosa in più da sbagliare al deploy senza niente in
+    # cambio. Chi vuole restringere lo fa con API__CORS_ORIGINS; l'esposizione
+    # vera resta governata dal binding su loopback + reverse proxy.
+    cors_origins: list[str] = Field(default_factory=lambda: ["*"])
     # Path prefix a reverse proxy strips before forwarding. Empty when the
     # app owns its hostname. Set it (e.g. ``/limen``) when the app is served
     # under a prefix: FastAPI then advertises ``/limen/openapi.json`` in the
@@ -621,69 +622,6 @@ class KgSettings(BaseSettings):
     top_k: int = Field(default=4, ge=1, le=20)
 
 
-class AuthSettings(BaseSettings):
-    """Database-backed auth (replaces Clerk — PA-compliant, self-hosted).
-
-    ``enabled=False`` keeps protected endpoints open (public map + dev/test).
-    When enabled, protected endpoints require a valid server-side session
-    (opaque id in an httpOnly cookie). Email verification codes reuse the
-    SMTP config of the ``email`` notification channel.
-    """
-
-    model_config = SettingsConfigDict(extra="ignore")
-
-    enabled: bool = False
-    # Allow public self-registration. Off ⇒ only the admin creates accounts.
-    registration_open: bool = True
-    session_ttl_hours: int = Field(default=168, ge=1)
-    session_cookie_name: str = "limen_session"
-    # Secure=True requires HTTPS — set False only for local http dev.
-    cookie_secure: bool = True
-    cookie_samesite: Literal["lax", "strict", "none"] = "lax"
-    # Email verification / OTP codes.
-    code_ttl_minutes: int = Field(default=15, ge=1)
-    code_length: int = Field(default=6, ge=4, le=10)
-    code_max_attempts: int = Field(default=5, ge=1)
-    # scrypt work factor (RFC 7914). n MUST be a power of two.
-    scrypt_n: int = Field(default=2**16, ge=2**14)
-    scrypt_r: int = Field(default=8, ge=1)
-    scrypt_p: int = Field(default=1, ge=1)
-
-
-class SpidSettings(BaseSettings):
-    """SPID / CIE login via OIDC (seam — fase D).
-
-    Disabled until the OIDC client is configured. Full SPID needs an AgID-
-    accredited Service Provider + a SAML/OIDC proxy or aggregator; this seam
-    speaks standard OIDC authorization-code so it can be wired to that proxy
-    when accreditation lands. ``configured`` gates the whole flow (endpoints
-    fail closed, the frontend button stays disabled).
-    """
-
-    model_config = SettingsConfigDict(extra="ignore")
-
-    client_id: str | None = None
-    client_secret: SecretStr | None = None
-    issuer: str | None = None
-    authorization_endpoint: str | None = None
-    token_endpoint: str | None = None
-    userinfo_endpoint: str | None = None
-    redirect_uri: str | None = None
-    scopes: list[str] = Field(default_factory=lambda: ["openid", "profile", "email"])
-    # Where the browser lands after a successful SPID login (frontend route).
-    post_login_url: str = "http://localhost:5173/#/dashboard"
-
-    @property
-    def configured(self) -> bool:
-        return bool(
-            self.client_id
-            and self.client_secret
-            and self.authorization_endpoint
-            and self.token_endpoint
-            and self.redirect_uri
-        )
-
-
 class AlertSettings(BaseSettings):
     """Alert-dispatch rules used by the AlertDispatchExecutor."""
 
@@ -861,8 +799,6 @@ class Settings(BaseSettings):
     kg: KgSettings = Field(default_factory=KgSettings)
     geodata: GeodataSettings = Field(default_factory=GeodataSettings)
     geoserver_source: GeoServerSourceSettings = Field(default_factory=GeoServerSourceSettings)
-    auth: AuthSettings = Field(default_factory=AuthSettings)
-    spid: SpidSettings = Field(default_factory=SpidSettings)
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_json: bool = False

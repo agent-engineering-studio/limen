@@ -78,7 +78,7 @@ flowchart LR
 
     subgraph FE["Phase 6 — Map"]
         Tiles[pg_tileserv]
-        SPA[Vite + MapLibre + Clerk]
+        SPA[Vite + MapLibre]
     end
 
     subgraph Notif["Phase 7"]
@@ -123,7 +123,7 @@ celle. La pipeline è stata validata sul pilota **Puglia + Basilicata** ed
 | **Notifications** | Protocol NotificationChannel + Telegram/MQTT/Email + dispatcher | `src/limen/notifications/` |
 | **API** | app FastAPI, DI tipizzata via Depends(), job periodici APScheduler | `src/limen/api/` |
 | **Observability** | instrumentor di tracing OpenTelemetry + strumenti di metrica custom | `src/limen/observability/` |
-| **Frontend** | mappa pubblica Vite + React + MapLibre, con auth Clerk | `frontend/` |
+| **Frontend** | mappa pubblica Vite + React + MapLibre, **senza login** | `frontend/` |
 
 ## Sorgente dati ISPRA
 
@@ -209,8 +209,10 @@ non possano ignorarle.
 * **Gli endpoint non contengono business logic** — chiamano workflow /
   repo.
 * **APScheduler** in-process, così lo stesso code path funziona su Neon.
-* **Il frontend è Vite, non Next.js** — mappa pubblica read-only; l'auth
-  Clerk è attiva via `@clerk/react` sulla stessa SPA Vite.
+* **Il frontend è Vite, non Next.js** — mappa pubblica in sola lettura, e
+  pubblica per davvero: nessuna autenticazione utente (epic #69). Il login che
+  c'era proteggeva la pagina e non i dati, perché le API che la alimentano
+  erano già aperte.
 * **I canali non possono mai far crashare il workflow** — ogni invio è
   avvolto in `_send_safe` nel dispatcher.
 

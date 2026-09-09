@@ -11,20 +11,13 @@ import type {
   CellBreakdownResponse,
   CellHistoryResponse,
   CellMultiHazardResponse,
-  AdminCreateBody,
-  AdminUser,
-  AuthConfig,
   ComuneListResponse,
   HazardType,
   HazardsResponse,
   HealthResponse,
   LatestAssessmentResponse,
-  MeResponse,
-  MessageResponse,
-  RegisterBody,
   ReliabilityResponse,
   ShadowSummaryResponse,
-  UserListResponse,
 } from "../types";
 
 export class ApiClientError extends Error {
@@ -64,8 +57,6 @@ export class ApiClient {
   ): Promise<T> {
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       ...init,
-      // Session cookie travels with every request (auth is cookie-based).
-      credentials: "include",
       signal: signal ?? init.signal ?? null,
       headers: {
         Accept: "application/json",
@@ -223,48 +214,6 @@ export class ApiClient {
     return this.request<ReliabilityResponse>("/api/shadow/reliability", {}, signal);
   }
 
-  // --- auth ---
-  private post<T>(
-    path: string,
-    body: unknown,
-    signal?: AbortSignal,
-    method: "POST" | "PATCH" = "POST",
-  ): Promise<T> {
-    return this.request<T>(
-      path,
-      { method, body: JSON.stringify(body), headers: { "Content-Type": "application/json" } },
-      signal,
-    );
-  }
-
-  register(body: RegisterBody): Promise<MessageResponse> {
-    return this.post<MessageResponse>("/api/auth/register", body);
-  }
-
-  verifyEmail(email: string, code: string): Promise<MessageResponse> {
-    return this.post<MessageResponse>("/api/auth/verify-email", { email, code });
-  }
-
-  resendCode(email: string): Promise<MessageResponse> {
-    return this.post<MessageResponse>("/api/auth/resend-code", { email });
-  }
-
-  login(email: string, password: string): Promise<MeResponse> {
-    return this.post<MeResponse>("/api/auth/login", { email, password });
-  }
-
-  logout(): Promise<MessageResponse> {
-    return this.post<MessageResponse>("/api/auth/logout", {});
-  }
-
-  getMe(signal?: AbortSignal): Promise<MeResponse> {
-    return this.request<MeResponse>("/api/auth/me", {}, signal);
-  }
-
-  getAuthConfig(signal?: AbortSignal): Promise<AuthConfig> {
-    return this.request<AuthConfig>("/api/auth/config", {}, signal);
-  }
-
   getTopComuni(aoi?: string, limit = 50, signal?: AbortSignal): Promise<ComuneListResponse> {
     const qs = new URLSearchParams();
     if (aoi) qs.set("aoi", aoi);
@@ -272,19 +221,6 @@ export class ApiClient {
     return this.request<ComuneListResponse>(`/api/comuni?${qs.toString()}`, {}, signal);
   }
 
-  // --- admin ---
-  adminListUsers(query?: string, signal?: AbortSignal): Promise<UserListResponse> {
-    const qs = query ? `?query=${encodeURIComponent(query)}` : "";
-    return this.request<UserListResponse>(`/api/admin/users${qs}`, {}, signal);
-  }
-
-  adminCreateUser(body: AdminCreateBody): Promise<AdminUser> {
-    return this.post<AdminUser>("/api/admin/users", body);
-  }
-
-  adminUpdateUser(userId: string, roles: string[], status: string): Promise<AdminUser> {
-    return this.post<AdminUser>(`/api/admin/users/${encodeURIComponent(userId)}`, { roles, status }, undefined, "PATCH");
-  }
 }
 
 export const defaultApiClient = new ApiClient();
