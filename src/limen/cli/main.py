@@ -8,6 +8,7 @@ Usage:
     limen backtest           Replay a historical window and emit a §2.5 metrics report.
     limen backtest-flood     Replay Copernicus EMS flood perimeters (#64).
     limen ingest-events      Dated event catalogue: --hazard landslide|flood.
+    limen ingest-fire-history  FIRMS country archive (2000+), fire_density + truth set.
     limen monitor-once       Run the MAF landslide workflow once for an AOI.
     limen forecast           Predictive run at now+H hours (forecast rain, no persistence).
     limen firms-sync         Ingest NASA FIRMS active-fire hotspots (FIRMS__MAP_KEY).
@@ -46,6 +47,7 @@ from limen.cli.geodata import run as _run_geodata
 from limen.cli.geoserver_sync import run as _run_geoserver_sync
 from limen.cli.imperviousness_fetch import run as _run_imperviousness_fetch
 from limen.cli.ingest_events import run as _run_ingest_events
+from limen.cli.ingest_fire_history import run as _run_ingest_fire_history
 from limen.cli.ingest_kb import run as _run_ingest_kb
 from limen.cli.llm_check import run as _run_llm_check
 from limen.cli.mcp_serve import run as _run_mcp_serve
@@ -184,6 +186,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help="landslide: ITALICA CSV (LIMEN_ITALICA_CSV); flood: Copernicus EMS perimeters",
     )
     sub.add_parser(
+        "ingest-fire-history",
+        help=(
+            "load the FIRMS country archive (MODIS 2000+, VIIRS 2012+) — no credentials "
+            "(env: LIMEN_FIRE_HISTORY_FROM / _TO / _COUNTRY, LIMEN_FIRMS_CSV)"
+        ),
+    )
+    sub.add_parser(
         "verify",
         help="fact-check archived report zones vs real landslide events (#17)",
     )
@@ -259,6 +268,7 @@ def main(argv: list[str] | None = None) -> int:
         "ingest-kb": _run_ingest_kb,
         "geoserver-sync": _run_geoserver_sync,
         "firms-sync": _run_firms_sync,
+        "ingest-fire-history": _run_ingest_fire_history,
         "mcp-serve": _run_mcp_serve,
         "verify": _run_verify,
         "forecast-history": _run_forecast_history,

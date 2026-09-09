@@ -92,6 +92,7 @@ persistenza.
 | **Dimensione pericolo** | `hazard_type` su ogni riga di rischio e su entrambi i ledger di dedup; motori registrati per coppia *(pericolo, implementazione)*; un file di soglie per pericolo. Oggi ne è abilitato uno, `landslide`: aggiungerne uno è uno YAML più una registrazione | trasversale | `core/models/hazard.py`, `core/scoring/registry.py`, `config/hazards/` |
 | **Calibrate** | stat di normalizzazione per-AOI; precompute `s_static` | one-shot | `limen calibrate` + `reports/calibrate_<aoi>.md` |
 | **Ingest eventi** | catalogo **e-ITALICA** (frane innescate da pioggia, datate, tutta Italia) — truth set del backtest | one-shot, auto-download Zenodo | `limen ingest-events` |
+| **Storia del fuoco** | archivio **FIRMS per paese** (MODIS dal 2000, VIIRS S-NPP dal 2012): 391.987 detection italiane → 224.156 eventi cella-giorno e `fire_density` su 65.771 celle. Pubblico, nessuna credenziale — il portale di download chiede Earthdata e consegna via email, gli archivi per paese sono CSV in chiaro. Solo `type = 0`: senza quel filtro la cella più "incendiata" d'Italia era l'ILVA di Taranto con 3.308 giorni-incendio, perché un'acciaieria è una detection ad alta confidenza. Sanità: 16 perimetri EFFIS su 16 confermati da un hotspot entro 1 km / ±2 g | one-shot, cache | `integrations/firms/archive.py` + `limen ingest-fire-history` |
 | **Truth set alluvione** | perimetri **allagati osservati** di Copernicus EMS Rapid Mapping (13 attivazioni italiane, 9.463 poligoni, 480 km², 2.354 celle su 9 regioni) più le **maschere di osservazione**, che dicono dove il satellite ha guardato: dentro, l'assenza di poligono è un "non allagato" osservato; fuori, un'allerta è *non verificabile* e non falsa. Pubblico, nessuna credenziale — FloodCat richiede un'utenza DPC e Polaris pubblica PDF | one-shot, cache dei vettori | `integrations/copernicus_ems/` + `limen ingest-events --hazard flood` |
 | **Backtest alluvione** | replay a passo giornaliero con la previsione **come fu emessa** (`issued`, la skill operativa) accanto alla pioggia poi caduta (`observed`, il tetto con una previsione perfetta) → hit rate, **tasso di base**, FAR sui soli giorni-cella osservati, preavviso | one-shot | `limen backtest-flood` + `reports/backtest_flood_*.md` |
 | **Backtest** | replay di una finestra storica con pioggia antecedente **CERRA** (5.5 km) + truth set e-ITALICA → hit rate / FAR / lead time vs target §2.5 | one-shot | `limen backtest` + `reports/backtest_*.md` |
@@ -323,6 +324,9 @@ quando la mappa / i briefing vengono pubblicati:
 * **INGV** (servizio eventi FDSN, ShakeMap) — CC-BY 4.0.
   https://terremoti.ingv.it
 * **EFFIS** (perimetri aree bruciate) — termini Copernicus EFFIS.
+* **NASA FIRMS** (hotspot attivi VIIRS/MODIS, NRT + archivio per paese
+  dal 2000) — dati NASA, uso libero con attribuzione; l'archivio per
+  paese non richiede credenziali. https://firms.modaps.eosdis.nasa.gov
 * **Copernicus EMS Rapid Mapping** (perimetri allagati osservati, truth set
   del backtest alluvione) — © European Union, Copernicus EMS: libero con
   attribuzione, nessuna credenziale.

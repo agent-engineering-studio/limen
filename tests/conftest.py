@@ -157,6 +157,8 @@ async def reset_db(pg_pool: asyncpg.Pool) -> AsyncIterator[None]:
         # precedente, e il conto passa o fallisce a seconda dell'ordine.
         "flood_events",
         "flood_observation_masks",
+        # Eventi incendio cella-giorno (#66): stessa ragione.
+        "fire_events",
     ]
     async with acquire() as conn:
         with contextlib.suppress(Exception):

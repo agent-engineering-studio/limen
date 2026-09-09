@@ -111,6 +111,11 @@ def _parse_row(row: dict[str, str], *, source: str) -> FireHotspot | None:
     confidence = (row.get("confidence") or "").strip() or None
     # VIIRS names the 4 µm channel bright_ti4, MODIS calls it brightness.
     brightness = _as_float(row.get("bright_ti4")) or _as_float(row.get("brightness"))
+    # `type` dice *cosa* ha visto il satellite: 0 vegetazione, 1 vulcano,
+    # 2 sorgente statica al suolo, 3 offshore. Il filtro di confidenza non
+    # distingue un incendio da un'acciaieria — un'acciaieria è calda davvero e
+    # arriva ad alta confidenza. Solo questa colonna lo fa.
+    detection_type = _as_float(row.get("type"))
     return FireHotspot(
         source=source,
         acq_date=acq_date,
@@ -123,6 +128,7 @@ def _parse_row(row: dict[str, str], *, source: str) -> FireHotspot | None:
         daynight=(row.get("daynight") or "").strip() or None,
         satellite=(row.get("satellite") or "").strip() or None,
         instrument=(row.get("instrument") or "").strip() or None,
+        detection_type=int(detection_type) if detection_type is not None else None,
     )
 
 
