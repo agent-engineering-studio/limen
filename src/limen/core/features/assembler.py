@@ -119,6 +119,7 @@ def assemble_bundles(
             coastal_surge_norm=ctx.coastal_surge_norm,
             seismic_history=seismic,
             months_since_fire=ctx.months_since_fire,
+            fire_severity=ctx.fire_severity,
             fire_weather=fire_weather,
             sensor_features=ctx.sensor_features_by_cell.get(cell_id),
         )

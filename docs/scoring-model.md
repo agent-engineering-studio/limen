@@ -154,13 +154,40 @@ all'attenuazione GMPE arriva in un prompt successivo.
 ### F — amplificazione post-incendio
 
 ```
-F(m) = exp(-((m - 6)² / 50))    se 0 ≤ m ≤ 24
-     = 0                         altrimenti
+F(m, sev) = exp(-((m - 6)² / 50)) · (floor + (1 - floor) · sev)   se 0 ≤ m ≤ 24
+          = 0                                                      altrimenti
 ```
 
 `m` = mesi trascorsi dal perimetro EFFIS più recente che interseca
 l'AOI. Campana centrata a 6 mesi, zero al di fuori della finestra
 0–24 mesi.
+
+**La severità modula l'ampiezza, non la forma** (#67). Un incendio di chioma
+severo e una bruciatura di stoppie non lasciano il versante nello stesso
+stato, ma il decorso temporale dell'idrofobicità è lo stesso: cambia quanto,
+non quando.
+
+`sev` viene dalla **densità** di potenza radiativa FIRMS dentro il perimetro
+(`frp_sum_mw / area_ha`), normalizzata dalla rampa `post_fire.frp_*`. Non
+dalla somma: misurato su 2.419 perimetri EFFIS italiani 2012–2024, la somma
+correla con l'area a **0,63** e la densità a **0,26**, quindi la somma è in
+gran parte un indicatore di *dimensione* del rogo — usarla come severità
+direbbe che un incendio grande è per definizione severo. Il dNBR resta la
+misura di riferimento, ma il suo endpoint Copernicus richiede una richiesta
+manuale (`EffisClient.fetch_dnbr` è uno stub); la firma accetta un numero in
+[0,1] e non si accorge di dove venga.
+
+Due proprietà da tenere a mente:
+
+* il moltiplicatore è **≤ 1 per costruzione**, quindi la severità può solo
+  attenuare un allarme, mai inventarne uno;
+* con `sev` non misurata (nessun perimetro, o perimetro senza area) o con
+  `post_fire.severity_floor: 1.0` il fattore è **identico** a prima della
+  #67 — nessun ricalibro è obbligato.
+
+`severity_floor` è un **giudizio, non una misura**: servirebbe un truth set di
+frane post-incendio per tararlo, e le frane innescate da pioggia su suolo
+percorso dal fuoco sono troppo rare per assemblarlo oggi.
 
 ### H — componente idraulica
 

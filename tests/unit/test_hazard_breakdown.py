@@ -50,19 +50,35 @@ def _landslide_score() -> RiskScore[ComponentBreakdown]:
     )
 
 
-def test_landslide_breakdown_keeps_its_shape() -> None:
-    """La forma serializzata è quella di prima più il solo discriminante.
+def test_landslide_factors_payload_never_changes_shape() -> None:
+    """Il contratto che **non** può muoversi: la colonna `factors`.
+
+    Le righe già in `risk_assessments` sono state scritte con esattamente
+    queste chiavi, e il lettore dell'endpoint breakdown le cerca per nome. Un
+    campo in più qui riscriverebbe la forma di ogni riga storica, quindi
+    l'insieme è chiuso — le aggiunte di audit vanno sul DTO, che nessuno
+    persiste.
+    """
+    payload = _landslide_score().breakdown.factors_payload()
+
+    assert set(payload) == {"s", "m", "e", "f", "h", "static_terms", "meteo_terms"}
+
+
+def test_landslide_breakdown_keeps_the_keys_consumers_read() -> None:
+    """La forma serializzata del DTO **cresce**, ma non cambia.
 
     I consumatori a valle leggono `s`/`m`/`e`/`f`/`h`/`k`, `static_terms` e
-    `meteo_terms` per nome: se uno di questi cambiasse chiave o tipo, la
-    colonna `factors` e il breakdown esposto dall'API smetterebbero di essere
-    leggibili dalle righe già scritte.
+    `meteo_terms` per nome: se uno di questi cambiasse chiave o tipo, il
+    breakdown esposto dall'API smetterebbe di essere leggibile. Aggiungere
+    campi di audit (la severità del bruciato, #67) è additivo e non rompe un
+    lettore per nome — l'insieme chiuso è quello del payload persistito, qui
+    sopra.
     """
     dumped = _landslide_score().to_dict()
     breakdown = dumped["breakdown"]
     assert isinstance(breakdown, dict)
 
-    assert set(breakdown) == {
+    assert {
         "hazard_type",
         "s",
         "m",
@@ -73,7 +89,7 @@ def test_landslide_breakdown_keeps_its_shape() -> None:
         "static_terms",
         "meteo_terms",
         "kinematic_terms",
-    }
+    } <= set(breakdown)
     assert breakdown["hazard_type"] == "landslide"
     assert breakdown["s"] == 0.4
     assert breakdown["k"] == 0.0

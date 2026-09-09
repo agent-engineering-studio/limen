@@ -264,6 +264,11 @@ class PostFireBlock(_StrictModel):
     peak_months: float = Field(..., ge=0.0)
     curve_denominator: float = Field(..., gt=0.0)
     window_months_max: float = Field(..., gt=0.0)
+    # Severità del bruciato da FRP FIRMS (#67). Con i default il fattore F
+    # resta identico a prima quando la severità non è disponibile.
+    severity_floor: float = Field(default=1.0, ge=0.0, le=1.0)
+    frp_floor_mw_per_ha: float = Field(default=0.0, ge=0.0)
+    frp_saturation_mw_per_ha: float = Field(default=1.0, gt=0.0)
 
 
 class KinematicWeights(_StrictModel):
