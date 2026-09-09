@@ -88,13 +88,26 @@ async def _lifespan_default(app: FastAPI) -> AsyncIterator[None]:
     app.state.ready = True
     app.state.ready_detail = "pool + migrations OK"
 
-    scheduler = AsyncScheduler()
+    # Lo scheduler vive nel processo `worker` (#77). Con
+    # `SCHEDULER__ENABLED=false` l'API è HTTP puro: prima, uno sweep nazionale
+    # e le richieste della mappa condividevano un solo event loop, e il
+    # commento in `risk_scoring.py` racconta che l'API andava in timeout
+    # durante lo sweep — `asyncio.to_thread` era il cerotto.
+    scheduler: AsyncScheduler | None = None
+    if settings.scheduler.enabled:
+        scheduler = AsyncScheduler()
+        await scheduler.__aenter__()
+        await register_jobs(scheduler, deps)
+        await scheduler.start_in_background()
+    else:
+        log.info("api.lifespan.scheduler_disabled", reason="jobs run in the worker process")
     app.state.scheduler = scheduler
-    await scheduler.__aenter__()
-    await register_jobs(scheduler, deps)
-    await scheduler.start_in_background()
 
-    if deps.settings.report.html_enabled and deps.settings.report.html_run_at_startup:
+    if (
+        settings.scheduler.enabled
+        and deps.settings.report.html_enabled
+        and deps.settings.report.html_run_at_startup
+    ):
 
         async def _kickoff_report() -> None:
             try:
@@ -104,8 +117,10 @@ async def _lifespan_default(app: FastAPI) -> AsyncIterator[None]:
 
         app.state.report_kickoff_task = asyncio.create_task(_kickoff_report())
 
+    # L'ingestor IoT è un consumer MQTT, cioè un batch: sta nel worker. Nel
+    # processo API partirebbe una seconda sottoscrizione allo stesso topic.
     ingestor: MqttIngestor | None = None
-    if settings.enable_insitu:
+    if settings.enable_insitu and settings.scheduler.enabled:
         sigma_v = (
             deps.thresholds.kinematic.sigma_v if deps.thresholds.kinematic is not None else None
         )
@@ -126,10 +141,11 @@ async def _lifespan_default(app: FastAPI) -> AsyncIterator[None]:
         if ingestor is not None:
             with contextlib.suppress(Exception):
                 await ingestor.stop()
-        with contextlib.suppress(Exception):
-            await scheduler.stop()
-        with contextlib.suppress(Exception):
-            await scheduler.__aexit__(None, None, None)
+        if scheduler is not None:
+            with contextlib.suppress(Exception):
+                await scheduler.stop()
+            with contextlib.suppress(Exception):
+                await scheduler.__aexit__(None, None, None)
         await SharedHttpClient.aclose()
         await close_pool()
         app.state.ready = False

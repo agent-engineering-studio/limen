@@ -282,6 +282,17 @@ class SchedulerSettings(BaseSettings):
     # motivo per cui la tabella esiste — e poche migliaia di righe al giorno,
     # quindi nessuna ragione di essere avari.
     job_runs_retention_days: int = Field(default=90, ge=1)
+    # Se lo scheduler parte in questo processo (#77). Nel container `api` è
+    # `false`: l'API torna HTTP puro e read-only, coerente con la mappa
+    # pubblica di #69. Il processo `limen worker` ignora questo flag — è la
+    # sua unica ragione di esistere, e un worker che si spegne da solo per
+    # una variabile d'ambiente sarebbe un modo silenzioso di fermare i batch.
+    enabled: bool = True
+    # Quante regioni valutare in parallelo nello sweep. Quattro: il limite non
+    # è la CPU (64 core) ma il rate limit di Open-Meteo e la contesa sul
+    # database, e con l'LLM che domina il tempo per regione bastano poche
+    # regioni concorrenti per riempire l'attesa.
+    sweep_concurrency: int = Field(default=4, ge=1, le=32)
     # Run the ISPRA IdroGEO sync every N hours.
     weekly_idrogeo_hours: int = Field(default=24 * 7, ge=1)
     # Hot-table partition maintenance + retention. Partitions are created a

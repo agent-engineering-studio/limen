@@ -108,6 +108,59 @@ def _sweep_metrics(result: Any, *, cells: int) -> dict[str, Any]:
     return out
 
 
+async def _score_one_aoi(
+    *,
+    deps: AppDependencies,
+    workflow: Any,
+    hazard: HazardType,
+    aoi_id: str,
+    limit: asyncio.Semaphore,
+) -> tuple[str, int]:
+    """Valuta una regione, sotto semaforo. Ritorna ``(aoi_id, celle)``.
+
+    Funzione di modulo e non chiusura dentro il ciclo: una chiusura
+    catturerebbe `hazard` e `workflow` per riferimento, e oggi è innocuo solo
+    perché il `gather` è atteso dentro la stessa iterazione. Diventerebbe un
+    bug il giorno che qualcuno sposta l'attesa fuori — che è esattamente il
+    genere di modifica che questo passo invita a fare.
+    """
+    async with limit:
+        ctx = MonitoringContext(
+            aoi_id=aoi_id,
+            hazard_type=hazard,
+            valuation_time=datetime.now(UTC),
+            enable_insitu=deps.settings.enable_insitu,
+        )
+        # Una riga per regione: una sola riga per sweep direbbe che è durato
+        # N, venti dicono quale regione lo fa durare — che è l'informazione
+        # che serve prima di ottimizzare (#74).
+        async with tracked(JOB_HOURLY_MONITORING, scope=aoi_id) as metrics:
+            metrics["hazard"] = hazard.value
+            try:
+                result = await workflow.run(ctx)
+            except Exception as exc:  # never bring the scheduler down
+                log.error(
+                    "job.hourly_monitoring.error",
+                    aoi_id=aoi_id,
+                    hazard=hazard.value,
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                )
+                metrics["status"] = "error"
+                metrics["error_type"] = type(exc).__name__
+                return aoi_id, 0
+            cells = len(result.context.cell_results)
+            metrics.update(_sweep_metrics(result, cells=cells))
+            log.info(
+                "job.hourly_monitoring.aoi.done",
+                aoi_id=aoi_id,
+                hazard=hazard.value,
+                cells=cells,
+                assessment_id=result.context.assessment_id,
+            )
+            return aoi_id, cells
+
+
 async def run_hourly_monitoring(deps: AppDependencies) -> dict[str, int]:
     """Run the workflow over every AOI; return per-AOI cell counts."""
     if _sweep_lock.locked():
@@ -157,41 +210,40 @@ async def _run_sweep(deps: AppDependencies) -> dict[str, int]:
                 error_type=type(exc).__name__,
             )
             continue
-        for aoi_id in aois:
-            ctx = MonitoringContext(
-                aoi_id=aoi_id,
-                hazard_type=hazard,
-                valuation_time=datetime.now(UTC),
-                enable_insitu=deps.settings.enable_insitu,
-            )
-            # Una riga per regione: una sola riga per sweep direbbe che è
-            # durato N, venti dicono quale regione lo fa durare — che è
-            # l'informazione che serve prima di ottimizzare (#74).
-            async with tracked(JOB_HOURLY_MONITORING, scope=aoi_id) as metrics:
-                metrics["hazard"] = hazard.value
-                try:
-                    result = await workflow.run(ctx)
-                except Exception as exc:  # never bring the scheduler down
-                    log.error(
-                        "job.hourly_monitoring.error",
-                        aoi_id=aoi_id,
-                        hazard=hazard.value,
-                        error=str(exc),
-                        error_type=type(exc).__name__,
-                    )
-                    metrics["status"] = "error"
-                    metrics["error_type"] = type(exc).__name__
-                    continue
-                cells = len(result.context.cell_results)
-                out[aoi_id] = out.get(aoi_id, 0) + cells
-                metrics.update(_sweep_metrics(result, cells=cells))
-                log.info(
-                    "job.hourly_monitoring.aoi.done",
+        # Regioni in parallelo, con un semaforo (#77). Il limite non è la CPU
+        # — la macchina ne ha 64 e lo scoring vero è lo 0,6% del tempo — ma il
+        # rate limit di Open-Meteo e la contesa sul database. Con l'LLM che
+        # domina i 156 s di una regione, poche regioni concorrenti bastano a
+        # riempire l'attesa.
+        #
+        # **Niente ProcessPoolExecutor** per lo scoring, che la issue
+        # proponeva: misurato al passo 1, `RiskScoring` costa 0,86 s su 10.353
+        # celle contro 155,7 s di sweep. Spostarlo fra processi significherebbe
+        # serializzare bundle Pydantic avanti e indietro per contendersi meno
+        # dell'1% del tempo — quasi certamente più costo che guadagno, e
+        # complessità certa.
+        limit = asyncio.Semaphore(deps.settings.scheduler.sweep_concurrency)
+        # `return_exceptions=True`: una regione che esplode fuori dal try —
+        # per esempio annullata — non deve portarsi via le altre diciannove.
+        results = await asyncio.gather(
+            *(
+                _score_one_aoi(
+                    deps=deps,
+                    workflow=workflow,
+                    hazard=hazard,
                     aoi_id=aoi_id,
-                    hazard=hazard.value,
-                    cells=cells,
-                    assessment_id=result.context.assessment_id,
+                    limit=limit,
                 )
+                for aoi_id in aois
+            ),
+            return_exceptions=True,
+        )
+        for item in results:
+            if isinstance(item, BaseException):
+                log.error("job.hourly_monitoring.task_failed", error=str(item))
+                continue
+            aoi_id, cells = item
+            out[aoi_id] = out.get(aoi_id, 0) + cells
     log.info(
         "job.hourly_monitoring.done",
         hazards=[h.value for h in hazards],

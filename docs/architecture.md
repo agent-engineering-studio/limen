@@ -124,6 +124,7 @@ celle. La pipeline è stata validata sul pilota **Puglia + Basilicata** ed
 | **API** | app FastAPI, DI tipizzata via Depends(), job periodici APScheduler | `src/limen/api/` |
 | **Observability** | instrumentor di tracing OpenTelemetry + strumenti di metrica custom | `src/limen/observability/` |
 | **Frontend** | mappa pubblica Vite + React + MapLibre, **senza login** | `frontend/` |
+| **Worker** | processo separato dei batch: scheduler APScheduler + ingestor IoT, zero HTTP. Una sola replica — `_sweep_lock` è un lock di processo (#77) | `limen worker` |
 
 ## Sorgente dati ISPRA
 

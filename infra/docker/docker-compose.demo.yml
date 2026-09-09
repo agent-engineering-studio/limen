@@ -70,12 +70,16 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    environment:
+    environment: &api-env
       # Override these via the shell to point at Neon or a managed PG.
       DB__CONNECTION_STRING: postgresql://limen:limen@postgres:5432/limen
       OBJECT_STORE__BACKEND: filesystem
       OBJECT_STORE__ROOT: /var/lib/limen/objects
       SCHEDULER__CACHE_CLEANUP: apscheduler
+      # I job vivono nel container `worker` (#77). Qui l'API è HTTP puro:
+      # prima, uno sweep nazionale e le richieste della mappa condividevano
+      # un solo event loop, e l'API andava in timeout durante lo sweep.
+      SCHEDULER__ENABLED: "false"
       API__HOST: 0.0.0.0
       API__PG_TILESERV_URL: http://pg_tileserv:7800
       # Notifications — listing a channel here enables it; channels
@@ -221,6 +225,58 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
+
+  worker:
+    # Il processo dei batch: scheduler APScheduler + ingestor IoT, zero HTTP.
+    # Stessa immagine dell'api — è lo stesso codice, cambia solo il comando.
+    #
+    # `deploy.replicas: 1` è **esplicito e necessario**: `_sweep_lock` in
+    # `hourly_monitoring.py` è un `asyncio.Lock` di processo, quindi impedisce
+    # due sweep sovrapposti solo dentro un worker. Due repliche farebbero due
+    # sweep concorrenti, e il rimedio non è un lock distribuito — che non
+    # serve — ma questa riga.
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.api
+    image: limen/api:0.1
+    container_name: limen-worker
+    restart: unless-stopped
+    command: ["limen", "worker"]
+    depends_on:
+      # Sull'api e non solo su postgres: le migrazioni le applica l'API al
+      # boot, e il worker le **attende** invece di applicarle — due processi
+      # che migrano insieme sono una corsa.
+      api:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *api-env
+      # Il worker ignora il flag — è la sua ragione di esistere — ma tenerlo
+      # esplicito evita che qualcuno legga l'ancora e pensi il contrario.
+      SCHEDULER__ENABLED: "true"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - limen-objects:/var/lib/limen/objects
+      - ${GEOSERVER_SHAPEFILE_DIR:-../../../mcp-geoserver/data}:/data:ro
+      - ../../mlflow.db:/app/mlflow.db:ro
+      - ../../mlruns:/Users/gzileni/Git/limen/mlruns
+    # Nessuna `ports:`: il worker non serve niente.
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 8g
+    healthcheck:
+      # Interroga il database, non il PID: un worker con l'event loop bloccato
+      # ha ancora il processo vivo. `--health` esce 0 se l'ultimo battito in
+      # `job_runs` è recente.
+      test: ["CMD", "limen", "worker", "--health"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
 
   mcp:
     # limen-ops MCP server for agent gateways (OpenClaw & co.). Same image
