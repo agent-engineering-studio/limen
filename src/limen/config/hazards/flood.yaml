@@ -12,7 +12,7 @@
 # layer che il progetto ha in casa da più tempo, e qui smette di essere solo
 # il componente H del motore frane per diventare la base di un pericolo suo.
 
-model_version: "flood-v1.0.0"
+model_version: "flood-v1.1.0"
 
 susceptibility:
   # Una cella fuori dalle zone mappate. Non zero: il mosaico copre i bacini
@@ -36,11 +36,51 @@ pluvial:
   # autunno normale. Il workflow legge `window_hours` e va a prendere
   # esattamente quella finestra, così le due cose non possono divergere.
   #
-  # 80 mm/72 h è l'ordine di grandezza sotto cui il reticolo italiano regge;
-  # 250 mm/72 h è l'evento che lo travolge — la scala degli episodi che
-  # producono le esondazioni mappate dal mosaico.
-  threshold_mm:  80.0
-  saturation_mm: 250.0
+  # **Ritarati sul truth set** (#64), non scelti a naso. I primi numeri
+  # (80-250 mm) erano fuori dall'ordine di grandezza del fenomeno: una cella
+  # con suscettibilità 0,80 — la mediana di quelle realmente allagate —
+  # doveva vedere ~176 mm/72 h per entrare in classe alta, e solo il 4,8%
+  # delle celle allagate ne ha visti almeno 150. Il 95% dei mancati era
+  # garantito dalla taratura, prima di qualunque considerazione sul modello.
+  #
+  # Derivazione, su 1.999 celle allagate e 24.993 celle osservate e asciutte
+  # (Emilia-Romagna e Toscana, perimetri Copernicus EMS 2023-2025, pioggia
+  # dall'archivio Open-Meteo):
+  #
+  #   pioggia 72 h (mm)   p10    p25    p50    p75    p90
+  #   allagate           45,7   63,7   86,2  104,8  126,6
+  #   asciutte           35,0   48,4   72,9  107,5  158,1
+  #
+  # `threshold_mm` = 40, appena sotto il p10 delle allagate, così gli eventi
+  # veri stanno sulla rampa e non sotto il suo piede. `saturation_mm` = 120
+  # risolve (86,2 − 40) / (S − 40) = 0,45 / 0,80, cioè mette la cella allagata
+  # mediana esattamente sul confine della classe alta alla suscettibilità
+  # mediana delle allagate. Nessun parametro libero: due percentili e un
+  # cutoff di classe.
+  #
+  # **Quello che questa taratura non può fare, e va detto.** Le due
+  # distribuzioni si sovrappongono quasi del tutto, e sopra i 120 mm sono le
+  # celle *asciutte* a superare la soglia più spesso (19,4% contro 11,1%).
+  # Dentro l'impronta di un'alluvione ha piovuto su tutti allo stesso modo:
+  # quel che decide quali celle finiscono sott'acqua è l'incanalamento, non
+  # l'accumulo locale. Nessun valore di queste due soglie separa le une dalle
+  # altre, e cercarlo sarebbe adattarsi al rumore. Il FAR resta alto per
+  # questo motivo, non per la scelta dei numeri: servirebbe un segnale di
+  # routing (quota sul reticolo idrografico più vicino, o le classi di tempo
+  # di ritorno del mosaico usate come tali), che oggi non c'è.
+  #
+  # Esito misurato (Emilia-Romagna, replica `issued`, finestra dal 2024-09-04,
+  # stesso filtro sui nodi senza corso d'acqua):
+  #
+  #                   hit rate   tasso base   rapporto   FAR   preavviso
+  #   80-250 mm            4%         0,3%      12,4x    94%       22 h
+  #   40-120 mm           77%         7,3%      10,6x    79%       50 h
+  #
+  # Il gate sull'hit rate passa, quello sul FAR resta fallito. Era il
+  # risultato atteso: la taratura ha rimesso le soglie nell'ordine di
+  # grandezza del fenomeno, la discriminazione non può darla.
+  threshold_mm:  40.0
+  saturation_mm: 120.0
   window_hours:  72
 
   # Suolo già saturo ⇒ la stessa pioggia scorre invece di infiltrarsi.
@@ -81,6 +121,31 @@ pc_alert:
   moderate:  gialla
   high:      arancione
   very_high: rossa
+
+# Gate §2.5 per il backtest alluvione (#64), verificati da `limen
+# backtest-flood` contro i perimetri allagati osservati di Copernicus EMS.
+#
+# Gli stessi numeri delle frane su hit rate e FAR, perché la domanda è la
+# stessa e i due report devono poter stare accanto. Il **preavviso minimo** no:
+# 12 h invece di 18, perché un allagamento è un evento a soglia con
+# un'insorgenza rapida — la pioggia che riempie un alveo arriva in ore, non
+# nei giorni di pioggia antecedente che precedono una frana, e pretendere 18 h
+# scarterebbe come tardivi avvisi che un centro operativo usa benissimo.
+#
+# Una precisazione che cambia la lettura del FAR: qui il denominatore sono i
+# **giorni-cella osservati**, non tutte le allerte. Dentro una maschera di
+# osservazione EMS l'assenza di poligono allagato è un "non allagato"
+# osservato; fuori non è informazione, e quell'allerta è `non verificabile`,
+# non falsa. Misurato sul Piemonte prima di introdurre la distinzione: FAR
+# 100% con 10.021 avvisi contro 12 celle di verità, perché EMSR800 aveva
+# mappato 0,3 km². Un FAR calcolato su tutte le allerte non misura il modello,
+# misura quanto ha guardato il satellite.
+calibration:
+  s_vs_ispra_correlation_min: null
+  backtest:
+    hit_rate_min:            0.70
+    far_max:                 0.30
+    lead_time_hours_min:     12.0
 
 # Priorità degli alert (non scoring). Un allagamento colpisce ciò che sta in
 # basso e vicino: le stesse bande degli altri pericoli, senza il termine WUI

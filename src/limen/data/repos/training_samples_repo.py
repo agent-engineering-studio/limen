@@ -24,7 +24,10 @@ from limen.data.db import acquire
 
 log = get_logger(__name__)
 
-LabelSource = Literal["italica", "iffi", "background"]
+#: Da dove viene l'etichetta. `copernicus-ems` sono i perimetri allagati
+#: osservati del truth set flood (#64): una fonte per pericolo, perché i
+#: cataloghi non si somigliano (punti datati contro poligoni osservati).
+LabelSource = Literal["italica", "iffi", "background", "copernicus-ems"]
 
 
 @dataclass(frozen=True, slots=True)

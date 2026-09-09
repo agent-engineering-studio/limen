@@ -1,8 +1,18 @@
-"""``limen ingest-events`` — load the ITALICA / e-ITALICA event catalogue.
+"""``limen ingest-events [--hazard landslide|flood]`` — cataloghi datati.
 
-Reads the ITALICA CSV (semicolon-delimited, EPSG:4326 lon/lat + UTC date)
-into ``landslide_events``. This is the dated truth set the §2.5 backtest
-replays against — IFFI on its own is an undated inventory.
+Il truth set contro cui i backtest §2.5 rigiocano la storia. Un pericolo per
+sorgente, perché le due sorgenti non si somigliano affatto:
+
+* ``--hazard landslide`` (default) — ITALICA / e-ITALICA: un CSV di **punti**
+  datati, scaricabile da un DOI Zenodo fissato. IFFI da solo è un inventario
+  senza date.
+* ``--hazard flood`` — Copernicus EMS Rapid Mapping: i **poligoni** di
+  estensione allagata osservata delle attivazioni italiane. Un allagamento ha
+  un'estensione, e su celle da 1 km² il perimetro è ciò che rende il backtest
+  misurabile invece di indicativo (#64).
+
+Entrambi idempotenti: l'upsert è per id di catalogo e i download sono in
+cache, quindi rieseguire il comando non riscrive nulla e non riscarica nulla.
 
 Source resolution (for reproducible init on a fresh machine):
 1. ``LIMEN_ITALICA_CSV`` — explicit local path wins (offline / custom file);
@@ -25,9 +35,18 @@ from shapely.geometry import Point
 from limen.core.logging import get_logger
 from limen.data.db import lifespan_pool
 from limen.data.migrate import run_migrations
+from limen.data.repos import flood_events_repo
 from limen.data.repos.landslide_events_repo import LandslideEvent, count_events
 from limen.data.repos.landslide_events_repo import upsert_many as events_upsert
 from limen.integrations._http import SharedHttpClient, fetch_with_retry
+from limen.integrations.copernicus_ems.client import (
+    ObservationMask,
+    ObservedFlood,
+    catalogue_provenance,
+    fetch_activations,
+    fetch_observation_masks,
+    fetch_observed_floods,
+)
 
 log = get_logger(__name__)
 
@@ -125,7 +144,7 @@ def _parse_rows(path: Path) -> list[LandslideEvent]:
     return events
 
 
-async def run() -> int:
+async def _run_landslide() -> int:
     try:
         path = await _resolve_csv()
     finally:
@@ -140,14 +159,88 @@ async def run() -> int:
         await run_migrations()
         n = await events_upsert(events)
         total = await count_events()
-    log.info("ingest_events.done", upserted=n, total_in_db=total)
+    log.info("ingest_events.done", hazard="landslide", upserted=n, total_in_db=total)
     return 0
+
+
+def _flood_categories() -> tuple[str, ...]:
+    """Categorie EMS da ingerire.
+
+    Default ``Flood,Storm``: la categoria EMS descrive la *causa* e diverse
+    alluvioni italiane sono catalogate «Storm» (EMSR928 Lombardia, EMSR930
+    Basilicata). Il filtro sui poligoni resta comunque `5-Flood`, quindi
+    allargare la categoria non fa entrare eventi di un altro pericolo — fa
+    solo guardare in più pacchetti.
+    """
+    raw = os.getenv("LIMEN_FLOOD_EVENTS_CATEGORIES", "Flood,Storm")
+    return tuple(part.strip() for part in raw.split(",") if part.strip())
+
+
+async def _run_flood() -> int:
+    cache = Path(os.getenv("LIMEN_FLOOD_EVENTS_CACHE", "./data/flood_events")).expanduser()
+    country = os.getenv("LIMEN_FLOOD_EVENTS_COUNTRY", "Italy")
+
+    try:
+        activations = await fetch_activations(country=country, categories=_flood_categories())
+        if not activations:
+            # Nessuna attivazione è un risultato possibile e non un errore:
+            # un paese senza alluvioni mappate nella finestra pubblica.
+            log.warning("ingest_events.flood.no_activations", country=country)
+            return 0
+        polygons: list[ObservedFlood] = []
+        masks: list[ObservationMask] = []
+        for activation in activations:
+            found = await fetch_observed_floods(activation, cache_dir=cache)
+            polygons.extend(found)
+            # Le maschere si prendono anche quando i poligoni non arrivano:
+            # sapere che una zona è stata osservata e trovata asciutta è
+            # informazione quanto sapere che si è allagata.
+            masks.extend(await fetch_observation_masks(activation.code))
+    finally:
+        await SharedHttpClient.aclose()
+
+    provenance = catalogue_provenance()
+    log.info(
+        "ingest_events.flood.parsed",
+        polygons=len(polygons),
+        activations=len(activations),
+        years=sorted({a.event_time.year for a in activations}),
+    )
+    if not polygons:
+        log.warning("ingest_events.flood.no_polygons", note="pacchetti prodotti non leggibili")
+        return 1
+
+    async with lifespan_pool():
+        await run_migrations()
+        n = await flood_events_repo.upsert_many(polygons)
+        m = await flood_events_repo.upsert_masks(masks)
+        total = await flood_events_repo.count_events()
+    log.info(
+        "ingest_events.done",
+        hazard="flood",
+        upserted=n,
+        masks=m,
+        total_in_db=total,
+        source=provenance["source"],
+        licence=provenance["licence"],
+    )
+    return 0
+
+
+async def run(hazard: str = "landslide") -> int:
+    """Dispatcher per pericolo."""
+    if hazard == "flood":
+        return await _run_flood()
+    if hazard in ("landslide", ""):
+        return await _run_landslide()
+    log.error("ingest_events.unknown_hazard", hazard=hazard)
+    return 2
 
 
 def main() -> int:
     import asyncio
 
-    return asyncio.run(run())
+    return asyncio.run(run(os.getenv("LIMEN_INGEST_HAZARD", "landslide")))
 
 
 if __name__ == "__main__":  # pragma: no cover

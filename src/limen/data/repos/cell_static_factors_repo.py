@@ -37,6 +37,12 @@ class CellStaticFactors:
     # Phase 12+: flood hazard from the ISPRA Mosaicatura Idraulica.
     flood_hazard_class: str | None = None
     flood_hazard_norm: float | None = None
+    # Suolo sigillato (#63) ed esposizione viabilità (#21). Erano nella
+    # tabella ma non qui, quindi chi leggeva la riga li trovava assenti: il
+    # vettore di feature dell'alluvione (#64) usciva senza il suo secondo
+    # predittore e nessuno se ne accorgeva.
+    imperviousness_norm: float | None = None
+    distance_to_road_m: float | None = None
     extras: dict[str, Any] | None = None
 
 
@@ -128,7 +134,8 @@ async def get_for_cell(cell_id: str) -> CellStaticFactors | None:
             SELECT cell_id, slope_deg, aspect_deg, elevation_m, twi, curvature,
                    lithology, land_cover, landuse_code, litho_weight,
                    dist_faults_m, distance_to_iffi_m, iffi_density_500,
-                   pai_class_norm, flood_hazard_class, flood_hazard_norm, extras
+                   pai_class_norm, flood_hazard_class, flood_hazard_norm,
+                   imperviousness_norm, distance_to_road_m, extras
             FROM cell_static_factors WHERE cell_id = $1
             """,
             cell_id,
@@ -155,5 +162,7 @@ async def get_for_cell(cell_id: str) -> CellStaticFactors | None:
         pai_class_norm=row["pai_class_norm"],
         flood_hazard_class=row["flood_hazard_class"],
         flood_hazard_norm=row["flood_hazard_norm"],
+        imperviousness_norm=row["imperviousness_norm"],
+        distance_to_road_m=row["distance_to_road_m"],
         extras=extras or {},
     )

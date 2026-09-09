@@ -356,8 +356,14 @@ def test_a_burnt_cell_takes_the_same_rain_worse() -> None:
 
     Un suolo percorso dal fuoco è idrofobico: la stessa pioggia scorre invece
     di infiltrarsi. Misurato con la configurazione di default: una cella P3
-    con 140 mm previsti passa da Moderate a High se ha bruciato al mese di
+    con 75 mm previsti passa da Moderate a High se ha bruciato al mese di
     picco.
+
+    75 mm e non 140: con le soglie ritarate sul truth set (40-120 mm/72 h,
+    #64) 140 mm satura già la rampa pluviale, e un trigger a 1,0 non lascia
+    spazio a nessun moltiplicatore. L'invariante è la stessa — la cascata
+    sposta di una classe — ma per vederla serve un valore nell'interno della
+    rampa, non oltre il suo tetto.
     """
     engine = FloodScoringEngine(_thresholds())
 
@@ -368,7 +374,7 @@ def test_a_burnt_cell_takes_the_same_rain_worse() -> None:
             static=StaticFactors(cell_id="cell", flood_hazard_norm=0.8),
             dynamic=DynamicInputs(
                 valuation_time=dt.datetime(2026, 11, 3, 12, tzinfo=dt.UTC),
-                flood_forecast_rain_72h_mm=140.0,
+                flood_forecast_rain_72h_mm=75.0,
                 soil_moisture_0_7=0.35,
                 months_since_fire=mesi,
             ),
