@@ -166,6 +166,13 @@ async def run_effis_sync(
         perimeters += 1
 
     total_after = await count_perimeters()
+    # La severità dipende da *entrambi* i dataset: un perimetro nuovo cambia
+    # la densità tanto quanto un hotspot nuovo, quindi il ricalcolo sta su
+    # entrambi i percorsi di sync (#67).
+    from limen.data.repos.fire_events_repo import refresh_perimeter_frp
+
+    await refresh_perimeter_frp()
+
     log.info(
         "effis.sync.done",
         perimeters=perimeters,

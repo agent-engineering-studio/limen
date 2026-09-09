@@ -188,6 +188,48 @@ post_fire:
   curve_denominator: 50.0
   window_months_max: 24.0
 
+  # Severità del bruciato dalla potenza radiativa FIRMS (#67). Prima, un
+  # incendio di chioma severo e una bruciatura di stoppie amplificavano il
+  # rischio frana allo stesso modo: la campana guardava solo il tempo
+  # trascorso. Il dNBR sarebbe la misura giusta ma il suo endpoint richiede
+  # una richiesta manuale, quindi `fetch_dnbr` è rimasto uno stub.
+  #
+  # **Si usa la densità di FRP, non la somma.** Misurato su 2.419 perimetri
+  # EFFIS italiani 2012-2024 con hotspot dentro:
+  #
+  #     correlazione con area_ha:   somma FRP 0,63   densità FRP 0,26
+  #
+  # La somma di FRP è in gran parte un indicatore di *dimensione* del rogo, e
+  # usarla come severità direbbe che un incendio grande è per definizione
+  # severo. La densità (somma / area) è un'intensità media, che è ciò che il
+  # dNBR misura.
+  #
+  # Rampa ancorata alla distribuzione misurata della densità:
+  #     p10 0,076   p25 0,146   p50 0,273   p75 0,489   p90 0,881   max 13,6
+  # `frp_floor` = p10 e `frp_saturation` = p90: sotto il decile più debole la
+  # severità è 0, dal decile più intenso in su è 1. Nessun parametro libero.
+  frp_floor_mw_per_ha:      0.08
+  frp_saturation_mw_per_ha: 0.88
+
+  # Quanto la severità può attenuare la campana:
+  #     F *= severity_floor + (1 - severity_floor) * severity
+  #
+  # A 0,5 il rogo meno intenso conserva metà dell'amplificazione, quello
+  # mediano il 62%, e dal p90 in su resta 1,0 — cioè il comportamento di
+  # prima.
+  #
+  # **Questo numero è un giudizio, non una misura, e va detto.** Servirebbe un
+  # truth set di frane post-incendio per tararlo, e non è assemblabile: le
+  # frane innescate da pioggia su suolo percorso dal fuoco sono rare, e in
+  # questo deployment `landslide_events` non ha eventi con un perimetro
+  # EFFIS entro due anni e 2 km.
+  #
+  # È accettabile come giudizio per una ragione strutturale: il moltiplicatore
+  # è ≤ 1 per costruzione, quindi la severità può solo **attenuare** un
+  # allarme, non inventarne uno. Con `severity_floor: 1.0` la modulazione è
+  # disattivata e il fattore F torna esattamente quello di prima.
+  severity_floor: 0.5
+
 # V1.5 — Kinematic component K (per §2.9). Only contributes when a
 # calibrated displacement sensor is present in the bundle's
 # `sensor_features`. Defaults are conservative literature values for

@@ -15,6 +15,16 @@ Two sources are combined, newest wins:
   ``min_hotspots`` detections on the same day inside the AOI are
   required, which is what makes this safe to read as "it burnt here".
 
+Dalla #67 l'executor porta anche la **severità** del bruciato: la densità di
+potenza radiativa del perimetro più recente, normalizzata dalla rampa in
+`post_fire.frp_*`. Serve perché un incendio di chioma severo e una bruciatura
+di stoppie non lasciano il versante nello stesso stato.
+
+La severità esiste solo per i perimetri EFFIS: un cluster di hotspot senza
+perimetro non ha un'area su cui dividere, e la densità è una divisione per
+area. In quel caso resta `None` e il fattore F è identico a prima — non zero,
+perché "non misurato" e "bruciato debolmente" sono fatti diversi.
+
 The engine is untouched — ``post_fire_factor`` stays pure; only the
 bundle assembly changes.
 """
@@ -25,8 +35,10 @@ from limen.agents.workflow_runtime.executor import Executor, handler
 from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
+from limen.core.scoring.post_fire import frp_severity
 from limen.core.scoring.regional_thresholds import load_regional_thresholds
 from limen.data.db import acquire
+from limen.data.repos.fire_events_repo import perimeter_severity_at
 
 log = get_logger(__name__)
 
@@ -77,21 +89,26 @@ class FireCheckExecutor(Executor):
 
         delta_days = (ctx.valuation_time.date() - last_fire).days
         months = max(0.0, delta_days / 30.0)
-        window_max = load_regional_thresholds().post_fire.window_months_max
-        if months > window_max:
+        post_fire = load_regional_thresholds().post_fire
+        if months > post_fire.window_months_max:
             # Out of the amplification window — record but neutralise.
             log.info(
                 "executor.fire_check.window_expired",
                 aoi_id=ctx.aoi_id,
                 months_since_fire=months,
-                window_max=window_max,
+                window_max=post_fire.window_months_max,
             )
             return ctx.with_update(months_since_fire=None)
+
+        density = await perimeter_severity_at(ctx.aoi_id, on_or_before=last_fire)
+        severity = frp_severity(density, post_fire=post_fire)
 
         log.info(
             "executor.fire_check",
             aoi_id=ctx.aoi_id,
             months_since_fire=months,
             last_fire=str(last_fire),
+            frp_density=density,
+            fire_severity=severity,
         )
-        return ctx.with_update(months_since_fire=months)
+        return ctx.with_update(months_since_fire=months, fire_severity=severity)

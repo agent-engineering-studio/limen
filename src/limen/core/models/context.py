@@ -138,6 +138,9 @@ class MonitoringContext(BaseModel):
     fwi_by_node: Sequence[FireWeatherState | None] = Field(default_factory=tuple)
     seismic_events: Sequence[SeismicHistoryEvent] = Field(default_factory=tuple)
     months_since_fire: float | None = None
+    #: Severità del bruciato in [0,1] (#67). La calcola FireCheck dalla
+    #: densità di FRP del perimetro, non il motore.
+    fire_severity: float | None = None
     sensor_payload: dict[str, Any] | None = None
     # V1.5 — populated by SensorFetchExecutor when enable_insitu=True.
     sensor_features_by_cell: dict[str, SensorFeatures] = Field(default_factory=dict)

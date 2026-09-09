@@ -127,6 +127,119 @@ async def refresh_density(
         )
 
 
+#: Giorni attorno alla `firedate` del perimetro in cui cercare gli hotspot.
+#: La firedate EFFIS è la data d'inizio consolidata, gli hotspot sono orbite:
+#: un rogo di più giorni ha detection dopo, e un rilevamento anticipato di
+#: qualche ora può cadere il giorno prima. Cinque giorni per lato coprono la
+#: durata tipica senza raccogliere l'incendio successivo.
+FRP_WINDOW_DAYS = 5
+
+#: Somma di FRP e sua densità per perimetro, in una passata.
+#:
+#: Solo hotspot di vegetazione (`detection_type = 0`): un'acciaieria dentro il
+#: perimetro sommerebbe potenza radiativa che non viene da quel rogo.
+#:
+#: `NULLIF(area_ha, 0)`: un perimetro con area nulla o assente lascia la
+#: densità a NULL invece di dividere per zero — e NULL qui significa "non
+#: misurabile", che è la cosa giusta da propagare al motore.
+_REFRESH_FRP_SQL = """
+WITH agg AS (
+    SELECT fp.id,
+           sum(h.frp_mw)  AS frp_sum,
+           count(h.frp_mw) AS hotspots
+    FROM fire_perimeters fp
+    JOIN fire_hotspots h
+      ON h.detection_type = 0
+     AND h.frp_mw IS NOT NULL
+     AND h.acq_date BETWEEN fp.fire_date - $1::int AND fp.fire_date + $1::int
+     AND ST_Intersects(fp.geom, h.geom)
+    WHERE fp.fire_date IS NOT NULL
+    GROUP BY fp.id
+)
+UPDATE fire_perimeters fp
+SET frp_sum_mw            = agg.frp_sum,
+    frp_hotspots          = agg.hotspots,
+    frp_density_mw_per_ha = agg.frp_sum / NULLIF(fp.area_ha, 0),
+    updated_at            = now()
+FROM agg
+WHERE fp.id = agg.id
+"""
+
+
+async def refresh_perimeter_frp(
+    *, window_days: int = FRP_WINDOW_DAYS, timeout: float | None = None
+) -> int:
+    """Ricalcola FRP e densità su tutti i perimetri. Idempotente.
+
+    Va chiamata quando arriva *uno dei due* dataset: un perimetro nuovo o
+    hotspot nuovi cambiano la stessa risposta, quindi sia il sync EFFIS sia
+    l'ingest della storia del fuoco la invocano.
+    """
+    async with acquire() as conn:
+        status = await conn.execute(_REFRESH_FRP_SQL, window_days, timeout=timeout)
+    written = int(status.split()[-1]) if status else 0
+    log.info("fire_perimeters.frp_refreshed", perimeters=written, window_days=window_days)
+    return written
+
+
+async def perimeter_severity_at(aoi_id: str, *, on_or_before: date) -> float | None:
+    """La densità di FRP del perimetro più recente che tocca l'AOI.
+
+    `None` quando non c'è un perimetro misurabile: il motore lo legge come
+    "severità sconosciuta" e resta identico a prima, che è ciò che rende la
+    modulazione retrocompatibile.
+    """
+    async with acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT fp.frp_density_mw_per_ha AS density
+            FROM fire_perimeters fp
+            JOIN aoi a ON ST_Intersects(a.geom, fp.geom)
+            WHERE a.id = $1
+              AND fp.fire_date IS NOT NULL
+              AND fp.fire_date <= $2
+              AND fp.frp_density_mw_per_ha IS NOT NULL
+            ORDER BY fp.fire_date DESC
+            LIMIT 1
+            """,
+            aoi_id,
+            on_or_before,
+        )
+    if row is None or row["density"] is None:
+        return None
+    return float(row["density"])
+
+
+async def frp_size_correlation() -> dict[str, float | int]:
+    """Correlazione fra le due grandezze e l'area, per il controllo di sanità.
+
+    Serve a mostrare che somma e densità **non** misurano la stessa cosa: la
+    somma cresce con la dimensione del rogo (è energia totale), la densità no
+    (è intensità media). Se si usasse la somma come severità, la
+    "verifica" contro l'area sarebbe circolare.
+    """
+    async with acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT count(*)::int                                AS perimeters,
+                   corr(frp_sum_mw, area_ha)                    AS corr_sum_area,
+                   corr(frp_density_mw_per_ha, area_ha)         AS corr_density_area,
+                   corr(ln(frp_sum_mw), ln(area_ha))            AS corr_log_sum_area
+            FROM fire_perimeters
+            WHERE frp_sum_mw > 0 AND area_ha > 0
+              AND frp_density_mw_per_ha IS NOT NULL
+            """
+        )
+    if row is None:
+        return {"perimeters": 0}
+    return {
+        "perimeters": int(row["perimeters"]),
+        "corr_sum_area": float(row["corr_sum_area"] or 0.0),
+        "corr_density_area": float(row["corr_density_area"] or 0.0),
+        "corr_log_sum_area": float(row["corr_log_sum_area"] or 0.0),
+    }
+
+
 async def count_events() -> int:
     async with acquire() as conn:
         row = await conn.fetchrow("SELECT count(*)::bigint AS n FROM fire_events")
@@ -205,12 +318,16 @@ async def effis_firms_agreement(
 
 
 __all__ = [
+    "FRP_WINDOW_DAYS",
     "VEGETATION_FIRE",
     "VIIRS_ERA_START",
     "FireEvent",
     "count_events",
     "effis_firms_agreement",
     "events_for_cells",
+    "frp_size_correlation",
+    "perimeter_severity_at",
     "rebuild_events",
     "refresh_density",
+    "refresh_perimeter_frp",
 ]

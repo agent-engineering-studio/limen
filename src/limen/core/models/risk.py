@@ -127,6 +127,10 @@ class DynamicInputs(_Frozen):
     coastal_surge_norm: float | None = Field(default=None, ge=0.0, le=1.0)
     seismic_history: tuple[SeismicHistoryEvent, ...] = ()
     months_since_fire: float | None = Field(default=None, ge=0.0)
+    #: Severità del bruciato in [0,1] (#67), dalla densità di FRP FIRMS.
+    #: `None` = non misurata, che il motore legge come "nessuna
+    #: modulazione" e non come "bruciato debolmente".
+    fire_severity: float | None = Field(default=None, ge=0.0, le=1.0)
     # Fase 2a (#61) — i sei numeri della catena FWI per questa cella, già
     # avanzati al giorno di valutazione dallo step FwiUpdate. Assente sulle
     # celle senza stato ricorsivo: il motore incendio lo dichiara invece di
@@ -290,6 +294,16 @@ class ComponentBreakdown(HazardBreakdown):
     static_terms: StaticBreakdown
     meteo_terms: MeteoBreakdown
     kinematic_terms: KinematicBreakdown | None = None
+
+    #: Di quanto la severità del bruciato ha attenuato il fattore F (#67).
+    #: 1.0 = nessuna attenuazione, che è anche il caso "severità non
+    #: misurata". Deliberatamente **fuori** da `factors_payload()`: quel
+    #: dizionario deve restare identico byte per byte alla forma pre-Fase-2,
+    #: altrimenti ogni riga già scritta in `risk_assessments` cambierebbe
+    #: forma e il lettore dell'endpoint breakdown si romperebbe. Qui serve
+    #: all'API e alla narrativa, non alla persistenza.
+    fire_severity_multiplier: float = Field(default=1.0, ge=0.0, le=1.0)
+    fire_severity: float | None = Field(default=None, ge=0.0, le=1.0)
 
     def components(self) -> dict[str, float]:
         return {"S": self.s, "M": self.m, "E": self.e, "F": self.f, "H": self.h, "K": self.k}

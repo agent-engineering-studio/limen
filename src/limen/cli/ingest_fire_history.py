@@ -403,6 +403,10 @@ async def run() -> int:
         for aoi_id in await list_aoi_ids():
             await fire_events_repo.refresh_density(aoi_id, timeout=_STMT_TIMEOUT_S)
 
+        # Severità del bruciato per i perimetri EFFIS (#67): hotspot nuovi
+        # cambiano la densità dei perimetri già in tabella.
+        await fire_events_repo.refresh_perimeter_frp(timeout=_STMT_TIMEOUT_S)
+
         report = _write_report(
             hotspots=written,
             events=events,

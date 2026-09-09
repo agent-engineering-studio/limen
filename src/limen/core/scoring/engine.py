@@ -37,7 +37,7 @@ from limen.core.scoring.base import classify_score
 from limen.core.scoring.caine import compute_caine
 from limen.core.scoring.flood_forecast import flood_forecast_bonus
 from limen.core.scoring.kinematic import compute_kinematic
-from limen.core.scoring.post_fire import post_fire_factor
+from limen.core.scoring.post_fire import post_fire_factor, severity_multiplier
 from limen.core.scoring.regional_thresholds import (
     CaineBlock,
     CaineMacroregion,
@@ -278,7 +278,17 @@ class MultiFactorScoringEngine:
             as_of=bundle.dynamic.valuation_time,
             seismic=self._t.seismic,
         )
-        f = post_fire_factor(bundle.dynamic.months_since_fire, post_fire=self._t.post_fire)
+        # La severità del bruciato attenua l'ampiezza della campana, non la
+        # sua forma (#67): con `fire_severity=None` il fattore F è identico a
+        # prima, quindi nessun ricalibro è obbligato.
+        f = post_fire_factor(
+            bundle.dynamic.months_since_fire,
+            post_fire=self._t.post_fire,
+            severity=bundle.dynamic.fire_severity,
+        )
+        fire_severity_mult = severity_multiplier(
+            bundle.dynamic.fire_severity, post_fire=self._t.post_fire
+        )
         # H (hydrology) is the ISPRA Mosaicatura Idraulica per-cell
         # flood-hazard class, mapped through the same AA/P1..P4 ladder
         # as PAI. NULL ⇒ keeps the V1 baseline `h = 0` so behaviour is
@@ -354,6 +364,8 @@ class MultiFactorScoringEngine:
                 static_terms=static.breakdown,
                 meteo_terms=meteo.breakdown,
                 kinematic_terms=k_breakdown if monitored else None,
+                fire_severity_multiplier=fire_severity_mult,
+                fire_severity=bundle.dynamic.fire_severity,
             ),
             model_version=self._t.model_version,
             monitored=monitored,
