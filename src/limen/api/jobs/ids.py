@@ -23,10 +23,13 @@ JOB_IOT_PARTITION_ROLLOVER = "limen-iot-partition-rollover"
 JOB_DRIFT_MONITOR = "limen-drift-monitor"
 JOB_GEODATA_EXPORT = "limen-geodata-export"
 JOB_HTML_REPORT = "limen-html-report"
+JOB_BRIEFING_ENRICHMENT = "limen-briefing-enrichment"
+JOB_NIGHTLY = "limen-nightly"
 
 
 __all__ = [
     "JOB_ALERT_DIGEST",
+    "JOB_BRIEFING_ENRICHMENT",
     "JOB_CACHE_CLEANUP",
     "JOB_DAILY_REPORT",
     "JOB_DRIFT_MONITOR",
@@ -38,6 +41,7 @@ __all__ = [
     "JOB_HTML_REPORT",
     "JOB_IOT_PARTITION_ROLLOVER",
     "JOB_IOT_ROLLUP",
+    "JOB_NIGHTLY",
     "JOB_NOWCAST_MONITORING",
     "JOB_PARTITIONS",
     "JOB_WEEKLY_IDROGEO",

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import Mapping
 from importlib import resources
 
 from limen.agents.chat_agents.risk_analyst import RiskAnalysis
@@ -62,25 +63,35 @@ def trim_to_max(text: str, max_words: int = MAX_WORDS) -> str:
     return truncated + "."
 
 
-def _fallback_briefing(assessment: AggregateAssessment, *, reason: str) -> str:
-    """Deterministic Italian briefing built from the breakdown only.
+def deterministic_briefing(
+    *,
+    aoi_id: str,
+    n_cells: int,
+    cells_by_level: Mapping[str, int],
+    dominant_level: str,
+) -> str:
+    """Il briefing italiano ricavato dai soli numeri, senza LLM.
 
-    Used when the LLM call fails or repeatedly produces an out-of-range
-    length. It mentions only numbers that are in the assessment.
+    Funzione **pura**: nessun log, nessuna rete, stessi argomenti ⇒ stesso
+    testo. Ha due chiamanti (#78) e non più uno: la degradazione di
+    :class:`BriefingAgent` quando il modello narrativo non risponde, e le API
+    che leggono una riga scritta dallo sweep orario, dove ``briefing_it`` è
+    NULL per costruzione finché ``briefing_enrichment`` non passa.
 
-    Emits ``llm.fallback`` — the same event the RiskAnalyst uses — because the
-    return value is indistinguishable from a successful briefing to every
-    caller downstream. Without the log there is nothing to tell a healthy
-    engine from a dead one.
+    Il testo è quello del pericolo frane — soglia Caine, densità IFFI, classe
+    PAI — perché è l'unico pericolo con una narrativa (``has_narrative``): un
+    riassunto che parla di soglie pluviometriche accanto a un punteggio
+    d'incendio sarebbe peggio del silenzio. Chi chiama per un altro pericolo
+    non deve chiamare.
+
+    La chiusa dice "senza il modello narrativo" e non "in assenza di una
+    risposta valida": ora il caso normale è l'attesa, non il guasto.
     """
-    log.warning("llm.fallback", role="Briefing", reason=reason)
-    top = assessment.top_cells[0] if assessment.top_cells else None
-    level = top.level.value if top else "None"
-    counts = ", ".join(f"{k}: {v}" for k, v in sorted(assessment.cells_by_level.items()))
+    counts = ", ".join(f"{k}: {v}" for k, v in sorted(cells_by_level.items()))
     base = (
         f"La valutazione automatica del modello deterministico Limen indica per l'area "
-        f"{assessment.aoi_id} una classe dominante {level}. "
-        f"Le celle valutate sono {assessment.n_cells}; "
+        f"{aoi_id} una classe dominante {dominant_level}. "
+        f"Le celle valutate sono {n_cells}; "
         f"la distribuzione per classe è {{{counts}}}. "
         f"Il contributo statico riflette suscettibilità storica, densità IFFI, "
         f"pendenza, classe PAI e indice litologico; il contributo meteorico "
@@ -92,10 +103,28 @@ def _fallback_briefing(assessment: AggregateAssessment, *, reason: str) -> str:
         f"frane storiche e pendenze rilevanti; nei prossimi cicli la diagnosi "
         f"verrà rivalutata con cadenza oraria appoggiandosi alle nuove osservazioni "
         f"meteorologiche e sismologiche disponibili. La diagnosi numerica resta "
-        f"autorevole; il presente testo è un riassunto generato in modalità di "
-        f"sicurezza in assenza di una risposta valida dal modello narrativo."
+        f"autorevole; il presente testo è un riassunto deterministico, prodotto "
+        f"senza il modello narrativo."
     )
     return trim_to_max(base, MAX_WORDS)
+
+
+def _fallback_briefing(assessment: AggregateAssessment, *, reason: str) -> str:
+    """:func:`deterministic_briefing` più il log della degradazione.
+
+    Emits ``llm.fallback`` — the same event the RiskAnalyst uses — because the
+    return value is indistinguishable from a successful briefing to every
+    caller downstream. Without the log there is nothing to tell a healthy
+    engine from a dead one.
+    """
+    log.warning("llm.fallback", role="Briefing", reason=reason)
+    top = assessment.top_cells[0] if assessment.top_cells else None
+    return deterministic_briefing(
+        aoi_id=assessment.aoi_id,
+        n_cells=assessment.n_cells,
+        cells_by_level=assessment.cells_by_level,
+        dominant_level=top.level.value if top else "None",
+    )
 
 
 def _caine_note(cell: CellRiskRecord) -> str:

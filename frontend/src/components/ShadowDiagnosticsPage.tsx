@@ -156,7 +156,9 @@ function LiveDiagnostics(): JSX.Element {
       <p className="shadow-muted">
         Quando l&apos;IA stima una probabilità, quella percentuale corrisponde
         alla frequenza reale? Più i punti stanno sulla diagonale, meglio è
-        calibrata.
+        calibrata. I punti vengono dal confronto <strong>notturno</strong>: il
+        modello in ombra gira una volta al giorno, non a ogni valutazione
+        oraria, quindi un giorno di dati è un giro di confronto, non ventiquattro.
       </p>
       {reliability ? (
         <ReliabilityChart data={reliability} />
@@ -165,8 +167,8 @@ function LiveDiagnostics(): JSX.Element {
       )}
 
       <p className="exp-note">
-        Finestra dal {data.since.slice(0, 10)} · modello IA:{" "}
-        {data.model_versions.join(", ") || "n/d"}.
+        Finestra dal {data.since.slice(0, 10)} · confronto notturno · modello
+        IA: {data.model_versions.join(", ") || "n/d"}.
       </p>
     </>
   );

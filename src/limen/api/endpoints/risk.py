@@ -8,18 +8,20 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Response, status
 
+from limen.agents.chat_agents.briefing import deterministic_briefing
+from limen.agents.chat_agents.prompts_registry import has_narrative
 from limen.api.dependencies import DepsDep
 from limen.api.schemas import (
     CellBreakdownResponse,
     LatestAssessmentResponse,
 )
-from limen.core.models.context import CellRiskRecord, RiskAnalysisDTO
+from limen.core.models.context import RiskAnalysisDTO
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import (
     RiskLevel,
-    breakdown_from_factors,
 )
 from limen.data.db import acquire
+from limen.data.repos.assessment_repo import record_from_row
 
 router = APIRouter(tags=["risk"])
 
@@ -30,50 +32,6 @@ def _coerce_json(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
     return dict(json.loads(value))
-
-
-_NEUTRAL_LANDSLIDE_FACTORS: dict[str, Any] = {
-    "s": 0.0,
-    "m": 0.0,
-    "e": 0.0,
-    "f": 0.0,
-    "h": 0.0,
-    "static_terms": {
-        "susc_ispra": 0.0,
-        "iffi_density": 0.0,
-        "slope": 0.0,
-        "pai": 0.0,
-        "litho_weight": 0.0,
-    },
-    "meteo_terms": {
-        "caine_excess": 0.0,
-        "caine_norm": 0.0,
-        "api_factor": 0.5,
-        "soil_factor": 0.5,
-    },
-}
-
-
-def _record_from_row(row: Any) -> CellRiskRecord:
-    hazard = HazardType(row["hazard_type"])
-    factors = _coerce_json(row["factors"])
-    if hazard is HazardType.LANDSLIDE:
-        # Rows written before a field existed still deserve to be shown: a
-        # historical cell is worth reading with neutral gaps, and a 500 on it
-        # helps nobody.
-        factors = {**_NEUTRAL_LANDSLIDE_FACTORS, **factors}
-        meteo = dict(factors["meteo_terms"])
-        # measured_overrides round-trips through JSON as a list; the DTO is a tuple.
-        if "measured_overrides" in meteo:
-            meteo["measured_overrides"] = tuple(meteo["measured_overrides"])
-        factors["meteo_terms"] = meteo
-    return CellRiskRecord(
-        cell_id=str(row["cell_id"]),
-        hazard_type=hazard,
-        score=float(row["score"]),
-        level=RiskLevel(row["class"]),
-        breakdown=breakdown_from_factors(hazard, factors),
-    )
 
 
 @router.get("/api/aoi/{aoi_id}/risk/latest", response_model=LatestAssessmentResponse)
@@ -124,13 +82,29 @@ async def latest_assessment(
             detail=f"no {hazard.value} assessment for AOI {aoi_id!r}",
         )
 
-    records = [_record_from_row(r) for r in rows]
+    records = [record_from_row(r) for r in rows]
     explanation = _coerce_json(rows[0]["explanation"])
     analysis_payload = explanation.get("analysis")
     analysis = RiskAnalysisDTO.model_validate(analysis_payload) if analysis_payload else None
 
     by_level = Counter(r.level.value for r in records)
     high_or_above = sum(1 for r in records if r.level in {RiskLevel.High, RiskLevel.VeryHigh})
+
+    # Lo sweep orario non chiama più l'LLM (#78): `briefing_it` è NULL finché
+    # `briefing_enrichment` non passa, e per le regioni non escalate resta
+    # NULL per sempre. Un pannello vuoto sarebbe una regressione rispetto a
+    # prima, quindi si mostra il testo deterministico — lo stesso che
+    # `BriefingAgent` produce in degradazione — e si dice che lo è.
+    stored = explanation.get("briefing_it")
+    briefing_it = str(stored) if stored else None
+    briefing_is_fallback = briefing_it is None and has_narrative(hazard)
+    if briefing_is_fallback:
+        briefing_it = deterministic_briefing(
+            aoi_id=aoi_id,
+            n_cells=len(records),
+            cells_by_level=dict(by_level),
+            dominant_level=records[0].level.value,
+        )
 
     return LatestAssessmentResponse(
         aoi_id=aoi_id,
@@ -141,7 +115,8 @@ async def latest_assessment(
         cells=records,
         cells_high_or_above=high_or_above,
         cells_by_level=dict(by_level),
-        briefing_it=str(explanation.get("briefing_it")) if explanation.get("briefing_it") else None,
+        briefing_it=briefing_it,
+        briefing_is_fallback=briefing_is_fallback,
         analysis=analysis,
     )
 

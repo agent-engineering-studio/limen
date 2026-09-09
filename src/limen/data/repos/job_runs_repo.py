@@ -186,6 +186,38 @@ async def recent(job_id: str | None = None, *, limit: int = 20) -> list[JobRun]:
     return [_to_run(r) for r in rows]
 
 
+async def finished_since(job_id: str, *, hours: int, limit: int = 500) -> list[JobRun]:
+    """I run **con scope** di un job conclusi nelle ultime ``hours``, dal più recente.
+
+    Con scope: il briefing asincrono (#78) lavora per regione, e la riga
+    globale dello sweep non ne nomina nessuna. Il filtro fine — quali regioni
+    meritano una narrativa — lo fa il chiamante sulle metriche, perché è una
+    regola di prodotto (`briefing_min_level`) e non una query.
+    """
+    try:
+        async with acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT id, job_id, scope, started_at, finished_at, status,
+                       metrics, error, host
+                FROM job_runs
+                WHERE job_id = $1
+                  AND scope IS NOT NULL
+                  AND finished_at IS NOT NULL
+                  AND finished_at >= now() - $2::int * interval '1 hour'
+                ORDER BY finished_at DESC
+                LIMIT $3
+                """,
+                job_id,
+                hours,
+                limit,
+            )
+    except Exception as exc:
+        log.warning("job_runs.degraded", phase="finished_since", job=job_id, error=str(exc))
+        return []
+    return [_to_run(r) for r in rows]
+
+
 async def purge_older_than(days: int) -> int:
     """Retention. Un DELETE e non un DROP PARTITION: `job_runs` cresce di
     poche migliaia di righe al giorno, non dei gigabyte delle tabelle calde."""
@@ -208,6 +240,7 @@ __all__ = [
     "JobRun",
     "Status",
     "finish",
+    "finished_since",
     "latest_global",
     "latest_per_scope",
     "purge_older_than",

@@ -64,6 +64,11 @@ class LatestAssessmentResponse(BaseModel):
     cells_high_or_above: int
     cells_by_level: dict[str, int]
     briefing_it: str | None = None
+    #: True quando ``briefing_it`` è il testo deterministico e non quello del
+    #: modello narrativo (#78): lo sweep orario non chiama più l'LLM, il
+    #: briefing arriva dopo. Senza questo flag la SPA presenterebbe un
+    #: segnaposto come se fosse l'analisi.
+    briefing_is_fallback: bool = False
     analysis: RiskAnalysisDTO | None = None
 
 

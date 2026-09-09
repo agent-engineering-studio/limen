@@ -72,7 +72,32 @@ Promotion to a stage is then an **operator decision** (`mlflow models
 transition-stage`), not an automatic action — even a passing gate
 only marks the run as eligible.
 
+`TRAINING__AUTO_RETRAIN` (default **false**) permette al passo `retrain` della
+pipeline notturna di lanciare `uv run limen train` in un sottoprocesso quando
+il drift l'ha chiesto. Addestra e registra; **non promuove**. L'invariante non
+si muove: acceso l'interruttore, la notte produce un run MLflow in più con il
+suo tag, e la transizione di stage resta un comando che un umano digita.
+
+Il registry vuole un backend a database: `SCORING__MLFLOW_TRACKING_URI` punta a
+`postgresql://limen:limen@postgres:5432/mlflow` nel compose (database creato da
+`infra/postgres/initdb/01-mlflow-db.sql`). Il file store è deprecato in MLflow
+2.x e il registry dei modelli non ci funziona affatto — sqlite resta il default
+solo per lo sviluppo locale.
+
 ## Champion-challenger shadow
+
+**Lo shadow gira di notte, non ogni ora (#78).** `SCORING__MODE=shadow`
+continua a significare "il challenger è configurato", ma il profilo `hourly`
+del workflow non lo inserisce: LightGBM più SHAP per cella, ogni ora, su
+~312.000 celle nazionali è il costo di un modello che il verdetto shadow dà
+già per non promuovibile con queste feature. Il passo `shadow_ml` di
+`api/jobs/nightly.py` lo esegue una volta per notte con `profile="nightly"`,
+che scrive in `model_runs` e **non** persiste in `risk_assessments` né
+dispaccia allerte: il notturno misura, non opera.
+
+Conseguenza per chi legge i grafici: i dati del challenger sono **giornalieri**,
+non orari. `SCORING__SHADOW_SHAP_TOP_K` ora morde solo lì, quindi alzarlo non
+costa più niente allo sweep orario.
 
 The workflow inserts `ShadowChallengerExecutor` only when
 `SCORING__MODE=shadow` and the resolver produced a challenger. The

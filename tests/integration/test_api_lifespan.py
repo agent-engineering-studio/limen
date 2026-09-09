@@ -7,8 +7,14 @@ from apscheduler import AsyncScheduler
 
 from limen.agents.llm_factory.stub import StubLlmClientFactory
 from limen.api.dependencies import AppDependencies
-from limen.api.jobs.registration import (
+from limen.api.jobs.ids import (
+    JOB_BRIEFING_ENRICHMENT,
     JOB_CACHE_CLEANUP,
+    JOB_DRIFT_MONITOR,
+    JOB_FORECAST_HISTORY,
+    JOB_NIGHTLY,
+)
+from limen.api.jobs.registration import (
     JOB_HOURLY_MONITORING,
     JOB_HTML_REPORT,
     JOB_PARTITIONS,
@@ -36,14 +42,19 @@ async def test_register_jobs_schedules_enabled_jobs(reset_db: None, pg_pool: obj
         registered_again = await register_jobs(scheduler, deps)
 
     registered_set = set(registered)
-    # the always-on trio plus the new HTML report job must all be scheduled
     assert {
         JOB_HOURLY_MONITORING,
         JOB_WEEKLY_IDROGEO,
-        JOB_CACHE_CLEANUP,
         JOB_HTML_REPORT,
         JOB_PARTITIONS,
+        JOB_BRIEFING_ENRICHMENT,
+        JOB_NIGHTLY,
     }.issubset(registered_set)
+    # I tre schedule autonomi assorbiti dalla pipeline notturna (#78). Restano
+    # dei job — girano dentro `limen-nightly` — ma non hanno più un tick loro,
+    # ed è quello che questa asserzione protegge: reintrodurne uno li farebbe
+    # girare due volte, e il retrain due volte è due volte Optuna.
+    assert registered_set.isdisjoint({JOB_CACHE_CLEANUP, JOB_DRIFT_MONITOR, JOB_FORECAST_HISTORY})
     assert len(registered) == len(registered_set)  # no duplicate ids
     assert registered == registered_again  # idempotent re-registration
 
@@ -87,7 +98,7 @@ async def test_register_jobs_skips_disabled(reset_db: None, pg_pool: object) -> 
         registered = await register_jobs(scheduler, deps)
     assert JOB_HOURLY_MONITORING not in registered
     assert JOB_WEEKLY_IDROGEO not in registered
-    assert JOB_CACHE_CLEANUP in registered
+    assert JOB_NIGHTLY in registered
     assert JOB_HTML_REPORT in registered  # report job still enabled by default
 
 
@@ -96,10 +107,11 @@ async def test_partitions_job_registers_under_pg_cron_backend(
 ) -> None:
     """Partition maintenance must not depend on the cache-cleanup backend.
 
-    With ``SCHEDULER__CACHE_CLEANUP=pg_cron`` the cleanup job is deliberately
-    not registered, and partition creation used to ride along inside it: after
-    a week of uptime every hot-table write would land in the DEFAULT partition,
-    which retention never drops.
+    With ``SCHEDULER__CACHE_CLEANUP=pg_cron`` the cleanup is the database's
+    job, and partition creation used to ride along inside it: after a week of
+    uptime every hot-table write would land in the DEFAULT partition, which
+    retention never drops. Dopo #78 la manutenzione sta nel notturno, ma la
+    dipendenza da non ricreare è la stessa.
     """
     settings = Settings.model_validate({"scheduler": {"cache_cleanup": "pg_cron"}})
     deps = await AppDependencies.build(
@@ -113,3 +125,4 @@ async def test_partitions_job_registers_under_pg_cron_backend(
 
     assert JOB_CACHE_CLEANUP not in registered
     assert JOB_PARTITIONS in registered
+    assert JOB_NIGHTLY in registered

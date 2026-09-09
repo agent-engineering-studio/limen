@@ -75,8 +75,13 @@ async def _hazards_stale_first(enabled: Sequence[HazardType]) -> list[HazardType
     return sorted(enabled, key=lambda h: (seen.get(h) is not None, seen.get(h)))
 
 
-def _sweep_metrics(result: Any, *, cells: int) -> dict[str, Any]:
+def sweep_metrics(result: Any, *, cells: int) -> dict[str, Any]:
     """Metriche di un AOI, dai record che il workflow già produce.
+
+    Pubblica perché ha tre chiamanti (#78): oltre allo sweep orario, i due
+    trigger event-driven — nowcast radar e FIRMS — che dopo la #78 girano con
+    lo stesso profilo e hanno bisogno delle stesse metriche perché il briefing
+    asincrono possa trovarli.
 
     Il runtime misura ogni nodo in `NodeExecutionRecord.duration_seconds`
     (`workflow_runtime/builder.py`), quindi i tempi per passo sono già lì: la
@@ -103,6 +108,11 @@ def _sweep_metrics(result: Any, *, cells: int) -> dict[str, Any]:
     }
     if assessment is not None:
         out["high_or_above"] = assessment.cells_high_or_above
+        # La distribuzione serve al briefing asincrono (#78): decide con la
+        # stessa regola che il nodo LLM applicava dentro lo sweep
+        # (`briefing_min_level`), e senza i conteggi dovrebbe rileggersi le
+        # righe di ogni regione per scoprire che non c'è niente da raccontare.
+        out["cells_by_level"] = dict(assessment.cells_by_level)
     for node in result.nodes:
         out[f"{node.name.lower()}_s"] = round(node.duration_seconds, 3)
     return out
@@ -150,7 +160,7 @@ async def _score_one_aoi(
                 metrics["error_type"] = type(exc).__name__
                 return aoi_id, 0
             cells = len(result.context.cell_results)
-            metrics.update(_sweep_metrics(result, cells=cells))
+            metrics.update(sweep_metrics(result, cells=cells))
             log.info(
                 "job.hourly_monitoring.aoi.done",
                 aoi_id=aoi_id,
@@ -199,7 +209,8 @@ async def _run_sweep(deps: AppDependencies) -> dict[str, int]:
             log.info("job.hourly_monitoring.no_aois", hazard=hazard.value)
             continue
         try:
-            workflow = deps.build_workflow(hazard=hazard)
+            # Profilo orario: niente LLM, niente shadow (#78).
+            workflow = deps.build_workflow(hazard=hazard, profile="hourly")
         except Exception as exc:
             # A hazard that cannot be scored (no engine, no thresholds) must
             # not take the other hazards down with it.

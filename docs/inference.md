@@ -34,9 +34,9 @@ toccare Limen.
 | `chat` | 8B, GPU-resident | prosa italiana (briefing) |
 | `extract` | profilo JSON (grammar-constrained) | output JSON stretto |
 | `embed` | embedding | sidecar KG |
-| `quality-local` | colibrì / GLM-5.2, **con** fallback su `quality-cloud` | **vietato** — vedi sotto |
+| `quality-local` | colibrì / GLM-5.2, **con** fallback su `quality-cloud` | solo `briefing` — vedi sotto |
 | `quality-cloud` | Claude via API, fallback di `quality-local` | — |
-| `glm52` | colibrì per nome proprio, **senza** fallback | **vietato** — vedi sotto |
+| `glm52` | colibrì per nome proprio, **senza** fallback | solo `briefing` — vedi sotto |
 
 La differenza fra `quality-local` e `glm52` non è il modello — è la semantica
 del guasto. Se colibrì non risponde, `quality-local` restituisce Claude senza
@@ -81,43 +81,58 @@ Ogni ruolo di `LLM__MODELS__*` è invocato su un percorso sincrono:
 |---|---|---|
 | `POST /api/monitor/{aoi_id}` | `api/endpoints/monitor.py:33-40` | il client HTTP resta appeso |
 | tool MCP `run_monitor` | `mcp/tools.py:188-190` | l'agente resta appeso |
-| trigger nowcast radar | `api/jobs/nowcast_monitoring.py:69-75` | **15 min** |
-| trigger FIRMS | `api/jobs/firms_monitoring.py:70-76` | 45 min |
-| sweep oraria | `api/jobs/hourly_monitoring.py:60-68` | 60 min |
 | `limen monitor-once` | `cli/monitor_once.py:60` | foreground |
 
-Il caso peggiore non è la richiesta HTTP: è la **sweep oraria**. Il loop a
-`hourly_monitoring.py:61` è sequenziale su tutte le AOI, e
-`run_hourly_monitoring` è protetta da `_sweep_lock` che **scarta** i tick
-successivi. Con un briefing da decine di minuti la prima sweep non chiude
-entro l'ora, ogni tick seguente logga `job.hourly_monitoring.skip`, e il
-monitoraggio nazionale si ferma. Nessun errore, nessun alert: solo un sistema
+Il caso peggiore **era** la sweep oraria: il loop era sequenziale su tutte le
+AOI e `run_hourly_monitoring` è protetta da `_sweep_lock`, che **scarta** i
+tick successivi. Con un briefing da decine di minuti la prima sweep non
+chiudeva entro l'ora, ogni tick seguente logava `job.hourly_monitoring.skip`, e
+il monitoraggio nazionale si fermava. Nessun errore, nessun alert: un sistema
 che sembra vivo e non sta più valutando niente.
 
+Dalla #78 la sweep oraria **non chiama più l'LLM**: gira con
+`profile="hourly"`, che toglie `RiskAnalystNode` e `BriefingNode`. Non è una
+mitigazione del vincolo, è la rimozione del percorso — sulla Basilicata i due
+nodi costavano 140,3 s dei 156 di sweep contro 0,88 s di scoring. Con lei sono
+usciti dalla tabella i due trigger event-driven, **nowcast radar** (15 min) e
+**FIRMS** (45 min): usano lo stesso profilo, e i loro sweep vengono raccolti
+da `briefing_enrichment` come quelli orari.
+
 Per questo il vincolo è **imposto per costruzione, non per convenzione**:
-`limen.config.settings.SLOW_GENERATION_MODELS` elenca i modelli vietati e un
+`limen.config.settings.SLOW_GENERATION_MODELS` elenca i modelli lenti e un
 `model_validator` su `LLMSettings` **rifiuta di far partire il processo** se un
-ruolo ci è mappato. Copre anche le chiavi non previste (`LLMModels` ha
-`extra="allow"`), quindi un futuro `LLM__MODELS__REPORT=quality-local` non
+ruolo *sincrono* ci è mappato. Copre anche le chiavi non previste (`LLMModels`
+ha `extra="allow"`), quindi un futuro `LLM__MODELS__REPORT=quality-local` non
 passa di straforo. È lo stesso principio per cui colibrì rifiuta di ascoltare
 su `0.0.0.0` senza chiave: meglio un errore chiaro che un degrado silenzioso.
 
-### Come si userà colibrì (proposta, non implementata)
+### L'eccezione: `briefing`
 
-Un modello che genera in decine di minuti non è inutile — è un modello *batch*.
-Serve un percorso che non abbia mai un client in attesa:
+`ASYNC_GENERATION_ROLES` elenca i ruoli **non** sincroni, e dalla #78 ne
+contiene uno: `briefing`. Il percorso batch che questa pagina descriveva come
+proposta esiste:
 
-1. Un ruolo dedicato (`report` / `deep_analysis`) fuori da `LLM__MODELS__*`,
-   con la propria allowlist che ammette `quality-local`.
-2. Un job asincrono che lo invoca, sul modello di `api/jobs/daily_report.py`:
-   nessun intervallo breve, nessun lock condiviso con la sweep.
-3. Esito **persistito** (tabella o object store) con stato
-   `pending`/`done`/`failed`, recuperabile da un endpoint che legge il record
-   e risponde subito — mai un endpoint che attende la generazione.
-4. Tetto per-ruolo generoso (`LLM__LLAMACPP_ROLE_TIMEOUT_SECONDS`), senza
-   toccare quello globale.
+* `api/jobs/briefing_enrichment.py` passa ogni
+  `LLM__BRIEFING_INTERVAL_MINUTES` (default 10), prende dagli sweep recenti le
+  regioni uscite senza narrativa e ne racconta **una alla volta**;
+* l'esito è persistito — `explanation.briefing_it` sulle righe di
+  `risk_assessments` — e le API lo leggono da lì, rispondendo subito con il
+  testo deterministico finché non arriva;
+* nessun client resta appeso: mappa, allerte e punteggi non lo aspettano.
 
-Finché questo non esiste, la validazione all'avvio è la protezione.
+Quindi:
+
+```bash
+LLM__MODELS__BRIEFING=quality-local
+LLM__LLAMACPP_ROLE_TIMEOUT_SECONDS='{"Briefing": 5400}'
+```
+
+è una configurazione ammessa, e il tetto per-ruolo è la parte da non
+dimenticare: il default globale di 120 s taglierebbe la generazione a metà.
+
+`risk_analyst` resta vietato anche se lo stesso job lo invoca subito prima del
+briefing — è lo stesso ruolo che MCP e i percorsi HTTP chiamano, e la
+configurazione è per ruolo, non per chiamante.
 
 ## Timeout
 

@@ -16,21 +16,19 @@ from apscheduler.triggers.interval import IntervalTrigger
 from limen.api.dependencies import AppDependencies
 from limen.api.jobs._tracking import track_job
 from limen.api.jobs.alert_digest import run_alert_digest
-from limen.api.jobs.cache_cleanup import run_cache_cleanup_job
+from limen.api.jobs.briefing_enrichment import run_briefing_enrichment
 from limen.api.jobs.daily_report import run_daily_report
-from limen.api.jobs.drift_monitor import run_drift_monitor_job
 from limen.api.jobs.firms_monitoring import run_firms_monitoring
-from limen.api.jobs.forecast_history import run_forecast_history_job
 from limen.api.jobs.forecast_monitoring import run_forecast_monitoring
 from limen.api.jobs.geodata_export import run_geodata_export_job
 from limen.api.jobs.hourly_monitoring import run_hourly_monitoring
 from limen.api.jobs.html_report import run_html_report
 from limen.api.jobs.iot_partition_rollover import run_iot_partition_rollover_job
 from limen.api.jobs.iot_rollup import run_iot_rollup_job
+from limen.api.jobs.nightly import run_nightly_pipeline
 from limen.api.jobs.nowcast_monitoring import run_nowcast_monitoring
 from limen.api.jobs.partitions import run_partitions_job
 from limen.api.jobs.weekly_idrogeo_sync import run_weekly_idrogeo_sync
-from limen.config.settings import SchedulerBackend
 from limen.core.logging import get_logger
 
 log = get_logger(__name__)
@@ -39,17 +37,16 @@ log = get_logger(__name__)
 # vive là per rompere il ciclo con i moduli dei job (#75).
 from limen.api.jobs.ids import (  # noqa: E402
     JOB_ALERT_DIGEST,
-    JOB_CACHE_CLEANUP,
+    JOB_BRIEFING_ENRICHMENT,
     JOB_DAILY_REPORT,
-    JOB_DRIFT_MONITOR,
     JOB_FIRMS_MONITORING,
-    JOB_FORECAST_HISTORY,
     JOB_FORECAST_MONITORING,
     JOB_GEODATA_EXPORT,
     JOB_HOURLY_MONITORING,
     JOB_HTML_REPORT,
     JOB_IOT_PARTITION_ROLLOVER,
     JOB_IOT_ROLLUP,
+    JOB_NIGHTLY,
     JOB_NOWCAST_MONITORING,
     JOB_PARTITIONS,
     JOB_WEEKLY_IDROGEO,
@@ -112,17 +109,6 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
             interval_hours=deps.settings.forecast.interval_hours,
             horizon_hours=deps.settings.forecast.horizon_hours,
         )
-
-        # Persist the per-cell forecast trend (+24/48/72h) for the UI (#41).
-        await scheduler.add_schedule(
-            track_job(JOB_FORECAST_HISTORY)(run_forecast_history_job),
-            args=(deps,),
-            trigger=_deferred_interval(hours=deps.settings.forecast.interval_hours),
-            id=JOB_FORECAST_HISTORY,
-            conflict_policy=ConflictPolicy.replace,
-        )
-        registered.append(JOB_FORECAST_HISTORY)
-        log.info("scheduler.registered", job=JOB_FORECAST_HISTORY)
 
     # Digest degli alert (#59). Registrato quando il rate limit è attivo: è
     # l'unica cosa che svuota la coda, e senza di esso un ciclo trattenuto
@@ -240,21 +226,6 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
         interval_hours=cfg.partitions_interval_hours,
     )
 
-    if cfg.cache_cleanup is SchedulerBackend.APSCHEDULER:
-        await scheduler.add_schedule(
-            track_job(JOB_CACHE_CLEANUP)(run_cache_cleanup_job),
-            args=(deps,),
-            trigger=_deferred_interval(seconds=cfg.cache_cleanup_interval_seconds),
-            id=JOB_CACHE_CLEANUP,
-            conflict_policy=ConflictPolicy.replace,
-        )
-        registered.append(JOB_CACHE_CLEANUP)
-        log.info(
-            "scheduler.registered",
-            job=JOB_CACHE_CLEANUP,
-            interval_seconds=cfg.cache_cleanup_interval_seconds,
-        )
-
     if deps.settings.enable_insitu:
         await scheduler.add_schedule(
             track_job(JOB_IOT_ROLLUP)(run_iot_rollup_job),
@@ -284,20 +255,35 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
             cron="day 02 02:00",
         )
 
-    if deps.settings.monitoring.enable_drift_monitoring:
-        await scheduler.add_schedule(
-            track_job(JOB_DRIFT_MONITOR)(run_drift_monitor_job),
-            args=(deps,),
-            trigger=_deferred_interval(hours=deps.settings.monitoring.drift_check_hours),
-            id=JOB_DRIFT_MONITOR,
-            conflict_policy=ConflictPolicy.replace,
-        )
-        registered.append(JOB_DRIFT_MONITOR)
-        log.info(
-            "scheduler.registered",
-            job=JOB_DRIFT_MONITOR,
-            interval_hours=deps.settings.monitoring.drift_check_hours,
-        )
+    # Il briefing narrativo, dopo lo sweep (#78). Registrato sempre: la
+    # condizione vera — "questo sweep è uscito senza narrativa" — la conosce
+    # solo il job, e un tick che non trova candidati costa una query.
+    await scheduler.add_schedule(
+        track_job(JOB_BRIEFING_ENRICHMENT)(run_briefing_enrichment),
+        args=(deps,),
+        trigger=_deferred_interval(minutes=deps.settings.llm.briefing_interval_minutes),
+        id=JOB_BRIEFING_ENRICHMENT,
+        conflict_policy=ConflictPolicy.replace,
+    )
+    registered.append(JOB_BRIEFING_ENRICHMENT)
+    log.info(
+        "scheduler.registered",
+        job=JOB_BRIEFING_ENRICHMENT,
+        interval_minutes=deps.settings.llm.briefing_interval_minutes,
+    )
+
+    # La notte in un job solo: shadow, drift, retrain, forecast history,
+    # partizioni, retention. Gli schedule autonomi dei primi quattro non
+    # esistono più — si incrociavano fra loro e con lo sweep orario.
+    await scheduler.add_schedule(
+        track_job(JOB_NIGHTLY)(run_nightly_pipeline),
+        args=(deps,),
+        trigger=CronTrigger(hour=cfg.nightly_hour_utc, minute=0),
+        id=JOB_NIGHTLY,
+        conflict_policy=ConflictPolicy.replace,
+    )
+    registered.append(JOB_NIGHTLY)
+    log.info("scheduler.registered", job=JOB_NIGHTLY, hour_utc=cfg.nightly_hour_utc)
 
     if deps.settings.geodata.enable_periodic_export:
         await scheduler.add_schedule(

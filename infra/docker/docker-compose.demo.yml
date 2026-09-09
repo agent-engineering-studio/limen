@@ -197,7 +197,12 @@ services:
       NOWCAST__MIN_INTENSITY_MMH: ${NOWCAST__MIN_INTENSITY_MMH:-30}
       REPORT__ENABLED: ${REPORT__ENABLED:-true}
       REPORT__HOUR_UTC: ${REPORT__HOUR_UTC:-6}
-      SCORING__MLFLOW_TRACKING_URI: sqlite:////app/mlflow.db
+      # Registry su Postgres, non su SQLite (#78): il file store è deprecato e
+      # il registry dei modelli non ci funziona, quindi il cancello di
+      # promozione non avrebbe dove scrivere. Il database `mlflow` lo crea
+      # `infra/postgres/initdb/01-mlflow-db.sql` al primo boot del cluster.
+      # sqlite resta il default solo per lo sviluppo locale.
+      SCORING__MLFLOW_TRACKING_URI: ${SCORING__MLFLOW_TRACKING_URI:-postgresql://limen:limen@postgres:5432/mlflow}
       LLM__OLLAMA_API_KEY: ${LLM__OLLAMA_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     extra_hosts:
@@ -213,11 +218,12 @@ services:
       - limen-objects:/var/lib/limen/objects
       # DTM / shared vector data (read-only). Same folder GeoServer serves.
       - ${GEOSERVER_SHAPEFILE_DIR:-../../../mcp-geoserver/data}:/data:ro
-      # MLflow registry for the shadow challenger. mlruns mounts at the SAME
-      # absolute path as on the host: the registry stores absolute artifact
-      # URIs at log time. rw because model load writes registered_model_meta
-      # into the artifact dir. Missing files ⇒ challenger degrades to None.
-      - ../../mlflow.db:/app/mlflow.db:ro
+      # Gli **artefatti** del challenger. Il registry sta su Postgres (#78) e
+      # mlflow.db non è più montato, ma questo mount resta e allo stesso
+      # percorso assoluto dell'host: il registry salva URI assoluti al momento
+      # del log. rw perché il caricamento del modello scrive
+      # registered_model_meta nella cartella dell'artefatto. File mancanti ⇒
+      # il challenger degrada a None.
       - ../../mlruns:/Users/gzileni/Git/limen/mlruns
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/ready', timeout=3).status==200 else 1)\""]
@@ -260,7 +266,9 @@ services:
     volumes:
       - limen-objects:/var/lib/limen/objects
       - ${GEOSERVER_SHAPEFILE_DIR:-../../../mcp-geoserver/data}:/data:ro
-      - ../../mlflow.db:/app/mlflow.db:ro
+      # Il registry sta su Postgres (#78): niente più mlflow.db montato. Gli
+      # **artefatti** restano qui, allo stesso percorso assoluto dell'host,
+      # perché il registry salva URI assoluti al momento del log.
       - ../../mlruns:/Users/gzileni/Git/limen/mlruns
     # Nessuna `ports:`: il worker non serve niente.
     deploy:

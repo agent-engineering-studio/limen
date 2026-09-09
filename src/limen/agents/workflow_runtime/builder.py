@@ -76,6 +76,18 @@ class Workflow:
     def step_count(self) -> int:
         return len(self._steps)
 
+    @property
+    def step_names(self) -> tuple[str, ...]:
+        """I nomi dei nodi, nell'ordine di esecuzione.
+
+        Il conteggio dice *quanti* passi ci sono; per i profili (#78) serve
+        sapere **quali**, perché un profilo che toglie due nodi LLM e ne
+        aggiunge uno per sbaglio avrebbe lo stesso conteggio di uno corretto.
+        I passi condizionali compaiono qui anche se a runtime il predicato li
+        salterà: è la forma dichiarata, non la traccia di un'esecuzione.
+        """
+        return tuple(step.executor.name for step in self._steps)
+
     async def run(self, ctx: object) -> WorkflowResult:
         records: list[NodeExecutionRecord] = []
         current = ctx

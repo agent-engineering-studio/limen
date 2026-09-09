@@ -107,6 +107,10 @@ export interface LatestAssessmentResponse {
   cells_high_or_above: number;
   cells_by_level: Record<string, number>;
   briefing_it: string | null;
+  // True quando il testo è il riassunto deterministico e non quello del
+  // modello narrativo: lo sweep orario non chiama l'LLM, il briefing arriva
+  // con qualche minuto di ritardo (#78).
+  briefing_is_fallback: boolean;
   analysis: RiskAnalysisDTO | null;
 }
 
