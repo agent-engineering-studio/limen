@@ -70,8 +70,7 @@
    3. `apt install smartmontools && smartctl -a /dev/sdb` per la conferma
       formale (SMART non è installato sull'host).
 4. **Bring-up**: `make up-dev` → `make seed` (o `make migrate`) → `uv run limen seed-comuni`
-   (serve `GEOSERVER_SOURCE__DB_DSN`) → `uv run limen create-admin` (env
-   `LIMEN_ADMIN_EMAIL`/`_PASSWORD`).
+   (serve `GEOSERVER_SOURCE__DB_DSN`).
 
 ---
 
@@ -167,17 +166,24 @@ Versione: implementazione completa, in fase di test. Feature mergiate di recente
   Attenzione: `make build-images` resta un target distinto e non ridondante —
   costruisce con `--platform linux/amd64` esplicito (la base `postgis/postgis`
   non ha manifest arm64) e produce anche `frontend/dist/`.
-- **Auth su database** (issue #49, PR #50-53) — **Clerk rimosso** (non ammesso per la
-  PA). `src/limen/auth/`: password scrypt (stdlib), verifica email via codice
-  (SMTP riusato dal canale email; in dev il codice va nei log), sessioni
-  server-side in cookie httpOnly (`sessions`), ruoli `admin`/`ml-ops`/`operatore`/
-  `viewer`. Endpoint `/api/auth/*`, admin dashboard `/api/admin/*` + UI `#/admin`,
-  CLI `limen create-admin`. **SPID = seam OIDC fail-closed** (`SPID__*` non
-  configurato ⇒ disattivo): da cablare a un proxy/aggregatore **accreditato AgID**
-  quando disponibile. Frontend: `AuthProvider`/`useAuth`, pagine `#/accedi`,
-  `#/registrati`, `#/verifica`. CORS: `allow_credentials=True` + origini esplicite
-  (`API__CORS_ORIGINS`; default Vite dev). `AUTH__ENABLED=false` di default ⇒
-  endpoint protetti aperti finché non lo attivi.
+- **Autenticazione utente: RIMOSSA** (epic #69, figlie #70-#73). L'auth su
+  database della #49 (PR #50-53) è stata smontata per intero: via
+  `src/limen/auth/`, gli endpoint `/api/auth/*` e `/api/admin/*`, il seam SPID,
+  `limen create-admin`, `AuthSettings`/`SpidSettings` e le pagine `#/accedi`,
+  `#/registrati`, `#/verifica`, `#/admin`. Tabelle `users`, `auth_codes`,
+  `sessions` droppate dalla **migrazione 045** (la 025 non è stata toccata:
+  checksum). CORS torna a `["*"]` — `allow_credentials=True` esisteva solo per
+  il cookie di sessione.
+  **Perché**: Limen è una dashboard cartografica pubblica, il login proteggeva
+  la pagina e non i dati (le API erano già aperte, un `curl` otteneva tutto), e
+  teneva dati personali di cittadini custoditi da una PA senza una funzione che
+  lo giustificasse — con registrazione pubblica aperta di default.
+  Il lancio manuale di uno sweep resta su CLI (`limen monitor-once`) e su MCP
+  con `MCP_ADMIN_TOKEN`, fail-closed.
+  **Non reintrodurla** per un'area operatori ipotetica: è il future-proofing
+  che `CLAUDE.md` vieta. Il lavoro della #49 è recuperabile da git, e se
+  nascerà un'area per operatori di Regione o Protezione Civile allora SPID/CIE
+  avrà senso.
 - **A2A (Agent2Agent) + OpenClaw** (issue #3, PR #48) — Agent Card
   `/.well-known/agent-card.json` + endpoint JSON-RPC `/a2a` (message/send,
   message/stream SSE, tasks/get|cancel, push), task in `a2a_tasks`. Tool MCP
@@ -370,11 +376,9 @@ una che dipende da un altro repo.
   - Nessuno è nel percorso operativo caldo (invariante "geodata mai nel critical
     path"): l'API legge feature pre-calcolate dal DB. Servono solo per ri-ingest.
 - **Validazioni live rimaste** (bloccate in locale dal Docker instabile, da rifare
-  sul server): smoke browser del login auth (Vite `npm run dev` + API), curl
+  sul server): curl
   `/api/comuni` con `serve`, integration test `tests/integration/test_alert_dispatch_executor.py`
   (era rosso solo per errore I/O di testcontainers, non per il codice).
-- **SPID reale**: richiede accreditamento AgID + proxy SPID/CIE OIDC, poi impostare
-  `SPID__*`. Il seam è pronto.
 - **Verdetto shadow ML** (issue #4): finestra di osservazione ~fino a inizio agosto
   2026 prima che la retention 30gg mangi i dati; il challenger ML era
   sistematicamente più basso del champion → probabile "non promuovere".
@@ -400,7 +404,6 @@ make seed                    # migrazioni + AOI Puglia/Basilicata + griglia 1 km
 make migrate                 # solo migrazioni pendenti
 uv run limen partitions      # partizioni giornaliere mancanti + stato tabelle calde
 uv run limen seed-comuni     # confini ISTAT + tag celle (needs GEOSERVER_SOURCE__DB_DSN)
-uv run limen create-admin    # LIMEN_ADMIN_EMAIL / _PASSWORD / _FIRST / _LAST
 uv run limen bootstrap-static
 uv run limen calibrate
 uv run limen monitor-once    # LIMEN_MONITOR_AOI / CELL_LIMIT
@@ -426,7 +429,9 @@ make check                   # ruff check + mypy --strict + pytest
   (MinIO/R2/B2 via `OBJECT_STORE__ENDPOINT_URL`); niente SDK cloud fuori da
   `data/object_store/`. Azure rimosso.
 - **production-stack**: Neon ammesso solo dev/test; in prod Postgres containerizzato.
-- **auth-strategy**: Clerk **abbandonato** (no PA) → auth su DB (fasi A→D fatte,
+- **auth-decision**: autenticazione utente **rimossa** (epic #69); mappa
+  pubblica, operatività su CLI/MCP. Supera la vecchia `auth-strategy` (Clerk
+  abbandonato → auth su DB, fasi A→D
   issue #49 chiusa). Vedi §1.
 - **llm-local-ollama**: in locale/container preferire **Ollama** host + qwen; il
   resolver salta i provider cloud senza SDK (fix crash hourly_monitoring). Ordine

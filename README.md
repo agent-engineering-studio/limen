@@ -245,12 +245,15 @@ Completati di recente:
   mareggiate via **Open-Meteo Marine** (costiera), il tutto scalato dalla
   pericolosità geografica ISPRA. Deterministico, puro, degrada in modo neutro
   (segnale non applicabile ⇒ 0); disattivabile con `ENABLE_FLOOD_FORECAST=false`.
-- **Autenticazione su database** (self-hosted, PA-compliant — Clerk rimosso):
-  registrazione con nome/cognome/email + **verifica via codice**, login con
-  password (hash scrypt), **sessioni server-side** in cookie httpOnly
-  (revocabili), ruoli `admin`/`ml-ops`/`operatore`/`viewer`, CLI
-  `limen create-admin`. Endpoint `/api/auth/*`, `AuthProvider`/`useAuth` sulla
-  SPA. SPID via seam OIDC (in arrivo). Vedi issue #49 + `src/limen/auth/`.
+- **Nessuna autenticazione utente, per scelta** (epic #69). Limen è una
+  dashboard cartografica pubblica: mappa, quadro nazionale, allerte, comuni e
+  diagnostica del modello in ombra si aprono senza login. Il login che c'era
+  proteggeva la *pagina* e non i dati — tutte le API che alimentavano la
+  dashboard erano già pubbliche, quindi un `curl` otteneva tutto. Il lancio di
+  uno sweep, la sola operazione privilegiata, resta su CLI (`limen
+  monitor-once`) e su MCP con `MCP_ADMIN_TOKEN`, fail-closed. Il lavoro
+  dell'auth su database (#49) resta nella storia git e si recupera se nascerà
+  un'area per operatori di Regione o Protezione Civile.
 - **Sfidante ML addestrato** su 37k campioni (frane e-ITALICA + pioggia
   antecedente CERRA per campione): **AUC-PR 0.60 vs 0.28 del motore
   deterministico** sulla stessa partizione spaziale e la stessa pioggia

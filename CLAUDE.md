@@ -60,7 +60,7 @@
 | API has no business logic | Endpoints under `src/limen/api/endpoints/` only call the Phase-4 workflow or the Phase-1 repos. New behaviour goes in `agents/` or `core/`, never in route handlers. |
 | DI not globals | Everything routes need is in `AppDependencies` injected via FastAPI `Depends()`. No `from limen.x import _GLOBAL_THING` inside endpoints. |
 | APScheduler not pg_cron | Periodic jobs (hourly monitoring, weekly ISPRA sync, cache cleanup when configured) run in-process via APScheduler so the same code works on Neon. |
-| Frontend = Vite (no Next.js) | Phase 6 ships a public read-only map. Vite + React + MapLibre is the right surface; Next.js adds an unneeded Node server / RSC overhead. Auth is **database-backed** (Clerk removed — not PA-compliant): session cookie via `/api/auth/*`, `AuthProvider`/`useAuth` in the SPA, roles from `GET /api/auth/me`. See issue #49 + `src/limen/auth/`. |
+| Frontend = Vite (no Next.js), and **no user auth** | Phase 6 ships a public read-only map. Vite + React + MapLibre is the right surface; Next.js adds an unneeded Node server / RSC overhead. There is **no authentication** (epic #69): the whole SPA — map, national strip, alerts, comuni, shadow diagnostics — opens without a login, because the APIs feeding it were always public and a login protected the page, not the data. The one privileged action, launching a sweep, lives on the CLI (`limen monitor-once`) and on MCP behind `MCP_ADMIN_TOKEN`. Do not reintroduce a login for a hypothetical operator area — that is the future-proofing this file forbids; #49's work is recoverable from git if the need becomes real. |
 | Tile pipeline | `mv_latest_risk` materialised view: `grid_cells` CROSS JOIN the enabled rows of `hazards`, LEFT JOIN the latest `risk_assessments` per **(cell, hazard)**. **Always refresh via `refresh_mv_latest_risk()`** (PersistResult executor calls it; it debounces to one refresh per 5 min and chains the comune rollup). Never `REFRESH MATERIALIZED VIEW mv_latest_risk` directly. |
 | Engine registry is 2-D | Engines are registered per **(hazard, implementation)** in `core/scoring/registry.py` — hazard and implementation are orthogonal axes, so `(wildfire, ml)` has a home. Registering a factory plus adding `config/hazards/<hazard>.yaml` and its schema is the **only** production change a new hazard needs. Each factory narrows the base `HazardThresholds` to its own schema and raises on a mismatch. `resolver.py` stays the operational layer: it reads `SCORING__ENGINE` and degrades to the V1 baseline on any V2 failure, never raising. |
 | Breakdown is per hazard | `RiskScore` is generic over a `HazardBreakdown` subclass, with a **covariant** TypeVar so `RiskScore[ComponentBreakdown]` is usable as `RiskScore[HazardBreakdown]`. `ScoringEngine` is `Protocol[BreakdownT_co]`: read the numbers ⇒ ask for the concrete breakdown, only serialise ⇒ ask for the base. PEP 695 syntax is **not** usable here (it infers the parameter as invariant and breaks that assignment) — UP046 is suppressed on the class with the reason next to it. |
@@ -152,7 +152,7 @@ before reaching for raw bash:
 
 **Skills NOT relevant to this project:**
 
-- All `clerk-*` skills — Limen doesn't use Clerk for auth.
+- All `clerk-*` skills — Limen has no user authentication at all.
 - `statusline-setup`, `keybindings-help` — user-environment, not project.
 
 ---
@@ -302,9 +302,10 @@ extension points already:
 - V2 ML scoring engine (drop-in replacement of
   `MultiFactorScoringEngine` consuming the same `CellFeatureBundle`).
 - Knowledge-graph grounding of the briefing — V2.x.
-- Authentication is **database-backed** (Clerk removed — not PA-compliant):
-  see memory `auth-strategy` + issue #49. Phase A (backend) + B (frontend)
-  landed; admin dashboard (C) and SPID OIDC seam (D) remain.
+- **Authentication is gone** (epic #69, children #70-#73): no `limen.auth`,
+  no `/api/auth/*` or `/api/admin/*`, no SPID seam, no `users`/`sessions`/
+  `auth_codes` tables (dropped by migration 045). An operator web area is
+  explicitly parked, not planned — see memory `auth-decision`.
 - ML/MLOps for V2 — out of scope for V1.5.
 - DEM derivatives (TINITALY → slope/aspect/curvature/TWI), CORINE, ISPRA Carta Geologica
   vettoriale: `cell_static_factors` columns stay NULL until the raster/vector ingest
