@@ -94,7 +94,10 @@ async def test_run_training_skips_on_empty_dataset(settings) -> None:  # type: i
     # Force fetch_samples → empty by patching the repo.
     import limen.ml.train as train_mod
 
-    async def _empty() -> list:  # type: ignore[type-arg]
+    async def _empty(**_kwargs: object) -> list:  # type: ignore[type-arg]
+        # `fetch_samples` prende ora il pericolo (#68): lo stub accetta i
+        # kwargs invece di fissarne la firma, così un terzo parametro non
+        # rompe un test che non sta provando la firma.
         return []
 
     train_mod.fetch_samples = _empty  # type: ignore[assignment]

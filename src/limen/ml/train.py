@@ -22,13 +22,15 @@ import structlog
 
 from limen.config.settings import Settings, get_settings
 from limen.core.logging import get_logger
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.data.repos.training_samples_repo import (
     TrainingSample,
     fetch_samples,
+    fetch_wildfire_ready_samples,
     list_blocks,
 )
-from limen.ml.baseline import caine_baseline, v1_baseline
-from limen.ml.dataset import TrainingMatrix, prune_collinear, to_matrix
+from limen.ml.baseline import baseline_for, caine_baseline
+from limen.ml.dataset import TrainingMatrix, matrix_sha, prune_collinear, to_matrix
 from limen.ml.feature_store import spatial_block_folds
 from limen.ml.metrics import (
     auc_pr,
@@ -175,6 +177,100 @@ def _cv_eval(
     )
 
 
+def _algorithm_candidates(seed: int, weights: dict[int, float]) -> dict[str, Any]:
+    """I candidati da confrontare sulla **stessa** partizione CV (#68).
+
+    Random Forest, gradient boosting e regressione logistica. XGBoost è nella
+    lista della issue e **non** è qui: LightGBM occupa la stessa nicchia
+    algoritmica — boosting su alberi, dataset tabellare di poche decine di
+    migliaia di righe — ed è già una dipendenza. Un secondo GBDT darebbe un
+    terzo numero senza una terza informazione, al prezzo di una dipendenza in
+    più.
+
+    MaxEnt resta fuori per la ragione che la issue stessa dà: su dati
+    presence-only una Random Forest con un buon campionamento di fondo lo
+    eguaglia, e il campionamento caso-controllo è quello che l'estrazione fa.
+
+    La logistica non è un riempitivo: è il riferimento lineare obbligatorio,
+    l'analogo di Caine per le frane. Se il boosting non la batte, la struttura
+    non-lineare non sta comprando niente.
+    """
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import StandardScaler
+
+    return {
+        "random_forest": RandomForestClassifier(
+            n_estimators=300,
+            min_samples_leaf=5,
+            class_weight="balanced",
+            random_state=seed,
+            n_jobs=-1,
+        ),
+        # Standardizzata: la logistica senza scala dà coefficienti dominati
+        # dalla feature con l'unità più grande, e qui convivono indici in
+        # [0,1] e millimetri di pioggia.
+        "logistic": make_pipeline(
+            StandardScaler(),
+            LogisticRegression(max_iter=2000, class_weight="balanced", random_state=seed),
+        ),
+        "gradient_boosting": _lightgbm_candidate(seed, weights),
+    }
+
+
+def _lightgbm_candidate(seed: int, weights: dict[int, float]) -> Any:
+    import lightgbm as lgb
+
+    return lgb.LGBMClassifier(
+        objective="binary",
+        verbosity=-1,
+        scale_pos_weight=weights[1] / weights[0],
+        deterministic=True,
+        force_row_wise=True,
+        seed=seed,
+        n_estimators=300,
+    )
+
+
+def _compare_algorithms(
+    matrix: TrainingMatrix, fold_blocks: list[list[str]], *, seed: int
+) -> dict[str, dict[str, float]]:
+    """AUC-PR e Brier di ogni candidato, sulla stessa partizione a blocchi.
+
+    Stessi fold del modello finale: confrontare algoritmi su partizioni
+    diverse misurerebbe la fortuna della partizione.
+    """
+    import numpy as np
+
+    block_to_fold = {b: i for i, fold in enumerate(fold_blocks) for b in fold}
+    fold_idx = np.array([block_to_fold.get(g, 0) for g in matrix.groups])
+    weights = _class_weight(matrix.y)
+
+    out: dict[str, dict[str, float]] = {}
+    for name, estimator in _algorithm_candidates(seed, weights).items():
+        oof = np.zeros(len(matrix.y), dtype=float)
+        covered = np.zeros(len(matrix.y), dtype=bool)
+        for k in range(len(fold_blocks)):
+            train_mask = fold_idx != k
+            val_mask = fold_idx == k
+            if val_mask.sum() == 0 or matrix.y[train_mask].sum() == 0:
+                continue
+            from sklearn.base import clone
+
+            model = clone(estimator)
+            model.fit(matrix.X[train_mask], matrix.y[train_mask])
+            oof[val_mask] = model.predict_proba(matrix.X[val_mask])[:, 1]
+            covered[val_mask] = True
+        if not covered.any():
+            continue
+        out[name] = {
+            "auc_pr": auc_pr(matrix.y[covered], oof[covered]),
+            "brier": brier_score(matrix.y[covered], oof[covered]),
+        }
+    return out
+
+
 def _check_promotion(
     *,
     settings: Settings,
@@ -197,13 +293,19 @@ def _check_promotion(
     )
 
 
-async def run_training(*, settings: Settings | None = None) -> TrainResult:
+async def run_training(
+    *, settings: Settings | None = None, hazard: HazardType = DEFAULT_HAZARD
+) -> TrainResult:
     """End-to-end training entry point. Returns a :class:`TrainResult`.
 
     Idempotent in the sense that re-running with the same dataset
     deterministically produces the same metrics (seeds + folds are
     fixed). Missing optional deps degrade gracefully: with `ml` not
     installed the call returns early with a logged warning.
+
+    ``hazard`` sceglie schema di feature, baseline e nome del modello
+    registrato insieme (#68): confrontare un challenger incendio con la
+    baseline delle frane non misurerebbe niente.
     """
     s = settings or get_settings()
     try:
@@ -225,7 +327,13 @@ async def run_training(*, settings: Settings | None = None) -> TrainResult:
             promoted=False,
         )
 
-    samples = await fetch_samples()
+    # Per l'incendio solo i campioni con il meteo ricostruito: un positivo
+    # senza FWI entrerebbe con zero, cioè con la lezione sbagliata (#68).
+    samples = (
+        await fetch_wildfire_ready_samples()
+        if hazard is HazardType.WILDFIRE
+        else await fetch_samples(hazard=hazard)
+    )
     if _need_minimum_samples(samples):
         _log.warning("training.skip.too_few_samples", count=len(samples))
         return TrainResult(
@@ -238,7 +346,7 @@ async def run_training(*, settings: Settings | None = None) -> TrainResult:
             promoted=False,
         )
 
-    matrix = to_matrix(samples)
+    matrix = to_matrix(samples, hazard=hazard)
     matrix, collinear_dropped = prune_collinear(matrix, threshold=s.training.collinearity_prune_r)
     if collinear_dropped:
         _log.warning(
@@ -255,14 +363,21 @@ async def run_training(*, settings: Settings | None = None) -> TrainResult:
     with mlflow.start_run() as run:
         mlflow.log_params(
             {
+                "hazard": hazard.value,
                 "n_samples": len(samples),
                 "positives": int(matrix.y.sum()),
                 "spatial_blocks": len(blocks),
                 "cv_folds": s.training.spatial_cv_folds,
                 "optuna_trials": s.training.optuna_trials,
                 "seed": s.training.seed,
+                # L'impronta del dataset: stessi input ⇒ stesso SHA, che è il
+                # criterio di riproducibilità della #68. Registrata come
+                # parametro e non come metrica perché non è un numero da
+                # confrontare, è un'identità.
+                "matrix_sha256": matrix_sha(matrix),
             }
         )
+        mlflow.set_tag("hazard", hazard.value)
 
         study = optuna.create_study(
             direction="maximize",
@@ -281,12 +396,39 @@ async def run_training(*, settings: Settings | None = None) -> TrainResult:
 
         auc_pr_mean, auc_pr_std, brier_mean, oof_prob, oof_y = _cv_eval(matrix, folds, best_params)
 
-        baseline_scores = v1_baseline(samples)
-        baseline_auc = auc_pr(matrix.y, baseline_scores)
-        # Second reference: the bare Caine I-D power law — the ML must add
-        # value over the triggering threshold itself, not just the blend.
-        caine_scores = caine_baseline(samples)
-        caine_auc = auc_pr(matrix.y, caine_scores)
+        baseline_scores = baseline_for(hazard)(samples)
+        # `nan` = campione la cui baseline non è calcolabile (per l'incendio,
+        # meteo non arricchito). Si escludono dal confronto invece di
+        # sostituirli con zero: zero regalerebbe alla baseline i veri negativi
+        # che non abbiamo misurato.
+        import numpy as np
+
+        finite = np.isfinite(baseline_scores)
+        baseline_auc = auc_pr(matrix.y[finite], baseline_scores[finite]) if finite.any() else 0.0
+        if not finite.all():
+            _log.warning(
+                "training.baseline_partial",
+                hazard=hazard.value,
+                scored=int(finite.sum()),
+                total=len(finite),
+            )
+        # Riferimento lineare/di soglia, per pericolo: per le frane la legge di
+        # potenza di Caine nuda, per l'incendio non esiste un secondo
+        # riferimento distinto dalla V1 (che è già FWI-only), quindi il
+        # confronto con gli altri algoritmi prende quel ruolo.
+        caine_scores = caine_baseline(samples) if hazard is HazardType.LANDSLIDE else None
+        caine_auc = auc_pr(matrix.y, caine_scores) if caine_scores is not None else 0.0
+
+        algorithms = _compare_algorithms(matrix, folds, seed=s.training.seed)
+        for name, scores in algorithms.items():
+            mlflow.log_metrics(
+                {f"alg_{name}_auc_pr": scores["auc_pr"], f"alg_{name}_brier": scores["brier"]}
+            )
+        _log.info(
+            "training.algorithms",
+            hazard=hazard.value,
+            **{k: round(v["auc_pr"], 4) for k, v in algorithms.items()},
+        )
 
         # Operational metrics at a sane default threshold (0.5 for probs).
         hit_rate, far = hit_rate_far(matrix.y, oof_prob, threshold=0.5)
@@ -316,11 +458,10 @@ async def run_training(*, settings: Settings | None = None) -> TrainResult:
         mlflow.log_param("collinear_dropped", json.dumps(collinear_dropped))
         # Operating points at 50/70/90% recall — what does catching X% of
         # the landslides cost, for the ML and both references?
-        for label, scores in (
-            ("ml", oof_prob),
-            ("v1", baseline_scores),
-            ("caine", caine_scores),
-        ):
+        sweeps: list[tuple[str, Any]] = [("ml", oof_prob), ("v1", baseline_scores)]
+        if caine_scores is not None:
+            sweeps.append(("caine", caine_scores))
+        for label, scores in sweeps:
             for point in threshold_sweep(matrix.y, scores):
                 r = int(point["recall_target"] * 100)
                 mlflow.log_metrics(
@@ -347,10 +488,15 @@ async def run_training(*, settings: Settings | None = None) -> TrainResult:
         final_model = lgb.LGBMClassifier(**final_params)
         final_model.fit(matrix.X, matrix.y)
 
+        # Un nome di modello registrato per pericolo: lo stage di un modello
+        # incendio non deve poter promuovere un modello frane.
+        registered = s.scoring.mlflow_registered_model
+        if hazard is not DEFAULT_HAZARD:
+            registered = f"{registered}-{hazard.value}"
         mlflow.lightgbm.log_model(
             final_model.booster_,
             artifact_path="model",
-            registered_model_name=s.scoring.mlflow_registered_model,
+            registered_model_name=registered,
         )
 
         with tempfile.TemporaryDirectory() as tmpd:
@@ -388,6 +534,7 @@ async def run_training(*, settings: Settings | None = None) -> TrainResult:
 
         _log.info(
             "training.done",
+            hazard=hazard.value,
             run_id=run.info.run_id,
             n_samples=len(samples),
             auc_pr_mean=auc_pr_mean,

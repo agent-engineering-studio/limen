@@ -15,8 +15,9 @@ from __future__ import annotations
 
 import hashlib
 import random
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 import structlog
@@ -28,9 +29,14 @@ from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import (
     CellFeatureBundle,
     DynamicInputs,
+    FireWeatherState,
     RainfallSample,
     RainfallSeries,
     StaticFactors,
+)
+from limen.core.scoring.regional_thresholds import (
+    WildfireThresholds,
+    load_hazard_thresholds,
 )
 from limen.data.db import acquire
 from limen.data.repos import (
@@ -150,6 +156,133 @@ async def _load_flood_positives(*, min_occurrence: datetime) -> list[_PositiveEv
     ]
 
 
+async def _load_wildfire_positives(
+    *, min_occurrence: datetime, max_occurrence: datetime | None = None
+) -> list[_PositiveEvent]:
+    """Giorni-incendio da `fire_events` (#66), uno per cella-giorno.
+
+    Ogni giorno di fuoco è un positivo a sé e non un evento per cella: un
+    incendio che brucia tre giorni è tre giornate in cui quella cella era in
+    pericolo, ed è la stessa scelta che `fire_events` ha già fatto.
+
+    Il timestamp è **mezzogiorno UTC**, non mezzanotte: il FWI di Van Wagner è
+    definito sulle condizioni di mezzogiorno locale, e ancorare i campioni a
+    mezzanotte chiederebbe alla catena l'indice del giorno sbagliato al
+    confine.
+    """
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT e.cell_id, e.event_date, g.aoi_id,
+                   ST_X(ST_Centroid(g.geom)) AS lon,
+                   ST_Y(ST_Centroid(g.geom)) AS lat,
+                   ST_Centroid(g.geom) AS geom
+            FROM fire_events e
+            JOIN grid_cells g ON g.id = e.cell_id
+            WHERE e.event_date >= $1::date
+              AND ($2::date IS NULL OR e.event_date <= $2::date)
+            ORDER BY e.event_date, e.cell_id
+            """,
+            min_occurrence.date(),
+            max_occurrence.date() if max_occurrence else None,
+        )
+    return [
+        _PositiveEvent(
+            iffi_id=f"{r['cell_id']}@{r['event_date'].isoformat()}",
+            cell_id=str(r["cell_id"]),
+            aoi_id=str(r["aoi_id"]),
+            occurrence_date=datetime.combine(r["event_date"], time(12, 0), tzinfo=UTC),
+            centroid_lonlat=(float(r["lon"]), float(r["lat"])),
+            geom=r["geom"],
+        )
+        for r in rows
+    ]
+
+
+async def _wildfire_background(
+    *,
+    positives: list[_PositiveEvent],
+    target: int,
+    rng: random.Random,
+    window: tuple[datetime, datetime],
+) -> list[tuple[str, str, float, float, datetime]]:
+    """Pseudo-assenze caso-controllo per l'incendio.
+
+    **FIRMS è presence-only**, quindi l'assenza di un evento non prova che non
+    sia bruciato: nuvole, chioma e roghi sotto la soglia di rilevamento non
+    compaiono. Le negative si campionano, non si leggono.
+
+    Due popolazioni in parti uguali, e servono a cose diverse:
+
+    * **la stessa cella in un giorno senza fuoco** — insegna il *quando*: la
+      cella è identica in tutto tranne il meteo, quindi la differenza che il
+      modello impara è la finestra meteorologica;
+    * **una cella mai bruciata, in un giorno qualsiasi della finestra** —
+      insegna il *dove*: combustibile, pendenza e memoria del fuoco.
+    Con le sole prime, un modello che dicesse "qui brucia sempre" avrebbe
+    ragione su metà del dataset; con le sole seconde, il meteo non conterebbe.
+    """
+    lo, hi = window
+    span_days = max(1, (hi - lo).days)
+    fire_days: dict[str, set[date]] = {}
+    for ev in positives:
+        fire_days.setdefault(ev.cell_id, set()).add(ev.occurrence_date.date())
+
+    same_cell_target = target // 2
+    out: list[tuple[str, str, float, float, datetime]] = []
+    burnt = list(positives)
+    rng.shuffle(burnt)
+    attempts = 0
+    while len(out) < same_cell_target and burnt and attempts < same_cell_target * 20:
+        attempts += 1
+        ev = burnt[attempts % len(burnt)]
+        day = (lo + timedelta(days=rng.randrange(span_days))).date()
+        if day in fire_days.get(ev.cell_id, set()):
+            continue
+        out.append(
+            (
+                ev.cell_id,
+                ev.aoi_id,
+                ev.centroid_lonlat[0],
+                ev.centroid_lonlat[1],
+                datetime.combine(day, time(12, 0), tzinfo=UTC),
+            )
+        )
+
+    never_burnt = await _never_burnt_pool(exclude_cells=set(fire_days))
+    rng.shuffle(never_burnt)
+    for cell_id, aoi_id, lon, lat in never_burnt[: target - len(out)]:
+        day = (lo + timedelta(days=rng.randrange(span_days))).date()
+        out.append((cell_id, aoi_id, lon, lat, datetime.combine(day, time(12, 0), tzinfo=UTC)))
+    return out
+
+
+async def _never_burnt_pool(*, exclude_cells: set[str]) -> list[tuple[str, str, float, float]]:
+    """Celle senza alcun giorno-incendio registrato.
+
+    `fire_density = 0` e non "assente da `fire_events`": la colonna è già il
+    conteggio dei giorni-incendio e sta sulla stessa riga delle altre feature,
+    quindi il filtro è un indice invece di un anti-join su 224.000 righe.
+    """
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT g.id, g.aoi_id,
+                   ST_X(ST_Centroid(g.geom)) AS lon,
+                   ST_Y(ST_Centroid(g.geom)) AS lat
+            FROM grid_cells g
+            JOIN cell_static_factors c ON c.cell_id = g.id
+            WHERE c.fire_density = 0
+            ORDER BY g.id
+            """
+        )
+    return [
+        (str(r["id"]), str(r["aoi_id"]), float(r["lon"]), float(r["lat"]))
+        for r in rows
+        if str(r["id"]) not in exclude_cells
+    ]
+
+
 async def _load_background_pool(*, exclude_cells: set[str]) -> list[tuple[str, str, float, float]]:
     """Return ``[(cell_id, aoi_id, lon, lat), ...]`` for sampling."""
     async with acquire() as conn:
@@ -169,7 +302,7 @@ async def _load_background_pool(*, exclude_cells: set[str]) -> list[tuple[str, s
     ]
 
 
-async def _build_flood_features(cell_id: str) -> dict[str, Any]:
+async def _build_flood_features(cell_id: str, valuation_time: datetime) -> dict[str, Any]:  # noqa: ARG001
     """Vettore statico per il pericolo alluvione (#64).
 
     Non il vettore delle frane con un nome diverso: la suscettibilità
@@ -200,7 +333,60 @@ async def _build_flood_features(cell_id: str) -> dict[str, Any]:
     }
 
 
-async def _build_features(cell_id: str) -> dict[str, Any]:
+async def _fire_days_before(cell_id: str, *, before: datetime) -> int:
+    """Giorni-incendio della cella **strettamente prima** di una data.
+
+    Non `cell_static_factors.fire_density`, che conta tutta l'era VIIRS —
+    compreso il giorno etichettato. Misurato: con la densità completa lo SHAP
+    dava a quella feature un'importanza media di 3,32 contro 0,29 del FWI,
+    cioè il modello leggeva in gran parte la propria etichetta. È leakage
+    temporale, e non si riporta: si toglie.
+    """
+    async with acquire() as conn:
+        value = await conn.fetchval(
+            "SELECT count(*)::int FROM fire_events WHERE cell_id = $1 AND event_date < $2",
+            cell_id,
+            before.date(),
+        )
+    return int(value or 0)
+
+
+async def _build_wildfire_features(cell_id: str, valuation_time: datetime) -> dict[str, Any]:
+    """Vettore statico dell'incendio (#68).
+
+    Combustibile, morfologia, interfaccia urbano-foresta e memoria del fuoco.
+    Il combustibile passa per la **stessa** `fuel.for_code` del motore V1: se
+    il challenger leggesse la mappa CLC in modo suo, batterebbe la V1 anche
+    solo per aver letto il combustibile diversamente, e non sapremmo quale
+    delle due cose ha vinto.
+
+    La parte dinamica (FWI, ISI, DC del giorno) la riempie
+    :mod:`limen.ml.fire_features`, che ricostruisce la catena: è ricorsiva e
+    non si legge da una tabella statica.
+    """
+    static = await cell_static_factors_repo.get_for_cell(cell_id)
+    if static is None:
+        return {"fire": {}}
+    thresholds = load_hazard_thresholds(HazardType.WILDFIRE)
+    assert isinstance(thresholds, WildfireThresholds)
+    return {
+        "fire": {
+            "fuel_class_norm": thresholds.fuel.for_code(static.landuse_code),
+            "wui_proximity_norm": _maybe_float(static.wui_proximity_norm),
+            # Solo il passato del campione: vedi `_fire_days_before`.
+            "density_hist": float(await _fire_days_before(cell_id, before=valuation_time)),
+            # Input grezzo, non feature: serve a rigiocare la baseline V1 sullo
+            # stesso campione. Se il challenger e il campione leggessero la
+            # mappa CLC in due modi diversi, una vittoria non direbbe quale
+            # delle due cose ha vinto. `_flatten` lo ignora perché non è un
+            # numero.
+            "landuse_code": static.landuse_code,
+        },
+        "static": {"slope_deg": _maybe_float(static.slope_deg)},
+    }
+
+
+async def _build_features(cell_id: str, valuation_time: datetime) -> dict[str, Any]:  # noqa: ARG001
     """Pull the static + InSAR + exposure feature vector for one cell.
 
     Meteo / seismic / fire are dynamic and would need an offline replay
@@ -234,6 +420,57 @@ def _maybe_float(value: Any) -> float | None:
     if value is None:
         return None
     return float(value)
+
+
+def wildfire_features_to_bundle(
+    *, cell_id: str, aoi_id: str, valuation_time: datetime, features: dict[str, Any]
+) -> CellFeatureBundle | None:
+    """Ricostruisce il bundle incendio da un vettore memorizzato (#68).
+
+    Serve alla **baseline FWI-only**: il gate di promozione confronta il
+    challenger con il motore V1 sulla stessa partizione, e per farlo la V1
+    deve poter dare un punteggio allo stesso campione.
+
+    Ritorna ``None`` quando la parte meteo manca: senza FWI il motore V1
+    darebbe zero, e zero non è "nessun pericolo misurato" ma "nessun
+    pericolo", quindi la baseline sembrerebbe brava per aver dichiarato
+    sicuri i giorni che non abbiamo arricchito.
+    """
+    fire = dict(features.get("fire") or {})
+    if "fwi" not in fire:
+        return None
+    static_dict = dict(features.get("static") or {})
+    # `wui_proximity_norm` **non** entra nel bundle: il motore incendio non la
+    # legge, serve alla priorità degli alert. Resta una feature del
+    # challenger, che può usare più informazione della V1 — è il punto di un
+    # challenger — purché la V1 riceva esattamente i suoi input.
+    static = StaticFactors(
+        cell_id=cell_id,
+        slope_deg=static_dict.get("slope_deg"),
+        landuse_code=fire.get("landuse_code"),
+    )
+    return CellFeatureBundle(
+        aoi_id=aoi_id,
+        cell_id=cell_id,
+        static=static,
+        dynamic=DynamicInputs(
+            valuation_time=valuation_time,
+            fire_weather=FireWeatherState(
+                day=valuation_time.date(),
+                # FFMC/DMC/BUI non sono nel vettore: il motore incendio legge
+                # `fwi` per il punteggio e gli altri codici servono alla
+                # ricorsione, che qui è già stata percorsa. Si passano i
+                # neutri dello schema invece di inventare valori.
+                ffmc=0.0,
+                dmc=0.0,
+                dc=float(fire.get("dc") or 0.0),
+                isi=float(fire.get("isi") or 0.0),
+                bui=0.0,
+                fwi=float(fire["fwi"]),
+                chain_days=int(fire.get("chain_days") or 0),
+            ),
+        ),
+    )
 
 
 def features_to_bundle(
@@ -279,10 +516,29 @@ def features_to_bundle(
     )
 
 
+#: Sorgente dell'etichetta e costruttore del vettore, per pericolo. Una
+#: tabella invece di una catena di ternari: al terzo pericolo la catena era
+#: già illeggibile, e questa dice a colpo d'occhio cosa cambia fra i tre.
+_LABEL_SOURCE_BY_HAZARD: dict[HazardType, LabelSource] = {
+    HazardType.LANDSLIDE: "italica",
+    HazardType.FLOOD: "copernicus-ems",
+    HazardType.WILDFIRE: "firms",
+}
+
+_FEATURE_BUILDER_BY_HAZARD: dict[
+    HazardType, Callable[[str, datetime], Awaitable[dict[str, Any]]]
+] = {
+    HazardType.LANDSLIDE: _build_features,
+    HazardType.FLOOD: _build_flood_features,
+    HazardType.WILDFIRE: _build_wildfire_features,
+}
+
+
 async def extract_training_samples(
     *,
     settings: Settings | None = None,
     min_occurrence: datetime | None = None,
+    max_occurrence: datetime | None = None,
     dataset_version_id: int | None = None,
     rng_seed: int | None = None,
     hazard: HazardType = DEFAULT_HAZARD,
@@ -295,8 +551,14 @@ async def extract_training_samples(
 
     ``hazard`` scelge catalogo **e** vettore di feature insieme, perché le due
     cose non sono separabili: le etichette dell'alluvione sono i perimetri
-    osservati di Copernicus EMS e i suoi predittori sono idraulici, mentre
-    quelle delle frane sono i punti e-ITALICA con predittori di versante.
+    osservati di Copernicus EMS e i suoi predittori sono idraulici, quelle
+    delle frane sono i punti e-ITALICA con predittori di versante, e quelle
+    dell'incendio sono i giorni-incendio FIRMS con predittori di combustibile.
+
+    ``max_occurrence`` esiste per l'incendio (#68): la catena FWI va
+    ricostruita giorno per giorno dall'archivio meteo, quindi la finestra di
+    addestramento è limitata da quanto se ne può ricostruire — e va dichiarata
+    invece di estrarre positivi che nessun enricher riuscirà a completare.
     """
     s = settings or get_settings()
     seed = rng_seed if rng_seed is not None else s.training.seed
@@ -304,15 +566,17 @@ async def extract_training_samples(
     grid = SpatialBlockGrid(edge_deg=s.training.spatial_block_deg)
     cutoff = min_occurrence or datetime(2000, 1, 1, tzinfo=UTC)
 
-    is_flood = hazard is HazardType.FLOOD
-    label_source: LabelSource = "copernicus-ems" if is_flood else "italica"
-    build = _build_flood_features if is_flood else _build_features
+    label_source: LabelSource = _LABEL_SOURCE_BY_HAZARD.get(hazard, "italica")
+    build = _FEATURE_BUILDER_BY_HAZARD.get(hazard, _build_features)
 
-    positives = (
-        await _load_flood_positives(min_occurrence=cutoff)
-        if is_flood
-        else await _load_positives(min_occurrence=cutoff)
-    )
+    if hazard is HazardType.WILDFIRE:
+        positives = await _load_wildfire_positives(
+            min_occurrence=cutoff, max_occurrence=max_occurrence
+        )
+    elif hazard is HazardType.FLOOD:
+        positives = await _load_flood_positives(min_occurrence=cutoff)
+    else:
+        positives = await _load_positives(min_occurrence=cutoff)
     if not positives:
         _log.warning(
             "training.no_positives",
@@ -328,7 +592,7 @@ async def extract_training_samples(
         if key in seen_pos:
             continue
         seen_pos.add(key)
-        features = await build(ev.cell_id)
+        features = await build(ev.cell_id, ev.occurrence_date)
         block = grid.block_for(*ev.centroid_lonlat)
         positive_samples.append(
             TrainingSample(
@@ -344,28 +608,56 @@ async def extract_training_samples(
         )
 
     target_background = int(len(positive_samples) * s.training.background_ratio)
-    pool = await _load_background_pool(exclude_cells={ev.cell_id for ev in positives})
-    rng.shuffle(pool)
     background_samples: list[TrainingSample] = []
-    for cell_id, _aoi_id, lon, lat in pool[:target_background]:
-        # Stable pseudo-time per cell so re-runs don't shuffle the dataset.
-        seed_bytes = hashlib.sha256(cell_id.encode("utf-8")).digest()
-        offset_days = int.from_bytes(seed_bytes[:4], "big") % (365 * 10)
-        valuation_time = cutoff + timedelta(days=offset_days)
-        features = await build(cell_id)
-        block = grid.block_for(lon, lat)
-        background_samples.append(
-            TrainingSample(
-                cell_id=cell_id,
-                valuation_time=valuation_time,
-                label=0,
-                label_source="background",
-                features=features,
-                split_block=block,
-                dataset_version_id=dataset_version_id,
-                hazard_type=hazard,
-            )
+
+    if hazard is HazardType.WILDFIRE:
+        # Le negative dell'incendio portano un **tempo**, non una data
+        # pseudo-casuale per cella: il predittore dominante è il meteo del
+        # giorno, quindi una negativa senza un giorno credibile non
+        # insegnerebbe nulla. Finestra = quella dei positivi.
+        window = (
+            min(ev.occurrence_date for ev in positives),
+            max(ev.occurrence_date for ev in positives),
         )
+        controls = await _wildfire_background(
+            positives=positives, target=target_background, rng=rng, window=window
+        )
+        for cell_id, _aoi_id, lon, lat, valuation_time in controls:
+            features = await build(cell_id, valuation_time)
+            background_samples.append(
+                TrainingSample(
+                    cell_id=cell_id,
+                    valuation_time=valuation_time,
+                    label=0,
+                    label_source="background",
+                    features=features,
+                    split_block=grid.block_for(lon, lat),
+                    dataset_version_id=dataset_version_id,
+                    hazard_type=hazard,
+                )
+            )
+    else:
+        pool = await _load_background_pool(exclude_cells={ev.cell_id for ev in positives})
+        rng.shuffle(pool)
+        for cell_id, _aoi_id, lon, lat in pool[:target_background]:
+            # Stable pseudo-time per cell so re-runs don't shuffle the dataset.
+            seed_bytes = hashlib.sha256(cell_id.encode("utf-8")).digest()
+            offset_days = int.from_bytes(seed_bytes[:4], "big") % (365 * 10)
+            valuation_time = cutoff + timedelta(days=offset_days)
+            features = await build(cell_id, valuation_time)
+            block = grid.block_for(lon, lat)
+            background_samples.append(
+                TrainingSample(
+                    cell_id=cell_id,
+                    valuation_time=valuation_time,
+                    label=0,
+                    label_source="background",
+                    features=features,
+                    split_block=block,
+                    dataset_version_id=dataset_version_id,
+                    hazard_type=hazard,
+                )
+            )
 
     written = await training_samples_repo.insert_many(positive_samples + background_samples)
     _log.info(

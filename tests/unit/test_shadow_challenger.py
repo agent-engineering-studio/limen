@@ -9,6 +9,7 @@ import pytest
 
 from limen.agents.executors.shadow_challenger import ShadowChallengerExecutor
 from limen.core.models.context import MonitoringContext
+from limen.core.models.hazard import HazardType
 from limen.core.models.risk import (
     CellFeatureBundle,
     ComponentBreakdown,
@@ -122,3 +123,56 @@ async def test_shadow_survives_persistence_failure(monkeypatch: pytest.MonkeyPat
     )
     out = await executor.run(ctx)  # MUST NOT raise
     assert out is ctx or out == ctx
+
+
+@pytest.mark.asyncio
+async def test_wildfire_shadow_writes_its_own_hazard_and_touches_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Lo shadow incendio (#68) scrive in `model_runs` con il **suo**
+    `hazard_type` e lascia intatto l'output del campione.
+
+    La riga di pericolo non è un dettaglio di etichettatura: un confronto
+    campione/challenger che mescolasse due pericoli sommerebbe due domande
+    diverse, e la promozione leggerebbe un numero che non significa niente.
+    """
+    inserted: list[Any] = []
+
+    async def _insert_many(rows: Any) -> int:
+        inserted.extend(rows)
+        return len(rows)
+
+    import limen.agents.executors.shadow_challenger as mod
+
+    monkeypatch.setattr(mod, "insert_model_runs", _insert_many)
+
+    executor = ShadowChallengerExecutor(_StubChallenger(), hazard=HazardType.WILDFIRE)
+    initial_records = [
+        landslide_record(
+            "c-1",
+            score=0.7,
+            level=RiskLevel.High,
+            s=0.4,
+            m=0.4,
+            static_terms=StaticBreakdown(
+                susc_ispra=0.4, iffi_density=0.0, slope=0.5, pai=0.3, litho_weight=0.1
+            ),
+            meteo_terms=MeteoBreakdown(
+                caine_excess=0.2, caine_norm=0.3, api_factor=0.4, soil_factor=0.5
+            ),
+        )
+    ]
+    ctx = MonitoringContext(
+        aoi_id="aoi-shadow-fire",
+        valuation_time=datetime(2026, 8, 1, tzinfo=UTC),
+        cell_ids=("c-1",),
+        cell_results=initial_records,
+    )
+
+    out = await executor.run(ctx)
+
+    assert out.cell_results == initial_records
+    assert out.assessment == ctx.assessment
+    assert len(inserted) == 1
+    assert inserted[0].hazard_type is HazardType.WILDFIRE
+    assert inserted[0].role == "challenger"
