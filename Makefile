@@ -49,7 +49,7 @@ BUILD_PROFILES ?= --profile geoserver --profile frontend --profile geodata
 .PHONY: help install \
         up down build rebuild up-host-ollama \
         up-dev down-dev logs migrate seed bootstrap-static calibrate backtest serve \
-        data-status static-data flood-data flood-events backtest-flood \
+        data-status static-data flood-data flood-events backtest-flood fire-history \
         demo demo-down demo-walkthrough \
         observability observability-down \
         geoserver-up geoserver-down geoserver-init geoserver-logs geoserver-sync dtm-vrt osm-data \
@@ -79,6 +79,7 @@ help:
 	@echo "  make data-status        quali layer statici sono caricati e cosa blocca gli altri"
 	@echo "  make static-data        carica tutti i layer configurati + riepilogo"
 	@echo "  make flood-data         come static-data, con il focus sull'alluvione"
+	@echo "  make fire-history       archivio FIRMS 2000+ : densità e truth set incendi"
 	@echo "  make flood-events       truth set alluvione da Copernicus EMS (pubblico)"
 	@echo "  make backtest-flood     rigioca i perimetri: hit rate, tasso di base, FAR"
 	@echo "  make imperviousness-data  scarica il raster CLMS del suolo sigillato (EEA, aperto)"
@@ -235,6 +236,14 @@ imperviousness-data:
 	@echo "  Ora punta la variabile al file e riempi le celle:"
 	@echo "    LIMEN_IMPERVIOUSNESS_RASTER=$(CURDIR)/data/sealing/clms_imd_2018/imd_2018_100m.tif"
 	@echo "    make bootstrap-static"
+
+# Storia del fuoco: archivio FIRMS per paese, 2000-2024. Nessuna credenziale
+# (il portale di download chiede Earthdata e spedisce via email, gli archivi
+# per paese sono CSV in chiaro). ~35 MB per l'Italia intera, in cache.
+# Popola fire_hotspots, fire_events e fire_density, e scrive il confronto
+# EFFIS/FIRMS in reports/.
+fire-history:
+	$(UV) run limen ingest-fire-history
 
 # Truth set alluvione: perimetri allagati osservati di Copernicus EMS.
 # Servizio pubblico, nessuna credenziale (FloodCat richiede un'utenza DPC e

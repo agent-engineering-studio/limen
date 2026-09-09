@@ -403,6 +403,14 @@ async def bootstrap_static_for_aoi(aoi_id: str) -> dict[str, int]:
         await conn.execute(_PAI_CLASS_SQL, aoi_id, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
         await conn.execute(_FLOOD_HAZARD_SQL, aoi_id, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
 
+    # Densità storica del fuoco (#66). No-op pulito con `fire_events` vuota:
+    # la colonna resta a 0, che qui è un'informazione ("nessun hotspot
+    # rilevato") e non un "layer non caricato". Popolarla richiede
+    # `limen ingest-fire-history`.
+    from limen.data.repos import fire_events_repo
+
+    await fire_events_repo.refresh_density(aoi_id, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
+
     # Distanze dalla rete OSM (strade/ferrovie) — no-op finché
     # `sync_osm_infrastructure` non ha popolato osm_infrastructure.
     await compute_osm_distances_for_aoi(aoi_id)

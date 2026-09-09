@@ -134,6 +134,10 @@ class FireHotspot:
     daynight: str | None = None
     satellite: str | None = None
     instrument: str | None = None
+    #: Classificazione FIRMS della fonte: 0 vegetazione, 1 vulcano,
+    #: 2 sorgente statica al suolo (industriale), 3 offshore. `None` per le
+    #: righe ingerite prima che la colonna venisse letta.
+    detection_type: int | None = None
 
     @property
     def acquired_at(self) -> datetime:
@@ -152,11 +156,11 @@ _UPSERT_HOTSPOT_SQL = """
 INSERT INTO fire_hotspots (
     source, acq_date, acq_time, latitude, longitude, acquired_at,
     frp_mw, confidence, brightness_k, daynight, satellite, instrument,
-    geom, dataset_version_id
+    detection_type, geom, dataset_version_id
 ) VALUES (
     $1, $2, $3, $4, $5, $6,
-    $7, $8, $9, $10, $11, $12,
-    ST_SetSRID(ST_MakePoint($5, $4), 4326), $13
+    $7, $8, $9, $10, $11, $12, $13,
+    ST_SetSRID(ST_MakePoint($5, $4), 4326), $14
 )
 ON CONFLICT (source, acq_date, acq_time, latitude, longitude) DO UPDATE
 SET frp_mw             = EXCLUDED.frp_mw,
@@ -165,6 +169,10 @@ SET frp_mw             = EXCLUDED.frp_mw,
     daynight           = EXCLUDED.daynight,
     satellite          = EXCLUDED.satellite,
     instrument         = EXCLUDED.instrument,
+    -- COALESCE e non EXCLUDED secco: una nuova ingestione senza la classe
+    -- non deve cancellare quella che una precedente aveva letto.
+    detection_type     = COALESCE(EXCLUDED.detection_type,
+                                  fire_hotspots.detection_type),
     dataset_version_id = COALESCE(EXCLUDED.dataset_version_id,
                                   fire_hotspots.dataset_version_id),
     updated_at         = now()
@@ -193,6 +201,7 @@ async def upsert_hotspots(
             h.daynight,
             h.satellite,
             h.instrument,
+            h.detection_type,
             dataset_version_id,
         )
         for h in hotspots
