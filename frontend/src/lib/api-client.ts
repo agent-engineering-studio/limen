@@ -14,6 +14,7 @@ import type {
   ComuneListResponse,
   HazardType,
   HazardsResponse,
+  JobStatusResponse,
   HealthResponse,
   LatestAssessmentResponse,
   ReliabilityResponse,
@@ -212,6 +213,10 @@ export class ApiClient {
 
   getShadowReliability(signal?: AbortSignal): Promise<ReliabilityResponse> {
     return this.request<ReliabilityResponse>("/api/shadow/reliability", {}, signal);
+  }
+
+  getJobStatus(signal?: AbortSignal): Promise<JobStatusResponse> {
+    return this.request<JobStatusResponse>("/api/status/jobs", {}, signal);
   }
 
   getTopComuni(aoi?: string, limit = 50, signal?: AbortSignal): Promise<ComuneListResponse> {

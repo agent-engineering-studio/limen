@@ -277,6 +277,11 @@ class SchedulerSettings(BaseSettings):
     cache_cleanup_interval_seconds: int = Field(default=300, ge=10)
     # Run the MAF workflow for every active AOI every N minutes.
     hourly_monitoring_minutes: int = Field(default=60, ge=5)
+    # Quanto tenere la tracciatura dei job (#75). Novanta giorni: abbastanza
+    # per confrontare uno sweep di oggi con quello di due mesi fa — che è il
+    # motivo per cui la tabella esiste — e poche migliaia di righe al giorno,
+    # quindi nessuna ragione di essere avari.
+    job_runs_retention_days: int = Field(default=90, ge=1)
     # Run the ISPRA IdroGEO sync every N hours.
     weekly_idrogeo_hours: int = Field(default=24 * 7, ge=1)
     # Hot-table partition maintenance + retention. Partitions are created a

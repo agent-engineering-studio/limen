@@ -354,3 +354,24 @@ export interface ForecastAlertItem {
 export interface ForecastAlertsResponse {
   items: ForecastAlertItem[];
 }
+
+// --- Stato dei job (mirror src/limen/api/schemas.py, #75) ---
+export interface SweepStatus {
+  started_at: string;
+  finished_at: string | null;
+  status: string;
+  duration_s: number | null;
+}
+
+export interface JobRunStatus {
+  aoi_id: string;
+  last_assessed_at: string | null;
+  duration_s: number | null;
+  status: string;
+  cells: number | null;
+}
+
+export interface JobStatusResponse {
+  sweep: SweepStatus | null;
+  per_aoi: JobRunStatus[];
+}

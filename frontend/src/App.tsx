@@ -5,6 +5,7 @@ import CellPopup from "./components/CellPopup";
 import ComuneLeaderboard from "./components/ComuneLeaderboard";
 import ExplainerPage from "./components/ExplainerPage";
 import ForecastList from "./components/ForecastList";
+import FreshnessBadge from "./components/FreshnessBadge";
 import HomePage from "./components/HomePage";
 import IntegrationsPage from "./components/IntegrationsPage";
 import HazardSelector from "./components/HazardSelector";
@@ -135,7 +136,7 @@ export function App(): JSX.Element {
           </a>
         </nav>
         <HazardSelector />
-        <span className="header-meta">agg. 1h · 20 regioni</span>
+        <FreshnessBadge />
       </header>
 
       {page === "home" ? (

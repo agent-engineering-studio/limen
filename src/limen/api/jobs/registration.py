@@ -14,6 +14,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from limen.api.dependencies import AppDependencies
+from limen.api.jobs._tracking import track_job
 from limen.api.jobs.alert_digest import run_alert_digest
 from limen.api.jobs.cache_cleanup import run_cache_cleanup_job
 from limen.api.jobs.daily_report import run_daily_report
@@ -34,21 +35,25 @@ from limen.core.logging import get_logger
 
 log = get_logger(__name__)
 
-JOB_HOURLY_MONITORING = "limen-hourly-monitoring"
-JOB_FORECAST_MONITORING = "limen-forecast-monitoring"
-JOB_FORECAST_HISTORY = "limen-forecast-history"
-JOB_DAILY_REPORT = "limen-daily-report"
-JOB_NOWCAST_MONITORING = "limen-nowcast-monitoring"
-JOB_FIRMS_MONITORING = "limen-firms-monitoring"
-JOB_WEEKLY_IDROGEO = "limen-weekly-idrogeo"
-JOB_ALERT_DIGEST = "limen-alert-digest"
-JOB_CACHE_CLEANUP = "limen-cache-cleanup"
-JOB_PARTITIONS = "limen-partitions"
-JOB_IOT_ROLLUP = "limen-iot-rollup"
-JOB_IOT_PARTITION_ROLLOVER = "limen-iot-partition-rollover"
-JOB_DRIFT_MONITOR = "limen-drift-monitor"
-JOB_GEODATA_EXPORT = "limen-geodata-export"
-JOB_HTML_REPORT = "limen-html-report"
+# Ri-esportati da `ids` per non rompere gli import esistenti; la definizione
+# vive là per rompere il ciclo con i moduli dei job (#75).
+from limen.api.jobs.ids import (  # noqa: E402
+    JOB_ALERT_DIGEST,
+    JOB_CACHE_CLEANUP,
+    JOB_DAILY_REPORT,
+    JOB_DRIFT_MONITOR,
+    JOB_FIRMS_MONITORING,
+    JOB_FORECAST_HISTORY,
+    JOB_FORECAST_MONITORING,
+    JOB_GEODATA_EXPORT,
+    JOB_HOURLY_MONITORING,
+    JOB_HTML_REPORT,
+    JOB_IOT_PARTITION_ROLLOVER,
+    JOB_IOT_ROLLUP,
+    JOB_NOWCAST_MONITORING,
+    JOB_PARTITIONS,
+    JOB_WEEKLY_IDROGEO,
+)
 
 
 def _deferred_interval(*, minutes: int = 0, hours: int = 0, seconds: int = 0) -> IntervalTrigger:
@@ -79,7 +84,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
 
     if cfg.enable_hourly_monitoring:
         await scheduler.add_schedule(
-            run_hourly_monitoring,
+            track_job(JOB_HOURLY_MONITORING)(run_hourly_monitoring),
             args=(deps,),
             trigger=_deferred_interval(minutes=cfg.hourly_monitoring_minutes),
             id=JOB_HOURLY_MONITORING,
@@ -94,7 +99,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
 
     if deps.settings.forecast.enabled:
         await scheduler.add_schedule(
-            run_forecast_monitoring,
+            track_job(JOB_FORECAST_MONITORING)(run_forecast_monitoring),
             args=(deps,),
             trigger=_deferred_interval(hours=deps.settings.forecast.interval_hours),
             id=JOB_FORECAST_MONITORING,
@@ -110,7 +115,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
 
         # Persist the per-cell forecast trend (+24/48/72h) for the UI (#41).
         await scheduler.add_schedule(
-            run_forecast_history_job,
+            track_job(JOB_FORECAST_HISTORY)(run_forecast_history_job),
             args=(deps,),
             trigger=_deferred_interval(hours=deps.settings.forecast.interval_hours),
             id=JOB_FORECAST_HISTORY,
@@ -124,7 +129,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
     # resterebbe in `alert_aggregates` per sempre — silenzio che sembra calma.
     if deps.settings.notifications.rate_limit.enabled:
         await scheduler.add_schedule(
-            run_alert_digest,
+            track_job(JOB_ALERT_DIGEST)(run_alert_digest),
             args=(deps,),
             trigger=_deferred_interval(
                 minutes=deps.settings.notifications.rate_limit.digest_interval_minutes
@@ -141,7 +146,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
 
     if deps.settings.report.enabled:
         await scheduler.add_schedule(
-            run_daily_report,
+            track_job(JOB_DAILY_REPORT)(run_daily_report),
             args=(deps,),
             trigger=CronTrigger(hour=deps.settings.report.hour_utc, minute=0),
             id=JOB_DAILY_REPORT,
@@ -156,7 +161,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
 
     if deps.settings.report.html_enabled:
         await scheduler.add_schedule(
-            run_html_report,
+            track_job(JOB_HTML_REPORT)(run_html_report),
             args=(deps,),
             trigger=_deferred_interval(hours=deps.settings.report.html_interval_hours),
             id=JOB_HTML_REPORT,
@@ -171,7 +176,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
 
     if deps.settings.nowcast.enabled:
         await scheduler.add_schedule(
-            run_nowcast_monitoring,
+            track_job(JOB_NOWCAST_MONITORING)(run_nowcast_monitoring),
             args=(deps,),
             trigger=_deferred_interval(minutes=deps.settings.nowcast.interval_minutes),
             id=JOB_NOWCAST_MONITORING,
@@ -189,7 +194,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
     # job is not scheduled at all rather than waking up to log a skip.
     if deps.settings.firms.active:
         await scheduler.add_schedule(
-            run_firms_monitoring,
+            track_job(JOB_FIRMS_MONITORING)(run_firms_monitoring),
             args=(deps,),
             trigger=_deferred_interval(minutes=deps.settings.firms.interval_minutes),
             id=JOB_FIRMS_MONITORING,
@@ -206,7 +211,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
 
     if cfg.enable_weekly_idrogeo:
         await scheduler.add_schedule(
-            run_weekly_idrogeo_sync,
+            track_job(JOB_WEEKLY_IDROGEO)(run_weekly_idrogeo_sync),
             args=(deps,),
             trigger=CronTrigger(day_of_week="mon", hour=3, minute=15),
             id=JOB_WEEKLY_IDROGEO,
@@ -222,7 +227,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
     # Unconditional: partitions must exist whatever the cache-cleanup
     # backend is, and retention has nowhere else to run.
     await scheduler.add_schedule(
-        run_partitions_job,
+        track_job(JOB_PARTITIONS)(run_partitions_job),
         args=(deps,),
         trigger=_deferred_interval(hours=cfg.partitions_interval_hours),
         id=JOB_PARTITIONS,
@@ -237,7 +242,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
 
     if cfg.cache_cleanup is SchedulerBackend.APSCHEDULER:
         await scheduler.add_schedule(
-            run_cache_cleanup_job,
+            track_job(JOB_CACHE_CLEANUP)(run_cache_cleanup_job),
             args=(deps,),
             trigger=_deferred_interval(seconds=cfg.cache_cleanup_interval_seconds),
             id=JOB_CACHE_CLEANUP,
@@ -252,7 +257,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
 
     if deps.settings.enable_insitu:
         await scheduler.add_schedule(
-            run_iot_rollup_job,
+            track_job(JOB_IOT_ROLLUP)(run_iot_rollup_job),
             args=(deps,),
             trigger=_deferred_interval(minutes=deps.settings.iot.rollup_minutes),
             id=JOB_IOT_ROLLUP,
@@ -266,7 +271,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
         )
 
         await scheduler.add_schedule(
-            run_iot_partition_rollover_job,
+            track_job(JOB_IOT_PARTITION_ROLLOVER)(run_iot_partition_rollover_job),
             args=(deps,),
             trigger=CronTrigger(day=2, hour=2, minute=0),
             id=JOB_IOT_PARTITION_ROLLOVER,
@@ -281,7 +286,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
 
     if deps.settings.monitoring.enable_drift_monitoring:
         await scheduler.add_schedule(
-            run_drift_monitor_job,
+            track_job(JOB_DRIFT_MONITOR)(run_drift_monitor_job),
             args=(deps,),
             trigger=_deferred_interval(hours=deps.settings.monitoring.drift_check_hours),
             id=JOB_DRIFT_MONITOR,
@@ -296,7 +301,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
 
     if deps.settings.geodata.enable_periodic_export:
         await scheduler.add_schedule(
-            run_geodata_export_job,
+            track_job(JOB_GEODATA_EXPORT)(run_geodata_export_job),
             args=(deps,),
             trigger=_deferred_interval(hours=deps.settings.geodata.export_features_hours),
             id=JOB_GEODATA_EXPORT,
