@@ -103,7 +103,7 @@ class OpenMeteoFloodClient:
         payload = resp.json()
         return payload if isinstance(payload, dict) else None
 
-    async def _get_many(
+    async def fetch_grid(
         self,
         url: str,
         nodes: list[tuple[float, float]],
@@ -114,6 +114,10 @@ class OpenMeteoFloodClient:
 
         Separate from :meth:`_get`, which narrows to ``dict`` and would drop
         the whole response on the floor.
+
+        Public because the flood backtest needs the same batching against the
+        historical endpoints: duplicating it there would duplicate the 677-point
+        lesson below, and one of the two copies would eventually lose it.
 
         Batched because the coordinates travel in the query string: 677 points
         came back as something that was not JSON at all. A failed batch
@@ -260,7 +264,7 @@ class OpenMeteoFloodClient:
         thresholds it feeds are stated per window.
         """
         end = t0 + timedelta(hours=horizon_hours)
-        results = await self._get_many(
+        results = await self.fetch_grid(
             FORECAST_URL,
             nodes,
             {
@@ -311,7 +315,7 @@ class OpenMeteoFloodClient:
         Per node and not an AOI-wide maximum: one basin in flood must not push
         cells in a different catchment past the alert gate.
         """
-        results = await self._get_many(
+        results = await self.fetch_grid(
             FLOOD_URL,
             nodes,
             {

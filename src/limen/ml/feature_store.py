@@ -24,6 +24,7 @@ from shapely.geometry.base import BaseGeometry
 
 from limen.config.settings import Settings, get_settings
 from limen.core.logging import get_logger
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import (
     CellFeatureBundle,
     DynamicInputs,
@@ -110,6 +111,45 @@ async def _load_positives(*, min_occurrence: datetime) -> list[_PositiveEvent]:
     return out
 
 
+async def _load_flood_positives(*, min_occurrence: datetime) -> list[_PositiveEvent]:
+    """Celle intersecate da un perimetro allagato osservato (Copernicus EMS).
+
+    L'ancora è ``event_time`` (inizio dell'evento) e non l'acquisizione
+    satellitare: un campione etichettato all'ora in cui il satellite ha visto
+    l'acqua insegnerebbe al modello a riconoscere un allagamento in corso,
+    che è esattamente ciò che non serve prevedere.
+    """
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT min(e.id)         AS event_id,
+                   g.id              AS cell_id,
+                   g.aoi_id,
+                   min(e.event_time) AS event_time,
+                   ST_X(ST_Centroid(g.geom)) AS lon,
+                   ST_Y(ST_Centroid(g.geom)) AS lat,
+                   ST_Centroid(g.geom) AS geom
+            FROM flood_events e
+            JOIN grid_cells g ON ST_Intersects(g.geom, e.geom)
+            WHERE e.event_time >= $1
+            GROUP BY g.id, g.aoi_id, g.geom
+            ORDER BY min(e.event_time)
+            """,
+            min_occurrence,
+        )
+    return [
+        _PositiveEvent(
+            iffi_id=str(r["event_id"]),
+            cell_id=str(r["cell_id"]),
+            aoi_id=str(r["aoi_id"]),
+            occurrence_date=r["event_time"],
+            centroid_lonlat=(float(r["lon"]), float(r["lat"])),
+            geom=r["geom"],
+        )
+        for r in rows
+    ]
+
+
 async def _load_background_pool(*, exclude_cells: set[str]) -> list[tuple[str, str, float, float]]:
     """Return ``[(cell_id, aoi_id, lon, lat), ...]`` for sampling."""
     async with acquire() as conn:
@@ -127,6 +167,37 @@ async def _load_background_pool(*, exclude_cells: set[str]) -> list[tuple[str, s
         for r in rows
         if str(r["id"]) not in exclude_cells
     ]
+
+
+async def _build_flood_features(cell_id: str) -> dict[str, Any]:
+    """Vettore statico per il pericolo alluvione (#64).
+
+    Non il vettore delle frane con un nome diverso: la suscettibilità
+    idraulica, il suolo sigillato e la posizione topografica sono i predittori
+    dell'allagamento, mentre densità IFFI e velocità InSAR descrivono un
+    versante che si muove — infilarle qui darebbe al challenger delle colonne
+    che non parlano del suo fenomeno.
+
+    Manca la parte dinamica, come per le frane: pioggia e portata storiche
+    richiedono un replay offline, che è quello che fa `limen backtest-flood`.
+    """
+    static = await cell_static_factors_repo.get_for_cell(cell_id)
+    if static is None:
+        return {"static": {}}
+    # Accesso diretto e non `getattr(..., None)`: un campo che la riga non
+    # porta deve essere un errore di tipo, non un None silenzioso. Con
+    # `getattr` il vettore usciva senza `imperviousness_norm` su tutti i
+    # 14.124 campioni e sembrava soltanto un dato mancante.
+    return {
+        "static": {
+            "flood_hazard_norm": _maybe_float(static.flood_hazard_norm),
+            "imperviousness_norm": _maybe_float(static.imperviousness_norm),
+            "elevation_m": _maybe_float(static.elevation_m),
+            "slope_deg": _maybe_float(static.slope_deg),
+            "twi": _maybe_float(static.twi),
+            "distance_to_road_m": _maybe_float(static.distance_to_road_m),
+        },
+    }
 
 
 async def _build_features(cell_id: str) -> dict[str, Any]:
@@ -214,12 +285,18 @@ async def extract_training_samples(
     min_occurrence: datetime | None = None,
     dataset_version_id: int | None = None,
     rng_seed: int | None = None,
+    hazard: HazardType = DEFAULT_HAZARD,
 ) -> int:
     """Extract positive + background samples and persist them.
 
     Returns the total number of rows written. Idempotent —
     :func:`training_samples_repo.insert_many` upserts on
-    ``(cell_id, valuation_time, label_source)``.
+    ``(cell_id, hazard_type, valuation_time, label_source)``.
+
+    ``hazard`` scelge catalogo **e** vettore di feature insieme, perché le due
+    cose non sono separabili: le etichette dell'alluvione sono i perimetri
+    osservati di Copernicus EMS e i suoi predittori sono idraulici, mentre
+    quelle delle frane sono i punti e-ITALICA con predittori di versante.
     """
     s = settings or get_settings()
     seed = rng_seed if rng_seed is not None else s.training.seed
@@ -227,9 +304,21 @@ async def extract_training_samples(
     grid = SpatialBlockGrid(edge_deg=s.training.spatial_block_deg)
     cutoff = min_occurrence or datetime(2000, 1, 1, tzinfo=UTC)
 
-    positives = await _load_positives(min_occurrence=cutoff)
+    is_flood = hazard is HazardType.FLOOD
+    label_source: LabelSource = "copernicus-ems" if is_flood else "italica"
+    build = _build_flood_features if is_flood else _build_features
+
+    positives = (
+        await _load_flood_positives(min_occurrence=cutoff)
+        if is_flood
+        else await _load_positives(min_occurrence=cutoff)
+    )
     if not positives:
-        _log.warning("training.no_positives", min_occurrence=cutoff.isoformat())
+        _log.warning(
+            "training.no_positives",
+            hazard=hazard.value,
+            min_occurrence=cutoff.isoformat(),
+        )
         return 0
 
     positive_samples: list[TrainingSample] = []
@@ -239,17 +328,18 @@ async def extract_training_samples(
         if key in seen_pos:
             continue
         seen_pos.add(key)
-        features = await _build_features(ev.cell_id)
+        features = await build(ev.cell_id)
         block = grid.block_for(*ev.centroid_lonlat)
         positive_samples.append(
             TrainingSample(
                 cell_id=ev.cell_id,
                 valuation_time=ev.occurrence_date,
                 label=1,
-                label_source="italica",
+                label_source=label_source,
                 features=features,
                 split_block=block,
                 dataset_version_id=dataset_version_id,
+                hazard_type=hazard,
             )
         )
 
@@ -262,7 +352,7 @@ async def extract_training_samples(
         seed_bytes = hashlib.sha256(cell_id.encode("utf-8")).digest()
         offset_days = int.from_bytes(seed_bytes[:4], "big") % (365 * 10)
         valuation_time = cutoff + timedelta(days=offset_days)
-        features = await _build_features(cell_id)
+        features = await build(cell_id)
         block = grid.block_for(lon, lat)
         background_samples.append(
             TrainingSample(
@@ -273,12 +363,14 @@ async def extract_training_samples(
                 features=features,
                 split_block=block,
                 dataset_version_id=dataset_version_id,
+                hazard_type=hazard,
             )
         )
 
     written = await training_samples_repo.insert_many(positive_samples + background_samples)
     _log.info(
         "training.extract.done",
+        hazard=hazard.value,
         positives=len(positive_samples),
         background=len(background_samples),
         rows_written=written,

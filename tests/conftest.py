@@ -149,6 +149,14 @@ async def reset_db(pg_pool: asyncpg.Pool) -> AsyncIterator[None]:
         # La catena FWI è stato ricorsivo (#61): senza truncate un test che la
         # estende leggerebbe i giorni scritti da quello prima.
         "fwi_state",
+        # Coda del digest e contatori per canale (#59): stato fra cicli.
+        "alert_aggregates",
+        "notification_sends",
+        # Truth set alluvione e maschere di osservazione (#64). Senza
+        # truncate un test che conta i poligoni conta anche quelli del test
+        # precedente, e il conto passa o fallisce a seconda dell'ordine.
+        "flood_events",
+        "flood_observation_masks",
     ]
     async with acquire() as conn:
         with contextlib.suppress(Exception):

@@ -6,6 +6,8 @@ Usage:
     limen bootstrap-static   Populate cell_static_factors (one-shot) for every seeded AOI.
     limen calibrate          Precompute s_static + per-AOI norm stats; run S vs ISPRA gate.
     limen backtest           Replay a historical window and emit a §2.5 metrics report.
+    limen backtest-flood     Replay Copernicus EMS flood perimeters (#64).
+    limen ingest-events      Dated event catalogue: --hazard landslide|flood.
     limen monitor-once       Run the MAF landslide workflow once for an AOI.
     limen forecast           Predictive run at now+H hours (forecast rain, no persistence).
     limen firms-sync         Ingest NASA FIRMS active-fire hotspots (FIRMS__MAP_KEY).
@@ -29,6 +31,7 @@ from typing import Any
 
 from limen import __version__
 from limen.cli.backtest import run as _run_backtest
+from limen.cli.backtest_flood import run as _run_backtest_flood
 from limen.cli.backtest_wildfire import run as _run_backtest_wildfire
 from limen.cli.bootstrap_static import run as _run_bootstrap_static
 from limen.cli.calibrate import run as _run_calibrate
@@ -107,6 +110,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help="replay a historical window and write a §2.5 metrics report",
     )
     sub.add_parser(
+        "backtest-flood",
+        help=(
+            "replay Copernicus EMS flood perimeters "
+            "(env: LIMEN_BACKTEST_FLOOD_AOI / _START / _END / _LEVEL / _MODE)"
+        ),
+    )
+    sub.add_parser(
         "backtest-wildfire",
         help=(
             "replay the FWI chain against EFFIS burnt-area perimeters "
@@ -163,9 +173,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "firms-sync",
         help="ingest NASA FIRMS active-fire hotspots (needs FIRMS__MAP_KEY)",
     )
-    sub.add_parser(
+    ingest_events = sub.add_parser(
         "ingest-events",
-        help="load the ITALICA/e-ITALICA dated landslide catalogue (LIMEN_ITALICA_CSV)",
+        help="load a dated event catalogue: ITALICA (landslide) or Copernicus EMS (flood)",
+    )
+    ingest_events.add_argument(
+        "--hazard",
+        choices=["landslide", "flood"],
+        default="landslide",
+        help="landslide: ITALICA CSV (LIMEN_ITALICA_CSV); flood: Copernicus EMS perimeters",
     )
     sub.add_parser(
         "verify",
@@ -228,6 +244,7 @@ def main(argv: list[str] | None = None) -> int:
         "bootstrap-static": _run_bootstrap_static,
         "calibrate": _run_calibrate,
         "backtest": _run_backtest,
+        "backtest-flood": _run_backtest_flood,
         "backtest-wildfire": _run_backtest_wildfire,
         "fwi-backfill": _run_fwi_backfill,
         "monitor-once": _run_monitor_once,
@@ -241,7 +258,6 @@ def main(argv: list[str] | None = None) -> int:
         "sync-egms": _run_sync_egms,
         "ingest-kb": _run_ingest_kb,
         "geoserver-sync": _run_geoserver_sync,
-        "ingest-events": _run_ingest_events,
         "firms-sync": _run_firms_sync,
         "mcp-serve": _run_mcp_serve,
         "verify": _run_verify,
@@ -251,6 +267,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "geodata":
         try:
             return asyncio.run(_run_geodata(args))
+        except KeyboardInterrupt:  # pragma: no cover
+            return 130
+    if args.command == "ingest-events":
+        try:
+            return asyncio.run(_run_ingest_events(args.hazard))
         except KeyboardInterrupt:  # pragma: no cover
             return 130
     runner = runners[args.command]

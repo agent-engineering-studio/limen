@@ -49,7 +49,7 @@ BUILD_PROFILES ?= --profile geoserver --profile frontend --profile geodata
 .PHONY: help install \
         up down build rebuild up-host-ollama \
         up-dev down-dev logs migrate seed bootstrap-static calibrate backtest serve \
-        data-status static-data flood-data \
+        data-status static-data flood-data flood-events backtest-flood \
         demo demo-down demo-walkthrough \
         observability observability-down \
         geoserver-up geoserver-down geoserver-init geoserver-logs geoserver-sync dtm-vrt osm-data \
@@ -79,6 +79,8 @@ help:
 	@echo "  make data-status        quali layer statici sono caricati e cosa blocca gli altri"
 	@echo "  make static-data        carica tutti i layer configurati + riepilogo"
 	@echo "  make flood-data         come static-data, con il focus sull'alluvione"
+	@echo "  make flood-events       truth set alluvione da Copernicus EMS (pubblico)"
+	@echo "  make backtest-flood     rigioca i perimetri: hit rate, tasso di base, FAR"
 	@echo "  make imperviousness-data  scarica il raster CLMS del suolo sigillato (EEA, aperto)"
 	@echo "  make dtm-vrt            mosaico virtuale sulle tessere DTM (serve GDAL sull'host)"
 	@echo "  make calibrate          run §2.5 calibration (s_static + S↔ISPRA gate)"
@@ -233,6 +235,18 @@ imperviousness-data:
 	@echo "  Ora punta la variabile al file e riempi le celle:"
 	@echo "    LIMEN_IMPERVIOUSNESS_RASTER=$(CURDIR)/data/sealing/clms_imd_2018/imd_2018_100m.tif"
 	@echo "    make bootstrap-static"
+
+# Truth set alluvione: perimetri allagati osservati di Copernicus EMS.
+# Servizio pubblico, nessuna credenziale (FloodCat richiede un'utenza DPC e
+# Polaris pubblica PDF). Idempotente: i vettori estratti restano in cache,
+# quindi il secondo giro non riscarica i ~100 MB per attivazione.
+flood-events:
+	$(UV) run limen ingest-events --hazard flood
+
+# Rigioca i perimetri: hit rate accanto al tasso di base, FAR sui soli
+# giorni-cella che un passaggio satellitare ha davvero osservato.
+backtest-flood:
+	$(UV) run limen backtest-flood
 
 calibrate:
 	$(UV) run limen calibrate
