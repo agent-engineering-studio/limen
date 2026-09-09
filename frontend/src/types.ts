@@ -18,50 +18,6 @@ export interface AoiSummary {
   kind: string | null;
 }
 
-// --- auth (mirror src/limen/auth/models.py) ---
-export interface AuthUser {
-  id: string;
-  email: string;
-  first_name: string;
-  last_name: string;
-  email_verified: boolean;
-  status: string;
-  roles: string[];
-}
-
-export interface MeResponse {
-  user: AuthUser;
-}
-
-export interface MessageResponse {
-  message: string;
-}
-
-export interface RegisterBody {
-  first_name: string;
-  last_name: string;
-  email: string;
-  password: string;
-}
-
-export interface AdminUser extends AuthUser {
-  created_at?: string | null;
-}
-
-export interface UserListResponse {
-  users: AdminUser[];
-}
-
-export interface AdminCreateBody extends RegisterBody {
-  roles: string[];
-}
-
-export const ALL_ROLES: readonly string[] = ["admin", "ml-ops", "operatore", "viewer"] as const;
-
-export interface AuthConfig {
-  spid_enabled: boolean;
-}
-
 export interface ComuneRisk {
   istat_code: string;
   name: string;

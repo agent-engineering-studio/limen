@@ -1,13 +1,14 @@
 // Capitolo 3 del percorso «Capire Limen» — la diagnostica del modello ML in
-// ombra (#26). L'INTRO didattica (cos'è lo shadow, perché due modelli, come si
-// legge la mappa) è per tutti; i DATI LIVE (numeri, tabelle, mappa) sono
-// riservati al ruolo ml-ops. NON autoritativo: il V1 guida sempre le allerte.
+// ombra (#26). Intro didattica e dati live sono entrambi **pubblici** (#71):
+// la mappa è pubblica in sola lettura, e le API che alimentano questa pagina
+// lo erano già — il gating viveva solo nel frontend, quindi proteggeva la
+// pagina e non i dati. NON autoritativo: il V1 guida sempre le allerte, ed è
+// ciò che il disclaimer qui sotto continua a dire.
 
 import { useEffect, useState } from "react";
 
 import { RISK_CLASSES } from "../lib/risk-colors";
 import { defaultApiClient } from "../lib/api-client";
-import { useMlOps } from "../lib/roles";
 import type { ReliabilityResponse, ShadowSummaryResponse } from "../types";
 import { ChapterFooter, CourseHeader } from "./Course";
 import DivergenceMap from "./DivergenceMap";
@@ -30,7 +31,7 @@ export function championWouldAlert(score: number): boolean {
   return championClassIndex(score) >= 2; // Moderate è indice 2
 }
 
-// --- Dati live, riservati a ml-ops -----------------------------------------
+// --- Dati live -------------------------------------------------------------
 function LiveDiagnostics(): JSX.Element {
   const [data, setData] = useState<ShadowSummaryResponse | null>(null);
   const [reliability, setReliability] = useState<ReliabilityResponse | null>(null);
@@ -171,9 +172,8 @@ function LiveDiagnostics(): JSX.Element {
   );
 }
 
-// --- Pagina: intro pubblica + dati gated -----------------------------------
+// --- Pagina: intro e dati live, entrambi pubblici --------------------------
 export default function ShadowDiagnosticsPage(): JSX.Element {
-  const { allowed } = useMlOps();
   return (
     <div className="explainer sci" aria-label="Diagnostica ML (shadow)">
       <article>
@@ -230,15 +230,7 @@ export default function ShadowDiagnosticsPage(): JSX.Element {
           </li>
         </ul>
 
-        {allowed ? (
-          <LiveDiagnostics />
-        ) : (
-          <p className="shadow-note" role="note">
-            I <strong>dati live</strong> (numeri, tabelle e mappa aggiornati)
-            sono riservati agli operatori con ruolo <code>ml-ops</code>. La
-            spiegazione qui sopra vale per tutti.
-          </p>
-        )}
+        <LiveDiagnostics />
 
         <ChapterFooter current={3} />
       </article>

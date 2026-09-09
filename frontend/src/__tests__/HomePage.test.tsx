@@ -1,10 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../lib/auth", () => ({
-  useAuth: () => ({ user: null, ready: true }),
-}));
-
 vi.mock("../lib/api-client", () => ({
   defaultApiClient: {
     getNationalReport: vi.fn(() =>
@@ -25,12 +21,13 @@ vi.mock("../lib/api-client", () => ({
 import HomePage from "../components/HomePage";
 
 describe("HomePage", () => {
-  it("renders the pitch, the sign-in CTA and live stats", async () => {
+  it("renders the pitch, the dashboard CTA and live stats", async () => {
     render(<HomePage />);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       /Rischio frana e inondazione/,
     );
-    expect(screen.getByText("Accedi alla dashboard")).toBeInTheDocument();
+    // Nessun login: la dashboard è pubblica (#71).
+    expect(screen.getByText("Apri la dashboard")).toBeInTheDocument();
     expect(screen.getByText("Cos'è Limen")).toBeInTheDocument();
     // Static fallback first, live numbers after the fetch resolves.
     await waitFor(() =>

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
-import { useAuth } from "../lib/auth";
 import type { NationalReportResponse } from "../types";
 
 /** Subtle topographic-contour backdrop for the hero (generated curves). */
@@ -80,7 +79,6 @@ const FEATURES = [
 
 export function HomePage(): JSX.Element {
   const [stats, setStats] = useState<NationalReportResponse | null>(null);
-  const { user } = useAuth();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -118,15 +116,9 @@ export function HomePage(): JSX.Element {
             verificato su vent&rsquo;anni di frane reali.
           </p>
           <div className="hero-actions">
-            {user ? (
-              <a className="btn-primary" href="#/dashboard">
-                Apri la dashboard
-              </a>
-            ) : (
-              <a className="btn-primary" href="#/accedi">
-                Accedi alla dashboard
-              </a>
-            )}
+            <a className="btn-primary" href="#/dashboard">
+              Apri la dashboard
+            </a>
             <a className="btn-ghost" href="#/come-funziona">
               Cos&apos;è Limen
             </a>
