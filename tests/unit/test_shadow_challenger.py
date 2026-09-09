@@ -18,11 +18,17 @@ from limen.core.models.risk import (
     RiskScore,
     StaticBreakdown,
 )
+from limen.core.scoring.base import ScoringEngine
 from tests.factories import landslide_record
 
 
-class _StubChallenger:
-    """Returns a deterministic RiskScore for any bundle."""
+class _StubChallenger(ScoringEngine[ComponentBreakdown]):
+    """Returns a deterministic RiskScore for any bundle.
+
+    Eredita dal Protocol invece di soddisfarlo per struttura: così prende il
+    `score_many` di default (#76) e non va aggiornato ogni volta che il
+    contratto cresce — che è quello che è successo aggiungendolo.
+    """
 
     model_uri = "test://challenger"
     model_version = "v0"

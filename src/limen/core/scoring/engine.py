@@ -33,7 +33,7 @@ from limen.core.models.risk import (
     StaticBreakdown,
 )
 from limen.core.scoring.api import api_factor
-from limen.core.scoring.base import classify_score
+from limen.core.scoring.base import ScoringEngine, classify_score
 from limen.core.scoring.caine import compute_caine
 from limen.core.scoring.flood_forecast import flood_forecast_bonus
 from limen.core.scoring.kinematic import compute_kinematic
@@ -126,7 +126,7 @@ class _MeteoAggregate:
     breakdown: MeteoBreakdown
 
 
-class MultiFactorScoringEngine:
+class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
     """Stateless engine bound to a :class:`RegionalThresholds`."""
 
     def __init__(self, thresholds: RegionalThresholds | None = None) -> None:

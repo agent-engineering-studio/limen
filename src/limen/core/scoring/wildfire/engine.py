@@ -27,11 +27,11 @@ from limen.core.models.risk import (
     RiskScore,
     WildfireBreakdown,
 )
-from limen.core.scoring.base import classify_score
+from limen.core.scoring.base import ScoringEngine, classify_score
 from limen.core.scoring.regional_thresholds import WildfireThresholds
 
 
-class WildfireScoringEngine:
+class WildfireScoringEngine(ScoringEngine[WildfireBreakdown]):
     """``ScoringEngine[WildfireBreakdown]`` — the V1 baseline for wildfire."""
 
     def __init__(self, thresholds: WildfireThresholds) -> None:

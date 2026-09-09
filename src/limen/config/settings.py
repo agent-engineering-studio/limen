@@ -471,6 +471,13 @@ class ScoringSettings(BaseSettings):
     # Shadow rows older than this are purged by the cleanup job — the
     # national hourly sweep writes ~1M rows/day (~1 GB/day). 0 = keep all.
     model_runs_retention_days: int = Field(default=30, ge=0)
+    # Quante celle per regione ricevono l'attribuzione SHAP nel challenger
+    # (#76). L'attribuzione per cella è il costo dominante dello shadow, e su
+    # 312.000 celle produce spiegazioni che nessuno leggerà: chi apre il
+    # dettaglio lo fa per le celle che contano. Le altre prendono il ripiego
+    # sulle magnitudini, che è il percorso già previsto quando l'explainer
+    # manca. 0 disattiva lo SHAP del tutto.
+    shadow_shap_top_k: int = Field(default=50, ge=0)
     # Hot-table retention for per-cell assessments (~15 GB/day nationally).
     # mv_latest_risk + alert ledgers keep the operational state. 0 = keep all.
     assessments_retention_days: int = Field(default=14, ge=0)

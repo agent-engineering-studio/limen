@@ -92,9 +92,13 @@ class RiskScoringExecutor(Executor):
         HTTP request during a sweep timed out.
         """
         bundles = assemble_bundles(ctx, macroregion=self._macroregion)
+        # `score_many` e non un ciclo di `score`: per il V1 è lo stesso ciclo
+        # (misurato: 83 µs a cella, 0,86 s per la Basilicata), per un motore
+        # vettoriale è una `predict` sola invece di 60.000. Il chiamante non
+        # deve sapere quale dei due ha in mano — è il punto del Protocol.
+        scores = self._engine.score_many(bundles)
         records: list[CellRiskRecord] = []
-        for bundle in bundles:
-            scored = self._engine.score(bundle)
+        for bundle, scored in zip(bundles, scores, strict=True):
             records.append(
                 CellRiskRecord(
                     cell_id=bundle.cell_id,

@@ -89,17 +89,20 @@ def _sweep_metrics(result: Any, *, cells: int) -> dict[str, Any]:
     chiave, che è corretto: è un passo diverso.
     """
     ctx = result.context
+    assessment = ctx.assessment
     out: dict[str, Any] = {
         "cells": cells,
         "assessment_id": ctx.assessment_id,
-        # `briefing_it`, non `briefing`: il campo si chiama così, e con il nome
-        # sbagliato la metrica diceva `llm_called=False` mentre 140 s su 156
-        # erano andati all'LLM — una metrica che mente è peggio di nessuna.
-        "llm_called": bool(ctx.analysis is not None or ctx.briefing_it),
+        # I due campi vivono su `AggregateAssessment`, non sul contesto, e si
+        # chiamano `analysis` e `briefing_it`. Al primo giro li leggevo dal
+        # contesto e la metrica diceva `llm_called=False` mentre 140 s su 156
+        # erano andati all'LLM: una metrica che mente è peggio di nessuna.
+        "llm_called": bool(
+            assessment is not None and (assessment.analysis is not None or assessment.briefing_it)
+        ),
     }
-    assessment = getattr(ctx, "assessment", None)
     if assessment is not None:
-        out["high_or_above"] = getattr(assessment, "high_or_above", None)
+        out["high_or_above"] = assessment.cells_high_or_above
     for node in result.nodes:
         out[f"{node.name.lower()}_s"] = round(node.duration_seconds, 3)
     return out

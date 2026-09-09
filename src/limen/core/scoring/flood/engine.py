@@ -38,12 +38,12 @@ from limen.core.models.risk import (
     FloodBreakdown,
     RiskScore,
 )
-from limen.core.scoring.base import classify_score
+from limen.core.scoring.base import ScoringEngine, classify_score
 from limen.core.scoring.flood.trigger import fluvial_trigger, pluvial_trigger
 from limen.core.scoring.regional_thresholds import FloodThresholds
 
 
-class FloodScoringEngine:
+class FloodScoringEngine(ScoringEngine[FloodBreakdown]):
     """``ScoringEngine[FloodBreakdown]`` — the V1 baseline for flood."""
 
     def __init__(
