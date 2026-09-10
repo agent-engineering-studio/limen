@@ -1,6 +1,8 @@
-"""``limen seed`` — apply migrations then load Puglia + Basilicata AOIs + grids."""
+"""``limen seed`` — apply migrations then load the ISTAT AOIs + their grids."""
 
 from __future__ import annotations
+
+from collections.abc import Sequence
 
 from limen.core.logging import get_logger
 from limen.data.db import lifespan_pool
@@ -12,12 +14,30 @@ from limen.data.seed.loader import load_all
 log = get_logger(__name__)
 
 
-async def run() -> int:
+async def run(*, only: Sequence[str] | None = None) -> int:
+    """Apply migrations, then load the seed AOIs and generate their grids.
+
+    ``only`` restringe l'insieme agli id indicati. Serve ai test (#90): la
+    griglia a 1 km delle venti regioni sono ~312.000 celle e una ventina di
+    minuti, e quasi nessun test di integrazione ha bisogno dell'Italia — ne
+    vuole una regione, spesso per poi ridurla a sei celle. Il default resta
+    l'intero seme nazionale, quindi `limen seed` non cambia comportamento.
+    """
+    wanted = set(only) if only is not None else None
     async with lifespan_pool():
         applied = await run_migrations()
         log.info("seed.migrations.applied", files=applied, count=len(applied))
 
-        for aoi in load_all():
+        selected = [a for a in load_all() if wanted is None or a.id in wanted]
+        if wanted is not None:
+            missing = wanted - {a.id for a in selected}
+            if missing:
+                # Un id sbagliato deve fermarsi qui: seminare in silenzio meno
+                # regioni di quelle chieste darebbe test che passano su un
+                # database vuoto.
+                raise KeyError(f"unknown seed AOI(s): {', '.join(sorted(missing))}")
+
+        for aoi in selected:
             await upsert_aoi(
                 id=aoi.id,
                 name=aoi.name,

@@ -215,7 +215,12 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
-addopts = "-ra --strict-markers"
+# `-m "not slow"`: i test marcati `slow` seminano l'Italia intera (venti
+# regioni, ~312.000 celle, una ventina di minuti) e non stanno nel budget di
+# un gate su ogni PR (#90). Restano eseguibili con `pytest -m slow`, e la CI
+# li gira in un job suo su `main`. `-ra` mostra comunque quanti ne sono stati
+# deselezionati, quindi non spariscono in silenzio.
+addopts = "-ra --strict-markers -m 'not slow'"
 markers = [
     "integration: integration tests that require a real PostgreSQL+PostGIS instance (via testcontainers)",
     "slow: tests that take more than a few seconds",
