@@ -37,33 +37,78 @@ class ModelRunRow:
     hazard_type: HazardType = DEFAULT_HAZARD
 
 
+#: Colonne della staging, nell'ordine dei record.
+_STAGING_COLUMNS = (
+    "cell_id",
+    "valuation_time",
+    "aoi_id",
+    "hazard_type",
+    "model_uri",
+    "model_version",
+    "role",
+    "probability",
+    "risk_class",
+    "breakdown",
+)
+
+
 async def insert_many(rows: Iterable[ModelRunRow]) -> int:
+    """Scrive le righe dello shadow in una COPY (#76).
+
+    **COPY in una temporanea, poi INSERT … SELECT … ON CONFLICT**, e non una
+    COPY diretta: il vincolo `UNIQUE (cell_id, hazard_type, computed_at, role,
+    model_uri)` esiste perché due sweep sovrapposti non devono duplicare le
+    righe, e la COPY non sa fare `ON CONFLICT`. La issue suggeriva di
+    rinunciare al vincolo contando sul worker unico che arriverà con #77:
+    sarebbe stato fidarsi di un passo non ancora fatto, e il costo di tenerlo
+    è una tabella temporanea che vive dentro la transazione.
+
+    Resta comunque un paio di round-trip invece di uno per riga.
+    """
     items = list(rows)
     if not items:
         return 0
+    records = [
+        (
+            it.cell_id,
+            it.valuation_time,
+            it.aoi_id,
+            it.hazard_type.value,
+            it.model_uri,
+            it.model_version,
+            it.role,
+            it.probability,
+            it.risk_class,
+            json.dumps(it.breakdown, default=str),
+        )
+        for it in items
+    ]
     async with acquire() as conn, conn.transaction():
-        for it in items:
-            await conn.execute(
-                """
-                INSERT INTO model_runs (
-                    cell_id, valuation_time, aoi_id, hazard_type,
-                    model_uri, model_version, role,
-                    probability, risk_class, breakdown
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
-                ON CONFLICT (cell_id, hazard_type, computed_at, role, model_uri)
-                DO NOTHING
-                """,
-                it.cell_id,
-                it.valuation_time,
-                it.aoi_id,
-                it.hazard_type.value,
-                it.model_uri,
-                it.model_version,
-                it.role,
-                it.probability,
-                it.risk_class,
-                json.dumps(it.breakdown, default=str),
+        # ON COMMIT DROP: la temporanea vive quanto la transazione, quindi
+        # due sweep concorrenti non se la contendono e non resta niente da
+        # ripulire se qualcosa esplode a metà.
+        await conn.execute(
+            "CREATE TEMP TABLE _model_runs_staging "
+            "(LIKE model_runs INCLUDING DEFAULTS) ON COMMIT DROP"
+        )
+        await conn.copy_records_to_table(
+            "_model_runs_staging", records=records, columns=list(_STAGING_COLUMNS)
+        )
+        await conn.execute(
+            """
+            INSERT INTO model_runs (
+                cell_id, valuation_time, aoi_id, hazard_type,
+                model_uri, model_version, role,
+                probability, risk_class, breakdown
             )
+            SELECT cell_id, valuation_time, aoi_id, hazard_type,
+                   model_uri, model_version, role,
+                   probability, risk_class, breakdown
+            FROM _model_runs_staging
+            ON CONFLICT (cell_id, hazard_type, computed_at, role, model_uri)
+            DO NOTHING
+            """
+        )
     log.info("model_runs.insert_many", count=len(items))
     return len(items)
 

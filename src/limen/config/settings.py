@@ -53,6 +53,16 @@ class LLMProvider(StrEnum):
 # docs/inference.md); until that exists, refuse to start.
 SLOW_GENERATION_MODELS: frozenset[str] = frozenset({"quality-local", "glm52"})
 
+# I ruoli **non** consumati su un percorso sincrono, e quindi gli unici a cui è
+# lecito assegnare un modello di :data:`SLOW_GENERATION_MODELS`. Dopo #78 il
+# briefing non gira più dentro il tick orario: lo scrive `briefing_enrichment`
+# su righe già persistite, un AOI alla volta, e nessuno lo aspetta — né la
+# mappa (che mostra il testo deterministico finché non arriva) né le allerte
+# (deterministiche per invariante). Un briefing che impiega mezz'ora è quindi
+# lento, non rotto. `risk_analyst` resta fuori: lo stesso job lo invoca prima
+# del briefing, ma è anche il ruolo che MCP e i percorsi HTTP chiamano.
+ASYNC_GENERATION_ROLES: frozenset[str] = frozenset({"briefing"})
+
 
 class ScoringEngineKind(StrEnum):
     """Which scoring engine drives the workflow's authoritative numbers.
@@ -229,6 +239,14 @@ class LLMSettings(BaseSettings):
     #   LLM__LLAMACPP_ROLE_TIMEOUT_SECONDS='{"Briefing": 5400}'
     llamacpp_role_timeout_seconds: dict[str, float] = Field(default_factory=dict)
 
+    # Cadenza di `briefing_enrichment` (#78). Dieci minuti: il briefing non è
+    # più dentro lo sweep, e la finestra fra un tick orario e il successivo è
+    # abbastanza larga da assorbire una decina di regioni anche con un modello
+    # locale. La finestra di recupero è più lunga dell'ora dello sweep perché
+    # un riavvio del worker non deve lasciare regioni senza narrativa.
+    briefing_interval_minutes: int = Field(default=10, ge=1)
+    briefing_lookback_hours: int = Field(default=3, ge=1)
+
     @field_validator("llamacpp_role_timeout_seconds")
     @classmethod
     def _positive_role_timeouts(cls, v: dict[str, float]) -> dict[str, float]:
@@ -250,7 +268,9 @@ class LLMSettings(BaseSettings):
         offenders = {
             field: value.strip()
             for field, value in self.models.model_dump().items()
-            if isinstance(value, str) and value.strip() in SLOW_GENERATION_MODELS
+            if field not in ASYNC_GENERATION_ROLES
+            and isinstance(value, str)
+            and value.strip() in SLOW_GENERATION_MODELS
         }
         if not offenders:
             return self
@@ -263,8 +283,11 @@ class LLMSettings(BaseSettings):
             "than the response), and these gateway models generate in tens of "
             "minutes. The caller would time out into its deterministic "
             "fallback and the monitoring sweep would stall silently. Use "
-            "'fast' / 'chat' / 'extract' here, and route long-running "
-            "generation through a dedicated asynchronous role instead."
+            "'fast' / 'chat' / 'extract' here. L'unico ruolo asincrono è "
+            f"{', '.join(sorted(ASYNC_GENERATION_ROLES))}: dopo #78 il briefing "
+            "lo scrive `briefing_enrichment` su righe già persistite, quindi lì "
+            "un modello lento è ammesso (dàgli un tetto in "
+            "LLM__LLAMACPP_ROLE_TIMEOUT_SECONDS)."
         )
 
 
@@ -277,12 +300,32 @@ class SchedulerSettings(BaseSettings):
     cache_cleanup_interval_seconds: int = Field(default=300, ge=10)
     # Run the MAF workflow for every active AOI every N minutes.
     hourly_monitoring_minutes: int = Field(default=60, ge=5)
+    # Quanto tenere la tracciatura dei job (#75). Novanta giorni: abbastanza
+    # per confrontare uno sweep di oggi con quello di due mesi fa — che è il
+    # motivo per cui la tabella esiste — e poche migliaia di righe al giorno,
+    # quindi nessuna ragione di essere avari.
+    job_runs_retention_days: int = Field(default=90, ge=1)
+    # Se lo scheduler parte in questo processo (#77). Nel container `api` è
+    # `false`: l'API torna HTTP puro e read-only, coerente con la mappa
+    # pubblica di #69. Il processo `limen worker` ignora questo flag — è la
+    # sua unica ragione di esistere, e un worker che si spegne da solo per
+    # una variabile d'ambiente sarebbe un modo silenzioso di fermare i batch.
+    enabled: bool = True
+    # Quante regioni valutare in parallelo nello sweep. Quattro: il limite non
+    # è la CPU (64 core) ma il rate limit di Open-Meteo e la contesa sul
+    # database, e con l'LLM che domina il tempo per regione bastano poche
+    # regioni concorrenti per riempire l'attesa.
+    sweep_concurrency: int = Field(default=4, ge=1, le=32)
     # Run the ISPRA IdroGEO sync every N hours.
     weekly_idrogeo_hours: int = Field(default=24 * 7, ge=1)
     # Hot-table partition maintenance + retention. Partitions are created a
     # week ahead, so anything well under that is safe; 6 h keeps retention
     # responsive without hammering the catalogue.
     partitions_interval_hours: int = Field(default=6, ge=1)
+    # Ora UTC della pipeline notturna (#78): shadow ML, drift, retrain,
+    # forecast history, partizioni, retention. Le due del mattino perché è
+    # dopo l'ultimo sweep della notte e prima del report delle sei.
+    nightly_hour_utc: int = Field(default=2, ge=0, le=23)
     enable_hourly_monitoring: bool = True
     enable_weekly_idrogeo: bool = True
 
@@ -466,6 +509,13 @@ class ScoringSettings(BaseSettings):
     # Shadow rows older than this are purged by the cleanup job — the
     # national hourly sweep writes ~1M rows/day (~1 GB/day). 0 = keep all.
     model_runs_retention_days: int = Field(default=30, ge=0)
+    # Quante celle per regione ricevono l'attribuzione SHAP nel challenger
+    # (#76). L'attribuzione per cella è il costo dominante dello shadow, e su
+    # 312.000 celle produce spiegazioni che nessuno leggerà: chi apre il
+    # dettaglio lo fa per le celle che contano. Le altre prendono il ripiego
+    # sulle magnitudini, che è il percorso già previsto quando l'explainer
+    # manca. 0 disattiva lo SHAP del tutto.
+    shadow_shap_top_k: int = Field(default=50, ge=0)
     # Hot-table retention for per-cell assessments (~15 GB/day nationally).
     # mv_latest_risk + alert ledgers keep the operational state. 0 = keep all.
     assessments_retention_days: int = Field(default=14, ge=0)
@@ -518,6 +568,12 @@ class TrainingSettings(BaseSettings):
     optuna_trials: int = Field(default=50, ge=1, le=2000)
     optuna_timeout_seconds: int = Field(default=900, ge=10)
     seed: int = Field(default=42, ge=0)
+    # Riaddestramento automatico quando il drift lo chiede (#78). Default
+    # **false**: addestrare da soli è accettabile, promuovere no, e finché
+    # l'operatore non guarda il tag di promozione un modello nuovo è solo
+    # un run MLflow in più. Acceso, gira in un sottoprocesso `uv run limen
+    # train` — Optuna non condivide il processo del worker.
+    auto_retrain: bool = False
 
 
 class EgmsSettings(BaseSettings):

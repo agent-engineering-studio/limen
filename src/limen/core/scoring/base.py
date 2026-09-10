@@ -9,6 +9,7 @@ what makes the V2 engine a true drop-in: switching
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from limen.core.models.risk import BreakdownT_co, CellFeatureBundle, RiskLevel, RiskScore
@@ -48,6 +49,32 @@ class ScoringEngine(Protocol[BreakdownT_co]):
     """
 
     def score(self, bundle: CellFeatureBundle) -> RiskScore[BreakdownT_co]: ...
+
+    def score_many(
+        self, bundles: Sequence[CellFeatureBundle]
+    ) -> Sequence[RiskScore[BreakdownT_co]]:
+        """Score a batch. Deve dare gli **stessi** numeri di ``score`` uno a uno.
+
+        Esiste perché per un motore vettoriale la differenza non è di
+        efficienza ma di ordine di grandezza: LightGBM predice 60.000 righe in
+        una chiamata in meno di un secondo, e chiamato una riga alla volta paga
+        60.000 volte l'attraversamento del confine Python/C.
+
+        Per il V1 deterministico è il ciclo, e va bene così: misurato, 10.353
+        celle costano 0,86 s, cioè 83 µs a cella in Python puro. Un motore che
+        non ha niente da vettorizzare non deve fingere di averlo — ma deve
+        offrire la stessa superficie, altrimenti il chiamante torna a
+        distinguere i due casi e la sostituibilità del Protocol si perde.
+
+        Ritorna una ``Sequence`` e non una ``list``: ``list`` è invariante nel
+        suo parametro, quindi ``list[RiskScore[BreakdownT_co]]`` metterebbe una
+        variabile covariante in posizione invariante e romperebbe la varianza
+        del Protocol — quella che permette a ``RiskScore[ComponentBreakdown]``
+        di passare dove si attende ``RiskScore[HazardBreakdown]``. Una lista
+        resta un ritorno valido; è il *tipo dichiarato* a dover essere
+        covariante.
+        """
+        return [self.score(b) for b in bundles]
 
 
 __all__ = ["ScoringEngine", "classify_score"]

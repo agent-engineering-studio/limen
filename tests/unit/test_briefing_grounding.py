@@ -247,5 +247,5 @@ async def test_kg_failure_does_not_block_llm_path() -> None:
     text = await agent.brief(_assessment(), analysis=_analysis())
     elapsed = time.monotonic() - start
     # Deterministic fallback briefing — no citations, no stall.
-    assert "modalità di sicurezza" in text
+    assert "riassunto deterministico" in text
     assert elapsed < 1.0, f"LLM failure path leaked: {elapsed:.2f}s"

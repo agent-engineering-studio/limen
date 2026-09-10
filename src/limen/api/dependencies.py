@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     import asyncpg
 
     from limen.agents.workflow_runtime.builder import Workflow
+    from limen.agents.workflows.main_workflow import WorkflowProfile
 
 
 @dataclass(slots=True)
@@ -113,8 +114,13 @@ class AppDependencies:
         *,
         cell_limit: int | None = None,
         hazard: HazardType = DEFAULT_HAZARD,
+        profile: WorkflowProfile = "forecast",
     ) -> Workflow:
-        """Build a workflow for ``hazard``, bound to this container's factory."""
+        """Build a workflow for ``hazard``, bound to this container's factory.
+
+        ``profile`` sceglie la cadenza (#78): lo sweep orario passa
+        ``"hourly"`` e ottiene un percorso senza LLM e senza shadow.
+        """
         from limen.agents.workflows.main_workflow import (
             WorkflowDeps,
             build_hazard_workflow,
@@ -136,6 +142,7 @@ class AppDependencies:
                 grounding_service=self.grounding_service,
             ),
             cell_limit=cell_limit,
+            profile=profile,
         )
 
 

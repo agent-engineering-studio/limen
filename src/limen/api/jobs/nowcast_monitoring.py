@@ -18,6 +18,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from limen.api.dependencies import AppDependencies
+from limen.api.jobs._tracking import tracked
+from limen.api.jobs.hourly_monitoring import sweep_metrics
+from limen.api.jobs.ids import JOB_NOWCAST_MONITORING
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
 from limen.data.db import acquire
@@ -66,13 +69,20 @@ async def run_nowcast_monitoring(deps: AppDependencies) -> dict[str, float]:
             observed_at=sri.observed_at.isoformat(),
         )
         try:
-            workflow = deps.build_workflow()
+            # Profilo orario e non previsionale (#78): questo tick è
+            # event-driven e breve, e con `LLM__MODELS__BRIEFING` su un modello
+            # lento un briefing sincrono lo terrebbe aperto per decine di
+            # minuti. La narrativa arriva dopo, da `briefing_enrichment`, che
+            # legge anche le righe di questo job.
+            workflow = deps.build_workflow(profile="hourly")
             ctx = MonitoringContext(
                 aoi_id=aoi_id,
                 valuation_time=datetime.now(UTC),
                 enable_insitu=deps.settings.enable_insitu,
             )
-            result = await workflow.run(ctx)
+            async with tracked(JOB_NOWCAST_MONITORING, scope=aoi_id) as metrics:
+                result = await workflow.run(ctx)
+                metrics.update(sweep_metrics(result, cells=len(result.context.cell_results)))
             triggered[aoi_id] = round(peak, 1)
             log.info(
                 "job.nowcast.aoi.done",

@@ -66,3 +66,6 @@ mlruns/
 
 # Superpowers brainstorming (mockup companion)
 .superpowers/
+
+# Cache locale degli spike (scripts/spike_*.py): dati pubblici riscaricabili.
+.cache/

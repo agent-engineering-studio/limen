@@ -192,6 +192,7 @@ function ComuneSection({
 /** Analisi AI della regione, caricata solo quando l'operatore la apre. */
 function RegionalAnalysis({ aoiId }: { aoiId: string }): JSX.Element {
   const [text, setText] = useState<string | null | undefined>(undefined);
+  const [isFallback, setIsFallback] = useState(false);
 
   const { selected: hazard } = useHazard();
   // Il briefing è per pericolo: senza questo, quello caricato per il
@@ -203,7 +204,10 @@ function RegionalAnalysis({ aoiId }: { aoiId: string }): JSX.Element {
     setText(null);
     defaultApiClient
       .getLatestRisk(aoiId, undefined, hazard)
-      .then((resp) => setText(resp.briefing_it ?? ""))
+      .then((resp) => {
+        setIsFallback(resp.briefing_is_fallback);
+        setText(resp.briefing_it ?? "");
+      })
       .catch(() => setText(""));
   };
 
@@ -221,8 +225,11 @@ function RegionalAnalysis({ aoiId }: { aoiId: string }): JSX.Element {
         <>
           <p className="regional-analysis-text">{text}</p>
           <p className="popup-note">
-            Testo generato da un modello linguistico sull'intera regione; i
-            numeri citati vengono dalla valutazione deterministica.
+            {isFallback
+              ? "Riassunto deterministico: l'analisi narrativa viene prodotta " +
+                "dopo lo sweep e comparirà entro pochi minuti."
+              : "Testo generato da un modello linguistico sull'intera regione; " +
+                "i numeri citati vengono dalla valutazione deterministica."}
           </p>
         </>
       )}

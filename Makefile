@@ -50,6 +50,7 @@ BUILD_PROFILES ?= --profile geoserver --profile frontend --profile geodata
         up down build rebuild up-host-ollama \
         up-dev down-dev logs migrate seed bootstrap-static calibrate backtest serve \
         data-status static-data flood-data flood-events backtest-flood fire-history \
+        logs-worker \
         demo demo-down demo-walkthrough \
         observability observability-down \
         geoserver-up geoserver-down geoserver-init geoserver-logs geoserver-sync dtm-vrt osm-data \
@@ -79,6 +80,7 @@ help:
 	@echo "  make data-status        quali layer statici sono caricati e cosa blocca gli altri"
 	@echo "  make static-data        carica tutti i layer configurati + riepilogo"
 	@echo "  make flood-data         come static-data, con il focus sull'alluvione"
+	@echo "  make logs-worker        log del processo batch (scheduler + IoT)"
 	@echo "  make fire-history       archivio FIRMS 2000+ : densità e truth set incendi"
 	@echo "  make flood-events       truth set alluvione da Copernicus EMS (pubblico)"
 	@echo "  make backtest-flood     rigioca i perimetri: hit rate, tasso di base, FAR"
@@ -200,6 +202,12 @@ down-dev:
 
 logs:
 	docker compose -f $(COMPOSE_DEV) logs -f postgres
+
+# I job vivono nel container `worker` (#77): `logs api` non mostra più uno
+# `scheduler.registered`, ed è il modo più veloce di accorgersi che la
+# separazione è in piedi.
+logs-worker:
+	docker compose -p limen logs -f worker
 
 migrate:
 	$(UV) run limen migrate

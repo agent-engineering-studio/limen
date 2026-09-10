@@ -5,8 +5,11 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from typing import Any
 
 from limen.api.dependencies import AppDependencies
+from limen.api.jobs._tracking import tracked
+from limen.api.jobs.ids import JOB_HOURLY_MONITORING
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
@@ -72,10 +75,112 @@ async def _hazards_stale_first(enabled: Sequence[HazardType]) -> list[HazardType
     return sorted(enabled, key=lambda h: (seen.get(h) is not None, seen.get(h)))
 
 
+def sweep_metrics(result: Any, *, cells: int) -> dict[str, Any]:
+    """Metriche di un AOI, dai record che il workflow già produce.
+
+    Pubblica perché ha tre chiamanti (#78): oltre allo sweep orario, i due
+    trigger event-driven — nowcast radar e FIRMS — che dopo la #78 girano con
+    lo stesso profilo e hanno bisogno delle stesse metriche perché il briefing
+    asincrono possa trovarli.
+
+    Il runtime misura ogni nodo in `NodeExecutionRecord.duration_seconds`
+    (`workflow_runtime/builder.py`), quindi i tempi per passo sono già lì: la
+    issue proponeva un dizionario `timings` sul contesto, ma sarebbe stato un
+    secondo posto dove misurare la stessa cosa, e i due sarebbero divergiti al
+    primo nodo aggiunto.
+
+    I nomi dei nodi diventano chiavi `<nodo>_s` in minuscolo: `RiskScoring`
+    → `riskscoring_s`. Leggibile e stabile — un nodo rinominato cambia la
+    chiave, che è corretto: è un passo diverso.
+    """
+    ctx = result.context
+    assessment = ctx.assessment
+    out: dict[str, Any] = {
+        "cells": cells,
+        "assessment_id": ctx.assessment_id,
+        # I due campi vivono su `AggregateAssessment`, non sul contesto, e si
+        # chiamano `analysis` e `briefing_it`. Al primo giro li leggevo dal
+        # contesto e la metrica diceva `llm_called=False` mentre 140 s su 156
+        # erano andati all'LLM: una metrica che mente è peggio di nessuna.
+        "llm_called": bool(
+            assessment is not None and (assessment.analysis is not None or assessment.briefing_it)
+        ),
+    }
+    if assessment is not None:
+        out["high_or_above"] = assessment.cells_high_or_above
+        # La distribuzione serve al briefing asincrono (#78): decide con la
+        # stessa regola che il nodo LLM applicava dentro lo sweep
+        # (`briefing_min_level`), e senza i conteggi dovrebbe rileggersi le
+        # righe di ogni regione per scoprire che non c'è niente da raccontare.
+        out["cells_by_level"] = dict(assessment.cells_by_level)
+    for node in result.nodes:
+        out[f"{node.name.lower()}_s"] = round(node.duration_seconds, 3)
+    return out
+
+
+async def _score_one_aoi(
+    *,
+    deps: AppDependencies,
+    workflow: Any,
+    hazard: HazardType,
+    aoi_id: str,
+    limit: asyncio.Semaphore,
+) -> tuple[str, int]:
+    """Valuta una regione, sotto semaforo. Ritorna ``(aoi_id, celle)``.
+
+    Funzione di modulo e non chiusura dentro il ciclo: una chiusura
+    catturerebbe `hazard` e `workflow` per riferimento, e oggi è innocuo solo
+    perché il `gather` è atteso dentro la stessa iterazione. Diventerebbe un
+    bug il giorno che qualcuno sposta l'attesa fuori — che è esattamente il
+    genere di modifica che questo passo invita a fare.
+    """
+    async with limit:
+        ctx = MonitoringContext(
+            aoi_id=aoi_id,
+            hazard_type=hazard,
+            valuation_time=datetime.now(UTC),
+            enable_insitu=deps.settings.enable_insitu,
+        )
+        # Una riga per regione: una sola riga per sweep direbbe che è durato
+        # N, venti dicono quale regione lo fa durare — che è l'informazione
+        # che serve prima di ottimizzare (#74).
+        async with tracked(JOB_HOURLY_MONITORING, scope=aoi_id) as metrics:
+            metrics["hazard"] = hazard.value
+            try:
+                result = await workflow.run(ctx)
+            except Exception as exc:  # never bring the scheduler down
+                log.error(
+                    "job.hourly_monitoring.error",
+                    aoi_id=aoi_id,
+                    hazard=hazard.value,
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                )
+                metrics["status"] = "error"
+                metrics["error_type"] = type(exc).__name__
+                return aoi_id, 0
+            cells = len(result.context.cell_results)
+            metrics.update(sweep_metrics(result, cells=cells))
+            log.info(
+                "job.hourly_monitoring.aoi.done",
+                aoi_id=aoi_id,
+                hazard=hazard.value,
+                cells=cells,
+                assessment_id=result.context.assessment_id,
+            )
+            return aoi_id, cells
+
+
 async def run_hourly_monitoring(deps: AppDependencies) -> dict[str, int]:
     """Run the workflow over every AOI; return per-AOI cell counts."""
     if _sweep_lock.locked():
         log.info("job.hourly_monitoring.skip", reason="previous sweep still running")
+        # Il salto si registra, e non come errore: è voluto. Non registrarlo
+        # nasconderebbe che il sistema è in ritardo su se stesso, che è
+        # esattamente il sintomo per cui questa tabella esiste (#75).
+        async with tracked(JOB_HOURLY_MONITORING) as metrics:
+            metrics["status"] = "skipped"
+            metrics["reason"] = "previous sweep still running"
         return {}
     async with _sweep_lock:
         return await _run_sweep(deps)
@@ -104,7 +209,8 @@ async def _run_sweep(deps: AppDependencies) -> dict[str, int]:
             log.info("job.hourly_monitoring.no_aois", hazard=hazard.value)
             continue
         try:
-            workflow = deps.build_workflow(hazard=hazard)
+            # Profilo orario: niente LLM, niente shadow (#78).
+            workflow = deps.build_workflow(hazard=hazard, profile="hourly")
         except Exception as exc:
             # A hazard that cannot be scored (no engine, no thresholds) must
             # not take the other hazards down with it.
@@ -115,33 +221,40 @@ async def _run_sweep(deps: AppDependencies) -> dict[str, int]:
                 error_type=type(exc).__name__,
             )
             continue
-        for aoi_id in aois:
-            ctx = MonitoringContext(
-                aoi_id=aoi_id,
-                hazard_type=hazard,
-                valuation_time=datetime.now(UTC),
-                enable_insitu=deps.settings.enable_insitu,
-            )
-            try:
-                result = await workflow.run(ctx)
-            except Exception as exc:  # never bring the scheduler down
-                log.error(
-                    "job.hourly_monitoring.error",
+        # Regioni in parallelo, con un semaforo (#77). Il limite non è la CPU
+        # — la macchina ne ha 64 e lo scoring vero è lo 0,6% del tempo — ma il
+        # rate limit di Open-Meteo e la contesa sul database. Con l'LLM che
+        # domina i 156 s di una regione, poche regioni concorrenti bastano a
+        # riempire l'attesa.
+        #
+        # **Niente ProcessPoolExecutor** per lo scoring, che la issue
+        # proponeva: misurato al passo 1, `RiskScoring` costa 0,86 s su 10.353
+        # celle contro 155,7 s di sweep. Spostarlo fra processi significherebbe
+        # serializzare bundle Pydantic avanti e indietro per contendersi meno
+        # dell'1% del tempo — quasi certamente più costo che guadagno, e
+        # complessità certa.
+        limit = asyncio.Semaphore(deps.settings.scheduler.sweep_concurrency)
+        # `return_exceptions=True`: una regione che esplode fuori dal try —
+        # per esempio annullata — non deve portarsi via le altre diciannove.
+        results = await asyncio.gather(
+            *(
+                _score_one_aoi(
+                    deps=deps,
+                    workflow=workflow,
+                    hazard=hazard,
                     aoi_id=aoi_id,
-                    hazard=hazard.value,
-                    error=str(exc),
-                    error_type=type(exc).__name__,
+                    limit=limit,
                 )
+                for aoi_id in aois
+            ),
+            return_exceptions=True,
+        )
+        for item in results:
+            if isinstance(item, BaseException):
+                log.error("job.hourly_monitoring.task_failed", error=str(item))
                 continue
-            cells = len(result.context.cell_results)
+            aoi_id, cells = item
             out[aoi_id] = out.get(aoi_id, 0) + cells
-            log.info(
-                "job.hourly_monitoring.aoi.done",
-                aoi_id=aoi_id,
-                hazard=hazard.value,
-                cells=cells,
-                assessment_id=result.context.assessment_id,
-            )
     log.info(
         "job.hourly_monitoring.done",
         hazards=[h.value for h in hazards],

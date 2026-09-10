@@ -47,10 +47,14 @@ class ShadowChallengerExecutor(Executor):
         if challenger is None:
             return []
         bundles = assemble_bundles(ctx)
+        # Una `predict` per regione invece di una per cella (#76): il motore
+        # ML costruisce una matrice sola, e lo SHAP lo calcola solo per le
+        # prime K. Il ciclo qui sotto resta perché il *breakdown* per riga è
+        # comunque per cella — è la predizione a essere vettoriale.
+        scores = challenger.score_many(bundles)
         feature_row_fn = getattr(challenger, "feature_row", None)
         rows: list[ModelRunRow] = []
-        for bundle in bundles:
-            scored = challenger.score(bundle)
+        for bundle, scored in zip(bundles, scores, strict=True):
             breakdown = scored.breakdown.model_dump(mode="json")
             if feature_row_fn is not None:
                 # Canonical model inputs → drift monitoring compares

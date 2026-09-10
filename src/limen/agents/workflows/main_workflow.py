@@ -18,7 +18,9 @@ numeric ``cell_results`` are identical.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Literal
 
 from limen.agents.chat_agents.briefing import BriefingAgent
 from limen.agents.chat_agents.prompts_registry import has_narrative
@@ -86,6 +88,25 @@ class WorkflowDeps:
 _LEVEL_ORDER = ("None", "Low", "Moderate", "High", "VeryHigh")
 
 
+def level_reached(cells_by_level: Mapping[str, int], min_level: str) -> bool:
+    """True se almeno una cella sta al livello ``min_level`` o sopra.
+
+    Presa dal predicato qui sotto e resa pura perché ha un secondo chiamante
+    (#78): il briefing asincrono deve decidere quali regioni raccontare con la
+    **stessa** regola che il nodo LLM applicava dentro lo sweep. Due copie
+    della soglia sarebbero divergite alla prima taratura di
+    ``briefing_min_level``.
+    """
+    if min_level == "None":
+        return True
+    floor = _LEVEL_ORDER.index(min_level)
+    return any(
+        count > 0 and _LEVEL_ORDER.index(level) >= floor
+        for level, count in cells_by_level.items()
+        if level in _LEVEL_ORDER
+    )
+
+
 def _llm_worthwhile(ctx: MonitoringContext, min_level: str) -> bool:
     """True when the cycle warrants the (slow) LLM narrative.
 
@@ -99,12 +120,7 @@ def _llm_worthwhile(ctx: MonitoringContext, min_level: str) -> bool:
         return True
     if ctx.assessment is None:
         return False
-    floor = _LEVEL_ORDER.index(min_level)
-    return any(
-        count > 0 and _LEVEL_ORDER.index(level) >= floor
-        for level, count in ctx.assessment.cells_by_level.items()
-        if level in _LEVEL_ORDER
-    )
+    return level_reached(ctx.assessment.cells_by_level, min_level)
 
 
 class RiskAnalystNode(Executor):
@@ -178,11 +194,25 @@ class BriefingNode(Executor):
 # ---------------------------------------------------------------------------
 # Builder
 # ---------------------------------------------------------------------------
+#: Le tre cadenze (#78). Non un flag booleano "con o senza LLM": i tre
+#: profili differiscono per *quali passi* eseguono, e un nome dice quale
+#: cadenza li ha chiesti.
+#:
+#: * ``hourly``   — solo V1: niente LLM, niente shadow. È il percorso che deve
+#:   stare dentro il tick, e la misura del passo 1 dice perché: due nodi
+#:   dichiarati non autoritativi consumavano il 90% dei 156 s di una regione.
+#: * ``nightly``  — champion + challenger con SHAP su tutte le celle, senza
+#:   persistenza operativa né allerte: il notturno misura, non opera.
+#: * ``forecast`` — il percorso previsionale esistente, invariato.
+WorkflowProfile = Literal["hourly", "nightly", "forecast"]
+
+
 def build_hazard_workflow(
     hazard: HazardType = DEFAULT_HAZARD,
     deps: WorkflowDeps | None = None,
     *,
     cell_limit: int | None = None,
+    profile: WorkflowProfile = "forecast",
 ) -> Workflow:
     """Assemble the sequential workflow for one hazard.
 
@@ -204,6 +234,11 @@ def build_hazard_workflow(
 
     ``cell_limit`` is exposed mainly for tests / smoke runs where scoring 60k
     cells per AOI would be wasteful.
+
+    ``profile`` sceglie la cadenza (#78). Il default resta ``forecast`` — cioè
+    il comportamento di prima — perché cambiarlo silenziosamente toglierebbe la
+    narrativa a ogni chiamante esistente: `monitor-once`, MCP, i test. Lo
+    sweep orario lo passa esplicito.
     """
     deps = deps or WorkflowDeps(
         llm_factory=_default_factory(),
@@ -221,8 +256,14 @@ def build_hazard_workflow(
     # MLflow round trip.
     champion = deps.scoring_engine or resolve_scoring_engine(settings=settings, hazard=hazard)
     challenger = deps.challenger_engine
+    # Lo shadow gira **solo di notte** (#78). `ScoringMode.SHADOW` continua a
+    # significare "il challenger è configurato", ma nell'orario non entra:
+    # LightGBM più SHAP per cella ogni ora è il costo di un modello che il
+    # verdetto shadow dà già per non promuovibile con queste feature.
     if challenger is None and settings.scoring.mode is ScoringMode.SHADOW:
         challenger = resolve_challenger(settings=settings, hazard=hazard)
+    if profile == "hourly":
+        challenger = None
 
     name = f"limen-{hazard.value}-v1"
     builder = (
@@ -271,7 +312,11 @@ def build_hazard_workflow(
     # frane che racconta un incendio: a volte ci azzecca, a volte spiega una
     # soglia pluviale mai calcolata. Nessuna prosa è meglio di prosa
     # sbagliata, e punteggi, alert e mappa non ne dipendono.
-    if has_narrative(hazard):
+    # Nell'orario nessun nodo LLM: il briefing arriva dopo, in asincrono, sulle
+    # righe già persistite. Non è una degradazione — è dove il tempo era
+    # finito: 102 s di RiskAnalyst e 38 di Briefing sui 156 di una regione,
+    # contro 0,88 s di scoring.
+    if has_narrative(hazard) and profile != "hourly":
         builder = builder.add(
             RiskAnalystNode(deps.llm_factory, min_level=settings.llm.briefing_min_level)
         ).add(
@@ -281,15 +326,25 @@ def build_hazard_workflow(
                 min_level=settings.llm.briefing_min_level,
             )
         )
+    elif profile == "hourly":
+        log.info("workflow.narrative.skipped", hazard=hazard.value, reason="hourly profile")
     else:
         log.info("workflow.narrative.skipped", hazard=hazard.value, reason="no prompt")
-    builder = builder.add(PersistResultExecutor(hazard=hazard)).add(
-        AlertDispatchExecutor(deps.notification_dispatcher, hazard=hazard)
-    )
+    # Il notturno misura, non opera: niente riga in `risk_assessments` e
+    # nessuna allerta. Le sue uscite stanno in `model_runs`, che è ciò che il
+    # confronto champion-challenger legge. Persistere anche lui darebbe alla
+    # mappa due valutazioni dello stesso giorno con la stessa dignità, e
+    # dispacciare allerte alle due di notte su un modello non promosso sarebbe
+    # peggio ancora.
+    if profile != "nightly":
+        builder = builder.add(PersistResultExecutor(hazard=hazard)).add(
+            AlertDispatchExecutor(deps.notification_dispatcher, hazard=hazard)
+        )
     log.info(
         "workflow.built",
         name=name,
         hazard=hazard.value,
+        profile=profile,
         steps=builder.build().step_count,
         enable_insitu=settings.enable_insitu,
         llm_provider=deps.llm_factory.provider,
@@ -328,9 +383,10 @@ def build_landslide_workflow(
     deps: WorkflowDeps | None = None,
     *,
     cell_limit: int | None = None,
+    profile: WorkflowProfile = "forecast",
 ) -> Workflow:
     """Landslide workflow. Thin alias kept for the existing call sites."""
-    return build_hazard_workflow(DEFAULT_HAZARD, deps, cell_limit=cell_limit)
+    return build_hazard_workflow(DEFAULT_HAZARD, deps, cell_limit=cell_limit, profile=profile)
 
 
 def _default_factory() -> LlmClientFactory:

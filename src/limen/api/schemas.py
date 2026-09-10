@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from limen.core.models.context import (
     CellRiskRecord,
@@ -64,6 +64,11 @@ class LatestAssessmentResponse(BaseModel):
     cells_high_or_above: int
     cells_by_level: dict[str, int]
     briefing_it: str | None = None
+    #: True quando ``briefing_it`` è il testo deterministico e non quello del
+    #: modello narrativo (#78): lo sweep orario non chiama più l'LLM, il
+    #: briefing arriva dopo. Senza questo flag la SPA presenterebbe un
+    #: segnaposto come se fosse l'analisi.
+    briefing_is_fallback: bool = False
     analysis: RiskAnalysisDTO | None = None
 
 
@@ -128,3 +133,28 @@ class ComuneListResponse(BaseModel):
 class ComuneDetailResponse(BaseModel):
     comune: ComuneRisk
     cells: list[dict[str, object]]
+
+
+# --- Stato dei job (#75) ---
+class SweepStatus(BaseModel):
+    """L'ultimo sweep nazionale nel suo insieme."""
+
+    started_at: datetime
+    finished_at: datetime | None = None
+    status: str
+    duration_s: float | None = None
+
+
+class JobRunStatus(BaseModel):
+    """Quando una regione è stata valutata l'ultima volta, e quanto ci è voluto."""
+
+    aoi_id: str
+    last_assessed_at: datetime | None = None
+    duration_s: float | None = None
+    status: str
+    cells: int | None = None
+
+
+class JobStatusResponse(BaseModel):
+    sweep: SweepStatus | None = None
+    per_aoi: list[JobRunStatus] = Field(default_factory=list)

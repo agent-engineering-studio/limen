@@ -15,6 +15,7 @@ Usage:
     limen imperviousness-fetch  Download the CLMS sealed-soil raster (public EEA service).
     limen review-alerts      Sampled manual-review checklist for the alert FAR protocol.
     limen serve              Start the FastAPI HTTP server (uvicorn on :8080).
+    limen worker             Batch process: scheduler + IoT, no HTTP.
     limen llm-check          Probe the inference engine: model + latency per agent role.
     limen train              Extract training samples and train the V2 ML model (MLflow).
     limen shadow-report      Champion vs ML-challenger comparison over the shadow window.
@@ -48,6 +49,7 @@ from limen.cli.imperviousness_fetch import run as _run_imperviousness_fetch
 from limen.cli.ingest_events import run as _run_ingest_events
 from limen.cli.ingest_fire_history import run as _run_ingest_fire_history
 from limen.cli.ingest_kb import run as _run_ingest_kb
+from limen.cli.jobs import run as _run_jobs
 from limen.cli.llm_check import run as _run_llm_check
 from limen.cli.mcp_serve import run as _run_mcp_serve
 from limen.cli.migrate import run as _run_migrate
@@ -61,6 +63,7 @@ from limen.cli.server import run as _run_server
 from limen.cli.shadow_report import run as _run_shadow_report
 from limen.cli.sync_egms import run as _run_sync_egms
 from limen.cli.train import run as _run_train
+from limen.cli.worker import run as _run_worker
 from limen.config.settings import get_settings
 from limen.core.logging import configure_logging
 from limen.report.verify import run as _run_verify
@@ -191,6 +194,19 @@ def _build_parser() -> argparse.ArgumentParser:
             "(env: LIMEN_FIRE_HISTORY_FROM / _TO / _COUNTRY, LIMEN_FIRMS_CSV)"
         ),
     )
+    worker = sub.add_parser(
+        "worker",
+        help="processo dei batch: scheduler + IoT, senza HTTP (#77)",
+    )
+    worker.add_argument(
+        "--health",
+        action="store_true",
+        help="esce 0 se il battito del worker è recente, 1 altrimenti",
+    )
+    sub.add_parser(
+        "jobs",
+        help=("cosa ha girato e quanto è durato (env: LIMEN_JOBS_JOB / _PER_AOI / _LIMIT)"),
+    )
     sub.add_parser(
         "verify",
         help="fact-check archived report zones vs real landslide events (#17)",
@@ -240,6 +256,7 @@ def main(argv: list[str] | None = None) -> int:
     runners: dict[str, Runner] = {
         "migrate": _run_migrate,
         "data-status": _run_data_status,
+        "jobs": _run_jobs,
         "imperviousness-fetch": _run_imperviousness_fetch,
         "review-alerts": _run_review_alerts,
         "partitions": _run_partitions,
@@ -271,6 +288,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "geodata":
         try:
             return asyncio.run(_run_geodata(args))
+        except KeyboardInterrupt:  # pragma: no cover
+            return 130
+    if args.command == "worker":
+        try:
+            return asyncio.run(_run_worker(check_health=args.health))
         except KeyboardInterrupt:  # pragma: no cover
             return 130
     if args.command == "ingest-events":

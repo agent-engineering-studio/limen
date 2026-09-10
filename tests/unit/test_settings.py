@@ -72,11 +72,25 @@ def test_llm_resolver_ollama_still_selectable_explicitly() -> None:
 
 @pytest.mark.parametrize("slow_model", sorted(SLOW_GENERATION_MODELS))
 def test_slow_model_on_a_sync_role_refuses_to_start(slow_model: str) -> None:
-    """Every LLM__MODELS__* role is on a synchronous path. Pointing one at a
-    model that generates in tens of minutes must be a boot-time refusal, not a
-    caller timeout that silently degrades to the deterministic fallback."""
+    """Un ruolo sincrono puntato su un modello che genera in decine di minuti
+    deve essere un rifiuto all'avvio, non un timeout del chiamante che degrada
+    in silenzio al testo deterministico.
+
+    Il ruolo qui è `risk_analyst` e non più `briefing`: dopo #78 il briefing è
+    l'unico consumatore asincrono, mentre il RiskAnalyst resta su MCP e sui
+    percorsi HTTP."""
     with pytest.raises(ValueError, match=r"synchronous"):
-        _make_settings(llm={"models": {"briefing": slow_model}})
+        _make_settings(llm={"models": {"risk_analyst": slow_model}})
+
+
+@pytest.mark.parametrize("slow_model", sorted(SLOW_GENERATION_MODELS))
+def test_slow_model_is_allowed_on_the_briefing_role(slow_model: str) -> None:
+    """Dopo #78 il briefing non gira più dentro il tick orario: lo scrive
+    `briefing_enrichment` su righe già persistite, una regione alla volta, e
+    nessuno lo aspetta — la mappa mostra il testo deterministico finché non
+    arriva. Lì un modello lento è lento, non rotto."""
+    s = _make_settings(llm={"models": {"briefing": slow_model}})
+    assert s.llm.models.briefing == slow_model
 
 
 def test_slow_model_check_covers_undeclared_roles_too() -> None:

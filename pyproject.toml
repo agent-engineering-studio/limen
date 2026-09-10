@@ -82,6 +82,12 @@ ml = [
     "lightgbm>=4.5",
     "scikit-learn>=1.5",
     "mlflow>=2.16",
+    # Il backend a database di MLflow passa da SQLAlchemy, che per Postgres
+    # vuole un driver: `mlflow` non lo tira dentro da solo, e senza questa riga
+    # `SCORING__MLFLOW_TRACKING_URI=postgresql://…` fallisce alla prima
+    # connessione con un ModuleNotFoundError invece che a configurazione.
+    # Verificato: `import psycopg2` non risolveva nell'ambiente sincronizzato.
+    "psycopg2-binary>=2.9",
     "optuna>=4.0",
     "shap>=0.46",
     "onnxruntime>=1.20",

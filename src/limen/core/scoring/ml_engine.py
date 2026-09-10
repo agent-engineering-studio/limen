@@ -12,6 +12,7 @@ Model Registry.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -76,9 +77,17 @@ class MLScoringEngine(ScoringEngine[ComponentBreakdown]):
         artefacts: _MLArtefacts,
         *,
         thresholds: RegionalThresholds | None = None,
+        shap_top_k: int | None = None,
     ) -> None:
         self._artefacts = artefacts
         self._t: RegionalThresholds = thresholds or load_regional_thresholds()
+        # Iniettabile per i test; il default viene dalla configurazione, come
+        # ogni altra soglia del sistema.
+        if shap_top_k is None:
+            from limen.config.settings import get_settings
+
+            shap_top_k = get_settings().scoring.shadow_shap_top_k
+        self._t_shap_top_k = int(shap_top_k)
 
     @property
     def model_uri(self) -> str:
@@ -166,6 +175,10 @@ class MLScoringEngine(ScoringEngine[ComponentBreakdown]):
         row = _bundle_to_feature_row(bundle, names=names)
         return dict(zip(names, row, strict=True))
 
+    @property
+    def _shap_top_k(self) -> int:
+        return self._t_shap_top_k
+
     def score(self, bundle: CellFeatureBundle) -> RiskScore[ComponentBreakdown]:
         """Predict the cell's calibrated probability + component breakdown.
 
@@ -180,12 +193,64 @@ class MLScoringEngine(ScoringEngine[ComponentBreakdown]):
         feature_row = _bundle_to_feature_row(bundle, names=self._artefacts.feature_names)
         prob = _predict(self._artefacts, feature_row)
         prob_calibrated = _calibrate(self._artefacts, prob)
+        return self._assemble(bundle, feature_row=feature_row, prob=prob_calibrated, with_shap=True)
+
+    def score_many(
+        self, bundles: Sequence[CellFeatureBundle]
+    ) -> Sequence[RiskScore[ComponentBreakdown]]:
+        """Una matrice, una `predict`, una calibrazione (#76).
+
+        Il ciclo cella-per-cella pagava 60.000 volte l'attraversamento del
+        confine Python/C di LightGBM per una predizione che in blocco costa
+        meno di un secondo. I numeri sono gli stessi: stessa riga di feature,
+        stesso booster, stesso calibratore — un test di invarianza lo prova.
+
+        **SHAP solo sulle prime K.** L'attribuzione per cella è il costo
+        dominante del challenger, e su 312.000 celle produce spiegazioni che
+        nessuno leggerà: chi apre il breakdown di una cella lo fa per le celle
+        che contano. Le altre ricevono l'attribuzione di ripiego dalle
+        magnitudini della riga di feature, che è il comportamento già previsto
+        quando lo SHAP manca. La soglia è `scoring.shadow_shap_top_k`.
+        """
+        if not bundles:
+            return []
+        names = self._artefacts.feature_names
+        rows = [_bundle_to_feature_row(b, names=names) for b in bundles]
+        probs = _predict_batch(self._artefacts, rows)
+        calibrated = _calibrate_batch(self._artefacts, probs)
+
+        # Le prime K per probabilità: sono quelle di cui un operatore aprirà
+        # il dettaglio, e le uniche per cui lo SHAP vale il suo costo.
+        top_k = max(0, int(self._shap_top_k))
+        ranked = sorted(range(len(calibrated)), key=lambda i: calibrated[i], reverse=True)
+        with_shap = set(ranked[:top_k])
+
+        return [
+            self._assemble(
+                bundle,
+                feature_row=rows[i],
+                prob=calibrated[i],
+                with_shap=i in with_shap,
+            )
+            for i, bundle in enumerate(bundles)
+        ]
+
+    def _assemble(
+        self,
+        bundle: CellFeatureBundle,
+        *,
+        feature_row: list[float],
+        prob: float,
+        with_shap: bool,
+    ) -> RiskScore[ComponentBreakdown]:
+        prob_calibrated = prob
         level_str = _classify(prob_calibrated, self._t.classes)
 
         attribution = _component_attribution(
             self._artefacts,
             feature_row=feature_row,
             total=prob_calibrated,
+            use_shap=with_shap,
         )
         breakdown = ComponentBreakdown(
             s=attribution["S"],
@@ -278,6 +343,35 @@ def _predict(artefacts: _MLArtefacts, row: list[float]) -> float:
         log.warning("ml.predict.failed", error=str(exc))
         return 0.0
     return float(raw[0]) if len(raw) else 0.0
+
+
+def _predict_batch(artefacts: _MLArtefacts, rows: list[list[float]]) -> list[float]:
+    """Una sola `booster.predict` su tutta la matrice."""
+    booster: Any = artefacts.booster
+    try:
+        import numpy as np
+    except ImportError:  # pragma: no cover
+        return [0.0] * len(rows)
+    try:
+        raw = booster.predict(np.asarray(rows, dtype=float))
+    except Exception as exc:  # pragma: no cover — load was successful
+        log.warning("ml.predict_batch.failed", error=str(exc), rows=len(rows))
+        return [0.0] * len(rows)
+    return [float(x) for x in raw]
+
+
+def _calibrate_batch(artefacts: _MLArtefacts, probs: list[float]) -> list[float]:
+    calibrator: Any = artefacts.calibrator
+    if calibrator is None:
+        return [_clamp01(p) for p in probs]
+    try:
+        import numpy as np
+
+        out = calibrator.predict(np.asarray(probs, dtype=float))
+        return [_clamp01(float(x)) for x in out]
+    except Exception as exc:  # pragma: no cover
+        log.warning("ml.calibrate_batch.failed", error=str(exc))
+        return [_clamp01(p) for p in probs]
 
 
 def _calibrate(artefacts: _MLArtefacts, prob: float) -> float:
@@ -419,6 +513,7 @@ def _component_attribution(
     *,
     feature_row: list[float],
     total: float,
+    use_shap: bool = True,
 ) -> dict[str, float]:
     """Return ``{S, M, E, F, H, K}`` summing (approximately) to ``total``.
 
@@ -437,7 +532,10 @@ def _component_attribution(
         # score to the static component — the safest neutral choice.
         return {"S": _clamp01(total), "M": 0.0, "E": 0.0, "F": 0.0, "H": 0.0, "K": 0.0}
 
-    contributions = _shap_contributions(artefacts, feature_row)
+    # `use_shap=False` è la politica del batch (#76): lo SHAP si calcola solo
+    # per le prime K celle, le altre prendono il ripiego sulle magnitudini —
+    # lo stesso percorso già previsto quando l'explainer manca.
+    contributions = _shap_contributions(artefacts, feature_row) if use_shap else None
     if contributions is None or len(contributions) != len(names):
         contributions = [abs(float(v)) for v in feature_row]
     else:
