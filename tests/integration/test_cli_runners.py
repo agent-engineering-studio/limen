@@ -30,7 +30,7 @@ from limen.cli.seed import run as run_seed
 from limen.data.repos import partitions_repo
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.openmeteo.client import ARCHIVE_URL, FORECAST_URL
-from tests.conftest import register_flood_mocks
+from tests.conftest import SEED_PUGLIA, SEED_SMALL_AOI, register_flood_mocks
 
 pytestmark = pytest.mark.integration
 
@@ -69,7 +69,14 @@ async def test_migrate_runs(reset_db: None, pg_pool: object) -> None:
     assert rc == 0
 
 
+@pytest.mark.slow
 async def test_seed_runs(reset_db: None, pg_pool: object) -> None:
+    """Il seme **nazionale** intero: venti regioni, ~312.000 celle.
+
+    Marcato `slow` e tenuto cosi' (#90): e' l'unico posto che verifica davvero
+    che `limen seed` regga l'Italia, e ridurlo a una regione toglierebbe la
+    sola copertura di quel fatto. Gli altri test qui sotto seminano una
+    regione sola, perche' a loro serve una griglia, non il paese."""
     rc = await run_seed()
     assert rc == 0
 
@@ -83,7 +90,7 @@ async def test_partitions_runs(reset_db: None, pg_pool: object) -> None:
 
 async def test_bootstrap_static_runs(reset_db: None, pg_pool: object) -> None:
     """Seed then bootstrap-static — exercises the orchestrator end-to-end."""
-    await run_seed()
+    await run_seed(only=[SEED_SMALL_AOI])
     rc = await run_bootstrap_static()
     assert rc == 0
 
@@ -95,7 +102,7 @@ async def test_calibrate_runs(reset_db: None, pg_pool: object, tmp_path: Path) -
     cwd_before = Path.cwd()
     os.chdir(tmp_path)
     try:
-        await run_seed()
+        await run_seed(only=[SEED_SMALL_AOI])
         await run_bootstrap_static()
         rc = await run_calibrate()
     finally:
@@ -110,7 +117,7 @@ async def test_monitor_once_runs(reset_db: None, pg_pool: object) -> None:
     Forces the LLM factory to the deterministic Stub via env-injected
     settings so we don't depend on any provider's key.
     """
-    await run_seed()
+    await run_seed(only=[SEED_SMALL_AOI])
     await run_bootstrap_static()
 
     # Patch the resolver path: monkeypatch the import-time function so
@@ -149,9 +156,10 @@ async def test_backtest_runs(
     The window is a single hour so the test stays fast even with hourly
     bundle assembly.
     """
-    await run_seed()
+    # Puglia e non la regione piccola: il backtest la nomina qui sotto.
+    await run_seed(only=[SEED_PUGLIA])
     await run_bootstrap_static()
-    os.environ["LIMEN_BACKTEST_AOI"] = "it-puglia"
+    os.environ["LIMEN_BACKTEST_AOI"] = SEED_PUGLIA
     os.environ["LIMEN_BACKTEST_START"] = datetime(2026, 5, 1, 12, tzinfo=UTC).isoformat()
     os.environ["LIMEN_BACKTEST_END"] = datetime(2026, 5, 1, 13, tzinfo=UTC).isoformat()
 

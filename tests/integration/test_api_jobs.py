@@ -23,7 +23,7 @@ from limen.config.settings import Settings
 from limen.data.db import acquire, get_pool
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.openmeteo.client import ARCHIVE_URL, FORECAST_URL
-from tests.conftest import register_flood_mocks
+from tests.conftest import SEED_SMALL_AOI, register_flood_mocks
 
 pytestmark = pytest.mark.integration
 
@@ -69,14 +69,16 @@ async def test_hourly_monitoring_runs_against_seeded_aois(
     pg_pool: object,
 ) -> None:
     """Job iterates every seeded AOI and persists a RiskAssessment per cell."""
-    await run_seed()
+    # Una regione, non venti (#90): questo test ne riduce comunque la griglia
+    # a sei celle, e seminare l'Italia per arrivarci costava venti minuti — da
+    # solo piu' dell'intero budget del job di CI.
+    await run_seed(only=[SEED_SMALL_AOI])
     async with acquire() as conn:
-        # Trim the grids FIRST: the seed lays down ~312k cells across the 20
-        # AOIs and this test needs six. Deleting them with a `NOT IN`
-        # anti-join used to blow past the pool's 30 s command timeout, and
-        # pre-seeding cell_static_factors before the trim meant inserting
-        # 312k rows only to cascade-delete them a moment later. Ordered this
-        # way both statements touch a handful of rows.
+        # Trim the grids FIRST: this test needs six cells. Deleting with a
+        # `NOT IN` anti-join used to blow past the pool's 30 s command
+        # timeout, and pre-seeding cell_static_factors before the trim meant
+        # inserting rows only to cascade-delete them a moment later. Ordered
+        # this way both statements touch a handful of rows.
         await conn.execute(
             """
             DELETE FROM grid_cells g
@@ -110,7 +112,7 @@ async def test_weekly_idrogeo_sync_handles_unreachable_isp_gracefully(
     pg_pool: object,
 ) -> None:
     """ISPRA WFS is mocked to 503 → the sync degrades, no exception escapes."""
-    await run_seed()
+    await run_seed(only=[SEED_SMALL_AOI])
     deps = await _build_deps()
     with respx.mock(assert_all_called=False) as mock:
         # Match any ISPRA WFS path
