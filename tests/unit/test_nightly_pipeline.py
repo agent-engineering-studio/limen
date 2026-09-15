@@ -8,12 +8,15 @@ provato — invece che ereditato dallo scheduler.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import pytest
 
 import limen.api.jobs.nightly as nightly
 from limen.api.jobs.nightly import STEPS, run_nightly_pipeline
+from limen.config.settings import ScoringMode
+from limen.core.models.hazard import HazardType
 
 
 class _Recorder:
@@ -158,3 +161,170 @@ async def test_retention_is_skipped_under_the_pg_cron_backend() -> None:
         "status": "skipped",
         "reason": "cache cleanup runs under pg_cron",
     }
+
+
+# ---------------------------------------------------------------------------
+# Passo shadow e retrain (#116)
+# ---------------------------------------------------------------------------
+
+
+def _shadow_deps(*, mode: ScoringMode, hazards: list[HazardType], fail_build: bool = False) -> Any:
+    class _Scoring:
+        pass
+
+    class _Hazards:
+        enabled = hazards
+
+    class _Scheduler:
+        sweep_concurrency = 2
+
+    class _Settings:
+        scoring = _Scoring()
+        scheduler = _Scheduler()
+        enable_insitu = False
+
+    _Settings.scoring.mode = mode
+    _Settings.hazards = _Hazards()
+
+    class _Result:
+        def __init__(self, n: int) -> None:
+            class _Ctx:
+                cell_results = [object()] * n
+
+            self.context = _Ctx()
+
+    class _Workflow:
+        async def run(self, ctx: Any) -> _Result:
+            if ctx.aoi_id == "it-rotta":
+                raise RuntimeError("regione esplosa")
+            return _Result(4)
+
+    class _Deps:
+        settings = _Settings()
+
+        def build_workflow(self, *, hazard: HazardType, profile: str) -> _Workflow:
+            assert profile == "nightly"
+            if fail_build and hazard is HazardType.FLOOD:
+                raise RuntimeError("pericolo non valutabile")
+            return _Workflow()
+
+    return _Deps()
+
+
+@pytest.mark.asyncio
+async def test_shadow_is_skipped_outside_shadow_mode() -> None:
+    deps = _shadow_deps(mode=ScoringMode.CHAMPION_ONLY, hazards=[HazardType.LANDSLIDE])
+    out = await nightly._shadow_ml(deps)
+    assert out["status"] == "skipped"
+
+
+@pytest.mark.asyncio
+async def test_shadow_without_aois_is_skipped(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _none() -> list[str]:
+        return []
+
+    monkeypatch.setattr(nightly, "_all_aois", _none)
+    deps = _shadow_deps(mode=ScoringMode.SHADOW, hazards=[HazardType.LANDSLIDE])
+    assert (await nightly._shadow_ml(deps))["reason"] == "no aoi"
+
+
+@pytest.mark.asyncio
+async def test_shadow_scores_every_aoi_and_isolates_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Una regione che esplode e un pericolo non valutabile non fermano le
+    altre: il notturno misura quello che può."""
+
+    async def _aois() -> list[str]:
+        return ["it-puglia", "it-rotta"]
+
+    monkeypatch.setattr(nightly, "_all_aois", _aois)
+    deps = _shadow_deps(
+        mode=ScoringMode.SHADOW,
+        hazards=[HazardType.LANDSLIDE, HazardType.FLOOD],
+        fail_build=True,
+    )
+    out = await nightly._shadow_ml(deps)
+    assert out == {"aois": 1, "cells": 4}
+
+
+def _retrain_deps(*, auto: bool, timeout: int = 60) -> Any:
+    class _Training:
+        auto_retrain = auto
+        optuna_timeout_seconds = timeout
+
+    class _Settings:
+        training = _Training()
+
+    class _Deps:
+        settings = _Settings()
+
+    return _Deps()
+
+
+class _Proc:
+    def __init__(self, *, returncode: int, stderr: bytes = b"", hang: bool = False) -> None:
+        self.returncode = returncode
+        self._stderr = stderr
+        self._hang = hang
+        self.killed = False
+
+    async def communicate(self) -> tuple[bytes, bytes]:
+        if self._hang:
+            await asyncio.sleep(3600)
+        return b"", self._stderr
+
+    def kill(self) -> None:
+        self.killed = True
+
+    async def wait(self) -> int:
+        return self.returncode
+
+
+def _spawn(monkeypatch: pytest.MonkeyPatch, proc: _Proc) -> list[tuple[str, ...]]:
+    launched: list[tuple[str, ...]] = []
+
+    async def _exec(*args: str, **_kw: Any) -> _Proc:
+        launched.append(args)
+        return proc
+
+    monkeypatch.setattr(nightly.asyncio, "create_subprocess_exec", _exec)
+    return launched
+
+
+@pytest.mark.asyncio
+async def test_retrain_runs_limen_train_in_a_subprocess(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sottoprocesso e non chiamata diretta: Optuna col suo carico non deve
+    restare nella memoria del worker per lo sweep del mattino."""
+    launched = _spawn(monkeypatch, _Proc(returncode=0))
+    out = await nightly._retrain(_retrain_deps(auto=True), triggered=True)
+    assert out == {"returncode": 0}
+    assert launched == [("uv", "run", "limen", "train")]
+
+
+@pytest.mark.asyncio
+async def test_retrain_reports_a_failed_training(monkeypatch: pytest.MonkeyPatch) -> None:
+    _spawn(monkeypatch, _Proc(returncode=2, stderr=b"Optuna: nessun trial valido"))
+    out = await nightly._retrain(_retrain_deps(auto=True), triggered=True)
+    assert out["status"] == "error"
+    assert out["returncode"] == 2
+    assert "nessun trial valido" in out["stderr"]
+
+
+@pytest.mark.asyncio
+async def test_retrain_kills_a_hung_training(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Oltre il budget non è lento, è bloccato: una notte appesa a un training
+    non finisce mai."""
+    proc = _Proc(returncode=-9, hang=True)
+    _spawn(monkeypatch, proc)
+
+    real_wait_for = asyncio.wait_for
+
+    async def _short(awaitable: Any, timeout: float) -> Any:
+        return await real_wait_for(awaitable, timeout=0.01)
+
+    monkeypatch.setattr(nightly.asyncio, "wait_for", _short)
+    out = await nightly._retrain(_retrain_deps(auto=True, timeout=10), triggered=True)
+    assert out["status"] == "error"
+    assert "timed out" in out["reason"]
+    assert proc.killed is True
