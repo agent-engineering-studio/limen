@@ -9,6 +9,7 @@ Usage:
     limen backtest-flood     Replay Copernicus EMS flood perimeters (#64).
     limen ingest-events      Dated event catalogue: --hazard landslide|flood.
     limen ingest-fire-history  FIRMS country archive (2000+), fire_density + truth set.
+    limen effis-sync         Perimetri di area bruciata EFFIS: truth set del backtest incendio.
     limen monitor-once       Run the MAF landslide workflow once for an AOI.
     limen forecast           Predictive run at now+H hours (forecast rain, no persistence).
     limen firms-sync         Ingest NASA FIRMS active-fire hotspots (FIRMS__MAP_KEY).
@@ -27,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 from collections.abc import Callable, Coroutine
 from typing import Any
@@ -35,9 +37,11 @@ from limen import __version__
 from limen.cli.backtest import run as _run_backtest
 from limen.cli.backtest_flood import run as _run_backtest_flood
 from limen.cli.backtest_wildfire import run as _run_backtest_wildfire
+from limen.cli.bootstrap_static import FORCE_ENV as BOOTSTRAP_FORCE_ENV
 from limen.cli.bootstrap_static import run as _run_bootstrap_static
 from limen.cli.calibrate import run as _run_calibrate
 from limen.cli.data_status import run as _run_data_status
+from limen.cli.effis_sync import run as _run_effis_sync
 from limen.cli.firms_sync import run as _run_firms_sync
 from limen.cli.forecast import run as _run_forecast
 from limen.cli.forecast_history import run as _run_forecast_history
@@ -101,9 +105,21 @@ def _build_parser() -> argparse.ArgumentParser:
         "seed-comuni",
         help="import ISTAT comune boundaries + tag cells (needs GEOSERVER_SOURCE__DB_DSN)",
     )
-    sub.add_parser(
+    bootstrap = sub.add_parser(
         "bootstrap-static",
         help="populate cell_static_factors (IFFI density, distance, PAI) for every seeded AOI",
+    )
+    bootstrap.add_argument(
+        "--force",
+        action="store_true",
+        help=(
+            "ricalcola ogni passo anche se la sorgente non è cambiata "
+            f"(equivale a {BOOTSTRAP_FORCE_ENV}=1)"
+        ),
+    )
+    sub.add_parser(
+        "effis-sync",
+        help="scarica i perimetri di area bruciata EFFIS per ogni AOI (truth set incendio)",
     )
     sub.add_parser(
         "calibrate",
@@ -263,6 +279,7 @@ def main(argv: list[str] | None = None) -> int:
         "seed": _run_seed,
         "seed-comuni": _run_seed_comuni,
         "bootstrap-static": _run_bootstrap_static,
+        "effis-sync": _run_effis_sync,
         "calibrate": _run_calibrate,
         "backtest": _run_backtest,
         "backtest-flood": _run_backtest_flood,
@@ -295,6 +312,12 @@ def main(argv: list[str] | None = None) -> int:
             return asyncio.run(_run_worker(check_health=args.health))
         except KeyboardInterrupt:  # pragma: no cover
             return 130
+    if args.command == "bootstrap-static" and args.force:
+        # Alias della variabile invece di un parametro al runner: i runner
+        # hanno firma uniforme (`Runner`, nessun argomento) e leggono l'env,
+        # che è la convenzione già documentata più sopra. Romperla per un
+        # flag solo renderebbe questo comando l'eccezione da ricordare.
+        os.environ[BOOTSTRAP_FORCE_ENV] = "1"
     if args.command == "ingest-events":
         try:
             return asyncio.run(_run_ingest_events(args.hazard))
