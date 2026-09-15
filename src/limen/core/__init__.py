@@ -1,1 +1,1 @@
-"""Core utilities (logging, scheduling, LLM resolver stub)."""
+"""Core utilities (logging, LLM resolver stub)."""

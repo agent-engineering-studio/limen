@@ -245,7 +245,6 @@ frontend/                # Vite + TypeScript + React + MapLibre SPA
 │   ├── scoring/         # deterministic V1 engine + Caine / API / seismic / post-fire
 │   │                    # registry.py (hazard×implementation) + resolver.py (policy)
 │   ├── logging.py
-│   ├── scheduling.py    # APScheduler (Neon path)
 │   └── llm_resolver.py
 ├── integrations/
 │   ├── _http.py             # shared httpx client + tenacity policy + degrade_gracefully
@@ -260,7 +259,7 @@ frontend/                # Vite + TypeScript + React + MapLibre SPA
     ├── migrations/      # NNN_*.sql, immutable once applied
     ├── object_store/    # ObjectStore Protocol + filesystem | s3
     ├── caching/         # PostgresCache + CachedOpenMeteoClient
-    ├── repos/           # aoi, grid, iffi, pai, susceptibility, seismic, fire,
+    ├── repos/           # aoi, grid, iffi, pai, seismic, fire,
     │                    # raster_refs, dataset_versions, cell_static_factors
     └── seed/            # Puglia + Basilicata placeholder GeoJSON + loader
 
