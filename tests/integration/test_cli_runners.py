@@ -24,6 +24,7 @@ from limen.cli.backtest import run as run_backtest
 from limen.cli.bootstrap_static import run as run_bootstrap_static
 from limen.cli.calibrate import run as run_calibrate
 from limen.cli.migrate import run as run_migrate
+from limen.cli.monitor_once import _AOI_ENV as _MONITOR_AOI_ENV
 from limen.cli.monitor_once import run as run_monitor_once
 from limen.cli.partitions import run as run_partitions
 from limen.cli.seed import run as run_seed
@@ -130,7 +131,10 @@ async def test_monitor_once_runs(reset_db: None, pg_pool: object) -> None:
         return StubLlmClientFactory()
 
     monitor_mod.resolve_llm_factory = _stub_resolve  # type: ignore[assignment]
-    os.environ["LIMEN_MONITOR_AOI"] = "it-puglia"
+    # Deve essere la stessa AOI seminata sopra: con il seme ridotto a una
+    # regione (#90) un id diverso qui fa fallire `monitor-once` con
+    # "AOI not found", che e' esattamente cosa e' successo alla prima CI.
+    os.environ[_MONITOR_AOI_ENV] = SEED_SMALL_AOI
     os.environ["LIMEN_MONITOR_CELL_LIMIT"] = "5"
 
     try:
@@ -141,7 +145,7 @@ async def test_monitor_once_runs(reset_db: None, pg_pool: object) -> None:
             rc = await run_monitor_once()
     finally:
         monitor_mod.resolve_llm_factory = real_resolve  # type: ignore[assignment]
-        os.environ.pop("LIMEN_MONITOR_AOI", None)
+        os.environ.pop(_MONITOR_AOI_ENV, None)
         os.environ.pop("LIMEN_MONITOR_CELL_LIMIT", None)
     assert rc == 0
 
