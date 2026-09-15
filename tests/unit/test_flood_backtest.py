@@ -21,14 +21,25 @@ from limen.cli.backtest_flood import (
     FloodBacktestMetrics,
     _accumulate_72h,
     _accumulate_observed,
+    _daily_sums,
     _discharge_ratios,
     _metrics,
+    _midnight_values,
+    _modes,
     _node_key,
     _nodes_from_cells,
+    _NodeSeries,
+    _parse_dt,
+    _parse_level,
+    _replay,
     _Tally,
+    _trickle_floor,
+    _unmeasurable,
+    _write_report,
 )
 from limen.core.models.hazard import HazardType
-from limen.core.models.risk import StaticFactors
+from limen.core.models.risk import RiskLevel, StaticFactors
+from limen.core.scoring.flood.engine import FloodScoringEngine
 from limen.core.scoring.regional_thresholds import FloodThresholds, load_hazard_thresholds
 
 D0 = date(2024, 9, 17)
@@ -239,3 +250,273 @@ def test_base_rate_is_the_share_of_days_a_flooded_cell_was_already_in_alert() ->
     assert out.base_rate == 0.4
     # È il metro dell'hit rate: senza, il 100% qui sopra sembrerebbe bravura.
     assert out.hit_rate == 1.0
+
+
+# ---------------------------------------------------------------------------
+# Replay: il ciclo che mette insieme motore, soglie e serie (#116)
+# ---------------------------------------------------------------------------
+
+
+def _series(*, rain: float, day: date = D0, ratio: float | None = None) -> _NodeSeries:
+    return _NodeSeries(
+        rain_issued={day: rain},
+        rain_observed={day: rain},
+        soil={day: 0.3},
+        discharge_ratio={day: ratio} if ratio is not None else {},
+    )
+
+
+def _day_window(day: date = D0) -> tuple[datetime, datetime]:
+    moment = datetime.combine(day, datetime.min.time(), tzinfo=UTC)
+    return moment, moment
+
+
+def test_replay_alerts_a_mapped_cell_under_heavy_rain() -> None:
+    """Pioggia ben oltre la saturazione su una cella mappata come pericolosa:
+    l'allerta deve accendersi, ed essere attribuita al ramo pluviale."""
+    thresholds = _thresholds()
+    cell = StaticFactors(cell_id="c1", flood_hazard_norm=1.0)
+    start, end = _day_window()
+
+    tally = _replay(
+        aoi_id="it-test",
+        mode="issued",
+        cells=[(cell, 16.0, 41.0)],
+        cell_node=[0],
+        series=[_series(rain=thresholds.pluvial.saturation_mm * 2)],
+        truth={"c1": start + timedelta(hours=12)},
+        start=start,
+        end=end,
+        alert_level=RiskLevel.Moderate,
+        thresholds=thresholds,
+        engine=FloodScoringEngine(thresholds),
+    )
+
+    assert tally.days == 1
+    assert tally.measurable is True
+    assert tally.alert_days == {"c1": [D0]}
+    assert tally.pluvial_driven == 1
+    assert tally.fluvial_driven == 0
+    # La cella di verità in allerta alimenta il tasso di base.
+    assert tally.truth_cell_days == 1
+    assert tally.truth_alert_days == 1
+
+
+def test_replay_skips_cells_whose_node_is_below_both_thresholds() -> None:
+    """Il pre-filtro per nodo: sotto soglia pluviale e senza portata, ogni
+    cella del nodo vale zero, e valutarla sarebbe lavoro per un esito noto."""
+    thresholds = _thresholds()
+    cell = StaticFactors(cell_id="c1", flood_hazard_norm=1.0)
+    start, end = _day_window()
+
+    tally = _replay(
+        aoi_id="it-test",
+        mode="observed",
+        cells=[(cell, 16.0, 41.0)],
+        cell_node=[0],
+        series=[_series(rain=thresholds.pluvial.threshold_mm / 2)],
+        truth={},
+        start=start,
+        end=end,
+        alert_level=RiskLevel.Low,
+        thresholds=thresholds,
+        engine=FloodScoringEngine(thresholds),
+    )
+
+    assert tally.alert_days == {}
+    # Misurabile comunque: c'era un dato di pioggia, solo sotto soglia.
+    assert tally.measurable is True
+
+
+def test_replay_without_any_rain_is_not_measurable() -> None:
+    """Nessun dato per il giorno: non e' "nessuna allerta", e' "non misurato".
+    La differenza e' quella fra un modello muto e un modello senza ingressi."""
+    thresholds = _thresholds()
+    cell = StaticFactors(cell_id="c1", flood_hazard_norm=1.0)
+    start, end = _day_window()
+    empty = _NodeSeries(rain_issued={}, rain_observed={}, soil={}, discharge_ratio={})
+
+    tally = _replay(
+        aoi_id="it-test",
+        mode="issued",
+        cells=[(cell, 16.0, 41.0)],
+        cell_node=[0],
+        series=[empty],
+        truth={},
+        start=start,
+        end=end,
+        alert_level=RiskLevel.Low,
+        thresholds=thresholds,
+        engine=FloodScoringEngine(thresholds),
+    )
+    assert tally.measurable is False
+
+
+def test_tally_merge_sums_across_windows() -> None:
+    a = _Tally(
+        alert_days={"c1": [D0]},
+        truth={"c1": datetime(2024, 9, 18, tzinfo=UTC)},
+        truth_cell_days=2,
+        truth_alert_days=1,
+        days=3,
+        measurable=False,
+        pluvial_driven=1,
+    )
+    b = _Tally(
+        alert_days={"c1": [D0 + timedelta(days=1)], "c2": [D0]},
+        truth={"c2": datetime(2024, 9, 19, tzinfo=UTC)},
+        truth_cell_days=1,
+        truth_alert_days=0,
+        days=4,
+        measurable=True,
+        fluvial_driven=2,
+    )
+    a.merge(b)
+    assert a.alert_days == {"c1": [D0, D0 + timedelta(days=1)], "c2": [D0]}
+    assert set(a.truth) == {"c1", "c2"}
+    assert (a.truth_cell_days, a.truth_alert_days, a.days) == (3, 1, 7)
+    # Basta una finestra misurabile perche' la replica lo sia.
+    assert a.measurable is True
+    assert (a.pluvial_driven, a.fluvial_driven) == (1, 2)
+
+
+# ---------------------------------------------------------------------------
+# Riduzioni per giorno e soglia del fosso
+# ---------------------------------------------------------------------------
+def test_daily_sums_add_hours_and_skip_missing_values() -> None:
+    stamps = ["2024-09-17T00:00", "2024-09-17T01:00", "2024-09-18T00:00"]
+    assert _daily_sums(stamps, [1.0, None, 2.5]) == {D0: 1.0, D0 + timedelta(days=1): 2.5}
+
+
+def test_midnight_values_keep_only_the_first_hour() -> None:
+    stamps = ["2024-09-17T00:00", "2024-09-17T13:00", "2024-09-18T00:00"]
+    assert _midnight_values(stamps, [0.2, 0.9, None]) == {D0: 0.2}
+
+
+def test_trickle_floor_is_a_fraction_of_the_largest_baseline() -> None:
+    """Il rapporto di portata e' patologico sui rigagnoli: un nodo conta come
+    fiume solo sopra il 10 % del deflusso di base piu' grande dell'AOI."""
+    big = {D0: 100.0, D0 + timedelta(days=1): 100.0}
+    ditch = {D0: 1.0}
+    assert _trickle_floor([big, ditch, {}]) == 10.0
+    assert _trickle_floor([]) == 0.0
+
+
+def test_unmeasurable_is_flagged_as_such() -> None:
+    m = _unmeasurable("it-test", "issued", days=5)
+    assert m.measurable is False
+    assert m.days == 5
+    assert m.hit_rate == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Parametri da ambiente
+# ---------------------------------------------------------------------------
+def test_parse_dt_adds_utc_to_naive_values(monkeypatch) -> None:
+    monkeypatch.setenv("LIMEN_T_DT", "2024-09-17T06:00")
+    assert _parse_dt("LIMEN_T_DT") == datetime(2024, 9, 17, 6, tzinfo=UTC)
+    monkeypatch.delenv("LIMEN_T_DT")
+    assert _parse_dt("LIMEN_T_DT") is None
+
+
+def test_parse_level_falls_back_to_high_on_a_bad_value(monkeypatch) -> None:
+    from limen.cli import backtest_flood as mod
+
+    monkeypatch.delenv(mod._LEVEL_ENV, raising=False)
+    assert _parse_level() is RiskLevel.High
+    monkeypatch.setenv(mod._LEVEL_ENV, "Moderate")
+    assert _parse_level() is RiskLevel.Moderate
+    monkeypatch.setenv(mod._LEVEL_ENV, "catastrofico")
+    assert _parse_level() is RiskLevel.High
+
+
+def test_modes_default_to_both(monkeypatch) -> None:
+    from limen.cli import backtest_flood as mod
+
+    monkeypatch.delenv(mod._MODE_ENV, raising=False)
+    assert _modes() == ["issued", "observed"]
+    monkeypatch.setenv(mod._MODE_ENV, "issued")
+    assert _modes() == ["issued"]
+    monkeypatch.setenv(mod._MODE_ENV, " OBSERVED ")
+    assert _modes() == ["observed"]
+
+
+# ---------------------------------------------------------------------------
+# Report
+# ---------------------------------------------------------------------------
+def _metrics_row(**over: object) -> FloodBacktestMetrics:
+    base: dict[str, object] = {
+        "aoi_id": "it-test",
+        "mode": "issued",
+        "truth_cells": 4,
+        "days": 30,
+        "cells_scored": 100,
+        "hits": 3,
+        "misses": 1,
+        "alert_episodes": 2,
+        "true_days": 5,
+        "false_days": 5,
+        "unverifiable_days": 7,
+        "hit_rate": 0.75,
+        "far": 0.5,
+        "mean_lead_hours": 20.0,
+        "base_rate": 0.25,
+        "pluvial_driven": 6,
+        "fluvial_driven": 1,
+        "measurable": True,
+        "window_start": D0,
+    }
+    base.update(over)
+    return FloodBacktestMetrics(**base)
+
+
+def test_write_report_carries_the_numbers_and_the_gate(tmp_path, monkeypatch) -> None:
+    from limen.cli import backtest_flood as mod
+    from limen.data.repos.flood_events_repo import ActivationSummary
+
+    monkeypatch.setattr(mod, "REPORTS_DIR", tmp_path)
+    start = datetime(2024, 9, 1, tzinfo=UTC)
+    end = datetime(2024, 9, 30, tzinfo=UTC)
+    provenance = {
+        "source": "Copernicus EMS",
+        "licence": "CC-BY",
+        "credentials": "nessuna",
+        "geometry": "poligoni",
+        "coverage_note": "dal 2023",
+        "known_limit": "copre solo le attivazioni",
+    }
+    activation = ActivationSummary(
+        activation_code="EMSR800",
+        event_time=datetime(2024, 9, 18, tzinfo=UTC),
+        polygons=12,
+        area_km2=3.4,
+        name="Piemonte",
+    )
+
+    path = _write_report(
+        aoi_id="it-test",
+        start=start,
+        end=end,
+        runs=[
+            _metrics_row(),
+            # finestra issued ridotta: il report deve dirlo
+            _metrics_row(mode="observed", window_start=date(2024, 9, 5)),
+            _metrics_row(mode="issued", measurable=False),
+            # nessun giorno verificabile: il FAR non e' un "0 %", e' assente
+            _metrics_row(mode="observed", true_days=0, false_days=0, base_rate=0.0),
+        ],
+        provenance=provenance,
+        activations=[activation],
+        thresholds=_thresholds(),
+    )
+
+    text = path.read_text(encoding="utf-8")
+    assert path.name == "backtest_flood_it-test_2024-09-01_2024-09-30.md"
+    assert "`EMSR800`" in text and "3.4" in text
+    assert "75%" in text and "3.00x" in text
+    assert "non misurabile" in text
+    assert "niente di verificabile" in text
+    assert "(dal 2024-09-05)" in text
+    if _thresholds().calibration is not None:
+        assert "### Gate §2.5" in text
+        assert "non valutabile" in text
