@@ -225,3 +225,96 @@ async def test_without_the_env_var_nothing_is_forced(monkeypatch: pytest.MonkeyP
 
     monkeypatch.delenv(FORCE_ENV, raising=False)
     assert await _force_seen_by_bootstrap(monkeypatch) == [False]
+
+
+# ---------------------------------------------------------------------------
+# `limen effis-sync`: il gate, non la rete
+# ---------------------------------------------------------------------------
+
+
+async def _run_effis(monkeypatch: pytest.MonkeyPatch, *, fails: bool = False) -> list[tuple]:
+    """Esegue `limen effis-sync` con la fetch finta, e riporta i bbox chiesti."""
+    from contextlib import asynccontextmanager
+
+    from shapely.geometry import Polygon
+
+    import limen.cli.effis_sync as mod
+    import limen.integrations.effis.sync_job as effis_mod
+    from limen.data.repos.aoi_repo import AOI
+
+    calls: list[tuple] = []
+
+    @asynccontextmanager
+    async def _no_pool():
+        yield None
+
+    async def _aois() -> list[str]:
+        return ["it-test"]
+
+    async def _get(aoi_id: str) -> AOI:
+        return AOI(
+            id=aoi_id,
+            name="test",
+            kind="test",
+            geom=Polygon([(16.0, 41.0), (17.0, 41.0), (17.0, 42.0), (16.0, 42.0)]),
+            bbox=None,
+            metadata={},
+        )
+
+    async def _fake_sync(*, bbox: tuple[float, float, float, float], **_: object) -> dict[str, int]:
+        calls.append(bbox)
+        if fails:
+            raise RuntimeError("EFFIS giu'")
+        return {"perimeters": 3}
+
+    class _Gate:
+        def __init__(self) -> None:
+            self.done_called = False
+
+        async def needs(self, step: str, fp: object) -> bool:
+            return True
+
+        async def done(self, step: str, **meta: object) -> None:
+            self.done_called = True
+
+    gate = _Gate()
+
+    async def _create(aoi_id: str, *, force: bool = False) -> _Gate:
+        return gate
+
+    monkeypatch.setattr(mod, "lifespan_pool", _no_pool)
+    monkeypatch.setattr(mod, "list_aoi_ids", _aois)
+    monkeypatch.setattr(mod, "get_aoi", _get)
+    monkeypatch.setattr(mod.fingerprint.StepGate, "create", staticmethod(_create))
+
+    async def _fp(*_a: object, **_k: object) -> object:
+        return mod.fingerprint.Fingerprint()
+
+    monkeypatch.setattr(mod.fingerprint, "of_tables", _fp)
+    monkeypatch.setattr(effis_mod, "run_effis_sync", _fake_sync)
+
+    assert await mod.run() == 0
+    calls.append(gate.done_called)  # ultimo elemento: versione registrata?
+    return calls
+
+
+async def test_effis_sync_asks_for_the_aoi_bounds(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`.bounds` della geometria, non il campo `bbox`.
+
+    Il campo `bbox` dell'AOI e' una **geometria**, e passarlo a
+    `run_effis_sync` da' `'Polygon' object is not subscriptable`. E' successo:
+    il passo falliva in silenzio dentro il bootstrap, non registrava la
+    versione, e ogni esecuzione successiva lo ripeteva.
+    """
+    calls = await _run_effis(monkeypatch)
+    assert calls[0] == (16.0, 41.0, 17.0, 42.0)
+    assert calls[-1] is True, "una fetch riuscita deve registrare la versione"
+
+
+async def test_effis_sync_does_not_record_a_version_when_the_fetch_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """EFFIS giu' non deve far fallire la sequenza, ma nemmeno far credere di
+    aver ingerito: senza versione registrata il prossimo giro riprova."""
+    calls = await _run_effis(monkeypatch, fails=True)
+    assert calls[-1] is False
