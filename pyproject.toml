@@ -278,17 +278,15 @@ omit = [
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
-# **72, non 80, e il perche' conta.** La soglia era 80 da sempre, ma non era
-# mai stata applicata: il job di CI moriva al timeout prima di arrivare al
-# report (#90). Alla prima esecuzione che arriva in fondo la copertura reale
-# e' risultata **72,45 %**. Ottanta era un'aspirazione, non un fatto.
+# **80, e oggi la copertura reale e' 72,45 %** — quindi questo gate e' rosso
+# di proposito. La soglia era gia' 80 da sempre, ma non era mai stata
+# applicata: il job di CI moriva al timeout prima di arrivare al report (#90).
+# Alla prima esecuzione che arriva in fondo si e' scoperto il divario.
 #
-# Questo numero e' un **cricchetto**: puo' solo salire. Tenerlo a 80 con la
-# realta' a 72 darebbe un gate rosso da subito, e un gate sempre rosso non e'
-# un gate — e' il rumore da cui la #90 e' nata. Ottanta resta l'obiettivo:
-# alzare questa riga quando la copertura cresce e' lavoro a parte, con il suo
-# numero davanti.
-fail_under = 72
+# Tenerla a 80 e' una scelta: e' il livello che il progetto si e' dato, e
+# abbassarla al valore misurato avrebbe trasformato una misura in un
+# obiettivo. Il rosso qui dice "mancano 7,55 punti", non "qualcosa e' rotto".
+fail_under = 80
 exclude_also = [
     "raise NotImplementedError",
     "if TYPE_CHECKING:",
