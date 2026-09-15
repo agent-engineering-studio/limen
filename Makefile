@@ -134,17 +134,21 @@ up: gs-volumes
 	    >/dev/null 2>&1 && break; \
 	  sleep 3; \
 	done
-	@echo "[up] idempotent data refresh: seed (AOIs + grid) + geoserver-sync (IFFI + PAI)"
+	@echo "[up] seed (AOIs + griglia) nel container"
 	docker compose $(COMPOSE_ALL) exec -T api limen seed
-	docker compose $(COMPOSE_ALL) exec -T api limen geoserver-sync
 	@echo ""
 	@echo "[up] Stack ready:"
 	@echo "   API      http://localhost:8080/docs      Frontend  http://localhost:5173"
 	@echo "   GeoServer http://localhost:8081/geoserver Web UI    http://localhost:8000"
 	@echo ""
-	@echo "[up] One-off: per-cell static factors incl. DTM slope. Misurato sul DTM 5 m:"
+	@echo "[up] sorgenti + fattori statici, sull'HOST (che legge i raster e .env)."
+	@echo "     geoserver-sync sta qui e non nel container: lo script e' l'unica"
+	@echo "     descrizione della sequenza, e farlo due volte costava due volte."
+	@echo "     Idempotente sul COSTO (#101): salta i passi la cui sorgente non è"
+	@echo "     cambiata. La PRIMA esecuzione però paga tutto — misurato sul DTM 5 m,"
 	@echo "     ~2m45s ogni 11k celle, cioè ~1.5-2h sulle 312k delle 20 regioni."
-	@echo "     Va lanciato sull'HOST, che legge il DTM e .env:  make static-data"
+	@echo "     Forzare il ricalcolo:  LIMEN_BOOTSTRAP_FORCE=1 make bootstrap-static"
+	@bash scripts/load_static_data.sh
 
 down:
 	docker compose $(COMPOSE_ALL) $(UP_PROFILES) down
@@ -294,11 +298,14 @@ restore-training:            # usage: make restore-training DUMP=data/backups/tr
 
 # Full reproducible data init for a fresh machine (all 20 regions + ITALICA
 # truth set auto-downloaded from Zenodo). Idempotent: safe to re-run.
+# Stessa sequenza di `make up` per i fattori statici: `load_static_data.sh` è
+# l'unico posto che la descrive, così le tre strade (up / init / static-data)
+# non divergono (#101).
 init:
 	$(UV) run limen migrate
 	$(UV) run limen seed
 	$(UV) run limen ingest-events
-	$(UV) run limen bootstrap-static
+	@bash scripts/load_static_data.sh
 	$(UV) run limen calibrate
 
 serve:

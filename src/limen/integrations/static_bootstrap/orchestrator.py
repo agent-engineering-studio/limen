@@ -10,10 +10,13 @@ even when those datasets are not yet wired up.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from limen.core.logging import get_logger
 from limen.data.db import acquire
 from limen.data.repos.aoi_repo import get_aoi
 from limen.data.repos.cell_static_factors_repo import count_factors
+from limen.integrations.static_bootstrap import fingerprint
 
 log = get_logger(__name__)
 
@@ -363,8 +366,32 @@ async def compute_osm_distances_for_aoi(aoi_id: str) -> None:
             )
 
 
-async def bootstrap_static_for_aoi(aoi_id: str) -> dict[str, int]:
+@dataclass(frozen=True, slots=True)
+class BootstrapResult:
+    """Esito del bootstrap per un AOI.
+
+    `summary` e' la riga che `make up` stampa: dice cosa ha saltato e perche',
+    che e' l'unica difesa contro un passo idempotente che tace (#101).
+    """
+
+    cells_with_factors: int
+    recomputed: int
+    skipped: int
+    summary: str
+
+
+async def bootstrap_static_for_aoi(aoi_id: str, *, force: bool = False) -> BootstrapResult:
     """Run the achievable static-bootstrap steps for ``aoi_id``.
+
+    Ogni passo si salta se la **sorgente non è cambiata** (#101): il modulo
+    `fingerprint` registra per `(aoi, passo)` un'impronta che tiene dentro la
+    sorgente, il numero di celle dell'AOI e una versione di codice del passo.
+    Prima era idempotente nel risultato ma non nel costo — un'ora e mezza a
+    ogni esecuzione sulle 312.000 celle nazionali — ed è il motivo per cui non
+    stava dentro `make up`.
+
+    ``force`` ricalcola comunque: serve quando cambia qualcosa che l'impronta
+    non vede e che `STEP_VERSION` non ha colto.
 
     Returns counters of cells touched per stage.
     """
@@ -372,36 +399,60 @@ async def bootstrap_static_for_aoi(aoi_id: str) -> dict[str, int]:
     if aoi is None:
         raise ValueError(f"AOI not found: {aoi_id!r}")
 
+    gate = await fingerprint.StepGate.create(aoi_id, force=force)
+
     # GeoServer PostGIS is the authoritative source of the ISPRA landslide
     # inventory + PAI hazard. When GEOSERVER_SOURCE__DB_DSN is set, refresh
     # iffi_landslides / pai_hazard from it before the per-cell aggregation;
     # otherwise this is a clean no-op and the existing tables are used as-is.
     from limen.integrations.geoserver_source import sync_geoserver_source_for_aoi
 
+    # Il sync da GeoServer non passa dal gate: è lui a **produrre** le tabelle
+    # su cui le impronte dei passi successivi si calcolano, e ha già una
+    # propria idempotenza. Saltarlo qui vorrebbe dire misurare una sorgente
+    # vecchia di un giro.
     gs_counts = await sync_geoserver_source_for_aoi(aoi_id)
     if gs_counts["iffi"] or gs_counts["pai"] or gs_counts.get("flood"):
         log.info("static_bootstrap.geoserver_source", aoi_id=aoi_id, **gs_counts)
 
-    # Outside the factors transaction: the backfill's work stays committed
-    # even if a later aggregation times out and rolls back.
+    # La griglia va seminata comunque: è la tabella su cui ogni altro passo
+    # scrive, costa un INSERT ... ON CONFLICT DO NOTHING, e gateggiarla
+    # significherebbe che un AOI nuovo non ha righe su cui lavorare.
     async with acquire() as conn:
-        await conn.execute(_PAI_SUBDIV_BACKFILL_SQL, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
-        await conn.execute(_FLOOD_SUBDIV_BACKFILL_SQL, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
-
-    async with acquire() as conn, conn.transaction():
         result_seed = await conn.execute(_SEED_CELLS_SQL, aoi_id)
         log.info("static_bootstrap.seed_cells", aoi_id=aoi_id, result=result_seed)
 
-        # Batch spatial aggregation over large ISPRA volumes — override the
-        # pool's default per-statement timeout so these can run to completion.
-        await conn.execute(
-            _IFFI_DENSITY_SQL, aoi_id, _BUFFER_DEG_500M_AT_41N, timeout=_BOOTSTRAP_STMT_TIMEOUT_S
-        )
-        await conn.execute(
-            _DISTANCE_TO_IFFI_SQL, aoi_id, _DISTANCE_CAP_M, timeout=_BOOTSTRAP_STMT_TIMEOUT_S
-        )
-        await conn.execute(_PAI_CLASS_SQL, aoi_id, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
-        await conn.execute(_FLOOD_HAZARD_SQL, aoi_id, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
+    iffi_fp = await fingerprint.of_tables("iffi_landslides")
+    if await gate.needs("iffi", iffi_fp):
+        # Outside the factors transaction: the backfill's work stays committed
+        # even if a later aggregation times out and rolls back.
+        async with acquire() as conn, conn.transaction():
+            await conn.execute(
+                _IFFI_DENSITY_SQL,
+                aoi_id,
+                _BUFFER_DEG_500M_AT_41N,
+                timeout=_BOOTSTRAP_STMT_TIMEOUT_S,
+            )
+            await conn.execute(
+                _DISTANCE_TO_IFFI_SQL, aoi_id, _DISTANCE_CAP_M, timeout=_BOOTSTRAP_STMT_TIMEOUT_S
+            )
+        await gate.done("iffi", **iffi_fp.details)
+
+    pai_fp = await fingerprint.of_tables("pai_hazard")
+    if await gate.needs("pai", pai_fp):
+        async with acquire() as conn:
+            await conn.execute(_PAI_SUBDIV_BACKFILL_SQL, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
+        async with acquire() as conn, conn.transaction():
+            await conn.execute(_PAI_CLASS_SQL, aoi_id, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
+        await gate.done("pai", **pai_fp.details)
+
+    flood_fp = await fingerprint.of_tables("flood_hazard")
+    if await gate.needs("flood_hazard", flood_fp):
+        async with acquire() as conn:
+            await conn.execute(_FLOOD_SUBDIV_BACKFILL_SQL, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
+        async with acquire() as conn, conn.transaction():
+            await conn.execute(_FLOOD_HAZARD_SQL, aoi_id, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
+        await gate.done("flood_hazard", **flood_fp.details)
 
     # Densità storica del fuoco (#66). No-op pulito con `fire_events` vuota:
     # la colonna resta a 0, che qui è un'informazione ("nessun hotspot
@@ -409,64 +460,107 @@ async def bootstrap_static_for_aoi(aoi_id: str) -> dict[str, int]:
     # `limen ingest-fire-history`.
     from limen.data.repos import fire_events_repo
 
-    await fire_events_repo.refresh_density(aoi_id, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
+    # `require_rows=False`: una `fire_events` vuota non e' una sorgente
+    # mancante, e' "nessun hotspot rilevato" — e la densita' a zero e' quella
+    # l'informazione. Il passo gira, e si salta solo se gli eventi sono gli
+    # stessi del giro prima.
+    fire_fp = await fingerprint.of_tables("fire_events", require_rows=False)
+    if await gate.needs("fire_density", fire_fp):
+        await fire_events_repo.refresh_density(aoi_id, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
+        await gate.done("fire_density", **fire_fp.details)
 
     # Distanze dalla rete OSM (strade/ferrovie) — no-op finché
     # `sync_osm_infrastructure` non ha popolato osm_infrastructure.
-    await compute_osm_distances_for_aoi(aoi_id)
+    osm_fp = await fingerprint.of_tables("osm_infrastructure")
+    if await gate.needs("osm_distance", osm_fp):
+        await compute_osm_distances_for_aoi(aoi_id)
+        await gate.done("osm_distance", **osm_fp.details)
 
     # DEM derivatives — runs when LIMEN_DEM_RASTER points at a GeoTIFF
     # (e.g. TINITALY 10 m). With the env var unset the step is a clean
     # no-op + structured log; the AOI keeps progressing.
     from limen.integrations.dem import sync_dem_for_aois
+    from limen.integrations.dem.sync_job import DEM_RASTER_ENV
 
-    dem_written = await sync_dem_for_aois(aoi_ids=[aoi_id])
-    if dem_written:
-        log.info(
-            "static_bootstrap.dem_done",
-            aoi_id=aoi_id,
-            rows_written=dem_written,
-        )
+    dem_fp = fingerprint.of_env_file(DEM_RASTER_ENV)
+    if await gate.needs("dem", dem_fp):
+        dem_written = await sync_dem_for_aois(aoi_ids=[aoi_id])
+        if dem_written:
+            log.info(
+                "static_bootstrap.dem_done",
+                aoi_id=aoi_id,
+                rows_written=dem_written,
+            )
+        await gate.done("dem", rows_written=dem_written, **dem_fp.details)
     # CORINE Land Cover — runs when LIMEN_CORINE_RASTER points at a
     # categorical GeoTIFF (e.g. CLC2018 100 m mosaic).
     from limen.integrations.corine import sync_corine_for_aois
+    from limen.integrations.corine.sync_job import CORINE_RASTER_ENV
 
-    corine_written = await sync_corine_for_aois(aoi_ids=[aoi_id])
-    if corine_written:
-        log.info(
-            "static_bootstrap.corine_done",
-            aoi_id=aoi_id,
-            rows_written=corine_written,
-        )
+    corine_fp = fingerprint.of_env_file(CORINE_RASTER_ENV)
+    corine_ran = await gate.needs("corine", corine_fp)
+    if corine_ran:
+        corine_written = await sync_corine_for_aois(aoi_ids=[aoi_id])
+        if corine_written:
+            log.info(
+                "static_bootstrap.corine_done",
+                aoi_id=aoi_id,
+                rows_written=corine_written,
+            )
+        await gate.done("corine", rows_written=corine_written, **corine_fp.details)
 
     # Dopo CORINE, perché legge `landuse_code`: invertirli lascerebbe la
-    # colonna WUI ferma di un giro rispetto alla copertura del suolo.
-    await compute_wui_proximity_for_aoi(aoi_id)
+    # colonna WUI ferma di un giro rispetto alla copertura del suolo. Per la
+    # stessa ragione la sua impronta è quella di CORINE: il WUI non ha una
+    # sorgente propria, deriva da `landuse_code`, quindi va rifatto quando
+    # cambia quella e mai da solo.
+    if await gate.needs("wui", corine_fp):
+        await compute_wui_proximity_for_aoi(aoi_id)
+        await gate.done("wui")
 
     # CLMS Imperviousness — gira quando LIMEN_IMPERVIOUSNESS_RASTER punta a un
     # GeoTIFF; senza, no-op pulito con log strutturato, come DEM e CORINE.
     from limen.integrations.imperviousness import sync_imperviousness_for_aois
+    from limen.integrations.imperviousness.sync_job import IMPERVIOUSNESS_RASTER_ENV
 
-    imperv_written = await sync_imperviousness_for_aois(aoi_ids=[aoi_id])
-    if imperv_written:
-        log.info(
-            "static_bootstrap.imperviousness_done",
-            aoi_id=aoi_id,
-            rows_written=imperv_written,
-        )
+    imperv_fp = fingerprint.of_env_file(IMPERVIOUSNESS_RASTER_ENV)
+    if await gate.needs("imperviousness", imperv_fp):
+        imperv_written = await sync_imperviousness_for_aois(aoi_ids=[aoi_id])
+        if imperv_written:
+            log.info(
+                "static_bootstrap.imperviousness_done",
+                aoi_id=aoi_id,
+                rows_written=imperv_written,
+            )
+        await gate.done("imperviousness", rows_written=imperv_written, **imperv_fp.details)
 
     # ISPRA Carta Geologica — vector shapefile + faults; runs when
     # LIMEN_GEOLOGICAL_SHAPEFILE points at a polygon file.
     from limen.integrations.geological import sync_geological_for_aois
+    from limen.integrations.geological.sync_job import LITHO_SHAPEFILE_ENV
 
-    geo_written = await sync_geological_for_aois(aoi_ids=[aoi_id])
-    if geo_written:
-        log.info(
-            "static_bootstrap.geological_done",
-            aoi_id=aoi_id,
-            rows_written=geo_written,
-        )
+    geo_fp = fingerprint.of_env_file(LITHO_SHAPEFILE_ENV)
+    if await gate.needs("geological", geo_fp):
+        geo_written = await sync_geological_for_aois(aoi_ids=[aoi_id])
+        if geo_written:
+            log.info(
+                "static_bootstrap.geological_done",
+                aoi_id=aoi_id,
+                rows_written=geo_written,
+            )
+        await gate.done("geological", rows_written=geo_written, **geo_fp.details)
 
     total = await count_factors()
-    log.info("static_bootstrap.done", aoi_id=aoi_id, factor_rows=total)
-    return {"cells_with_factors": total}
+    log.info(
+        "static_bootstrap.done",
+        aoi_id=aoi_id,
+        factor_rows=total,
+        recomputed=sum(1 for o in gate.outcomes if o.ran),
+        skipped=sum(1 for o in gate.outcomes if not o.ran),
+    )
+    return BootstrapResult(
+        cells_with_factors=total,
+        recomputed=sum(1 for o in gate.outcomes if o.ran),
+        skipped=sum(1 for o in gate.outcomes if not o.ran),
+        summary=gate.summary(),
+    )

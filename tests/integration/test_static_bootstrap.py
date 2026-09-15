@@ -95,7 +95,7 @@ async def test_bootstrap_populates_cells(reset_db: None) -> None:
     assert total_cells > 0
 
     result = await bootstrap_static_for_aoi(_AOI_ID)
-    assert result["cells_with_factors"] == total_cells
+    assert result.cells_with_factors == total_cells
     assert await count_factors() == total_cells
 
 
@@ -502,3 +502,92 @@ async def test_wui_is_skipped_without_land_cover(reset_db: None, pg_pool: object
             f"{aoi}|0|0",
         )
     assert val is None
+
+
+# ---------------------------------------------------------------------------
+# Idempotenza sul costo (#101)
+# ---------------------------------------------------------------------------
+
+
+async def test_a_second_run_recomputes_nothing(reset_db: None) -> None:
+    """Il criterio di accettazione centrale della #101.
+
+    Prima della #101 il bootstrap era idempotente nel *risultato* ma non nel
+    *costo*: ogni passo era un UPDATE su tutte le celle, incondizionato. È il
+    motivo per cui non stava dentro `make up` — un'ora e mezza a ogni avvio
+    sulle 312.000 celle nazionali.
+    """
+    await _seed(reset_db)
+
+    first = await bootstrap_static_for_aoi(_AOI_ID)
+    assert first.recomputed > 0, "la prima esecuzione deve calcolare qualcosa"
+
+    second = await bootstrap_static_for_aoi(_AOI_ID)
+    assert second.recomputed == 0
+    assert second.skipped == first.recomputed + first.skipped
+    assert "0 ricalcolati" in second.summary
+    # I fattori restano quelli: saltare non deve voler dire perdere.
+    assert second.cells_with_factors == first.cells_with_factors
+
+
+async def test_force_recomputes_everything(reset_db: None) -> None:
+    """`--force` serve quando cambia il *codice* e non la sorgente, e
+    l'impronta non può accorgersene."""
+    await _seed(reset_db)
+    await bootstrap_static_for_aoi(_AOI_ID)
+
+    forced = await bootstrap_static_for_aoi(_AOI_ID, force=True)
+    assert forced.recomputed > 0
+    assert "forzato" in forced.summary
+
+
+async def test_a_changed_source_reruns_only_its_own_step(reset_db: None) -> None:
+    """Sostituire una sorgente fa rieseguire **solo** il passo che la usa.
+
+    È l'altra metà del criterio: saltare tutto è facile, saltare il pezzo
+    giusto è il punto.
+    """
+    await _seed(reset_db)
+    await bootstrap_static_for_aoi(_AOI_ID)
+
+    # Un IFFI in più cambia l'impronta della sola sorgente IFFI.
+    await upsert_iffi(
+        [
+            IFFILandslide(
+                id="iffi-nuovo",
+                movement_type="crollo",
+                state="attivo",
+                velocity_class=None,
+                occurrence_date=None,
+                geom=Point(16.87, 41.13),
+                attributes={"src": "test"},
+            )
+        ]
+    )
+
+    third = await bootstrap_static_for_aoi(_AOI_ID)
+    assert third.recomputed == 1, f"atteso un solo passo ricalcolato: {third.summary}"
+    assert "iffi" in third.summary
+
+
+async def test_a_new_aoi_does_not_touch_the_others(reset_db: None) -> None:
+    """Aggiungere una regione ne calcola i fattori senza rifare le altre."""
+    await _seed(reset_db)
+    await bootstrap_static_for_aoi(_AOI_ID)
+
+    other_id = "test-bootstrap-altro"
+    await upsert_aoi(
+        id=other_id,
+        name="altro",
+        kind="test",
+        geom=Polygon(
+            [(17.00, 41.20), (17.04, 41.20), (17.04, 41.24), (17.00, 41.24), (17.00, 41.20)]
+        ),
+    )
+    await generate_and_store_grid(other_id)
+
+    fresh = await bootstrap_static_for_aoi(other_id)
+    assert fresh.recomputed > 0
+
+    unchanged = await bootstrap_static_for_aoi(_AOI_ID)
+    assert unchanged.recomputed == 0

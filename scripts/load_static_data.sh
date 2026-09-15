@@ -29,7 +29,7 @@ say()  { printf '\n\033[1m%s\033[0m\n' "$*"; }
 ok()   { printf '  [ok]      %s\n' "$*"; }
 skip() { printf '  [manca]   %s\n' "$*"; }
 
-say "1/4  Cosa è configurato in questo ambiente"
+say "1/5  Cosa è configurato in questo ambiente"
 
 have_geoserver=0; have_dem=0; have_imperv=0; have_corine=0
 if [ -n "${GEOSERVER_SOURCE__DB_DSN:-}" ]; then
@@ -87,17 +87,23 @@ if [ "$FOCUS" = "flood" ] && [ "$have_geoserver" -eq 0 ]; then
   echo "  Senza GEOSERVER_SOURCE__DB_DSN questo comando non caricherà nulla di utile."
 fi
 
-say "2/4  Migrazioni"
+say "2/5  Migrazioni"
 $UV run limen migrate || exit 1
 
-say "3/4  Sorgenti"
+say "3/5  Sorgenti"
 if [ "$have_geoserver" -eq 1 ]; then
   $UV run limen geoserver-sync || exit 1
 else
   echo "  saltato: GEOSERVER_SOURCE__DB_DSN non impostata"
 fi
 
-say "4/4  Fattori per cella"
+say "4/5  Perimetri EFFIS (truth set del backtest incendio)"
+# Comando a se' e non un passo del bootstrap: e' un dataset di verita', non un
+# fattore per cella, e il bootstrap per cella non fa chiamate HTTP. Sta pero'
+# in questa sequenza, che e' cio' che la #101 chiedeva.
+$UV run limen effis-sync || echo "  (EFFIS non raggiungibile: si prosegue)"
+
+say "5/5  Fattori per cella"
 # bootstrap-static esegue da sé i passi la cui sorgente è configurata e
 # registra `static_bootstrap.skip` per gli altri: una sola chiamata copre
 # DTM, CORINE, imperviousness, WUI, distanze OSM e litologia.
