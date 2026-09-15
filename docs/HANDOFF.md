@@ -377,8 +377,16 @@ una che dipende da un altro repo.
     path"): l'API legge feature pre-calcolate dal DB. Servono solo per ri-ingest.
 - **Validazioni live rimaste** (bloccate in locale dal Docker instabile, da rifare
   sul server): curl
-  `/api/comuni` con `serve`, integration test `tests/integration/test_alert_dispatch_executor.py`
-  (era rosso solo per errore I/O di testcontainers, non per il codice).
+  `/api/comuni` con `serve`, integration test `tests/integration/test_alert_dispatch_executor.py`.
+- **La CI non è mai stata verde** (#90), e questa pagina lo diceva male: il job
+  backend veniva **ucciso dal timeout di 30 minuti** a ogni esecuzione da fine
+  luglio, non falliva per un errore di I/O dei testcontainers. La causa era una
+  suite che seminava le venti regioni (~312.000 celle, ~20 minuti) per test che
+  ne valutavano sei. Dalla #90 la CI è divisa in tre job — `backend` (lint,
+  tipi, unitari: il gate rapido), `integration` (suite completa con la soglia di
+  copertura all'80 %), `slow` (seme nazionale, solo su `main`) — e i test di
+  integrazione seminano **una** regione con `run_seed(only=[...])`. Un rosso
+  ora è un rosso vero: prima non lo si poteva distinguere da un preesistente.
 - **Verdetto shadow ML** (issue #4): finestra di osservazione ~fino a inizio agosto
   2026 prima che la retention 30gg mangi i dati; il challenger ML era
   sistematicamente più basso del champion → probabile "non promuovere".

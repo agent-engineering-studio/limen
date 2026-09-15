@@ -21,6 +21,18 @@ if TYPE_CHECKING:
     import respx
 
 
+#: La regione che i test seminano quando gliene serve una qualunque (#90).
+#: Valle d'Aosta e' la piu' piccola delle venti: 3.268 km2 contro 301.563 del
+#: seme nazionale, quindi ~92 volte meno celle da generare. Quasi tutti i test
+#: di integrazione vogliono "un'AOI con una griglia", non l'Italia — e
+#: `test_api_jobs` la riduceva comunque a sei celle subito dopo.
+SEED_SMALL_AOI = "it-valle-d-aosta"
+
+#: Quando il test nomina esplicitamente un'AOI (il backtest usa
+#: `LIMEN_BACKTEST_AOI=it-puglia`), quella va seminata e non un'altra.
+SEED_PUGLIA = "it-puglia"
+
+
 def register_flood_mocks(mock: respx.Router) -> None:
     """Mock the flood/marine endpoints the default workflow calls.
 

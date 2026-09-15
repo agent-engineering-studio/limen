@@ -384,11 +384,15 @@ osm-data:                      # download the Geofabrik PBF + extract road/rail 
 test:
 	$(UV) run pytest --cov=limen
 
+# I test lenti (seme nazionale), esclusi dal gate: girano qui e in CI su main.
+test-slow:
+	$(UV) run pytest -m slow
+
 test-unit:
 	$(UV) run pytest tests/unit
 
 test-integration:
-	$(UV) run pytest tests/integration -m integration
+	$(UV) run pytest tests/integration -m "integration and not slow"
 
 test-frontend:
 	cd frontend && npm run lint && npm test && npm run build

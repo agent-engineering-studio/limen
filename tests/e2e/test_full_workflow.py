@@ -205,8 +205,16 @@ async def test_llm_does_not_change_numeric_breakdown(reset_db: None) -> None:
         assert r1.cell_id == r2.cell_id
         assert r1.score == pytest.approx(r2.score, abs=1e-12)
         assert r1.level == r2.level
-        assert r1.s == pytest.approx(r2.s, abs=1e-12)
-        assert r1.m == pytest.approx(r2.m, abs=1e-12)
-        assert r1.e == pytest.approx(r2.e, abs=1e-12)
-        assert r1.f == pytest.approx(r2.f, abs=1e-12)
-        assert r1.h == pytest.approx(r2.h, abs=1e-12)
+        # I componenti si leggono dal breakdown, non piu' appiattiti sul
+        # record: dalla Fase 2 `CellRiskRecord` porta `breakdown` e basta, e
+        # queste righe chiedevano `r1.s` a un oggetto che non ce l'ha piu'.
+        # Il test non girava — falliva con AttributeError prima di arrivare a
+        # verificare l'invarianza — e nessuno se ne accorgeva perche' la CI
+        # moriva al timeout (#90).
+        #
+        # `factors_payload()` e' un controllo **piu' forte** dei cinque
+        # attributi di prima: e' esattamente cio' che finisce in
+        # `risk_assessments.factors`, quindi confrontarlo dice che l'LLM non
+        # ha cambiato niente di cio' che raggiunge il database.
+        assert r1.breakdown.components() == pytest.approx(r2.breakdown.components(), abs=1e-12)
+        assert r1.breakdown.factors_payload() == r2.breakdown.factors_payload()
