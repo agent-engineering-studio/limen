@@ -134,15 +134,16 @@ up: gs-volumes
 	    >/dev/null 2>&1 && break; \
 	  sleep 3; \
 	done
-	@echo "[up] idempotent data refresh: seed (AOIs + grid) + geoserver-sync (IFFI + PAI)"
+	@echo "[up] seed (AOIs + griglia) nel container"
 	docker compose $(COMPOSE_ALL) exec -T api limen seed
-	docker compose $(COMPOSE_ALL) exec -T api limen geoserver-sync
 	@echo ""
 	@echo "[up] Stack ready:"
 	@echo "   API      http://localhost:8080/docs      Frontend  http://localhost:5173"
 	@echo "   GeoServer http://localhost:8081/geoserver Web UI    http://localhost:8000"
 	@echo ""
-	@echo "[up] fattori statici per cella (sull'HOST, che legge i raster e .env)."
+	@echo "[up] sorgenti + fattori statici, sull'HOST (che legge i raster e .env)."
+	@echo "     geoserver-sync sta qui e non nel container: lo script e' l'unica"
+	@echo "     descrizione della sequenza, e farlo due volte costava due volte."
 	@echo "     Idempotente sul COSTO (#101): salta i passi la cui sorgente non è"
 	@echo "     cambiata. La PRIMA esecuzione però paga tutto — misurato sul DTM 5 m,"
 	@echo "     ~2m45s ogni 11k celle, cioè ~1.5-2h sulle 312k delle 20 regioni."

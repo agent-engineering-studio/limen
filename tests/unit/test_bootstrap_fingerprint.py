@@ -162,3 +162,66 @@ def test_the_summary_names_what_it_recomputed_and_why() -> None:
     assert "1 ricalcolati" in summary
     assert "dem: sorgente cambiata" in summary
     assert "1 saltati" in summary
+
+
+# ---------------------------------------------------------------------------
+# Il cablaggio della forzatura: variabile d'ambiente -> parametro
+# ---------------------------------------------------------------------------
+
+
+async def _force_seen_by_bootstrap(monkeypatch: pytest.MonkeyPatch) -> list[bool]:
+    """Esegue `limen bootstrap-static` senza database e riporta il `force=`
+    con cui ha chiamato l'orchestratore."""
+    from contextlib import asynccontextmanager
+
+    import limen.cli.bootstrap_static as mod
+    from limen.integrations.static_bootstrap.orchestrator import BootstrapResult
+
+    seen: list[bool] = []
+
+    @asynccontextmanager
+    async def _no_pool():
+        yield None
+
+    async def _nothing() -> None:
+        return None
+
+    async def _aois() -> list[str]:
+        return ["it-test"]
+
+    async def _fake_bootstrap(aoi_id: str, *, force: bool = False) -> BootstrapResult:
+        seen.append(force)
+        return BootstrapResult(cells_with_factors=0, recomputed=0, skipped=0, summary="x")
+
+    monkeypatch.setattr(mod, "lifespan_pool", _no_pool)
+    monkeypatch.setattr(mod, "run_migrations", _nothing)
+    monkeypatch.setattr(mod, "list_aoi_ids", _aois)
+    monkeypatch.setattr(mod, "sync_osm_infrastructure", _nothing)
+    monkeypatch.setattr(mod, "bootstrap_static_for_aoi", _fake_bootstrap)
+
+    assert await mod.run() == 0
+    return seen
+
+
+@pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes"])
+async def test_the_env_var_forces_the_recompute(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    """`LIMEN_BOOTSTRAP_FORCE=1` deve arrivare fino a `bootstrap_static_for_aoi`.
+
+    Il parametro `force=` era gia' coperto; qui si verifica il pezzo in mezzo,
+    che e' dove si rompono le cose: `make up` invoca il comando **senza
+    argomenti**, quindi se la variabile non viene letta la forzatura non
+    esiste per il caso d'uso principale.
+    """
+    from limen.cli.bootstrap_static import FORCE_ENV
+
+    monkeypatch.setenv(FORCE_ENV, value)
+    assert await _force_seen_by_bootstrap(monkeypatch) == [True]
+
+
+async def test_without_the_env_var_nothing_is_forced(monkeypatch: pytest.MonkeyPatch) -> None:
+    from limen.cli.bootstrap_static import FORCE_ENV
+
+    monkeypatch.delenv(FORCE_ENV, raising=False)
+    assert await _force_seen_by_bootstrap(monkeypatch) == [False]
