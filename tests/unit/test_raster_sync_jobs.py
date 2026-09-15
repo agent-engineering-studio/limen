@@ -1,4 +1,4 @@
-"""Job raster del bootstrap statico: DTM e suolo impermeabilizzato (#116).
+"""Job raster del bootstrap statico: DTM, CORINE e suolo impermeabilizzato (#116).
 
 GeoTIFF veri scritti al volo, database simulato. Le proprietà da provare sono
 quelle che cambiano il punteggio senza dirlo:
@@ -23,6 +23,8 @@ import rasterio
 from rasterio.transform import from_origin
 from shapely.geometry import Polygon
 
+from limen.integrations.corine import sync_job as corine_sync
+from limen.integrations.corine import zonal as corine_zonal
 from limen.integrations.dem import sync_job as dem
 from limen.integrations.imperviousness import sync_job as imperv
 
@@ -198,3 +200,98 @@ async def test_sync_dem_on_an_uncovered_aoi_writes_nothing(
     monkeypatch.setattr(dem, "_load_cell_geometries", _cells)
     monkeypatch.setattr(dem, "upsert_many", _upsert)
     assert await dem.sync_dem_for_aois(aoi_ids=["it-x"], raster_path=raster) == 0
+
+
+# ---------------------------------------------------------------------------
+# CORINE
+# ---------------------------------------------------------------------------
+def _corine(path: Path, band: np.ndarray, *, nodata: int | None = 0) -> Path:
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        width=band.shape[1],
+        height=band.shape[0],
+        count=1,
+        dtype="uint16",
+        crs="EPSG:4326",
+        transform=from_origin(_ORIGIN[0], _ORIGIN[1], _PIX, _PIX),
+        nodata=nodata,
+    ) as dst:
+        dst.write(band.astype("uint16"), 1)
+    return path
+
+
+def test_landuse_is_the_majority_class_inside_the_cell(tmp_path: Path) -> None:
+    """Tre quarti di bosco di conifere (312), un quarto di urbano (111): la
+    cella è bosco. Il nodata non vota."""
+    band = np.full((10, 10), 312)
+    band[:, 7:] = 111
+    band[0, :] = 0
+    raster = _corine(tmp_path / "clc.tif", band)
+
+    (dentro, fuori) = corine_zonal.compute_landuse_stats(
+        raster_path=raster, cells={"dentro": _INSIDE, "fuori": _OUTSIDE}
+    )
+
+    assert dentro.landuse_code == "312"
+    assert dentro.pixel_count > 0
+    assert fuori.landuse_code is None and fuori.pixel_count == 0
+
+
+def test_landuse_on_a_missing_raster_raises(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        corine_zonal.compute_landuse_stats(raster_path=tmp_path / "manca.tif", cells={})
+
+
+async def test_sync_corine_writes_only_classified_cells(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raster = _corine(tmp_path / "clc.tif", np.full((10, 10), 211))
+    written: list[Any] = []
+
+    async def _cells(aoi_id: str) -> dict[str, Any]:
+        return {"dentro": _INSIDE, "fuori": _OUTSIDE} if aoi_id == "it-x" else {}
+
+    async def _upsert(rows: list[Any]) -> int:
+        written.extend(rows)
+        return len(rows)
+
+    monkeypatch.setattr(corine_sync, "_load_cell_geometries", _cells)
+    monkeypatch.setattr(corine_sync, "upsert_many", _upsert)
+
+    assert (
+        await corine_sync.sync_corine_for_aois(aoi_ids=["it-x", "it-vuota"], raster_path=raster)
+        == 1
+    )
+    assert [(r.cell_id, r.landuse_code) for r in written] == [("dentro", "211")]
+
+
+async def test_sync_corine_without_a_source_is_a_no_op(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(corine_sync.CORINE_RASTER_ENV, raising=False)
+    assert await corine_sync.sync_corine_for_aois(aoi_ids=["it-x"]) == 0
+    assert (
+        await corine_sync.sync_corine_for_aois(aoi_ids=["it-x"], raster_path=tmp_path / "x.tif")
+        == 0
+    )
+    monkeypatch.setenv(corine_sync.CORINE_RASTER_ENV, "/dati/clc.tif")
+    assert corine_sync._resolve_raster_path(None) == Path("/dati/clc.tif")
+
+
+async def test_cell_geometries_skip_rows_without_a_geometry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Le tre funzioni di lettura delle celle sono gemelle: una cella senza
+    geometria non entra in nessuno dei tre zonali."""
+
+    class _Rows:
+        async def fetch(self, _sql: str, _aoi: str) -> list[dict[str, Any]]:
+            return [{"id": "c1", "geom": _INSIDE}, {"id": "c2", "geom": None}]
+
+    for module in (corine_sync, dem, imperv):
+        _use(monkeypatch, module, _Rows())
+    assert list((await corine_sync._load_cell_geometries("it-x")).keys()) == ["c1"]
+    assert list((await dem._load_cell_geometries("it-x")).keys()) == ["c1"]
+    assert "c1" in await imperv._cell_geometries("it-x")
