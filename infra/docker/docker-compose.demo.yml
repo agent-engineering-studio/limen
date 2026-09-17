@@ -25,6 +25,14 @@ services:
     image: limen/postgres:16-3.5
     container_name: limen-postgres
     restart: unless-stopped
+    # SIGINT = "fast shutdown": Postgres chiude le connessioni, fa un
+    # checkpoint e esce pulito. Il SIGTERM di default e' lo "smart shutdown",
+    # che **aspetta** che i client si scolleghino: con l'API attaccata non
+    # finisce mai, dopo 10 s arriva il SIGKILL e il cluster riparte come dopo
+    # un crash. Su questo hardware quel recovery e' un fsync dell'intera
+    # cartella dati: misurato oltre 10 minuti su 25 GB.
+    stop_signal: SIGINT
+    stop_grace_period: 5m
     # Parallel workers on national-scale aggregations (312k cells) blow
     # through Docker's 64 MB /dev/shm default → DiskFullError.
     shm_size: 1gb
@@ -309,6 +317,30 @@ services:
       LOG_JSON: "true"
     ports:
       - "${LIMEN_MCP_BIND:-127.0.0.1}:8766:8766"
+    # Senza questa riga il container eredita dall'immagine la sonda dell'API,
+    # che interroga :8080/ready — una porta su cui il server MCP non ascolta:
+    # risultava `unhealthy` con il server perfettamente funzionante.
+    # Qui si interroga la porta sua. Una risposta HTTP qualunque basta e
+    # avanza: /mcp senza sessione risponde 400, ed e' comunque la prova che il
+    # server e' su e sta instradando. Solo una connessione rifiutata e' un
+    # guasto.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - |
+          python -c "
+          import sys, urllib.error, urllib.request
+          try:
+              urllib.request.urlopen('http://localhost:8766/mcp', timeout=3)
+          except urllib.error.HTTPError:
+              pass
+          except Exception:
+              sys.exit(1)
+          "
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   mosquitto:
     # Phase 7 — local MQTT broker for the alert pipeline. The API
@@ -356,7 +388,17 @@ services:
     ports:
       - "${LIMEN_TILESERV_BIND:-127.0.0.1}:7800:7800"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:7800/health || exit 1"]
+      # L'immagine pramsey/pg_tileserv non ha né wget né curl né nc: la sonda
+      # HTTP che c'era qui prima falliva sempre con "wget: command not found",
+      # e il container risultava `unhealthy` da settimane mentre serviva
+      # regolarmente le tile. Un controllo che non può passare è peggio di
+      # nessun controllo: nasconde quello vero.
+      # Qui si legge la tabella dei socket con le sole primitive della shell.
+      # 1E78 è 7800 in esadecimale, 0A è lo stato LISTEN; il processo ascolta
+      # su IPv6 (::), quindi la tabella è tcp6.
+      test:
+        - CMD-SHELL
+        - 'while read -r _ l _ s _; do [ "$$s" = 0A ] && case "$$l" in *:1E78) exit 0;; esac; done < /proc/net/tcp6; exit 1'
       interval: 15s
       timeout: 5s
       retries: 10
