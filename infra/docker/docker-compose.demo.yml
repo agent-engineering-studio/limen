@@ -317,6 +317,30 @@ services:
       LOG_JSON: "true"
     ports:
       - "${LIMEN_MCP_BIND:-127.0.0.1}:8766:8766"
+    # Senza questa riga il container eredita dall'immagine la sonda dell'API,
+    # che interroga :8080/ready — una porta su cui il server MCP non ascolta:
+    # risultava `unhealthy` con il server perfettamente funzionante.
+    # Qui si interroga la porta sua. Una risposta HTTP qualunque basta e
+    # avanza: /mcp senza sessione risponde 400, ed e' comunque la prova che il
+    # server e' su e sta instradando. Solo una connessione rifiutata e' un
+    # guasto.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - |
+          python -c "
+          import sys, urllib.error, urllib.request
+          try:
+              urllib.request.urlopen('http://localhost:8766/mcp', timeout=3)
+          except urllib.error.HTTPError:
+              pass
+          except Exception:
+              sys.exit(1)
+          "
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   mosquitto:
     # Phase 7 — local MQTT broker for the alert pipeline. The API
