@@ -364,7 +364,17 @@ services:
     ports:
       - "${LIMEN_TILESERV_BIND:-127.0.0.1}:7800:7800"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:7800/health || exit 1"]
+      # L'immagine pramsey/pg_tileserv non ha né wget né curl né nc: la sonda
+      # HTTP che c'era qui prima falliva sempre con "wget: command not found",
+      # e il container risultava `unhealthy` da settimane mentre serviva
+      # regolarmente le tile. Un controllo che non può passare è peggio di
+      # nessun controllo: nasconde quello vero.
+      # Qui si legge la tabella dei socket con le sole primitive della shell.
+      # 1E78 è 7800 in esadecimale, 0A è lo stato LISTEN; il processo ascolta
+      # su IPv6 (::), quindi la tabella è tcp6.
+      test:
+        - CMD-SHELL
+        - 'while read -r _ l _ s _; do [ "$$s" = 0A ] && case "$$l" in *:1E78) exit 0;; esac; done < /proc/net/tcp6; exit 1'
       interval: 15s
       timeout: 5s
       retries: 10
