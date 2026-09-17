@@ -27,13 +27,13 @@ from limen.cli.backtest_flood import (
     _midnight_values,
     _modes,
     _node_key,
+    _node_reference,
     _nodes_from_cells,
     _NodeSeries,
     _parse_dt,
     _parse_level,
     _replay,
     _Tally,
-    _trickle_floor,
     _unmeasurable,
     _write_report,
 )
@@ -96,19 +96,30 @@ def test_issued_and_observed_differ_when_the_forecast_was_wrong() -> None:
 # ---------------------------------------------------------------------------
 # Rapporto di portata
 # ---------------------------------------------------------------------------
-def test_discharge_ratio_is_peak_ahead_over_recent_baseline() -> None:
-    daily = {D0 - timedelta(days=k): 10.0 for k in range(1, 32)}
-    daily[D0] = 10.0
+def test_discharge_ratio_is_peak_ahead_over_the_node_own_high_flow() -> None:
+    daily = {D0 + timedelta(days=k): 10.0 for k in range(0, 7)}
     daily[D0 + timedelta(days=3)] = 40.0
-    for k in (1, 2, 4, 5, 6):
-        daily.setdefault(D0 + timedelta(days=k), 10.0)
 
-    assert _discharge_ratios(daily)[D0] == 4.0
+    assert _discharge_ratios(daily, 20.0)[D0] == 2.0
 
 
-def test_discharge_ratio_absent_without_enough_baseline() -> None:
+def test_without_a_reference_there_is_no_ratio() -> None:
+    """Riferimento assente vuol dire "non so quanto è grande questo corso
+    d'acqua", e un rapporto calcolato su zero sarebbe un'invenzione."""
     daily = {D0: 10.0, D0 + timedelta(days=1): 40.0}
-    assert D0 not in _discharge_ratios(daily)
+    assert _discharge_ratios(daily, 0.0) == {}
+
+
+def test_the_reference_is_a_percentile_of_the_node_own_series() -> None:
+    """Il q90 e non il massimo: rapportarsi al massimo del biennio direbbe
+    "tutto normale" fino alla ripetizione della peggiore piena."""
+    daily = {D0 + timedelta(days=k): float(k) for k in range(0, 400)}
+    assert _node_reference(daily, percentile=0.90, min_days=365) == 359.1
+
+
+def test_a_node_without_enough_history_has_no_reference() -> None:
+    daily = {D0 + timedelta(days=k): 5.0 for k in range(0, 100)}
+    assert _node_reference(daily, percentile=0.90, min_days=365) is None
 
 
 # ---------------------------------------------------------------------------
@@ -391,15 +402,6 @@ def test_daily_sums_add_hours_and_skip_missing_values() -> None:
 def test_midnight_values_keep_only_the_first_hour() -> None:
     stamps = ["2024-09-17T00:00", "2024-09-17T13:00", "2024-09-18T00:00"]
     assert _midnight_values(stamps, [0.2, 0.9, None]) == {D0: 0.2}
-
-
-def test_trickle_floor_is_a_fraction_of_the_largest_baseline() -> None:
-    """Il rapporto di portata e' patologico sui rigagnoli: un nodo conta come
-    fiume solo sopra il 10 % del deflusso di base piu' grande dell'AOI."""
-    big = {D0: 100.0, D0 + timedelta(days=1): 100.0}
-    ditch = {D0: 1.0}
-    assert _trickle_floor([big, ditch, {}]) == 10.0
-    assert _trickle_floor([]) == 0.0
 
 
 def test_unmeasurable_is_flagged_as_such() -> None:

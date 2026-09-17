@@ -363,8 +363,11 @@ def _flood_signals_step(hazard: HazardType) -> FloodForecastFetchExecutor:
     Per l'alluvione la finestra di accumulo è quella che la sua soglia
     intensità-durata dichiara: prendere 72 h di pioggia e confrontarla con
     una soglia calibrata su 24 h farebbe scattare il trigger su un autunno
-    normale. Per le frane resta il default storico, perché cambiarlo
-    sposterebbe i numeri del campione V1.
+    normale. Vale lo stesso per il ramo fluviale (#108): il rapporto è
+    tarato contro un percentile preciso della storia del nodo, quindi il
+    percentile va letto dalla stessa configurazione delle soglie, o la
+    misura e il metro divergono al primo ritocco. Per le frane resta il
+    default storico, perché cambiarlo sposterebbe i numeri del campione V1.
     """
     if hazard is not HazardType.FLOOD:
         return FloodForecastFetchExecutor()
@@ -375,8 +378,14 @@ def _flood_signals_step(hazard: HazardType) -> FloodForecastFetchExecutor:
     )
 
     loaded = load_hazard_thresholds(HazardType.FLOOD)
-    window = loaded.pluvial.window_hours if isinstance(loaded, FloodThresholds) else 72
-    return FloodForecastFetchExecutor(horizon_hours=window, per_node=True)
+    if not isinstance(loaded, FloodThresholds):
+        return FloodForecastFetchExecutor(per_node=True)
+    return FloodForecastFetchExecutor(
+        horizon_hours=loaded.pluvial.window_hours,
+        per_node=True,
+        reference_percentile=loaded.fluvial.reference_percentile,
+        reference_window_days=loaded.fluvial.reference_window_days,
+    )
 
 
 def build_landslide_workflow(

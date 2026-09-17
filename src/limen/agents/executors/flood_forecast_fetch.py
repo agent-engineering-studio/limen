@@ -14,7 +14,12 @@ from typing import Protocol
 from limen.agents.workflow_runtime.executor import Executor, handler
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
-from limen.integrations.openmeteo.flood import FloodSignals, OpenMeteoFloodClient
+from limen.integrations.openmeteo.flood import (
+    DEFAULT_REFERENCE_PERCENTILE,
+    DEFAULT_REFERENCE_WINDOW_DAYS,
+    FloodSignals,
+    OpenMeteoFloodClient,
+)
 
 log = get_logger(__name__)
 
@@ -27,6 +32,8 @@ class _FloodClient(Protocol):
         valuation_time: datetime,
         horizon_hours: int = 72,
         per_node: bool = False,
+        reference_percentile: float = ...,
+        reference_window_days: int = ...,
     ) -> FloodSignals: ...
 
 
@@ -39,10 +46,16 @@ class FloodForecastFetchExecutor(Executor):
         client: _FloodClient | None = None,
         horizon_hours: int = 72,
         per_node: bool = False,
+        reference_percentile: float = DEFAULT_REFERENCE_PERCENTILE,
+        reference_window_days: int = DEFAULT_REFERENCE_WINDOW_DAYS,
     ) -> None:
         super().__init__(name="FloodForecastFetch")
         self._client: _FloodClient = client if client is not None else OpenMeteoFloodClient()
         self._horizon_hours = horizon_hours
+        # Come si misura la piena ordinaria di un nodo (#108). Il workflow le
+        # legge da `flood.yaml`, insieme alle soglie tarate su quella misura.
+        self._reference_percentile = reference_percentile
+        self._reference_window_days = reference_window_days
         # I due segnali campionati per nodo invece che al centroide dell'AOI.
         # Acceso per il pericolo alluvione, dove sono il motore; spento per le
         # frane, dove il centroide alimenta un bonus opzionale al componente H
@@ -59,6 +72,8 @@ class FloodForecastFetchExecutor(Executor):
             valuation_time=ctx.valuation_time,
             horizon_hours=self._horizon_hours,
             per_node=self._per_node,
+            reference_percentile=self._reference_percentile,
+            reference_window_days=self._reference_window_days,
         )
         log.info(
             "executor.flood_forecast.done",
