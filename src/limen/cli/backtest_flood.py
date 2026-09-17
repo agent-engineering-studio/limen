@@ -60,6 +60,7 @@ from limen.core.scoring.flood.engine import FloodScoringEngine
 from limen.core.scoring.flood.trigger import fluvial_trigger
 from limen.core.scoring.regional_thresholds import (
     FloodThresholds,
+    FluvialBlock,
     load_hazard_thresholds,
 )
 from limen.data.db import acquire, lifespan_pool
@@ -68,6 +69,7 @@ from limen.data.repos import flood_events_repo
 from limen.data.repos.flood_events_repo import ActivationSummary
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.copernicus_ems.client import catalogue_provenance
+from limen.integrations.openmeteo.flood import MIN_REFERENCE_DAYS, percentile_of
 
 log = get_logger(__name__)
 
@@ -294,7 +296,8 @@ class _NodeSeries:
     rain_observed: dict[date, float]
     #: Umidità del suolo 0-7 cm a mezzanotte del giorno d.
     soil: dict[date, float]
-    #: Rapporto portata: picco dei 7 giorni seguenti / media dei 31 precedenti.
+    #: Rapporto portata: picco dei 7 giorni seguenti / piena ordinaria del
+    #: nodo, misurata sul suo storico **prima** della finestra di replay.
     discharge_ratio: dict[date, float]
 
 
@@ -351,43 +354,50 @@ def _accumulate_observed(daily: dict[date, float]) -> dict[date, float]:
     return out
 
 
-def _discharge_ratios(daily: dict[date, float]) -> dict[date, float]:
-    """Rapporto per giorno: picco dei 7 giorni dopo / media dei 31 prima.
+def _discharge_ratios(daily: dict[date, float], reference: float) -> dict[date, float]:
+    """Rapporto per giorno: picco dei 7 giorni dopo / piena ordinaria del nodo.
 
-    La stessa definizione dell'operativo (`_fluvial` in openmeteo/flood.py),
-    che lì usa ``past_days``/``forecast_days`` perché guarda "adesso"; qui la
-    finestra va fatta scorrere a mano, altrimenti il replay chiederebbe a
-    GloFAS lo stato di oggi per un giorno del 2024.
+    La stessa definizione dell'operativo (`_fluvial_by_node` in
+    openmeteo/flood.py), che lì usa ``forecast_days`` perché guarda "adesso";
+    qui la finestra va fatta scorrere a mano, altrimenti il replay
+    chiederebbe a GloFAS lo stato di oggi per un giorno del 2024.
     """
+    if reference <= 0.0:
+        return {}
     out: dict[date, float] = {}
     for day in daily:
-        past = [
-            daily[day - timedelta(days=k)] for k in range(1, 32) if day - timedelta(days=k) in daily
-        ]
         future = [
             daily[day + timedelta(days=k)] for k in range(0, 7) if day + timedelta(days=k) in daily
         ]
-        if len(past) < 15 or not future:
+        if not future:
             continue
-        baseline = sum(past) / len(past)
-        if baseline <= 0.0:
-            continue
-        out[day] = max(future) / baseline
+        out[day] = max(future) / reference
     return out
 
 
-#: Frazione del deflusso di base massimo dell'AOI sotto la quale un nodo non
-#: conta come corso d'acqua. Lo stesso `min_baseline_fraction` dell'operativo:
-#: il rapporto è patologico sui rigagnoli (misurato 62,0 su un fosso dove i
-#: fiumi veri stavano a 1,25), e un backtest che non applica il filtro misura
-#: un FAR che il sistema reale non produce.
-_MIN_BASELINE_FRACTION = 0.1
+def _fluvial_config() -> FluvialBlock:
+    """Il blocco fluviale della configurazione alluvione.
+
+    Letto qui e non ricopiato: il backtest deve misurare con lo stesso metro
+    con cui il sistema decide, percentile compreso.
+    """
+    loaded = load_hazard_thresholds(HazardType.FLOOD)
+    if not isinstance(loaded, FloodThresholds):  # pragma: no cover - schema garantito
+        raise TypeError(f"flood.yaml non è una configurazione alluvione: {type(loaded).__name__}")
+    return loaded.fluvial
 
 
-def _trickle_floor(discharges: Sequence[dict[date, float]]) -> float:
-    """Soglia di deflusso di base sotto cui un nodo è un fosso, non un fiume."""
-    means = [sum(series.values()) / len(series) for series in discharges if series]
-    return max(means) * _MIN_BASELINE_FRACTION if means else 0.0
+def _node_reference(daily: dict[date, float], *, percentile: float, min_days: int) -> float | None:
+    """La piena ordinaria del nodo, dal suo stesso storico (#108).
+
+    Calcolata **prima** della finestra di replay e non su tutta la serie: un
+    riferimento che contiene i giorni che si stanno giudicando saprebbe già
+    dell'evento, e il backtest misurerebbe un sistema che non esiste.
+    """
+    values = [daily[day] for day in sorted(daily)]
+    if len(values) < min_days:
+        return None
+    return percentile_of(values, percentile)
 
 
 async def _fetch_node_series(
@@ -413,12 +423,16 @@ async def _fetch_node_series(
         },
         "backtest_flood.history",
     )
+    fluvial = _fluvial_config()
     flow = await client.fetch_grid(
         FLOOD_URL,
         nodes,
         {
             "daily": "river_discharge",
-            "start_date": (start - timedelta(days=32)).isoformat(),
+            # Indietro fino a coprire la finestra di riferimento: il rapporto
+            # si misura contro la piena ordinaria del nodo, e quella va letta
+            # su anni, non sul mese prima dell'evento (#108).
+            "start_date": (start - timedelta(days=fluvial.reference_window_days)).isoformat(),
             "end_date": fetch_end.isoformat(),
             "timezone": "UTC",
         },
@@ -437,9 +451,6 @@ async def _fetch_node_series(
                 continue
             series[date.fromisoformat(str(stamp))] = float(value)
         discharges.append(series)
-    # Il filtro è relativo al massimo dell'AOI, quindi va deciso dopo aver
-    # letto tutti i nodi: per questo la portata si raccoglie in un giro a sé.
-    floor = _trickle_floor(discharges)
     dropped = 0
 
     out: list[_NodeSeries] = []
@@ -453,14 +464,18 @@ async def _fetch_node_series(
         soil = _midnight_values(stamps, hourly.get("soil_moisture_0_to_7cm") or [])
 
         discharge = discharges[index]
-        mean_flow = sum(discharge.values()) / len(discharge) if discharge else 0.0
-        if mean_flow < floor:
-            # Nessun corso d'acqua qui: `None`, che il trigger legge come
-            # assenza di segnale e non come fiume in secca.
+        reference = _node_reference(
+            {day: flow for day, flow in discharge.items() if day < start},
+            percentile=fluvial.reference_percentile,
+            min_days=MIN_REFERENCE_DAYS,
+        )
+        if reference is None:
+            # Nessuna piena ordinaria misurabile qui: `None`, che il trigger
+            # legge come assenza di segnale e non come fiume in secca.
             ratios: dict[date, float] = {}
             dropped += 1
         else:
-            ratios = _discharge_ratios(discharge)
+            ratios = _discharge_ratios(discharge, reference)
 
         out.append(
             _NodeSeries(
@@ -474,7 +489,8 @@ async def _fetch_node_series(
         "backtest_flood.nodes",
         nodes=len(nodes),
         without_river=dropped,
-        trickle_floor=round(floor, 3),
+        reference_percentile=fluvial.reference_percentile,
+        reference_window_days=fluvial.reference_window_days,
     )
     return out
 

@@ -685,19 +685,31 @@ class PluvialBlock(_StrictModel):
 
 
 class FluvialBlock(_StrictModel):
-    """River discharge, as a ratio to the recent seasonal normal.
+    """River discharge, as a ratio to the node's **own** ordinary high flow.
 
     GloFAS through Open-Meteo gives forecast peak discharge over the coming
-    week against the trailing month; a ratio is what is actually available
-    without credentials. EFAS return periods (2/5/20 y) would be the better
-    signal and are a follow-up -- they need a CDS account and a NetCDF
-    dependency, so a client for them could not be exercised here.
+    week; what it is divided by decides whether the number means the same
+    thing on the Po and on one of its Apennine tributaries. Against the
+    trailing month it did not, and the filter that tried to repair it
+    silenced 101 nodes out of 105 in Emilia-Romagna (#108). Against a
+    percentile of the node's own multi-year series it does, and no filter is
+    needed. EFAS return periods (2/5/20 y) would still be the better signal
+    -- they need a CDS account and a NetCDF dependency, so a client for them
+    could not be exercised here.
     """
 
-    #: Ratio at or below which the river is behaving normally.
-    normal_ratio: float = Field(..., ge=1.0)
+    #: Ratio at or below which the river is behaving normally. Not ``>= 1``:
+    #: the reference is the river's ordinary *high* flow, so an ordinary day
+    #: sits well below 1 (measured median 0.40 in Emilia-Romagna).
+    normal_ratio: float = Field(..., gt=0.0)
     #: Ratio at which the fluvial trigger saturates at 1.0.
-    saturation_ratio: float = Field(..., gt=1.0)
+    saturation_ratio: float = Field(..., gt=0.0)
+    #: Which percentile of the node's own daily discharge is "ordinary high
+    #: flow". The divisor of the ratio above: changing it rescales the two
+    #: thresholds, so the three move together or not at all.
+    reference_percentile: float = Field(default=0.90, gt=0.0, lt=1.0)
+    #: How much history the percentile is computed over.
+    reference_window_days: int = Field(default=730, ge=365)
 
     @model_validator(mode="after")
     def _ordered(self) -> FluvialBlock:

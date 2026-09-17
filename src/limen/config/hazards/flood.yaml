@@ -89,15 +89,62 @@ pluvial:
   dry_soil_factor: 0.45
 
 fluvial:
-  # Portata prevista rapportata alla normale recente (GloFAS via Open-Meteo:
-  # picco dei prossimi 7 giorni / media dei 31 precedenti).
+  # Portata prevista rapportata alla **piena ordinaria del nodo stesso**
+  # (GloFAS via Open-Meteo: picco dei prossimi 7 giorni / q90 della sua serie
+  # giornaliera su due anni).
   #
   # Le soglie di tempo di ritorno di EFAS (2/5/20 anni) sarebbero il segnale
   # migliore, ma richiedono un account CDS e una dipendenza NetCDF: un client
   # che non si può eseguire non è un client. Il rapporto è ciò che è
   # disponibile senza credenziali, ed è già ingerito.
-  normal_ratio:     1.5
-  saturation_ratio: 4.0
+  #
+  # **Il denominatore è cambiato (#108), e con esso le due soglie.** Prima era
+  # la media dei 31 giorni precedenti, che rende il numero incomparabile fra
+  # corsi d'acqua di taglia diversa: il rapporto esplode sui rigagnoli (62,0
+  # su un fosso dove i fiumi veri stavano a 1,25). La toppa era scartare i
+  # nodi il cui deflusso di base stesse sotto il 10 % del massimo dell'AOI, e
+  # in Emilia-Romagna il 10 % del Po vale 186 m³/s: restavano 4 nodi su 105, e
+  # Lamone, Senio e Montone — i fiumi esondati nel 2023 e nel 2024 — erano fra
+  # gli scartati. Il ramo fluviale era spento proprio dove serviva.
+  #
+  # Misurato su GloFAS 2023-2024, reticolo a 0,2°, quota di giorni-nodo sopra
+  # la soglia di normalità per classe di portata media:
+  #
+  #   classe (m³/s)     <0,5   0,5-2   2-20   20-200   >200
+  #   picco/media 31 g   43%     41%    41%      41%    30%
+  #   picco/q90 del nodo 13%     12%    12%      11%     2%
+  #
+  # Col vecchio denominatore la soglia scattava su due giorni su cinque in
+  # **ogni** classe: un fosso e il Reno erano indistinguibili, ed è per questo
+  # che serviva un filtro. Col percentile del nodo la quota è omogenea e
+  # dieci volte più bassa sui grandi fiumi, che è il comportamento atteso: il
+  # Po supera la sua piena ordinaria di rado. Il filtro non serve più.
+  #
+  # Derivazione delle due soglie, stesso metodo del ramo pluviale — due
+  # percentili e un cutoff di classe, nessun parametro libero. Su 75.109
+  # giorni-nodo in Emilia-Romagna e 51 giorni-nodo di alluvione vera in
+  # Romagna (16-17 maggio 2023, 19 settembre 2024):
+  #
+  #   picco/q90          p10    p50    p75    p90    p99
+  #   giorni qualunque  0,07   0,40   0,90   1,63   4,49
+  #   giorni di piena   1,66   6,39   8,05   8,29  10,15
+  #
+  # `normal_ratio` = 1,6, appena sotto il p10 dei giorni di piena (1,66) e
+  # sopra il p90 dei giorni qualunque (1,63): gli eventi veri stanno sulla
+  # rampa, l'ordinario sotto il suo piede. `saturation_ratio` risolve
+  # (6,39 − 1,6) / (S − 1,6) = 0,45 / 0,80, cioè mette il giorno di piena
+  # mediano sul confine della classe alta alla suscettibilità mediana delle
+  # celle allagate: S = 10,1 → 10,0.
+  normal_ratio:     1.6
+  saturation_ratio: 10.0
+
+  # Come si misura la piena ordinaria di un nodo. Il q90 e non il massimo: il
+  # massimo di due anni è un singolo evento, e rapportarsi a quello direbbe
+  # "tutto normale" fino alla ripetizione della peggiore piena del biennio.
+  # Due anni e non uno: sotto un ciclo stagionale completo il percentile
+  # racconta la stagione in cui è stato calcolato.
+  reference_percentile:  0.90
+  reference_window_days: 730
 
 imperviousness:
   # Suolo impermeabilizzato: amplifica **solo** il ramo pluviale. Il cemento
