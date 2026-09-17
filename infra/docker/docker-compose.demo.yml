@@ -25,6 +25,14 @@ services:
     image: limen/postgres:16-3.5
     container_name: limen-postgres
     restart: unless-stopped
+    # SIGINT = "fast shutdown": Postgres chiude le connessioni, fa un
+    # checkpoint e esce pulito. Il SIGTERM di default e' lo "smart shutdown",
+    # che **aspetta** che i client si scolleghino: con l'API attaccata non
+    # finisce mai, dopo 10 s arriva il SIGKILL e il cluster riparte come dopo
+    # un crash. Su questo hardware quel recovery e' un fsync dell'intera
+    # cartella dati: misurato oltre 10 minuti su 25 GB.
+    stop_signal: SIGINT
+    stop_grace_period: 5m
     # Parallel workers on national-scale aggregations (312k cells) blow
     # through Docker's 64 MB /dev/shm default → DiskFullError.
     shm_size: 1gb
