@@ -73,7 +73,10 @@ from limen.integrations.openmeteo.flood import MIN_REFERENCE_DAYS, percentile_of
 
 log = get_logger(__name__)
 
-REPORTS_DIR = Path("reports")
+#: Dove finisce il report. Configurabile perche' dentro un container la
+#: directory di lavoro non e' scrivibile: il primo giro di questo backtest
+#: ha calcolato per tre minuti e poi e' morto su `mkdir: Permission denied`.
+REPORTS_DIR = Path(os.getenv("LIMEN_REPORTS_DIR", "reports"))
 
 _AOI_ENV = "LIMEN_BACKTEST_FLOOD_AOI"
 _START_ENV = "LIMEN_BACKTEST_FLOOD_START"
@@ -400,10 +403,23 @@ def _node_reference(daily: dict[date, float], *, percentile: float, min_days: in
     return percentile_of(values, percentile)
 
 
+#: Serie gia' scaricate in questa esecuzione, per (nodi, inizio, fine).
+#: Le due repliche `issued` e `observed` girano sulle stesse finestre e
+#: chiedevano quindi due volte gli stessi due anni di portate per 135 nodi:
+#: Open-Meteo risponde 429 alla seconda tornata, e una finestra senza
+#: riferimento e' una finestra col ramo fluviale spento — cioe' una misura
+#: che non vale. Misurato: 4 richieste su 8 respinte.
+_SERIES_CACHE: dict[tuple[tuple[tuple[float, float], ...], date, date], list[_NodeSeries]] = {}
+
+
 async def _fetch_node_series(
     nodes: list[tuple[float, float]], *, start: date, end: date
 ) -> list[_NodeSeries]:
     """Una serie per nodo: previsioni emesse, osservato, suolo, portata."""
+    chiave = (tuple(nodes), start, end)
+    if chiave in _SERIES_CACHE:
+        log.info("backtest_flood.series_cached", nodes=len(nodes), start=str(start), end=str(end))
+        return _SERIES_CACHE[chiave]
     from limen.integrations.openmeteo.flood import FLOOD_URL, OpenMeteoFloodClient
 
     client = OpenMeteoFloodClient()
@@ -492,6 +508,7 @@ async def _fetch_node_series(
         reference_percentile=fluvial.reference_percentile,
         reference_window_days=fluvial.reference_window_days,
     )
+    _SERIES_CACHE[chiave] = out
     return out
 
 
