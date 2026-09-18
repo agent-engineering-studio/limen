@@ -31,6 +31,8 @@ bundle assembly changes.
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from limen.agents.workflow_runtime.executor import Executor, handler
 from limen.config.settings import get_settings
 from limen.core.logging import get_logger
@@ -45,13 +47,26 @@ log = get_logger(__name__)
 
 # GREATEST ignores NULL operands in PostgreSQL, so an AOI with only one
 # of the two sources still yields that source's date.
+#: Il ramo hotspot legge `fire_hotspots` e non il rollup `fire_events`: il
+#: feed NRT (`run_firms_sync`) scrive solo qui, mentre il rollup lo ricostruisce
+#: la CLI storica, quindi leggerlo perderebbe proprio gli incendi delle ultime
+#: ore — cioe' il motivo per cui questo ramo esiste.
+#:
+#: Il **limite temporale** e' invece obbligatorio. Senza, la query incrociava
+#: 392.000 punti col poligono regionale a ogni tick: a cache fredda 106 s
+#: contro i 30 s di `DB__COMMAND_TIMEOUT_SECONDS`, e il TimeoutError usciva
+#: dall'executor facendo cadere lo sweep **intero** dell'AOI (misurato: 16
+#: regioni su 20 in errore). Il limite non cambia il risultato, perche' oltre
+#: `post_fire.window_months_max` il fattore F e' neutralizzato dieci righe piu'
+#: sotto: si smette di leggere cio' che si sarebbe buttato via. Misurato su
+#: it-abruzzo: da 3.195 blocchi letti a 115.
 _QUERY_SQL = """
 SELECT GREATEST(
     (
         SELECT MAX(fp.fire_date)
         FROM fire_perimeters fp
         JOIN aoi a ON ST_Intersects(a.geom, fp.geom)
-        WHERE a.id = $1
+        WHERE a.id = $1 AND fp.fire_date >= $3
     ),
     (
         SELECT MAX(clustered.acq_date)
@@ -59,7 +74,7 @@ SELECT GREATEST(
             SELECT fh.acq_date
             FROM fire_hotspots fh
             JOIN aoi a ON ST_Intersects(a.geom, fh.geom)
-            WHERE a.id = $1
+            WHERE a.id = $1 AND fh.acq_date >= $3
             GROUP BY fh.acq_date
             HAVING COUNT(*) >= $2
         ) AS clustered
@@ -79,8 +94,13 @@ class FireCheckExecutor(Executor):
 
     @handler
     async def run(self, ctx: MonitoringContext) -> MonitoringContext:
+        post_fire = load_regional_thresholds().post_fire
+        # La stessa finestra che neutralizza il fattore piu' sotto, qui usata
+        # per non leggere nemmeno: 30,44 giorni e' il mese medio, coerente col
+        # `/30` con cui i mesi si ricavano subito dopo.
+        oldest = ctx.valuation_time.date() - timedelta(days=post_fire.window_months_max * 30.44)
         async with acquire() as conn:
-            row = await conn.fetchrow(_QUERY_SQL, ctx.aoi_id, self._min_hotspots)
+            row = await conn.fetchrow(_QUERY_SQL, ctx.aoi_id, self._min_hotspots, oldest)
 
         last_fire = row["last_fire"] if row else None
         if last_fire is None:
@@ -89,7 +109,6 @@ class FireCheckExecutor(Executor):
 
         delta_days = (ctx.valuation_time.date() - last_fire).days
         months = max(0.0, delta_days / 30.0)
-        post_fire = load_regional_thresholds().post_fire
         if months > post_fire.window_months_max:
             # Out of the amplification window — record but neutralise.
             log.info(
