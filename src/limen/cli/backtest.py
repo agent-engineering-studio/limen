@@ -57,7 +57,9 @@ from limen.integrations.openmeteo.grid import build_rain_nodes, nearest_node
 
 log = get_logger(__name__)
 
-REPORTS_DIR = Path("./reports")
+#: Dove finisce il report. Configurabile con `LIMEN_REPORTS_DIR` perche'
+#: dentro un container la directory di lavoro non e' scrivibile.
+REPORTS_DIR = Path(os.getenv("LIMEN_REPORTS_DIR", "reports"))
 # March 2009 Southern-Italy storm — 23 ITALICA events in Puglia/Basilicata
 # cluster on the 7th, so the default window has a real truth set.
 _DEFAULT_START = datetime(2009, 3, 4, 0, 0, tzinfo=UTC)
@@ -189,6 +191,42 @@ def _synthesise_rainfall(
     return RainfallSeries(samples=sliced)
 
 
+def _match_truth(
+    alert_times: dict[str, list[datetime]],
+    truth: dict[str, datetime],
+    *,
+    lead_max_hours: float,
+) -> tuple[int, int, list[float]]:
+    """Hit, mancate e preavvisi, confrontando allerte ed eventi.
+
+    Un hit e' **un'allerta qualunque** nelle ore che precedono l'evento, non
+    la prima allerta della finestra. La versione precedente guardava solo la
+    piu' antica: con una soglia permissiva quasi ogni cella si accende il
+    primo giorno, e una cella che al momento della frana era in allerta da
+    giorni risultava *mancata* perche' il suo primo allarme cadeva fuori
+    dall'orizzonte. Misurato in Liguria a `Moderate`: il 72% delle ore-cella
+    era in allerta e il backtest dichiarava 118 mancate su 131.
+
+    Il preavviso riportato e' quello dell'allerta piu' precoce **ancora dentro
+    l'orizzonte**: il tempo che un operatore ha avuto davvero.
+    """
+    hits = 0
+    misses = 0
+    leads: list[float] = []
+    for cell_id, event_time in truth.items():
+        dentro = [
+            t
+            for t in alert_times.get(cell_id, ())
+            if 0 < (event_time - t).total_seconds() / 3600.0 <= lead_max_hours
+        ]
+        if not dentro:
+            misses += 1
+            continue
+        hits += 1
+        leads.append((event_time - min(dentro)).total_seconds() / 3600.0)
+    return hits, misses, leads
+
+
 def _evaluate(
     *,
     aoi_id: str,
@@ -208,7 +246,11 @@ def _evaluate(
     # Assign each cell to its nearest rainfall node once.
     cell_node = [nearest_node(lon, lat, nodes) for _, lon, lat in cells]
 
-    earliest_alert: dict[str, datetime] = {}
+    # Gli istanti di allerta delle sole celle di verita': per decidere un hit
+    # serve sapere se la cella era in allerta **nelle ore prima dell'evento**,
+    # non se lo era stata una volta a inizio finestra.
+    alert_times: dict[str, list[datetime]] = {cell_id: [] for cell_id in truth}
+    alerted_cells: set[str] = set()
     alerts_total = 0
     for t in hours:
         # Slice each node's antecedent series once, then reuse across the
@@ -226,30 +268,13 @@ def _evaluate(
             scored = engine.score(bundle)
             if _level_at_least(scored.level, alert_level):
                 alerts_total += 1
-                if sf.cell_id not in earliest_alert:
-                    earliest_alert[sf.cell_id] = t
+                alerted_cells.add(sf.cell_id)
+                if sf.cell_id in alert_times:
+                    alert_times[sf.cell_id].append(t)
 
-    hits = 0
-    misses = 0
-    leads: list[float] = []
-    for cell_id, event_time in truth.items():
-        alert_time = earliest_alert.get(cell_id)
-        if alert_time is None:
-            misses += 1
-            continue
-        lead_hours = (event_time - alert_time).total_seconds() / 3600.0
-        # A hit is any alert BEFORE the event within the warning horizon.
-        # Rainfall-triggered landslides have multi-day antecedent rain, so a
-        # 3-5 day lead is a *good* early warning, not a miss; the old 24 h cap
-        # wrongly discarded them. Mean lead is reported separately against the
-        # section-2.5 lead_time_hours_min quality gate.
-        if 0 < lead_hours <= lead_max_hours:
-            hits += 1
-            leads.append(lead_hours)
-        else:
-            misses += 1
+    hits, misses, leads = _match_truth(alert_times, truth, lead_max_hours=lead_max_hours)
 
-    false_alarms = max(0, len(earliest_alert) - hits)
+    false_alarms = max(0, len(alerted_cells) - hits)
     hit_rate = hits / len(truth) if truth else 0.0
     far = false_alarms / (hits + false_alarms) if (hits + false_alarms) else 0.0
     mean_lead = sum(leads) / len(leads) if leads else 0.0
@@ -368,7 +393,13 @@ def _parse_dt(env_name: str, default: datetime) -> datetime:
     raw = os.getenv(env_name)
     if not raw:
         return default
-    return datetime.fromisoformat(raw)
+    parsed = datetime.fromisoformat(raw)
+    # Una data scritta a mano (`2019-11-01`) non porta il fuso, e piu' avanti
+    # finisce a confronto con i campioni di pioggia, che ce l'hanno: senza
+    # questa riga il comando muore a meta' con "can't compare offset-naive and
+    # offset-aware datetimes". Il default e' gia' in UTC, quindi il difetto si
+    # vedeva solo passando la finestra da variabile d'ambiente.
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
 def _parse_level(env_name: str, default: RiskLevel) -> RiskLevel:

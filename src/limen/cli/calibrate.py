@@ -40,7 +40,9 @@ from limen.data.repos.norm_stats_repo import upsert_many as upsert_norms
 
 log = get_logger(__name__)
 
-REPORTS_DIR = Path("./reports")
+#: Dove finisce il report. Configurabile con `LIMEN_REPORTS_DIR` perche'
+#: dentro un container la directory di lavoro non e' scrivibile.
+REPORTS_DIR = Path(os.getenv("LIMEN_REPORTS_DIR", "reports"))
 _FACTORS_FOR_NORM = ("iffi_density_500", "slope_deg", "pai_class_norm")
 
 

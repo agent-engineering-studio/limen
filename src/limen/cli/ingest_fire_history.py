@@ -69,7 +69,9 @@ log = get_logger(__name__)
 
 SOURCE = "nasa"
 DATASET = "firms_archive"
-REPORTS_DIR = Path("reports")
+#: Dove finisce il report. Configurabile con `LIMEN_REPORTS_DIR` perche'
+#: dentro un container la directory di lavoro non e' scrivibile.
+REPORTS_DIR = Path(os.getenv("LIMEN_REPORTS_DIR", "reports"))
 
 #: Il bootstrap set-based su 312.000 celle esce dal timeout di default del
 #: pool, come gli altri passi di `static_bootstrap`.

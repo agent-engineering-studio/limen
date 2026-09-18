@@ -25,7 +25,9 @@ from limen.integrations._http import SharedHttpClient
 
 log = get_logger(__name__)
 
-REPORTS_DIR = Path("./reports")
+#: Dove finisce il report. Configurabile con `LIMEN_REPORTS_DIR` perche'
+#: dentro un container la directory di lavoro non e' scrivibile.
+REPORTS_DIR = Path(os.getenv("LIMEN_REPORTS_DIR", "reports"))
 
 
 def _write_report(run: ForecastRun) -> Path:

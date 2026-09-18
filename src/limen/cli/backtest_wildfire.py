@@ -62,7 +62,9 @@ from limen.integrations.openmeteo.grid import build_snapped_nodes, nearest_node
 
 log = get_logger(__name__)
 
-REPORTS_DIR = Path("reports")
+#: Dove finisce il report. Configurabile con `LIMEN_REPORTS_DIR` perche'
+#: dentro un container la directory di lavoro non e' scrivibile.
+REPORTS_DIR = Path(os.getenv("LIMEN_REPORTS_DIR", "reports"))
 
 _AOI_ENV = "LIMEN_BACKTEST_WILDFIRE_AOI"
 _START_ENV = "LIMEN_BACKTEST_WILDFIRE_START"
