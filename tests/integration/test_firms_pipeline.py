@@ -176,7 +176,14 @@ async def test_hotspots_open_the_post_fire_window_without_an_effis_perimeter(
     today = datetime.now(UTC).date()
     await upsert_hotspots(
         [
-            FireHotspot(source=_SOURCE, acq_date=today, acq_time=t, latitude=lat, longitude=lon)
+            FireHotspot(
+                source=_SOURCE,
+                acq_date=today,
+                acq_time=t,
+                latitude=lat,
+                longitude=lon,
+                detection_type=0,
+            )
             for t in (1218, 1400, 1542)
         ]
     )
@@ -189,6 +196,40 @@ async def test_hotspots_open_the_post_fire_window_without_an_effis_perimeter(
     # one flare or glint pixel is not a fire.
     strict = await FireCheckExecutor(min_hotspots=5).run(ctx)
     assert strict.months_since_fire is None
+
+
+async def test_industrial_hotspots_do_not_open_the_post_fire_window(
+    reset_db: None, pg_pool: object
+) -> None:
+    """Un'acciaieria non e' un incendio (#124).
+
+    FIRMS la vede eccome — alta confidenza, alta potenza radiativa, perche' e'
+    davvero molto calda — e il filtro di qualita' non la distingue da un rogo.
+    Solo `detection_type` lo fa. Senza questo filtro, in Puglia il motore
+    riteneva bruciato qualcosa in 272 giorni su 366 e teneva l'amplificazione
+    post-incendio accesa tutto l'anno.
+    """
+    aoi_id, lat, lon = await _seed_test_aoi()
+    today = datetime.now(UTC).date()
+    await upsert_hotspots(
+        [
+            FireHotspot(
+                source=_SOURCE,
+                acq_date=today,
+                acq_time=t,
+                latitude=lat,
+                longitude=lon,
+                # 2 = sorgente statica al suolo. 1 sarebbe un vulcano, 3 offshore.
+                detection_type=2,
+            )
+            for t in (1218, 1400, 1542)
+        ]
+    )
+    ctx = MonitoringContext(aoi_id=aoi_id, valuation_time=datetime.now(UTC))
+
+    updated = await FireCheckExecutor(min_hotspots=2).run(ctx)
+
+    assert updated.months_since_fire is None
 
 
 async def test_firms_monitoring_triggers_the_aoi_once_then_cools_down(
