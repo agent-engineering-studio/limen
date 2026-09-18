@@ -47,6 +47,17 @@ log = get_logger(__name__)
 
 # GREATEST ignores NULL operands in PostgreSQL, so an AOI with only one
 # of the two sources still yields that source's date.
+#: `detection_type = 0` tiene fuori cio' che brucia ma non e' un incendio
+#: (#124). FIRMS classifica la sorgente: 0 vegetazione, 1 vulcano, 2 sorgente
+#: statica al suolo, 3 offshore. Senza il filtro, in Puglia il motore riteneva
+#: bruciato qualcosa in **272 giorni su 366** contro i 173 veri, perche' l'ILVA
+#: di Taranto e' calda tutti i giorni — e' lo stesso errore gia' corretto per
+#: `fire_density`, dove la cella piu' incendiata d'Italia risultava
+#: un'acciaieria. Il filtro di qualita' non la toglie e non puo': e' una misura
+#: corretta di un oggetto molto caldo. Le righe con `detection_type` NULL
+#: restano fuori, come per `fire_events`: sbagliare per difetto perde qualche
+#: giorno, sbagliare per eccesso tiene il fattore F acceso per sempre.
+#:
 #: Il ramo hotspot legge `fire_hotspots` e non il rollup `fire_events`: il
 #: feed NRT (`run_firms_sync`) scrive solo qui, mentre il rollup lo ricostruisce
 #: la CLI storica, quindi leggerlo perderebbe proprio gli incendi delle ultime
@@ -74,7 +85,7 @@ SELECT GREATEST(
             SELECT fh.acq_date
             FROM fire_hotspots fh
             JOIN aoi a ON ST_Intersects(a.geom, fh.geom)
-            WHERE a.id = $1 AND fh.acq_date >= $3
+            WHERE a.id = $1 AND fh.acq_date >= $3 AND fh.detection_type = 0
             GROUP BY fh.acq_date
             HAVING COUNT(*) >= $2
         ) AS clustered
