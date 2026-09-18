@@ -162,6 +162,9 @@ services:
       # for Italian prose. 'fast' is the 4B, 'extract' the JSON profile.
       LLM__LLAMACPP_MODEL: ${LLM__LLAMACPP_MODEL:-chat}
       LLM__LLAMACPP_API_KEY: ${LLM__LLAMACPP_API_KEY:-}
+      # Dove scrivono i comandi CLI: cataloghi in cache e report dei backtest.
+      LIMEN_DATA_DIR: /var/lib/limen/datasets
+      LIMEN_REPORTS_DIR: /var/lib/limen/reports
       # Ceiling for roles with no per-role override. Sized for the GPU-resident
       # gateway models on NVMe (a swap is seconds). Was 900 s, from when the
       # GGUFs lived on spinning disk; that high a ceiling now only delays the
@@ -224,6 +227,12 @@ services:
       - "${LIMEN_API_BIND:-127.0.0.1}:8080:8080"
     volumes:
       - limen-objects:/var/lib/limen/objects
+      # Cataloghi scaricati (e-ITALICA, archivi FIRMS, mosaici) e report dei
+      # backtest. Senza questi due l'immagine non ha dove scrivere: la
+      # directory di lavoro e' di root, il processo gira come `limen`, e i
+      # comandi morivano su "Permission denied" dopo aver lavorato per minuti.
+      - ${LIMEN_DATASETS_DIR:-/srv/data/limen-datasets}:/var/lib/limen/datasets
+      - ${LIMEN_REPORTS_HOST_DIR:-/srv/data/limen-reports}:/var/lib/limen/reports
       # DTM / shared vector data (read-only). Same folder GeoServer serves.
       - ${GEOSERVER_SHAPEFILE_DIR:-../../../mcp-geoserver/data}:/data:ro
       # Gli **artefatti** del challenger. Il registry sta su Postgres (#78) e
@@ -273,6 +282,12 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - limen-objects:/var/lib/limen/objects
+      # Cataloghi scaricati (e-ITALICA, archivi FIRMS, mosaici) e report dei
+      # backtest. Senza questi due l'immagine non ha dove scrivere: la
+      # directory di lavoro e' di root, il processo gira come `limen`, e i
+      # comandi morivano su "Permission denied" dopo aver lavorato per minuti.
+      - ${LIMEN_DATASETS_DIR:-/srv/data/limen-datasets}:/var/lib/limen/datasets
+      - ${LIMEN_REPORTS_HOST_DIR:-/srv/data/limen-reports}:/var/lib/limen/reports
       - ${GEOSERVER_SHAPEFILE_DIR:-../../../mcp-geoserver/data}:/data:ro
       # Il registry sta su Postgres (#78): niente più mlflow.db montato. Gli
       # **artefatti** restano qui, allo stesso percorso assoluto dell'host,
