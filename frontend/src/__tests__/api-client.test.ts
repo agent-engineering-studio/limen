@@ -47,6 +47,39 @@ describe("ApiClient", () => {
     );
   });
 
+  it("surfaces a non-JSON error body instead of a stream error", async () => {
+    // Il difetto visto in pagina: il ramo d'errore provava `json()` e, al
+    // fallimento, `text()` sullo stesso corpo gia' consumato. Il risultato era
+    // "Failed to execute 'text' on 'Response': body stream already read"
+    // stampato al posto dell'errore vero — con l'API giu', la dashboard
+    // ripeteva tre volte un messaggio che non c'entrava nulla.
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("502 Bad Gateway", { status: 502 }));
+    const client = new ApiClient({ baseUrl: "http://api", fetchImpl });
+
+    await expect(client.getLatestRisk("it-puglia")).rejects.toMatchObject({
+      status: 502,
+      body: "502 Bad Gateway",
+    });
+  });
+
+  it("keeps a JSON error body parsed", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ detail: "non trovato" }), {
+          status: 404,
+        }),
+      );
+    const client = new ApiClient({ baseUrl: "http://api", fetchImpl });
+
+    await expect(client.getLatestRisk("assente")).rejects.toMatchObject({
+      status: 404,
+      body: { detail: "non trovato" },
+    });
+  });
+
   it("encodes path parameters", async () => {
     const fetchImpl = vi
       .fn()
