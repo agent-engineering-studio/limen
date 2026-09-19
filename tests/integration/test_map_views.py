@@ -125,8 +125,14 @@ async def test_refresh_latest_risk_returns_status(reset_db: None, pg_pool: objec
     assert code in {0, 1}
 
 
-async def test_tiles_redirect_when_configured(reset_db: None, pg_pool: object) -> None:
-    """With API__PG_TILESERV_URL set, /api/tiles 307-redirects to pg_tileserv."""
+async def test_tiles_are_proxied_not_redirected(reset_db: None, pg_pool: object) -> None:
+    """I byte arrivano dall'API, e il nome interno di pg_tileserv non esce.
+
+    Rimandare il browser a `http://pg_tileserv:7800` lasciava la mappa vuota:
+    quel nome esiste solo dentro la rete Docker, e su una pagina https un salto
+    in http viene bloccato a prescindere. Misurato in produzione: l'endpoint
+    rispondeva 307 e nessuna cella compariva.
+    """
     settings = Settings.model_validate({"api": {"pg_tileserv_url": "http://pg_tileserv:7800"}})
     deps = await AppDependencies.build(
         pool=get_pool(),
@@ -137,10 +143,44 @@ async def test_tiles_redirect_when_configured(reset_db: None, pg_pool: object) -
     app.state.deps = deps
     app.state.ready = True
     app.state.ready_detail = "test"
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        r = await client.get("/api/tiles/mv_latest_risk/8/256/256.pbf", follow_redirects=False)
-    assert r.status_code == 307
-    location = r.headers.get("location", "")
-    assert location.startswith("http://pg_tileserv:7800/")
-    assert location.endswith("/mv_latest_risk/8/256/256.pbf")
+    import respx
+
+    tile = b"\x1a\x2f tile finta"
+    with respx.mock(assert_all_called=True) as mock:
+        rotta = mock.get("http://pg_tileserv:7800/mv_latest_risk/8/256/256.pbf").respond(
+            200, content=tile, headers={"content-type": "application/x-protobuf"}
+        )
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            r = await client.get("/api/tiles/mv_latest_risk/8/256/256.pbf", follow_redirects=False)
+
+    assert rotta.called
+    assert r.status_code == 200
+    assert r.content == tile
+    assert r.headers["content-type"] == "application/x-protobuf"
+    # Nessun redirect: il browser non deve mai vedere l'indirizzo interno.
+    assert "location" not in r.headers
+
+
+async def test_tiles_report_an_unreachable_tileserv(reset_db: None, pg_pool: object) -> None:
+    """pg_tileserv giù è 502, non un errore attribuito al chiamante."""
+    import respx
+
+    settings = Settings.model_validate({"api": {"pg_tileserv_url": "http://pg_tileserv:7800"}})
+    deps = await AppDependencies.build(
+        pool=get_pool(),
+        settings=settings,
+        llm_factory=StubLlmClientFactory(),
+    )
+    app = build_app_with_deps(deps)
+    app.state.deps = deps
+    app.state.ready = True
+    app.state.ready_detail = "test"
+
+    with respx.mock as mock:
+        mock.get(url__regex=r".*pg_tileserv.*").mock(side_effect=httpx.ConnectError("giù"))
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            r = await client.get("/api/tiles/risk/8/256/256.pbf")
+
+    assert r.status_code == 502
