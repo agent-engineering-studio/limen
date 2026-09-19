@@ -65,11 +65,18 @@ export class ApiClient {
       },
     });
     if (!response.ok) {
-      let body: unknown = null;
+      // Il corpo si legge UNA volta sola e poi si prova a interpretarlo.
+      // Prima si tentava `json()` e, fallendo, `text()`: ma il primo tentativo
+      // consuma comunque il flusso, quindi il secondo lanciava "body stream
+      // already read" e quel messaggio finiva in pagina al posto dell'errore
+      // vero — con l'API giù, la dashboard diceva tre volte una cosa che non
+      // c'entrava nulla.
+      const raw = await response.text().catch(() => "");
+      let body: unknown = raw || null;
       try {
-        body = await response.json();
+        body = raw ? JSON.parse(raw) : null;
       } catch {
-        body = await response.text();
+        // Non era JSON: resta il testo, che è comunque più informativo.
       }
       throw new ApiClientError(
         `request to ${path} failed with ${response.status}`,
