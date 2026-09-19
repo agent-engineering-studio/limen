@@ -22,7 +22,14 @@ const COMUNE_MIN_ZOOM = 7;
 const COMUNE_MAX_ZOOM = 11;
 // Sotto questo zoom una cella da 1 km è sub-pixel: mostriamo il
 // choropleth regionale (20 poligoni) invece dei 312k poligoni cella.
-const CELL_MIN_ZOOM = 7;
+//
+// Nove e non sette, misurato sul peso della tile che il browser deve
+// scaricare per disegnarla: 1,85 MB a zoom 5, 726 kB a 7, 44 kB a 9, 4 kB a
+// 11. A sette il tile server superava il proprio limite di 5 s e rispondeva
+// 500, quindi la mappa restava vuota — e le richieste a vuoto saturavano il
+// pool, facendo cadere anche le tile leggere delle regioni. Fra 7 e 9 non
+// resta un buco: c'è il rollup comunale, che copre 7-11.
+const CELL_MIN_ZOOM = 9;
 const WMS_PAI_LAYER = "ispra:mosaicatura_ispra_2020_2021_aree_pericolosita_frana_pai";
 const IFFI_REGIONS = [
   "abruzzo", "basilicata", "bolzano", "calabria", "campania",
@@ -175,7 +182,10 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       [SOURCE_ID]: {
         type: "vector",
         tiles: [tilesUrl],
-        minzoom: 5,
+        // La sorgente parte dallo stesso zoom del livello che la disegna.
+        // Prima partiva da 5: il browser scaricava tile da 1,85 MB che poi
+        // non mostrava a nessuno, e intanto il tile server andava in timeout.
+        minzoom: CELL_MIN_ZOOM,
         maxzoom: 14,
       },
       [REGION_SOURCE_ID]: {
@@ -258,6 +268,9 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         filter: ["in", ["get", "worst_class"], ["literal", ["High", "VeryHigh"]]],
         layout: {
           "text-field": ["to-string", ["get", "n_alert"]],
+          // Dichiarato invece che lasciato al default ("Open Sans Regular"):
+          // il default e' implicito e il server dei glifi potrebbe non averlo.
+          "text-font": ["Open Sans Regular"],
           "text-size": 12,
         },
         paint: {
@@ -340,6 +353,10 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       container: containerRef.current,
       style: {
         version: 8,
+        // Obbligatorio: il contatore sui comuni e' un livello `symbol` con
+        // `text-field`, e senza `glyphs` MapLibre rifiuta lo stile intero —
+        // niente celle, niente regioni, nemmeno lo sfondo.
+        glyphs: config.mapGlyphsUrl,
         sources,
         layers,
       },

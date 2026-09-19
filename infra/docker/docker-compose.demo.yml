@@ -439,6 +439,10 @@ services:
       # Host ammessi dal dev server di Vite: dietro proxy l'Host e' il
       # dominio pubblico, e senza elencarlo Vite blocca ogni richiesta.
       VITE_ALLOWED_HOSTS: ${VITE_ALLOWED_HOSTS:-}
+      # `off` dietro un proxy che non inoltra le WebSocket: senza, il client
+      # HMR ricarica la pagina di continuo e nessuna richiesta arriva a
+      # completarsi. Vedi la nota in vite.config.ts.
+      VITE_HMR: ${VITE_HMR:-}
       # Phase 12 — optional static PMTiles served by the geodata stack.
       # Leave unset to keep the overlays hidden. Production deploys the
       # files behind nginx / Caddy from `$GEODATA_PMTILES_DIR`.

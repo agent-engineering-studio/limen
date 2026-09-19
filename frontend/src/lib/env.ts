@@ -17,6 +17,7 @@ interface ViteEnv {
   readonly VITE_IFFI_PMTILES_URL?: string;
   /** GeoServer WMS endpoint for the ISPRA overlays (PAI, IFFI). */
   readonly VITE_GEOSERVER_WMS_URL?: string;
+  readonly VITE_MAP_GLYPHS_URL?: string;
 }
 
 const env: ViteEnv =
@@ -48,4 +49,13 @@ export const config = {
   iffiPmtilesUrl: env.VITE_IFFI_PMTILES_URL,
   geoserverWmsUrl:
     env.VITE_GEOSERVER_WMS_URL ?? "http://localhost:8081/geoserver/ispra/wms",
+  // Da dove MapLibre prende i caratteri per le etichette. Senza questa voce
+  // lo stile non e' valido: un livello `symbol` con `text-field` la pretende,
+  // e MapLibre rifiuta lo stile **intero** — mappa completamente bianca,
+  // sfondo compreso, con un solo errore in console.
+  // Il default e' un server pubblico perche' la mappa deve funzionare appena
+  // installata, come gia' accade per lo sfondo OpenStreetMap; un deployment
+  // che non vuole dipendenze esterne punta questa variabile ai propri glifi.
+  mapGlyphsUrl:
+    env.VITE_MAP_GLYPHS_URL ?? "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf",
 } as const;

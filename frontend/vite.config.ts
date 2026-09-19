@@ -16,6 +16,19 @@ const allowedHosts = (process.env.VITE_ALLOWED_HOSTS ?? "")
   .map((host) => host.trim())
   .filter(Boolean);
 
+// Dietro un reverse proxy che non inoltra le WebSocket, il client HMR non
+// riesce a connettersi, resta in "server connection lost" e **ricarica la
+// pagina** a ogni tentativo riuscito: ogni ricaricamento annulla le richieste
+// in volo, che nel browser compaiono come `cancelled` e non arrivano mai a
+// popolare la pagina. Misurato su nginx 1.28: l'upgrade a WebSocket torna 200
+// con l'HTML invece di 101.
+//
+// `VITE_HMR=off` spegne solo il canale di aggiornamento: il resto del dev
+// server continua a funzionare. La soluzione giusta resta servire la build
+// statica, ma questa evita che un'esposizione dietro proxy diventi
+// inutilizzabile senza che si capisca perche'.
+const hmrDisabled = (process.env.VITE_HMR ?? "").trim().toLowerCase() === "off";
+
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -24,6 +37,7 @@ export default defineConfig({
     // Omesso quando la variabile e' vuota, per non cambiare il
     // comportamento dello sviluppo in locale.
     ...(allowedHosts.length > 0 ? { allowedHosts } : {}),
+    ...(hmrDisabled ? { hmr: false as const } : {}),
   },
   build: {
     outDir: "dist",
