@@ -68,7 +68,7 @@ class RiskScoringExecutor(Executor):
         thresholds: HazardThresholds | None = None,
         engine: ScoringEngine[HazardBreakdown] | None = None,
         top_k: int = 10,
-        macroregion: str = "italy_default",
+        macroregion: str | None = None,
         hazard: HazardType = DEFAULT_HAZARD,
     ) -> None:
         super().__init__(name="RiskScoring")

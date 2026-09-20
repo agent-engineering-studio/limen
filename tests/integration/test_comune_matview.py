@@ -48,6 +48,9 @@ async def _seed_minimal() -> None:
 async def test_comune_rollup(reset_db: None) -> None:
     await _seed_minimal()
     async with acquire() as conn:
+        # Righe seminate a mano: lo stato della mappa lo scrive il passo di
+        # persistenza (#125), qui va ricostruito.
+        await conn.execute("SELECT rebuild_latest_risk()")
         await conn.execute("SELECT refresh_mv_latest_risk()")  # also refreshes comune
         row = await conn.fetchrow("SELECT * FROM mv_comune_risk WHERE istat_code='C001'")
     assert row is not None

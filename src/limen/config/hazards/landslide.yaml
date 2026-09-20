@@ -88,6 +88,42 @@ caine:
 # Kohler-Linsley: API_t = k · API_{t-1} + P_t (we approximate with a
 # rolling sum at horizons 30/60/90 d). The factor is a logistic transform
 # of the standardised anomaly vs the per-cell monthly baseline.
+# Quale curva di Caine vale per quale AOI (#122). Finché questo blocco non
+# è esistito, `macroregion` restava al default in tutti e quattro i punti che
+# avrebbero dovuto impostarla: l'Italia intera girava su `italy_default` e le
+# tre tarature regionali del 2026-07 erano configurazione mai eseguita. In
+# Puglia e Basilicata la produzione pretendeva 45,6 mm/72 h dove la taratura
+# ne chiede 39,9, cioè allertava **meno** del prescritto.
+#
+# Raggruppamento ISTAT (Nord / Centro / Mezzogiorno), non una scelta nostra:
+# è quello con cui sono state fittate le curve sul catalogo e-ITALICA.
+# Un'AOI non elencata — una provincia, un bacino, una regione nuova — ricade
+# su `italy_default`, che è la curva prudente.
+macroregion_by_aoi:
+  northern_italy:
+    - it-piemonte
+    - it-valle-d-aosta
+    - it-liguria
+    - it-lombardia
+    - it-trentino-alto-adige
+    - it-veneto
+    - it-friuli-venezia-giulia
+    - it-emilia-romagna
+  central_italy:
+    - it-toscana
+    - it-umbria
+    - it-marche
+    - it-lazio
+  southern_italy:
+    - it-abruzzo
+    - it-molise
+    - it-campania
+    - it-puglia
+    - it-basilicata
+    - it-calabria
+    - it-sicilia
+    - it-sardegna
+
 api:
   horizon_days:      30
   decay_k:           0.95

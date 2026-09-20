@@ -53,7 +53,8 @@ def _to_series(samples_in: Iterable[Any]) -> RainfallSeries:
 def assemble_bundles(
     ctx: MonitoringContext,
     *,
-    macroregion: str = "italy_default",
+    # None = la deduce il motore dall'AOI (#122); una stringa la impone.
+    macroregion: str | None = None,
 ) -> Sequence[CellFeatureBundle]:
     """Return one :class:`CellFeatureBundle` per cell in the context.
 

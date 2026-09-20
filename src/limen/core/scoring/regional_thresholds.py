@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator, model_validator
 
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 
@@ -152,6 +152,39 @@ class CaineBlock(_StrictModel):
         if "italy_default" not in v:
             raise ValueError("caine.macroregions must define 'italy_default'")
         return v
+
+
+class MacroregionAssignment(RootModel[dict[str, list[str]]]):
+    """Quale curva vale per quale AOI: ``{macroregione: [aoi, ...]}``.
+
+    Sta fuori da ``caine`` perché gli stessi nomi li usano anche
+    ``rain_floor`` e ``flood_forecast``: duplicare l'elenco in tre blocchi
+    vorrebbe dire poterli far divergere.
+    """
+
+    model_config = ConfigDict(strict=True, frozen=True)
+
+    @model_validator(mode="after")
+    def _no_aoi_twice(self) -> MacroregionAssignment:
+        seen: set[str] = set()
+        for aois in self.root.values():
+            for aoi in aois:
+                if aoi in seen:
+                    raise ValueError(f"AOI {aoi!r} assegnata a due macroregioni")
+                seen.add(aoi)
+        return self
+
+    def for_aoi(self, aoi_id: str) -> str:
+        """La macroregione dell'AOI, o ``italy_default`` se non assegnata.
+
+        Il fallback non è un ripiego silenzioso: una AOI nuova (una provincia,
+        un bacino) deve poter essere valutata prima che qualcuno decida in
+        quale gruppo sta, e la curva generica è la scelta prudente.
+        """
+        for name, aois in self.root.items():
+            if aoi_id in aois:
+                return name
+        return "italy_default"
 
 
 class RainFloorMacroregion(_StrictModel):
@@ -440,6 +473,26 @@ class RegionalThresholds(HazardThresholds):
     kinematic: KinematicBlock | None = None
     target_distribution: TargetDistribution
     calibration: CalibrationBlock
+    # Assente ⇒ ogni AOI usa la curva generica, cioè il comportamento che
+    # c'era prima della #122.
+    macroregion_by_aoi: MacroregionAssignment | None = None
+
+    @model_validator(mode="after")
+    def _assignment_names_exist(self) -> RegionalThresholds:
+        if self.macroregion_by_aoi is None:
+            return self
+        unknown = set(self.macroregion_by_aoi.root) - set(self.caine.macroregions)
+        if unknown:
+            raise ValueError(
+                f"macroregion_by_aoi cita macroregioni che caine non definisce: {sorted(unknown)}"
+            )
+        return self
+
+    def macroregion_for(self, aoi_id: str) -> str:
+        """La curva da usare per questa AOI."""
+        if self.macroregion_by_aoi is None:
+            return "italy_default"
+        return self.macroregion_by_aoi.for_aoi(aoi_id)
 
     def model_card(self) -> dict[str, Any]:
         return {

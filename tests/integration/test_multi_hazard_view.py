@@ -94,6 +94,9 @@ async def three_hazards(reset_db: None) -> AsyncIterator[None]:
         await _assess(conn, _CELLS[1], hazard=HazardType.FLOOD, score=0.70, level="High")
         await _assess(conn, _CELLS[1], hazard=HazardType.LANDSLIDE, score=0.68, level="High")
     async with acquire() as conn:
+        # `latest_risk` la scrive il passo che persiste lo sweep (#125); qui
+        # le righe sono seminate a mano, quindi si ricostruisce.
+        await conn.execute("SELECT rebuild_latest_risk()")
         await conn.execute("UPDATE mv_refresh_state SET refreshed_at = 'epoch'::timestamptz")
     await refresh_latest_risk()
     yield
