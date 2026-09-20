@@ -67,7 +67,7 @@ describe("parseInline", () => {
   it("separa grassetto, codice e link", () => {
     expect(parseInline("il **peso** è `0,35` — vedi [pagina](./02.md)")).toEqual([
       { kind: "text", text: "il " },
-      { kind: "strong", text: "peso" },
+      { kind: "strong", parts: [{ kind: "text", text: "peso" }] },
       { kind: "text", text: " è " },
       { kind: "code", text: "0,35" },
       { kind: "text", text: " — vedi " },
@@ -84,6 +84,30 @@ describe("parseInline", () => {
         href: "https://idrogeo.isprambiente.it/",
       },
     ]);
+  });
+});
+
+describe("parseInline, link dentro il grassetto", () => {
+  // L'indice scrive ogni voce come `**[titolo](path)**`: se il grassetto non
+  // guarda dentro, la pagina pubblica le parentesi quadre invece del link.
+  it("tiene il link cliccabile quando è dentro il grassetto", () => {
+    expect(parseInline("**[Limen in una pagina](./01-limen-in-una-pagina.md)**")).toEqual([
+      {
+        kind: "strong",
+        parts: [
+          {
+            kind: "link",
+            text: "Limen in una pagina",
+            href: "./01-limen-in-una-pagina.md",
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("non confonde due grassetti separati con uno solo", () => {
+    const parts = parseInline("**uno** e **due**");
+    expect(parts.filter((p) => p.kind === "strong")).toHaveLength(2);
   });
 });
 

@@ -18,9 +18,9 @@ function renderInline(parts: Inline[], keyPrefix: string): JSX.Element[] {
     const key = `${keyPrefix}-${i}`;
     switch (part.kind) {
       case "strong":
-        return <strong key={key}>{part.text}</strong>;
+        return <strong key={key}>{renderInline(part.parts, key)}</strong>;
       case "em":
-        return <em key={key}>{part.text}</em>;
+        return <em key={key}>{renderInline(part.parts, key)}</em>;
       case "code":
         return <code key={key}>{part.text}</code>;
       case "link": {
