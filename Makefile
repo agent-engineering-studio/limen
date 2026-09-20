@@ -46,7 +46,7 @@ COMPOSE_BUILD := $(if $(wildcard .env),--env-file .env) \
 # here — it runs from its own repo (see the note in docker-compose.demo.yml).
 BUILD_PROFILES ?= --profile geoserver --profile frontend --profile geodata
 
-.PHONY: help install \
+.PHONY: help install docs-links docs-bundle \
         up down build rebuild up-host-ollama \
         up-dev down-dev logs migrate seed bootstrap-static calibrate backtest serve \
         data-status static-data flood-data flood-events backtest-flood fire-history \
@@ -413,7 +413,17 @@ format:
 typecheck:
 	$(UV) run mypy
 
-check: lint typecheck test
+check: lint typecheck test docs-links
+
+# Un link rotto in una pagina divulgativa non fa fallire nessun test: lo
+# scopre chi ci clicca sopra. Qui diventa un errore.
+docs-links:
+	$(UV) run python scripts/check_doc_links.py
+
+# Porta docs/divulgazione/*.md dentro il bundle della SPA: la build Docker
+# del frontend non ha docs/ nel contesto. Un test verifica l'allineamento.
+docs-bundle:
+	$(UV) run python scripts/build_docs_bundle.py
 
 clean:
 	rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage htmlcov dist build

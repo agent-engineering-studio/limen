@@ -56,13 +56,21 @@ provider): `docker compose -f infra/docker/docker-compose.demo.yml up -d
 `ANTHROPIC_API_KEY` > `OPENAI_API_KEY` > credenziali Foundry > Ollama;
 in locale/produzione si usa **Ollama** (host, modello qwen).
 
+**Non sei uno sviluppatore?** La documentazione divulgativa in
+[`docs/divulgazione/`](./docs/divulgazione/README.md) spiega senza gergo come
+viene calcolato il rischio di ogni cella, cosa fanno (e cosa non fanno) il
+modello ML e gli agenti AI, da quali fonti aperte arrivano i dati e perché
+l'LLM gira su un server proprio. Le stesse pagine sono nella SPA alla voce
+**Documentazione** (`#/documentazione`).
+
 Approfondimenti: [`docs/demo.md`](./docs/demo.md) (demo locale su un AOI piccolo),
 [`docs/architecture.md`](./docs/architecture.md),
 [`docs/openclaw.md`](./docs/openclaw.md),
 [`docs/api.md`](./docs/api.md),
 [`docs/deployment.md`](./docs/deployment.md),
 [`docs/scoring-model.md`](./docs/scoring-model.md),
-[`docs/runbook.md`](./docs/runbook.md).
+[`docs/runbook.md`](./docs/runbook.md),
+[`docs/divulgazione/`](./docs/divulgazione/README.md) (per un pubblico non tecnico).
 
 Il motore V1 è una combinazione lineare pesata **pura** e interpretabile
 (§2.4 del project doc) che legge ogni peso, soglia e cutoff di classe da
