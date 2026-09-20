@@ -121,11 +121,43 @@ class PersistResultExecutor(Executor):
             await conn.copy_records_to_table(
                 "risk_assessments", records=records, columns=list(_COPY_COLUMNS)
             )
+            # Lo stato corrente lo conosce chi scrive: è questo. Prima veniva
+            # ricavato rigenerando `mv_latest_risk`, cioè ordinando ~19
+            # milioni di righe al giorno per estrarne 937.000 — venti minuti
+            # contro un debounce di cinque (#125). Qui è un'istruzione sola
+            # sulle righe appena scritte, trovate per `run_id`.
+            #
+            # La guardia sul `computed_at` serve allo sweep previsionale e a
+            # un eventuale replay: una riga più vecchia non deve sovrascrivere
+            # una più recente solo perché è arrivata dopo.
+            await conn.execute(
+                """
+                INSERT INTO latest_risk (
+                    cell_id, hazard_type, score, class, horizon,
+                    pipeline_version, computed_at, factors, explanation
+                )
+                SELECT cell_id, hazard_type, score, class, horizon,
+                       pipeline_version, computed_at, factors, explanation
+                FROM risk_assessments
+                WHERE run_id = $1 AND computed_at = $2
+                ON CONFLICT (cell_id, hazard_type) DO UPDATE
+                SET score            = EXCLUDED.score,
+                    class            = EXCLUDED.class,
+                    horizon          = EXCLUDED.horizon,
+                    pipeline_version = EXCLUDED.pipeline_version,
+                    computed_at      = EXCLUDED.computed_at,
+                    factors          = EXCLUDED.factors,
+                    explanation      = EXCLUDED.explanation
+                WHERE latest_risk.computed_at <= EXCLUDED.computed_at
+                """,
+                run_id,
+                computed_at,
+            )
 
-        # Best-effort refresh of the map's materialized view so the
-        # frontend sees the new scores immediately. Failure here MUST
-        # NOT block the workflow — the matview can also be refreshed by
-        # a periodic job or by the operator.
+        # La mappa è già aggiornata: `mv_latest_risk` è una vista su
+        # `latest_risk`, appena scritta qui sopra. Questa chiamata aggiorna il
+        # rollup per comune, che resta un aggregato materializzato. Best
+        # effort: un rollup fallito non deve fermare lo sweep.
         try:
             from limen.data.repos.map_views_repo import refresh_latest_risk
 

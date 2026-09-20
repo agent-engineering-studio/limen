@@ -171,6 +171,11 @@ async def reset_db(pg_pool: asyncpg.Pool) -> AsyncIterator[None]:
         "flood_observation_masks",
         # Eventi incendio cella-giorno (#66): stessa ragione.
         "fire_events",
+        # Stato corrente della mappa (#125): `grid_cells` è già nella lista e
+        # la cancella in CASCADE, ma elencarla qui la svuota anche quando un
+        # test non tocca la griglia — altrimenti la vista mostrerebbe i
+        # punteggi dello sweep precedente.
+        "latest_risk",
     ]
     async with acquire() as conn:
         with contextlib.suppress(Exception):
