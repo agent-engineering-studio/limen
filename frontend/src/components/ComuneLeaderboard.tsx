@@ -21,7 +21,13 @@ export default function ComuneLeaderboard(): JSX.Element | null {
     defaultApiClient
       .getTopComuni(undefined, 20, ctrl.signal)
       .then((r) => setComuni(r.comuni))
-      .catch(() => setComuni([]));
+      .catch(() => {
+        // Solo se l'annullamento non e' nostro. Con StrictMode l'effetto gira
+        // due volte e la prima richiesta viene abortita: senza questa guardia
+        // il suo `catch` arriva dopo la risposta buona e la cancella, e il
+        // pannello sparisce (`comuni.length === 0` → `null`) pur avendo i dati.
+        if (!ctrl.signal.aborted) setComuni([]);
+      });
     return () => ctrl.abort();
   }, []);
 

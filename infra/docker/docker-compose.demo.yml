@@ -439,11 +439,19 @@ services:
       # Host ammessi dal dev server di Vite: dietro proxy l'Host e' il
       # dominio pubblico, e senza elencarlo Vite blocca ogni richiesta.
       VITE_ALLOWED_HOSTS: ${VITE_ALLOWED_HOSTS:-}
+      # `off` dietro un proxy che non inoltra le WebSocket: senza, il client
+      # HMR ricarica la pagina di continuo e nessuna richiesta arriva a
+      # completarsi. Vedi la nota in vite.config.ts.
+      VITE_HMR: ${VITE_HMR:-}
       # Phase 12 — optional static PMTiles served by the geodata stack.
       # Leave unset to keep the overlays hidden. Production deploys the
       # files behind nginx / Caddy from `$GEODATA_PMTILES_DIR`.
       VITE_PAI_PMTILES_URL: ${VITE_PAI_PMTILES_URL:-}
       VITE_IFFI_PMTILES_URL: ${VITE_IFFI_PMTILES_URL:-}
+      # Dove MapLibre prende i caratteri delle etichette. Senza, lo stile non
+      # e' valido e la mappa resta bianca: il default vive in `lib/env.ts`,
+      # questa riga serve a poterlo sostituire con glifi ospitati in casa.
+      VITE_MAP_GLYPHS_URL: ${VITE_MAP_GLYPHS_URL:-}
     command: ["sh", "-c", "npm ci --no-audit --no-fund && npm run dev -- --host 0.0.0.0 --port 5173"]
     volumes:
       - ../../frontend:/app
@@ -453,6 +461,42 @@ services:
     ports:
       - "${LIMEN_FRONTEND_BIND:-127.0.0.1}:5173:5173"
     profiles: ["frontend"]  # opt-in: `docker compose --profile frontend up`
+
+  # La stessa SPA, ma **costruita**: e' questa che va dietro un dominio
+  # pubblico. Il dev server del servizio qui sopra serve moduli non compilati e
+  # inietta il client HMR, che dietro un proxy senza WebSocket non si connette
+  # e **ricarica la pagina** di continuo: misurato sui log di nginx, decine di
+  # richieste chiuse dal client (499) su tile e API, con la mappa che non
+  # arrivava mai a disegnare.
+  #
+  # Stessa porta del dev server, cosi' il reverse proxy non cambia:
+  #   docker compose --profile geoserver --profile frontend-static up -d
+  frontend-static:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+      args:
+        # Vite riscrive gli URL degli asset **durante la build**: questi
+        # valori non si possono cambiare dopo, vanno passati qui.
+        BASE_PATH: ${LIMEN_BASE_PATH:-/}
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
+        VITE_TILESERV_URL: ${VITE_TILESERV_URL:-http://localhost:7800}
+        VITE_PAI_PMTILES_URL: ${VITE_PAI_PMTILES_URL:-}
+        VITE_IFFI_PMTILES_URL: ${VITE_IFFI_PMTILES_URL:-}
+        VITE_GEOSERVER_WMS_URL: ${VITE_GEOSERVER_WMS_URL:-}
+        VITE_MAP_GLYPHS_URL: ${VITE_MAP_GLYPHS_URL:-}
+        VITE_DEFAULT_LON: ${VITE_DEFAULT_LON:-}
+        VITE_DEFAULT_LAT: ${VITE_DEFAULT_LAT:-}
+        VITE_DEFAULT_ZOOM: ${VITE_DEFAULT_ZOOM:-}
+    image: limen/web:0.1
+    container_name: limen-frontend-static
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${LIMEN_FRONTEND_BIND:-127.0.0.1}:5173:80"
+    profiles: ["frontend-static"]
 
   # ── Sidecar knowledge-graph: NON definito qui, di proposito ────────────
   #

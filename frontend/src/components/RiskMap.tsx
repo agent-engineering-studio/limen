@@ -22,7 +22,23 @@ const COMUNE_MIN_ZOOM = 7;
 const COMUNE_MAX_ZOOM = 11;
 // Sotto questo zoom una cella da 1 km è sub-pixel: mostriamo il
 // choropleth regionale (20 poligoni) invece dei 312k poligoni cella.
-const CELL_MIN_ZOOM = 7;
+//
+// Otto e non sette, misurato sul peso della tile che il browser deve
+// scaricare per disegnarla: 1,85 MB a zoom 5, 726 kB a 7, 848 kB a 8, 165 kB
+// a 9, 4 kB a 11. A sette il tile server superava il proprio limite di 5 s e
+// rispondeva 500, quindi la mappa restava vuota — e le richieste a vuoto
+// saturavano il pool, facendo cadere anche le tile leggere delle regioni.
+// A otto la tile e' grossa ma arriva in 1,6 s: una schermata costa qualche
+// MB, il prezzo scelto per vedere le celle una scala prima.
+//
+// Vale però **solo per le frane**. `v_region_tiles` e `mv_comune_risk` sono
+// fissate in SQL sul pericolo di default, quindi per incendio, alluvione o
+// vista multi-rischio le celle sono l'unico livello che segue davvero il
+// selettore: alzare la soglia lì lascerebbe in pagina i colori delle frane
+// sotto l'etichetta di un altro pericolo, che è peggio di una mappa lenta.
+// Per quei casi si resta a sette e si pagano le tile pesanti.
+const CELL_MIN_ZOOM_DEFAULT = 8;
+const CELL_MIN_ZOOM_OTHER = 7;
 const WMS_PAI_LAYER = "ispra:mosaicatura_ispra_2020_2021_aree_pericolosita_frana_pai";
 const IFFI_REGIONS = [
   "abruzzo", "basilicata", "bolzano", "calabria", "campania",
@@ -119,6 +135,10 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   // Non si è unificato tutto su `risk_at`: cambierebbe la sorgente della
   // mappa che oggi funziona, in cambio di simmetria e nient'altro.
   const isDefaultHazard = hazard === "landslide";
+  // Le rollup regionali e comunali sono fissate sulle frane: quando il
+  // selettore dice altro, le celle sono l'unica cosa che lo rispetta.
+  const cellMinZoom =
+    isDefaultHazard && !multi ? CELL_MIN_ZOOM_DEFAULT : CELL_MIN_ZOOM_OTHER;
   // Tre sorgenti, non due: la vista d'insieme non è "un pericolo qualunque"
   // ma un'aggregazione, e `v_multi_hazard` (migrazione 037) è l'unica che dà
   // una riga per cella su tutti i pericoli insieme.
@@ -175,7 +195,10 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       [SOURCE_ID]: {
         type: "vector",
         tiles: [tilesUrl],
-        minzoom: 5,
+        // La sorgente parte dallo stesso zoom del livello che la disegna.
+        // Prima partiva da 5: il browser scaricava tile da 1,85 MB che poi
+        // non mostrava a nessuno, e intanto il tile server andava in timeout.
+        minzoom: cellMinZoom,
         maxzoom: 14,
       },
       [REGION_SOURCE_ID]: {
@@ -224,7 +247,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         type: "fill",
         source: REGION_SOURCE_ID,
         "source-layer": "public.v_region_tiles",
-        maxzoom: CELL_MIN_ZOOM,
+        maxzoom: cellMinZoom,
         paint: {
           // `v_region_tiles` è fissata sul pericolo di default in SQL, quindi
           // tiene la palette di default anche quando il selettore dice altro:
@@ -258,6 +281,9 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         filter: ["in", ["get", "worst_class"], ["literal", ["High", "VeryHigh"]]],
         layout: {
           "text-field": ["to-string", ["get", "n_alert"]],
+          // Dichiarato invece che lasciato al default ("Open Sans Regular"):
+          // il default e' implicito e il server dei glifi potrebbe non averlo.
+          "text-font": ["Open Sans Regular"],
           "text-size": 12,
         },
         paint: {
@@ -271,7 +297,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         type: "fill",
         source: SOURCE_ID,
         "source-layer": sourceLayer,
-        minzoom: CELL_MIN_ZOOM,
+        minzoom: cellMinZoom,
         paint: {
           "fill-color": cellFillColor as never,
           "fill-opacity": 0.55,
@@ -340,6 +366,10 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       container: containerRef.current,
       style: {
         version: 8,
+        // Obbligatorio: il contatore sui comuni e' un livello `symbol` con
+        // `text-field`, e senza `glyphs` MapLibre rifiuta lo stile intero —
+        // niente celle, niente regioni, nemmeno lo sfondo.
+        glyphs: config.mapGlyphsUrl,
         sources,
         layers,
       },
@@ -363,7 +393,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     }
     // Click su una regione a zoom nazionale → zoom fino alle celle.
     map.on("click", REGION_LAYER_ID, (e: maplibregl.MapMouseEvent) => {
-      map.easeTo({ center: e.lngLat, zoom: CELL_MIN_ZOOM + 1 });
+      map.easeTo({ center: e.lngLat, zoom: cellMinZoom + 1 });
     });
     map.on("mouseenter", REGION_LAYER_ID, () => {
       map.getCanvas().style.cursor = "pointer";
@@ -374,7 +404,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
 
     // Comune drill-down: click a comune → zoom into its cells.
     map.on("click", COMUNE_LAYER_ID, (e: maplibregl.MapMouseEvent) => {
-      map.easeTo({ center: e.lngLat, zoom: CELL_MIN_ZOOM + 2 });
+      map.easeTo({ center: e.lngLat, zoom: cellMinZoom + 2 });
     });
     map.on("mouseenter", COMUNE_LAYER_ID, () => {
       map.getCanvas().style.cursor = "pointer";
