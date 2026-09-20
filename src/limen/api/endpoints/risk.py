@@ -45,34 +45,29 @@ async def latest_assessment(
     ``hazard`` is validated by FastAPI against the enum, so an unknown value
     is a 422 and needs no hand-written check.
     """
+    # `latest_risk` e non `risk_assessments` (#125). Cercare il massimo
+    # `computed_at` nello storico significava attraversare le partizioni di
+    # una regione: **misurati 103 secondi** per la sola Basilicata, contro un
+    # timeout di comando di 180 — l'endpoint che alimenta la barra laterale
+    # della dashboard era a un passo dal non rispondere più.
+    #
+    # Cambia una sfumatura, in meglio: prima si prendevano le righe di **un**
+    # istante, quello dell'ultimo sweep, e una cella non rivalutata in quel
+    # giro spariva dal conteggio. Ora si prende l'ultimo stato noto di ogni
+    # cella, che è quello che la mappa disegna: le due superfici smettono di
+    # poter dire numeri diversi.
     async with acquire() as conn:
-        latest_ts = await conn.fetchval(
-            """
-            SELECT MAX(ra.computed_at)
-            FROM risk_assessments ra
-            JOIN grid_cells g ON g.id = ra.cell_id
-            WHERE g.aoi_id = $1 AND ra.hazard_type = $2
-            """,
-            aoi_id,
-            hazard.value,
-        )
-        if latest_ts is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"no {hazard.value} assessment for AOI {aoi_id!r}",
-            )
         rows = await conn.fetch(
             """
-            SELECT ra.cell_id, ra.hazard_type, ra.computed_at, ra.horizon,
-                   ra.score, ra.class, ra.factors, ra.explanation,
-                   ra.pipeline_version
-            FROM risk_assessments ra
-            JOIN grid_cells g ON g.id = ra.cell_id
-            WHERE g.aoi_id = $1 AND ra.computed_at = $2 AND ra.hazard_type = $3
-            ORDER BY ra.score DESC
+            SELECT lr.cell_id, lr.hazard_type, lr.computed_at, lr.horizon,
+                   lr.score, lr.class, lr.factors, lr.explanation,
+                   lr.pipeline_version
+            FROM latest_risk lr
+            JOIN grid_cells g ON g.id = lr.cell_id
+            WHERE g.aoi_id = $1 AND lr.hazard_type = $2
+            ORDER BY lr.score DESC
             """,
             aoi_id,
-            latest_ts,
             hazard.value,
         )
 
