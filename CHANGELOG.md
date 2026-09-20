@@ -6,6 +6,34 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+* **Documentazione divulgativa** in `docs/divulgazione/` (issue #129): sei
+  pagine più glossario e indice, scritte per chi non fa questo mestiere —
+  come si calcola il rischio di una cella con i pesi veri e un esempio
+  numerico seguito fino al colore, cosa fanno (e cosa non fanno) il motore
+  deterministico, lo sfidante ML e gli agenti, le fonti dati aperte una per
+  una con licenza e cadenza, l'LLM che gira in casa, trasparenza e
+  riproducibilità. I limiti sono in apertura di ogni pagina, e i numeri
+  scomodi — il backtest frane che oggi fallisce tutti e tre i gate §2.5
+  (#122) — stanno scritti accanto a quelli buoni.
+* **Sezione «Documentazione» nella SPA** (`#/documentazione`, con una
+  sotto-rotta per pagina): rende gli stessi Markdown, senza copiarli.
+  Collegata dalla navigazione e da `#/come-funziona`.
+* `RiskFlowDiagram` — lo schema «dati → punteggio → classe → avviso»
+  riusabile, con una prop che evidenzia la fase; nei Markdown è un blocco
+  Mermaid preceduto da `<!-- schema-fase: … -->`, così GitHub mostra il
+  diagramma e la SPA il componente.
+* `lib/markdown.ts` — parser Markdown minimo (niente nuove dipendenze: il
+  contenuto è nostro e arriva a build time, quindi il problema che una
+  libreria risolverebbe non si pone).
+* `make docs-bundle` + `scripts/build_docs_bundle.py` — porta i Markdown nel
+  bundle della SPA, perché il contesto Docker del frontend non contiene
+  `docs/`; un test verifica che il generato sia allineato ai sorgenti.
+* `make docs-links` + `scripts/check_doc_links.py` — un link interno rotto
+  ora fallisce il gate invece di aspettare un lettore. Incluso in
+  `make check`.
+
 ## [0.6.0-impl-complete] — 2026-06-04 — Backlog closure + ready-for-testing
 
 Closes the post-Phase-12 audit: every "deferred by design" item from
