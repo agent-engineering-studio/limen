@@ -111,6 +111,11 @@ async def _seed(conn: asyncpg.Connection) -> None:
             computed_at,
             computed_at.isoformat(),
         )
+    # Lo stato corrente lo scrive il passo di persistenza (#125), che questo
+    # test non esegue: qui le righe sono seminate a mano, quindi si
+    # ricostruisce — è la stessa funzione che userebbe un operatore dopo un
+    # ripristino.
+    await conn.execute("SELECT rebuild_latest_risk()")
 
 
 @pytest.fixture()

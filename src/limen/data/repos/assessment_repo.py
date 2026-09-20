@@ -192,7 +192,8 @@ async def attach_narrative(
     non compaiono nella SET, che è l'invariante "l'LLM non tocca i numeri"
     scritta in SQL invece che sperata.
     """
-    async with acquire() as conn:
+    payload = json.dumps(analysis, default=str) if analysis is not None else None
+    async with acquire() as conn, conn.transaction():
         status = await conn.execute(
             """
             UPDATE risk_assessments
@@ -204,7 +205,29 @@ async def attach_narrative(
             """,
             run_id,
             briefing_it,
-            json.dumps(analysis, default=str) if analysis is not None else None,
+            payload,
+        )
+        # Lo stesso testo va su `latest_risk`, che dalla #125 è ciò che la
+        # mappa e le API leggono: senza questa riga il briefing resterebbe
+        # nello storico e non lo vedrebbe nessuno. Anche qui solo
+        # `explanation`, e per le sole celle di quello sweep — l'invariante
+        # "l'LLM non tocca i numeri" vale identica sulle due tabelle.
+        await conn.execute(
+            """
+            UPDATE latest_risk lr
+            SET explanation = lr.explanation || jsonb_build_object(
+                    'briefing_it', $2::text,
+                    'analysis', $3::jsonb
+                )
+            FROM risk_assessments ra
+            WHERE ra.run_id = $1
+              AND lr.cell_id = ra.cell_id
+              AND lr.hazard_type = ra.hazard_type
+              AND lr.computed_at = ra.computed_at
+            """,
+            run_id,
+            briefing_it,
+            payload,
         )
     updated = int(status.split()[-1]) if status else 0
     log.info("assessment.narrative_attached", run_id=run_id, rows=updated)

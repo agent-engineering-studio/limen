@@ -499,11 +499,16 @@ async def active_cascades() -> dict[str, Any]:
                 SELECT count(*) AS cells,
                        max((factors->>'post_fire_multiplier')::float) AS max_multiplier,
                        min((factors->>'months_since_fire')::float) AS min_months
-                FROM risk_assessments
+                FROM latest_risk
                 WHERE hazard_type = 'flood'
-                  -- Ultimo giorno: limita la scansione alle partizioni
-                  -- correnti, e una cascata "attiva" è per definizione
-                  -- quella dell'ultimo passaggio.
+                  -- `latest_risk` e non `risk_assessments` (#125): «l'ultimo
+                  -- passaggio» è esattamente ciò che questa tabella tiene,
+                  -- una riga per cella invece delle ~19 milioni al giorno
+                  -- dello storico. Misurato prima del cambio: questa query
+                  -- da sola faceva scadere il report nazionale, perché
+                  -- estraeva due campi JSON da ogni riga dell'ultimo giorno.
+                  -- La finestra resta: uno stato fermo da più di un giorno
+                  -- non descrive una cascata attiva.
                   AND computed_at >= now() - interval '24 hours'
                   AND (factors->>'post_fire_multiplier')::float > 1.0
                 """
