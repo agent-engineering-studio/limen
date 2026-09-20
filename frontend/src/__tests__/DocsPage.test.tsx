@@ -51,6 +51,14 @@ describe("DocsPage", () => {
     expect(container.textContent).not.toContain("flowchart");
   });
 
+  it("l'indice non pubblica le parentesi quadre al posto dei link", () => {
+    window.location.hash = "#/documentazione/indice";
+    const { container } = render(<DocsPage />);
+    expect(container.textContent).not.toContain("](./");
+    const inStrong = container.querySelectorAll("strong a");
+    expect(inStrong.length).toBeGreaterThan(5);
+  });
+
   it("i rimandi fra pagine restano dentro l'applicazione", () => {
     window.location.hash = "#/documentazione/indice";
     const { container } = render(<DocsPage />);

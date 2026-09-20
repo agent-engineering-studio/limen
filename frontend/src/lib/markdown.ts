@@ -31,10 +31,13 @@ export type Block =
 
 export type Inline =
   | { kind: "text"; text: string }
-  | { kind: "strong"; text: string }
-  | { kind: "em"; text: string }
   | { kind: "code"; text: string }
-  | { kind: "link"; text: string; href: string };
+  | { kind: "link"; text: string; href: string }
+  // L'enfasi porta parti, non testo: l'indice scrive `**[titolo](path)**`, e
+  // trattare il contenuto come piatto pubblicava le parentesi quadre invece
+  // di un link cliccabile.
+  | { kind: "strong"; parts: Inline[] }
+  | { kind: "em"; parts: Inline[] };
 
 const MARKER = /^<!--\s*schema-fase:\s*([a-z]+)\s*-->$/;
 const HEADING = /^(#{1,4})\s+(.*)$/;
@@ -177,7 +180,7 @@ export function parseMarkdown(source: string): Block[] {
   return blocks;
 }
 
-const INLINE = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)\s]+\)|<[^ >]+@?[^ >]+>|\*[^*]+\*)/;
+const INLINE = /(\*\*.+?\*\*|`[^`]+`|\[[^\]]+\]\([^)\s]+\)|<[^ >]+@?[^ >]+>|\*[^*]+\*)/;
 
 export function parseInline(text: string): Inline[] {
   const out: Inline[] = [];
@@ -193,7 +196,7 @@ export function parseInline(text: string): Inline[] {
     }
     const token = match[0];
     if (token.startsWith("**")) {
-      out.push({ kind: "strong", text: token.slice(2, -2) });
+      out.push({ kind: "strong", parts: parseInline(token.slice(2, -2)) });
     } else if (token.startsWith("`")) {
       out.push({ kind: "code", text: token.slice(1, -1) });
     } else if (token.startsWith("[")) {
@@ -208,7 +211,7 @@ export function parseInline(text: string): Inline[] {
       const href = token.slice(1, -1);
       out.push({ kind: "link", text: href, href });
     } else {
-      out.push({ kind: "em", text: token.slice(1, -1) });
+      out.push({ kind: "em", parts: parseInline(token.slice(1, -1)) });
     }
     rest = rest.slice(match.index + token.length);
   }
