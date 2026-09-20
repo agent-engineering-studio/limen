@@ -175,6 +175,18 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
             ),
         )
 
+    def _macroregion(self, bundle: CellFeatureBundle) -> str:
+        """Quale curva regionale vale per questa cella.
+
+        La risoluzione sta qui e non nei chiamanti perché i chiamanti erano
+        quattro e nessuno la faceva (#122): l'unico modo perché il quinto non
+        ripeta l'errore è che non debba fare niente. Un bundle che dichiara
+        la macroregione vince — serve ai test e ai confronti fra curve.
+        """
+        if bundle.macroregion is not None:
+            return bundle.macroregion
+        return self._t.macroregion_for(bundle.aoi_id)
+
     # ------------------------------------------------------------------
     # Meteo component
     # ------------------------------------------------------------------
@@ -183,7 +195,7 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
         caine_excess_val, _event = compute_caine(
             bundle.dynamic.rainfall,
             caine=self._t.caine,
-            macroregion=bundle.macroregion,
+            macroregion=self._macroregion(bundle),
         )
         caine_norm = _norm_caine(caine_excess_val)
 
@@ -255,7 +267,7 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
         excess, _event = compute_caine(
             bundle.dynamic.rainfall,
             caine=self._caine_floor,
-            macroregion=bundle.macroregion,
+            macroregion=self._macroregion(bundle),
         )
         if excess <= 0.0:
             return False
@@ -307,7 +319,7 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
                 river_discharge_ratio=bundle.dynamic.river_discharge_ratio,
                 coastal_surge_norm=bundle.dynamic.coastal_surge_norm,
                 flood_hazard_norm=bundle.static.flood_hazard_norm,
-                macroregion=bundle.macroregion,
+                macroregion=self._macroregion(bundle),
                 cfg=self._t.flood_forecast,
             )
             if self._t.flood_forecast is not None

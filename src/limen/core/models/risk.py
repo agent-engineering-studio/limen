@@ -148,7 +148,13 @@ class CellFeatureBundle(_Frozen):
     cell_id: str
     static: StaticFactors
     dynamic: DynamicInputs
-    macroregion: str = "italy_default"
+    # `None` = deducila dall'AOI (la mappa sta nello YAML). Era una stringa
+    # col default "italy_default", e nessuno dei quattro punti che la
+    # impostano la impostava davvero: tutta l'Italia girava sulla curva
+    # generica e tre tarature su quattro erano configurazione morta (#122).
+    # Col default vuoto il motore risolve da sé, e chi vuole una curva
+    # precisa — un test, un confronto — la dichiara.
+    macroregion: str | None = None
 
     @model_validator(mode="after")
     def _cell_id_consistency(self) -> CellFeatureBundle:
