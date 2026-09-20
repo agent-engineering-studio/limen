@@ -36,10 +36,25 @@ ARG VITE_API_URL
 ARG VITE_TILESERV_URL
 ARG VITE_PAI_PMTILES_URL
 ARG VITE_IFFI_PMTILES_URL
+# Le variabili di Vite vengono sostituite **al momento della build**: una non
+# dichiarata qui non si puo' piu' cambiare dopo, e l'override resterebbe
+# scritto nella documentazione senza avere effetto.
+ARG VITE_GEOSERVER_WMS_URL
+ARG VITE_MAP_GLYPHS_URL
+# Vista iniziale: anche questa e' sostituita a build-time, quindi dichiararla
+# qui e' l'unico modo perche' un deployment possa sceglierla.
+ARG VITE_DEFAULT_LON
+ARG VITE_DEFAULT_LAT
+ARG VITE_DEFAULT_ZOOM
 ENV VITE_API_URL=$VITE_API_URL \
     VITE_TILESERV_URL=$VITE_TILESERV_URL \
     VITE_PAI_PMTILES_URL=$VITE_PAI_PMTILES_URL \
-    VITE_IFFI_PMTILES_URL=$VITE_IFFI_PMTILES_URL
+    VITE_IFFI_PMTILES_URL=$VITE_IFFI_PMTILES_URL \
+    VITE_GEOSERVER_WMS_URL=$VITE_GEOSERVER_WMS_URL \
+    VITE_MAP_GLYPHS_URL=$VITE_MAP_GLYPHS_URL \
+    VITE_DEFAULT_LON=$VITE_DEFAULT_LON \
+    VITE_DEFAULT_LAT=$VITE_DEFAULT_LAT \
+    VITE_DEFAULT_ZOOM=$VITE_DEFAULT_ZOOM
 
 # `vite build` directly rather than `npm run build`, which also runs `tsc -b`:
 # type-checking belongs to CI, and a deploy build should not fail on a type
