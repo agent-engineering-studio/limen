@@ -17,27 +17,26 @@ import pytest
 
 from limen.data.db import acquire
 
-pytestmark = pytest.mark.anyio
 
-
-async def _cell(conn: object, cell_id: str = "cell-125") -> None:
+async def _cell(conn: object, cell_id: str = "cell-125", idx: int = 1) -> None:
     await conn.execute(  # type: ignore[attr-defined]
         """
-        INSERT INTO aoi (id, name, geom)
-        VALUES ('it-test-125', 'Test 125',
+        INSERT INTO aoi (id, name, kind, geom)
+        VALUES ('it-test-125', 'Test 125', 'region',
                 ST_GeomFromText('POLYGON((10 45,10.1 45,10.1 45.1,10 45.1,10 45))', 4326))
         ON CONFLICT (id) DO NOTHING
         """
     )
     await conn.execute(  # type: ignore[attr-defined]
         """
-        INSERT INTO grid_cells (id, aoi_id, geom, centroid, area_km2)
-        VALUES ($1, 'it-test-125',
+        INSERT INTO grid_cells (id, aoi_id, row_idx, col_idx, geom, area_km2)
+        VALUES ($1, 'it-test-125', $2, $2,
                 ST_GeomFromText('POLYGON((10 45,10.01 45,10.01 45.01,10 45.01,10 45))', 4326),
-                ST_GeomFromText('POINT(10.005 45.005)', 4326), 1.0)
+                1.0)
         ON CONFLICT (id) DO NOTHING
         """,
         cell_id,
+        idx,
     )
 
 
@@ -57,7 +56,9 @@ async def _upsert(conn: object, cell_id: str, score: float, when: datetime) -> N
     )
 
 
-async def test_the_view_shows_the_score_without_any_refresh(reset_db: None) -> None:
+async def test_the_view_shows_the_score_without_any_refresh(
+    reset_db: None, pg_pool: object
+) -> None:
     now = datetime.now(UTC)
     async with acquire() as conn:
         await _cell(conn)
@@ -71,7 +72,7 @@ async def test_the_view_shows_the_score_without_any_refresh(reset_db: None) -> N
     assert score == pytest.approx(0.42)
 
 
-async def test_an_older_row_does_not_overwrite_a_newer_one(reset_db: None) -> None:
+async def test_an_older_row_does_not_overwrite_a_newer_one(reset_db: None, pg_pool: object) -> None:
     now = datetime.now(UTC)
     async with acquire() as conn:
         await _cell(conn)
@@ -84,12 +85,12 @@ async def test_an_older_row_does_not_overwrite_a_newer_one(reset_db: None) -> No
     assert score == pytest.approx(0.80)
 
 
-async def test_a_cell_never_scored_is_still_on_the_map(reset_db: None) -> None:
+async def test_a_cell_never_scored_is_still_on_the_map(reset_db: None, pg_pool: object) -> None:
     # Il CROSS JOIN con i pericoli abilitati: una cella senza valutazione
     # esiste comunque, con punteggio nullo. Era così anche prima ed è ciò
     # che permette alla mappa di disegnare tutto il territorio.
     async with acquire() as conn:
-        await _cell(conn, "cell-125-vuota")
+        await _cell(conn, "cell-125-vuota", idx=2)
         row = await conn.fetchrow(
             "SELECT risk_score FROM mv_latest_risk"
             " WHERE cell_id = $1 AND hazard_type = 'landslide'",

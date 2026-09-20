@@ -139,7 +139,12 @@ class PersistResultExecutor(Executor):
                 SELECT cell_id, hazard_type, score, class, horizon,
                        pipeline_version, computed_at, factors, explanation
                 FROM risk_assessments
-                WHERE run_id = $1 AND computed_at = $2
+                -- Le righe previsionali (`horizon` '+24h') le scrive
+                -- `forecast_history` per il grafico dell'andamento, e non
+                -- sono lo stato corrente di niente: sotto la vecchia vista
+                -- diventavano «l'ultimo punteggio» solo perché erano le più
+                -- recenti, e la mappa mostrava una previsione come presente.
+                WHERE run_id = $1 AND computed_at = $2 AND horizon NOT LIKE '+%'
                 ON CONFLICT (cell_id, hazard_type) DO UPDATE
                 SET score            = EXCLUDED.score,
                     class            = EXCLUDED.class,

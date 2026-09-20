@@ -62,6 +62,9 @@ async def _seed_cells(conn: asyncpg.Connection) -> None:
 async def _force_refresh() -> None:
     """Refresh past the 5-minute debounce, which a test cannot wait out."""
     async with acquire() as conn:
+        # Le righe sono seminate a mano e non dal passo di persistenza, che
+        # è quello che tiene aggiornata `latest_risk` (#125).
+        await conn.execute("SELECT rebuild_latest_risk()")
         await conn.execute("UPDATE mv_refresh_state SET refreshed_at = 'epoch'::timestamptz")
     await refresh_latest_risk()
 

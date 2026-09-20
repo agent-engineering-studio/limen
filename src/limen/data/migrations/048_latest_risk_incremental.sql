@@ -197,7 +197,48 @@ CREATE INDEX IF NOT EXISTS mv_comune_risk_aoi_idx         ON mv_comune_risk (aoi
 REFRESH MATERIALIZED VIEW mv_comune_risk;
 
 -- ---------------------------------------------------------------------------
--- 4. Il refresh non ha più una materializzata da rigenerare
+-- 4. La ricostruzione dallo storico, esplicita e fuori dal percorso caldo
+-- ---------------------------------------------------------------------------
+-- La scansione costosa non sparisce: cambia chi la chiede e quando. Serve
+-- dopo un ripristino, dopo un'ingestione che ha scritto in `risk_assessments`
+-- per altre vie, e ai test che seminano righe a mano. Non la chiama nessun
+-- job: se tornasse nel percorso orario, tornerebbe il problema della #125.
+--
+-- `horizon NOT LIKE '+%'` esclude le righe previsionali: le scrive
+-- `forecast_history` per il grafico dell'andamento, e sotto la vecchia vista
+-- diventavano «l'ultimo punteggio» della cella perché erano le più recenti.
+-- La mappa mostrava una previsione come se fosse lo stato corrente.
+CREATE OR REPLACE FUNCTION rebuild_latest_risk() RETURNS bigint
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    n bigint;
+BEGIN
+    INSERT INTO latest_risk (
+        cell_id, hazard_type, score, class, horizon, pipeline_version,
+        computed_at, factors, explanation
+    )
+    SELECT DISTINCT ON (cell_id, hazard_type)
+           cell_id, hazard_type, score, class, horizon, pipeline_version,
+           computed_at, factors, explanation
+    FROM risk_assessments
+    WHERE horizon NOT LIKE '+%'
+    ORDER BY cell_id, hazard_type, computed_at DESC
+    ON CONFLICT (cell_id, hazard_type) DO UPDATE
+    SET score            = EXCLUDED.score,
+        class            = EXCLUDED.class,
+        horizon          = EXCLUDED.horizon,
+        pipeline_version = EXCLUDED.pipeline_version,
+        computed_at      = EXCLUDED.computed_at,
+        factors          = EXCLUDED.factors,
+        explanation      = EXCLUDED.explanation
+    WHERE latest_risk.computed_at <= EXCLUDED.computed_at;
+    GET DIAGNOSTICS n = ROW_COUNT;
+    RETURN n;
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- 5. Il refresh non ha più una materializzata da rigenerare
 -- ---------------------------------------------------------------------------
 -- Stessa firma e stessi codici di ritorno (1 = fatto, 0 = saltato per
 -- debounce, -1 = fallito): i chiamanti non cambiano. Il debounce resta
