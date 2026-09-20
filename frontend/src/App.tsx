@@ -3,6 +3,7 @@ import type maplibregl from "maplibre-gl";
 
 import CellPopup from "./components/CellPopup";
 import ComuneLeaderboard from "./components/ComuneLeaderboard";
+import DocsPage from "./components/DocsPage";
 import ExplainerPage from "./components/ExplainerPage";
 import ForecastList from "./components/ForecastList";
 import FreshnessBadge from "./components/FreshnessBadge";
@@ -23,11 +24,17 @@ type Page =
   | "home"
   | "dashboard"
   | "explainer"
+  | "docs"
   | "science"
   | "shadow"
   | "integrations";
 
 function pageFromHash(): Page {
+  // La documentazione ha una sotto-rotta per pagina, quindi il confronto
+  // esatto non basta: `#/documentazione/glossario` è la stessa sezione.
+  if (window.location.hash.startsWith("#/documentazione")) {
+    return "docs";
+  }
   switch (window.location.hash) {
     case "#/dashboard":
     case "#/italia": // vecchio deep-link: il quadro nazionale vive in dashboard
@@ -131,6 +138,9 @@ export function App(): JSX.Element {
           >
             Cos&apos;è Limen
           </a>
+          <a href="#/documentazione" className={page === "docs" ? "on" : ""}>
+            Documentazione
+          </a>
           <a href="#/integrazioni" className={page === "integrations" ? "on" : ""}>
             Integrazioni
           </a>
@@ -144,6 +154,10 @@ export function App(): JSX.Element {
       ) : page === "explainer" ? (
         <div className="explainer-area">
           <ExplainerPage />
+        </div>
+      ) : page === "docs" ? (
+        <div className="explainer-area">
+          <DocsPage />
         </div>
       ) : page === "science" ? (
         <div className="explainer-area">

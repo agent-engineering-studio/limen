@@ -380,6 +380,12 @@ export default function ExplainerPage(): JSX.Element {
           </a>{" "}
           spiega la logica di innesco senza bisogno di leggere il codice.
         </p>
+        <p className="exp-note">
+          Se invece cerchi il quadro completo — il calcolo per intero, cosa
+          fanno ML e AI, da dove arrivano i dati e perché non costano nulla —
+          la <a href="#/documentazione">documentazione divulgativa</a> sono sei
+          pagine scritte per chi non fa questo mestiere.
+        </p>
         <ChapterFooter current={1} />
       </article>
     </div>
