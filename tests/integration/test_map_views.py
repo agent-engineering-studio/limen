@@ -162,6 +162,71 @@ async def test_tiles_are_proxied_not_redirected(reset_db: None, pg_pool: object)
     assert "location" not in r.headers
 
 
+async def test_tiles_forward_the_hazard_parameter(reset_db: None, pg_pool: object) -> None:
+    """Il parametro arriva a pg_tileserv, altrimenti la mappa mente.
+
+    Il proxy costruiva l'URL con il solo percorso: `p_hazard` non arrivava e
+    `risk_at()` rispondeva sempre col pericolo di default, quindi il
+    selettore mostrava le celle delle frane etichettate «Alluvione». È un
+    guasto peggiore della mappa vuota — quella si vede.
+    """
+    settings = Settings.model_validate({"api": {"pg_tileserv_url": "http://pg_tileserv:7800"}})
+    deps = await AppDependencies.build(
+        pool=get_pool(),
+        settings=settings,
+        llm_factory=StubLlmClientFactory(),
+    )
+    app = build_app_with_deps(deps)
+    app.state.deps = deps
+    app.state.ready = True
+    app.state.ready_detail = "test"
+    import respx
+
+    with respx.mock(assert_all_called=False) as mock:
+        rotta = mock.get(url__startswith="http://pg_tileserv:7800/public.risk_at/").respond(
+            200, content=b"tile", headers={"content-type": "application/x-protobuf"}
+        )
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            r = await client.get(
+                "/api/tiles/public.risk_at/9/273/190.pbf?p_hazard=flood&hours_ago=24"
+            )
+
+    assert r.status_code == 200, r.text
+    assert rotta.called
+    chiesto = rotta.calls.last.request.url
+    assert chiesto.params["p_hazard"] == "flood"
+    assert chiesto.params["hours_ago"] == "24"
+
+
+async def test_tiles_without_parameters_stay_clean(reset_db: None, pg_pool: object) -> None:
+    """Senza parametri l'URL resta nudo: `multi_hazard_at` non ne accetta, e
+    passargliene uno sarebbe un 400 su ogni tile del quadro unico."""
+    settings = Settings.model_validate({"api": {"pg_tileserv_url": "http://pg_tileserv:7800"}})
+    deps = await AppDependencies.build(
+        pool=get_pool(),
+        settings=settings,
+        llm_factory=StubLlmClientFactory(),
+    )
+    app = build_app_with_deps(deps)
+    app.state.deps = deps
+    app.state.ready = True
+    app.state.ready_detail = "test"
+    import respx
+
+    with respx.mock(assert_all_called=False) as mock:
+        rotta = mock.get(url__startswith="http://pg_tileserv:7800/public.multi_hazard_at/").respond(
+            200, content=b"tile"
+        )
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            r = await client.get("/api/tiles/public.multi_hazard_at/9/273/190.pbf")
+
+    assert r.status_code == 200, r.text
+    assert rotta.called
+    assert not rotta.calls.last.request.url.params
+
+
 async def test_tiles_report_an_unreachable_tileserv(reset_db: None, pg_pool: object) -> None:
     """pg_tileserv giù è 502, non un errore attribuito al chiamante."""
     import respx

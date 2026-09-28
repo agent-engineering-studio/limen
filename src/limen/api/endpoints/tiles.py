@@ -22,6 +22,7 @@ from fastapi import APIRouter, HTTPException, Response, status
 
 from limen.api.dependencies import DepsDep
 from limen.core.logging import get_logger
+from limen.core.models.hazard import HazardType
 from limen.integrations._http import SharedHttpClient
 
 log = get_logger(__name__)
@@ -37,8 +38,27 @@ _PASS_THROUGH = ("content-type", "content-encoding", "cache-control", "etag")
 
 
 @router.get("/{layer}/{z}/{x}/{y}.pbf")
-async def tile(layer: str, z: int, x: int, y: int, deps: DepsDep) -> Response:
-    """Inoltra la tile da ``pg_tileserv``, mantenendo l'origine dell'API."""
+async def tile(
+    layer: str,
+    z: int,
+    x: int,
+    y: int,
+    deps: DepsDep,
+    # I parametri delle sorgenti a funzione. Sono dichiarati uno per uno, e
+    # non inoltrati in blocco, perché un proxy che ripete qualunque cosa gli
+    # arrivi moltiplica le chiavi di cache a piacere di chi chiama.
+    p_hazard: HazardType | None = None,
+    hours_ago: int | None = None,
+) -> Response:
+    """Inoltra la tile da ``pg_tileserv``, mantenendo l'origine dell'API.
+
+    **La query string va inoltrata.** La prima versione costruiva l'URL con
+    il solo percorso, quindi `p_hazard` non arrivava mai a pg_tileserv e
+    `risk_at()` rispondeva sempre con il pericolo di default: il selettore
+    mostrava le celle delle frane etichettate «Alluvione». È un guasto
+    peggiore della mappa vuota — la mappa vuota si vede, una mappa con i dati
+    sbagliati no. Era invisibile finché quelle tile andavano in timeout.
+    """
     base = deps.settings.api.pg_tileserv_url
     if not base:
         raise HTTPException(
@@ -46,9 +66,15 @@ async def tile(layer: str, z: int, x: int, y: int, deps: DepsDep) -> Response:
             detail="pg_tileserv URL is not configured (set API__PG_TILESERV_URL)",
         )
     url = f"{base.rstrip('/')}/{layer}/{z}/{x}/{y}.pbf"
+    # Solo i parametri presenti: `multi_hazard_at` non ne accetta, e
+    # passargliene uno sarebbe un 400 su ogni tile del quadro unico.
+    params = {
+        **({"p_hazard": p_hazard.value} if p_hazard is not None else {}),
+        **({"hours_ago": str(hours_ago)} if hours_ago is not None else {}),
+    }
     client = await SharedHttpClient.get()
     try:
-        upstream = await client.get(url, timeout=_TILE_TIMEOUT_SECONDS)
+        upstream = await client.get(url, params=params, timeout=_TILE_TIMEOUT_SECONDS)
     except (httpx.HTTPError, TimeoutError, OSError) as exc:
         # pg_tileserv giù non è un errore del chiamante: la mappa resta senza
         # quel riquadro e lo dice, invece di far sembrare rotta la richiesta.
