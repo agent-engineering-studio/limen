@@ -9,6 +9,8 @@ superficie si comporta come prima.
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 from fastapi import Response
 
@@ -104,14 +106,20 @@ def test_mcp_rejects_an_unknown_hazard_naming_the_valid_ones() -> None:
     assert "landslide" in str(exc.value)
 
 
-def test_comune_tools_refuse_a_hazard_they_cannot_honour() -> None:
-    """`mv_comune_risk` è fissata sul pericolo di default in SQL, perché il suo
-    `exposure_rank` legge una chiave che solo il breakdown delle frane ha.
-    Accettare e ignorare il parametro farebbe credere all'agente di aver
-    ottenuto numeri sull'alluvione."""
-    assert tools._require_default_hazard(None, "top_comuni") is DEFAULT_HAZARD
-    with pytest.raises(ValueError, match="only"):
-        tools._require_default_hazard("flood", "top_comuni")
+def test_comune_tools_no_longer_refuse_a_hazard() -> None:
+    """Il rifiuto non c'è più, e nemmeno il parametro.
+
+    `mv_comune_risk` era fissata sulle frane in SQL, quindi questi strumenti
+    accettavano `hazard` e rifiutavano qualunque valore diverso dal default —
+    era la cosa giusta finché la vista non sapeva rispondere. Dalla
+    migrazione 051 la riga porta i tre pericoli insieme, quindi non c'è più
+    niente da rifiutare: chiedere un pericolo non ha senso quando la risposta
+    li contiene tutti.
+    """
+    assert not hasattr(tools, "_require_default_hazard")
+    firma = inspect.signature(tools.top_comuni)
+    assert "hazard" not in firma.parameters
+    assert "hazard" not in inspect.signature(tools.comune_risk).parameters
 
 
 # ---------------------------------------------------------------------------
@@ -165,10 +173,12 @@ async def test_mcp_wrappers_expose_the_hazard_parameter() -> None:
     ):
         assert "hazard" in params[name], name
 
-    # I due sui comuni lo accettano per poterlo rifiutare con una ragione,
-    # invece di lasciarlo cadere come farebbe un parametro ignoto.
-    assert "hazard" in params["tool_top_comuni"]
-    assert "hazard" in params["tool_comune_risk"]
+    # I due sui comuni **non** lo espongono più (migrazione 051): la riga
+    # porta i tre pericoli insieme, quindi chiedere quale sarebbe una domanda
+    # senza risposta possibile. Prima lo accettavano per poterlo rifiutare con
+    # una ragione, che era giusto finché la vista sapeva rispondere a uno solo.
+    assert "hazard" not in params["tool_top_comuni"]
+    assert "hazard" not in params["tool_comune_risk"]
 
     # E il tool che dice quali pericoli chiedere esiste, perché le istruzioni
     # del server dicono all'agente di chiamarlo per primo.

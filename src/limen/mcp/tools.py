@@ -59,23 +59,6 @@ def _coerce_hazard(value: str | None) -> HazardType:
         raise ValueError(f"unknown hazard {value!r}; known: {known}") from None
 
 
-def _require_default_hazard(hazard: str | None, surface: str) -> HazardType:
-    """Accept the parameter, refuse a value the surface cannot honour.
-
-    ``mv_comune_risk`` is pinned to the default hazard in SQL (migration 028),
-    because its ``exposure_rank`` reads a component key only the landslide
-    breakdown has. Silently ignoring a different value would let an agent
-    believe it got flood numbers, which is worse than saying no.
-    """
-    hz = _coerce_hazard(hazard)
-    if hz is not DEFAULT_HAZARD:
-        raise ValueError(
-            f"{surface} is {DEFAULT_HAZARD.value}-only: the comune rollup view is "
-            f"pinned to it until Fase 2 gives each hazard its own exposure term"
-        )
-    return hz
-
-
 def _coerce_json(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
@@ -308,22 +291,23 @@ async def run_forecast_history(
     return {"cells_persisted": total, "aoi_ids": aoi_ids, "hazard": hz.value}
 
 
-async def comune_risk(istat_code: str, hazard: str | None = None) -> dict[str, Any]:
-    """Comune rollup (worst class, counts, exposure) for one ISTAT code."""
+async def comune_risk(istat_code: str) -> dict[str, Any]:
+    """Rollup di un comune su **tutti** i pericoli, per un codice ISTAT.
+
+    Non più a pericolo unico (migrazione 051): la riga porta i tre pericoli
+    affiancati in `hazards`, e `worst_class` resta il peggiore fra essi —
+    la stessa chiave di prima, con un significato più largo.
+    """
     from limen.data.repos.comune_risk import comune_detail
 
-    _require_default_hazard(hazard, "comune_risk")
     detail = await comune_detail(istat_code)
     return detail["comune"] if detail else {"error": f"comune {istat_code!r} not found"}
 
 
-async def top_comuni(
-    limit: int = 10, aoi_id: str | None = None, hazard: str | None = None
-) -> list[dict[str, Any]]:
-    """Comuni with alerting cells, ranked by exposure (national or per-AOI)."""
+async def top_comuni(limit: int = 10, aoi_id: str | None = None) -> list[dict[str, Any]]:
+    """Comuni ordinati dal peggiore fra tutti i pericoli (nazionale o per AOI)."""
     from limen.data.repos.comune_risk import top_comuni as _top
 
-    _require_default_hazard(hazard, "top_comuni")
     return await _top(aoi_id=aoi_id, limit=limit)
 
 

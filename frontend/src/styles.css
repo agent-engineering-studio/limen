@@ -2142,3 +2142,80 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   border-radius: 2px;
   background: #f0e3c2;
 }
+
+/* ------------------------------------------------------------------ */
+/* Il comune è l'unità di lettura: una riga, tre pericoli             */
+/* ------------------------------------------------------------------ */
+
+.cb-search {
+  width: 100%;
+  margin: 6px 0 10px;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 13px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+}
+.cb-search:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.cb-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cb-list li {
+  padding: 8px 0;
+  border-top: 1px solid var(--hairline);
+}
+.cb-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cb-name {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--ink);
+}
+.cb-meta {
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+/* I tre indicatori vanno a capo insieme, non si spezzano a metà riga. */
+.cb-hazards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 4px;
+}
+.cb-haz {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+/* Un pericolo a zero resta in riga, sbiadito: un trattino è una risposta,
+   una colonna che sparisce no. */
+.cb-haz.is-quiet {
+  color: var(--muted);
+}
+.cb-chip {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid rgb(0 0 0 / 18%);
+}
+.cb-haz-label {
+  font-weight: 500;
+}
+.cb-haz-class {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}

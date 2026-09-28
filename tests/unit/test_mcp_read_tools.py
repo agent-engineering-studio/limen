@@ -80,11 +80,11 @@ def test_unknown_hazard_names_the_valid_ones() -> None:
     assert tools._coerce_hazard(None) is HazardType.LANDSLIDE
 
 
-def test_comune_surfaces_refuse_a_hazard_they_cannot_serve() -> None:
-    """La vista comunale è fissata alle frane: ignorare in silenzio un altro
-    pericolo farebbe credere a un agente di avere numeri sull'alluvione."""
-    with pytest.raises(ValueError, match="landslide-only"):
-        tools._require_default_hazard("flood", "top_comuni")
+def test_comune_surfaces_serve_every_hazard_now() -> None:
+    """La vista comunale non è più fissata alle frane (migrazione 051): la
+    riga porta i tre pericoli, quindi il guardiano che rifiutava gli altri
+    non ha più niente da rifiutare."""
+    assert not hasattr(tools, "_require_default_hazard")
 
 
 def test_coerce_json_tolerates_strings_garbage_and_lists() -> None:

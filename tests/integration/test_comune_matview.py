@@ -52,9 +52,25 @@ async def test_comune_rollup(reset_db: None) -> None:
         # persistenza (#125), qui va ricostruito.
         await conn.execute("SELECT rebuild_latest_risk()")
         await conn.execute("SELECT refresh_mv_latest_risk()")  # also refreshes comune
-        row = await conn.fetchrow("SELECT * FROM mv_comune_risk WHERE istat_code='C001'")
+        # Una riga per (comune, pericolo) dalla migrazione 051: qui si guarda
+        # quella delle frane, che è il pericolo seminato.
+        row = await conn.fetchrow(
+            "SELECT * FROM mv_comune_risk WHERE istat_code='C001' AND hazard_type='landslide'"
+        )
+        pericoli = await conn.fetchval(
+            "SELECT count(*) FROM mv_comune_risk WHERE istat_code='C001'"
+        )
+        tile = await conn.fetchrow("SELECT * FROM v_comune_tiles WHERE istat_code='C001'")
     assert row is not None
     assert row["worst_class"] == "High"  # worst cell drives the headline
     assert row["n_alert"] == 1  # one High+ cell
     assert row["n_cells"] == 2
     assert float(row["exposure_rank"]) == pytest.approx(0.9)  # E of the High cell only
+    # Ogni pericolo abilitato ha la sua riga, anche senza celle valutate: una
+    # colonna che sparisce non distingue «calmo» da «non calcolato».
+    assert int(pericoli) >= 1
+    # La mappa però ne vuole **una sola** per comune, altrimenti disegna
+    # poligoni sovrapposti e il colore è quello dell'ultimo disegnato.
+    assert tile is not None
+    assert tile["worst_class"] == "High"
+    assert tile["worst_hazard"] == "landslide"

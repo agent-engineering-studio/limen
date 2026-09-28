@@ -57,7 +57,8 @@ Read tools (open):
   one; `hazards` and `cascades` cover all of them regardless.
 * multi_hazard_summary(cell_id? | aoi_id?) → one place, every hazard. Use
   this for "what is threatening here", not N calls to the per-hazard tools.
-* top_comuni(limit?, aoi_id?) and comune_risk(istat_code) → comune rollups.
+* top_comuni(limit?, aoi_id?) e comune_risk(istat_code) → rollup per comune,
+  su tutti i pericoli (migrazione 051).
   **Landslide only**: the rollup view is pinned to it, so passing another
   hazard returns an error rather than mislabelled numbers.
 
@@ -128,16 +129,14 @@ def _build_server() -> Any:
         return await multi_hazard_summary(cell_id=cell_id, aoi_id=aoi_id)
 
     @mcp.tool()
-    async def tool_comune_risk(istat_code: str, hazard: str | None = None) -> dict[str, Any]:
-        """Comune rollup (worst class, class counts, exposure). Landslide only."""
-        return await comune_risk(istat_code, hazard)
+    async def tool_comune_risk(istat_code: str) -> dict[str, Any]:
+        """Rollup di un comune su tutti i pericoli: peggiore, conteggi, esposizione."""
+        return await comune_risk(istat_code)
 
     @mcp.tool()
-    async def tool_top_comuni(
-        limit: int = 10, aoi_id: str | None = None, hazard: str | None = None
-    ) -> list[dict[str, Any]]:
-        """Comuni with alerting cells, exposure-ranked. Landslide only."""
-        return await top_comuni(limit=limit, aoi_id=aoi_id, hazard=hazard)
+    async def tool_top_comuni(limit: int = 10, aoi_id: str | None = None) -> list[dict[str, Any]]:
+        """Comuni ordinati dal peggiore fra tutti i pericoli."""
+        return await top_comuni(limit=limit, aoi_id=aoi_id)
 
     @mcp.tool()
     async def tool_run_monitor(

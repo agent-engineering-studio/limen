@@ -33,12 +33,13 @@ const COMUNE_MAX_ZOOM = 11;
 // A otto la tile e' grossa ma arriva in 1,6 s: una schermata costa qualche
 // MB, il prezzo scelto per vedere le celle una scala prima.
 //
-// Vale però **solo per le frane**. `v_region_tiles` e `mv_comune_risk` sono
-// fissate in SQL sul pericolo di default, quindi per incendio, alluvione o
-// vista multi-rischio le celle sono l'unico livello che segue davvero il
-// selettore: alzare la soglia lì lascerebbe in pagina i colori delle frane
-// sotto l'etichetta di un altro pericolo, che è peggio di una mappa lenta.
-// Per quei casi si resta a sette e si pagano le tile pesanti.
+// Il livello dei comuni ora segue tutti i pericoli (migrazione 051): mostra
+// il peggiore dei tre, che è la stessa lettura della colonna a fianco.
+// `v_region_tiles` invece è ancora fissata in SQL sul pericolo di default,
+// quindi per incendio e alluvione le celle restano l'unico livello che segue
+// il selettore, e la soglia resta a sette: alzarla lascerebbe in pagina i
+// colori delle frane sotto l'etichetta di un altro pericolo, che è peggio di
+// una mappa lenta.
 const CELL_MIN_ZOOM_DEFAULT = 8;
 const CELL_MIN_ZOOM_OTHER = 7;
 const WMS_PAI_LAYER = "ispra:mosaicatura_ispra_2020_2021_aree_pericolosita_frana_pai";
@@ -217,7 +218,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       },
       [COMUNE_SOURCE_ID]: {
         type: "vector",
-        tiles: [`${tileserv}/public.mv_comune_risk/{z}/{x}/{y}.pbf`],
+        tiles: [`${tileserv}/public.v_comune_tiles/{z}/{x}/{y}.pbf`],
         minzoom: 6,
         maxzoom: 12,
       },
@@ -269,7 +270,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         id: COMUNE_LAYER_ID,
         type: "fill",
         source: COMUNE_SOURCE_ID,
-        "source-layer": "public.mv_comune_risk",
+        "source-layer": "public.v_comune_tiles",
         minzoom: COMUNE_MIN_ZOOM,
         maxzoom: COMUNE_MAX_ZOOM,
         paint: {
@@ -283,7 +284,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         id: COMUNE_BADGE_ID,
         type: "symbol",
         source: COMUNE_SOURCE_ID,
-        "source-layer": "public.mv_comune_risk",
+        "source-layer": "public.v_comune_tiles",
         minzoom: COMUNE_MIN_ZOOM,
         maxzoom: COMUNE_MAX_ZOOM,
         filter: ["in", ["get", "worst_class"], ["literal", ["High", "VeryHigh"]]],
