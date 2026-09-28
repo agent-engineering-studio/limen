@@ -83,9 +83,7 @@ async def _conta() -> tuple[int, int]:
     return int(storico), int(corrente)
 
 
-async def test_uno_sweep_identico_non_riscrive_lo_storico(
-    reset_db: None, pg_pool: object
-) -> None:
+async def test_uno_sweep_identico_non_riscrive_lo_storico(reset_db: None, pg_pool: object) -> None:
     ids = await _seed_cells()
     celle = [landslide_record(c, score=0.10, level=RiskLevel.None_) for c in ids]
 
@@ -122,9 +120,7 @@ async def test_la_mappa_resta_aggiornata_anche_senza_riga_di_storico(
     assert storia < secondo, "history_at è avanzato senza che sia stata scritta una riga"
 
 
-async def test_un_cambio_di_classe_è_sempre_una_notizia(
-    reset_db: None, pg_pool: object
-) -> None:
+async def test_un_cambio_di_classe_è_sempre_una_notizia(reset_db: None, pg_pool: object) -> None:
     ids = await _seed_cells()
     await _persist([landslide_record(c, score=0.10, level=RiskLevel.None_) for c in ids])
     prima, _ = await _conta()
@@ -177,9 +173,7 @@ async def test_il_battito_lascia_una_traccia_anche_se_non_cambia_nulla(
     assert dopo == prima + len(ids)
 
 
-async def test_con_delta_zero_si_torna_a_scrivere_sempre(
-    reset_db: None, pg_pool: object
-) -> None:
+async def test_con_delta_zero_si_torna_a_scrivere_sempre(reset_db: None, pg_pool: object) -> None:
     # La via d'uscita: `history_min_delta=0` riproduce il comportamento
     # precedente, che è ciò che serve se un giorno lo storico completo
     # dovesse tornare a servire.

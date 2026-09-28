@@ -44,3 +44,42 @@ COMMENT ON COLUMN latest_risk.history_at IS
   'Ultimo istante per cui esiste una riga in risk_assessments per questa cella (#135).';
 COMMENT ON COLUMN latest_risk.run_id IS
   'Sweep che ha prodotto questo stato; lo usa attach_narrative per raggiungere tutta l''area.';
+
+-- La ricostruzione dallo storico (#125) deve riportare anche le due colonne
+-- nuove, altrimenti dopo un ripristino `latest_risk` avrebbe `run_id` nullo e
+-- il briefing successivo non attaccherebbe a nessuna cella: `attach_narrative`
+-- cerca proprio per `run_id`. È il difetto che la CI ha colto sul test del
+-- briefing, e in produzione si sarebbe visto solo dopo un ripristino.
+--
+-- `history_at` prende il `computed_at` della riga ricostruita, che è vero per
+-- definizione: quella riga *è* l'ultima traccia di storico della cella.
+CREATE OR REPLACE FUNCTION rebuild_latest_risk() RETURNS bigint
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    n bigint;
+BEGIN
+    INSERT INTO latest_risk (
+        cell_id, hazard_type, score, class, horizon, pipeline_version,
+        computed_at, factors, explanation, history_at, run_id
+    )
+    SELECT DISTINCT ON (cell_id, hazard_type)
+           cell_id, hazard_type, score, class, horizon, pipeline_version,
+           computed_at, factors, explanation, computed_at, run_id
+    FROM risk_assessments
+    WHERE horizon NOT LIKE '+%'
+    ORDER BY cell_id, hazard_type, computed_at DESC
+    ON CONFLICT (cell_id, hazard_type) DO UPDATE
+    SET score            = EXCLUDED.score,
+        class            = EXCLUDED.class,
+        horizon          = EXCLUDED.horizon,
+        pipeline_version = EXCLUDED.pipeline_version,
+        computed_at      = EXCLUDED.computed_at,
+        factors          = EXCLUDED.factors,
+        explanation      = EXCLUDED.explanation,
+        history_at       = EXCLUDED.history_at,
+        run_id           = EXCLUDED.run_id
+    WHERE latest_risk.computed_at <= EXCLUDED.computed_at;
+    GET DIAGNOSTICS n = ROW_COUNT;
+    RETURN n;
+END $$;
