@@ -1,8 +1,12 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
 import { useHazard } from "../lib/hazard";
+import type { PanelFailure } from "../lib/panel-state";
+import { describeFailure, isStale, relativeTime } from "../lib/panel-state";
+import { verdictFromTotals } from "../lib/verdict";
 import type { NationalReportResponse } from "../types";
+import { PanelDegraded, PanelLoading } from "./PanelState";
 
 /**
  * Compact national picture for the dashboard sidebar — absorbs the old
@@ -11,8 +15,13 @@ import type { NationalReportResponse } from "../types";
  */
 export function NationalStrip(): JSX.Element {
   const [report, setReport] = useState<NationalReportResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<PanelFailure | null>(null);
+  // Cambiare questo numero rilancia l'effetto: è il «Riprova» del pannello
+  // degradato, che senza un modo per richiedere i dati sarebbe un bottone
+  // che invita a ricaricare la pagina intera.
+  const [tentativo, setTentativo] = useState(0);
   const { selected, multi } = useHazard();
+  const riprova = useCallback(() => setTentativo((n) => n + 1), []);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -20,22 +29,25 @@ export function NationalStrip(): JSX.Element {
     // e lasciare quelle di prima mentre arriva la risposta le attribuirebbe
     // al pericolo appena scelto.
     setReport(null);
-    setError(null);
+    setFailure(null);
     defaultApiClient
       .getNationalReport(ctrl.signal, selected)
       .then(setReport)
       .catch((err: unknown) => {
-        if (!ctrl.signal.aborted)
-          setError(err instanceof Error ? err.message : String(err));
+        if (ctrl.signal.aborted) return;
+        // Il messaggio tecnico resta dove serve a chi ripara; in pagina va
+        // quello che una persona può leggere.
+        console.error("national report", err);
+        setFailure(describeFailure(err));
       });
     return () => ctrl.abort();
-  }, [selected]);
+  }, [selected, tentativo]);
 
-  if (error) {
+  if (failure) {
     return (
       <section className="national-strip" aria-label="Quadro nazionale">
         <h2>Italia · quadro nazionale</h2>
-        <p className="panel-error">{error}</p>
+        <PanelDegraded failure={failure} onRetry={riprova} />
       </section>
     );
   }
@@ -43,18 +55,38 @@ export function NationalStrip(): JSX.Element {
     return (
       <section className="national-strip" aria-label="Quadro nazionale">
         <h2>Italia · quadro nazionale</h2>
-        <p>caricamento…</p>
+        <PanelLoading label="Carico il quadro nazionale" />
       </section>
     );
   }
 
+  const verdetto = verdictFromTotals(report.totals);
+  const vecchio = isStale(report.generated_at);
+
   return (
     <section className="national-strip" aria-label="Quadro nazionale">
-      <h2>Italia · quadro nazionale</h2>
+      <div className={`verdict tone-${verdetto.tone}`}>
+        <p className="verdict-text">{verdetto.text}</p>
+        {verdetto.note ? <p className="verdict-note">{verdetto.note}</p> : null}
+        <p className="verdict-meta">
+          {relativeTime(report.generated_at)} · {report.totals.regions} regioni ·{" "}
+          {report.hazards.find((h) => h.hazard === report.hazard)?.label_it ??
+            report.hazard}
+        </p>
+        {vecchio ? (
+          // Numeri fermi da ore mostrati senza dirlo sono peggio di nessun
+          // numero: chi guarda li legge come «adesso».
+          <p className="verdict-stale">
+            Dati fermi da più di tre ore: il calcolo dovrebbe girare ogni ora.
+          </p>
+        ) : null}
+        <p className="verdict-disclaimer">
+          Limen affianca e non sostituisce l&apos;allertamento della Protezione
+          Civile. <a href="#/documentazione/01-limen-in-una-pagina">Cosa vuol dire</a>
+        </p>
+      </div>
       <p className="alert-meta">
-        {new Date(report.generated_at).toLocaleString("it-IT")} ·{" "}
-        {report.totals.cells.toLocaleString("it-IT")} celle ·{" "}
-        {report.totals.regions} regioni
+        {report.totals.cells.toLocaleString("it-IT")} celle valutate
       </p>
       {multi ? (
         // In vista d'insieme le testate restano quelle di *un* pericolo (le

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Protocol } from "pmtiles";
@@ -122,6 +122,12 @@ export interface RiskMapProps {
  * exposes its props so the tile-URL composition can be asserted.
  */
 export function RiskMap(props: RiskMapProps): JSX.Element {
+  // La cartografia di base arriva da un servizio esterno, quindi quando il
+  // nostro livello del rischio non carica la mappa resta *visivamente
+  // perfetta* — strade, rilievi, etichette — e non dice niente. Un sistema di
+  // allerta che sembra integro mentre non sa nulla è peggio di uno
+  // palesemente rotto: questo stato serve a impedirlo.
+  const [livelloAssente, setLivelloAssente] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const tileserv = (props.tileservUrl ?? config.tileservUrl).replace(/\/+$/, "");
   const { selected: hazard, view, multi, available } = useHazard();
@@ -413,6 +419,17 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       map.getCanvas().style.cursor = "";
     });
 
+    // `error` copre anche le tile che tornano 500 o 404: MapLibre le segnala
+    // con l'id della sorgente, che è l'unico modo di distinguere un guasto
+    // del *nostro* livello da uno della cartografia di base.
+    map.on("error", (e: unknown) => {
+      const sourceId = (e as { sourceId?: string }).sourceId;
+      if (sourceId === SOURCE_ID) setLivelloAssente(true);
+    });
+    map.on("sourcedata", (e: maplibregl.MapSourceDataEvent) => {
+      if (e.sourceId === SOURCE_ID && e.isSourceLoaded) setLivelloAssente(false);
+    });
+
     return () => {
       map.remove();
       if (props.mapRef) {
@@ -439,14 +456,23 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   }, [props.selectedCellId, props.mapRef]);
 
   return (
-    <div
-      ref={containerRef}
-      className="map-container"
-      data-testid="risk-map"
-      data-tile-url={`${tileserv}/${tileLayer}/{z}/{x}/{y}.pbf${tileQuery}`}
-      style={{ width: "100%", height: "100%" }}
-      aria-label={`Mappa interattiva del rischio: ${hazardLabel}`}
-    />
+    <div className="map-wrap">
+      <div
+        ref={containerRef}
+        className="map-container"
+        data-testid="risk-map"
+        data-tile-url={`${tileserv}/${tileLayer}/{z}/{x}/{y}.pbf${tileQuery}`}
+        style={{ width: "100%", height: "100%" }}
+        aria-label={`Mappa interattiva del rischio: ${hazardLabel}`}
+      />
+      {livelloAssente ? (
+        <div className="map-banner" role="alert">
+          <strong>Il livello del rischio non è disponibile.</strong> Questa è
+          solo la cartografia di base: le celle colorate mancano, non sono
+          assenti perché il rischio è nullo.
+        </div>
+      ) : null}
+    </div>
   );
 }
 

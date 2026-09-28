@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { defaultApiClient } from "../lib/api-client";
 import { useHazard } from "../lib/hazard";
 import { RISK_CLASSES, riskClassesFor, riskColorsFor } from "../lib/risk-colors";
-import type { LegendClass } from "../types";
+import type { HazardType, LegendClass, RiskLevel } from "../types";
 
 const PC_COLOR: Record<string, string> = {
   verde: "#2e8540",
@@ -11,6 +11,24 @@ const PC_COLOR: Record<string, string> = {
   arancione: "#d9730d",
   rossa: "#c92a2a",
 };
+
+/** I cinque colori in una riga: resta visibile anche con la legenda chiusa. */
+function ScalaColori({
+  levels,
+  hazard,
+}: {
+  levels: RiskLevel[];
+  hazard: HazardType;
+}): JSX.Element {
+  const colori = riskColorsFor(hazard);
+  return (
+    <span className="legend-scale" aria-hidden>
+      {levels.map((l) => (
+        <span key={l} style={{ background: colori[l] }} />
+      ))}
+    </span>
+  );
+}
 
 /**
  * Five-class risk legend.
@@ -60,8 +78,11 @@ export function LegendPanel(): JSX.Element {
   // *cosa* colora una cella.
   if (multi) {
     return (
-      <section className="legend-panel" aria-label="Legenda classi di rischio">
-        <h2>Classi di rischio · tutti i pericoli</h2>
+      <details className="legend-panel" aria-label="Legenda classi di rischio">
+        <summary>
+          <ScalaColori levels={RISK_CLASSES.map((c) => c.level)} hazard={selected} />
+          Classi di rischio · tutti i pericoli
+        </summary>
         <table className="legend-matrix">
           <thead>
             <tr>
@@ -101,13 +122,16 @@ export function LegendPanel(): JSX.Element {
           tinta dice quale, l'intensità quanto. Le soglie numeriche cambiano da
           un pericolo all'altro — scegli un pericolo per vederle.
         </p>
-      </section>
+      </details>
     );
   }
 
   return (
-    <section className="legend-panel" aria-label="Legenda classi di rischio">
-      <h2>Classi di rischio</h2>
+    <details className="legend-panel" aria-label="Legenda classi di rischio">
+      <summary>
+        <ScalaColori levels={riskClassesFor(selected).map((c) => c.level)} hazard={selected} />
+        Classi di rischio
+      </summary>
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
         {riskClassesFor(selected).map((c) => (
           <li key={c.level} className="legend-row">
@@ -142,9 +166,12 @@ export function LegendPanel(): JSX.Element {
       <p className="legend-note">
         Le liste mettono prima le celle vicine a centri abitati e strade
         (🏠 🛣): stesso rischio, più conseguenze. Colori e numeri seguono
-        sempre la scala qui sopra.
+        sempre la scala qui sopra.{" "}
+        <a href="#/documentazione/02-come-si-calcola-il-rischio">
+          Come si calcola il rischio
+        </a>
       </p>
-    </section>
+    </details>
   );
 }
 

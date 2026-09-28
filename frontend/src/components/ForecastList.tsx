@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
 import { useHazard } from "../lib/hazard";
+import type { PanelFailure } from "../lib/panel-state";
+import { describeFailure } from "../lib/panel-state";
+import { PanelDegraded, PanelEmpty, PanelLoading } from "./PanelState";
 import { RISK_COLOR_BY_LEVEL } from "../lib/risk-colors";
 import type { ForecastAlertItem, RiskLevel } from "../types";
 
@@ -12,35 +15,38 @@ import type { ForecastAlertItem, RiskLevel } from "../types";
  */
 export function ForecastList(): JSX.Element {
   const [items, setItems] = useState<ForecastAlertItem[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<PanelFailure | null>(null);
+  const [tentativo, setTentativo] = useState(0);
   const { selected: hazard } = useHazard();
+  const riprova = useCallback(() => setTentativo((n) => n + 1), []);
 
   useEffect(() => {
-    setError(null);
+    setFailure(null);
     setItems(null);
     const ctrl = new AbortController();
     defaultApiClient
       .getForecastAlerts({ sinceHours: 72, hazard }, ctrl.signal)
       .then((resp) => setItems(resp.items))
       .catch((err: unknown) => {
-        if (!ctrl.signal.aborted)
-          setError(err instanceof Error ? err.message : String(err));
+        if (ctrl.signal.aborted) return;
+        console.error("forecast alerts", err);
+        setFailure(describeFailure(err));
       });
     return () => ctrl.abort();
-  }, [hazard]);
+  }, [hazard, tentativo]);
 
   return (
     <section className="alert-list" aria-label="Previsioni">
       <h2>Previsioni</h2>
-      {error ? (
-        <p className="panel-error">{error}</p>
+      {failure ? (
+        <PanelDegraded failure={failure} onRetry={riprova} />
       ) : items === null ? (
-        <p>caricamento…</p>
+        <PanelLoading label="Carico le previsioni" />
       ) : items.length === 0 ? (
-        <p className="alert-meta">
-          Nessuna regione prevista sopra soglia a +48h nelle ultime 72 ore —
-          la sweep previsionale gira ogni 6 ore sulla pioggia prevista.
-        </p>
+        <PanelEmpty
+          title="Nessuna regione prevista sopra soglia"
+          detail="A +48 ore, nelle ultime 72. Il calcolo previsionale gira ogni 6 ore sulla pioggia prevista."
+        />
       ) : (
         <ul>
           {items.map((it) => (
