@@ -226,10 +226,19 @@ export class ApiClient {
     return this.request<JobStatusResponse>("/api/status/jobs", {}, signal);
   }
 
-  getTopComuni(aoi?: string, limit = 50, signal?: AbortSignal): Promise<ComuneListResponse> {
+  getTopComuni(
+    aoi?: string,
+    limit = 50,
+    signal?: AbortSignal,
+    /** Cerca per nome. Con una ricerca la soglia non si applica: chi cerca il
+     *  proprio comune vuole vederlo anche quando è tranquillo, ed è il caso in
+     *  cui «nessun pericolo sopra soglia» è la notizia. */
+    q?: string,
+  ): Promise<ComuneListResponse> {
     const qs = new URLSearchParams();
     if (aoi) qs.set("aoi", aoi);
     qs.set("limit", String(limit));
+    if (q) qs.set("q", q);
     return this.request<ComuneListResponse>(`/api/comuni?${qs.toString()}`, {}, signal);
   }
 

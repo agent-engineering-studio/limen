@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type maplibregl from "maplibre-gl";
 
 import CellPopup from "./components/CellPopup";
-import ComuneLeaderboard from "./components/ComuneLeaderboard";
+import ComuniBoard from "./components/ComuniBoard";
 import DocsPage from "./components/DocsPage";
 import ExplainerPage from "./components/ExplainerPage";
 import ForecastList from "./components/ForecastList";
@@ -91,7 +91,7 @@ export function App(): JSX.Element {
           onCellSelect={selectCell}
           selectedCellId={selected?.cellId ?? null}
         />
-        <ComuneLeaderboard />
+        <ComuniBoard />
         <LegendPanel />
         <ShadowPanel />
       </aside>

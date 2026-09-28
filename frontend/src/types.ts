@@ -18,16 +18,29 @@ export interface AoiSummary {
   kind: string | null;
 }
 
+/** Un pericolo dentro la riga di un comune. */
+export interface ComuneHazard {
+  /** La classe della cella peggiore del comune per questo pericolo. */
+  class: RiskLevel;
+  score: number;
+  n_cells: number;
+  n_alert: number;
+}
+
 export interface ComuneRisk {
   istat_code: string;
   name: string;
   aoi_id: string;
+  /** Il peggiore fra i pericoli, e quale. */
+  worst_hazard: HazardType;
   worst_class: RiskLevel;
   max_score: number;
   n_cells: number;
   n_alert: number;
   counts: Record<string, number>;
   exposure_rank: number;
+  /** I tre indicatori affiancati: sempre tutti, anche a zero. */
+  hazards: Record<string, ComuneHazard>;
 }
 
 export interface ComuneListResponse {

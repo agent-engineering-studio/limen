@@ -114,16 +114,37 @@ class AlertsResponse(BaseModel):
     items: list[AlertItem]
 
 
+class ComuneHazard(BaseModel):
+    """Un pericolo dentro la riga di un comune."""
+
+    #: La classe della **cella peggiore**. È la scelta prudente: una soglia
+    #: («almeno tre celle sopra Moderato») ridurrebbe il rumore ma
+    #: nasconderebbe il versante singolo sopra un abitato, che è il caso per
+    #: cui questo sistema esiste. `n_cells` sta accanto a dire quanto è esteso.
+    class_: str = Field(alias="class")
+    score: float
+    n_cells: int
+    n_alert: int
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class ComuneRisk(BaseModel):
     istat_code: str
     name: str
     aoi_id: str
+    #: Il peggiore fra i pericoli, e quale: ordina la classifica e resta la
+    #: forma che i consumatori a pericolo unico leggevano.
+    worst_hazard: str
     worst_class: str
     max_score: float
     n_cells: int
     n_alert: int
     counts: dict[str, int]
     exposure_rank: float
+    #: I tre indicatori affiancati, sempre tutti: un pericolo a zero mostra
+    #: un trattino, e un trattino è una risposta — una colonna che sparisce no.
+    hazards: dict[str, ComuneHazard]
 
 
 class ComuneListResponse(BaseModel):
