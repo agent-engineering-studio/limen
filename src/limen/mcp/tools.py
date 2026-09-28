@@ -465,6 +465,13 @@ async def _per_hazard_blocks(
                     "high_or_above": sum(r["high_or_above"] for r in summary),
                     "moderate": sum(r["moderate"] for r in summary),
                 },
+                # L'età del dato **per pericolo**, che finora non esisteva da
+                # nessuna parte: la pagina mostrava un solo «aggiornato» per
+                # tutta la sezione, e con l'alluvione ferma da due giorni
+                # accanto all'incendio di un'ora fa diceva una cosa falsa su
+                # una delle due. Non costa una query: `risk_summary` porta
+                # già il `computed_at` di ogni regione.
+                "computed_at": max((r["computed_at"] for r in summary), default=None),
                 "top_cells": top,
             }
         )

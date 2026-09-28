@@ -52,3 +52,82 @@ export function verdictFromTotals(totals: VerdictTotals): Verdict {
     text: "Nessuna area sopra la soglia di attenzione",
   };
 }
+
+export interface HazardTotals {
+  hazard: string;
+  label_it: string;
+  totals: VerdictTotals;
+  computed_at: string | null;
+}
+
+export interface HazardLine {
+  hazard: string;
+  label: string;
+  /** Cosa dice questo pericolo, in una riga. */
+  text: string;
+  tone: VerdictTone;
+  computed_at: string | null;
+}
+
+export interface MultiVerdict {
+  /** Il peggiore fra i tre: è la riga grande. */
+  headline: Verdict;
+  /** Tutti e tre, nell'ordine in cui vanno letti: prima chi ha qualcosa da
+   *  dire. Sono la lettura unica che prima richiedeva due clic e la memoria
+   *  del numero visto prima. */
+  lines: HazardLine[];
+}
+
+const PESO: Record<VerdictTone, number> = { alert: 2, watch: 1, quiet: 0 };
+
+/**
+ * I tre indici letti insieme.
+ *
+ * Il titolo nomina il pericolo, che con un pericolo solo non serviva: «1.085
+ * aree in classe Alta» senza dire di cosa è la metà di un'informazione, e a
+ * chi legge la metà mancante è quella che decide cosa fare.
+ */
+export function verdictFromHazards(blocchi: HazardTotals[]): MultiVerdict {
+  const lines: HazardLine[] = blocchi.map((b) => {
+    const v = verdictFromTotals(b.totals);
+    return {
+      hazard: b.hazard,
+      label: b.label_it,
+      text: v.tone === "quiet" ? "nessuna area sopra la soglia" : v.text.toLowerCase(),
+      tone: v.tone,
+      computed_at: b.computed_at,
+    };
+  });
+
+  // Prima chi ha qualcosa da dire, poi in ordine stabile: senza lo spareggio
+  // sul nome due pericoli a pari tono si scambierebbero di posto a ogni
+  // aggiornamento e la colonna sembrerebbe muoversi da sola.
+  const ordinate = [...lines].sort(
+    (a, b) => PESO[b.tone] - PESO[a.tone] || a.hazard.localeCompare(b.hazard),
+  );
+
+  const peggiore = ordinate[0];
+  if (peggiore === undefined || peggiore.tone === "quiet") {
+    return {
+      headline: {
+        tone: "quiet",
+        text: "Nessuna area sopra la soglia di attenzione",
+        note:
+          blocchi.length > 1
+            ? `Per nessuno dei ${blocchi.length} pericoli sorvegliati.`
+            : undefined,
+      },
+      lines: ordinate,
+    };
+  }
+  const base = verdictFromTotals(
+    blocchi.find((b) => b.hazard === peggiore.hazard)?.totals ?? {
+      high_or_above: 0,
+      moderate: 0,
+    },
+  );
+  return {
+    headline: { ...base, text: `${peggiore.label}: ${base.text}` },
+    lines: ordinate,
+  };
+}
