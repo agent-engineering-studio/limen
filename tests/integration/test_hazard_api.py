@@ -159,6 +159,10 @@ async def _seed_two_hazard_rows() -> str:
                 score,
                 level,
             )
+        # Lo stato corrente lo scrive il passo di persistenza (#125), che
+        # questo semino non esegue: `/api/alerts` legge `latest_risk`, quindi
+        # le righe vanno riportate lì come farebbe uno sweep vero.
+        await conn.execute("SELECT rebuild_latest_risk()")
     return cell_id
 
 
