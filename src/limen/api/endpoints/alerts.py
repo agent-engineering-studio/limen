@@ -37,20 +37,28 @@ async def list_alerts(
     order = ["None", "Low", "Moderate", "High", "VeryHigh"]
     levels_to_include = order[order.index(threshold) :]
 
-    # Latest row per cell (repeat hourly ticks would flood the list with
-    # duplicates), ranked by score so the worst cells come first. The
-    # centroid lets the UI fly to / highlight the cell on the map.
+    # Lo stato corrente per cella viene da `latest_risk` (#125), non dallo
+    # storico. Cercarlo in `risk_assessments` significava un DISTINCT ON su
+    # tutte le righe della finestra: misurate **1.059.909 righe e 119
+    # secondi** per il solo conteggio, con l'endpoint che rispondeva 500 per
+    # timeout — è l'errore che la dashboard mostrava sul pannello «celle
+    # sopra soglia».
+    #
+    # `since_hours` cambia significato, e in meglio: non è più «ha superato
+    # la soglia in qualche momento delle ultime N ore» — una domanda che
+    # nessuna etichetta della pagina prometteva — ma «il suo ultimo calcolo
+    # non è più vecchio di N ore». È un filtro di freschezza: una cella la
+    # cui regione non viene valutata da due giorni non deve comparire in un
+    # elenco che il lettore legge come «adesso».
     async with acquire() as conn:
         rows = await conn.fetch(
             """
             WITH latest AS (
-                SELECT DISTINCT ON (ra.cell_id)
-                       ra.cell_id, ra.score, ra.class, ra.computed_at
-                FROM risk_assessments ra
-                WHERE ra.class = ANY($1::text[])
-                  AND ra.hazard_type = $3
-                  AND ra.computed_at >= now() - ($2::int * interval '1 hour')
-                ORDER BY ra.cell_id, ra.computed_at DESC
+                SELECT lr.cell_id, lr.score, lr.class, lr.computed_at
+                FROM latest_risk lr
+                WHERE lr.class = ANY($1::text[])
+                  AND lr.hazard_type = $3
+                  AND lr.computed_at >= now() - ($2::int * interval '1 hour')
             )
             -- Esposizione: 11x tessuto urbano CORINE (in cella + adiacenti
             -- ~2 km) e distanza precomputata dalla rete OSM principale
