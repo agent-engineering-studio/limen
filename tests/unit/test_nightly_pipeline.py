@@ -70,6 +70,12 @@ def stubbed(monkeypatch: pytest.MonkeyPatch) -> None:
     async def cache(_deps: object) -> int:
         return 3
 
+    async def storage(_deps: object) -> dict[str, object]:
+        # Il passo guarda quanto pesa il database (#135): qui non c'è un
+        # database, e il punto del test è la catena dei passi.
+        return {"db_size_gb": 1.2, "warn_at_gb": 0, "largest": {}}
+
+    monkeypatch.setattr(nightly, "_storage", storage)
     monkeypatch.setattr(nightly, "_shadow_ml", shadow)
     monkeypatch.setattr(nightly, "run_drift_monitor_job", drift)
     monkeypatch.setattr(nightly, "run_forecast_history_job", forecast)

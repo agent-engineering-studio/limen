@@ -212,18 +212,19 @@ async def attach_narrative(
         # nello storico e non lo vedrebbe nessuno. Anche qui solo
         # `explanation`, e per le sole celle di quello sweep — l'invariante
         # "l'LLM non tocca i numeri" vale identica sulle due tabelle.
+        # Per `run_id` e non unendo a `risk_assessments` (#135): con lo
+        # storico rado quell'unione troverebbe le sole celle cambiate, e il
+        # briefing arriverebbe a una manciata di celle invece che all'area
+        # intera. `latest_risk.run_id` dice quale sweep ha prodotto lo stato,
+        # che è esattamente l'insieme a cui la narrativa si riferisce.
         await conn.execute(
             """
-            UPDATE latest_risk lr
-            SET explanation = lr.explanation || jsonb_build_object(
+            UPDATE latest_risk
+            SET explanation = explanation || jsonb_build_object(
                     'briefing_it', $2::text,
                     'analysis', $3::jsonb
                 )
-            FROM risk_assessments ra
-            WHERE ra.run_id = $1
-              AND lr.cell_id = ra.cell_id
-              AND lr.hazard_type = ra.hazard_type
-              AND lr.computed_at = ra.computed_at
+            WHERE run_id = $1
             """,
             run_id,
             briefing_it,

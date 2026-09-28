@@ -6,6 +6,33 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+* **Lo storico registra i cambiamenti, non i fotogrammi** (#135). Lo sweep
+  orario scriveva una riga per cella a ogni giro — 312.550 celle × 3 pericoli
+  × 24 giri, misurate 18.898.377 righe nella sola partizione del 20 settembre
+  — e il 28 settembre hanno riempito i 200 GB di `/srv/pgfast`, mandando
+  Postgres in crash loop durante il recovery. Dal #125 lo stato corrente vive
+  in `latest_risk` ed è completo per costruzione, quindi `risk_assessments`
+  può registrare solo ciò che è una notizia: cella mai vista, cambio di
+  classe, scostamento oltre `SCORING__HISTORY_MIN_DELTA` (0,02), o battito
+  scaduto (`SCORING__HISTORY_HEARTBEAT_HOURS`, 24 h). Il battito non è un
+  dettaglio: senza, la retention farebbe scadere l'ultima riga di una cella
+  immobile e il trend mostrerebbe il vuoto dove c'è la calma.
+* `attach_narrative` raggiunge `latest_risk` per `run_id` invece di unirsi a
+  `risk_assessments` su tre colonne: con lo storico rado quell'unione avrebbe
+  trovato le sole celle cambiate, e il briefing sarebbe arrivato a una
+  manciata di celle invece che all'area intera.
+
+### Added
+
+* Passo notturno **`storage`**: registra quanto pesa il database e quali
+  tabelle pesano, e avvisa oltre `SCORING__DB_SIZE_WARN_GB`. Lo spazio libero
+  del filesystem da SQL non si vede, ma la crescita sì — e il 28 settembre
+  nessuno se n'era accorto perché niente guardava.
+* Migrazione 049: `latest_risk.history_at` (quando è stata scritta l'ultima
+  riga di storico, che non è l'ultimo calcolo) e `latest_risk.run_id`.
+
 ### Added
 
 * **Documentazione divulgativa** in `docs/divulgazione/` (issue #129): sei

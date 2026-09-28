@@ -49,6 +49,7 @@ STEPS = (
     "forecast_history",
     "partitions_maintain",
     "retention",
+    "storage",
 )
 
 
@@ -205,6 +206,7 @@ async def run_nightly_pipeline(deps: AppDependencies) -> dict[str, Any]:
     out["forecast_history"] = await _step("forecast_history", lambda: _forecast(deps))
     out["partitions_maintain"] = await _step("partitions_maintain", lambda: _partitions(deps))
     out["retention"] = await _step("retention", lambda: _retention(deps))
+    out["storage"] = await _step("storage", lambda: _storage(deps))
 
     log.info("job.nightly.done", steps={k: v is not None for k, v in out.items()})
     return out
@@ -220,6 +222,47 @@ async def _forecast(deps: AppDependencies) -> dict[str, Any]:
 
 async def _partitions(deps: AppDependencies) -> dict[str, Any]:
     return {"dropped": await run_partitions_job(deps)}
+
+
+async def _storage(deps: AppDependencies) -> dict[str, Any]:
+    """Quanto pesa il database, e un avviso prima che il volume finisca.
+
+    Il 2026-09-28 `/srv/pgfast` è arrivato al 100% e Postgres è andato in
+    crash loop: nessuno se n'era accorto prima, perché niente guardava. Un
+    sistema che monitora il territorio e non si accorge del proprio disco
+    pieno ha un problema suo.
+
+    Lo spazio libero del filesystem da SQL non si vede — il database gira in
+    un altro container e Postgres non espone una `statvfs`. Si guarda quindi
+    ciò che si può misurare da qui: quanto pesa, e quali tabelle pesano. La
+    dimensione finisce fra le metriche di `job_runs`, così la *crescita*
+    diventa leggibile nello storico dei run anche senza soglia.
+    """
+    async with acquire() as conn:
+        size = int(await conn.fetchval("SELECT pg_database_size(current_database())"))
+        rows = await conn.fetch(
+            """
+            SELECT c.relname, pg_total_relation_size(c.oid) AS bytes
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p', 'm')
+            ORDER BY 2 DESC
+            LIMIT 3
+            """
+        )
+    gb = size / 1024**3
+    soglia = deps.settings.scoring.db_size_warn_gb
+    out: dict[str, Any] = {
+        "db_size_gb": round(gb, 1),
+        "warn_at_gb": soglia,
+        "largest": {str(r["relname"]): round(int(r["bytes"]) / 1024**3, 1) for r in rows},
+    }
+    if soglia and gb >= soglia:
+        # `warning` e non `error`: il database funziona, è il margine che sta
+        # finendo. Chi legge i log deve poterlo distinguere da un guasto.
+        log.warning("job.nightly.storage_near_limit", **out)
+        out["status"] = "warn"
+    return out
 
 
 async def _retention(deps: AppDependencies) -> dict[str, Any]:
