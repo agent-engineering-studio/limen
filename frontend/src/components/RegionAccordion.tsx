@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
 import { useHazard } from "../lib/hazard";
+import type { PanelFailure } from "../lib/panel-state";
+import { describeFailure } from "../lib/panel-state";
+import { PanelDegraded, PanelEmpty, PanelLoading } from "./PanelState";
 import { RISK_COLOR_BY_LEVEL, RISK_LABEL_IT_BY_LEVEL } from "../lib/risk-colors";
 import type { AlertItem } from "../types";
 import CellTrendSparkline from "./CellTrendSparkline";
@@ -240,14 +243,16 @@ function RegionalAnalysis({ aoiId }: { aoiId: string }): JSX.Element {
 export function RegionAccordion(props: RegionAccordionProps): JSX.Element {
   const { onCellSelect, selectedCellId } = props;
   const [items, setItems] = useState<AlertItem[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<PanelFailure | null>(null);
+  const [tentativo, setTentativo] = useState(0);
   const { selected: hazard } = useHazard();
+  const riprova = useCallback(() => setTentativo((n) => n + 1), []);
 
   useEffect(() => {
     // Azzerare prima della nuova fetch: senza, un errore su un pericolo
-    // resterebbe a schermo per sempre (il render corto-circuita su `error`)
+    // resterebbe a schermo per sempre (il render corto-circuita su `failure`)
     // e le righe del pericolo precedente si spaccerebbero per quelle nuove.
-    setError(null);
+    setFailure(null);
     setItems(null);
     const ctrl = new AbortController();
     defaultApiClient
@@ -257,11 +262,12 @@ export function RegionAccordion(props: RegionAccordionProps): JSX.Element {
       )
       .then((resp) => setItems(resp.items))
       .catch((err: unknown) => {
-        if (!ctrl.signal.aborted)
-          setError(err instanceof Error ? err.message : String(err));
+        if (ctrl.signal.aborted) return;
+        console.error("alerts", err);
+        setFailure(describeFailure(err));
       });
     return () => ctrl.abort();
-  }, [hazard]);
+  }, [hazard, tentativo]);
 
   const groups = useMemo(() => (items ? groupByRegion(items) : []), [items]);
 
@@ -272,14 +278,15 @@ export function RegionAccordion(props: RegionAccordionProps): JSX.Element {
         Prima le celle il cui eventuale movimento toccherebbe case o strade
         (🏠 🛣), poi le altre. Il numero è il rischio della legenda.
       </p>
-      {error ? (
-        <p className="panel-error">{error}</p>
+      {failure ? (
+        <PanelDegraded failure={failure} onRetry={riprova} />
       ) : items === null ? (
-        <p>caricamento…</p>
+        <PanelLoading label="Carico le celle sopra soglia" />
       ) : groups.length === 0 ? (
-        <p className="alert-meta">
-          Nessuna cella Moderate o superiore nelle ultime 72 ore.
-        </p>
+        <PanelEmpty
+          title="Nessuna cella sopra la soglia"
+          detail="Nessuna cella in classe Moderata o superiore secondo l'ultimo calcolo."
+        />
       ) : (
         groups.map((g, i) => {
           const comuni = groupByComune(g.cells);
