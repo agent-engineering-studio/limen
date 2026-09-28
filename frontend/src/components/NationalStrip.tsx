@@ -4,7 +4,7 @@ import { defaultApiClient } from "../lib/api-client";
 import { useHazard } from "../lib/hazard";
 import type { PanelFailure } from "../lib/panel-state";
 import { describeFailure, isStale, relativeTime } from "../lib/panel-state";
-import { verdictFromTotals } from "../lib/verdict";
+import { verdictFromHazards } from "../lib/verdict";
 import type { NationalReportResponse } from "../types";
 import { PanelDegraded, PanelLoading } from "./PanelState";
 
@@ -60,18 +60,47 @@ export function NationalStrip(): JSX.Element {
     );
   }
 
-  const verdetto = verdictFromTotals(report.totals);
+  // I tre indici insieme, non uno alla volta: sapere che l'incendio ha aree
+  // in classe Alta mentre le frane non ne hanno richiedeva due clic e la
+  // memoria del numero visto prima.
+  const verdetto = verdictFromHazards(
+    report.hazards.map((h) => ({
+      hazard: h.hazard,
+      label_it: h.label_it,
+      totals: h.totals,
+      computed_at: h.computed_at,
+    })),
+  );
   const vecchio = isStale(report.generated_at);
 
   return (
     <section className="national-strip" aria-label="Quadro nazionale">
-      <div className={`verdict tone-${verdetto.tone}`}>
-        <p className="verdict-text">{verdetto.text}</p>
-        {verdetto.note ? <p className="verdict-note">{verdetto.note}</p> : null}
+      <div className={`verdict tone-${verdetto.headline.tone}`}>
+        <p className="verdict-text">{verdetto.headline.text}</p>
+        {verdetto.headline.note ? (
+          <p className="verdict-note">{verdetto.headline.note}</p>
+        ) : null}
+        {verdetto.lines.length > 1 ? (
+          <ul className="verdict-hazards">
+            {verdetto.lines.map((l) => (
+              <li key={l.hazard} className={`tone-${l.tone}`}>
+                <span className={`hazard-dot ${l.hazard}`} aria-hidden />
+                <span className="vh-label">{l.label}</span>
+                <span className="vh-text">{l.text}</span>
+                {/* L'età per pericolo: con l'alluvione ferma da due giorni
+                    accanto all'incendio di un'ora fa, un solo «aggiornato»
+                    per tutta la sezione diceva una cosa falsa su una delle
+                    due. */}
+                <span className={`vh-age ${l.computed_at && isStale(l.computed_at) ? "is-stale" : ""}`}>
+                  {l.computed_at ? relativeTime(l.computed_at) : "mai calcolato"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <p className="verdict-meta">
-          {relativeTime(report.generated_at)} · {report.totals.regions} regioni ·{" "}
-          {report.hazards.find((h) => h.hazard === report.hazard)?.label_it ??
-            report.hazard}
+          quadro aggiornato {relativeTime(report.generated_at)} ·{" "}
+          {report.totals.regions} regioni
         </p>
         {vecchio ? (
           // Numeri fermi da ore mostrati senza dirlo sono peggio di nessun

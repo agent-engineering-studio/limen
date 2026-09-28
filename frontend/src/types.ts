@@ -285,6 +285,10 @@ export interface NationalHazardBlock {
     high_or_above: number;
     moderate: number;
   };
+  /** Quando è stato calcolato l'ultimo dato di **questo** pericolo: senza,
+   *  la pagina mostrava un solo «aggiornato» per tutti e tre e con uno fermo
+   *  da due giorni diceva una cosa falsa. `null` se non c'è nulla. */
+  computed_at: string | null;
   top_cells: NationalTopCell[];
 }
 

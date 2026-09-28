@@ -14,7 +14,11 @@ import LegendPanel from "../components/LegendPanel";
 import RiskMap from "../components/RiskMap";
 import { defaultApiClient } from "../lib/api-client";
 import { HazardProvider } from "../lib/hazard";
-import { maplibreMultiHazardColorMatch } from "../lib/risk-colors";
+import {
+  HAZARD_HUE,
+  maplibreMultiHazardColorMatch,
+  maplibreWorstHazardLine,
+} from "../lib/risk-colors";
 import type { HazardsResponse, LegendResponse } from "../types";
 
 const ONE: HazardsResponse = {
@@ -94,13 +98,15 @@ describe("mappa in vista d'insieme", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "tutti" }));
-    expect(await screen.findByRole("table")).toBeInTheDocument();
+    // La matrice 5×3 non c'è più: il segno della vista d'insieme è la
+    // legenda a scala sola.
+    expect(await screen.findByText(/Il colore dice/)).toBeInTheDocument();
 
     // Tornando indietro si riparte dall'incendio, non dal default — e senza
     // una nuova richiesta: il pericolo scelto non è mai cambiato, quindi i
     // cutoff in mano sono già i suoi.
     fireEvent.click(screen.getByRole("button", { name: "Incendio" }));
-    await waitFor(() => expect(screen.queryByRole("table")).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/Il colore dice/)).toBeNull());
     expect(screen.getByRole("button", { name: "Incendio" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -113,7 +119,9 @@ describe("mappa in vista d'insieme", () => {
 });
 
 describe("legenda in vista d'insieme", () => {
-  it("mostra una colonna per pericolo invece dei cutoff numerici", async () => {
+  it("mostra una scala sola e la chiave dei bordi, non una matrice", async () => {
+    // La matrice 5×3 chiedeva quindici caselle per leggere una cella,
+    // perché il colore portava due informazioni. Ora ne porta una.
     vi.spyOn(defaultApiClient, "getHazards").mockResolvedValue(THREE);
     vi.spyOn(defaultApiClient, "getLegend").mockResolvedValue(EMPTY_LEGEND);
 
@@ -126,30 +134,39 @@ describe("legenda in vista d'insieme", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "tutti" }));
 
-    const matrice = await screen.findByRole("table");
-    expect(matrice).toBeInTheDocument();
+    expect(await screen.findByText(/Il colore dice/)).toBeInTheDocument();
+    expect(screen.queryByRole("table")).toBeNull();
+    // I tre pericoli restano nominati nella chiave: senza, il bordo
+    // colorato sarebbe un colore senza significato dichiarato. Si cerca
+    // dentro la chiave perché il selettore li nomina a sua volta.
+    const chiave = document.querySelector(".legend-hazards");
+    expect(chiave).not.toBeNull();
     for (const label of ["Frana", "Alluvione", "Incendio"]) {
-      expect(
-        screen.getByRole("columnheader", { name: label }),
-      ).toBeInTheDocument();
+      expect(chiave?.textContent).toContain(label);
     }
-    // Ogni combinazione classe×pericolo è nominata per i lettori di schermo:
-    // il colore da solo non è un'informazione accessibile.
-    expect(screen.getByText("Incendio: Molto alto")).toBeInTheDocument();
+    // E le soglie numeriche restano dichiarate come quelle delle frane,
+    // invece di lasciar credere che valgano per tutti e tre.
+    expect(screen.getByText(/quelle qui sopra sono delle frane/i)).toBeInTheDocument();
   });
 });
 
 describe("colore della vista d'insieme", () => {
-  it("annida la classe dentro il pericolo, così la tinta dice quale", () => {
+  it("il colore dice quanto, non quale: una scala sola sulla classe", () => {
     const expr = maplibreMultiHazardColorMatch() as unknown[];
     expect(expr[0]).toBe("match");
+    // Sulla classe, non sul pericolo: è tutto il cambiamento.
+    expect(expr[1]).toEqual(["get", "worst_level"]);
+    expect(expr).toContain("VeryHigh");
+  });
+
+  it("quale pericolo lo dice il bordo, con una tinta per pericolo", () => {
+    const expr = maplibreWorstHazardLine() as unknown[];
+    expect(expr[0]).toBe("match");
     expect(expr[1]).toEqual(["get", "worst_hazard"]);
-    expect(expr[2]).toBe("wildfire");
-    // Il ramo dell'incendio è a sua volta un match sulla classe, non un
-    // colore fisso: senza, l'intensità sparirebbe dalla mappa d'insieme.
-    const incendio = expr[3] as unknown[];
-    expect(incendio[0]).toBe("match");
-    expect(incendio[1]).toEqual(["get", "worst_level"]);
-    expect(incendio).toContain("#993404");
+    expect(expr).toContain("wildfire");
+    expect(expr).toContain(HAZARD_HUE.wildfire);
+    // L'ultimo elemento è il ripiego: una cella senza pericolo dichiarato
+    // non deve restare senza bordo e sembrare non selezionata.
+    expect(typeof expr[expr.length - 1]).toBe("string");
   });
 });

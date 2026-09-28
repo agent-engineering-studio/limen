@@ -2,7 +2,12 @@ import { useEffect, useState } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
 import { useHazard } from "../lib/hazard";
-import { RISK_CLASSES, riskClassesFor, riskColorsFor } from "../lib/risk-colors";
+import {
+  HAZARD_HUE,
+  RISK_CLASSES,
+  riskClassesFor,
+  riskColorsFor,
+} from "../lib/risk-colors";
 import type { HazardType, LegendClass, RiskLevel } from "../types";
 
 const PC_COLOR: Record<string, string> = {
@@ -13,6 +18,10 @@ const PC_COLOR: Record<string, string> = {
 };
 
 /** I cinque colori in una riga: resta visibile anche con la legenda chiusa. */
+/** La scala di riferimento della vista d'insieme: quella del pericolo di
+ *  default. Nominata una volta perché è una scelta, non un dettaglio. */
+const SCALA_RIFERIMENTO = "landslide" as const;
+
 function ScalaColori({
   levels,
   hazard,
@@ -77,50 +86,59 @@ export function LegendPanel(): JSX.Element {
   // tinta e pericolo, che nella vista d'insieme è l'unico modo di sapere
   // *cosa* colora una cella.
   if (multi) {
+    // Una scala sola, non una matrice 5×3. La vista d'insieme portava due
+    // informazioni in un colore — la tinta il pericolo, l'intensità la
+    // gravità — e per decodificarla serviva questa tabella accanto: quindici
+    // caselle per leggere una cella. Ora il colore dice quanto, e quale
+    // pericolo lo dice il bordo delle celle in classe alta.
     return (
       <details className="legend-panel" aria-label="Legenda classi di rischio">
         <summary>
-          <ScalaColori levels={RISK_CLASSES.map((c) => c.level)} hazard={selected} />
+          <ScalaColori
+            levels={RISK_CLASSES.map((c) => c.level)}
+            hazard={SCALA_RIFERIMENTO}
+          />
           Classi di rischio · tutti i pericoli
         </summary>
-        <table className="legend-matrix">
-          <thead>
-            <tr>
-              <th scope="col">classe</th>
-              {available.map((h) => (
-                <th key={h.hazard} scope="col">
-                  {h.label_it}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {RISK_CLASSES.map((c) => (
-              <tr key={c.level}>
-                <th scope="row">
-                  {c.label} <small style={{ color: "#5e6473" }}>({c.short})</small>
-                </th>
-                {available.map((h) => (
-                  <td key={h.hazard}>
-                    <span
-                      className="legend-swatch"
-                      role="presentation"
-                      aria-hidden
-                      style={{ background: riskColorsFor(h.hazard)[c.level] }}
-                    />
-                    <span className="sr-only">
-                      {h.label_it}: {c.label}
-                    </span>
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+          {riskClassesFor(SCALA_RIFERIMENTO).map((c) => (
+            <li key={c.level} className="legend-row">
+              <span
+                className="legend-swatch"
+                role="presentation"
+                aria-hidden
+                style={{ background: c.color }}
+              />
+              <span>
+                {c.label} <small style={{ color: "#5e6473" }}>({c.short})</small>
+              </span>
+              <span className="legend-range">
+                {`${c.range[0].toFixed(2)}-${c.range[1].toFixed(2)}`}
+              </span>
+            </li>
+          ))}
+        </ul>
         <p className="legend-note">
-          Ogni cella prende il colore del pericolo peggiore in quel punto: la
-          tinta dice quale, l'intensità quanto. Le soglie numeriche cambiano da
-          un pericolo all'altro — scegli un pericolo per vederle.
+          Il colore dice <strong>quanto</strong>: è la classe del pericolo
+          peggiore in quel punto. <strong>Quale</strong> pericolo lo dice il
+          bordo, sulle sole celle in classe Alta o superiore — dove la domanda
+          nasce davvero.
+        </p>
+        <ul className="legend-hazards">
+          {available.map((h) => (
+            <li key={h.hazard}>
+              <span
+                className="legend-outline"
+                aria-hidden
+                style={{ borderColor: HAZARD_HUE[h.hazard] }}
+              />
+              {h.label_it}
+            </li>
+          ))}
+        </ul>
+        <p className="legend-note">
+          Le soglie numeriche cambiano da un pericolo all&apos;altro: quelle
+          qui sopra sono delle frane. Scegli un pericolo per vedere le sue.
         </p>
       </details>
     );
