@@ -519,6 +519,27 @@ class ScoringSettings(BaseSettings):
     # Hot-table retention for per-cell assessments (~15 GB/day nationally).
     # mv_latest_risk + alert ledgers keep the operational state. 0 = keep all.
     assessments_retention_days: int = Field(default=14, ge=0)
+    # Quando una cella merita una riga di storico (#135). Lo sweep orario
+    # scriveva ogni cella a ogni giro — ~19 milioni di righe al giorno — e la
+    # maggioranza diceva la stessa cosa dell'ora prima: con il 70% delle
+    # celle in classe «Nessuno» per distribuzione obiettivo, il volume era
+    # quasi tutto fermo. Lo stato corrente vive in `latest_risk` dal #125,
+    # quindi lo storico può registrare i cambiamenti invece dei fotogrammi.
+    #
+    # `history_min_delta` è lo scostamento di punteggio sotto il quale due
+    # calcoli sono la stessa notizia: 0,02 su una scala 0-1 sta sotto la
+    # risoluzione visibile della spezzata del trend. 0 = scrivi sempre, cioè
+    # il comportamento di prima.
+    history_min_delta: float = Field(default=0.02, ge=0.0, le=1.0)
+    # Il battito: anche una cella immobile lascia una traccia ogni tanto.
+    # Senza, la retention le farebbe scadere l'ultima riga e la sua storia si
+    # azzererebbe — il trend mostrerebbe il vuoto dove c'è la calma.
+    history_heartbeat_hours: int = Field(default=24, ge=1)
+    # Oltre questa dimensione il passo notturno avvisa che il database sta
+    # crescendo verso il bordo del volume. 0 = nessun avviso: la soglia
+    # dipende dal disco del deployment, e un default inventato qui sarebbe
+    # sbagliato ovunque tranne che su una macchina.
+    db_size_warn_gb: int = Field(default=0, ge=0)
     mlflow_model_stage: Literal["Staging", "Production", "Archived"] = "Production"
     # Promotion gate — the ML model is blocked from champion until it
     # clears these floors on the same backtest the V1 baseline ran on.

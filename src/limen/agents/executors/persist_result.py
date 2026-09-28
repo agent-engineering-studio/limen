@@ -36,6 +36,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from limen.agents.workflow_runtime.executor import Executor, handler
+from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
@@ -61,12 +62,31 @@ _COPY_COLUMNS = (
 
 
 class PersistResultExecutor(Executor):
-    """Writes one ``risk_assessments`` row per scored cell, in una COPY."""
+    """Scrive lo stato corrente di ogni cella, e la storia solo di chi cambia."""
 
-    def __init__(self, *, horizon: str = "24h", hazard: HazardType = DEFAULT_HAZARD) -> None:
+    def __init__(
+        self,
+        *,
+        horizon: str = "24h",
+        hazard: HazardType = DEFAULT_HAZARD,
+        history_min_delta: float | None = None,
+        history_heartbeat_hours: int | None = None,
+    ) -> None:
         super().__init__(name="PersistResult")
         self._horizon = horizon
         self._hazard = hazard
+        # I due parametri sono iniettabili per i test, che devono poter
+        # provare «scrivi sempre» e «non scrivere mai» senza variabili
+        # d'ambiente; in esercizio vengono dalle impostazioni.
+        scoring = get_settings().scoring
+        self._history_min_delta = (
+            scoring.history_min_delta if history_min_delta is None else history_min_delta
+        )
+        self._history_heartbeat_hours = (
+            scoring.history_heartbeat_hours
+            if history_heartbeat_hours is None
+            else history_heartbeat_hours
+        )
 
     @handler
     async def run(self, ctx: MonitoringContext) -> MonitoringContext:
@@ -118,33 +138,94 @@ class PersistResultExecutor(Executor):
                 )
                 for cell in ctx.cell_results
             ]
-            await conn.copy_records_to_table(
-                "risk_assessments", records=records, columns=list(_COPY_COLUMNS)
+            # Le righe dello sweep passano da una tabella temporanea, non
+            # direttamente nello storico (#135). Serve a decidere *prima* di
+            # scrivere quali celle meritano una riga: il confronto è con
+            # `latest_risk`, che a questo punto contiene ancora lo stato
+            # precedente.
+            await conn.execute(
+                """
+                CREATE TEMP TABLE sweep_rows (
+                    cell_id          text,
+                    computed_at      timestamptz,
+                    hazard_type      hazard_type,
+                    horizon          text,
+                    score            double precision,
+                    class            text,
+                    factors          jsonb,
+                    explanation      jsonb,
+                    pipeline_version text,
+                    dataset_versions bigint[],
+                    run_id           bigint
+                ) ON COMMIT DROP
+                """
             )
-            # Lo stato corrente lo conosce chi scrive: è questo. Prima veniva
-            # ricavato rigenerando `mv_latest_risk`, cioè ordinando ~19
-            # milioni di righe al giorno per estrarne 937.000 — venti minuti
-            # contro un debounce di cinque (#125). Qui è un'istruzione sola
-            # sulle righe appena scritte, trovate per `run_id`.
+            await conn.copy_records_to_table(
+                "sweep_rows", records=records, columns=list(_COPY_COLUMNS)
+            )
+
+            # Cosa è una notizia: una cella mai vista, un cambio di classe,
+            # uno scostamento di punteggio oltre la soglia, o il battito
+            # scaduto. Tutto il resto è la stessa cosa dell'ora prima, e
+            # riscriverla ventiquattro volte al giorno è ciò che ha riempito
+            # il disco.
             #
-            # La guardia sul `computed_at` serve allo sweep previsionale e a
-            # un eventuale replay: una riga più vecchia non deve sovrascrivere
-            # una più recente solo perché è arrivata dopo.
+            # `history_at` e non `computed_at`: il secondo si aggiorna a ogni
+            # giro anche quando non scriviamo, quindi il battito misurato su
+            # quello non scadrebbe mai.
+            await conn.execute(
+                """
+                CREATE TEMP TABLE sweep_keep ON COMMIT DROP AS
+                SELECT s.*,
+                       lr.history_at AS prev_history_at,
+                       (
+                            lr.cell_id IS NULL
+                         OR lr.class IS DISTINCT FROM s.class
+                         OR abs(coalesce(lr.score, -1.0) - s.score) >= $1
+                         OR lr.history_at IS NULL
+                         OR s.computed_at - lr.history_at
+                              >= make_interval(hours => $2)
+                       ) AS keep
+                FROM sweep_rows s
+                LEFT JOIN latest_risk lr
+                       ON lr.cell_id = s.cell_id
+                      AND lr.hazard_type = s.hazard_type
+                """,
+                float(self._history_min_delta),
+                int(self._history_heartbeat_hours),
+            )
+
+            scritte = await conn.fetchval("SELECT count(*) FROM sweep_keep WHERE keep")
+            await conn.execute(
+                f"""
+                INSERT INTO risk_assessments ({", ".join(_COPY_COLUMNS)})
+                SELECT {", ".join(_COPY_COLUMNS)} FROM sweep_keep WHERE keep
+                """
+            )
+
+            # Lo stato corrente invece è **sempre** completo: è la mappa.
+            # `history_at` avanza solo per le celle che hanno lasciato una
+            # riga, così il battito successivo si misura da lì.
+            #
+            # La guardia sul `computed_at` serve a un replay: una riga più
+            # vecchia non deve sovrascrivere una più recente solo perché è
+            # arrivata dopo.
             await conn.execute(
                 """
                 INSERT INTO latest_risk (
                     cell_id, hazard_type, score, class, horizon,
-                    pipeline_version, computed_at, factors, explanation
+                    pipeline_version, computed_at, factors, explanation,
+                    history_at, run_id
                 )
-                SELECT cell_id, hazard_type, score, class, horizon,
-                       pipeline_version, computed_at, factors, explanation
-                FROM risk_assessments
+                SELECT k.cell_id, k.hazard_type, k.score, k.class, k.horizon,
+                       k.pipeline_version, k.computed_at, k.factors, k.explanation,
+                       CASE WHEN k.keep THEN k.computed_at ELSE k.prev_history_at END,
+                       k.run_id
+                FROM sweep_keep k
                 -- Le righe previsionali (`horizon` '+24h') le scrive
                 -- `forecast_history` per il grafico dell'andamento, e non
-                -- sono lo stato corrente di niente: sotto la vecchia vista
-                -- diventavano «l'ultimo punteggio» solo perché erano le più
-                -- recenti, e la mappa mostrava una previsione come presente.
-                WHERE run_id = $1 AND computed_at = $2 AND horizon NOT LIKE '+%'
+                -- sono lo stato corrente di niente.
+                WHERE k.horizon NOT LIKE '+%'
                 ON CONFLICT (cell_id, hazard_type) DO UPDATE
                 SET score            = EXCLUDED.score,
                     class            = EXCLUDED.class,
@@ -152,11 +233,11 @@ class PersistResultExecutor(Executor):
                     pipeline_version = EXCLUDED.pipeline_version,
                     computed_at      = EXCLUDED.computed_at,
                     factors          = EXCLUDED.factors,
-                    explanation      = EXCLUDED.explanation
+                    explanation      = EXCLUDED.explanation,
+                    history_at       = EXCLUDED.history_at,
+                    run_id           = EXCLUDED.run_id
                 WHERE latest_risk.computed_at <= EXCLUDED.computed_at
-                """,
-                run_id,
-                computed_at,
+                """
             )
 
         # La mappa è già aggiornata: `mv_latest_risk` è una vista su
@@ -177,7 +258,11 @@ class PersistResultExecutor(Executor):
         log.info(
             "executor.persist_result",
             aoi_id=ctx.aoi_id,
-            cells_persisted=len(records),
+            # Due numeri e non uno: lo stato corrente è sempre completo, lo
+            # storico no. Il loro rapporto è la misura del #135 — se tornano
+            # a coincidere, la scrittura selettiva ha smesso di funzionare.
+            cells_current=len(records),
+            cells_history=int(scritte or 0),
             run_id=run_id,
         )
         return ctx.with_update(assessment_id=run_id)
