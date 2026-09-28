@@ -129,37 +129,50 @@ export function maplibreColorMatch(
 }
 
 /**
- * Colore per la vista "tutti i pericoli".
+ * Colore per la vista "tutti i pericoli": **una scala sola**.
  *
- * Due informazioni in un colore: la **tinta** dice quale pericolo domina la
- * cella, l'**intensità** dice quanto è grave. Una sola rampa per la classe
- * massima direbbe solo la seconda, e su una mappa dove le tre rampe per
- * pericolo esistono già sarebbe anche in contrasto con loro — la stessa cella
- * cambierebbe colore passando dalla vista d'insieme a quella del pericolo che
- * la determina.
+ * Portava due informazioni in un canale — la tinta diceva quale pericolo
+ * domina, l'intensità quanto è grave — e sono due dimensioni in un colore:
+ * quella vista si guardava una volta e non si usava, perché per decodificarla
+ * serviva la legenda a matrice 5×3 accanto.
  *
- * `worst_hazard` e `worst_level` sono gli attributi di `v_multi_hazard`
- * (migrazione 037); il ripiego copre le celle senza valutazione.
+ * Ora il colore dice **quanto**, sempre e solo. Quale pericolo lo dicono il
+ * bordo delle celle in classe alta (:func:`maplibreWorstHazardLine`), il
+ * popup e la colonna, dove c'è lo spazio per scriverlo a parole.
+ *
+ * L'obiezione che questo codice portava prima resta vera e va detta: la
+ * stessa cella cambia colore passando dalla vista d'insieme a quella del
+ * pericolo che la determina, perché le rampe per pericolo esistono ancora.
+ * È il prezzo di avere una vista d'insieme leggibile, e la strada per
+ * toglierlo è unificare anche le rampe — una decisione che riguarda tutte e
+ * tre le mappe, non solo questa.
+ *
+ * `worst_level` è l'attributo di `v_multi_hazard` (migrazione 037); il
+ * ripiego copre le celle senza valutazione.
  */
 export function maplibreMultiHazardColorMatch(): unknown {
-  const ladder = (hazard: HazardType): unknown[] => {
-    const colors = riskColorsFor(hazard);
-    const stops: unknown[] = ["match", ["get", "worst_level"]];
-    for (const c of RISK_CLASSES) {
-      stops.push(c.level, colors[c.level]);
-    }
-    stops.push("#dadcdf");
-    return stops;
-  };
-  return [
-    "match",
-    ["get", "worst_hazard"],
-    "wildfire",
-    ladder("wildfire"),
-    "flood",
-    ladder("flood"),
-    // Le frane sono anche il ramo di default: una cella senza `worst_hazard`
-    // non è ancora valutata, e la classe cade sul grigio del ripiego sopra.
-    ladder("landslide"),
-  ];
+  return maplibreColorMatch("worst_level", "landslide");
+}
+
+/** Tinte dei pericoli: le stesse dei pallini nella colonna. */
+export const HAZARD_HUE: Record<HazardType, string> = {
+  landslide: "#f03b20",
+  wildfire: "#d95f0e",
+  flood: "#2b8cbe",
+};
+
+/**
+ * Bordo che dice **quale** pericolo, sulle sole celle in classe alta.
+ *
+ * Solo lì perché è dove la domanda nasce: davanti a una cella scura si vuole
+ * sapere di cosa, davanti a una chiara no — e un bordo colorato su ogni cella
+ * ridarebbe alla mappa il rumore che questa modifica toglie.
+ */
+export function maplibreWorstHazardLine(): unknown {
+  const stops: unknown[] = ["match", ["get", "worst_hazard"]];
+  for (const [hazard, hue] of Object.entries(HAZARD_HUE)) {
+    stops.push(hazard, hue);
+  }
+  stops.push("#7a7f8a");
+  return stops;
 }

@@ -2117,3 +2117,28 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   color: var(--amber-deep);
   font-weight: 600;
 }
+
+/* Chiave del bordo: quale pericolo, nella vista d'insieme. */
+.legend-hazards {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.legend-hazards li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.legend-outline {
+  display: inline-block;
+  width: 13px;
+  height: 11px;
+  border: 2px solid;
+  border-radius: 2px;
+  background: #f0e3c2;
+}

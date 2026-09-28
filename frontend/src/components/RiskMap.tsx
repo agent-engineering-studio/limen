@@ -8,6 +8,7 @@ import { useHazard } from "../lib/hazard";
 import {
   maplibreColorMatch,
   maplibreMultiHazardColorMatch,
+  maplibreWorstHazardLine,
 } from "../lib/risk-colors";
 
 const SOURCE_ID = "limen-risk";
@@ -18,6 +19,7 @@ const REGION_LAYER_ID = "limen-region-fill";
 const COMUNE_SOURCE_ID = "limen-comune";
 const COMUNE_LAYER_ID = "limen-comune-fill";
 const COMUNE_BADGE_ID = "limen-comune-badge";
+const WORST_HAZARD_LAYER_ID = "limen-worst-hazard";
 const COMUNE_MIN_ZOOM = 7;
 const COMUNE_MAX_ZOOM = 11;
 // Sotto questo zoom una cella da 1 km è sub-pixel: mostriamo il
@@ -310,6 +312,31 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
           "fill-outline-color": "#333",
         },
       },
+      ...(multi
+        ? [
+            {
+              // Quale pericolo, sulle sole celle in classe alta. È il secondo
+              // canale che sostituisce la tinta: il colore ora dice quanto,
+              // il bordo dice di cosa, e lo dice dove la domanda nasce
+              // davvero — davanti a una cella scura. Su ogni cella
+              // ridarebbe alla mappa il rumore che questa scelta toglie.
+              id: WORST_HAZARD_LAYER_ID,
+              type: "line" as const,
+              source: SOURCE_ID,
+              "source-layer": sourceLayer,
+              minzoom: cellMinZoom,
+              paint: {
+                "line-color": maplibreWorstHazardLine() as never,
+                "line-width": 1.6,
+              },
+              filter: [
+                "in",
+                ["get", "worst_level"],
+                ["literal", ["High", "VeryHigh"]],
+              ] as never,
+            },
+          ]
+        : []),
       {
         // Selection outline: the filter starts matching nothing and is
         // swapped in the selectedCellId effect below.
