@@ -304,9 +304,7 @@ async def run() -> int:
             # Un'esposizione mancante degrada il numero di attenzione, non lo
             # falsifica: il massimo resta il punteggio senza peso. Fermare la
             # calibrazione per questo sarebbe sproporzionato.
-            log.warning(
-                "calibrate.exposure.failed", error=str(exc), error_type=type(exc).__name__
-            )
+            log.warning("calibrate.exposure.failed", error=str(exc), error_type=type(exc).__name__)
 
         exit_code = 0
         thresholds = load_regional_thresholds()
