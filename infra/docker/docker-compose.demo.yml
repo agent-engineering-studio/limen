@@ -94,9 +94,10 @@ services:
       # whose creds are missing degrade to a no-op rather than erroring.
       # NOTIFICATIONS__ENABLED_CHANNELS: '["mqtt"]'
       # Istanza Open-Meteo propria (#142). Vuote ⇒ API pubblica, com'era.
-      # Il profilo compose `meteo` ha un progetto suo e non condivide questa
-      # rete, quindi si passa dall'host: host.docker.internal, mai 127.0.0.1,
-      # che dentro un container è il container.
+      # Il profilo compose `meteo` ha un progetto suo ma si attacca a QUESTA
+      # rete, quindi l'indirizzo è `http://openmeteo:8080/...`. La porta 8085
+      # sul loopback dell'host serve a `make meteo-check`, non a noi: da un
+      # container `host.docker.internal` risolve al gateway, non al loopback.
       OPENMETEO__FORECAST_URL: ${OPENMETEO__FORECAST_URL:-}
       OPENMETEO__ARCHIVE_URL: ${OPENMETEO__ARCHIVE_URL:-}
       OPENMETEO__MODELS: ${OPENMETEO__MODELS:-}
