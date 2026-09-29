@@ -1,3 +1,4 @@
+import type { JSX } from "react";
 // Il pericolo selezionato, risolto da GET /api/hazards.
 //
 // Un contesto e non una proprietà passata a mano: sei componenti della

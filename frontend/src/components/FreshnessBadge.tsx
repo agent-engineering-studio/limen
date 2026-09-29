@@ -10,6 +10,7 @@
 // vecchia etichetta generica che un buco nell'header.
 
 import { useEffect, useState } from "react";
+import type { JSX } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
 import type { JobStatusResponse } from "../types";

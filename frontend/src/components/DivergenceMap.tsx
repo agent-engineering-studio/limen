@@ -4,6 +4,7 @@
 // il colore significa "disaccordo tra modelli", non "pericolo".
 
 import { useEffect, useRef } from "react";
+import type { JSX } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 

@@ -1,3 +1,4 @@
+import type { JSX } from "react";
 import type { FlowPhase } from "../lib/markdown";
 
 // Lo schema che ricorre in ogni pagina divulgativa: la stessa catena, con

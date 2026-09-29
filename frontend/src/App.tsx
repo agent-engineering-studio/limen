@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { JSX } from "react";
 import type maplibregl from "maplibre-gl";
 
 import CellPopup from "./components/CellPopup";

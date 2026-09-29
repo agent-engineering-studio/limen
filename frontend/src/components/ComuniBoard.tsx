@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { JSX } from "react";
 import {
   Alert,
   Badge,
@@ -286,7 +287,7 @@ export function ComuniBoard(): JSX.Element {
                     ) : null}
                   </Group>
                 </UnstyledButton>
-                <Collapse in={apertoQui}>
+                <Collapse expanded={apertoQui}>
                   <Box pl="xs" pb="xs">
                     {apertoQui ? <DettaglioCelle istatCode={c.istat_code} /> : null}
                   </Box>

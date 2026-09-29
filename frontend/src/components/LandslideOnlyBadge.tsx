@@ -1,3 +1,4 @@
+import type { JSX } from "react";
 // Marchio "solo frane" per i pannelli che non seguono il selettore.
 //
 // Mappa, rollup comunale e quadro nazionale leggono viste SQL fissate sul

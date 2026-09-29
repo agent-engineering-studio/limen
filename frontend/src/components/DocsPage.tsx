@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { JSX } from "react";
 
 import { DOC_PAGES } from "../content/divulgazione";
 import type { Block, Inline } from "../lib/markdown";

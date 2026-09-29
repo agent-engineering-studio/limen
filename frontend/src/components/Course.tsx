@@ -1,3 +1,4 @@
+import type { JSX } from "react";
 // "Capire Limen" — chrome condiviso che lega le tre pagine in un percorso
 // (corso/libro): indice in cima con evidenza del capitolo corrente, riga
 // «Capitolo N di 3 · livello», «in questo capitolo», e avanti/indietro in

@@ -1,3 +1,4 @@
+import type { JSX } from "react";
 // Selettore del pericolo nell'header.
 //
 // **Non rende nulla con meno di due pericoli disponibili.** Con uno solo la
