@@ -15,6 +15,7 @@ COMPOSE_DEMO := infra/docker/docker-compose.demo.yml
 COMPOSE_OBS  := infra/docker/docker-compose.observability.yml
 COMPOSE_GEOSERVER := infra/docker/docker-compose.geoserver.yml
 COMPOSE_GEODATA := infra/docker/docker-compose.geodata.yml
+COMPOSE_METEO := infra/docker/docker-compose.meteo.yml
 # Unified stack: operational services + GeoServer, one project, one network.
 # Repo-root .env feeds compose ${VAR} interpolation (e.g. SCORING__MODE);
 # without --env-file compose only reads infra/docker/.env, which doesn't exist.
@@ -26,6 +27,12 @@ COMPOSE_ALL  := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_DEMO) -f $(C
 # `infra/docker/.env`, che non esiste, e GEOSERVER_SHAPEFILE_DIR resta al
 # default — che punta a una directory vuota.
 COMPOSE_GS   := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_GEOSERVER) -p limen
+# L'istanza Open-Meteo propria: fuori da `make up` come geodata, perche'
+# scarica decine di GB e un deployment che non la vuole non deve pagarli.
+# Progetto suo, non `-p limen`: non condivide la rete con lo stack operativo
+# e i container la raggiungono su `host.docker.internal:8085`, come il
+# gateway LiteLLM. Con `-p limen` compose chiamerebbe orfani tutti gli altri.
+COMPOSE_MT   := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_METEO)
 
 # Il bootstrap GeoServer legge una directory di dataset montata dall'host. Chi
 # l'ha clonata è di norma chi lancia `make`, quindi gli si passa il proprio
@@ -54,6 +61,7 @@ BUILD_PROFILES ?= --profile geoserver --profile frontend --profile geodata
         demo demo-down demo-walkthrough \
         observability observability-down \
         geoserver-up geoserver-down geoserver-init geoserver-logs geoserver-sync dtm-vrt osm-data \
+        meteo-up meteo-down meteo-sync meteo-check meteo-logs \
         test test-unit test-integration test-frontend \
         lint format typecheck check clean
 
@@ -99,6 +107,9 @@ help:
 	@echo "  make observability-down stop the observability stack"
 	@echo ""
 	@echo "GeoServer vector-data layer (opt-in, mcp-geo-server)"
+	@echo "  make meteo-up           istanza Open-Meteo propria (profilo meteo, opt-in)"
+	@echo "  make meteo-sync         scarica i modelli (primo avvio e cron giornaliero)"
+	@echo "  make meteo-check        quali variabili rispondono davvero"
 	@echo "  make geoserver-up       GeoServer + PostGIS + web UI + MCP agent + bootstrap"
 	@echo "  make geoserver-init     (re)load shapefiles into PostGIS + publish + style"
 	@echo "  make geoserver-logs     tail the GeoServer stack logs"
@@ -347,6 +358,25 @@ observability-down:
 # ---------------------------------------------------------------------------
 # GeoServer vector-data layer (opt-in — mcp-geo-server integration)
 # ---------------------------------------------------------------------------
+meteo-up:
+	docker compose $(COMPOSE_MT) --profile meteo up -d
+
+meteo-down:
+	docker compose $(COMPOSE_MT) --profile meteo down
+
+meteo-logs:
+	docker compose $(COMPOSE_MT) --profile meteo logs -f openmeteo
+
+# Primo avvio e cron giornaliero sono lo stesso comando: `sync` scarica solo
+# cio' che manca.
+meteo-sync:
+	./scripts/openmeteo_sync.sh
+
+# Dice quali variabili rispondono davvero. L'healthcheck del container no:
+# risponde anche a volume vuoto.
+meteo-check:
+	./scripts/openmeteo_sync.sh --check
+
 geoserver-up: gs-volumes
 	docker compose $(COMPOSE_GS) --profile geoserver up -d
 

@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 from tenacity import RetryError
 
+from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.integrations._http import SharedHttpClient, fetch_with_retry
 from limen.integrations.openmeteo.dtos import MeteoSnapshot, WeatherSample
@@ -28,8 +29,29 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
+#: Gli endpoint pubblici. Restano i default: un deployment che non ospita
+#: nulla non deve configurare niente. `OPENMETEO__*_URL` li sostituisce con
+#: l'istanza propria (#142).
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+
+
+def forecast_url() -> str:
+    return get_settings().openmeteo.forecast_url or FORECAST_URL
+
+
+def archive_url() -> str:
+    return get_settings().openmeteo.archive_url or ARCHIVE_URL
+
+
+def weather_model() -> str | None:
+    """Il modello da nominare, quando ce n'e' uno.
+
+    L'API pubblica sceglie da se' con `best_match`; un'istanza propria serve
+    solo cio' che ha sincronizzato e va nominata, o risponde a vuoto.
+    """
+    return get_settings().openmeteo.models or None
+
 
 # Per project doc §2.3 — the dynamic-weather variables we need.
 HOURLY_VARS = [
@@ -143,7 +165,9 @@ class OpenMeteoHttpClient:
             "end_date": window_end.date().isoformat(),
             "timezone": "UTC",
         }
-        url = ARCHIVE_URL if use_archive else FORECAST_URL
+        if (chosen := weather_model()) is not None:
+            params["models"] = chosen
+        url = archive_url() if use_archive else forecast_url()
         source = "open-meteo:archive" if use_archive else "open-meteo:forecast"
 
         log.info(
@@ -204,6 +228,8 @@ class OpenMeteoHttpClient:
             "daily": "precipitation_sum",
             "timezone": "UTC",
         }
+        if (chosen := weather_model()) is not None:
+            params["models"] = chosen
 
         log.info(
             "openmeteo.api.fetch",
@@ -215,7 +241,7 @@ class OpenMeteoHttpClient:
         )
         try:
             resp = await fetch_with_retry(
-                "GET", ARCHIVE_URL, client=await self._client(), params=params
+                "GET", archive_url(), client=await self._client(), params=params
             )
         except _DEGRADATION_EXC as exc:
             log.warning(
@@ -311,7 +337,7 @@ class OpenMeteoHttpClient:
         use_archive: bool,
         label: str,
     ) -> list[list[WeatherSample]]:
-        url = ARCHIVE_URL if use_archive else FORECAST_URL
+        url = archive_url() if use_archive else forecast_url()
         out: list[list[WeatherSample]] = []
         for i in range(0, len(nodes), batch_size):
             batch = nodes[i : i + batch_size]
@@ -323,8 +349,9 @@ class OpenMeteoHttpClient:
                 "end_date": window_end.date().isoformat(),
                 "timezone": "UTC",
             }
-            if model:
-                params["models"] = model
+            chosen = model or weather_model()
+            if chosen:
+                params["models"] = chosen
             try:
                 resp = await fetch_with_retry(
                     "GET", url, client=await self._client(), params=params

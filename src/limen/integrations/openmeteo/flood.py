@@ -27,10 +27,16 @@ from tenacity import RetryError
 
 from limen.core.logging import get_logger
 from limen.integrations._http import SharedHttpClient, fetch_with_retry
+from limen.integrations.openmeteo.client import forecast_url, weather_model
 
 log = get_logger(__name__)
 
+#: Lo stesso endpoint di previsione del client meteo, e quindi la stessa
+#: istanza propria quando ce n'e' una (#142): da qui passa la griglia
+#: pluviale, che e' il piu' grosso dei consumi rimasti.
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+#: Portata e onde restano sull'API pubblica. GloFAS non e' sul bucket AWS di
+#: Open-Meteo e non si puo' auto-ospitare; le onde sono venti chiamate l'ora.
 FLOOD_URL = "https://flood-api.open-meteo.com/v1/flood"
 MARINE_URL = "https://marine-api.open-meteo.com/v1/marine"
 
@@ -117,6 +123,16 @@ _REFERENCE_TTL_SECONDS = 30 * 24 * 3600
 #: esaurito il tetto giornaliero di Open-Meteo (#142). Sei ore lasciano vivo
 #: il ricambio giornaliero senza inseguirlo ventiquattro volte.
 _FLUVIAL_TTL_SECONDS = 6 * 3600
+
+
+def _with_model(params: dict[str, Any]) -> dict[str, Any]:
+    """Nomina il modello, se ce n'e' uno da nominare.
+
+    Solo sulle chiamate di previsione: portata e onde hanno modelli loro e
+    restano sull'API pubblica in ogni caso.
+    """
+    chosen = weather_model()
+    return params if chosen is None else {**params, "models": chosen}
 
 
 def _centroid(bbox: tuple[float, float, float, float]) -> tuple[float, float]:
@@ -295,15 +311,17 @@ class OpenMeteoFloodClient:
     ) -> float | None:
         end = (t0 + timedelta(hours=horizon_hours)).date()
         payload = await self._get(
-            FORECAST_URL,
-            {
-                "latitude": lat,
-                "longitude": lon,
-                "hourly": "precipitation",
-                "start_date": t0.date().isoformat(),
-                "end_date": end.isoformat(),
-                "timezone": "UTC",
-            },
+            forecast_url(),
+            _with_model(
+                {
+                    "latitude": lat,
+                    "longitude": lon,
+                    "hourly": "precipitation",
+                    "start_date": t0.date().isoformat(),
+                    "end_date": end.isoformat(),
+                    "timezone": "UTC",
+                }
+            ),
             "openmeteo.flood.pluvial",
         )
         if payload is None:
@@ -347,14 +365,16 @@ class OpenMeteoFloodClient:
         """
         end = t0 + timedelta(hours=horizon_hours)
         results = await self.fetch_grid(
-            FORECAST_URL,
+            forecast_url(),
             nodes,
-            {
-                "hourly": "precipitation",
-                "start_date": t0.date().isoformat(),
-                "end_date": end.date().isoformat(),
-                "timezone": "UTC",
-            },
+            _with_model(
+                {
+                    "hourly": "precipitation",
+                    "start_date": t0.date().isoformat(),
+                    "end_date": end.date().isoformat(),
+                    "timezone": "UTC",
+                }
+            ),
             "openmeteo.flood.pluvial_grid",
         )
         if len(results) != len(nodes):

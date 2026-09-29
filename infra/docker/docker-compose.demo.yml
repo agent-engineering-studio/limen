@@ -93,6 +93,13 @@ services:
       # Notifications — listing a channel here enables it; channels
       # whose creds are missing degrade to a no-op rather than erroring.
       # NOTIFICATIONS__ENABLED_CHANNELS: '["mqtt"]'
+      # Istanza Open-Meteo propria (#142). Vuote ⇒ API pubblica, com'era.
+      # Il profilo compose `meteo` ha un progetto suo e non condivide questa
+      # rete, quindi si passa dall'host: host.docker.internal, mai 127.0.0.1,
+      # che dentro un container è il container.
+      OPENMETEO__FORECAST_URL: ${OPENMETEO__FORECAST_URL:-}
+      OPENMETEO__ARCHIVE_URL: ${OPENMETEO__ARCHIVE_URL:-}
+      OPENMETEO__MODELS: ${OPENMETEO__MODELS:-}
       NOTIFICATIONS__MQTT__BROKER_HOST: mosquitto
       NOTIFICATIONS__MQTT__BROKER_PORT: "1883"
       NOTIFICATIONS__MQTT__TOPIC: limen/alerts
