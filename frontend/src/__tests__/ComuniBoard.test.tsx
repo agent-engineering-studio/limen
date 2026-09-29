@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
+// `render` dal nostro helper: i componenti Mantine vogliono il provider.
+import { render, screen, waitFor } from "../test-utils";
 import { describe, expect, it, vi } from "vitest";
 
 const { getTopComuni } = vi.hoisted(() => ({ getTopComuni: vi.fn() }));
@@ -23,8 +24,9 @@ const comune = (
   n_alert: 3,
   counts: {},
   exposure_rank: 1,
+  attention: 1.6,
   hazards: Object.fromEntries(
-    Object.entries(hazards).map(([h, v]) => [h, { ...v, score: 0.5 }]),
+    Object.entries(hazards).map(([h, v]) => [h, { ...v, score: 0.5, priority: 0.8 }]),
   ),
 });
 
@@ -47,7 +49,9 @@ describe("ComuniBoard", () => {
     // Tre indicatori, non uno: l'alluvione a zero resta in riga col trattino.
     expect(container.querySelectorAll(".cb-haz")).toHaveLength(3);
     expect(container.querySelector(".cb-haz.is-quiet")).not.toBeNull();
-    expect(container.textContent).toContain("ALTO");
+    expect(container.textContent).toContain("alto");
+    // Il numero unico sta accanto al nome: è quello che decide l'ordine.
+    expect(container.textContent).toContain("1.60");
   });
 
   it("una giornata tranquilla è una notizia, non un pannello vuoto", async () => {
@@ -59,13 +63,11 @@ describe("ComuniBoard", () => {
   });
 
   it("la ricerca chiede al servizio il termine, non filtra le trenta righe in mano", async () => {
+    // I comuni sono ottomila e in pagina ce ne sono trenta: filtrare qui
+    // vorrebbe dire non trovare il proprio.
     getTopComuni.mockResolvedValue({ comuni: [] });
-    const { container } = render(<ComuniBoard />);
+    render(<ComuniBoard />);
     await waitFor(() => expect(getTopComuni).toHaveBeenCalled());
-    const input = container.querySelector<HTMLInputElement>(".cb-search");
-    expect(input).not.toBeNull();
-    // La ricerca è lato servizio perché i comuni sono ottomila e in pagina ce
-    // ne sono trenta: filtrare qui vorrebbe dire non trovare il proprio.
-    expect(input?.getAttribute("type")).toBe("search");
+    expect(screen.getByLabelText("Cerca il tuo comune")).toBeInTheDocument();
   });
 });

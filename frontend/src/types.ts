@@ -23,6 +23,8 @@ export interface ComuneHazard {
   /** La classe della cella peggiore del comune per questo pericolo. */
   class: RiskLevel;
   score: number;
+  /** `punteggio per uno piu l'esposizione`: la priorità degli alert. */
+  priority: number;
   n_cells: number;
   n_alert: number;
 }
@@ -39,12 +41,42 @@ export interface ComuneRisk {
   n_alert: number;
   counts: Record<string, number>;
   exposure_rank: number;
+  /** Il numero unico del comune: massimo delle priorità, con l'incremento
+   *  quando più di un pericolo è oltre soglia. Non è una somma. */
+  attention: number;
   /** I tre indicatori affiancati: sempre tutti, anche a zero. */
   hazards: Record<string, ComuneHazard>;
 }
 
+/** Una cella scelta sulla mappa o nella colonna. Viveva in
+ *  `RegionAccordion`, che non esiste più: la lista per regione e quella per
+ *  comune dicevano cose sovrapposte, e ne è rimasta una. */
+export interface CellSelection {
+  cellId: string;
+  lon: number | null;
+  lat: number | null;
+  priority?: number;
+  exposure?: string | null;
+  place?: string | null;
+}
+
 export interface ComuneListResponse {
   comuni: ComuneRisk[];
+}
+
+/** Una cella dentro il dettaglio di un comune. */
+export interface ComuneCell {
+  cell_id: string;
+  hazard: HazardType;
+  score: number;
+  level: RiskLevel;
+  lon: number;
+  lat: number;
+}
+
+export interface ComuneDetailResponse {
+  comune: ComuneRisk;
+  cells: ComuneCell[];
 }
 
 export interface AoiListResponse {

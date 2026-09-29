@@ -11,6 +11,7 @@ import type {
   CellBreakdownResponse,
   CellHistoryResponse,
   CellMultiHazardResponse,
+  ComuneDetailResponse,
   ComuneListResponse,
   HazardType,
   HazardsResponse,
@@ -240,6 +241,15 @@ export class ApiClient {
     qs.set("limit", String(limit));
     if (q) qs.set("q", q);
     return this.request<ComuneListResponse>(`/api/comuni?${qs.toString()}`, {}, signal);
+  }
+
+  /** Il dettaglio di un comune: la riga e le sue celle peggiori. */
+  getComune(istatCode: string, signal?: AbortSignal): Promise<ComuneDetailResponse> {
+    return this.request<ComuneDetailResponse>(
+      `/api/comune/${encodeURIComponent(istatCode)}`,
+      {},
+      signal,
+    );
   }
 
 }
