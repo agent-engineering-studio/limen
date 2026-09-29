@@ -119,6 +119,11 @@ def _to_comune(row: Any) -> dict[str, Any]:
             h: {
                 "class": str(v["class"]),
                 "score": round(float(v["score"] or 0.0), 3),
+                # C'era nel DTO e nella query, non nella risposta: usciva
+                # sempre 0,000 pur essendo documentata come «la priorità che
+                # il dispacciatore degli alert usa». Un campo che vale
+                # sempre zero è peggio di un campo assente.
+                "priority": round(float(v.get("priority") or 0.0), 3),
                 "n_cells": int(v["n_cells"]),
                 "n_alert": int(v["n_alert"]),
                 "measured": bool(v.get("measured", True)),
