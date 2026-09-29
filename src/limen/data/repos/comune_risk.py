@@ -11,6 +11,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from limen.core.cascades.attention import attention_index
+from limen.core.cascades.config import load_cascades
+from limen.core.models.risk import RiskLevel
 from limen.data.db import acquire
 
 #: Ordine delle classi, per scegliere il peggiore fra i pericoli. In SQL
@@ -37,10 +40,11 @@ SELECT
     jsonb_object_agg(
         hazard_type::text,
         jsonb_build_object(
-            'class',   worst_class,
-            'score',   round(COALESCE(max_score, 0)::numeric, 3),
-            'n_cells', n_cells,
-            'n_alert', n_alert
+            'class',    worst_class,
+            'score',    round(COALESCE(max_score, 0)::numeric, 3),
+            'priority', round(COALESCE(priority, 0)::numeric, 3),
+            'n_cells',  n_cells,
+            'n_alert',  n_alert
         )
     ) AS hazards,
     -- Il peggiore fra i pericoli: è ciò che ordina la classifica e ciò che
@@ -58,7 +62,8 @@ SELECT
     sum(n_moderate)                        AS n_moderate,
     sum(n_high)                            AS n_high,
     sum(n_veryhigh)                        AS n_veryhigh,
-    max(exposure_rank)                     AS exposure_rank
+    max(exposure_rank)                     AS exposure_rank,
+    max(COALESCE(priority, 0))             AS max_priority
 FROM mv_comune_risk
 GROUP BY istat_code, name, aoi_id
 """
@@ -68,6 +73,17 @@ def _to_comune(row: Any) -> dict[str, Any]:
     hazards = row["hazards"]
     if isinstance(hazards, str):  # asyncpg restituisce jsonb come testo
         hazards = json.loads(hazards)
+    # Il numero che porta il comune all'attenzione. Si compone qui e non in
+    # SQL perché ha una soglia di classe, e le soglie stanno nella
+    # configurazione: scriverla nella query vorrebbe dire due copie della
+    # stessa regola, libere di divergere.
+    attenzione = attention_index(
+        {
+            h: (float(v.get("priority") or 0.0), RiskLevel(str(v["class"])))
+            for h, v in hazards.items()
+        },
+        rule=load_cascades().attention,
+    )
     return {
         "istat_code": row["istat_code"],
         "name": row["name"],
@@ -85,6 +101,7 @@ def _to_comune(row: Any) -> dict[str, Any]:
             "VeryHigh": int(row["n_veryhigh"]),
         },
         "exposure_rank": round(float(row["exposure_rank"] or 0.0), 3),
+        "attention": round(attenzione, 3),
         # I tre indicatori affiancati: la riga della dashboard li mostra tutti,
         # anche a zero, perché un trattino è una risposta e una colonna che
         # sparisce non lo è.
@@ -107,15 +124,25 @@ async def top_comuni(
     min_rank: int = 2,
     query: str | None = None,
 ) -> list[dict[str, Any]]:
-    """I comuni ordinati dal peggiore, su tutti i pericoli.
+    """I comuni ordinati dal numero di attenzione, su tutti i pericoli.
 
     `min_rank` è la soglia sotto cui un comune non entra in classifica: 2 è
     «Moderato», che è dove il sistema comincia a dire qualcosa. Con `query`
     la soglia non si applica — chi cerca il proprio comune per nome vuole
     vederlo comunque, anche quando non ha niente da segnalare, e quello è il
     caso in cui la risposta «nessun pericolo sopra soglia» è la notizia.
+
+    L'ordinamento avviene in due tempi, e non è pigrizia. In SQL si ordina
+    per la priorità massima, che è il termine dominante; in Python si applica
+    l'incremento multi-pericolo e si riordina. Fare tutto in SQL vorrebbe
+    dire riscrivere lì la regola — con la sua soglia di classe — e averne due
+    copie; fare tutto in Python vorrebbe dire caricare tutti i settemila
+    comuni a ogni richiesta. Si prende un margine di tre volte il limite, che
+    è abbastanza perché l'incremento (al più +15% per pericolo in più) non
+    possa far entrare in pagina un comune escluso dal taglio.
     """
     limit = max(1, min(limit, 200))
+    margine = limit * 3
     async with acquire() as conn:
         rows = await conn.fetch(
             f"""
@@ -123,17 +150,19 @@ async def top_comuni(
             SELECT * FROM per_comune
             WHERE ($1::text IS NULL OR aoi_id = $1)
               AND ($3::text IS NULL OR name ILIKE '%' || $3 || '%')
-              AND ($3::text IS NOT NULL OR worst_rank >= $4)
-            ORDER BY worst_rank DESC, exposure_rank DESC, n_alert DESC,
-                     max_score DESC, name
+              AND ($4::text IS NOT NULL OR worst_rank >= $5)
+            ORDER BY max_priority DESC, worst_rank DESC, n_alert DESC, name
             LIMIT $2
             """,
             aoi_id,
-            limit,
+            margine,
+            query,
             query,
             min_rank,
         )
-    return [_to_comune(r) for r in rows]
+    comuni = [_to_comune(r) for r in rows]
+    comuni.sort(key=lambda c: (-c["attention"], c["name"]))
+    return comuni[:limit]
 
 
 async def comune_detail(istat_code: str) -> dict[str, Any] | None:

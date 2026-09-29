@@ -35,6 +35,7 @@ from limen.core.scoring.regional_thresholds import load_regional_thresholds
 from limen.data.db import acquire, lifespan_pool
 from limen.data.migrate import run_migrations
 from limen.data.repos.aoi_repo import list_aoi_ids
+from limen.data.repos.exposure_repo import refresh_exposure_norm
 from limen.data.repos.norm_stats_repo import NormStat
 from limen.data.repos.norm_stats_repo import upsert_many as upsert_norms
 
@@ -291,6 +292,21 @@ async def run() -> int:
         if not aois:
             log.warning("calibrate.no_aois", note="run `limen seed` first")
             return 0
+
+        # L'esposizione per cella: chi e cosa c'è vicino. È statica come
+        # `s_static` — dipende da CORINE, OSM e DEM — quindi si ricalcola
+        # qui e non a ogni sweep, e da qui la legge il rollup per comune
+        # senza dover riscrivere la formula in SQL.
+        try:
+            scritte = await refresh_exposure_norm()
+            log.info("calibrate.exposure.done", cells=scritte)
+        except Exception as exc:
+            # Un'esposizione mancante degrada il numero di attenzione, non lo
+            # falsifica: il massimo resta il punteggio senza peso. Fermare la
+            # calibrazione per questo sarebbe sproporzionato.
+            log.warning(
+                "calibrate.exposure.failed", error=str(exc), error_type=type(exc).__name__
+            )
 
         exit_code = 0
         thresholds = load_regional_thresholds()

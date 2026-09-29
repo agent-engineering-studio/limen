@@ -71,3 +71,23 @@ joint_rain:
 # (peak_months 6.0, curve_denominator 50.0, window_months_max 24.0). Finestra
 # più lunga di quella dell'alluvione qui sopra, ed è corretto: le radici
 # perdono coesione più a lungo di quanto il suolo resti idrofobico.
+
+# ---------------------------------------------------------------------------
+# I tre pericoli → un numero per comune
+# ---------------------------------------------------------------------------
+# La colonna della dashboard mostra i tre pericoli affiancati, e accanto un
+# numero solo che dice quali comuni guardare per primi. Non è una somma: tre
+# pericoli blandi (0,40 ciascuno) passerebbero davanti a un versante sopra la
+# soglia alta (0,80), e i tre punteggi non sono nemmeno commensurabili.
+#
+# È il massimo della priorità già usata per gli alert — punteggio per uno più
+# l'esposizione — con un incremento quando i pericoli oltre soglia sono più
+# di uno. L'esposizione è ciò che risponde a «soprattutto vicino a un centro
+# abitato»: tessuto urbano nella cella, distanza da strade e ferrovie.
+attention:
+  enabled: true
+  # Da quale classe un pericolo conta per l'incremento.
+  min_level: Moderate
+  # Moltiplicativo per ogni pericolo oltre il primo: due pericoli insieme
+  # sono una notizia diversa da uno solo, ma non il doppio.
+  multi_hazard_bump: 0.15
