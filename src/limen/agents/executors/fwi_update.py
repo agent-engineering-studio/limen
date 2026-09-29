@@ -35,7 +35,7 @@ from limen.core.scoring.regional_thresholds import (
     load_hazard_thresholds,
 )
 from limen.data.repos import fwi_state_repo
-from limen.data.repos.fwi_state_repo import NodeDay
+from limen.data.repos.fwi_state_repo import NodeDay, StoredChain
 from limen.integrations.openmeteo.client import OpenMeteoHttpClient
 from limen.integrations.openmeteo.dtos import FireWeatherObservation, MeteoSnapshot
 from limen.integrations.openmeteo.grid import build_snapped_nodes
@@ -74,14 +74,37 @@ class FwiUpdateExecutor(Executor):
         target = ctx.valuation_time.date()
         today = datetime.now(UTC).date()
 
+        # The chain advances by day, the sweep runs by hour. Re-walking a day
+        # already on disk costs a full grid fetch -- four variables per node
+        # per day -- to land on the same numbers, and Open-Meteo bills by
+        # location-variable-day: 1446 nodes taken 24 times a day is what
+        # exhausted the free daily quota and left every cell with no chain at
+        # all (#142). Once the day is written, read it. The forecast that
+        # firms up during the day is precision nobody reads off a danger
+        # index EFFIS publishes once a day.
+        if nodes:
+            already = await fwi_state_repo.read_day(nodes, target)
+            if all(state is not None for state in already):
+                log.info(
+                    "fwi_update.stored",
+                    aoi_id=ctx.aoi_id,
+                    nodes=len(nodes),
+                    day=target.isoformat(),
+                )
+                return ctx.with_update(fwi_nodes=tuple(nodes), fwi_by_node=tuple(already))
+
+        stored_by_node = [
+            await fwi_state_repo.latest_before(lon, lat, target) for lon, lat in nodes
+        ]
         params = params_from(self._t)
         rows: list[NodeDay] = []
         chains: list[FireWeatherState | None] = []
-        # One fetch for the whole grid, covering the widest span any node can
-        # need plus the day before it (the 24 h rain of the first noon).
-        observations = await self._observations(nodes, self._span(target, self._t.fwi.max_gap_days))
-        for (lon, lat), by_day in zip(nodes, observations, strict=True):
-            stored = await fwi_state_repo.latest_before(lon, lat, target)
+        # One fetch for the whole grid, covering only the days some node still
+        # has to walk plus the one before it (the 24 h rain of the first
+        # noon). Asking for `max_gap_days` unconditionally multiplied every
+        # request by seven to re-read days already on disk.
+        observations = await self._observations(nodes, self._span(target, stored_by_node))
+        for (lon, lat), by_day, stored in zip(nodes, observations, stored_by_node, strict=True):
             # Walk from the day after the stored state, so a sweep two days
             # into the future does not skip the drying in between. Bounded by
             # the same gap the backfill uses: beyond it the state is a fiction
@@ -142,10 +165,19 @@ class FwiUpdateExecutor(Executor):
             log.warning("fwi_update.no_chain", aoi_id=ctx.aoi_id, day=target.isoformat())
         return ctx.with_update(fwi_nodes=tuple(nodes), fwi_by_node=tuple(chains))
 
-    @staticmethod
-    def _span(target: date, max_gap_days: int) -> list[date]:
-        """Every day any node might need, widest case first."""
-        first = target - timedelta(days=max_gap_days)
+    def _span(self, target: date, stored: list[StoredChain | None]) -> list[date]:
+        """Every day some node still has to walk, earliest first.
+
+        A node with no state at all walks the whole gap, so one cold node
+        widens the window for the grid -- which is correct: the fetch is one
+        request for every node and the extra days are free to the nodes that
+        do not need them.
+        """
+        floor = target - timedelta(days=self._t.fwi.max_gap_days)
+        if not stored or any(s is None for s in stored):
+            first = floor
+        else:
+            first = min(max(s.day + timedelta(days=1), floor) for s in stored if s is not None)
         return [first + timedelta(days=i) for i in range((target - first).days + 1)]
 
     async def _observations(
