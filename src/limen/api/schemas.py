@@ -86,6 +86,11 @@ class CellBreakdownResponse(BaseModel):
     pipeline_version: str
     factors: dict[str, object]
     explanation: dict[str, object]
+    #: Falso quando il segnale dinamico richiesto da questo pericolo non è
+    #: arrivato: il punteggio è zero per assenza di misura, non per quiete
+    #: (#143). È il posto in cui la domanda nasce — chi clicca una cella
+    #: grigia vuole sapere perché.
+    measured: bool = True
 
 
 class AlertItem(BaseModel):
@@ -128,6 +133,10 @@ class ComuneHazard(BaseModel):
     priority: float = 0.0
     n_cells: int
     n_alert: int
+    #: Falso quando il segnale dinamico che questo pericolo richiede non è
+    #: arrivato: il punteggio è zero per assenza di dato, non per quiete
+    #: (#143). Chi lo mostra scrive «non misurato», non «0,00 basso».
+    measured: bool = True
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -149,7 +158,9 @@ class ComuneRisk(BaseModel):
     #: più di un pericolo è oltre soglia. Non è una somma — sommare i tre
     #: punteggi farebbe passare tre pericoli blandi davanti a un versante
     #: sopra la soglia alta.
-    attention: float
+    #: `None` quando **nessuno** dei pericoli è stato misurato: è l'unica
+    #: risposta vera, e vale più di uno zero che si legge come "tranquillo".
+    attention: float | None
     #: I tre indicatori affiancati, sempre tutti: un pericolo a zero mostra
     #: un trattino, e un trattino è una risposta — una colonna che sparisce no.
     hazards: dict[str, ComuneHazard]

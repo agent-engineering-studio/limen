@@ -5,6 +5,7 @@ import { defaultApiClient } from "../lib/api-client";
 import { useHazard } from "../lib/hazard";
 import {
   HAZARD_HUE,
+  COLORE_IGNOTO,
   RISK_CLASSES,
   riskClassesFor,
   riskColorsFor,
@@ -49,6 +50,27 @@ function ScalaColori({
  * When the backend is reachable, each class also shows its Protezione
  * Civile alert colour (presentation-only mapping from /api/legend).
  */
+/** «Non misurato» sta in legenda perché sulla mappa è un colore come gli
+ *  altri, e senza la riga resterebbe un grigio senza nome (#143). */
+function RigaNonMisurato(): JSX.Element {
+  return (
+    <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+      <li className="legend-row">
+        <span
+          className="legend-swatch"
+          role="presentation"
+          aria-hidden
+          style={{ background: COLORE_IGNOTO }}
+        />
+        <span>
+          Non misurato <small style={{ color: "#5e6473" }}>(—)</small>
+        </span>
+        <span className="legend-range">nessun dato</span>
+      </li>
+    </ul>
+  );
+}
+
 export function LegendPanel(): JSX.Element {
   const [pcByLevel, setPcByLevel] = useState<Record<string, string>>({});
   // I cutoff arrivano dal backend perché sono **per pericolo** (#84): quelli
@@ -119,6 +141,13 @@ export function LegendPanel(): JSX.Element {
             </li>
           ))}
         </ul>
+        <RigaNonMisurato />
+        <p className="legend-note">
+          <strong>Non misurato</strong> non vuol dire tranquillo: il dato che
+          quel pericolo richiede non è arrivato, e il punteggio varrebbe zero
+          per assenza di misura. Una cella grigia è una cella su cui il
+          sistema non si pronuncia.
+        </p>
         <p className="legend-note">
           Il colore dice <strong>quanto</strong>: è la classe del pericolo
           peggiore in quel punto. <strong>Quale</strong> pericolo lo dice il
@@ -182,6 +211,13 @@ export function LegendPanel(): JSX.Element {
           </li>
         ))}
       </ul>
+      <RigaNonMisurato />
+      <p className="legend-note">
+        <strong>Non misurato</strong> non vuol dire tranquillo: il dato che
+        quel pericolo richiede non è arrivato, e il punteggio varrebbe zero
+        per assenza di misura. Una cella grigia è una cella su cui il
+        sistema non si pronuncia.
+      </p>
       <p className="legend-note">
         Le liste mettono prima le celle vicine a centri abitati e strade
         (🏠 🛣): stesso rischio, più conseguenze. Colori e numeri seguono

@@ -26,7 +26,17 @@ def _settings_pulite() -> Iterator[None]:
     get_settings.cache_clear()
 
 
-def test_senza_configurazione_si_parla_con_l_api_pubblica() -> None:
+def test_senza_configurazione_si_parla_con_l_api_pubblica(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Esplicito a vuoto, non «non impostato»: `Settings` legge anche il `.env`
+    # del repo, e su una macchina che ospita davvero l'istanza quel file le
+    # variabili ce le ha. Un test che passa o fallisce secondo la macchina non
+    # sta misurando il codice.
+    for chiave in ("OPENMETEO__FORECAST_URL", "OPENMETEO__ARCHIVE_URL", "OPENMETEO__MODELS"):
+        monkeypatch.setenv(chiave, "")
+    get_settings.cache_clear()
+
     assert meteo_client.forecast_url() == meteo_client.FORECAST_URL
     assert meteo_client.archive_url() == meteo_client.ARCHIVE_URL
     assert meteo_client.weather_model() is None
@@ -71,6 +81,9 @@ def test_il_modello_si_nomina_solo_sulle_previsioni(monkeypatch: pytest.MonkeyPa
     assert originali == {"hourly": "precipitation"}
 
 
-def test_senza_modello_i_parametri_restano_quelli() -> None:
+def test_senza_modello_i_parametri_restano_quelli(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENMETEO__MODELS", "")
+    get_settings.cache_clear()
+
     originali = {"hourly": "precipitation"}
     assert meteo_flood._with_model(originali) == originali

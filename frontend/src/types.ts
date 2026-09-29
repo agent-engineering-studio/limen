@@ -27,6 +27,10 @@ export interface ComuneHazard {
   priority: number;
   n_cells: number;
   n_alert: number;
+  /** Falso quando il segnale dinamico che questo pericolo richiede non è
+   *  arrivato: il punteggio è zero per assenza di dato, non per quiete.
+   *  Si scrive «non misurato», non «0,00 basso». */
+  measured: boolean;
 }
 
 export interface ComuneRisk {
@@ -42,8 +46,9 @@ export interface ComuneRisk {
   counts: Record<string, number>;
   exposure_rank: number;
   /** Il numero unico del comune: massimo delle priorità, con l'incremento
-   *  quando più di un pericolo è oltre soglia. Non è una somma. */
-  attention: number;
+   *  quando più di un pericolo è oltre soglia. Non è una somma.
+   *  `null` quando nessun pericolo è stato misurato. */
+  attention: number | null;
   /** I tre indicatori affiancati: sempre tutti, anche a zero. */
   hazards: Record<string, ComuneHazard>;
 }
@@ -171,6 +176,10 @@ export interface CellBreakdownResponse {
   pipeline_version: string;
   factors: Record<string, unknown>;
   explanation: Record<string, unknown>;
+  /** Falso quando il segnale dinamico richiesto non è arrivato: il punteggio
+   *  è zero per assenza di misura, non per quiete. È qui che la domanda
+   *  nasce — chi clicca una cella grigia vuole sapere perché. */
+  measured: boolean;
 }
 
 export interface AlertItem {

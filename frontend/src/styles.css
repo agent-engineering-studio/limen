@@ -984,6 +984,18 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   vertical-align: 6px;
 }
 .level-chip.on-dark { color: #fff; }
+/* «Non misurato»: nessun colore della scala, perché non è una classe.
+   Il tratteggio è lo stesso della colonna e della legenda. */
+.level-chip.is-unknown {
+  margin-left: 0;
+  color: #5e6473;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--hairline) 0 4px,
+    #f7f7f5 4px 8px
+  );
+  border: 1px dashed #c9ccd2;
+}
 .comp-bars { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 0; }
 .comp-bar { display: grid; grid-template-columns: 110px 1fr 52px; gap: 8px; align-items: center; font-size: 12.5px; }
 .comp-bar .track { display: block; background: var(--hairline); border-radius: 999px; height: 8px; overflow: hidden; }
@@ -1203,6 +1215,9 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
 .verdict-ok { background: #eaf4ec; color: #1f5c2d; border: 1px solid #cde5d3; }
 .verdict-watch { background: #fdf3d7; color: #6e5407; border: 1px solid #f0dfa6; }
 .verdict-warn { background: #fdeaea; color: #8f1d1d; border: 1px solid #f2c9c9; }
+/* Né buono né cattivo: è l'assenza di una misura, e non va colorata come
+   una notizia in nessuna delle due direzioni. */
+.verdict-neutral { background: #f4f4f2; color: #4a4f5a; border: 1px solid var(--hairline); }
 
 /* Analisi regionale nel gruppo della sidebar */
 .regional-analysis { margin: 2px 0 10px; padding-left: 28px; }
@@ -2147,4 +2162,48 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   flex: none;
   border-radius: 2px;
   border: 1px solid rgb(0 0 0 / 18%);
+}
+
+/* «Non misurato» (#143). Un tratteggio e non un colore: la scala del rischio
+   ha cinque classi e aggiungerne una sesta la renderebbe illeggibile, mentre
+   un riempimento diverso si distingue anche in simulazione daltonica e anche
+   in scala di grigi. Lo stesso motivo per cui la legenda accoppia sempre il
+   colore a un'etichetta. */
+.cb-chip.is-unknown {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--hairline) 0 2px,
+    transparent 2px 4px
+  );
+  border-style: dashed;
+}
+.cb-haz.is-unknown {
+  opacity: 0.75;
+}
+/* La barra dell'attenzione quando non c'è un'attenzione da disegnare: lo
+   spazio resta, così le righe non ballano, ma non finge un valore. */
+.cb-bar.is-unknown {
+  height: 3px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--hairline) 0 3px,
+    transparent 3px 6px
+  );
+}
+.cb-help {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--hairline);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+.cb-help:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }

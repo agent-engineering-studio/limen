@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from limen.core.cascades.attention import attention_index
+from limen.core.cascades.attention import HazardStanding, attention_index
 from limen.core.cascades.config import load_cascades
 from limen.core.models.risk import RiskLevel
 from limen.data.db import acquire
@@ -44,7 +44,8 @@ SELECT
             'score',    round(COALESCE(max_score, 0)::numeric, 3),
             'priority', round(COALESCE(priority, 0)::numeric, 3),
             'n_cells',  n_cells,
-            'n_alert',  n_alert
+            'n_alert',  n_alert,
+            'measured', measured
         )
     ) AS hazards,
     -- Il peggiore fra i pericoli: è ciò che ordina la classifica e ciò che
@@ -63,7 +64,10 @@ SELECT
     sum(n_high)                            AS n_high,
     sum(n_veryhigh)                        AS n_veryhigh,
     max(exposure_rank)                     AS exposure_rank,
-    max(COALESCE(priority, 0))             AS max_priority
+    -- Solo fra i pericoli misurati: ordinare sulla priorità di uno zero per
+    -- assenza di dato metterebbe in coda un comune di cui non sappiamo
+    -- niente, che è il posto sbagliato.
+    max(COALESCE(priority, 0)) FILTER (WHERE measured) AS max_priority
 FROM mv_comune_risk
 GROUP BY istat_code, name, aoi_id
 """
@@ -79,7 +83,11 @@ def _to_comune(row: Any) -> dict[str, Any]:
     # stessa regola, libere di divergere.
     attenzione = attention_index(
         {
-            h: (float(v.get("priority") or 0.0), RiskLevel(str(v["class"])))
+            h: HazardStanding(
+                priority=float(v.get("priority") or 0.0),
+                level=RiskLevel(str(v["class"])),
+                measured=bool(v.get("measured", True)),
+            )
             for h, v in hazards.items()
         },
         rule=load_cascades().attention,
@@ -101,7 +109,9 @@ def _to_comune(row: Any) -> dict[str, Any]:
             "VeryHigh": int(row["n_veryhigh"]),
         },
         "exposure_rank": round(float(row["exposure_rank"] or 0.0), 3),
-        "attention": round(attenzione, 3),
+        # `None` quando non c'è niente di misurato: chi lo mostra deve
+        # scrivere «non misurato», non «0,00».
+        "attention": None if attenzione is None else round(attenzione, 3),
         # I tre indicatori affiancati: la riga della dashboard li mostra tutti,
         # anche a zero, perché un trattino è una risposta e una colonna che
         # sparisce non lo è.
@@ -111,6 +121,7 @@ def _to_comune(row: Any) -> dict[str, Any]:
                 "score": round(float(v["score"] or 0.0), 3),
                 "n_cells": int(v["n_cells"]),
                 "n_alert": int(v["n_alert"]),
+                "measured": bool(v.get("measured", True)),
             }
             for h, v in hazards.items()
         },
@@ -151,7 +162,7 @@ async def top_comuni(
             WHERE ($1::text IS NULL OR aoi_id = $1)
               AND ($3::text IS NULL OR name ILIKE '%' || $3 || '%')
               AND ($4::text IS NOT NULL OR worst_rank >= $5)
-            ORDER BY max_priority DESC, worst_rank DESC, n_alert DESC, name
+            ORDER BY max_priority DESC NULLS LAST, worst_rank DESC, n_alert DESC, name
             LIMIT $2
             """,
             aoi_id,
@@ -161,7 +172,9 @@ async def top_comuni(
             min_rank,
         )
     comuni = [_to_comune(r) for r in rows]
-    comuni.sort(key=lambda c: (-c["attention"], c["name"]))
+    # I comuni senza niente di misurato vanno in coda: non sono tranquilli,
+    # ma nemmeno ordinabili, e metterli in cima sarebbe un allarme inventato.
+    comuni.sort(key=lambda c: (c["attention"] is None, -(c["attention"] or 0.0), c["name"]))
     return comuni[:limit]
 
 
