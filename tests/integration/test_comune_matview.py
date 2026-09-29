@@ -33,6 +33,15 @@ async def _seed_minimal() -> None:
                 cls,
                 e,
             )
+            # L'esposizione ora vive sulla cella e non nel breakdown delle
+            # frane (migrazione 052): è una proprietà del posto, non del
+            # pericolo, ed è ciò che pesa la priorità del comune.
+            await conn.execute(
+                "INSERT INTO cell_static_factors (cell_id, exposure_norm) VALUES ($1,$2) "
+                "ON CONFLICT (cell_id) DO UPDATE SET exposure_norm = EXCLUDED.exposure_norm",
+                cid,
+                e,
+            )
         await conn.execute(
             "INSERT INTO comuni (istat_code, name, aoi_id, geom) VALUES "
             "('C001','Testville','it-test', "
@@ -65,7 +74,13 @@ async def test_comune_rollup(reset_db: None) -> None:
     assert row["worst_class"] == "High"  # worst cell drives the headline
     assert row["n_alert"] == 1  # one High+ cell
     assert row["n_cells"] == 2
-    assert float(row["exposure_rank"]) == pytest.approx(0.9)  # E of the High cell only
+    # `exposure_rank` è il massimo sulle celle del comune, non più la somma
+    # del termine E delle sole celle in allerta: una cella sopra un paese
+    # basta a rendere il comune un posto da guardare.
+    assert float(row["exposure_rank"]) == pytest.approx(0.9)
+    # E la priorità è il punteggio della cella peggiore pesato per la sua
+    # esposizione — la stessa formula degli alert.
+    assert float(row["priority"]) > float(row["max_score"])
     # Ogni pericolo abilitato ha la sua riga, anche senza celle valutate: una
     # colonna che sparisce non distingue «calmo» da «non calcolato».
     assert int(pericoli) >= 1

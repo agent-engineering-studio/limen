@@ -6,6 +6,7 @@ import ComuniBoard from "./components/ComuniBoard";
 import DocsPage from "./components/DocsPage";
 import ExplainerPage from "./components/ExplainerPage";
 import ForecastList from "./components/ForecastList";
+import type { CellSelection } from "./types";
 import FreshnessBadge from "./components/FreshnessBadge";
 import HomePage from "./components/HomePage";
 import IntegrationsPage from "./components/IntegrationsPage";
@@ -13,8 +14,6 @@ import HazardSelector from "./components/HazardSelector";
 import LegendPanel from "./components/LegendPanel";
 import NationalStrip from "./components/NationalStrip";
 import OverlayControl from "./components/OverlayControl";
-import RegionAccordion from "./components/RegionAccordion";
-import type { CellSelection } from "./components/RegionAccordion";
 import RiskMap from "./components/RiskMap";
 import SciencePage from "./components/SciencePage";
 import ShadowDiagnosticsPage from "./components/ShadowDiagnosticsPage";
@@ -66,17 +65,6 @@ export function App(): JSX.Element {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  const selectCell = useCallback((sel: CellSelection) => {
-    setSelected(sel);
-    if (sel.lon != null && sel.lat != null && mapRef.current) {
-      mapRef.current.flyTo({
-        center: [sel.lon, sel.lat],
-        zoom: Math.max(mapRef.current.getZoom(), 11),
-        essential: true,
-      });
-    }
-  }, []);
-
   const onMapClick = useCallback((cellId: string) => {
     // Le coordinate non servono: la cella è già inquadrata dall'utente.
     setSelected({ cellId, lon: null, lat: null });
@@ -87,10 +75,6 @@ export function App(): JSX.Element {
       <aside className="sidebar" aria-label="Pannello laterale">
         <NationalStrip />
         <ForecastList />
-        <RegionAccordion
-          onCellSelect={selectCell}
-          selectedCellId={selected?.cellId ?? null}
-        />
         <ComuniBoard />
         <LegendPanel />
         <ShadowPanel />
@@ -101,6 +85,7 @@ export function App(): JSX.Element {
           onCellClick={onMapClick}
           selectedCellId={selected?.cellId ?? null}
         />
+        <HazardSelector />
         <OverlayControl mapRef={mapRef} />
         <CellPopup
           cellId={selected?.cellId ?? null}
@@ -145,7 +130,6 @@ export function App(): JSX.Element {
             Integrazioni
           </a>
         </nav>
-        <HazardSelector />
         <FreshnessBadge />
       </header>
 

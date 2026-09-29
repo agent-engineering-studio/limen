@@ -123,6 +123,9 @@ class ComuneHazard(BaseModel):
     #: cui questo sistema esiste. `n_cells` sta accanto a dire quanto è esteso.
     class_: str = Field(alias="class")
     score: float
+    #: `punteggio per uno piu l'esposizione`: la stessa priorità che il
+    #: dispacciatore degli alert usa per decidere chi viene prima.
+    priority: float = 0.0
     n_cells: int
     n_alert: int
 
@@ -142,6 +145,11 @@ class ComuneRisk(BaseModel):
     n_alert: int
     counts: dict[str, int]
     exposure_rank: float
+    #: Il numero unico: il massimo delle priorità, con l'incremento quando
+    #: più di un pericolo è oltre soglia. Non è una somma — sommare i tre
+    #: punteggi farebbe passare tre pericoli blandi davanti a un versante
+    #: sopra la soglia alta.
+    attention: float
     #: I tre indicatori affiancati, sempre tutti: un pericolo a zero mostra
     #: un trattino, e un trattino è una risposta — una colonna che sparisce no.
     hazards: dict[str, ComuneHazard]

@@ -21,12 +21,25 @@ _ROW = {
     "n_alert": 1,
     "counts": {"None": 0, "Low": 1, "Moderate": 0, "High": 1, "VeryHigh": 0},
     "exposure_rank": 0.9,
+    "attention": 1.52,
     # I tre pericoli affiancati (migrazione 051): la riga li porta tutti,
     # anche quelli a zero.
     "hazards": {
-        "landslide": {"class": "Moderate", "score": 0.44, "n_cells": 2, "n_alert": 0},
-        "flood": {"class": "None", "score": 0.0, "n_cells": 2, "n_alert": 0},
-        "wildfire": {"class": "High", "score": 0.8, "n_cells": 2, "n_alert": 1},
+        "landslide": {
+            "class": "Moderate",
+            "score": 0.44,
+            "priority": 0.62,
+            "n_cells": 2,
+            "n_alert": 0,
+        },
+        "flood": {"class": "None", "score": 0.0, "priority": 0.0, "n_cells": 2, "n_alert": 0},
+        "wildfire": {
+            "class": "High",
+            "score": 0.8,
+            "priority": 1.52,
+            "n_cells": 2,
+            "n_alert": 1,
+        },
     },
 }
 

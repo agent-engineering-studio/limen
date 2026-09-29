@@ -78,11 +78,45 @@ class JointRainRule(_Strict):
         return RiskLevel(v) if isinstance(v, str) else v
 
 
+class AttentionRule(_Strict):
+    """Come i tre pericoli diventano **un** numero per comune.
+
+    Non una somma. Sommare i tre punteggi inverte le priorità in modo
+    dimostrabile — 0,40+0,40+0,40 supererebbe 0,80+0+0, cioè tre pericoli
+    blandi passerebbero davanti a un versante sopra la soglia alta — e i tre
+    numeri non sono nemmeno commensurabili: hanno calibrazioni diverse, e
+    0,4 di incendio non è la stessa quantità di pericolo di 0,4 di frana.
+
+    Si prende il **massimo** della priorità già definita per gli alert
+    (`punteggio per uno piu l'esposizione`), e si aggiunge un incremento quando più
+    di un pericolo è oltre soglia: due pericoli insieme sullo stesso comune
+    sono una notizia diversa da uno solo, ma non il doppio.
+    """
+
+    enabled: bool = True
+    #: Da quale classe un pericolo "conta" per l'incremento.
+    min_level: RiskLevel = RiskLevel.Moderate
+    #: Moltiplicativo, come l'esposizione: `per (1 + bump)` per ogni pericolo
+    #: oltre il primo. 0 = nessun incremento, cioè il solo massimo.
+    multi_hazard_bump: float = Field(default=0.15, ge=0.0, le=1.0)
+
+    # Stessa ragione della regola sulla pioggia congiunta: in YAML la classe
+    # è una stringa e lo schema è strict, quindi la conversione va fatta
+    # prima della validazione.
+    @field_validator("min_level", mode="before")
+    @classmethod
+    def _coerce_level(cls, v: object) -> object:
+        return RiskLevel(v) if isinstance(v, str) else v
+
+
 class CascadeRules(_Strict):
     """Tutte le regole di cascata."""
 
     post_fire_flood: PostFireFloodRule
     joint_rain: JointRainRule
+    # Assente ⇒ i valori di default, che sono il comportamento più prudente:
+    # il massimo, con un incremento piccolo quando i pericoli sono più di uno.
+    attention: AttentionRule = Field(default_factory=lambda: AttentionRule())
 
 
 def load_cascades(path: Path | str | None = None) -> CascadeRules:

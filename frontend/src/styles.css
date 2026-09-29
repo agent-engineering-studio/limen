@@ -323,31 +323,6 @@ html, body, #root {
   padding: 4px 0;
   font-size: 13px;
 }
-.cb-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex: 0 0 auto;
-}
-.cb-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cb-meta {
-  color: #5e6473;
-  font-size: 12px;
-  flex: 0 0 auto;
-}
-.comune-headline {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #5e6473;
-  margin-left: 6px;
-}
 
 /* admin — gestione utenti */
 .admin-create {
@@ -2147,75 +2122,29 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
 /* Il comune è l'unità di lettura: una riga, tre pericoli             */
 /* ------------------------------------------------------------------ */
 
-.cb-search {
-  width: 100%;
-  margin: 6px 0 10px;
-  padding: 7px 10px;
-  font: inherit;
-  font-size: 13px;
-  border: 1px solid var(--panel-border);
-  border-radius: 8px;
-  background: var(--panel);
-  color: var(--ink);
-}
-.cb-search:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-.cb-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.cb-list li {
-  padding: 8px 0;
+/* Quasi tutto lo fa Mantine. Qui restano le due cose che il tema non può
+   sapere: la scala di colori del rischio, che deve restare identica a
+   quella della mappa, e la densità della riga, che su una colonna da 300 px
+   è più stretta di qualunque default. */
+.cb-row {
   border-top: 1px solid var(--hairline);
 }
 .cb-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
+  display: block;
+  width: 100%;
+  padding: 8px 0;
+  text-align: left;
 }
-.cb-name {
-  font-size: 13.5px;
-  font-weight: 650;
-  color: var(--ink);
+.cb-head:hover {
+  color: var(--accent);
 }
-.cb-meta {
-  font-size: 11.5px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-/* I tre indicatori vanno a capo insieme, non si spezzano a metà riga. */
-.cb-hazards {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  margin-top: 4px;
-}
-.cb-haz {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11.5px;
-  color: var(--ink-soft);
-}
-/* Un pericolo a zero resta in riga, sbiadito: un trattino è una risposta,
-   una colonna che sparisce no. */
 .cb-haz.is-quiet {
-  color: var(--muted);
+  opacity: 0.55;
 }
 .cb-chip {
   width: 10px;
   height: 10px;
+  flex: none;
   border-radius: 2px;
   border: 1px solid rgb(0 0 0 / 18%);
-}
-.cb-haz-label {
-  font-weight: 500;
-}
-.cb-haz-class {
-  font-weight: 700;
-  letter-spacing: 0.02em;
 }
