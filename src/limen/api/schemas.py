@@ -141,6 +141,20 @@ class ComuneHazard(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class ComuneForecast(BaseModel):
+    """Il picco previsto di un pericolo su un comune, e quando arriva."""
+
+    class_: str = Field(alias="class")
+    score: float
+    #: A quale orizzonte cade il picco: +24, +48 o +72 ore.
+    horizon_h: int
+    #: Il momento a cui la previsione si riferisce, già composto.
+    target_at: str
+    priority: float = 0.0
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class ComuneRisk(BaseModel):
     istat_code: str
     name: str
@@ -168,6 +182,13 @@ class ComuneRisk(BaseModel):
     #: I tre indicatori affiancati, sempre tutti: un pericolo a zero mostra
     #: un trattino, e un trattino è una risposta — una colonna che sparisce no.
     hazards: dict[str, ComuneHazard]
+    #: Il futuro, per pericolo. Un pericolo assente è **previsto sotto
+    #: Moderato**, non ignoto: lo stato previsionale tiene solo le celle sopra
+    #: soglia.
+    forecast: dict[str, ComuneForecast] = Field(default_factory=dict)
+    #: Lo stesso numero di `attention`, sul futuro e con la stessa regola:
+    #: se è più alto, il comune sta salendo.
+    forecast_attention: float | None = None
 
 
 class ComuneListResponse(BaseModel):

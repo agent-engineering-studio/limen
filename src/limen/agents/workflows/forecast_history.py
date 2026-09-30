@@ -50,6 +50,26 @@ INSERT INTO risk_assessments (
 """
 
 
+#: Lo stato corrente della previsione (migrazione 057). Si cancellano **tutte**
+#: le celle valutate da questa corsa, non solo quelle che tornano sopra
+#: soglia: una cella scesa sotto Moderato deve perdere la riga, altrimenti
+#: resterebbe lì a dire la previsione di ieri.
+_LATEST_DELETE_SQL = """
+DELETE FROM latest_forecast
+WHERE hazard_type = $1 AND horizon_h = $2 AND cell_id = ANY($3::text[])
+"""
+
+_LATEST_UPSERT_SQL = """
+INSERT INTO latest_forecast (cell_id, hazard_type, horizon_h, score, class, run_at, target_at)
+SELECT u.cell_id, $1::hazard_type, $2, u.score, u.class, now(),
+       now() + make_interval(hours => $2)
+FROM unnest($3::text[], $4::float8[], $5::text[]) AS u(cell_id, score, class)
+ON CONFLICT (cell_id, hazard_type, horizon_h) DO UPDATE
+SET score = EXCLUDED.score, class = EXCLUDED.class,
+    run_at = EXCLUDED.run_at, target_at = EXCLUDED.target_at
+"""
+
+
 def at_or_above(level: RiskLevel, floor: RiskLevel) -> bool:
     return _LEVEL_ORDER.index(level) >= _LEVEL_ORDER.index(floor)
 
@@ -88,6 +108,20 @@ async def persist_forecast_run(
                 json.dumps(factors, default=str),
                 pipeline_version,
             )
+        await conn.execute(
+            _LATEST_DELETE_SQL,
+            hazard.value,
+            horizon_h,
+            [c.cell_id for c in cell_results],
+        )
+        await conn.execute(
+            _LATEST_UPSERT_SQL,
+            hazard.value,
+            horizon_h,
+            cell_ids,
+            [float(c.score) for c in keep],
+            [c.level.value for c in keep],
+        )
     return len(keep)
 
 

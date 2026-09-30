@@ -4,6 +4,7 @@
 
 import type {
   ForecastAlertsResponse,
+  ForecastSchedule,
   LegendResponse,
   NationalReportResponse,
   AlertsResponse,
@@ -236,12 +237,21 @@ export class ApiClient {
      *  proprio comune vuole vederlo anche quando è tranquillo, ed è il caso in
      *  cui «nessun pericolo sopra soglia» è la notizia. */
     q?: string,
+    /** `forecast` ordina sul picco previsto: trova il comune che oggi è
+     *  sotto soglia e domani no. */
+    order: "now" | "forecast" = "now",
   ): Promise<ComuneListResponse> {
     const qs = new URLSearchParams();
     if (aoi) qs.set("aoi", aoi);
     qs.set("limit", String(limit));
     if (q) qs.set("q", q);
+    if (order !== "now") qs.set("order", order);
     return this.request<ComuneListResponse>(`/api/comuni?${qs.toString()}`, {}, signal);
+  }
+
+  /** Quando gira il prossimo calcolo previsionale, e quanto è vecchio l'ultimo. */
+  getForecastSchedule(signal?: AbortSignal): Promise<ForecastSchedule> {
+    return this.request<ForecastSchedule>("/api/alerts/forecast/schedule", {}, signal);
   }
 
   /** Il dettaglio di un comune: la riga e le sue celle peggiori. */

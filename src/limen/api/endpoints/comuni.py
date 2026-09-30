@@ -14,6 +14,8 @@ smette di poter bruciare mentre si guardano le frane.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, Query, Response
 
 from limen.api.schemas import ComuneDetailResponse, ComuneListResponse, ComuneRisk
@@ -32,8 +34,13 @@ async def list_comuni(
         "chi cerca il proprio comune vuole vederlo anche quando è tranquillo.",
         max_length=64,
     ),
+    order: Literal["now", "forecast"] = Query(
+        "now",
+        description="`now` ordina sull'adesso, `forecast` sul picco previsto: il "
+        "secondo trova il comune che oggi è sotto soglia e domani no.",
+    ),
 ) -> ComuneListResponse:
-    rows = await comune_risk.top_comuni(aoi_id=aoi, limit=limit, query=q)
+    rows = await comune_risk.top_comuni(aoi_id=aoi, limit=limit, query=q, order=order)
     return ComuneListResponse(comuni=[ComuneRisk(**r) for r in rows])
 
 
@@ -50,12 +57,15 @@ async def comune_history(
     istat_code: str,
     response: Response,
     hours: int = Query(168, ge=1, le=720),
-) -> dict[str, list[dict[str, object]]]:
-    """L'andamento del comune, una serie per pericolo.
+) -> dict[str, dict[str, list[dict[str, object]]]]:
+    """L'andamento del comune: `observed` e `forecast`, una serie per pericolo.
 
     Sette giorni per default: è la finestra in cui un tecnico comunale
     riconosce un peggioramento, e con la scrittura sparsa della #135 sono
     poche centinaia di righe per comune.
+
+    La previsione non ha una finestra sua: è la corsa più recente per ogni
+    orizzonte (+24/+48/+72 h), con il momento a cui si riferisce già composto.
     """
     response.headers["Cache-Control"] = "public, max-age=300"
     return await comune_risk.comune_history(istat_code, hours=hours)
