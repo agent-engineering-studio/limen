@@ -193,3 +193,52 @@ describe("cella non misurata", () => {
     expect(container.textContent).toContain("non è arrivato");
   });
 });
+
+describe("schede dei pericoli", () => {
+  it("mostra tutti e tre i pericoli con il loro numero, e cambia al clic", async () => {
+    // Il popup chiedeva un pericolo solo — quello del selettore, che in vista
+    // d'insieme vale «frane» — e una cella con l'incendio alto mostrava le
+    // barre delle frane senza dire che ce n'era uno peggiore.
+    vi.spyOn(defaultApiClient, "getHazards").mockResolvedValue(HAZARDS);
+    vi.spyOn(defaultApiClient, "getCellMultiHazard").mockResolvedValue({
+      scope: "cell",
+      cell_id: "it-basilicata|1|1",
+      aoi_id: "it-basilicata",
+      worst_hazard: "wildfire",
+      worst_level: "High",
+      hazards_at_moderate: ["landslide", "wildfire"],
+      hazards_at_high: ["wildfire"],
+      per_hazard: [
+        { hazard: "landslide", score: 0.38, level: "Moderate", computed_at: null },
+        { hazard: "flood", score: 0.0, level: "None", computed_at: null },
+        { hazard: "wildfire", score: 0.67, level: "High", computed_at: null },
+      ],
+    });
+    const breakdown = vi
+      .spyOn(defaultApiClient, "getCellBreakdown")
+      .mockResolvedValue(WILDFIRE_ROW);
+
+    const { container } = render(
+      <HazardProvider>
+        <CellPopup cellId="it-basilicata|1|1" />
+      </HazardProvider>,
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".popup-scheda")).toHaveLength(3));
+    expect(container.textContent).toContain("Incendio 0,67");
+    expect(container.textContent).toContain("Frana 0,38");
+    // Si apre sul pericolo peggiore della cella, non sulle frane per default.
+    await waitFor(() =>
+      expect(breakdown).toHaveBeenLastCalledWith("it-basilicata|1|1", expect.anything(), "wildfire"),
+    );
+
+    const frana = [...container.querySelectorAll(".popup-scheda")].find((b) =>
+      b.textContent?.startsWith("Frana"),
+    );
+    expect(frana).toBeDefined();
+    (frana as HTMLElement).click();
+    await waitFor(() =>
+      expect(breakdown).toHaveBeenLastCalledWith("it-basilicata|1|1", expect.anything(), "landslide"),
+    );
+  });
+});

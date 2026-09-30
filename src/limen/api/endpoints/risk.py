@@ -122,7 +122,15 @@ async def cell_breakdown(
     deps: DepsDep,  # noqa: ARG001 — DI presence
     hazard: HazardType = DEFAULT_HAZARD,
 ) -> CellBreakdownResponse:
-    """Return the latest persisted breakdown for ``cell_id``."""
+    """Return the current breakdown for ``cell_id``.
+
+    Da `latest_risk`, lo stato corrente, e non dall'ultima riga dello storico.
+    Nello storico stanno anche le righe **previsionali** (`horizon` `+72h`),
+    scritte dalla corsa notturna dopo l'ultimo sweep: «l'ultima riga» era
+    spesso una previsione a tre giorni, e il popup la presentava come il
+    valore di adesso — con l'etichetta `v1-forecast+72h` in piccolo sotto il
+    numero, dove nessuno la legge.
+    """
     async with acquire() as conn:
         row = await conn.fetchrow(
             """
@@ -131,10 +139,8 @@ async def cell_breakdown(
                    -- NULL = riga scritta prima che la colonna esistesse:
                    -- «non lo sappiamo», che si legge come misurato.
                    COALESCE(measured, true) AS measured
-            FROM risk_assessments
+            FROM latest_risk
             WHERE cell_id = $1 AND hazard_type = $2
-            ORDER BY computed_at DESC
-            LIMIT 1
             """,
             cell_id,
             hazard.value,
@@ -344,11 +350,15 @@ WHERE cell_id = $1
 ORDER BY computed_at
 """
 
+#: Dallo stato previsionale corrente (057), non dallo storico: lì le righe
+#: previsionali si accumulano corsa dopo corsa, e prima le teneva pulite solo
+#: un DELETE che attraversava tutte le partizioni. Stessa forma di risposta —
+#: `computed_at` è l'ora della corsa, `horizon` lo scostamento.
 _CELL_FORECAST_SQL = """
-SELECT computed_at, horizon, score, class
-FROM risk_assessments
-WHERE cell_id = $1 AND hazard_type = $2 AND pipeline_version LIKE 'v1-forecast+%'
-ORDER BY horizon
+SELECT run_at AS computed_at, '+' || horizon_h || 'h' AS horizon, score, class
+FROM latest_forecast
+WHERE cell_id = $1 AND hazard_type = $2 AND target_at > now()
+ORDER BY horizon_h
 """
 
 

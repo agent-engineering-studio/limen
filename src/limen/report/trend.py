@@ -27,11 +27,12 @@ WHERE cell_id = $1
 ORDER BY computed_at
 """
 
+#: Dallo stato previsionale corrente (057), come il popup della mappa.
 _FORECAST_SQL = """
-SELECT computed_at, horizon, score
-FROM risk_assessments
-WHERE cell_id = $1 AND hazard_type = $2 AND pipeline_version LIKE 'v1-forecast+%'
-ORDER BY horizon
+SELECT run_at AS computed_at, '+' || horizon_h || 'h' AS horizon, score
+FROM latest_forecast
+WHERE cell_id = $1 AND hazard_type = $2 AND target_at > now()
+ORDER BY horizon_h
 """
 
 TrendPoint = tuple[datetime, float]

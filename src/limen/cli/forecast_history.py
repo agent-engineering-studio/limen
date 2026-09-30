@@ -16,9 +16,25 @@ log = get_logger(__name__)
 
 
 async def run() -> int:
+    """Tutti i pericoli abilitati, come il job notturno.
+
+    `LIMEN_FORECAST_HAZARD` la limita a uno — serve a rilanciare a mano il
+    solo pericolo che una notte è fallito, senza rifare gli altri.
+    """
+    import os
+
+    from limen.config.settings import get_settings
+    from limen.core.models.hazard import HazardType
+
+    scelto = os.getenv("LIMEN_FORECAST_HAZARD")
+    pericoli = [HazardType(scelto)] if scelto else get_settings().hazards.enabled
+    total = 0
     async with lifespan_pool():
         await run_migrations()
-        total = await run_forecast_history()
+        for hazard in pericoli:
+            celle = await run_forecast_history(hazard=hazard)
+            log.info("cli.forecast_history.hazard", hazard=hazard.value, cells=celle)
+            total += celle
     log.info("cli.forecast_history.done", cells=total)
     return 0
 

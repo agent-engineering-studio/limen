@@ -1012,6 +1012,41 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   vertical-align: 6px;
 }
 .level-chip.on-dark { color: #fff; }
+/* Le tre schede del popup: sempre tutte, con il loro numero, così una cella
+   con l'incendio alto non si apre sulle barre delle frane senza dirlo. */
+.popup-schede {
+  display: flex;
+  gap: 4px;
+  margin: -2px 0 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+.popup-scheda {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 6px;
+  font-size: 12px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.popup-scheda strong { font-variant-numeric: tabular-nums; }
+.popup-scheda.on {
+  color: #14161b;
+  border-bottom-color: var(--accent);
+}
+.popup-scheda-chip {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  border: 1px solid rgb(0 0 0 / 18%);
+  flex: none;
+}
 /* «Non misurato»: nessun colore della scala, perché non è una classe.
    Il tratteggio è lo stesso della colonna e della legenda. */
 .level-chip.is-unknown {

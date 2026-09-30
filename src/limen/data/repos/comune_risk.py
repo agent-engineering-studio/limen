@@ -374,11 +374,17 @@ _CELLE_PEGGIORI = """
     ORDER BY lr.hazard_type, lr.score DESC NULLS LAST
 """
 
+#: Le righe grezze, non l'aggregato: il filtro sulla misura si fa in Python
+#: perché per lo storico serve il breakdown (vedi `comune_history`). Sono tre
+#: celle per una settimana, poche centinaia di righe.
 _STORIA_COMUNE = f"""
 WITH peggiori AS ({_CELLE_PEGGIORI})
 SELECT date_trunc('hour', ra.computed_at) AS t,
        p.hazard_type::text                AS hazard,
-       max(ra.score)                      AS score
+       ra.score,
+       ra.measured,
+       -- I fattori servono solo dove la colonna non c'era ancora.
+       CASE WHEN ra.measured IS NULL THEN ra.factors END AS factors
 FROM peggiori p
 JOIN risk_assessments ra
       ON ra.cell_id = p.cell_id
@@ -386,10 +392,35 @@ JOIN risk_assessments ra
 WHERE ra.horizon NOT LIKE '+%'
   AND ra.computed_at >= now() - make_interval(hours => $2::int)
   AND ra.score IS NOT NULL
-  AND COALESCE(ra.measured, true)
-GROUP BY 1, 2
+  AND ra.measured IS DISTINCT FROM false
 ORDER BY 1
 """
+
+
+def _misurata(hazard: str, factors: Any) -> bool:
+    """Se una riga storica senza colonna `measured` aveva davvero il dato.
+
+    Le righe scritte prima della 053 hanno `measured` NULL, che per la mappa
+    si legge come misurato: retro-marcarle sarebbe inventare al contrario.
+    Per un **grafico** però quella scelta disegna una caduta a zero che non è
+    mai avvenuta — il 28 e 29 settembre, col tetto Open-Meteo esaurito, ogni
+    cella incendio scrisse 0,00 per assenza di catena FWI. Il breakdown sa la
+    differenza anche su quelle righe, perché tiene il segnale grezzo: si
+    chiede a lui, con la stessa proiezione che usa lo sweep.
+
+    Fattori illeggibili ⇒ misurata: «non lo so» resta «non lo so».
+    """
+    from limen.core.models.hazard import HazardType
+    from limen.core.models.risk import breakdown_from_factors
+
+    if factors is None:
+        return True
+    try:
+        dati = json.loads(factors) if isinstance(factors, str) else factors
+        return breakdown_from_factors(HazardType(hazard), dict(dati)).measured()
+    except Exception:
+        return True
+
 
 #: Il futuro del comune: per ogni orizzonte, la cella peggiore **prevista**,
 #: dallo stato previsionale corrente (057).
@@ -433,11 +464,17 @@ async def comune_history(
         osservate = await conn.fetch(_STORIA_COMUNE, istat_code, hours)
         previste = await conn.fetch(_PREVISIONE_COMUNE, istat_code)
 
-    passato: dict[str, list[dict[str, Any]]] = {}
+    # Il massimo per ora e per pericolo, sulle sole righe misurate.
+    per_ora: dict[tuple[str, Any], float] = {}
     for r in osservate:
-        passato.setdefault(str(r["hazard"]), []).append(
-            {"t": r["t"].isoformat(), "score": round(float(r["score"]), 3)}
-        )
+        hazard = str(r["hazard"])
+        if r["measured"] is None and not _misurata(hazard, r["factors"]):
+            continue
+        chiave = (hazard, r["t"])
+        per_ora[chiave] = max(per_ora.get(chiave, 0.0), float(r["score"]))
+    passato: dict[str, list[dict[str, Any]]] = {}
+    for (hazard, t), score in sorted(per_ora.items(), key=lambda kv: kv[0][1]):
+        passato.setdefault(hazard, []).append({"t": t.isoformat(), "score": round(score, 3)})
 
     futuro: dict[str, list[dict[str, Any]]] = {}
     for r in previste:
