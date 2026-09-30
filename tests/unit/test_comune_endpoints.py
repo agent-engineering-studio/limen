@@ -21,6 +21,8 @@ _ROW = {
     "n_alert": 1,
     "counts": {"None": 0, "Low": 1, "Moderate": 0, "High": 1, "VeryHigh": 0},
     "exposure_rank": 0.9,
+    "lon": 13.1,
+    "lat": 46.5,
     "attention": 1.52,
     # I tre pericoli affiancati (migrazione 051): la riga li porta tutti,
     # anche quelli a zero.
@@ -93,3 +95,16 @@ def test_la_ricerca_arriva_al_repo(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_comune_detail_and_404(client: TestClient) -> None:
     assert client.get("/api/comune/C001").json()["comune"]["name"] == "Testville"
     assert client.get("/api/comune/NOPE").status_code == 404
+
+
+def test_la_riga_porta_le_coordinate(client: TestClient) -> None:
+    """Il centroide arriva fino alla risposta, o la mappa non si muove.
+
+    Il campo c'era nel repo e non nel DTO, e `response_model` lo toglieva in
+    silenzio: la colonna riceveva righe senza coordinate e cliccarle non
+    faceva niente. Un campo che il repo produce e il DTO non dichiara sparisce
+    senza un errore da nessuna parte, quindi lo verifica un test.
+    """
+    body = client.get("/api/comuni").json()["comuni"][0]
+    assert body["lon"] == 13.1
+    assert body["lat"] == 46.5

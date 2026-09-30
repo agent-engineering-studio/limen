@@ -154,6 +154,10 @@ class ComuneRisk(BaseModel):
     n_alert: int
     counts: dict[str, int]
     exposure_rank: float
+    #: Il centroide, per portare la mappa sul comune al clic. Sta nella lista
+    #: e non dietro una seconda richiesta: la vista lo ha già calcolato.
+    lon: float
+    lat: float
     #: Il numero unico: il massimo delle priorità, con l'incremento quando
     #: più di un pericolo è oltre soglia. Non è una somma — sommare i tre
     #: punteggi farebbe passare tre pericoli blandi davanti a un versante
