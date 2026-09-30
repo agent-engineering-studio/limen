@@ -159,6 +159,9 @@ FROM cell_comune cc
 JOIN latest_forecast lf ON lf.cell_id = cc.cell_id
 LEFT JOIN cell_static_factors f ON f.cell_id = cc.cell_id
 WHERE cc.istat_code = ANY($1::text[])
+  -- Un bersaglio nel passato non è una previsione. Succede se la corsa
+  -- notturna salta: il +24 h di ieri scade e resterebbe qui come «futuro».
+  AND lf.target_at > now()
 GROUP BY 1, 2, 3
 """
 
@@ -169,6 +172,7 @@ SELECT cc.istat_code,
 FROM latest_forecast lf
 JOIN cell_comune cc ON cc.cell_id = lf.cell_id
 LEFT JOIN cell_static_factors f ON f.cell_id = lf.cell_id
+WHERE lf.target_at > now()
 GROUP BY 1
 """
 
@@ -404,6 +408,7 @@ SELECT lf.hazard_type::text                            AS hazard,
 FROM cell_comune cc
 JOIN latest_forecast lf ON lf.cell_id = cc.cell_id
 WHERE cc.istat_code = $1
+  AND lf.target_at > now()
 GROUP BY 1, 2
 ORDER BY 1, 2
 """
