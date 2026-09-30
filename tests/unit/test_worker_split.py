@@ -250,7 +250,7 @@ def _patch_lifecycle(monkeypatch: pytest.MonkeyPatch, *, schema_ok: bool) -> dic
         events["registered"] = True
         return ["limen-hourly-monitoring"]
 
-    async def _beat(stop: asyncio.Event) -> None:
+    async def _beat(stop: asyncio.Event, scheduler: object = None) -> None:
         # Il battito finto ferma subito il worker: e' l'equivalente di un
         # SIGTERM arrivato appena partito.
         stop.set()
