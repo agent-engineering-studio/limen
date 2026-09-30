@@ -177,6 +177,53 @@ GROUP BY 1
 """
 
 
+#: I segnali grezzi dell'alluvione per comune: la pioggia a 72 ore più alta
+#: fra le sue celle, e se almeno una ha la portata del fiume.
+#:
+#: Qui e non in una proiezione del breakdown perché è una domanda **solo**
+#: dell'alluvione. Frane e incendio hanno un punteggio continuo, che si muove
+#: ogni giorno; l'alluvione è una soglia — sotto i `pluvial.threshold_mm` il
+#: ramo pluviale vale zero — e un «0,00» ripetuto per settimane non dice
+#: quanto manca. Il numero che lo dice è la pioggia prevista contro la soglia.
+_SEGNALI_ALLUVIONE = """
+SELECT cc.istat_code,
+       max((lr.factors->>'rain_mm')::float8)               AS rain_mm,
+       bool_or(lr.factors->>'discharge_ratio' IS NOT NULL) AS portata
+FROM cell_comune cc
+JOIN latest_risk lr ON lr.cell_id = cc.cell_id AND lr.hazard_type = 'flood'
+WHERE cc.istat_code = ANY($1::text[])
+GROUP BY 1
+"""
+
+
+async def _segnali_alluvione(conn: Any, istat_codes: list[str]) -> dict[str, dict[str, Any]]:
+    if not istat_codes:
+        return {}
+    from limen.core.models.hazard import HazardType
+    from limen.core.scoring.regional_thresholds import FloodThresholds, load_hazard_thresholds
+
+    soglie = load_hazard_thresholds(HazardType.FLOOD)
+    if not isinstance(soglie, FloodThresholds):
+        raise TypeError(f"flood needs FloodThresholds, got {type(soglie).__name__}")
+    soglia = float(soglie.pluvial.threshold_mm)
+    rows = await conn.fetch(_SEGNALI_ALLUVIONE, istat_codes)
+    return {
+        str(r["istat_code"]): {
+            "rain_mm": None if r["rain_mm"] is None else round(float(r["rain_mm"]), 1),
+            "rain_threshold_mm": soglia,
+            "discharge_known": bool(r["portata"]),
+        }
+        for r in rows
+    }
+
+
+def _con_segnali(comune: dict[str, Any], segnali: dict[str, Any] | None) -> dict[str, Any]:
+    alluvione = comune["hazards"].get("flood")
+    if alluvione is not None and segnali is not None:
+        alluvione.update(segnali)
+    return comune
+
+
 async def _previsioni(conn: Any, istat_codes: list[str]) -> dict[str, dict[str, Any]]:
     """Per ogni comune e pericolo, il picco previsto e quando arriva.
 
@@ -292,9 +339,15 @@ async def top_comuni(
                 query,
                 min_rank,
             )
-        previsioni = await _previsioni(conn, [str(r["istat_code"]) for r in rows])
+        codici = [str(r["istat_code"]) for r in rows]
+        previsioni = await _previsioni(conn, codici)
+        segnali = await _segnali_alluvione(conn, codici)
     comuni = [
-        _con_previsione(_to_comune(r), previsioni.get(str(r["istat_code"]), {})) for r in rows
+        _con_segnali(
+            _con_previsione(_to_comune(r), previsioni.get(str(r["istat_code"]), {})),
+            segnali.get(str(r["istat_code"])),
+        )
+        for r in rows
     ]
     chiave = "forecast_attention" if order == "forecast" else "attention"
     # I comuni senza un numero vanno in coda: non sono tranquilli, ma nemmeno
@@ -327,7 +380,11 @@ async def comune_detail(istat_code: str) -> dict[str, Any] | None:
             istat_code,
         )
         previsioni = await _previsioni(conn, [istat_code])
-    out = _con_previsione(_to_comune(row), previsioni.get(istat_code, {}))
+        segnali = await _segnali_alluvione(conn, [istat_code])
+    out = _con_segnali(
+        _con_previsione(_to_comune(row), previsioni.get(istat_code, {})),
+        segnali.get(istat_code),
+    )
     return {
         "comune": out,
         "cells": [

@@ -166,4 +166,36 @@ async def run_forecast_history(
         horizons=list(horizons),
         cells=total,
     )
+    await _registra_corsa(hazard, total)
     return total
+
+
+#: Dove si registra che la corsa di un pericolo è avvenuta, anche a zero celle.
+LAST_RUN_KEY = "forecast:last_run:{hazard}"
+
+
+async def _registra_corsa(hazard: HazardType, celle: int) -> None:
+    """Segna che la previsione di `hazard` è girata, **anche a zero celle**.
+
+    Lo stato previsionale tiene solo le celle da Moderato in su. Dedurre da
+    lì se una corsa è avvenuta confonde due risposte opposte: una giornata
+    asciutta, in cui l'alluvione è prevista sotto soglia ovunque e non lascia
+    righe, e una corsa mai fatta. Misurato il 30 settembre: l'Abruzzo a +24 h
+    ha dato zero celle, e la testata avrebbe detto «previsione non
+    disponibile» di un pericolo appena calcolato.
+
+    Tre giorni di scadenza: una previsione più vecchia non è più quella di
+    stanotte, e mostrarla come disponibile sarebbe peggio che tacere.
+    """
+    from datetime import UTC, datetime
+
+    from limen.data.caching.postgres_cache import PostgresCache
+
+    try:
+        await PostgresCache().set_json(
+            LAST_RUN_KEY.format(hazard=hazard.value),
+            {"run_at": datetime.now(UTC).isoformat(), "cells": celle},
+            ttl_seconds=3 * 24 * 3600,
+        )
+    except Exception as exc:
+        log.warning("forecast_history.last_run.failed", hazard=hazard.value, error=str(exc))

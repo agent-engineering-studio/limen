@@ -137,6 +137,13 @@ class ComuneHazard(BaseModel):
     #: arrivato: il punteggio è zero per assenza di dato, non per quiete
     #: (#143). Chi lo mostra scrive «non misurato», non «0,00 basso».
     measured: bool = True
+    #: Solo per l'alluvione: la pioggia a 72 ore più alta fra le celle del
+    #: comune, la soglia sotto cui il ramo pluviale vale zero, e se la portata
+    #: dei fiumi c'è. Sotto soglia il punteggio resta 0,00 per settimane, e
+    #: questi tre numeri sono ciò che dice quanto manca.
+    rain_mm: float | None = None
+    rain_threshold_mm: float | None = None
+    discharge_known: bool | None = None
 
     model_config = ConfigDict(populate_by_name=True)
 

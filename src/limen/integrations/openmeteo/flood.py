@@ -101,6 +101,87 @@ _GRID_BATCH = 100
 #: grande risponde con un corpo che non è JSON, e `resp.json()` alza di lì.
 _GRID_DEGRADATION_EXC: tuple[type[BaseException], ...] = (*_DEGRADATION_EXC, ValueError)
 
+#: La pausa di GloFAS dopo un 429, condivisa fra processi attraverso la cache.
+#:
+#: GloFAS è l'unica sorgente che non si può ospitare in proprio, e il suo 429
+#: dice «Daily API request limit exceeded. Please try again tomorrow»: un
+#: limite **giornaliero**. La politica di retry condivisa lo tratta come un
+#: 429 qualunque — quattro tentativi, attesa fino a 60 s — e lo fa per ogni
+#: blocco di cento nodi. Misurato il 30 settembre: la previsione d'alluvione
+#: è rimasta mezz'ora sui tentativi della prima regione, 88 volte 429, senza
+#: scrivere una riga. Dopo il primo 429 si smette fino alla mezzanotte UTC,
+#: quando il limite riparte; nel frattempo il ramo fluviale è «non so»
+#: (`None`), e l'alluvione si misura sul ramo pluviale, che viene dalla
+#: nostra istanza.
+_PAUSA_KEY = "openmeteo:glofas:pausa"
+_pausa_fino: datetime | None = None
+#: Quando si è guardata la cache l'ultima volta. Senza pausa attiva la si
+#: rilegge al più una volta al minuto: le richieste GloFAS di uno sweep sono
+#: migliaia, e una lettura per ciascuna sarebbe traffico per niente.
+_ultimo_controllo: datetime | None = None
+
+
+def _mezzanotte_utc(adesso: datetime) -> datetime:
+    domani = (adesso + timedelta(days=1)).date()
+    return datetime.combine(domani, datetime.min.time(), UTC)
+
+
+def _stato_http(exc: BaseException) -> int | None:
+    """Lo status HTTP dietro un'eccezione, anche se avvolta dal retry."""
+    if isinstance(exc, RetryError):
+        ultimo = exc.last_attempt.exception()
+        return _stato_http(ultimo) if ultimo is not None else None
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code
+    return None
+
+
+async def _in_pausa() -> bool:
+    """Vero finché GloFAS ha detto di riprovare domani."""
+    global _pausa_fino, _ultimo_controllo
+    adesso = datetime.now(UTC)
+    if _pausa_fino is not None and _pausa_fino > adesso:
+        return True
+    if _ultimo_controllo is not None and adesso - _ultimo_controllo < timedelta(minutes=1):
+        return False
+    _ultimo_controllo = adesso
+    try:
+        from limen.data.caching.postgres_cache import PostgresCache
+
+        valore = await PostgresCache().get_json(_PAUSA_KEY)
+    except Exception:
+        return False
+    if isinstance(valore, str):
+        fino = datetime.fromisoformat(valore)
+        if fino > adesso:
+            _pausa_fino = fino
+            return True
+    return False
+
+
+async def _entra_in_pausa(label: str) -> None:
+    global _pausa_fino
+    adesso = datetime.now(UTC)
+    _pausa_fino = _mezzanotte_utc(adesso)
+    log.warning(
+        "integration.degraded",
+        label="openmeteo.flood.pausa",
+        cause=label,
+        until=_pausa_fino.isoformat(),
+        note="GloFAS: limite giornaliero esaurito, ramo fluviale sospeso",
+    )
+    try:
+        from limen.data.caching.postgres_cache import PostgresCache
+
+        await PostgresCache().set_json(
+            _PAUSA_KEY,
+            _pausa_fino.isoformat(),
+            ttl_seconds=max(600, int((_pausa_fino - adesso).total_seconds())),
+        )
+    except Exception as exc:
+        log.warning("integration.degraded", label="openmeteo.flood.pausa_cache", error=str(exc))
+
+
 #: Giorni minimi perché il percentile di riferimento di un nodo sia un numero
 #: e non un artefatto della stagione in cui è stato calcolato.
 MIN_REFERENCE_DAYS = 365
@@ -184,12 +265,16 @@ class OpenMeteoFloodClient:
         return self._http if self._http is not None else await SharedHttpClient.get()
 
     async def _get(self, url: str, params: dict[str, Any], label: str) -> dict[str, Any] | None:
+        if url == FLOOD_URL and await _in_pausa():
+            return None
         try:
             resp = await fetch_with_retry("GET", url, client=await self._client(), params=params)
         except _DEGRADATION_EXC as exc:
             log.warning(
                 "integration.degraded", label=label, error=str(exc), error_type=type(exc).__name__
             )
+            if url == FLOOD_URL and _stato_http(exc) == 429:
+                await _entra_in_pausa(label)
             return None
         payload = resp.json()
         return payload if isinstance(payload, dict) else None
@@ -218,6 +303,11 @@ class OpenMeteoFloodClient:
         out: list[dict[str, Any]] = []
         for i in range(0, len(nodes), _GRID_BATCH):
             batch = nodes[i : i + _GRID_BATCH]
+            if url == FLOOD_URL and await _in_pausa():
+                # Allineato come un blocco degradato: chi chiama mappa per
+                # posizione, e una lista più corta sposterebbe i nodi.
+                out.extend({} for _ in batch)
+                continue
             batch_params = {
                 **params,
                 "latitude": ",".join(f"{lat:.4f}" for _, lat in batch),
@@ -238,6 +328,8 @@ class OpenMeteoFloodClient:
                     error_type=type(exc).__name__,
                     batch_size=len(batch),
                 )
+                if url == FLOOD_URL and _stato_http(exc) == 429:
+                    await _entra_in_pausa(label)
                 out.extend({} for _ in batch)
                 continue
             if isinstance(payload, list):

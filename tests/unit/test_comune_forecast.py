@@ -179,3 +179,54 @@ async def test_la_previsione_notturna_gira_per_ogni_pericolo(
 
     assert visti == [HazardType.LANDSLIDE, HazardType.FLOOD, HazardType.WILDFIRE]
     assert totale == 20
+
+
+@pytest.mark.asyncio
+async def test_una_corsa_a_zero_celle_resta_una_corsa(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Una giornata asciutta: l'alluvione è prevista sotto soglia ovunque e
+    non lascia righe. Dedurre la corsa dalle righe la farebbe sparire, e la
+    testata direbbe «non disponibile» di un pericolo appena calcolato."""
+    from limen.agents.workflows import forecast_history as fh
+    from limen.core.models.hazard import HazardType
+
+    scritti: dict[str, Any] = {}
+
+    class _Cache:
+        async def set_json(self, key: str, value: Any, *, ttl_seconds: int) -> None:
+            scritti[key] = value
+
+    monkeypatch.setattr("limen.data.caching.postgres_cache.PostgresCache", _Cache)
+    await fh._registra_corsa(HazardType.FLOOD, 0)
+
+    registrata = scritti["forecast:last_run:flood"]
+    assert registrata["cells"] == 0
+    assert isinstance(registrata["run_at"], str)
+
+
+def test_i_segnali_della_pioggia_vanno_solo_all_alluvione() -> None:
+    """Sotto soglia l'alluvione resta 0,00 per settimane: pioggia prevista e
+    soglia sono ciò che dice quanto manca. Solo a lei — frane e incendio
+    hanno un punteggio continuo, e quei campi non vi significherebbero niente."""
+    from limen.data.repos.comune_risk import _con_segnali
+
+    riga = {
+        "hazards": {
+            "landslide": {"class": "Moderate", "score": 0.37},
+            "flood": {"class": "None", "score": 0.0},
+        }
+    }
+    segnali = {"rain_mm": 18.4, "rain_threshold_mm": 40.0, "discharge_known": False}
+
+    _con_segnali(riga, segnali)
+
+    assert riga["hazards"]["flood"]["rain_mm"] == 18.4
+    assert riga["hazards"]["flood"]["discharge_known"] is False
+    assert "rain_mm" not in riga["hazards"]["landslide"]
+
+
+def test_senza_segnali_la_riga_non_cambia() -> None:
+    from limen.data.repos.comune_risk import _con_segnali
+
+    riga = {"hazards": {"flood": {"class": "None", "score": 0.0}}}
+    _con_segnali(riga, None)
+    assert riga["hazards"]["flood"] == {"class": "None", "score": 0.0}

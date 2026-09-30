@@ -42,6 +42,10 @@ type Pericolo = {
   n_cells: number;
   n_alert: number;
   measured?: boolean;
+  score?: number;
+  rain_mm?: number;
+  rain_threshold_mm?: number;
+  discharge_known?: boolean;
 };
 
 type Previsto = { class: string; score: number; horizon_h: number; priority: number };
@@ -99,10 +103,59 @@ describe("ComuniBoard", () => {
     // Tre indicatori, non uno: l'alluvione in classe «nessuno» resta in riga.
     expect(container.querySelectorAll(".cb-haz")).toHaveLength(3);
     expect(container.textContent).toContain("alto");
-    // Il numero unico sta accanto al nome, con la parola che dice cos'è:
-    // un 1,60 nudo non si sa interpretare.
-    expect(container.textContent).toContain("attenzione");
-    expect(container.textContent).toContain("1,60");
+    // Accanto al nome c'è il pericolo peggiore su 0–1, non l'attenzione che
+    // arrivava fino a 3: un 1,60 accanto a punteggi che arrivano a 1 non si
+    // sapeva leggere. Il numero d'ordine resta, ma non si mostra.
+    expect(container.textContent).not.toContain("1,60");
+    expect(container.textContent).toContain("In cima per");
+  });
+
+  it("la testata è il pericolo peggiore, non la media", async () => {
+    // Ispani: frana 0,37, alluvione 0,00, incendio 0,56 alto. La media fa
+    // 0,31 «basso» — un incendio in classe Alta presentato come quasi
+    // tranquillo perché oggi non piove.
+    getTopComuni.mockResolvedValue({
+      comuni: [
+        comune("Ispani", {
+          landslide: { class: "Moderate", n_cells: 9, n_alert: 0, score: 0.37 },
+          flood: { class: "None", n_cells: 9, n_alert: 0, score: 0.0 },
+          wildfire: { class: "High", n_cells: 9, n_alert: 3, score: 0.56 },
+        }),
+      ],
+    });
+    const { container } = render(<ComuniBoard />);
+    await waitFor(() => expect(screen.getByText("Ispani")).toBeInTheDocument());
+    const testa = container.querySelector(".cb-head")?.textContent ?? "";
+    expect(testa).toContain("0,56");
+    expect(testa).not.toContain("0,31");
+    // E il perché dell'ordine è scritto: il pericolo, l'abitato, la
+    // concomitanza — frana moderata e incendio alto sono due oltre soglia.
+    expect(testa).toContain("abitato o strade vicine");
+    expect(testa).toContain("2 pericoli oltre soglia");
+  });
+
+  it("l'alluvione dice quanto manca alla soglia, e se mancano i fiumi", async () => {
+    // Sotto 40 mm in 72 ore il ramo pluviale vale zero: «0,00» ripetuto per
+    // settimane non dice niente, la pioggia contro la soglia sì.
+    getTopComuni.mockResolvedValue({
+      comuni: [
+        comune("Ispani", {
+          flood: {
+            class: "None",
+            n_cells: 9,
+            n_alert: 0,
+            score: 0.0,
+            rain_mm: 18.4,
+            rain_threshold_mm: 40,
+            discharge_known: false,
+          },
+        }),
+      ],
+    });
+    const { container } = render(<ComuniBoard />);
+    await waitFor(() => expect(screen.getByText("Ispani")).toBeInTheDocument());
+    expect(container.textContent).toContain("18 mm su 40");
+    expect(container.textContent).toContain("fiumi n.d.");
   });
 
   it("un pericolo non misurato non si mostra come «nessuno»", async () => {
