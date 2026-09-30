@@ -1,11 +1,38 @@
 // `render` dal nostro helper: i componenti Mantine vogliono il provider.
 import { fireEvent, render, screen, waitFor } from "../test-utils";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getTopComuni } = vi.hoisted(() => ({ getTopComuni: vi.fn() }));
+const { getTopComuni, getForecastSchedule, getForecastAlerts } = vi.hoisted(() => ({
+  getTopComuni: vi.fn(),
+  getForecastSchedule: vi.fn(),
+  getForecastAlerts: vi.fn(),
+}));
 vi.mock("../lib/api-client", async (importActual) => {
   const vero = await importActual<typeof import("../lib/api-client")>();
-  return { ...vero, defaultApiClient: { getTopComuni } };
+  return {
+    ...vero,
+    defaultApiClient: { getTopComuni, getForecastSchedule, getForecastAlerts },
+  };
+});
+
+// Di default la previsione per cella esiste per le frane, calcolata
+// stanotte, con la prossima corsa fra sei ore: è la forma di tutti i giorni.
+const ORA = Date.now();
+const SCHEDULE = {
+  cells: {
+    next_run_at: new Date(ORA + 6 * 3600_000).toISOString(),
+    last_run_by_hazard: { landslide: new Date(ORA - 8 * 3600_000).toISOString() },
+  },
+  interval_hours: 6,
+  horizon_hours: 48,
+  next_run_at: new Date(ORA + 2 * 3600_000 + 14 * 60_000).toISOString(),
+  running_since: null,
+  last_run: null,
+};
+beforeEach(() => {
+  getTopComuni.mockReset();
+  getForecastSchedule.mockReset().mockResolvedValue(SCHEDULE);
+  getForecastAlerts.mockReset().mockResolvedValue({ items: [] });
 });
 
 import ComuniBoard from "../components/ComuniBoard";
@@ -17,10 +44,13 @@ type Pericolo = {
   measured?: boolean;
 };
 
+type Previsto = { class: string; score: number; horizon_h: number; priority: number };
+
 const comune = (
   name: string,
   hazards: Record<string, Pericolo>,
   attention: number | null = 1.6,
+  forecast: Record<string, Previsto> = {},
 ) => ({
   istat_code: name,
   name,
@@ -35,6 +65,13 @@ const comune = (
   lon: 13.1,
   lat: 46.5,
   attention,
+  forecast: Object.fromEntries(
+    Object.entries(forecast).map(([h, v]) => [
+      h,
+      { ...v, target_at: new Date(ORA + v.horizon_h * 3600_000).toISOString() },
+    ]),
+  ),
+  forecast_attention: Object.keys(forecast).length ? 1.9 : null,
   hazards: Object.fromEntries(
     Object.entries(hazards).map(([h, v]) => [
       h,
@@ -161,5 +198,66 @@ describe("ComuniBoard", () => {
     fireEvent.click(screen.getByText("Bardonecchia"));
 
     expect(visti).toEqual([{ lon: 13.1, lat: 46.5 }]);
+  });
+
+  it("la previsione sta nella riga del comune, con il verso e l'orizzonte", async () => {
+    // Stava in un pannello a parte, per regione: «nessuna regione sopra
+    // soglia» non dice se il *tuo* comune sta salendo.
+    getTopComuni.mockResolvedValue({
+      comuni: [
+        comune(
+          "Montegiordano",
+          { landslide: { class: "Moderate", n_cells: 36, n_alert: 0 } },
+          1.4,
+          { landslide: { class: "High", score: 0.62, horizon_h: 48, priority: 1.8 } },
+        ),
+      ],
+    });
+    const { container } = render(<ComuniBoard />);
+    await waitFor(() => expect(container.textContent).toContain("Previsto:"));
+    expect(container.textContent).toContain("0,62");
+    expect(container.textContent).toContain("in salita");
+    expect(container.textContent).toContain("+48 h");
+  });
+
+  it("senza righe previsionali, per un pericolo previsto dice «sotto moderato»", async () => {
+    // L'assenza è una risposta solo per i pericoli la cui corsa c'è stata:
+    // per le frane vuol dire previsto sotto soglia.
+    getTopComuni.mockResolvedValue({
+      comuni: [comune("Antrodoco", { landslide: { class: "Moderate", n_cells: 75, n_alert: 0 } })],
+    });
+    const { container } = render(<ComuniBoard />);
+    await waitFor(() => expect(container.textContent).toContain("sotto"));
+    expect(container.textContent).toContain("frana");
+    // E non si allarga agli altri due: per incendio e alluvione la corsa
+    // previsionale non esiste, e «sotto moderato» sarebbe inventato.
+    expect(container.textContent).not.toMatch(/incendio[^·]*sotto\s+moderato/i);
+  });
+
+  it("il selettore riordina sul futuro, e lo chiede al servizio", async () => {
+    getTopComuni.mockResolvedValue({ comuni: [] });
+    render(<ComuniBoard />);
+    await waitFor(() => expect(getTopComuni).toHaveBeenCalled());
+    fireEvent.click(screen.getByText("Più esposti fra 72 h"));
+    await waitFor(() =>
+      expect(getTopComuni).toHaveBeenLastCalledWith(
+        undefined,
+        30,
+        expect.anything(),
+        undefined,
+        "forecast",
+      ),
+    );
+  });
+
+  it("dice quando arriva la prossima previsione, e che è una al giorno", async () => {
+    // Due calcoli, due timer: un solo conto alla rovescia da sei ore farebbe
+    // credere che la curva di un comune si aggiorni quattro volte al giorno.
+    getTopComuni.mockResolvedValue({ comuni: [] });
+    const { container } = render(<ComuniBoard />);
+    await waitFor(() => expect(container.textContent).toContain("prossima tra"));
+    expect(container.textContent).toContain("una volta al giorno");
+    expect(container.textContent).toContain("ogni 6 ore");
+    expect(container.textContent).toContain("Disponibile per: frane");
   });
 });

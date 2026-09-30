@@ -54,6 +54,20 @@ export interface ComuneRisk {
   attention: number | null;
   /** I tre indicatori affiancati: sempre tutti, anche a zero. */
   hazards: Record<string, ComuneHazard>;
+  /** Il picco previsto per pericolo. Un pericolo assente è previsto **sotto
+   *  Moderato**, non ignoto: lo stato previsionale tiene solo le celle sopra
+   *  soglia. */
+  forecast: Record<string, ComuneForecast>;
+  /** L'attenzione sul futuro, con la stessa regola: più alta ⇒ sta salendo. */
+  forecast_attention: number | null;
+}
+
+export interface ComuneForecast {
+  class: RiskLevel;
+  score: number;
+  horizon_h: number;
+  target_at: string;
+  priority: number;
 }
 
 /** Una cella scelta sulla mappa o nella colonna. Viveva in
@@ -439,6 +453,27 @@ export interface ForecastAlertItem {
 
 export interface ForecastAlertsResponse {
   items: ForecastAlertItem[];
+}
+
+/** Sono due calcoli diversi, e il timer li mostra tutti e due: l'allerta per
+ *  regione ogni `interval_hours`, e la previsione **per cella** — quella del
+ *  grafico dei comuni — una volta al giorno, dentro il job notturno. */
+export interface ForecastSchedule {
+  cells: {
+    next_run_at: string | null;
+    last_run_by_hazard: Record<string, string>;
+  };
+  interval_hours: number;
+  horizon_hours: number;
+  /** `null` = il worker non l'ha pubblicato: «non lo so», non «subito». */
+  next_run_at: string | null;
+  running_since: string | null;
+  last_run: {
+    started_at: string;
+    finished_at: string | null;
+    status: string;
+    duration_s: number | null;
+  } | null;
 }
 
 // --- Stato dei job (mirror src/limen/api/schemas.py, #75) ---

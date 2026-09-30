@@ -14,6 +14,8 @@ smette di poter bruciare mentre si guardano le frane.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, Query, Response
 
 from limen.api.schemas import ComuneDetailResponse, ComuneListResponse, ComuneRisk
@@ -32,8 +34,13 @@ async def list_comuni(
         "chi cerca il proprio comune vuole vederlo anche quando è tranquillo.",
         max_length=64,
     ),
+    order: Literal["now", "forecast"] = Query(
+        "now",
+        description="`now` ordina sull'adesso, `forecast` sul picco previsto: il "
+        "secondo trova il comune che oggi è sotto soglia e domani no.",
+    ),
 ) -> ComuneListResponse:
-    rows = await comune_risk.top_comuni(aoi_id=aoi, limit=limit, query=q)
+    rows = await comune_risk.top_comuni(aoi_id=aoi, limit=limit, query=q, order=order)
     return ComuneListResponse(comuni=[ComuneRisk(**r) for r in rows])
 
 

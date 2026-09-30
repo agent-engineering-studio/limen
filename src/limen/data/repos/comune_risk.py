@@ -9,7 +9,6 @@ pagina tre richieste per dire una riga.
 from __future__ import annotations
 
 import json
-from datetime import timedelta
 from typing import Any
 
 from limen.core.cascades.attention import HazardStanding, attention_index
@@ -141,12 +140,99 @@ def _to_comune(row: Any) -> dict[str, Any]:
     }
 
 
+#: La previsione per comune, dallo stato previsionale corrente (057).
+#:
+#: Qui sì il massimo su **tutte** le celle, non la cella peggiore di oggi: la
+#: previsione serve proprio a vedere il versante che adesso è tranquillo e
+#: domani no, e seguire la cella peggiore di oggi lo nasconderebbe. Si può
+#: perché `latest_forecast` è una tabella piccola e non partizionata: la
+#: stessa domanda sullo storico costava 755 ms per comune.
+_PREVISIONE_PER_COMUNE = """
+SELECT cc.istat_code,
+       lf.hazard_type::text                              AS hazard,
+       lf.horizon_h,
+       max(lf.score)                                     AS score,
+       (array_agg(lf.class ORDER BY lf.score DESC))[1]   AS class,
+       max(lf.target_at)                                 AS target_at,
+       max(lf.score * (1.0 + COALESCE(f.exposure_norm, 0.0))) AS priority
+FROM cell_comune cc
+JOIN latest_forecast lf ON lf.cell_id = cc.cell_id
+LEFT JOIN cell_static_factors f ON f.cell_id = cc.cell_id
+WHERE cc.istat_code = ANY($1::text[])
+GROUP BY 1, 2, 3
+"""
+
+#: Per ordinare la classifica sul futuro invece che sull'adesso.
+_PRIORITA_PREVISTA = """
+SELECT cc.istat_code,
+       max(lf.score * (1.0 + COALESCE(f.exposure_norm, 0.0))) AS fc_priority
+FROM latest_forecast lf
+JOIN cell_comune cc ON cc.cell_id = lf.cell_id
+LEFT JOIN cell_static_factors f ON f.cell_id = lf.cell_id
+GROUP BY 1
+"""
+
+
+async def _previsioni(conn: Any, istat_codes: list[str]) -> dict[str, dict[str, Any]]:
+    """Per ogni comune e pericolo, il picco previsto e quando arriva.
+
+    Il picco su tutti gli orizzonti: la domanda è «quanto andrà male, e
+    quando», e rispondere con tre numeri per pericolo — +24, +48, +72 —
+    rimanderebbe la sintesi a chi legge.
+    """
+    if not istat_codes:
+        return {}
+    rows = await conn.fetch(_PREVISIONE_PER_COMUNE, istat_codes)
+    out: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        per_pericolo = out.setdefault(str(r["istat_code"]), {})
+        hazard = str(r["hazard"])
+        corrente = per_pericolo.get(hazard)
+        if corrente is None or float(r["score"]) > corrente["score"]:
+            per_pericolo[hazard] = {
+                "score": round(float(r["score"]), 3),
+                "class": str(r["class"]),
+                "horizon_h": int(r["horizon_h"]),
+                "target_at": r["target_at"].isoformat(),
+                "priority": round(float(r["priority"]), 3),
+            }
+    return out
+
+
+def _con_previsione(comune: dict[str, Any], previsto: dict[str, Any]) -> dict[str, Any]:
+    """Aggiunge alla riga il futuro, e il numero di attenzione previsto.
+
+    L'attenzione prevista si compone con la stessa regola di quella di
+    adesso — massimo più incremento per i pericoli concomitanti — così i due
+    numeri sono confrontabili: se il secondo è più alto, il comune sta
+    salendo.
+
+    Un pericolo senza riga previsionale **non è ignoto**: lo stato
+    previsionale tiene solo le celle da Moderato in su, e l'assenza vuol dire
+    previsto sotto soglia. Per questo entra nel conto come «sotto soglia» e
+    non viene escluso come i non misurati.
+    """
+    attenzione = attention_index(
+        {
+            h: HazardStanding(priority=float(v["priority"]), level=RiskLevel(str(v["class"])))
+            for h, v in previsto.items()
+        },
+        rule=load_cascades().attention,
+    )
+    return {
+        **comune,
+        "forecast": previsto,
+        "forecast_attention": None if attenzione is None else round(attenzione, 3),
+    }
+
+
 async def top_comuni(
     *,
     aoi_id: str | None,
     limit: int,
     min_rank: int = 2,
     query: str | None = None,
+    order: str = "now",
 ) -> list[dict[str, Any]]:
     """I comuni ordinati dal numero di attenzione, su tutti i pericoli.
 
@@ -168,26 +254,48 @@ async def top_comuni(
     limit = max(1, min(limit, 200))
     margine = limit * 3
     async with acquire() as conn:
-        rows = await conn.fetch(
-            f"""
-            WITH per_comune AS ({_PER_COMUNE})
-            SELECT * FROM per_comune
-            WHERE ($1::text IS NULL OR aoi_id = $1)
-              AND ($3::text IS NULL OR name ILIKE '%' || $3 || '%')
-              AND ($4::text IS NOT NULL OR worst_rank >= $5)
-            ORDER BY max_priority DESC NULLS LAST, worst_rank DESC, n_alert DESC, name
-            LIMIT $2
-            """,
-            aoi_id,
-            margine,
-            query,
-            query,
-            min_rank,
-        )
-    comuni = [_to_comune(r) for r in rows]
-    # I comuni senza niente di misurato vanno in coda: non sono tranquilli,
-    # ma nemmeno ordinabili, e metterli in cima sarebbe un allarme inventato.
-    comuni.sort(key=lambda c: (c["attention"] is None, -(c["attention"] or 0.0), c["name"]))
+        if order == "forecast":
+            # Sul futuro: la soglia di adesso non si applica, perché il punto
+            # è proprio trovare il comune che oggi è sotto e domani no.
+            rows = await conn.fetch(
+                f"""
+                WITH per_comune AS ({_PER_COMUNE}), previsti AS ({_PRIORITA_PREVISTA})
+                SELECT pc.* FROM per_comune pc
+                JOIN previsti pv ON pv.istat_code = pc.istat_code
+                WHERE ($1::text IS NULL OR pc.aoi_id = $1)
+                  AND ($3::text IS NULL OR pc.name ILIKE '%' || $3 || '%')
+                ORDER BY pv.fc_priority DESC, pc.name
+                LIMIT $2
+                """,
+                aoi_id,
+                margine,
+                query,
+            )
+        else:
+            rows = await conn.fetch(
+                f"""
+                WITH per_comune AS ({_PER_COMUNE})
+                SELECT * FROM per_comune
+                WHERE ($1::text IS NULL OR aoi_id = $1)
+                  AND ($3::text IS NULL OR name ILIKE '%' || $3 || '%')
+                  AND ($4::text IS NOT NULL OR worst_rank >= $5)
+                ORDER BY max_priority DESC NULLS LAST, worst_rank DESC, n_alert DESC, name
+                LIMIT $2
+                """,
+                aoi_id,
+                margine,
+                query,
+                query,
+                min_rank,
+            )
+        previsioni = await _previsioni(conn, [str(r["istat_code"]) for r in rows])
+    comuni = [
+        _con_previsione(_to_comune(r), previsioni.get(str(r["istat_code"]), {})) for r in rows
+    ]
+    chiave = "forecast_attention" if order == "forecast" else "attention"
+    # I comuni senza un numero vanno in coda: non sono tranquilli, ma nemmeno
+    # ordinabili, e metterli in cima sarebbe un allarme inventato.
+    comuni.sort(key=lambda c: (c[chiave] is None, -(c[chiave] or 0.0), c["name"]))
     return comuni[:limit]
 
 
@@ -214,7 +322,8 @@ async def comune_detail(istat_code: str) -> dict[str, Any] | None:
             """,
             istat_code,
         )
-    out = _to_comune(row)
+        previsioni = await _previsioni(conn, [istat_code])
+    out = _con_previsione(_to_comune(row), previsioni.get(istat_code, {}))
     return {
         "comune": out,
         "cells": [
@@ -278,36 +387,26 @@ GROUP BY 1, 2
 ORDER BY 1
 """
 
-#: Le righe previsionali delle stesse celle.
+#: Il futuro del comune: per ogni orizzonte, la cella peggiore **prevista**,
+#: dallo stato previsionale corrente (057).
 #:
-#: `horizon` porta lo scostamento (`+48h`) e `computed_at` l'istante in cui la
-#: corsa è stata fatta: il momento a cui la previsione si riferisce è la somma
-#: dei due, e si compone qui perché è l'unico posto che conosce entrambi.
-#:
-#: Si tiene **l'ultima corsa per orizzonte**, non tutte: il calcolo
-#: previsionale gira ogni sei ore, e disegnare anche le corse precedenti
-#: darebbe tre linee sovrapposte per lo stesso futuro.
-_PREVISIONE_COMUNE = f"""
-WITH peggiori AS ({_CELLE_PEGGIORI})
-SELECT DISTINCT ON (p.hazard_type, ra.horizon)
-       p.hazard_type::text AS hazard,
-       ra.horizon,
-       ra.computed_at,
-       ra.score,
-       ra.class
-FROM peggiori p
-JOIN risk_assessments ra
-      ON ra.cell_id = p.cell_id
-     AND ra.hazard_type = p.hazard_type
-WHERE ra.horizon LIKE '+%'
-  AND ra.computed_at >= now() - make_interval(hours => 24)
-  AND ra.score IS NOT NULL
-ORDER BY p.hazard_type, ra.horizon, ra.computed_at DESC
+#: Non la cella peggiore di oggi, come per il passato: la previsione serve a
+#: vedere il versante che adesso è tranquillo e domani no, e seguire quella
+#: di oggi lo nasconderebbe. Il passato non può fare lo stesso perché lo
+#: storico è partizionato — 212 s — mentre questa tabella è piccola e ha una
+#: riga per cella.
+_PREVISIONE_COMUNE = """
+SELECT lf.hazard_type::text                            AS hazard,
+       lf.horizon_h,
+       max(lf.target_at)                               AS target_at,
+       max(lf.score)                                   AS score,
+       (array_agg(lf.class ORDER BY lf.score DESC))[1] AS class
+FROM cell_comune cc
+JOIN latest_forecast lf ON lf.cell_id = cc.cell_id
+WHERE cc.istat_code = $1
+GROUP BY 1, 2
+ORDER BY 1, 2
 """
-
-
-def _ore(horizon: str) -> int:
-    return int(horizon.lstrip("+").rstrip("h") or 0)
 
 
 async def comune_history(
@@ -321,9 +420,9 @@ async def comune_history(
     disegna unisce i punti che esistono invece di inventare un livello per
     ogni ora.
 
-    Il futuro è la corsa previsionale più recente per ogni orizzonte, con il
-    momento a cui si riferisce già composto: chi disegna non deve sapere che
-    `+48h` va sommato a `computed_at`.
+    Il futuro è la cella peggiore prevista per ogni orizzonte, con il momento
+    a cui si riferisce già composto. Un orizzonte assente vuol dire previsto
+    sotto Moderato: lo stato previsionale tiene solo le celle sopra soglia.
     """
     async with acquire() as conn:
         osservate = await conn.fetch(_STORIA_COMUNE, istat_code, hours)
@@ -337,10 +436,9 @@ async def comune_history(
 
     futuro: dict[str, list[dict[str, Any]]] = {}
     for r in previste:
-        bersaglio = r["computed_at"] + timedelta(hours=_ore(str(r["horizon"])))
         futuro.setdefault(str(r["hazard"]), []).append(
             {
-                "t": bersaglio.isoformat(),
+                "t": r["target_at"].isoformat(),
                 "score": round(float(r["score"]), 3),
                 "level": str(r["class"]),
             }

@@ -6,7 +6,6 @@ import CellPopup from "./components/CellPopup";
 import ComuniBoard from "./components/ComuniBoard";
 import DocsPage from "./components/DocsPage";
 import ExplainerPage from "./components/ExplainerPage";
-import ForecastList from "./components/ForecastList";
 import type { CellSelection, ComuneCell, ComuneRisk } from "./types";
 import FreshnessBadge from "./components/FreshnessBadge";
 import HomePage from "./components/HomePage";
@@ -89,7 +88,6 @@ export function App(): JSX.Element {
     <>
       <aside className="sidebar" aria-label="Pannello laterale">
         <NationalStrip />
-        <ForecastList />
         <ComuniBoard onComune={vaiAlComune} onCella={vaiAllaCella} />
         <LegendPanel />
         <ShadowPanel />

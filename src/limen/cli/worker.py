@@ -73,12 +73,42 @@ async def _wait_for_schema(*, timeout_s: float = _MIGRATION_WAIT_MAX_S) -> bool:
     return False
 
 
-async def _heartbeat_loop(stop: asyncio.Event) -> None:
+async def _publish_next_fire(scheduler: Any, period: float) -> None:
+    """Scrive l'orario del prossimo scatto di ogni job registrato.
+
+    L'API non lo può leggere da sé: lo scheduler vive in memoria in questo
+    processo, e dedurlo dall'ultima corsa (`started_at + intervallo`) sbaglia
+    proprio dopo un riavvio, quando `_deferred_interval` sposta il primo
+    scatto a un intervallo dal boot — cioè quando qualcuno guarda il timer.
+
+    Con una scadenza di tre battiti: se il worker muore il valore sparisce,
+    e l'API dice «non lo so» invece di mostrare un conto alla rovescia verso
+    un calcolo che nessuno farà.
+    """
+    from limen.data.caching.postgres_cache import PostgresCache
+    from limen.data.repos.forecast_schedule import NEXT_FIRE_KEY
+
+    try:
+        prossimi = {
+            str(s.id): s.next_fire_time.isoformat()
+            for s in await scheduler.get_schedules()
+            if s.next_fire_time is not None
+        }
+        await PostgresCache().set_json(
+            NEXT_FIRE_KEY, prossimi, ttl_seconds=max(int(period * 3), 180)
+        )
+    except Exception as exc:
+        log.warning("worker.next_fire.failed", error=str(exc), error_type=type(exc).__name__)
+
+
+async def _heartbeat_loop(stop: asyncio.Event, scheduler: Any = None) -> None:
     """Una riga in `job_runs` a intervalli, finché non arriva lo stop."""
     period = _heartbeat_seconds()
     while not stop.is_set():
         run_id = await job_runs_repo.start(HEARTBEAT_JOB)
         await job_runs_repo.finish(run_id, status="ok", metrics={"period_s": period})
+        if scheduler is not None:
+            await _publish_next_fire(scheduler, period)
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(stop.wait(), timeout=period)
 
@@ -144,7 +174,7 @@ async def run(*, check_health: bool = False) -> int:
             await ingestor.start()
             log.info("worker.iot.started")
 
-        heartbeat = asyncio.create_task(_heartbeat_loop(stop))
+        heartbeat = asyncio.create_task(_heartbeat_loop(stop, scheduler))
         await stop.wait()
         log.info("worker.stopping")
 

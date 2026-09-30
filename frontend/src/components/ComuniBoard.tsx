@@ -8,6 +8,7 @@ import {
   Group,
   Popover,
   Progress,
+  SegmentedControl,
   Skeleton,
   Stack,
   Text,
@@ -27,7 +28,15 @@ import {
   RISK_LABEL_IT_BY_LEVEL,
 } from "../lib/risk-colors";
 import ComuneTrend from "./ComuneTrend";
-import type { ComuneCell, ComuneHazard, ComuneRisk, RiskLevel } from "../types";
+import PrevisioneTesta from "./PrevisioneTesta";
+import type {
+  ComuneCell,
+  ComuneForecast,
+  ComuneHazard,
+  ComuneRisk,
+  ForecastSchedule,
+  RiskLevel,
+} from "../types";
 
 // Il comune è l'unità di lettura, la cella è il dettaglio.
 //
@@ -229,6 +238,69 @@ function Indicatore({
   );
 }
 
+/** Dove va il comune: il pericolo con il picco previsto più alto, di quanto
+ *  sale rispetto ad adesso, e quando.
+ *
+ *  Un pericolo senza riga previsionale può voler dire due cose diverse, e
+ *  qui si distinguono: se per quel pericolo la corsa previsionale c'è stata,
+ *  vuol dire **previsto sotto Moderato**; se non c'è stata affatto — oggi è
+ *  il caso di incendio e alluvione — vuol dire che non si sa, e la riga lo
+ *  tace invece di dirlo tranquillo. */
+function RigaPrevisione({
+  comune,
+  previsti,
+  etichette,
+}: {
+  comune: ComuneRisk;
+  previsti: Set<string>;
+  etichette: Record<string, string>;
+}): JSX.Element | null {
+  if (previsti.size === 0) return null;
+  const voci = Object.entries(comune.forecast ?? {}) as [string, ComuneForecast][];
+  if (voci.length === 0) {
+    const nomi = [...previsti].map((h) => (etichette[h] ?? NOME_PERICOLO[h] ?? h).toLowerCase());
+    return (
+      <Text size="xs" c="dimmed" mt={3} className="cb-prev">
+        <span className="cb-prev-freccia" aria-hidden>→</span> Previsto: {nomi.join(", ")} sotto
+        moderato fino a +72 h
+      </Text>
+    );
+  }
+  const [hazard, f] = voci.reduce((a, b) => (b[1].priority > a[1].priority ? b : a));
+  const ora = comune.hazards[hazard]?.score ?? 0;
+  const delta = f.score - ora;
+  const freccia = delta > 0.02 ? "↗" : delta < -0.02 ? "↘" : "→";
+  const verso = delta > 0.02 ? "in salita" : delta < -0.02 ? "in calo" : "stabile";
+  const quando = new Date(f.target_at).toLocaleString("it-IT", {
+    weekday: "short",
+    hour: "2-digit",
+  });
+  return (
+    <Tooltip
+      label={`Picco previsto di ${(etichette[hazard] ?? NOME_PERICOLO[hazard] ?? hazard).toLowerCase()}: ${numero(f.score)} (${RISK_LABEL_IT_BY_LEVEL[f.class]}) a +${f.horizon_h} ore, contro ${numero(ora)} di adesso. È un calcolo sulla pioggia attesa, non un fatto.`}
+      withArrow
+      multiline
+      w={260}
+    >
+      <Group gap={5} wrap="nowrap" mt={3} className={`cb-prev is-${verso.replace(" ", "-")}`}>
+        <span className="cb-prev-freccia" aria-hidden>
+          {freccia}
+        </span>
+        <Text span size="xs">
+          Previsto:{" "}
+          <strong>
+            {(etichette[hazard] ?? NOME_PERICOLO[hazard] ?? hazard).toLowerCase()} {numero(f.score)}
+          </strong>{" "}
+          {ABBREVIAZIONE[f.class]}
+        </Text>
+        <Text span size="xs" c="dimmed">
+          · {verso} · +{f.horizon_h} h ({quando})
+        </Text>
+      </Group>
+    </Tooltip>
+  );
+}
+
 /** Le celle peggiori del comune, caricate solo quando la riga si apre. */
 function DettaglioCelle({
   istatCode,
@@ -308,31 +380,46 @@ function DettaglioCelle({
 
 /** Il numero del comune, con il suo nome accanto. Senza la parola
  *  «attenzione» era un 1,37 che nessuno sapeva interpretare. */
-function Attenzione({ valore, classe }: { valore: number | null; classe: RiskLevel }): JSX.Element {
+function Attenzione({
+  valore,
+  classe,
+  prevista = false,
+}: {
+  valore: number | null;
+  classe: RiskLevel;
+  /** Con l'ordine sul futuro il numero è l'attenzione **prevista**, e la
+   *  parola accanto lo dice: due numeri diversi con lo stesso nome si
+   *  confrontano come se fossero la stessa cosa. */
+  prevista?: boolean;
+}): JSX.Element {
   if (valore === null) {
     return (
       <Tooltip
-        label="Nessuno dei pericoli ha ricevuto il dato che richiede: non c'è niente da ordinare. Non significa che il comune sia tranquillo."
+        label={
+          prevista
+            ? "Nessun pericolo previsto sopra Moderato su questo comune, fra quelli per cui la previsione è disponibile."
+            : "Nessuno dei pericoli ha ricevuto il dato che richiede: non c'è niente da ordinare. Non significa che il comune sia tranquillo."
+        }
         withArrow
         multiline
         w={250}
       >
         <Text size="xs" fs="italic" c="dimmed">
-          non misurato
+          {prevista ? "sotto moderato" : "non misurato"}
         </Text>
       </Tooltip>
     );
   }
   return (
     <Tooltip
-      label={`Attenzione ${numero(valore)} su ${ATTENZIONE_MAX}. È il punteggio del pericolo peggiore moltiplicato per quanto c'è intorno (case, strade), più il 15 % per ogni altro pericolo almeno moderato. Serve a decidere chi guardare per primo.`}
+      label={`${prevista ? "Attenzione prevista a 72 ore" : "Attenzione"} ${numero(valore)} su ${ATTENZIONE_MAX}. È il punteggio del pericolo peggiore moltiplicato per quanto c'è intorno (case, strade), più il 15 % per ogni altro pericolo almeno moderato. Serve a decidere chi guardare per primo.`}
       withArrow
       multiline
       w={260}
     >
       <Group gap={4} wrap="nowrap" align="baseline">
         <Text span size="xs" c="dimmed">
-          attenzione
+          {prevista ? "prevista" : "attenzione"}
         </Text>
         <Text
           span
@@ -362,6 +449,11 @@ export function ComuniBoard({
   const [cerca, setCerca] = useState("");
   const [aperto, setAperto] = useState<string | null>(null);
   const [tentativo, setTentativo] = useState(0);
+  // Adesso o previsto: la stessa lista, due domande. «Chi è messo peggio»
+  // e «chi sta per esserlo» — la seconda è quella per cui esiste la
+  // previsione, e trova il comune che oggi è sotto soglia e domani no.
+  const [ordine, setOrdine] = useState<"now" | "forecast">("now");
+  const [schedule, setSchedule] = useState<ForecastSchedule | null>(null);
   const { available } = useHazard();
   const riprova = useCallback(() => setTentativo((n) => n + 1), []);
 
@@ -374,7 +466,7 @@ export function ComuniBoard({
     setComuni(null);
     setFailure(null);
     defaultApiClient
-      .getTopComuni(undefined, 30, ctrl.signal, termine || undefined)
+      .getTopComuni(undefined, 30, ctrl.signal, termine || undefined, ordine)
       .then((r) => setComuni(r.comuni))
       .catch((err: unknown) => {
         if (ctrl.signal.aborted) return;
@@ -382,7 +474,27 @@ export function ComuniBoard({
         setFailure(describeFailure(err));
       });
     return () => ctrl.abort();
-  }, [termine, tentativo]);
+  }, [termine, tentativo, ordine]);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    defaultApiClient
+      .getForecastSchedule(ctrl.signal)
+      .then(setSchedule)
+      .catch(() => {
+        if (!ctrl.signal.aborted) setSchedule(null);
+      });
+    return () => ctrl.abort();
+  }, []);
+
+  const previsti = useMemo(
+    () => new Set(Object.keys(schedule?.cells.last_run_by_hazard ?? {})),
+    [schedule],
+  );
+  const etichette = useMemo(
+    () => Object.fromEntries(available.map((a) => [a.hazard, a.label_it])),
+    [available],
+  );
 
   // Le etichette vengono dal backend; l'ordine no, perché una colonna che si
   // sposta fra un aggiornamento e l'altro non si legge.
@@ -398,9 +510,22 @@ export function ComuniBoard({
   return (
     <section className="comuni-board" aria-label="Rischio per comune">
       <Group justify="space-between" wrap="nowrap" align="center">
-        <h2>Comuni · dal più esposto</h2>
+        <h2>Comuni · adesso e previsione</h2>
         <ComeSiLegge />
       </Group>
+      <PrevisioneTesta schedule={schedule} />
+      <SegmentedControl
+        fullWidth
+        size="xs"
+        mb="xs"
+        value={ordine}
+        onChange={(v) => setOrdine(v as "now" | "forecast")}
+        data={[
+          { value: "now", label: "Più esposti adesso" },
+          { value: "forecast", label: "Più esposti fra 72 h" },
+        ]}
+        aria-label="Ordina i comuni"
+      />
       <TextInput
         placeholder="Cerca il tuo comune"
         aria-label="Cerca il tuo comune"
@@ -456,7 +581,11 @@ export function ComuniBoard({
                     <Text fw={650} size="sm">
                       {c.name}
                     </Text>
-                    <Attenzione valore={c.attention} classe={c.worst_class} />
+                    <Attenzione
+                      valore={ordine === "forecast" ? c.forecast_attention : c.attention}
+                      classe={c.worst_class}
+                      prevista={ordine === "forecast"}
+                    />
                   </Group>
                   {c.attention === null ? (
                     <Box className="cb-bar is-unknown" mt={3} aria-hidden />
@@ -478,6 +607,7 @@ export function ComuniBoard({
                       />
                     ))}
                   </Group>
+                  <RigaPrevisione comune={c} previsti={previsti} etichette={etichette} />
                   <Group gap={6} mt={3}>
                     <Text size="xs" c="dimmed">
                       {c.n_cells.toLocaleString("it-IT")} celle

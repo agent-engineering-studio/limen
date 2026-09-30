@@ -30,12 +30,12 @@ html, body, #root {
 
 .app-shell {
   display: grid;
-  /* Più larga di prima (era 320-360). La colonna porta quattro pannelli, e
-     in 320 px una riga di comune andava a capo due volte: il numero di
-     attenzione finiva sotto il nome e i tre pericoli su due righe. Il
-     massimo resta legato alla mappa — oltre i 440 px si comincia a togliere
-     territorio per fare spazio a una lista. */
-  grid-template-columns: minmax(380px, 440px) 1fr;
+  /* La colonna porta la lista dei comuni con adesso, previsione e grafico
+     per ciascuno: a 320-360 px una riga andava a capo tre volte e il grafico
+     era largo come un francobollo. Cresce con lo schermo — un terzo della
+     larghezza — fino a 600 px: oltre si comincia a togliere territorio alla
+     mappa per fare spazio a una lista. */
+  grid-template-columns: minmax(460px, min(34vw, 600px)) 1fr;
   grid-template-rows: 56px 1fr;
   height: 100vh;
 }
@@ -923,7 +923,7 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
 .feature-tag { border-radius: 7px; }
 
 /* --- Dashboard sidebar --- */
-.app-shell:not(.is-home) { grid-template-columns: minmax(380px, 440px) 1fr; }
+.app-shell:not(.is-home) { grid-template-columns: minmax(460px, min(34vw, 600px)) 1fr; }
 /* Il nome del pericolo sopra le quattro caselle. Sta attaccato ai numeri
    perché è la loro unità di misura: le celle non si sommano fra pericoli. */
 .strip-stats-head {
@@ -2236,6 +2236,35 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   margin-left: auto;
   white-space: nowrap;
 }
+/* La testata della previsione, dentro la lista dei comuni. Un fondo appena
+   diverso perché è l'unico blocco della colonna che parla del futuro. */
+.prev-testa {
+  background: #f6f4ee;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+.prev-titolo {
+  letter-spacing: 0.05em;
+  color: #3a3f4b;
+}
+.prev-timer {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* La riga di previsione di un comune. La freccia porta il verso, il colore
+   lo ribadisce ma non da solo: «in salita» è scritto accanto. */
+.cb-prev-freccia {
+  font-weight: 700;
+  width: 12px;
+  display: inline-block;
+  text-align: center;
+}
+.cb-prev.is-in-salita .cb-prev-freccia { color: #c2410c; }
+.cb-prev.is-in-calo .cb-prev-freccia { color: #2f6f4f; }
+.cb-prev.is-stabile .cb-prev-freccia { color: var(--muted); }
 .cb-help {
   width: 18px;
   height: 18px;
