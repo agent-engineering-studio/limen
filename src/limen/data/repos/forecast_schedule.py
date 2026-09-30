@@ -62,10 +62,27 @@ async def forecast_schedule(
     except Exception:
         corse_celle = []
 
+    # L'ora della corsa per pericolo: quella registrata dalla corsa stessa,
+    # che vale anche a zero celle, e in mancanza la riga più recente. Dedurla
+    # solo dalle righe confonderebbe «previsto sotto soglia ovunque» con «mai
+    # calcolato».
+    ultime: dict[str, str] = {str(r["hazard"]): r["run_at"].isoformat() for r in corse_celle}
+    try:
+        from limen.agents.workflows.forecast_history import LAST_RUN_KEY
+        from limen.core.models.hazard import HazardType
+
+        cache = PostgresCache()
+        for h in HazardType:
+            registrata = await cache.get_json(LAST_RUN_KEY.format(hazard=h.value))
+            if isinstance(registrata, dict) and isinstance(registrata.get("run_at"), str):
+                ultime[h.value] = max(ultime.get(h.value, ""), registrata["run_at"])
+    except Exception:
+        pass
+
     return {
         "cells": {
             "next_run_at": prossimi.get(cells_job_id) if isinstance(prossimi, dict) else None,
-            "last_run_by_hazard": {str(r["hazard"]): r["run_at"].isoformat() for r in corse_celle},
+            "last_run_by_hazard": ultime,
         },
         "interval_hours": interval_hours,
         "horizon_hours": horizon_hours,

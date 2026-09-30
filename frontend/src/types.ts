@@ -31,6 +31,11 @@ export interface ComuneHazard {
    *  arrivato: il punteggio è zero per assenza di dato, non per quiete.
    *  Si scrive «non misurato», non «0,00 basso». */
   measured: boolean;
+  /** Solo per l'alluvione: pioggia a 72 h più alta fra le celle, la soglia
+   *  sotto cui il ramo pluviale vale zero, e se la portata dei fiumi c'è. */
+  rain_mm?: number | null;
+  rain_threshold_mm?: number | null;
+  discharge_known?: boolean | null;
 }
 
 export interface ComuneRisk {

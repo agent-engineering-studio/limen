@@ -2300,6 +2300,9 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
 .cb-prev.is-in-salita .cb-prev-freccia { color: #c2410c; }
 .cb-prev.is-in-calo .cb-prev-freccia { color: #2f6f4f; }
 .cb-prev.is-stabile .cb-prev-freccia { color: var(--muted); }
+.cb-perche { line-height: 1.35; }
+.cb-motivo-esp { text-decoration: underline dotted; text-underline-offset: 2px; cursor: help; }
+.cb-pioggia { white-space: nowrap; }
 .cb-help {
   width: 18px;
   height: 18px;

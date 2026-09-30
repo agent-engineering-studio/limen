@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 import {
   Alert,
-  Badge,
   Box,
   Collapse,
   Group,
@@ -72,10 +71,6 @@ const ABBREVIAZIONE: Record<RiskLevel, string> = {
   VeryHigh: "molto alto",
 };
 
-/** Il fondo scala dell'attenzione: il punteggio arriva a 1, l'esposizione
- *  moltiplica fino a 3. */
-const ATTENZIONE_MAX = 3;
-
 const NOME_PERICOLO: Record<string, string> = {
   landslide: "frana",
   flood: "alluvione",
@@ -144,14 +139,23 @@ function ComeSiLegge(): JSX.Element {
         <Stack gap={8}>
           <Box>
             <Text size="xs" fw={700}>
-              Attenzione, da 0 a {ATTENZIONE_MAX}
+              Il numero accanto al nome, da 0 a 1
             </Text>
             <Text size="xs" c="dimmed">
-              Il numero grande accanto al nome. È il punteggio del pericolo
-              peggiore moltiplicato per quanto c&apos;è intorno — case, strade,
-              ferrovie — e aumentato del 15 % per ogni altro pericolo che sia
-              anch&apos;esso almeno moderato. Serve solo a decidere chi guardare
-              per primo: non è una probabilità.
+              Il pericolo peggiore del comune, con il suo nome e la sua classe:
+              la stessa scala di tutti gli altri numeri. Non è una media — un
+              incendio in classe Alta non diventa «basso» perché oggi non piove.
+            </Text>
+          </Box>
+          <Box>
+            <Text size="xs" fw={700}>
+              L&apos;ordine della lista
+            </Text>
+            <Text size="xs" c="dimmed">
+              Prima i comuni dove il pericolo peggiore è vicino a case, strade e
+              ferrovie, e quelli con più di un pericolo oltre soglia nello stesso
+              momento. Per questo un comune con 0,56 può stare sopra uno con 0,67:
+              la riga «In cima per» dice il perché.
             </Text>
           </Box>
           <Box>
@@ -211,9 +215,24 @@ function Indicatore({
     );
   }
   const classe = dato.class;
+  // Solo per l'alluvione arrivano pioggia e soglia. Frane e incendio hanno un
+  // punteggio continuo che si muove ogni giorno; l'alluvione è una soglia, e
+  // un «0,00» ripetuto per settimane non dice quanto manca.
+  const pioggia =
+    dato.rain_mm != null && dato.rain_threshold_mm != null
+      ? `${Math.round(dato.rain_mm)} mm su ${Math.round(dato.rain_threshold_mm)}`
+      : null;
+  const senzaFiumi = dato.discharge_known === false;
+  const spiegaAlluvione =
+    pioggia === null
+      ? ""
+      : ` Pioggia prevista in 72 ore: ${pioggia} mm di soglia — sotto la soglia il ramo pluviale vale zero.` +
+        (senzaFiumi
+          ? " La portata dei fiumi oggi non è disponibile (GloFAS), quindi conta solo la pioggia."
+          : "");
   return (
     <Tooltip
-      label={`${etichetta}: ${numero(dato.score)} su 1 — ${RISK_LABEL_IT_BY_LEVEL[classe]} (${banda(classe)}). ${dato.n_cells} celle valutate, ${dato.n_alert} sopra la soglia di allerta.`}
+      label={`${etichetta}: ${numero(dato.score)} su 1 — ${RISK_LABEL_IT_BY_LEVEL[classe]} (${banda(classe)}). ${dato.n_cells} celle valutate, ${dato.n_alert} sopra la soglia di allerta.${spiegaAlluvione}`}
       withArrow
       multiline
       w={250}
@@ -233,6 +252,12 @@ function Indicatore({
         <Text span size="xs" c="dimmed">
           {ABBREVIAZIONE[classe]}
         </Text>
+        {pioggia !== null ? (
+          <Text span size="xs" c="dimmed" className="cb-pioggia">
+            · {pioggia}
+            {senzaFiumi ? " · fiumi n.d." : ""}
+          </Text>
+        ) : null}
       </Group>
     </Tooltip>
   );
@@ -378,60 +403,131 @@ function DettaglioCelle({
   );
 }
 
-/** Il numero del comune, con il suo nome accanto. Senza la parola
- *  «attenzione» era un 1,37 che nessuno sapeva interpretare. */
-function Attenzione({
-  valore,
-  classe,
-  prevista = false,
+/** Il pericolo peggiore del comune, sulla stessa scala 0–1 di tutto il resto.
+ *
+ *  Prima qui c'era l'«attenzione», che arrivava fino a 3 perché moltiplicava
+ *  il punteggio per l'esposizione e per i pericoli concomitanti: accanto a
+ *  punteggi che arrivano a 1, un 1,37 non si sapeva leggere. Quel numero
+ *  resta, ma solo come **ordine** della lista; il perché dell'ordine lo dice
+ *  la riga `PercheInCima`, a parole.
+ *
+ *  Non la media dei tre: con Ispani — frana 0,37, alluvione 0,00, incendio
+ *  0,56 alto — la media fa 0,31 «basso», cioè un comune con un incendio in
+ *  classe Alta presentato come quasi tranquillo perché oggi non piove. */
+interface Picco {
+  hazard: string;
+  score: number;
+  level: RiskLevel;
+}
+
+function piccoDi(c: ComuneRisk, prevista: boolean): Picco | null {
+  const voci: Picco[] = prevista
+    ? Object.entries(c.forecast ?? {}).map(([h, f]) => ({
+        hazard: h,
+        score: f.score,
+        level: f.class,
+      }))
+    : Object.entries(c.hazards)
+        .filter(([, v]) => v.measured)
+        .map(([h, v]) => ({ hazard: h, score: v.score, level: v.class }));
+  if (voci.length === 0) return null;
+  return voci.reduce((a, b) => (b.score > a.score ? b : a));
+}
+
+function Testata({
+  picco,
+  prevista,
+  etichette,
 }: {
-  valore: number | null;
-  classe: RiskLevel;
-  /** Con l'ordine sul futuro il numero è l'attenzione **prevista**, e la
-   *  parola accanto lo dice: due numeri diversi con lo stesso nome si
-   *  confrontano come se fossero la stessa cosa. */
-  prevista?: boolean;
+  picco: Picco | null;
+  prevista: boolean;
+  etichette: Record<string, string>;
 }): JSX.Element {
-  if (valore === null) {
+  if (picco === null) {
     return (
-      <Tooltip
-        label={
-          prevista
-            ? "Nessun pericolo previsto sopra Moderato su questo comune, fra quelli per cui la previsione è disponibile."
-            : "Nessuno dei pericoli ha ricevuto il dato che richiede: non c'è niente da ordinare. Non significa che il comune sia tranquillo."
-        }
-        withArrow
-        multiline
-        w={250}
-      >
-        <Text size="xs" fs="italic" c="dimmed">
-          {prevista ? "sotto moderato" : "non misurato"}
-        </Text>
-      </Tooltip>
+      <Text size="xs" fs="italic" c="dimmed">
+        {prevista ? "previsto sotto moderato" : "non misurato"}
+      </Text>
     );
   }
+  const nome = (etichette[picco.hazard] ?? NOME_PERICOLO[picco.hazard] ?? picco.hazard).toLowerCase();
   return (
     <Tooltip
-      label={`${prevista ? "Attenzione prevista a 72 ore" : "Attenzione"} ${numero(valore)} su ${ATTENZIONE_MAX}. È il punteggio del pericolo peggiore moltiplicato per quanto c'è intorno (case, strade), più il 15 % per ogni altro pericolo almeno moderato. Serve a decidere chi guardare per primo.`}
+      label={`${prevista ? "Picco previsto a 72 ore" : "Pericolo peggiore del comune"}: ${nome} ${numero(picco.score)} su 1, ${RISK_LABEL_IT_BY_LEVEL[picco.level]} (${banda(picco.level)}).`}
       withArrow
       multiline
-      w={260}
+      w={250}
     >
       <Group gap={4} wrap="nowrap" align="baseline">
         <Text span size="xs" c="dimmed">
-          {prevista ? "prevista" : "attenzione"}
+          {prevista ? `previsto ${nome}` : nome}
         </Text>
         <Text
           span
           size="sm"
           fw={700}
-          c={RISK_COLOR_BY_LEVEL[classe]}
+          c={RISK_COLOR_BY_LEVEL[picco.level]}
           style={{ fontVariantNumeric: "tabular-nums" }}
         >
-          {numero(valore)}
+          {numero(picco.score)}
+        </Text>
+        <Text span size="xs" c="dimmed">
+          {ABBREVIAZIONE[picco.level]}
         </Text>
       </Group>
     </Tooltip>
+  );
+}
+
+const RANGO: Record<RiskLevel, number> = { None: 0, Low: 1, Moderate: 2, High: 3, VeryHigh: 4 };
+
+/** Perché il comune è a questa altezza della lista, a parole.
+ *
+ *  L'ordine tiene conto di due cose che il numero di testata non mostra:
+ *  quanto c'è intorno — case, strade, ferrovie — e quanti pericoli sono
+ *  insieme oltre soglia. Senza questa riga un comune con 0,56 sopra uno con
+ *  0,67 sembrerebbe un errore. */
+function PercheInCima({
+  c,
+  picco,
+  prevista,
+  etichette,
+}: {
+  c: ComuneRisk;
+  picco: Picco | null;
+  prevista: boolean;
+  etichette: Record<string, string>;
+}): JSX.Element | null {
+  if (picco === null) return null;
+  const nome = (etichette[picco.hazard] ?? NOME_PERICOLO[picco.hazard] ?? picco.hazard).toLowerCase();
+  const oltre = prevista
+    ? Object.values(c.forecast ?? {}).filter((f) => RANGO[f.class] >= RANGO.Moderate).length
+    : Object.values(c.hazards).filter((v) => v.measured && RANGO[v.class] >= RANGO.Moderate)
+        .length;
+  const motivi: JSX.Element[] = [
+    <span key="p">
+      {nome} {ABBREVIAZIONE[picco.level]}
+    </span>,
+  ];
+  if (c.exposure_rank > 0) {
+    motivi.push(
+      <Tooltip
+        key="e"
+        label={`Esposizione ${numero(c.exposure_rank)}: tessuto urbano, strade e ferrovie nella cella peggiore. Pesa sull'ordine: a parità di pericolo, prima dove ci sono persone.`}
+        withArrow
+        multiline
+        w={250}
+      >
+        <span className="cb-motivo-esp">abitato o strade vicine</span>
+      </Tooltip>,
+    );
+  }
+  if (oltre >= 2) motivi.push(<span key="n">{oltre} pericoli oltre soglia</span>);
+  return (
+    <Text size="xs" c="dimmed" mt={3} className="cb-perche">
+      In {prevista ? "cima fra 72 h" : "cima"} per:{" "}
+      {motivi.flatMap((m, k) => (k === 0 ? [m] : [<span key={`s${k}`}> · </span>, m]))}
+    </Text>
   );
 }
 
@@ -581,23 +677,27 @@ export function ComuniBoard({
                     <Text fw={650} size="sm">
                       {c.name}
                     </Text>
-                    <Attenzione
-                      valore={ordine === "forecast" ? c.forecast_attention : c.attention}
-                      classe={c.worst_class}
+                    <Testata
+                      picco={piccoDi(c, ordine === "forecast")}
                       prevista={ordine === "forecast"}
+                      etichette={etichette}
                     />
                   </Group>
-                  {c.attention === null ? (
-                    <Box className="cb-bar is-unknown" mt={3} aria-hidden />
-                  ) : (
-                    <Progress
-                      value={Math.min(100, (c.attention / ATTENZIONE_MAX) * 100)}
-                      size={3}
-                      mt={3}
-                      color={RISK_COLOR_BY_LEVEL[c.worst_class]}
-                      aria-label={`Attenzione ${numero(c.attention)} su ${ATTENZIONE_MAX}`}
-                    />
-                  )}
+                  {((pk) =>
+                    pk === null ? (
+                      <Box className="cb-bar is-unknown" mt={3} aria-hidden />
+                    ) : (
+                      // La barra è lo stesso numero della testata, su 0–1: prima
+                      // era l'attenzione su 3, e la barra piena voleva dire una
+                      // cosa diversa dal numero che le stava accanto.
+                      <Progress
+                        value={Math.min(100, pk.score * 100)}
+                        size={3}
+                        mt={3}
+                        color={RISK_COLOR_BY_LEVEL[pk.level]}
+                        aria-label={`${numero(pk.score)} su 1`}
+                      />
+                    ))(piccoDi(c, ordine === "forecast"))}
                   <Group gap="xs" mt={5} wrap="wrap">
                     {colonne.map((col) => (
                       <Indicatore
@@ -607,23 +707,18 @@ export function ComuniBoard({
                       />
                     ))}
                   </Group>
+                  <PercheInCima
+                    c={c}
+                    picco={piccoDi(c, ordine === "forecast")}
+                    prevista={ordine === "forecast"}
+                    etichette={etichette}
+                  />
                   <RigaPrevisione comune={c} previsti={previsti} etichette={etichette} />
                   <Group gap={6} mt={3}>
                     <Text size="xs" c="dimmed">
                       {c.n_cells.toLocaleString("it-IT")} celle
                     </Text>
-                    {c.exposure_rank > 0 ? (
-                      <Tooltip
-                        label={`Esposizione ${numero(c.exposure_rank)}: quanto tessuto urbano, quante strade e ferrovie ci sono nella cella peggiore. È il fattore che moltiplica il punteggio per fare l'attenzione.`}
-                        withArrow
-                        multiline
-                        w={250}
-                      >
-                        <Badge size="xs" variant="light" color="gray">
-                          abitato o strade vicine
-                        </Badge>
-                      </Tooltip>
-                    ) : null}
+
                   </Group>
                 </UnstyledButton>
                 <Collapse expanded={apertoQui}>
