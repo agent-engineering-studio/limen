@@ -45,6 +45,9 @@ export interface ComuneRisk {
   n_alert: number;
   counts: Record<string, number>;
   exposure_rank: number;
+  /** Il centroide, per portare la mappa sul comune al clic. */
+  lon: number;
+  lat: number;
   /** Il numero unico del comune: massimo delle priorità, con l'incremento
    *  quando più di un pericolo è oltre soglia. Non è una somma.
    *  `null` quando nessun pericolo è stato misurato. */
@@ -75,9 +78,18 @@ export interface ComuneCell {
   hazard: HazardType;
   score: number;
   level: RiskLevel;
+  /** Quando è stato calcolato. Un punteggio senza data non si sa se è di
+   *  adesso o di ieri, e su un rischio è la differenza fra
+   *  un'informazione e un numero. */
+  computed_at: string;
   lon: number;
   lat: number;
 }
+
+/** Una serie per pericolo, dal più vecchio al più recente. I pericoli non
+ *  misurati non compaiono: uno zero per assenza di dato disegnerebbe una
+ *  discesa a fondo scala che non è mai avvenuta. */
+export type ComuneHistory = Record<string, { t: string; score: number }[]>;
 
 export interface ComuneDetailResponse {
   comune: ComuneRisk;

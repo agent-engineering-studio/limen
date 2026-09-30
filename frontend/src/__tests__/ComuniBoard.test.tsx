@@ -1,5 +1,5 @@
 // `render` dal nostro helper: i componenti Mantine vogliono il provider.
-import { render, screen, waitFor } from "../test-utils";
+import { fireEvent, render, screen, waitFor } from "../test-utils";
 import { describe, expect, it, vi } from "vitest";
 
 const { getTopComuni } = vi.hoisted(() => ({ getTopComuni: vi.fn() }));
@@ -32,6 +32,8 @@ const comune = (
   n_alert: 3,
   counts: {},
   exposure_rank: 1,
+  lon: 13.1,
+  lat: 46.5,
   attention,
   hazards: Object.fromEntries(
     Object.entries(hazards).map(([h, v]) => [
@@ -140,5 +142,24 @@ describe("ComuniBoard", () => {
     render(<ComuniBoard />);
     await waitFor(() => expect(getTopComuni).toHaveBeenCalled());
     expect(screen.getByLabelText("Cerca il tuo comune")).toBeInTheDocument();
+  });
+
+  it("cliccare un comune porta la mappa sulle sue coordinate", async () => {
+    // Una classifica geografica su cui si clicca e non succede niente è una
+    // lista di nomi: il posto è metà dell'informazione.
+    getTopComuni.mockResolvedValue({
+      comuni: [
+        comune("Bardonecchia", {
+          landslide: { class: "Moderate", n_cells: 134, n_alert: 0 },
+        }),
+      ],
+    });
+    const visti: { lon: number; lat: number }[] = [];
+    render(<ComuniBoard onComune={(c) => visti.push({ lon: c.lon, lat: c.lat })} />);
+    await waitFor(() => expect(screen.getByText("Bardonecchia")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText("Bardonecchia"));
+
+    expect(visti).toEqual([{ lon: 13.1, lat: 46.5 }]);
   });
 });

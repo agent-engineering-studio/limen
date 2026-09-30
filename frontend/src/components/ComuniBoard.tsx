@@ -26,6 +26,7 @@ import {
   RISK_COLOR_BY_LEVEL,
   RISK_LABEL_IT_BY_LEVEL,
 } from "../lib/risk-colors";
+import ComuneTrend from "./ComuneTrend";
 import type { ComuneCell, ComuneHazard, ComuneRisk, RiskLevel } from "../types";
 
 // Il comune è l'unità di lettura, la cella è il dettaglio.
@@ -71,6 +72,20 @@ const NOME_PERICOLO: Record<string, string> = {
   flood: "alluvione",
   wildfire: "incendio",
 };
+
+/** «3 ore fa», non un timestamp ISO. Un punteggio senza data non si sa se è
+ *  di adesso o di ieri, e su un rischio è la differenza fra un'informazione e
+ *  un numero. */
+function quando(iso: string): string {
+  const minuti = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (!Number.isFinite(minuti) || minuti < 0) return "";
+  if (minuti < 2) return "adesso";
+  if (minuti < 60) return `${minuti} min fa`;
+  const ore = Math.round(minuti / 60);
+  if (ore < 24) return `${ore} ${ore === 1 ? "ora" : "ore"} fa`;
+  const giorni = Math.round(ore / 24);
+  return `${giorni} ${giorni === 1 ? "giorno" : "giorni"} fa`;
+}
 
 function numero(n: number, cifre = 2): string {
   return n.toLocaleString("it-IT", {
@@ -215,7 +230,13 @@ function Indicatore({
 }
 
 /** Le celle peggiori del comune, caricate solo quando la riga si apre. */
-function DettaglioCelle({ istatCode }: { istatCode: string }): JSX.Element {
+function DettaglioCelle({
+  istatCode,
+  onCella,
+}: {
+  istatCode: string;
+  onCella?: (c: ComuneCell) => void;
+}): JSX.Element {
   const [celle, setCelle] = useState<ComuneCell[] | null>(null);
   const [errore, setErrore] = useState(false);
 
@@ -254,22 +275,32 @@ function DettaglioCelle({ istatCode }: { istatCode: string }): JSX.Element {
         Celle peggiori · punteggio da 0 a 1
       </Text>
       {celle.map((c) => (
-        <Group key={`${c.cell_id}-${c.hazard}`} gap={6} wrap="nowrap">
-          <Box
-            className="cb-chip"
-            style={{ background: RISK_COLOR_BY_LEVEL[c.level] }}
-            aria-hidden
-          />
-          <Text span size="xs" c="dimmed" style={{ fontVariantNumeric: "tabular-nums" }}>
-            {numero(c.score)}
-          </Text>
-          <Text span size="xs">
-            {RISK_LABEL_IT_BY_LEVEL[c.level]}
-          </Text>
-          <Text span size="xs" c="dimmed">
-            · {NOME_PERICOLO[c.hazard] ?? c.hazard}
-          </Text>
-        </Group>
+        <UnstyledButton
+          key={`${c.cell_id}-${c.hazard}`}
+          className="cb-cella"
+          onClick={() => onCella?.(c)}
+          title="Mostra questa cella sulla mappa"
+        >
+          <Group gap={6} wrap="nowrap">
+            <Box
+              className="cb-chip"
+              style={{ background: RISK_COLOR_BY_LEVEL[c.level] }}
+              aria-hidden
+            />
+            <Text span size="xs" c="dimmed" style={{ fontVariantNumeric: "tabular-nums" }}>
+              {numero(c.score)}
+            </Text>
+            <Text span size="xs">
+              {RISK_LABEL_IT_BY_LEVEL[c.level]}
+            </Text>
+            <Text span size="xs" c="dimmed">
+              · {NOME_PERICOLO[c.hazard] ?? c.hazard}
+            </Text>
+            <Text span size="xs" c="dimmed" className="cb-quando">
+              {quando(c.computed_at)}
+            </Text>
+          </Group>
+        </UnstyledButton>
       ))}
     </Stack>
   );
@@ -317,7 +348,15 @@ function Attenzione({ valore, classe }: { valore: number | null; classe: RiskLev
   );
 }
 
-export function ComuniBoard(): JSX.Element {
+export function ComuniBoard({
+  onComune,
+  onCella,
+}: {
+  /** Porta la mappa sul comune. Cliccare una riga senza che la mappa si
+   *  muova è la cosa che rende inutile una classifica geografica. */
+  onComune?: (c: ComuneRisk) => void;
+  onCella?: (c: ComuneCell) => void;
+} = {}): JSX.Element {
   const [comuni, setComuni] = useState<ComuneRisk[] | null>(null);
   const [failure, setFailure] = useState<PanelFailure | null>(null);
   const [cerca, setCerca] = useState("");
@@ -407,7 +446,10 @@ export function ComuniBoard(): JSX.Element {
               <Box key={c.istat_code} className="cb-row">
                 <UnstyledButton
                   className="cb-head"
-                  onClick={() => setAperto(apertoQui ? null : c.istat_code)}
+                  onClick={() => {
+                    setAperto(apertoQui ? null : c.istat_code);
+                    onComune?.(c);
+                  }}
                   aria-expanded={apertoQui}
                 >
                   <Group justify="space-between" wrap="nowrap" align="baseline">
@@ -456,7 +498,12 @@ export function ComuniBoard(): JSX.Element {
                 </UnstyledButton>
                 <Collapse expanded={apertoQui}>
                   <Box pl="xs" pb="xs">
-                    {apertoQui ? <DettaglioCelle istatCode={c.istat_code} /> : null}
+                    {apertoQui ? (
+                      <Stack gap={10}>
+                        <ComuneTrend istatCode={c.istat_code} />
+                        <DettaglioCelle istatCode={c.istat_code} onCella={onCella} />
+                      </Stack>
+                    ) : null}
                   </Box>
                 </Collapse>
               </Box>

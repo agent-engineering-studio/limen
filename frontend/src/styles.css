@@ -2191,6 +2191,23 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
     transparent 3px 6px
   );
 }
+/* Le celle del dettaglio sono cliccabili: portano la mappa lì. Senza un
+   segno che lo dica resterebbe una funzione che nessuno scopre. */
+.cb-cella {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 1px 4px;
+  margin-left: -4px;
+  border-radius: 4px;
+}
+.cb-cella:hover {
+  background: #f4f4f2;
+}
+.cb-quando {
+  margin-left: auto;
+  white-space: nowrap;
+}
 .cb-help {
   width: 18px;
   height: 18px;

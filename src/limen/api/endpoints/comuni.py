@@ -14,7 +14,7 @@ smette di poter bruciare mentre si guardano le frane.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 
 from limen.api.schemas import ComuneDetailResponse, ComuneListResponse, ComuneRisk
 from limen.data.repos import comune_risk
@@ -43,3 +43,19 @@ async def get_comune(istat_code: str) -> ComuneDetailResponse:
     if detail is None:
         raise HTTPException(status_code=404, detail="comune non trovato")
     return ComuneDetailResponse(comune=ComuneRisk(**detail["comune"]), cells=detail["cells"])
+
+
+@router.get("/api/comune/{istat_code}/history")
+async def comune_history(
+    istat_code: str,
+    response: Response,
+    hours: int = Query(168, ge=1, le=720),
+) -> dict[str, list[dict[str, object]]]:
+    """L'andamento del comune, una serie per pericolo.
+
+    Sette giorni per default: è la finestra in cui un tecnico comunale
+    riconosce un peggioramento, e con la scrittura sparsa della #135 sono
+    poche centinaia di righe per comune.
+    """
+    response.headers["Cache-Control"] = "public, max-age=300"
+    return await comune_risk.comune_history(istat_code, hours=hours)
