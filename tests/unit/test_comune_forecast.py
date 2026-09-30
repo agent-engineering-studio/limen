@@ -101,3 +101,81 @@ async def test_un_errore_di_cache_non_ferma_il_battito(monkeypatch: pytest.Monke
     # Non solleva: il battito è ciò che dice che il worker è vivo, e non può
     # morire per colpa di un timer.
     await _publish_next_fire(_Scheduler([]), period=60)
+
+
+def test_una_riga_storica_senza_catena_fwi_non_e_misurata() -> None:
+    """Il 28-29 settembre ogni cella incendio scrisse 0,00 per assenza di
+    catena, con `measured` ancora NULL. Per la mappa quel NULL vale
+    «misurato»; per un grafico disegna una caduta a zero mai avvenuta. Il
+    breakdown tiene il segnale grezzo e sa la differenza."""
+    from limen.data.repos.comune_risk import _misurata
+
+    senza_catena = {
+        "fwi_norm": 0.0,
+        "fuel": 1.0,
+        "slope": 0.6,
+        "spinup": True,
+        "fire_weather": None,
+    }
+    assert _misurata("wildfire", senza_catena) is False
+
+
+def test_una_giornata_asciutta_misurata_resta_misurata() -> None:
+    # Pioggia 0,0 mm arrivata davvero: la cella è calma, non ignota.
+    from limen.data.repos.comune_risk import _misurata
+
+    asciutta = {
+        "susceptibility": 0.4,
+        "pluvial": 0.0,
+        "fluvial": 0.0,
+        "mapped": True,
+        "rain_mm": 0.0,
+        "discharge_ratio": None,
+    }
+    assert _misurata("flood", asciutta) is True
+
+
+def test_fattori_illeggibili_non_diventano_un_buco() -> None:
+    # «Non lo so» resta «non lo so»: senza poter leggere il breakdown non si
+    # toglie un punto dal grafico.
+    from limen.data.repos.comune_risk import _misurata
+
+    assert _misurata("wildfire", "{non json") is True
+    assert _misurata("wildfire", None) is True
+
+
+@pytest.mark.asyncio
+async def test_la_previsione_notturna_gira_per_ogni_pericolo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Girava solo per le frane: la colonna mostrava il futuro di un pericolo
+    su tre. E un pericolo che fallisce non ferma gli altri — le frane non
+    devono saltare perché GloFAS ha risposto 429."""
+    from types import SimpleNamespace
+    from typing import cast
+
+    from limen.api.dependencies import AppDependencies
+    from limen.api.jobs import forecast_history as job
+    from limen.core.models.hazard import HazardType
+
+    visti: list[HazardType] = []
+
+    async def _corsa(*, settings: Any, hazard: HazardType) -> int:
+        visti.append(hazard)
+        if hazard is HazardType.FLOOD:
+            raise RuntimeError("429 Too Many Requests")
+        return 10
+
+    monkeypatch.setattr(job, "run_forecast_history", _corsa)
+    deps = SimpleNamespace(
+        settings=SimpleNamespace(
+            hazards=SimpleNamespace(
+                enabled=[HazardType.LANDSLIDE, HazardType.FLOOD, HazardType.WILDFIRE]
+            )
+        )
+    )
+
+    totale = await job.run_forecast_history_job(cast("AppDependencies", deps))
+
+    assert visti == [HazardType.LANDSLIDE, HazardType.FLOOD, HazardType.WILDFIRE]
+    assert totale == 20

@@ -3,11 +3,11 @@
 Sweeps each AOI at +24/+48/+72 h and writes the **≥ Moderate** cells to
 ``risk_assessments`` with ``horizon="+Hh"`` and ``pipeline_version=
 "v1-forecast+Hh"`` (``computed_at=now()`` → the UI derives the target time as
-``computed_at + H``). Idempotent + bounded: the prior forecast rows for the same
-cells at that horizon are deleted before the new insert, so only the latest
-forecast per (cell, horizon) survives. The observed history keeps the
-operational horizon (e.g. ``24h``); the two are read together by
-``GET /api/cell/{id}/history``.
+``computed_at + H``), and keeps the **current** forecast in ``latest_forecast``.
+
+The history is append-only, like every partitioned table here: retention drops
+partitions, it never deletes rows. Readers that want "the forecast now" read
+``latest_forecast``; the history is for replaying how a forecast evolved.
 """
 
 from __future__ import annotations
@@ -35,12 +35,6 @@ _LEVEL_ORDER = (
 )
 _DEFAULT_FLOOR = RiskLevel.Moderate
 _DEFAULT_HORIZONS = (24, 48, 72)
-
-_DELETE_PRIOR_SQL = """
-DELETE FROM risk_assessments
-WHERE horizon = $1 AND cell_id = ANY($2::text[]) AND hazard_type = $3
-  AND pipeline_version LIKE 'v1-forecast+%'
-"""
 
 _INSERT_SQL = """
 INSERT INTO risk_assessments (
@@ -89,13 +83,22 @@ async def persist_forecast_run(
     floor: RiskLevel = _DEFAULT_FLOOR,
     hazard: HazardType = DEFAULT_HAZARD,
 ) -> int:
-    """Write the ≥floor cells of one forecast run; delete prior rows first."""
+    """Write the ≥floor cells of one forecast run.
+
+    Lo storico è **solo in append**, come ogni altra tabella partizionata del
+    progetto: la retention la fa `drop_expired_partitions()`, mai un DELETE.
+    Prima qui c'era un DELETE delle righe previsionali precedenti per
+    `cell_id`, senza filtro sulla data, quindi attraverso tutte le partizioni:
+    su questo disco superava il timeout del comando già su Basilicata (8.000
+    celle), e la previsione d'incendio si fermava lì. Serviva a tenere
+    nello storico una sola corsa per cella; ora lo stato corrente è
+    `latest_forecast`, e i lettori leggono quello.
+    """
     keep = cells_to_persist(cell_results, floor=floor)
     horizon = f"+{horizon_h}h"
     pipeline_version = f"v1-forecast+{horizon_h}h"
     cell_ids = [c.cell_id for c in keep]
     async with conn.transaction():
-        await conn.execute(_DELETE_PRIOR_SQL, horizon, cell_ids, hazard.value)
         for c in keep:
             factors = c.breakdown.factors_payload()
             await conn.execute(

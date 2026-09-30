@@ -4,7 +4,12 @@ import type { JSX } from "react";
 import { defaultApiClient, ApiClientError } from "../lib/api-client";
 import { useHazard } from "../lib/hazard";
 import { RISK_COLOR_BY_LEVEL, RISK_LABEL_IT_BY_LEVEL } from "../lib/risk-colors";
-import type { CellBreakdownResponse, HazardType, RiskLevel } from "../types";
+import type {
+  CellBreakdownResponse,
+  CellMultiHazardResponse,
+  HazardType,
+  RiskLevel,
+} from "../types";
 
 export interface CellPopupProps {
   readonly cellId: string | null;
@@ -17,6 +22,12 @@ export interface CellPopupProps {
   readonly place?: string | null;
   readonly onDismiss?: () => void;
 }
+
+const NOME_SCHEDA: Record<HazardType, string> = {
+  landslide: "Frana",
+  flood: "Alluvione",
+  wildfire: "Incendio",
+};
 
 const EXPOSURE_PHRASE: Record<string, string> = {
   abitato: "un centro abitato",
@@ -284,10 +295,40 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
     return () => ctrl.abort();
   }, [cellId, props.lon, props.lat]);
 
-  const { selected: hazard } = useHazard();
+  const { selected } = useHazard();
+  // Tutti e tre i pericoli della cella, per le schede in testa al popup.
+  // Prima il popup chiedeva un pericolo solo — quello del selettore, che in
+  // vista d'insieme vale «frane» — e una cella con incendio alto mostrava le
+  // barre delle frane senza dire che ce n'era un altro peggiore.
+  const [quadro, setQuadro] = useState<CellMultiHazardResponse | null>(null);
+  const [scheda, setScheda] = useState<HazardType | null>(null);
 
   useEffect(() => {
-    if (!cellId) {
+    setQuadro(null);
+    setScheda(null);
+    if (!cellId) return;
+    const ctrl = new AbortController();
+    defaultApiClient
+      .getCellMultiHazard(cellId, ctrl.signal)
+      .then((q) => {
+        setQuadro(q);
+        // Si apre sul pericolo **peggiore della cella**, non su quello del
+        // selettore. La mappa di default è sulle frane, e aprire lì voleva
+        // dire che una cella con l'incendio alto mostrava le barre delle
+        // frane: il popup serve a dire cosa minaccia questo punto, e gli
+        // altri pericoli restano a un clic nelle schede.
+        setScheda(q.worst_hazard ?? selected);
+      })
+      .catch(() => {
+        if (!ctrl.signal.aborted) setScheda(selected);
+      });
+    return () => ctrl.abort();
+  }, [cellId, selected]);
+
+  const hazard: HazardType = scheda ?? selected;
+
+  useEffect(() => {
+    if (!cellId || scheda === null) {
       setData(null);
       setError(null);
       return;
@@ -315,7 +356,45 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
         }
       });
     return () => ctrl.abort();
-  }, [cellId, hazard]);
+  }, [cellId, hazard, scheda]);
+
+  // Le schede: sempre tutte e tre, nello stesso ordine, con il loro numero.
+  // Una scheda si legge senza aprirla — «Incendio 0,67» accanto a «Frana
+  // 0,38» dice già dove guardare.
+  const schede =
+    quadro === null ? null : (
+      <div className="popup-schede" role="tablist" aria-label="Pericolo">
+        {(["landslide", "flood", "wildfire"] as HazardType[]).map((h) => {
+          const v = quadro.per_hazard.find((x) => x.hazard === h);
+          const livello = (v?.level ?? "None") as RiskLevel;
+          return (
+            <button
+              key={h}
+              type="button"
+              role="tab"
+              aria-selected={h === hazard}
+              className={`popup-scheda ${h === hazard ? "on" : ""}`}
+              onClick={() => setScheda(h)}
+            >
+              <span
+                className="popup-scheda-chip"
+                style={{ background: RISK_COLOR_BY_LEVEL[livello] }}
+                aria-hidden
+              />
+              {NOME_SCHEDA[h]}{" "}
+              <strong>
+                {v?.score == null
+                  ? "—"
+                  : v.score.toLocaleString("it-IT", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+              </strong>
+            </button>
+          );
+        })}
+      </div>
+    );
 
   if (!cellId) return null;
 
@@ -335,6 +414,7 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
   if (!data) {
     return (
       <aside className="popup-card" role="dialog" aria-labelledby="cell-id">
+        {schede}
         <h3 id="cell-id">Cella {cellId}</h3>
         <p>caricamento…</p>
       </aside>
@@ -356,6 +436,7 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
   if (data.measured === false) {
     return (
       <aside className="popup-card" role="dialog" aria-labelledby="cell-id">
+        {schede}
         <h3 id="cell-id" style={{ margin: 0 }}>
           <span className="level-chip is-unknown">non misurato</span>
         </h3>
@@ -374,6 +455,7 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
 
   return (
     <aside className="popup-card" role="dialog" aria-labelledby="cell-id">
+      {schede}
       <h3 id="cell-id" style={{ margin: 0 }}>
         <span className="popup-score">{data.score.toFixed(2)}</span>
         <span

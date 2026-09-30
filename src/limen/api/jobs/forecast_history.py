@@ -16,9 +16,29 @@ log = get_logger(__name__)
 
 
 async def run_forecast_history_job(deps: AppDependencies) -> int:
-    try:
-        return await run_forecast_history(settings=deps.settings)
-    except Exception as exc:
-        # Scheduler job must never crash the loop — log and move on.
-        log.warning("job.forecast_history.failed", error=str(exc), error_type=type(exc).__name__)
-        return 0
+    """La previsione per cella, per **ogni** pericolo abilitato.
+
+    Girava solo per il pericolo di default, cioè le frane: la colonna dei
+    comuni mostrava il futuro di un pericolo su tre, e una cella con
+    l'incendio alto non aveva nessuna previsione d'incendio — senza che niente
+    lo dicesse, se non una riga in piccolo nella testata. Il workflow
+    previsionale sapeva già fare gli altri due: l'alluvione con i suoi trigger
+    per nodo, l'incendio camminando la catena FWI fino al giorno previsto
+    senza scriverlo (`FwiUpdateExecutor`).
+
+    Un pericolo che fallisce non ferma gli altri: la previsione delle frane
+    non deve saltare perché GloFAS ha risposto 429.
+    """
+    totale = 0
+    for hazard in deps.settings.hazards.enabled:
+        try:
+            totale += await run_forecast_history(settings=deps.settings, hazard=hazard)
+        except Exception as exc:
+            # Scheduler job must never crash the loop — log and move on.
+            log.warning(
+                "job.forecast_history.failed",
+                hazard=hazard.value,
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+    return totale
