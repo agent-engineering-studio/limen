@@ -9,6 +9,7 @@ pagina tre richieste per dire una riga.
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 from typing import Any
 
 from limen.core.cascades.attention import HazardStanding, attention_index
@@ -239,8 +240,8 @@ async def comune_detail(istat_code: str) -> dict[str, Any] | None:
 #:
 #: Non il massimo ricalcolato ora per ora su tutte le celle. Quella è la
 #: domanda più fedele, ed è la prima che ho scritto: su Bardonecchia (134
-#: celle, sette giorni, ventitré partizioni) ci mette **oltre due minuti**, e
-#: non a freddo — rieseguita a cache calda non migliora, perché tocca davvero
+#: celle, sette giorni, ventitré partizioni) ci mette **212 secondi**, e non
+#: a freddo — rieseguita a cache calda non migliora, perché tocca davvero
 #: troppi dati. Questa ne legge tre celle: 18 s la prima volta su questo
 #: disco, **41 ms** dopo.
 #:
@@ -249,8 +250,7 @@ async def comune_detail(istat_code: str) -> dict[str, Any] | None:
 #: l'inviluppo del comune. In compenso concorda con il numero in testata, che
 #: è anch'esso la cella peggiore: un grafico che raccontasse un altro
 #: aggregato accanto a quel numero sarebbe peggio che uno più stretto.
-_STORIA_COMUNE = """
-WITH peggiori AS (
+_CELLE_PEGGIORI = """
     SELECT DISTINCT ON (lr.hazard_type) lr.cell_id, lr.hazard_type
     FROM cell_comune cc
     JOIN latest_risk lr ON lr.cell_id = cc.cell_id
@@ -259,7 +259,10 @@ WITH peggiori AS (
       -- (#143): meglio una linea in meno che una linea a zero.
       AND COALESCE(lr.measured, true)
     ORDER BY lr.hazard_type, lr.score DESC NULLS LAST
-)
+"""
+
+_STORIA_COMUNE = f"""
+WITH peggiori AS ({_CELLE_PEGGIORI})
 SELECT date_trunc('hour', ra.computed_at) AS t,
        p.hazard_type::text                AS hazard,
        max(ra.score)                      AS score
@@ -275,20 +278,74 @@ GROUP BY 1, 2
 ORDER BY 1
 """
 
+#: Le righe previsionali delle stesse celle.
+#:
+#: `horizon` porta lo scostamento (`+48h`) e `computed_at` l'istante in cui la
+#: corsa è stata fatta: il momento a cui la previsione si riferisce è la somma
+#: dei due, e si compone qui perché è l'unico posto che conosce entrambi.
+#:
+#: Si tiene **l'ultima corsa per orizzonte**, non tutte: il calcolo
+#: previsionale gira ogni sei ore, e disegnare anche le corse precedenti
+#: darebbe tre linee sovrapposte per lo stesso futuro.
+_PREVISIONE_COMUNE = f"""
+WITH peggiori AS ({_CELLE_PEGGIORI})
+SELECT DISTINCT ON (p.hazard_type, ra.horizon)
+       p.hazard_type::text AS hazard,
+       ra.horizon,
+       ra.computed_at,
+       ra.score,
+       ra.class
+FROM peggiori p
+JOIN risk_assessments ra
+      ON ra.cell_id = p.cell_id
+     AND ra.hazard_type = p.hazard_type
+WHERE ra.horizon LIKE '+%'
+  AND ra.computed_at >= now() - make_interval(hours => 24)
+  AND ra.score IS NOT NULL
+ORDER BY p.hazard_type, ra.horizon, ra.computed_at DESC
+"""
 
-async def comune_history(istat_code: str, *, hours: int) -> dict[str, list[dict[str, Any]]]:
-    """Una serie per pericolo, dal più vecchio al più recente.
 
-    Dalla #135 lo storico è **sparso**: una cella lascia una riga solo quando
-    cambia classe, si scosta oltre soglia, o scade il battito di 24 ore. Sulle
-    ore senza scrittura non c'è un punto, ed è corretto — chi disegna unisce i
-    punti che esistono invece di inventare un livello per ogni ora.
+def _ore(horizon: str) -> int:
+    return int(horizon.lstrip("+").rstrip("h") or 0)
+
+
+async def comune_history(
+    istat_code: str, *, hours: int
+) -> dict[str, dict[str, list[dict[str, Any]]]]:
+    """Il passato e il futuro del comune, una serie per pericolo.
+
+    Il passato è **sparso** e resta tale: dalla #135 una cella lascia una riga
+    solo quando cambia classe, si scosta oltre soglia, o scade il battito di
+    24 ore. Sulle ore senza scrittura non c'è un punto, ed è corretto — chi
+    disegna unisce i punti che esistono invece di inventare un livello per
+    ogni ora.
+
+    Il futuro è la corsa previsionale più recente per ogni orizzonte, con il
+    momento a cui si riferisce già composto: chi disegna non deve sapere che
+    `+48h` va sommato a `computed_at`.
     """
     async with acquire() as conn:
-        rows = await conn.fetch(_STORIA_COMUNE, istat_code, hours)
-    serie: dict[str, list[dict[str, Any]]] = {}
-    for r in rows:
-        serie.setdefault(str(r["hazard"]), []).append(
+        osservate = await conn.fetch(_STORIA_COMUNE, istat_code, hours)
+        previste = await conn.fetch(_PREVISIONE_COMUNE, istat_code)
+
+    passato: dict[str, list[dict[str, Any]]] = {}
+    for r in osservate:
+        passato.setdefault(str(r["hazard"]), []).append(
             {"t": r["t"].isoformat(), "score": round(float(r["score"]), 3)}
         )
-    return serie
+
+    futuro: dict[str, list[dict[str, Any]]] = {}
+    for r in previste:
+        bersaglio = r["computed_at"] + timedelta(hours=_ore(str(r["horizon"])))
+        futuro.setdefault(str(r["hazard"]), []).append(
+            {
+                "t": bersaglio.isoformat(),
+                "score": round(float(r["score"]), 3),
+                "level": str(r["class"]),
+            }
+        )
+    for punti in futuro.values():
+        punti.sort(key=lambda p: str(p["t"]))
+
+    return {"observed": passato, "forecast": futuro}

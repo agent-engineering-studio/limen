@@ -30,7 +30,12 @@ html, body, #root {
 
 .app-shell {
   display: grid;
-  grid-template-columns: minmax(320px, 360px) 1fr;
+  /* Più larga di prima (era 320-360). La colonna porta quattro pannelli, e
+     in 320 px una riga di comune andava a capo due volte: il numero di
+     attenzione finiva sotto il nome e i tre pericoli su due righe. Il
+     massimo resta legato alla mappa — oltre i 440 px si comincia a togliere
+     territorio per fare spazio a una lista. */
+  grid-template-columns: minmax(380px, 440px) 1fr;
   grid-template-rows: 56px 1fr;
   height: 100vh;
 }
@@ -918,7 +923,30 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
 .feature-tag { border-radius: 7px; }
 
 /* --- Dashboard sidebar --- */
-.app-shell:not(.is-home) { grid-template-columns: minmax(320px, 372px) 1fr; }
+.app-shell:not(.is-home) { grid-template-columns: minmax(380px, 440px) 1fr; }
+/* Il nome del pericolo sopra le quattro caselle. Sta attaccato ai numeri
+   perché è la loro unità di misura: le celle non si sommano fra pericoli. */
+.strip-stats-head {
+  margin: 10px 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #3a3f4b;
+}
+.strip-stats-head span {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.strip-more > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 4px 0;
+}
+.strip-more > summary:hover { color: var(--accent); }
 .sidebar { padding: 18px; }
 .sidebar > section,
 .legend-panel {

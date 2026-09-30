@@ -86,10 +86,22 @@ export interface ComuneCell {
   lat: number;
 }
 
-/** Una serie per pericolo, dal più vecchio al più recente. I pericoli non
+export interface SeriePunto {
+  t: string;
+  score: number;
+  level?: RiskLevel;
+}
+
+/** Passato e futuro del comune, una serie per pericolo. I pericoli non
  *  misurati non compaiono: uno zero per assenza di dato disegnerebbe una
- *  discesa a fondo scala che non è mai avvenuta. */
-export type ComuneHistory = Record<string, { t: string; score: number }[]>;
+ *  discesa a fondo scala che non è mai avvenuta.
+ *
+ *  `forecast` porta il momento a cui la previsione si riferisce già composto
+ *  — chi disegna non deve sapere che `+48h` va sommato all'ora della corsa. */
+export interface ComuneHistory {
+  observed: Record<string, SeriePunto[]>;
+  forecast: Record<string, SeriePunto[]>;
+}
 
 export interface ComuneDetailResponse {
   comune: ComuneRisk;

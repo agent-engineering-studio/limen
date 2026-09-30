@@ -21,7 +21,7 @@ export function NationalStrip(): JSX.Element {
   // degradato, che senza un modo per richiedere i dati sarebbe un bottone
   // che invita a ricaricare la pagina intera.
   const [tentativo, setTentativo] = useState(0);
-  const { selected, multi } = useHazard();
+  const { selected } = useHazard();
   const riprova = useCallback(() => setTentativo((n) => n + 1), []);
 
   useEffect(() => {
@@ -115,19 +115,17 @@ export function NationalStrip(): JSX.Element {
           Civile. <a href="#/documentazione/01-limen-in-una-pagina">Cosa vuol dire</a>
         </p>
       </div>
-      <p className="alert-meta">
-        {report.totals.cells.toLocaleString("it-IT")} celle valutate
+      {/* Le quattro caselle sono di **un** pericolo, non di tutti: le celle
+          non si sommano fra pericoli, sono le stesse celle. Il nome del
+          pericolo sta ora sopra le caselle e non in una riga staccata sotto
+          — con la testata che dice «Incendio: 5024 aree in classe Alta» e le
+          caselle che dicono «0 High+», la distanza fra le due cose era il
+          modo più facile di leggere un numero per un altro. */}
+      <p className="strip-stats-head">
+        {report.hazards.find((h) => h.hazard === report.hazard)?.label_it ??
+          report.hazard}
+        <span> · su {report.totals.cells.toLocaleString("it-IT")} celle</span>
       </p>
-      {multi ? (
-        // In vista d'insieme le testate restano quelle di *un* pericolo (le
-        // celle non si sommano fra pericoli: sono le stesse celle). Dirlo è
-        // l'unico modo di non farle leggere come un totale nazionale.
-        <p className="alert-meta">
-          testate:{" "}
-          {report.hazards.find((h) => h.hazard === report.hazard)?.label_it ??
-            report.hazard}
-        </p>
-      ) : null}
       <div className="strip-stats">
         <div>
           <strong className="mono">{report.totals.high_or_above}</strong>
@@ -148,41 +146,45 @@ export function NationalStrip(): JSX.Element {
           <span>previsioni</span>
         </div>
       </div>
-      {multi && report.hazards.length > 1 ? (
-        <ul className="strip-hazards">
-          {report.hazards.map((b) => (
-            <li key={b.hazard}>
-              <span className={`hazard-dot ${b.hazard}`} aria-hidden />
-              {b.label_it}:{" "}
-              <span className="mono">{b.totals.high_or_above}</span> High+,{" "}
-              <span className="mono">
-                {b.totals.moderate.toLocaleString("it-IT")}
-              </span>{" "}
-              Moderate
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {((c) => {
-        const righe: string[] = [];
-        if (c.post_fire_flood && c.post_fire_flood.cells > 0) {
-          righe.push(
-            `${c.post_fire_flood.cells} aree bruciate con rischio allagamento più alto`,
-          );
-        }
-        if (c.joint_rain && c.joint_rain.cells > 0) {
-          righe.push(
-            `${c.joint_rain.cells} aree sopra soglia per più di un pericolo`,
-          );
-        }
-        return righe.length > 0 ? (
-          <p className="strip-cascades" aria-label="Cascate attive">
-            ⛓ {righe.join(" · ")}
-          </p>
-        ) : null;
-      })(report.cascades)}
-      <details>
-        <summary>Report e modello ML</summary>
+      {/* Tutto il resto sta dietro un pannello a scomparsa. Sono numeri che
+          si consultano, non che si sorvegliano: tenerli aperti allungava la
+          colonna di tre schermate e spingeva i comuni — che è la lista su cui
+          si decide qualcosa — sotto la piega. */}
+      <details className="strip-more">
+        <summary>Dettaglio per pericolo, cascate e modello ML</summary>
+        {report.hazards.length > 1 ? (
+          <ul className="strip-hazards">
+            {report.hazards.map((b) => (
+              <li key={b.hazard}>
+                <span className={`hazard-dot ${b.hazard}`} aria-hidden />
+                {b.label_it}:{" "}
+                <span className="mono">{b.totals.high_or_above}</span> High+,{" "}
+                <span className="mono">
+                  {b.totals.moderate.toLocaleString("it-IT")}
+                </span>{" "}
+                Moderate
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {((c) => {
+          const righe: string[] = [];
+          if (c.post_fire_flood && c.post_fire_flood.cells > 0) {
+            righe.push(
+              `${c.post_fire_flood.cells} aree bruciate con rischio allagamento più alto`,
+            );
+          }
+          if (c.joint_rain && c.joint_rain.cells > 0) {
+            righe.push(
+              `${c.joint_rain.cells} aree sopra soglia per più di un pericolo`,
+            );
+          }
+          return righe.length > 0 ? (
+            <p className="strip-cascades" aria-label="Cascate attive">
+              ⛓ {righe.join(" · ")}
+            </p>
+          ) : null;
+        })(report.cascades)}
         <p className="strip-report">{report.report_it}</p>
         {report.ml_top_cells.length > 0 ? (
           <>

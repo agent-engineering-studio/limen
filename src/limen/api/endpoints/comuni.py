@@ -50,12 +50,15 @@ async def comune_history(
     istat_code: str,
     response: Response,
     hours: int = Query(168, ge=1, le=720),
-) -> dict[str, list[dict[str, object]]]:
-    """L'andamento del comune, una serie per pericolo.
+) -> dict[str, dict[str, list[dict[str, object]]]]:
+    """L'andamento del comune: `observed` e `forecast`, una serie per pericolo.
 
     Sette giorni per default: è la finestra in cui un tecnico comunale
     riconosce un peggioramento, e con la scrittura sparsa della #135 sono
     poche centinaia di righe per comune.
+
+    La previsione non ha una finestra sua: è la corsa più recente per ogni
+    orizzonte (+24/+48/+72 h), con il momento a cui si riferisce già composto.
     """
     response.headers["Cache-Control"] = "public, max-age=300"
     return await comune_risk.comune_history(istat_code, hours=hours)
