@@ -115,6 +115,17 @@ export function riskColorsFor(hazard: HazardType): Record<RiskLevel, string> {
   return COLORS_BY_HAZARD[hazard] ?? RISK_COLOR_BY_LEVEL;
 }
 
+/**
+ * Il grigio di «non lo so».
+ *
+ * Lo stesso per una cella non ancora valutata e per una valutata senza il
+ * dato che le serviva (#143): a chi guarda dicono la stessa cosa, e la scala
+ * del rischio ha cinque classi proprio perché una sesta tinta la renderebbe
+ * illeggibile. Il perché della differenza sta nel popup e nella colonna,
+ * dove c'è lo spazio per scriverlo a parole.
+ */
+export const COLORE_IGNOTO = "#dadcdf";
+
 export function maplibreColorMatch(
   prop = "risk_level",
   hazard: HazardType = "landslide",
@@ -124,8 +135,14 @@ export function maplibreColorMatch(
   for (const c of RISK_CLASSES) {
     stops.push(c.level, colors[c.level]);
   }
-  stops.push("#dadcdf");
-  return stops;
+  stops.push(COLORE_IGNOTO);
+  // `measured` falso ⇒ neutro, prima di ogni classe. Un punteggio zero per
+  // assenza di misura, dipinto in fondo alla scala, si legge come una buona
+  // notizia: è l'unico posto in cui questo sistema sbaglierebbe in direzione
+  // rassicurante. Le tile scritte prima che la colonna esistesse non hanno
+  // l'attributo, e `!=` su un attributo assente è falso: restano colorate,
+  // che è il comportamento giusto per «non lo sappiamo».
+  return ["case", ["==", ["get", "measured"], false], COLORE_IGNOTO, stops];
 }
 
 /**

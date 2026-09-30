@@ -110,6 +110,36 @@ SELECT refresh_mv_latest_risk();
    `MeteoFetchExecutor` degrada silenziosamente a `None` su un 5xx ma
    logga `integration.degraded`.
 
+### "Alluvione e incendio danno zero su ogni cella"
+
+Zero esatto ovunque, con `computed_at` recente, non è un territorio calmo:
+è l'assenza di dato che arriva fino in fondo. Il breakdown lo dice —
+`fire_weather: null` con `spinup: true`, `rain_mm: null`,
+`discharge_ratio: null` — e i motori degradano come devono.
+
+1. Contare i degradi dell'ultima giornata:
+   `docker logs limen-worker --since 24h | grep -c integration.degraded`.
+   Un numero a tre cifre tutto su etichette `openmeteo.*` è il tetto
+   giornaliero dell'API pubblica, non un guasto di rete.
+2. Confermarlo con una chiamata a mano: la risposta è
+   `{"error":true,"reason":"Daily API request limit exceeded..."}`, non un
+   timeout.
+3. Guardare i nodi FWI: `SELECT day, count(*) FROM fwi_state GROUP BY day
+   ORDER BY day DESC LIMIT 8;`. Se il conteggio cala di giorno in giorno,
+   la catena si sta spegnendo dal nord — è il fronte del quota che si
+   ritira, non una perdita di stato.
+4. La cura è l'istanza propria: `make meteo-up`, `make meteo-check`, e
+   `OPENMETEO__FORECAST_URL` / `__ARCHIVE_URL` nel `.env` (#142). Portata
+   e onde restano sull'API pubblica in ogni caso: GloFAS non è pubblicato
+   sul bucket AWS di Open-Meteo.
+
+### "pg_tileserv risponde 404 su una vista appena creata"
+
+Il catalogo di pg_tileserv si legge all'avvio. Una migrazione che crea una
+vista o una funzione di tile non la rende visibile finché il container non
+riparte: `docker compose -p limen restart pg_tileserv`. Un 404 su una
+vista che esiste in Postgres è quasi sempre questo, non un errore di nome.
+
 ### "Gli alert non partono"
 
 1. Verificare che almeno una cella superi `ALERT__MIN_LEVEL`. La

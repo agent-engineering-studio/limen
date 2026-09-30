@@ -27,6 +27,10 @@ export interface ComuneHazard {
   priority: number;
   n_cells: number;
   n_alert: number;
+  /** Falso quando il segnale dinamico che questo pericolo richiede non è
+   *  arrivato: il punteggio è zero per assenza di dato, non per quiete.
+   *  Si scrive «non misurato», non «0,00 basso». */
+  measured: boolean;
 }
 
 export interface ComuneRisk {
@@ -41,9 +45,13 @@ export interface ComuneRisk {
   n_alert: number;
   counts: Record<string, number>;
   exposure_rank: number;
+  /** Il centroide, per portare la mappa sul comune al clic. */
+  lon: number;
+  lat: number;
   /** Il numero unico del comune: massimo delle priorità, con l'incremento
-   *  quando più di un pericolo è oltre soglia. Non è una somma. */
-  attention: number;
+   *  quando più di un pericolo è oltre soglia. Non è una somma.
+   *  `null` quando nessun pericolo è stato misurato. */
+  attention: number | null;
   /** I tre indicatori affiancati: sempre tutti, anche a zero. */
   hazards: Record<string, ComuneHazard>;
 }
@@ -70,9 +78,18 @@ export interface ComuneCell {
   hazard: HazardType;
   score: number;
   level: RiskLevel;
+  /** Quando è stato calcolato. Un punteggio senza data non si sa se è di
+   *  adesso o di ieri, e su un rischio è la differenza fra
+   *  un'informazione e un numero. */
+  computed_at: string;
   lon: number;
   lat: number;
 }
+
+/** Una serie per pericolo, dal più vecchio al più recente. I pericoli non
+ *  misurati non compaiono: uno zero per assenza di dato disegnerebbe una
+ *  discesa a fondo scala che non è mai avvenuta. */
+export type ComuneHistory = Record<string, { t: string; score: number }[]>;
 
 export interface ComuneDetailResponse {
   comune: ComuneRisk;
@@ -171,6 +188,10 @@ export interface CellBreakdownResponse {
   pipeline_version: string;
   factors: Record<string, unknown>;
   explanation: Record<string, unknown>;
+  /** Falso quando il segnale dinamico richiesto non è arrivato: il punteggio
+   *  è zero per assenza di misura, non per quiete. È qui che la domanda
+   *  nasce — chi clicca una cella grigia vuole sapere perché. */
+  measured: boolean;
 }
 
 export interface AlertItem {

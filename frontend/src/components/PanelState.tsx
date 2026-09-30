@@ -1,3 +1,4 @@
+import type { JSX } from "react";
 import type { PanelFailure } from "../lib/panel-state";
 
 // I tre stati che un pannello può avere quando non ha numeri da mostrare, e

@@ -3,6 +3,7 @@
 // quando il comune è aperto) + cache per cella. role=img + alt, mai solo-colore.
 
 import { useEffect, useState } from "react";
+import type { JSX } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
 import { useHazard } from "../lib/hazard";

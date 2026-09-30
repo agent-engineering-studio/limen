@@ -261,6 +261,21 @@ class HazardBreakdown(_Frozen):
         """
         return 0.0
 
+    def measured(self) -> bool:
+        """Whether the dynamic input this hazard needs actually arrived.
+
+        A degraded source gives a neutral result, and for a multiplicative
+        engine the neutral result is **zero** -- indistinguishable, once it
+        reaches a map, from a genuinely calm cell (#143). Only the breakdown
+        knows the difference, because only the breakdown holds the raw
+        signal, so it is the breakdown that answers.
+
+        The default is ``True``: a hazard whose score stands on terrain alone
+        is measured even when the weather is missing. The ones that need a
+        live feed say so themselves.
+        """
+        return True
+
     @classmethod
     def from_factors(cls, payload: dict[str, Any]) -> Self:
         """Rebuild from a persisted ``factors`` blob.
@@ -372,6 +387,13 @@ class WildfireBreakdown(HazardBreakdown):
         # tempo del giorno: è l'analogo della suscettibilità di un versante.
         return self.fuel
 
+    def measured(self) -> bool:
+        # Senza catena il termine meteo è *ignoto*, e con una forma
+        # moltiplicativa questo porta il punteggio a zero — un "nessun
+        # pericolo" che nessuno ha misurato. `spinup` non basta a
+        # distinguerlo: è vero anche per una catena corta ma reale.
+        return self.fire_weather is not None
+
     @classmethod
     def from_factors(cls, payload: dict[str, Any]) -> Self:
         # `day` torna da JSONB come stringa, e il modello è strict: senza
@@ -436,6 +458,13 @@ class FloodBreakdown(HazardBreakdown):
         # La suscettibilità idraulica è ciò che la cella è a prescindere dal
         # tempo: l'analogo della fragilità di un versante.
         return self.susceptibility
+
+    def measured(self) -> bool:
+        # I due trigger *sono* il motore: senza nessuno dei due segnali grezzi
+        # il punteggio è `suscettibilità per zero`, che è zero ovunque. Basta
+        # che ne arrivi uno — «piove ma non so quanto è grosso il fiume» è
+        # un'alluvione misurata a metà, non una non misurata.
+        return self.rain_mm is not None or self.discharge_ratio is not None
 
 
 #: The concrete breakdowns, discriminated by ``hazard_type``. Pydantic needs

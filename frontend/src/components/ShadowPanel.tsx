@@ -7,6 +7,7 @@
 // restano nel report CLI, non qui. Etichetta esplicita: non-autoritativo.
 
 import { useEffect, useState } from "react";
+import type { JSX } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
 import type { ShadowRegion, ShadowSummaryResponse } from "../types";

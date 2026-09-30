@@ -27,10 +27,16 @@ from tenacity import RetryError
 
 from limen.core.logging import get_logger
 from limen.integrations._http import SharedHttpClient, fetch_with_retry
+from limen.integrations.openmeteo.client import forecast_url, weather_model
 
 log = get_logger(__name__)
 
+#: Lo stesso endpoint di previsione del client meteo, e quindi la stessa
+#: istanza propria quando ce n'e' una (#142): da qui passa la griglia
+#: pluviale, che e' il piu' grosso dei consumi rimasti.
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+#: Portata e onde restano sull'API pubblica. GloFAS non e' sul bucket AWS di
+#: Open-Meteo e non si puo' auto-ospitare; le onde sono venti chiamate l'ora.
 FLOOD_URL = "https://flood-api.open-meteo.com/v1/flood"
 MARINE_URL = "https://marine-api.open-meteo.com/v1/marine"
 
@@ -111,6 +117,23 @@ DEFAULT_REFERENCE_WINDOW_DAYS = 730
 #: archivio per ogni nodo ogni ora.
 _REFERENCE_TTL_SECONDS = 30 * 24 * 3600
 
+#: Per quanto vale la previsione di portata. GloFAS gira **una volta al
+#: giorno**: richiederla a ogni tick orario restituisce gli stessi numeri e
+#: costa 8538 località per ventiquattro volte, che è la metà di ciò che ha
+#: esaurito il tetto giornaliero di Open-Meteo (#142). Sei ore lasciano vivo
+#: il ricambio giornaliero senza inseguirlo ventiquattro volte.
+_FLUVIAL_TTL_SECONDS = 6 * 3600
+
+
+def _with_model(params: dict[str, Any]) -> dict[str, Any]:
+    """Nomina il modello, se ce n'e' uno da nominare.
+
+    Solo sulle chiamate di previsione: portata e onde hanno modelli loro e
+    restano sull'API pubblica in ogni caso.
+    """
+    chosen = weather_model()
+    return params if chosen is None else {**params, "models": chosen}
+
 
 def _centroid(bbox: tuple[float, float, float, float]) -> tuple[float, float]:
     min_lon, min_lat, max_lon, max_lat = bbox
@@ -127,6 +150,11 @@ def _reference_key(nodes: list[tuple[float, float]], *, percentile: float, windo
     fingerprint = ";".join(f"{lon:.4f},{lat:.4f}" for lon, lat in nodes)
     digest = sha256(f"{percentile}:{window_days}:{fingerprint}".encode()).hexdigest()[:32]
     return f"flood:discharge_reference:{digest}"
+
+
+def _fluvial_key(nodes: list[tuple[float, float]]) -> str:
+    fingerprint = ";".join(f"{lon:.4f},{lat:.4f}" for lon, lat in nodes)
+    return f"flood:fluvial_forecast:{sha256(fingerprint.encode()).hexdigest()[:32]}"
 
 
 def percentile_of(values: list[float], p: float) -> float | None:
@@ -270,7 +298,7 @@ class OpenMeteoFloodClient:
             percentile=reference_percentile,
             window_days=reference_window_days,
         )
-        rivers = await self._fluvial_by_node(nodes, reference=reference)
+        rivers = await self._cached_fluvial_by_node(nodes, reference=reference)
         return replace(
             signals,
             nodes=tuple(nodes),
@@ -283,15 +311,17 @@ class OpenMeteoFloodClient:
     ) -> float | None:
         end = (t0 + timedelta(hours=horizon_hours)).date()
         payload = await self._get(
-            FORECAST_URL,
-            {
-                "latitude": lat,
-                "longitude": lon,
-                "hourly": "precipitation",
-                "start_date": t0.date().isoformat(),
-                "end_date": end.isoformat(),
-                "timezone": "UTC",
-            },
+            forecast_url(),
+            _with_model(
+                {
+                    "latitude": lat,
+                    "longitude": lon,
+                    "hourly": "precipitation",
+                    "start_date": t0.date().isoformat(),
+                    "end_date": end.isoformat(),
+                    "timezone": "UTC",
+                }
+            ),
             "openmeteo.flood.pluvial",
         )
         if payload is None:
@@ -335,14 +365,16 @@ class OpenMeteoFloodClient:
         """
         end = t0 + timedelta(hours=horizon_hours)
         results = await self.fetch_grid(
-            FORECAST_URL,
+            forecast_url(),
             nodes,
-            {
-                "hourly": "precipitation",
-                "start_date": t0.date().isoformat(),
-                "end_date": end.date().isoformat(),
-                "timezone": "UTC",
-            },
+            _with_model(
+                {
+                    "hourly": "precipitation",
+                    "start_date": t0.date().isoformat(),
+                    "end_date": end.date().isoformat(),
+                    "timezone": "UTC",
+                }
+            ),
             "openmeteo.flood.pluvial_grid",
         )
         if len(results) != len(nodes):
@@ -457,6 +489,55 @@ class OpenMeteoFloodClient:
             # un percentile calcolato su due settimane di magra.
             out.append(percentile_of(vals, percentile) if len(vals) >= MIN_REFERENCE_DAYS else None)
         return out
+
+    async def _cached_fluvial_by_node(
+        self,
+        nodes: list[tuple[float, float]],
+        *,
+        reference: list[float | None],
+    ) -> list[float | None]:
+        """Il rapporto per nodo, riletto dalla cache finché GloFAS non gira.
+
+        Stessa forma del riferimento, ragione diversa: là la piena ordinaria
+        non si muove di settimana in settimana, qui la **previsione** esiste
+        in una sola versione al giorno. Rifarla ogni ora non la aggiorna, la
+        ricompra.
+
+        Cache irraggiungibile ⇒ si richiede: più lento, mai sbagliato.
+        """
+        key = _fluvial_key(nodes)
+        cache = self._cache
+        if cache is None:
+            from limen.data.caching.postgres_cache import PostgresCache
+
+            cache = PostgresCache()
+        try:
+            cached = await cache.get_json(key)
+        except Exception as exc:
+            log.warning(
+                "integration.degraded",
+                label="openmeteo.flood.fluvial_cache",
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            cached = None
+        if isinstance(cached, list) and len(cached) == len(nodes):
+            return [float(v) if v is not None else None for v in cached]
+
+        ratios = await self._fluvial_by_node(nodes, reference=reference)
+        # Una risposta tutta vuota è un degrado, non un dato: metterla in
+        # cache terrebbe l'AOI a secco per sei ore dopo un singolo 429.
+        if any(r is not None for r in ratios):
+            try:
+                await cache.set_json(key, ratios, ttl_seconds=_FLUVIAL_TTL_SECONDS)
+            except Exception as exc:
+                log.warning(
+                    "integration.degraded",
+                    label="openmeteo.flood.fluvial_cache",
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                )
+        return ratios
 
     async def _fluvial_by_node(
         self,

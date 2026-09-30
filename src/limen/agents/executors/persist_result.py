@@ -58,6 +58,7 @@ _COPY_COLUMNS = (
     "pipeline_version",
     "dataset_versions",
     "run_id",
+    "measured",
 )
 
 
@@ -135,6 +136,10 @@ class PersistResultExecutor(Executor):
                     assessment.pipeline_version,
                     [],
                     run_id,
+                    # Lo chiede il breakdown, non questo executor: solo lui
+                    # tiene il segnale grezzo, e solo lui sa distinguere una
+                    # cella calma da una cella di cui non sappiamo niente.
+                    cell.breakdown.measured(),
                 )
                 for cell in ctx.cell_results
             ]
@@ -156,7 +161,8 @@ class PersistResultExecutor(Executor):
                     explanation      jsonb,
                     pipeline_version text,
                     dataset_versions bigint[],
-                    run_id           bigint
+                    run_id           bigint,
+                    measured         boolean
                 ) ON COMMIT DROP
                 """
             )
@@ -215,12 +221,12 @@ class PersistResultExecutor(Executor):
                 INSERT INTO latest_risk (
                     cell_id, hazard_type, score, class, horizon,
                     pipeline_version, computed_at, factors, explanation,
-                    history_at, run_id
+                    history_at, run_id, measured
                 )
                 SELECT k.cell_id, k.hazard_type, k.score, k.class, k.horizon,
                        k.pipeline_version, k.computed_at, k.factors, k.explanation,
                        CASE WHEN k.keep THEN k.computed_at ELSE k.prev_history_at END,
-                       k.run_id
+                       k.run_id, k.measured
                 FROM sweep_keep k
                 -- Le righe previsionali (`horizon` '+24h') le scrive
                 -- `forecast_history` per il grafico dell'andamento, e non
@@ -235,7 +241,8 @@ class PersistResultExecutor(Executor):
                     factors          = EXCLUDED.factors,
                     explanation      = EXCLUDED.explanation,
                     history_at       = EXCLUDED.history_at,
-                    run_id           = EXCLUDED.run_id
+                    run_id           = EXCLUDED.run_id,
+                    measured         = EXCLUDED.measured
                 WHERE latest_risk.computed_at <= EXCLUDED.computed_at
                 """
             )

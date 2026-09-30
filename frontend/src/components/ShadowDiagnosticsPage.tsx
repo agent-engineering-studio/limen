@@ -6,6 +6,7 @@
 // ciò che il disclaimer qui sotto continua a dire.
 
 import { useEffect, useState } from "react";
+import type { JSX } from "react";
 
 import { RISK_CLASSES } from "../lib/risk-colors";
 import { defaultApiClient } from "../lib/api-client";

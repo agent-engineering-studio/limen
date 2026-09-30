@@ -612,6 +612,41 @@ class EgmsSettings(BaseSettings):
     refresh_days: int = Field(default=180, ge=1)
 
 
+class OpenMeteoSettings(BaseSettings):
+    """Dove chiedere il meteo (#142).
+
+    Vuote, si usano gli endpoint pubblici e non cambia niente. Valorizzate,
+    puntano a un'istanza Open-Meteo propria — che e' open source e gira in
+    Docker, quindi rispetta l'invariante "self-hosted, nessun cloud" fino in
+    fondo e toglie il tetto di 10.000 chiamate al giorno che ha spento
+    alluvione e incendio su tutta l'Italia.
+
+    **Portata e onde restano fuori di proposito.** GloFAS non e' pubblicato
+    sul bucket AWS di Open-Meteo -- "climate, flood, satellite and ensemble
+    models are not published due to their immense size" -- quindi il ramo
+    fluviale non si puo' auto-ospitare comunque; e il moto ondoso e' un solo
+    scalare per AOI, venti chiamate l'ora, che non e' mai stato il problema.
+    Dare loro una manopola sarebbe la messa in conto del futuro che questo
+    progetto vieta.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    #: Sostituisce `https://api.open-meteo.com/v1/forecast`. Da qui passano
+    #: le due griglie grosse -- FWI e pioggia per nodo -- piu' quella
+    #: pluviale dell'alluvione: e' il 95 % del traffico.
+    forecast_url: str | None = None
+    #: Sostituisce `https://archive-api.open-meteo.com/v1/archive`. Serve al
+    #: backfill della catena FWI e ai backtest, non allo sweep.
+    archive_url: str | None = None
+    #: Il modello da nominare nelle richieste. Un'istanza propria serve solo
+    #: i modelli che ha sincronizzato e non sa scegliere da se' come fa
+    #: `best_match` sull'API pubblica: senza questo risponde a vuoto.
+    #: Per l'Italia `dwd_icon_eu` (7 km, umidita' del suolo e neve comprese);
+    #: per l'archivio il sync e' `copernicus_era5_land`.
+    models: str | None = None
+
+
 class MonitoringSettings(BaseSettings):
     """Drift + retraining monitor cadence + thresholds (V2)."""
 
@@ -873,6 +908,7 @@ class Settings(BaseSettings):
     training: TrainingSettings = Field(default_factory=TrainingSettings)
     egms: EgmsSettings = Field(default_factory=EgmsSettings)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
+    openmeteo: OpenMeteoSettings = Field(default_factory=OpenMeteoSettings)
     kg: KgSettings = Field(default_factory=KgSettings)
     geodata: GeodataSettings = Field(default_factory=GeodataSettings)
     geoserver_source: GeoServerSourceSettings = Field(default_factory=GeoServerSourceSettings)

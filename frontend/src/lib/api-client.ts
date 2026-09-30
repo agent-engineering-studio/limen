@@ -12,6 +12,7 @@ import type {
   CellHistoryResponse,
   CellMultiHazardResponse,
   ComuneDetailResponse,
+  ComuneHistory,
   ComuneListResponse,
   HazardType,
   HazardsResponse,
@@ -247,6 +248,18 @@ export class ApiClient {
   getComune(istatCode: string, signal?: AbortSignal): Promise<ComuneDetailResponse> {
     return this.request<ComuneDetailResponse>(
       `/api/comune/${encodeURIComponent(istatCode)}`,
+      {},
+      signal,
+    );
+  }
+
+  getComuneHistory(
+    istatCode: string,
+    hours = 168,
+    signal?: AbortSignal,
+  ): Promise<ComuneHistory> {
+    return this.request<ComuneHistory>(
+      `/api/comune/${encodeURIComponent(istatCode)}/history?hours=${hours}`,
       {},
       signal,
     );

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { JSX } from "react";
 import type maplibregl from "maplibre-gl";
 
 import CellPopup from "./components/CellPopup";
@@ -6,7 +7,7 @@ import ComuniBoard from "./components/ComuniBoard";
 import DocsPage from "./components/DocsPage";
 import ExplainerPage from "./components/ExplainerPage";
 import ForecastList from "./components/ForecastList";
-import type { CellSelection } from "./types";
+import type { CellSelection, ComuneCell, ComuneRisk } from "./types";
 import FreshnessBadge from "./components/FreshnessBadge";
 import HomePage from "./components/HomePage";
 import IntegrationsPage from "./components/IntegrationsPage";
@@ -70,12 +71,26 @@ export function App(): JSX.Element {
     setSelected({ cellId, lon: null, lat: null });
   }, []);
 
+  // Dalla colonna alla mappa. Una classifica geografica su cui si clicca e
+  // non succede niente è una lista di nomi: il posto è metà dell'informazione.
+  const vaiAlComune = useCallback((c: ComuneRisk) => {
+    // Zoom 11: il comune riempie la vista senza perdere i suoi confini, che
+    // è ciò che si vuole vedere arrivando dalla lista. Più stretto si
+    // perderebbe il contesto, più largo non si distinguerebbe da prima.
+    mapRef.current?.flyTo({ center: [c.lon, c.lat], zoom: 11, duration: 900 });
+  }, []);
+
+  const vaiAllaCella = useCallback((c: ComuneCell) => {
+    mapRef.current?.flyTo({ center: [c.lon, c.lat], zoom: 13, duration: 700 });
+    setSelected({ cellId: c.cell_id, lon: c.lon, lat: c.lat });
+  }, []);
+
   const dashboard = (
     <>
       <aside className="sidebar" aria-label="Pannello laterale">
         <NationalStrip />
         <ForecastList />
-        <ComuniBoard />
+        <ComuniBoard onComune={vaiAlComune} onCella={vaiAllaCella} />
         <LegendPanel />
         <ShadowPanel />
       </aside>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { JSX } from "react";
 
 import { defaultApiClient, ApiClientError } from "../lib/api-client";
 import { useHazard } from "../lib/hazard";
@@ -347,6 +348,29 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
   const rowHazard: HazardType = data.hazard_type ?? hazard;
   const components = readComponents(rowHazard, factors);
   const level = asLevel(data.level);
+
+  // Una cella non misurata è grigia sulla mappa, e questo è il posto dove si
+  // viene a chiedere perché (#143). Il punteggio non si mostra: varrebbe zero
+  // per assenza di dato, e uno zero accanto a «nessun pericolo» è la bugia
+  // che questa modifica toglie.
+  if (data.measured === false) {
+    return (
+      <aside className="popup-card" role="dialog" aria-labelledby="cell-id">
+        <h3 id="cell-id" style={{ margin: 0 }}>
+          <span className="level-chip is-unknown">non misurato</span>
+        </h3>
+        <p className="alert-meta" style={{ margin: "2px 0 0" }}>
+          {props.place ? `${props.place} · ` : ""}cella {data.cell_id} · modello{" "}
+          {data.pipeline_version} · {new Date(data.computed_at).toLocaleString("it-IT")}
+        </p>
+        <p className="verdict verdict-neutral" role="status">
+          Il dato che questo pericolo richiede non è arrivato. Il punteggio
+          varrebbe zero per assenza di misura, non perché non ci sia pericolo:
+          per questo la cella è grigia e non verde.
+        </p>
+      </aside>
+    );
+  }
 
   return (
     <aside className="popup-card" role="dialog" aria-labelledby="cell-id">

@@ -3,6 +3,7 @@
 // Linguaggio per non addetti: niente termine tecnico senza spiegazione.
 
 import { useState } from "react";
+import type { JSX } from "react";
 
 import { RISK_CLASSES } from "../lib/risk-colors";
 import { ChapterFooter, CourseHeader } from "./Course";

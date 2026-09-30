@@ -17,6 +17,25 @@ from limen.data.migrate import run_migrations
 
 log = get_logger(__name__)
 
+
+def demojibake(name: str) -> str:
+    """Ripara un nome doppiamente codificato, lascia stare gli altri (#143).
+
+    Gli shapefile ISTAT sono in ISO-8859-1. Caricati dichiarando UTF-8, i due
+    byte di «ì» diventano due caratteri e il comune si chiama «StalettÃ¬».
+    Succede nel PostGIS di GeoServer, a monte di noi, e da lì arriverebbe
+    intatto fino alla colonna della dashboard.
+
+    Il giro inverso fallisce sui nomi già corretti — «ì» in LATIN1 è il solo
+    byte EC, che non è UTF-8 valido — quindi la riparazione è sicura da
+    applicare a tutti e ripetibile senza danno.
+    """
+    try:
+        return name.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return name
+
+
 _SRC_SQL = """
 SELECT pro_com_t::text AS istat_code, comune AS name,
        ST_AsBinary(ST_Multi(ST_Force2D(ST_Transform(geom, 4326)))) AS wkb
@@ -59,7 +78,7 @@ async def run() -> int:
                             geom = EXCLUDED.geom
                     """,
                     r["istat_code"],
-                    r["name"],
+                    demojibake(r["name"]),
                     r["wkb"],
                 )
                 if res.split()[-1] == "1":

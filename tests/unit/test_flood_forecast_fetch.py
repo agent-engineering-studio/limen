@@ -243,3 +243,51 @@ async def test_a_different_lattice_is_a_different_key() -> None:
     assert base != _reference_key(_NODES, percentile=0.95, window_days=730)
     assert base != _reference_key(_NODES, percentile=0.9, window_days=1095)
     assert base == _reference_key(_NODES, percentile=0.9, window_days=730)
+
+
+async def test_la_previsione_fluviale_in_cache_non_si_ricompra(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GloFAS gira una volta al giorno: richiederla a ogni tick orario non la
+    aggiorna, la ricompra — 8538 località per ventiquattro, che è metà di ciò
+    che ha esaurito il tetto giornaliero di Open-Meteo (#142)."""
+    seen = _grid(monkeypatch, {"openmeteo.flood.fluvial_grid": []})
+    cache = _Cache(stored=[0.5, None, 2.0])
+
+    ratios = await OpenMeteoFloodClient(cache=cache)._cached_fluvial_by_node(
+        _NODES, reference=[10.0, 10.0, 10.0]
+    )
+
+    assert ratios == [0.5, None, 2.0]
+    assert seen == []
+    assert cache.writes == []
+
+
+async def test_la_previsione_fluviale_riempie_la_cache_con_la_scadenza_giusta(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _grid(monkeypatch, {"openmeteo.flood.fluvial_grid": [[30.0], [5.0], None]})
+    cache = _Cache()
+
+    ratios = await OpenMeteoFloodClient(cache=cache)._cached_fluvial_by_node(
+        _NODES, reference=[10.0, 10.0, 10.0]
+    )
+
+    (key, value, ttl) = cache.writes[0]
+    assert key.startswith("flood:fluvial_forecast:")
+    assert value == ratios
+    assert ttl == 6 * 3600
+
+
+async def test_un_degrado_non_finisce_in_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Un 429 svuota la griglia. Scriverlo terrebbe l'AOI a secco per sei ore
+    per un singolo errore di rete, che è esattamente il guasto da evitare."""
+    _grid(monkeypatch, {"openmeteo.flood.fluvial_grid": [None, None, None]})
+    cache = _Cache()
+
+    ratios = await OpenMeteoFloodClient(cache=cache)._cached_fluvial_by_node(
+        _NODES, reference=[10.0, 10.0, 10.0]
+    )
+
+    assert ratios == [None, None, None]
+    assert cache.writes == []

@@ -1,0 +1,92 @@
+# Limen — istanza Open-Meteo propria (#142).
+#
+# Opt-in: si attiva solo con il profilo `meteo`, quindi `make up` non la
+# tocca. Un deployment che non la accende continua a parlare con l'API
+# pubblica e non deve configurare niente.
+#
+# Va avviata DOPO lo stack operativo: si attacca alla rete `limen_default`,
+# che e' `make up` a creare.
+#
+#   make meteo-up        avvia
+#   make meteo-check     quali variabili rispondono davvero
+#   make meteo-sync      scarica in anticipo (facoltativo, vedi sotto)
+#
+# Non serve sincronizzare per cominciare: con REMOTE_DATA_DIRECTORY l'istanza
+# legge dal bucket alla richiesta e tiene una cache locale. Misurato a volume
+# appena creato, senza alcun sync: tutte e otto le variabili che il codice
+# chiede rispondono 24 ore su 24, con numeri plausibili (Bari, 29 set 2026:
+# 17,8 -> 23,6 gradi, umidita' 93 -> 64 %, umidita' del suolo 0,033-0,039).
+# `make meteo-sync` scarica in anticipo: serve a togliere la latenza della
+# prima lettura e a funzionare senza rete, non ad accendere il servizio.
+#
+# Perché esiste. Ogni tick orario chiedeva a Open-Meteo circa diecimila
+# località — 1446 nodi FWI per quattro variabili, più 8538 nodi alluvione su
+# due griglie — ventiquattro volte al giorno, contro un tetto gratuito di
+# 10.000 chiamate. Il tetto è saltato e alluvione e incendio hanno dato zero
+# su tutta l'Italia per mancanza di dato, non per quiete del territorio.
+# Open-Meteo è open source: ospitarlo toglie il tetto e non viola
+# l'invariante "self-hosted, nessun cloud" — è l'opposto.
+#
+# Cosa NON copre. GloFAS non è pubblicato sul bucket AWS di Open-Meteo
+# ("climate, flood, satellite and ensemble models are not published due to
+# their immense size"), quindi il ramo fluviale dell'alluvione resta
+# sull'API pubblica. È il consumo piccolo, ed è in cache sei ore.
+
+name: limen-meteo
+
+services:
+
+  openmeteo:
+    image: ghcr.io/open-meteo/open-meteo:latest
+    container_name: limen-openmeteo
+    restart: unless-stopped
+    profiles: ["meteo"]
+    environment:
+      # Da dove il `sync` prende i dati: il bucket pubblico su AWS Open Data.
+      REMOTE_DATA_DIRECTORY: https://openmeteo.s3.amazonaws.com/data/
+      CACHE_SIZE: "${OPENMETEO_CACHE_SIZE:-8GB}"
+    volumes:
+      - openmeteo-data:/app/data
+    networks:
+      # La rete dello stack operativo, che esiste già: api e worker la
+      # raggiungono come `openmeteo:8080`, senza passare dall'host. Non è un
+      # dettaglio di comodità — una porta pubblicata su 127.0.0.1 NON è
+      # raggiungibile da un altro container via `host.docker.internal`, che
+      # risolve al gateway, non al loopback dell'host. Misurato: connection
+      # refused.
+      - limen
+    ports:
+      # Solo per l'host: `make meteo-check` e una curl a mano. Stessa regola
+      # di ogni altra porta pubblicata — Docker scrive le sue catene iptables
+      # prima di ufw, quindi il `default deny incoming` dell'host non protegge
+      # una porta pubblicata. Loopback, e il reverse proxy se serve da fuori.
+      - "${LIMEN_OPENMETEO_BIND:-127.0.0.1}:8085:8080"
+    healthcheck:
+      # `/v1/forecast` risponde 200 anche a volume vuoto, con le colonne a
+      # `null`: questo check dice che il processo serve, non che il modello
+      # c'è. Quello lo dice `make meteo-check`. La radice `/` non è una
+      # rotta e darebbe 404.
+      test:
+        - CMD
+        - wget
+        - -q
+        - -O
+        - "-"
+        - "http://localhost:8080/v1/forecast?latitude=41.1&longitude=16.8&hourly=precipitation&forecast_days=1"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+networks:
+  limen:
+    # Creata dallo stack operativo (`make up`). Esterna perché è sua, non di
+    # questo file: questo profilo ci si attacca e basta.
+    name: limen_default
+    external: true
+
+volumes:
+  openmeteo-data:
+    # I modelli sincronizzati. Centinaia di GB per un archivio ERA5 completo,
+    # molto meno per la sola previsione: vedi lo script di sync.
+    name: limen-openmeteo-data

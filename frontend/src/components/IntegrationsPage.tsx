@@ -1,3 +1,4 @@
+import type { JSX } from "react";
 // "Integrazioni" — pagina tecnica per sviluppatori / gateway agentici.
 // Documenta i due modi di parlare con Limen da un altro agente: MCP (pull di
 // dati / azioni operative) e A2A (interoperabilità JSON-RPC tra agent, con

@@ -153,10 +153,14 @@ describe("legenda in vista d'insieme", () => {
 describe("colore della vista d'insieme", () => {
   it("il colore dice quanto, non quale: una scala sola sulla classe", () => {
     const expr = maplibreMultiHazardColorMatch() as unknown[];
-    expect(expr[0]).toBe("match");
+    // La scala sta dentro il `case` che protegge le celle non misurate
+    // (#143): la guardia viene prima, la classe resta quella di sempre.
+    expect(expr[0]).toBe("case");
+    const scala = expr[3] as unknown[];
+    expect(scala[0]).toBe("match");
     // Sulla classe, non sul pericolo: è tutto il cambiamento.
-    expect(expr[1]).toEqual(["get", "worst_level"]);
-    expect(expr).toContain("VeryHigh");
+    expect(scala[1]).toEqual(["get", "worst_level"]);
+    expect(scala).toContain("VeryHigh");
   });
 
   it("quale pericolo lo dice il bordo, con una tinta per pericolo", () => {

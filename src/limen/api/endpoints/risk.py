@@ -127,7 +127,10 @@ async def cell_breakdown(
         row = await conn.fetchrow(
             """
             SELECT cell_id, hazard_type, computed_at, horizon, score, class,
-                   factors, explanation, pipeline_version
+                   factors, explanation, pipeline_version,
+                   -- NULL = riga scritta prima che la colonna esistesse:
+                   -- «non lo sappiamo», che si legge come misurato.
+                   COALESCE(measured, true) AS measured
             FROM risk_assessments
             WHERE cell_id = $1 AND hazard_type = $2
             ORDER BY computed_at DESC
@@ -151,6 +154,7 @@ async def cell_breakdown(
         pipeline_version=str(row["pipeline_version"]),
         factors=_coerce_json(row["factors"]),
         explanation=_coerce_json(row["explanation"]),
+        measured=bool(row["measured"]),
     )
 
 

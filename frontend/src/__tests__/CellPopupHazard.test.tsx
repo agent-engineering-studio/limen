@@ -43,6 +43,7 @@ const WILDFIRE_ROW: CellBreakdownResponse = {
     fire_weather: { day: "2026-09-05", fwi: 47.9, chain_days: 46 },
   },
   explanation: {},
+  measured: true,
 };
 
 beforeEach(() => {
@@ -113,6 +114,7 @@ describe("CellPopup alluvione", () => {
         rain_mm: 12.0,
       },
       explanation: {},
+  measured: true,
     });
 
     render(
@@ -152,6 +154,7 @@ describe("CellPopup alluvione", () => {
         rain_mm: 200.0,
       },
       explanation: {},
+  measured: true,
     });
 
     render(
@@ -163,5 +166,30 @@ describe("CellPopup alluvione", () => {
     await waitFor(() =>
       expect(screen.getByText(/fuori dalle zone idrauliche mappate/i)).toBeInTheDocument(),
     );
+  });
+});
+
+describe("cella non misurata", () => {
+  it("non mostra un punteggio che sarebbe zero per assenza di dato", async () => {
+    // Sulla mappa è grigia, e questo è il posto dove si viene a chiedere
+    // perché (#143). Uno 0,00 accanto a «nessun pericolo» è la bugia da
+    // togliere: la cella non è tranquilla, è ignota.
+    vi.spyOn(defaultApiClient, "getHazards").mockResolvedValue(HAZARDS);
+    vi.spyOn(defaultApiClient, "getCellBreakdown").mockResolvedValue({
+      ...WILDFIRE_ROW,
+      score: 0,
+      level: "None",
+      measured: false,
+    });
+
+    const { container } = render(
+      <HazardProvider>
+        <CellPopup cellId="it-basilicata|1|1" />
+      </HazardProvider>,
+    );
+
+    await waitFor(() => expect(container.textContent).toContain("non misurato"));
+    expect(container.textContent).not.toContain("0.00");
+    expect(container.textContent).toContain("non è arrivato");
   });
 });

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { JSX } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
 import { useHazard } from "../lib/hazard";

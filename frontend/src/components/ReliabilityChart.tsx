@@ -1,3 +1,4 @@
+import type { JSX } from "react";
 // Curva di calibrazione (reliability diagram) del challenger ML (#30).
 // Gated sui dati: finché non ci sono abbastanza eventi reali mostra uno stato
 // esplicito "dati insufficienti". Non autoritativo — solo diagnostica.

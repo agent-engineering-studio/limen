@@ -7,6 +7,7 @@
 // parametri — nessun LLM, coerente con "gli alert non inventano numeri".
 
 import { useEffect, useState } from "react";
+import type { JSX } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
 import { RISK_CLASSES } from "../lib/risk-colors";

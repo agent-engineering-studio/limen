@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from limen.core.cascades.attention import attention_index
+from limen.core.cascades.attention import HazardStanding, attention_index
 from limen.core.cascades.config import load_cascades
 from limen.core.models.risk import RiskLevel
 from limen.data.db import acquire
@@ -44,7 +44,8 @@ SELECT
             'score',    round(COALESCE(max_score, 0)::numeric, 3),
             'priority', round(COALESCE(priority, 0)::numeric, 3),
             'n_cells',  n_cells,
-            'n_alert',  n_alert
+            'n_alert',  n_alert,
+            'measured', measured
         )
     ) AS hazards,
     -- Il peggiore fra i pericoli: è ciò che ordina la classifica e ciò che
@@ -63,7 +64,15 @@ SELECT
     sum(n_high)                            AS n_high,
     sum(n_veryhigh)                        AS n_veryhigh,
     max(exposure_rank)                     AS exposure_rank,
-    max(COALESCE(priority, 0))             AS max_priority
+    -- Il centroide, per portare la mappa sul comune quando si clicca la
+    -- riga. Viene da qui e non da una seconda richiesta: la vista ce l'ha
+    -- già calcolato, e le tre righe per pericolo hanno lo stesso comune.
+    ST_X((array_agg(centroid))[1])         AS lon,
+    ST_Y((array_agg(centroid))[1])         AS lat,
+    -- Solo fra i pericoli misurati: ordinare sulla priorità di uno zero per
+    -- assenza di dato metterebbe in coda un comune di cui non sappiamo
+    -- niente, che è il posto sbagliato.
+    max(COALESCE(priority, 0)) FILTER (WHERE measured) AS max_priority
 FROM mv_comune_risk
 GROUP BY istat_code, name, aoi_id
 """
@@ -79,7 +88,11 @@ def _to_comune(row: Any) -> dict[str, Any]:
     # stessa regola, libere di divergere.
     attenzione = attention_index(
         {
-            h: (float(v.get("priority") or 0.0), RiskLevel(str(v["class"])))
+            h: HazardStanding(
+                priority=float(v.get("priority") or 0.0),
+                level=RiskLevel(str(v["class"])),
+                measured=bool(v.get("measured", True)),
+            )
             for h, v in hazards.items()
         },
         rule=load_cascades().attention,
@@ -101,7 +114,11 @@ def _to_comune(row: Any) -> dict[str, Any]:
             "VeryHigh": int(row["n_veryhigh"]),
         },
         "exposure_rank": round(float(row["exposure_rank"] or 0.0), 3),
-        "attention": round(attenzione, 3),
+        "lon": round(float(row["lon"]), 5),
+        "lat": round(float(row["lat"]), 5),
+        # `None` quando non c'è niente di misurato: chi lo mostra deve
+        # scrivere «non misurato», non «0,00».
+        "attention": None if attenzione is None else round(attenzione, 3),
         # I tre indicatori affiancati: la riga della dashboard li mostra tutti,
         # anche a zero, perché un trattino è una risposta e una colonna che
         # sparisce non lo è.
@@ -109,8 +126,14 @@ def _to_comune(row: Any) -> dict[str, Any]:
             h: {
                 "class": str(v["class"]),
                 "score": round(float(v["score"] or 0.0), 3),
+                # C'era nel DTO e nella query, non nella risposta: usciva
+                # sempre 0,000 pur essendo documentata come «la priorità che
+                # il dispacciatore degli alert usa». Un campo che vale
+                # sempre zero è peggio di un campo assente.
+                "priority": round(float(v.get("priority") or 0.0), 3),
                 "n_cells": int(v["n_cells"]),
                 "n_alert": int(v["n_alert"]),
+                "measured": bool(v.get("measured", True)),
             }
             for h, v in hazards.items()
         },
@@ -151,7 +174,7 @@ async def top_comuni(
             WHERE ($1::text IS NULL OR aoi_id = $1)
               AND ($3::text IS NULL OR name ILIKE '%' || $3 || '%')
               AND ($4::text IS NOT NULL OR worst_rank >= $5)
-            ORDER BY max_priority DESC, worst_rank DESC, n_alert DESC, name
+            ORDER BY max_priority DESC NULLS LAST, worst_rank DESC, n_alert DESC, name
             LIMIT $2
             """,
             aoi_id,
@@ -161,7 +184,9 @@ async def top_comuni(
             min_rank,
         )
     comuni = [_to_comune(r) for r in rows]
-    comuni.sort(key=lambda c: (-c["attention"], c["name"]))
+    # I comuni senza niente di misurato vanno in coda: non sono tranquilli,
+    # ma nemmeno ordinabili, e metterli in cima sarebbe un allarme inventato.
+    comuni.sort(key=lambda c: (c["attention"] is None, -(c["attention"] or 0.0), c["name"]))
     return comuni[:limit]
 
 
@@ -176,6 +201,7 @@ async def comune_detail(istat_code: str) -> dict[str, Any] | None:
         cells = await conn.fetch(
             """
             SELECT m.cell_id, m.hazard_type::text AS hazard, m.score, m.class AS level,
+                   m.computed_at,
                    ST_X(ST_Centroid(g.geom)) AS lon,
                    ST_Y(ST_Centroid(g.geom)) AS lat
             FROM cell_comune cc
@@ -196,9 +222,73 @@ async def comune_detail(istat_code: str) -> dict[str, Any] | None:
                 "hazard": str(c["hazard"]),
                 "score": round(float(c["score"]), 3),
                 "level": str(c["level"]),
+                # Quando è stato calcolato: un punteggio senza data non si sa
+                # se è di adesso o di ieri, e su un rischio è la differenza
+                # fra un'informazione e un numero.
+                "computed_at": c["computed_at"].isoformat(),
                 "lon": float(c["lon"]),
                 "lat": float(c["lat"]),
             }
             for c in cells
         ],
     }
+
+
+#: L'andamento del comune: la storia della **cella peggiore di oggi**, per
+#: pericolo.
+#:
+#: Non il massimo ricalcolato ora per ora su tutte le celle. Quella è la
+#: domanda più fedele, ed è la prima che ho scritto: su Bardonecchia (134
+#: celle, sette giorni, ventitré partizioni) ci mette **oltre due minuti**, e
+#: non a freddo — rieseguita a cache calda non migliora, perché tocca davvero
+#: troppi dati. Questa ne legge tre celle: 18 s la prima volta su questo
+#: disco, **41 ms** dopo.
+#:
+#: Il cambio ha un prezzo e va detto: la cella peggiore di oggi poteva non
+#: esserlo cinque giorni fa, quindi la linea è la storia di *quel* punto, non
+#: l'inviluppo del comune. In compenso concorda con il numero in testata, che
+#: è anch'esso la cella peggiore: un grafico che raccontasse un altro
+#: aggregato accanto a quel numero sarebbe peggio che uno più stretto.
+_STORIA_COMUNE = """
+WITH peggiori AS (
+    SELECT DISTINCT ON (lr.hazard_type) lr.cell_id, lr.hazard_type
+    FROM cell_comune cc
+    JOIN latest_risk lr ON lr.cell_id = cc.cell_id
+    WHERE cc.istat_code = $1
+      -- Un pericolo non misurato non ha una cella peggiore da seguire
+      -- (#143): meglio una linea in meno che una linea a zero.
+      AND COALESCE(lr.measured, true)
+    ORDER BY lr.hazard_type, lr.score DESC NULLS LAST
+)
+SELECT date_trunc('hour', ra.computed_at) AS t,
+       p.hazard_type::text                AS hazard,
+       max(ra.score)                      AS score
+FROM peggiori p
+JOIN risk_assessments ra
+      ON ra.cell_id = p.cell_id
+     AND ra.hazard_type = p.hazard_type
+WHERE ra.horizon NOT LIKE '+%'
+  AND ra.computed_at >= now() - make_interval(hours => $2::int)
+  AND ra.score IS NOT NULL
+  AND COALESCE(ra.measured, true)
+GROUP BY 1, 2
+ORDER BY 1
+"""
+
+
+async def comune_history(istat_code: str, *, hours: int) -> dict[str, list[dict[str, Any]]]:
+    """Una serie per pericolo, dal più vecchio al più recente.
+
+    Dalla #135 lo storico è **sparso**: una cella lascia una riga solo quando
+    cambia classe, si scosta oltre soglia, o scade il battito di 24 ore. Sulle
+    ore senza scrittura non c'è un punto, ed è corretto — chi disegna unisce i
+    punti che esistono invece di inventare un livello per ogni ora.
+    """
+    async with acquire() as conn:
+        rows = await conn.fetch(_STORIA_COMUNE, istat_code, hours)
+    serie: dict[str, list[dict[str, Any]]] = {}
+    for r in rows:
+        serie.setdefault(str(r["hazard"]), []).append(
+            {"t": r["t"].isoformat(), "score": round(float(r["score"]), 3)}
+        )
+    return serie
