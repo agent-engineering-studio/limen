@@ -2331,6 +2331,32 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   line-height: 1;
 }
 .comune-chip button:hover { background: #e4e1d8; }
+.overlay-gruppo { margin-top: 6px; }
+.overlay-gruppo:first-of-type { margin-top: 2px; }
+.overlay-gruppo-nome {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 1px;
+}
+.overlay-zoom { color: var(--muted); }
+.overlay-classi {
+  display: flex;
+  gap: 8px;
+  margin: 2px 0 0 20px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.overlay-classi i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
 .cb-help {
   width: 18px;
   height: 18px;

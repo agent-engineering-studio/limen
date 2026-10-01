@@ -7,6 +7,12 @@ import { vi } from "vitest";
 
 vi.mock("maplibre-gl", () => {
   class FakeMap {
+    // L'ultimo stile passato al costruttore: i test che verificano i livelli
+    // leggono lo stile vero, non una copia scritta a mano.
+    static ultimeOpzioni: unknown = null;
+    constructor(opzioni: unknown) {
+      FakeMap.ultimeOpzioni = opzioni;
+    }
     on() {
       return this;
     }

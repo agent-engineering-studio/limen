@@ -18,7 +18,7 @@ deve fare.
 from __future__ import annotations
 
 import httpx
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from limen.api.dependencies import DepsDep
 from limen.core.logging import get_logger
@@ -49,6 +49,15 @@ async def tile(
     # arrivi moltiplica le chiavi di cache a piacere di chi chiama.
     p_hazard: HazardType | None = None,
     hours_ago: int | None = None,
+    # Le colonne da includere nelle tile delle sorgenti a tabella. Scartarlo
+    # faceva tornare a pg_tileserv **tutte** le colonne — i JSON degli
+    # attributi degli eventi, i metadati di caricamento — e le tile dei livelli
+    # di contesto perdevano l'ottimizzazione che le rendeva leggere. Validato
+    # come elenco di nomi di colonna, per la stessa ragione per cui gli altri
+    # parametri sono dichiarati uno per uno: niente chiavi di cache arbitrarie.
+    properties: str | None = Query(
+        None, max_length=200, pattern=r"^[a-z_][a-z0-9_]*(,[a-z_][a-z0-9_]*)*$"
+    ),
 ) -> Response:
     """Inoltra la tile da ``pg_tileserv``, mantenendo l'origine dell'API.
 
@@ -71,6 +80,7 @@ async def tile(
     params = {
         **({"p_hazard": p_hazard.value} if p_hazard is not None else {}),
         **({"hours_ago": str(hours_ago)} if hours_ago is not None else {}),
+        **({"properties": properties} if properties is not None else {}),
     }
     client = await SharedHttpClient.get()
     try:
