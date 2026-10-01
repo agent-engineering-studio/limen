@@ -452,7 +452,25 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
           ],
           "fill-opacity": 0.45,
         },
-        layout: { visibility: visibile("ovl-idraulica-fill") },
+        layout: {
+          visibility: visibile("ovl-idraulica-fill"),
+          // Gli scenari PGRA sono annidati: l'area P1 contiene la P2, che
+          // contiene la P3 — su un campione di 200 pezzi P3, tutti e 200
+          // stavano sotto un P1 o un P2. Senza un ordine, MapLibre dipinge
+          // nell'ordine della tile, e un P1 azzurro poteva coprire il P3 blu
+          // scuro: la zona più pericolosa mostrata come la meno. La chiave
+          // più alta va sopra. Lo stesso criterio del punteggio, che di più
+          // classi sovrapposte prende la massima.
+          "fill-sort-key": [
+            "match",
+            ["get", "hazard_class"],
+            "P3",
+            3,
+            "P2",
+            2,
+            1,
+          ],
+        },
       },
       {
         id: "ovl-idraulica-line",

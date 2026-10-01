@@ -50,3 +50,22 @@ describe("livelli di contesto", () => {
     for (const o of OVERLAYS) expect(o.layerIds.length).toBeGreaterThan(0);
   });
 });
+
+describe("pericolosità idraulica sulla mappa", () => {
+  it("P3 sta sopra P2 sopra P1, qualunque sia l'ordine della tile", async () => {
+    // Gli scenari PGRA sono annidati: senza ordine un P1 azzurro poteva
+    // coprire un P3 blu scuro, la zona più pericolosa mostrata come la meno.
+    const maplibre = await import("maplibre-gl");
+    const { default: RiskMap } = await import("../components/RiskMap");
+    render(<RiskMap />);
+    const opzioni = (maplibre.Map as unknown as { ultimeOpzioni: { style: { layers: { id: string; layout?: Record<string, unknown> }[] } } }).ultimeOpzioni;
+    const livello = opzioni.style.layers.find((l) => l.id === "ovl-idraulica-fill");
+    const chiave = livello?.layout?.["fill-sort-key"] as unknown[];
+    const valore = (classe: string): number => {
+      const i = chiave.indexOf(classe);
+      return (i >= 0 ? chiave[i + 1] : chiave[chiave.length - 1]) as number;
+    };
+    expect(valore("P3")).toBeGreaterThan(valore("P2"));
+    expect(valore("P2")).toBeGreaterThan(valore("P1"));
+  });
+});
