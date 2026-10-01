@@ -109,6 +109,8 @@ export interface SeriePunto {
   t: string;
   score: number;
   level?: RiskLevel;
+  /** Solo nei punti previsti dell'alluvione: la pioggia prevista più alta. */
+  rain_mm?: number;
 }
 
 /** Passato e futuro del comune, una serie per pericolo. I pericoli non

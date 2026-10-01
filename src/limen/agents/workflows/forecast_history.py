@@ -64,6 +64,52 @@ SET score = EXCLUDED.score, class = EXCLUDED.class,
 """
 
 
+#: La previsione per comune, per ogni pericolo e a ogni livello (059).
+_COMUNE_DELETE_SQL = """
+DELETE FROM latest_forecast_comune
+WHERE hazard_type = $1 AND horizon_h = $2 AND istat_code = ANY($3::text[])
+"""
+
+_COMUNE_INSERT_SQL = """
+INSERT INTO latest_forecast_comune
+    (istat_code, hazard_type, horizon_h, score, class, rain_mm, run_at, target_at)
+SELECT u.istat_code, $1::hazard_type, $2, u.score, u.class, u.rain_mm, now(),
+       now() + make_interval(hours => $2)
+FROM unnest($3::text[], $4::float8[], $5::text[], $6::float8[])
+     AS u(istat_code, score, class, rain_mm)
+"""
+
+
+def per_comune(
+    cell_results: list[CellRiskRecord], comune_of: dict[str, str]
+) -> dict[str, tuple[float, str, float | None]]:
+    """Pure: per comune, il punteggio più alto, la sua classe e la pioggia.
+
+    Tutte le celle, non solo quelle sopra soglia: è il punto della tabella.
+    La pioggia c'è solo per l'alluvione — è il suo breakdown a portarla — e
+    per gli altri pericoli resta ``None``.
+    """
+    from limen.core.models.risk import FloodBreakdown
+
+    out: dict[str, tuple[float, str, float | None]] = {}
+    for c in cell_results:
+        istat = comune_of.get(c.cell_id)
+        if istat is None:
+            continue
+        pioggia = c.breakdown.rain_mm if isinstance(c.breakdown, FloodBreakdown) else None
+        corrente = out.get(istat)
+        if corrente is None:
+            out[istat] = (float(c.score), c.level.value, pioggia)
+            continue
+        punteggio, classe, p = corrente
+        if float(c.score) > punteggio:
+            punteggio, classe = float(c.score), c.level.value
+        if pioggia is not None:
+            p = pioggia if p is None else max(p, pioggia)
+        out[istat] = (punteggio, classe, p)
+    return out
+
+
 def at_or_above(level: RiskLevel, floor: RiskLevel) -> bool:
     return _LEVEL_ORDER.index(level) >= _LEVEL_ORDER.index(floor)
 
@@ -125,6 +171,23 @@ async def persist_forecast_run(
             [float(c.score) for c in keep],
             [c.level.value for c in keep],
         )
+        righe = await conn.fetch(
+            "SELECT cell_id, istat_code FROM cell_comune WHERE cell_id = ANY($1::text[])",
+            [c.cell_id for c in cell_results],
+        )
+        comuni = per_comune(cell_results, {str(r["cell_id"]): str(r["istat_code"]) for r in righe})
+        if comuni:
+            codici = list(comuni)
+            await conn.execute(_COMUNE_DELETE_SQL, hazard.value, horizon_h, codici)
+            await conn.execute(
+                _COMUNE_INSERT_SQL,
+                hazard.value,
+                horizon_h,
+                codici,
+                [comuni[k][0] for k in codici],
+                [comuni[k][1] for k in codici],
+                [comuni[k][2] for k in codici],
+            )
     return len(keep)
 
 

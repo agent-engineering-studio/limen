@@ -271,6 +271,15 @@ export default function ComuneTrend({
                 {delta === undefined || Math.abs(delta) < 0.005
                   ? ""
                   : ` → ${numero(poi as number)}`}
+                {/* Il tratteggio dell'alluvione sta quasi sempre a zero: sotto
+                    i 40 mm in 72 ore il ramo pluviale non si accende. La pioggia
+                    prevista è il numero che dice quanto manca. */}
+                {((piu) => (piu === undefined ? "" : ` · previsti ${Math.round(piu)} mm`))(
+                  f.reduce<number | undefined>(
+                    (m, x) => (x.rain_mm === undefined ? m : Math.max(m ?? 0, x.rain_mm)),
+                    undefined,
+                  ),
+                )}
               </Text>
             </Group>
           );
