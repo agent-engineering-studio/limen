@@ -6,6 +6,7 @@ import { Protocol } from "pmtiles";
 
 import { config } from "../lib/env";
 import { useHazard } from "../lib/hazard";
+import { OVERLAYS } from "../lib/overlays";
 import {
   maplibreColorMatch,
   maplibreMultiHazardColorMatch,
@@ -165,6 +166,8 @@ export interface RiskMapProps {
   readonly mapRef?: { current: maplibregl.Map | null };
   /** Il confine del comune scelto dalla colonna, da evidenziare. */
   readonly comuneEvidenziato?: GeoJSON.Feature | null;
+  /** I livelli di contesto accesi (id di `lib/overlays`). */
+  readonly overlayAttivi?: ReadonlySet<string>;
 }
 
 /**
@@ -185,6 +188,14 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   const [livelloAssente, setLivelloAssente] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const evidenziatoRef = useRef<GeoJSON.Feature | null>(props.comuneEvidenziato ?? null);
+  const overlayRef = useRef<ReadonlySet<string>>(props.overlayAttivi ?? new Set());
+  // Visibilità di un livello di contesto, letta allo stato corrente: la mappa
+  // si ricostruisce a ogni cambio di pericolo, e senza questo i livelli
+  // tornerebbero spenti mentre la casella resta spuntata.
+  const visibile = (layerId: string): "visible" | "none" =>
+    OVERLAYS.some((o) => overlayRef.current.has(o.id) && o.layerIds.includes(layerId))
+      ? "visible"
+      : "none";
   const tileserv = (props.tileservUrl ?? config.tileservUrl).replace(/\/+$/, "");
   const { selected: hazard, view, multi, available } = useHazard();
   // Due sorgenti, non una. `v_risk_tiles` è fissata sul pericolo di default
@@ -281,6 +292,28 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         minzoom: 6,
         maxzoom: 12,
       },
+      // Livelli di contesto per alluvione e incendio, dalle tabelle che
+      // pg_tileserv pubblicava già. Solo gli attributi usati: le tile pesano
+      // meno, e il resto delle colonne non serve a disegnare.
+      "ovl-idraulica": {
+        type: "vector",
+        // La versione suddivisa: quella intera va in timeout a zoom 8.
+        tiles: [`${tileserv}/public.flood_hazard_subdiv/{z}/{x}/{y}.pbf?properties=hazard_class`],
+        minzoom: 10,
+        attribution: "ISPRA pericolosità idraulica (CC-BY-4.0)",
+      },
+      "ovl-alluvioni": {
+        type: "vector",
+        tiles: [`${tileserv}/public.flood_events/{z}/{x}/{y}.pbf?properties=event_time,source`],
+        minzoom: 8,
+        attribution: "Copernicus EMS",
+      },
+      "ovl-bruciate": {
+        type: "vector",
+        tiles: [`${tileserv}/public.fire_perimeters/{z}/{x}/{y}.pbf?properties=fire_date,area_ha`],
+        minzoom: 6,
+        attribution: "EFFIS",
+      },
       "wms-pai": {
         type: "raster",
         tiles: [wmsTileUrl(config.geoserverWmsUrl, WMS_PAI_LAYER)],
@@ -301,14 +334,14 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         type: "raster",
         source: "wms-pai",
         paint: { "raster-opacity": 0.6 },
-        layout: { visibility: "none" },
+        layout: { visibility: visibile("wms-pai-layer") },
       },
       {
         id: "wms-iffi-layer",
         type: "raster",
         source: "wms-iffi",
         paint: { "raster-opacity": 0.7 },
-        layout: { visibility: "none" },
+        layout: { visibility: visibile("wms-iffi-layer") },
       },
       {
         id: REGION_LAYER_ID,
@@ -397,6 +430,70 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
             },
           ]
         : []),
+      // Sopra le celle e non sotto come PAI e IFFI: con un riempimento
+      // leggero e il bordo si leggono qualunque sia il colore della cella, e
+      // il confine del comune resta comunque in cima.
+      {
+        id: "ovl-idraulica-fill",
+        type: "fill",
+        source: "ovl-idraulica",
+        "source-layer": "public.flood_hazard_subdiv",
+        paint: {
+          "fill-color": [
+            "match",
+            ["get", "hazard_class"],
+            "P3",
+            "#08519c",
+            "P2",
+            "#3182bd",
+            "P1",
+            "#9ecae1",
+            "#9ecae1",
+          ],
+          "fill-opacity": 0.45,
+        },
+        layout: { visibility: visibile("ovl-idraulica-fill") },
+      },
+      {
+        id: "ovl-idraulica-line",
+        type: "line",
+        source: "ovl-idraulica",
+        "source-layer": "public.flood_hazard_subdiv",
+        paint: { "line-color": "#08306b", "line-width": 0.6, "line-opacity": 0.6 },
+        layout: { visibility: visibile("ovl-idraulica-line") },
+      },
+      {
+        id: "ovl-alluvioni-fill",
+        type: "fill",
+        source: "ovl-alluvioni",
+        "source-layer": "public.flood_events",
+        paint: { "fill-color": "#00a6d6", "fill-opacity": 0.4 },
+        layout: { visibility: visibile("ovl-alluvioni-fill") },
+      },
+      {
+        id: "ovl-alluvioni-line",
+        type: "line",
+        source: "ovl-alluvioni",
+        "source-layer": "public.flood_events",
+        paint: { "line-color": "#005f80", "line-width": 1 },
+        layout: { visibility: visibile("ovl-alluvioni-line") },
+      },
+      {
+        id: "ovl-bruciate-fill",
+        type: "fill",
+        source: "ovl-bruciate",
+        "source-layer": "public.fire_perimeters",
+        paint: { "fill-color": "#3b1f14", "fill-opacity": 0.45 },
+        layout: { visibility: visibile("ovl-bruciate-fill") },
+      },
+      {
+        id: "ovl-bruciate-line",
+        type: "line",
+        source: "ovl-bruciate",
+        "source-layer": "public.fire_perimeters",
+        paint: { "line-color": "#b30000", "line-width": 1.2 },
+        layout: { visibility: visibile("ovl-bruciate-line") },
+      },
       {
         // Fuori dal comune scelto: un velo, non un muro. Abbastanza da
         // staccare la zona, non tanto da nascondere il contesto intorno.
@@ -550,6 +647,22 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tileserv, tileLayer, sourceLayer, tileQuery, hazard, view]);
+
+  // I livelli di contesto, senza ricostruire la mappa.
+  useEffect(() => {
+    overlayRef.current = props.overlayAttivi ?? new Set();
+    const map = props.mapRef?.current;
+    if (!map) return;
+    const apply = (): void => {
+      for (const o of OVERLAYS) {
+        for (const id of o.layerIds) {
+          if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", visibile(id));
+        }
+      }
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("idle", apply);
+  }, [props.overlayAttivi, props.mapRef]);
 
   // Il confine del comune, senza ricostruire la mappa.
   useEffect(() => {

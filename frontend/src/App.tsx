@@ -59,6 +59,17 @@ export function App(): JSX.Element {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [selected, setSelected] = useState<CellSelection | null>(null);
   const [evidenziato, setEvidenziato] = useState<ComuneGeometry | null>(null);
+  // Qui e non nel pannello: la mappa si ricostruisce a ogni cambio di
+  // pericolo, e deve poter riaccendere i livelli che erano accesi.
+  const [overlayAttivi, setOverlayAttivi] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleOverlay = useCallback((id: string) => {
+    setOverlayAttivi((prima) => {
+      const dopo = new Set(prima);
+      if (dopo.has(id)) dopo.delete(id);
+      else dopo.add(id);
+      return dopo;
+    });
+  }, []);
   const [page, setPage] = useState<Page>(pageFromHash);
 
   useEffect(() => {
@@ -75,6 +86,9 @@ export function App(): JSX.Element {
   // Dalla colonna alla mappa. Una classifica geografica su cui si clicca e
   // non succede niente è una lista di nomi: il posto è metà dell'informazione.
   const vaiAlComune = useCallback((c: ComuneRisk) => {
+    // La cella aperta prima resta di un altro posto: con il popup di una
+    // cella del Friuli aperto su Montegiordano, il numero non era di qui.
+    setSelected(null);
     // Subito verso il centro, poi il confine vero quando arriva: senza, il
     // clic aspetterebbe la rete prima di muovere la mappa.
     mapRef.current?.flyTo({ center: [c.lon, c.lat], zoom: 11, duration: 700 });
@@ -117,6 +131,7 @@ export function App(): JSX.Element {
           onCellClick={onMapClick}
           selectedCellId={selected?.cellId ?? null}
           comuneEvidenziato={evidenziato}
+          overlayAttivi={overlayAttivi}
         />
         {evidenziato ? (
           <div className="comune-chip" role="status">
@@ -133,7 +148,7 @@ export function App(): JSX.Element {
           </div>
         ) : null}
         <HazardSelector />
-        <OverlayControl mapRef={mapRef} />
+        <OverlayControl attivi={overlayAttivi} onToggle={toggleOverlay} />
         <CellPopup
           cellId={selected?.cellId ?? null}
           lon={selected?.lon}
