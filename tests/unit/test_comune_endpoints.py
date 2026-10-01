@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from limen.api.endpoints import comuni as comuni_ep
+from limen.data.repos import comune_risk as comune_risk_repo
 
 _ROW = {
     "istat_code": "C001",
@@ -54,8 +55,8 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     async def _detail(istat_code: str) -> dict[str, Any] | None:
         return {"comune": _ROW, "cells": []} if istat_code == "C001" else None
 
-    monkeypatch.setattr(comuni_ep.comune_risk, "top_comuni", _top)
-    monkeypatch.setattr(comuni_ep.comune_risk, "comune_detail", _detail)
+    monkeypatch.setattr(comune_risk_repo, "top_comuni", _top)
+    monkeypatch.setattr(comune_risk_repo, "comune_detail", _detail)
     app = FastAPI()
     app.include_router(comuni_ep.router)
     return TestClient(app)
@@ -85,7 +86,7 @@ def test_la_ricerca_arriva_al_repo(monkeypatch: pytest.MonkeyPatch) -> None:
         visti.update(kwargs)
         return []
 
-    monkeypatch.setattr(comuni_ep.comune_risk, "top_comuni", _top)
+    monkeypatch.setattr(comune_risk_repo, "top_comuni", _top)
     app = FastAPI()
     app.include_router(comuni_ep.router)
     TestClient(app).get("/api/comuni?q=Avezzano")
@@ -127,7 +128,7 @@ def test_il_confine_del_comune_arriva_con_il_riquadro(monkeypatch: pytest.Monkey
             "bbox": [14.6, 40.6, 14.61, 40.61],
         }
 
-    monkeypatch.setattr(comuni_ep.comune_risk, "comune_geometry", _geom)
+    monkeypatch.setattr(comune_risk_repo, "comune_geometry", _geom)
     app = FastAPI()
     app.include_router(comuni_ep.router)
 
