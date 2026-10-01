@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from limen.api.endpoints import comuni as comuni_ep
+from limen.data.repos import comune_risk as comune_risk_repo
 
 _ROW = {
     "istat_code": "C001",
@@ -54,8 +55,8 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     async def _detail(istat_code: str) -> dict[str, Any] | None:
         return {"comune": _ROW, "cells": []} if istat_code == "C001" else None
 
-    monkeypatch.setattr(comuni_ep.comune_risk, "top_comuni", _top)
-    monkeypatch.setattr(comuni_ep.comune_risk, "comune_detail", _detail)
+    monkeypatch.setattr(comune_risk_repo, "top_comuni", _top)
+    monkeypatch.setattr(comune_risk_repo, "comune_detail", _detail)
     app = FastAPI()
     app.include_router(comuni_ep.router)
     return TestClient(app)
@@ -85,7 +86,7 @@ def test_la_ricerca_arriva_al_repo(monkeypatch: pytest.MonkeyPatch) -> None:
         visti.update(kwargs)
         return []
 
-    monkeypatch.setattr(comuni_ep.comune_risk, "top_comuni", _top)
+    monkeypatch.setattr(comune_risk_repo, "top_comuni", _top)
     app = FastAPI()
     app.include_router(comuni_ep.router)
     TestClient(app).get("/api/comuni?q=Avezzano")
@@ -108,3 +109,34 @@ def test_la_riga_porta_le_coordinate(client: TestClient) -> None:
     body = client.get("/api/comuni").json()["comuni"][0]
     assert body["lon"] == 13.1
     assert body["lat"] == 46.5
+
+
+def test_il_confine_del_comune_arriva_con_il_riquadro(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Il bordo serve a evidenziare il comune, il riquadro a inquadrarlo
+    intero: uno zoom fisso tagliava Roma e lasciava Atrani un puntino."""
+
+    async def _geom(istat_code: str) -> dict[str, object] | None:
+        if istat_code != "065011":
+            return None
+        return {
+            "type": "Feature",
+            "properties": {"istat_code": "065011", "name": "Atrani"},
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [[[14.6, 40.6], [14.61, 40.6], [14.61, 40.61], [14.6, 40.6]]],
+            },
+            "bbox": [14.6, 40.6, 14.61, 40.61],
+        }
+
+    monkeypatch.setattr(comune_risk_repo, "comune_geometry", _geom)
+    app = FastAPI()
+    app.include_router(comuni_ep.router)
+
+    with TestClient(app) as c:
+        ok = c.get("/api/comune/065011/geometry")
+        assert ok.status_code == 200
+        assert ok.json()["bbox"] == [14.6, 40.6, 14.61, 40.61]
+        assert ok.json()["properties"]["name"] == "Atrani"
+        # I confini cambiano con un decreto, non con uno sweep.
+        assert "max-age=86400" in ok.headers["cache-control"]
+        assert c.get("/api/comune/999999/geometry").status_code == 404

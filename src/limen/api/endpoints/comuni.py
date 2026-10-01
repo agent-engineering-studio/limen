@@ -52,6 +52,17 @@ async def get_comune(istat_code: str) -> ComuneDetailResponse:
     return ComuneDetailResponse(comune=ComuneRisk(**detail["comune"]), cells=detail["cells"])
 
 
+@router.get("/api/comune/{istat_code}/geometry")
+async def comune_geometry(istat_code: str, response: Response) -> dict[str, object]:
+    """Il confine del comune in GeoJSON, con il suo riquadro."""
+    feature = await comune_risk.comune_geometry(istat_code)
+    if feature is None:
+        raise HTTPException(status_code=404, detail="comune non trovato")
+    # I confini cambiano con un decreto, non con uno sweep.
+    response.headers["Cache-Control"] = "public, max-age=86400"
+    return feature
+
+
 @router.get("/api/comune/{istat_code}/history")
 async def comune_history(
     istat_code: str,

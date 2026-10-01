@@ -2303,6 +2303,34 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
 .cb-perche { line-height: 1.35; }
 .cb-motivo-esp { text-decoration: underline dotted; text-underline-offset: 2px; cursor: help; }
 .cb-pioggia { white-space: nowrap; }
+/* Il nome del comune evidenziato, sulla mappa: dice che il velo scuro è una
+   scelta, non un guasto, e lo toglie con un clic. */
+.comune-chip {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px 5px 12px;
+  background: #fff;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 15%);
+  font-size: 13px;
+}
+.comune-chip button {
+  border: none;
+  background: #f1efe9;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  line-height: 1;
+}
+.comune-chip button:hover { background: #e4e1d8; }
 .cb-help {
   width: 18px;
   height: 18px;

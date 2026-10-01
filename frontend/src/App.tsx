@@ -6,7 +6,8 @@ import CellPopup from "./components/CellPopup";
 import ComuniBoard from "./components/ComuniBoard";
 import DocsPage from "./components/DocsPage";
 import ExplainerPage from "./components/ExplainerPage";
-import type { CellSelection, ComuneCell, ComuneRisk } from "./types";
+import { defaultApiClient } from "./lib/api-client";
+import type { CellSelection, ComuneCell, ComuneGeometry, ComuneRisk } from "./types";
 import FreshnessBadge from "./components/FreshnessBadge";
 import HomePage from "./components/HomePage";
 import IntegrationsPage from "./components/IntegrationsPage";
@@ -57,6 +58,7 @@ function pageFromHash(): Page {
 export function App(): JSX.Element {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [selected, setSelected] = useState<CellSelection | null>(null);
+  const [evidenziato, setEvidenziato] = useState<ComuneGeometry | null>(null);
   const [page, setPage] = useState<Page>(pageFromHash);
 
   useEffect(() => {
@@ -73,10 +75,27 @@ export function App(): JSX.Element {
   // Dalla colonna alla mappa. Una classifica geografica su cui si clicca e
   // non succede niente è una lista di nomi: il posto è metà dell'informazione.
   const vaiAlComune = useCallback((c: ComuneRisk) => {
-    // Zoom 11: il comune riempie la vista senza perdere i suoi confini, che
-    // è ciò che si vuole vedere arrivando dalla lista. Più stretto si
-    // perderebbe il contesto, più largo non si distinguerebbe da prima.
-    mapRef.current?.flyTo({ center: [c.lon, c.lat], zoom: 11, duration: 900 });
+    // Subito verso il centro, poi il confine vero quando arriva: senza, il
+    // clic aspetterebbe la rete prima di muovere la mappa.
+    mapRef.current?.flyTo({ center: [c.lon, c.lat], zoom: 11, duration: 700 });
+    defaultApiClient
+      .getComuneGeometry(c.istat_code)
+      .then((g) => {
+        setEvidenziato(g);
+        // Il comune intero, non uno zoom fisso: a 11 Roma non ci stava e
+        // Atrani era un puntino. Il bordo con la griglia a 1 km è ciò che
+        // dice dove finisce un comune e comincia il vicino.
+        mapRef.current?.fitBounds(
+          [
+            [g.bbox[0], g.bbox[1]],
+            [g.bbox[2], g.bbox[3]],
+          ],
+          { padding: 60, maxZoom: 14, duration: 900 },
+        );
+      })
+      .catch(() => {
+        // Senza confine resta il volo verso il centro: meno chiaro, non rotto.
+      });
   }, []);
 
   const vaiAllaCella = useCallback((c: ComuneCell) => {
@@ -97,7 +116,22 @@ export function App(): JSX.Element {
           mapRef={mapRef}
           onCellClick={onMapClick}
           selectedCellId={selected?.cellId ?? null}
+          comuneEvidenziato={evidenziato}
         />
+        {evidenziato ? (
+          <div className="comune-chip" role="status">
+            <span>
+              <strong>{String(evidenziato.properties?.["name"] ?? "")}</strong> evidenziato
+            </span>
+            <button
+              type="button"
+              aria-label="Togli l'evidenziazione del comune"
+              onClick={() => setEvidenziato(null)}
+            >
+              ✕
+            </button>
+          </div>
+        ) : null}
         <HazardSelector />
         <OverlayControl mapRef={mapRef} />
         <CellPopup

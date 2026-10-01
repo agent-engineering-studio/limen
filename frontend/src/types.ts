@@ -105,6 +105,11 @@ export interface ComuneCell {
   lat: number;
 }
 
+/** Il confine di un comune: un Feature GeoJSON con il riquadro. */
+export type ComuneGeometry = GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon> & {
+  bbox: [number, number, number, number];
+};
+
 export interface SeriePunto {
   t: string;
   score: number;

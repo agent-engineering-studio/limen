@@ -547,3 +547,43 @@ async def comune_history(
         punti.sort(key=lambda p: str(p["t"]))
 
     return {"observed": passato, "forecast": futuro}
+
+
+async def comune_geometry(istat_code: str) -> dict[str, Any] | None:
+    """Il confine del comune, per evidenziarlo sulla mappa.
+
+    Con la griglia a 1 km, portare la mappa sul comune non bastava: a zoom 11
+    le celle riempiono la vista e dove finisce un comune e comincia il vicino
+    non si capisce. Il confine ISTAT è il dato che lo dice.
+
+    Semplificato a ~30 m (`0,0003°`): il bordo serve a riconoscere la zona,
+    non a misurarla, e la geometria originale di un comune costiero pesa
+    centinaia di kilobyte. Con il suo riquadro, così la mappa inquadra il
+    comune intero invece di uno zoom fisso che taglia Roma e lascia Atrani
+    un puntino.
+    """
+    async with acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT istat_code, name,
+                   ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.0003), 6) AS geojson,
+                   ST_XMin(geom) AS xmin, ST_YMin(geom) AS ymin,
+                   ST_XMax(geom) AS xmax, ST_YMax(geom) AS ymax
+            FROM comuni
+            WHERE istat_code = $1
+            """,
+            istat_code,
+        )
+    if row is None:
+        return None
+    return {
+        "type": "Feature",
+        "properties": {"istat_code": str(row["istat_code"]), "name": str(row["name"])},
+        "geometry": json.loads(row["geojson"]),
+        "bbox": [
+            round(float(row["xmin"]), 5),
+            round(float(row["ymin"]), 5),
+            round(float(row["xmax"]), 5),
+            round(float(row["ymax"]), 5),
+        ],
+    }
