@@ -230,3 +230,60 @@ def test_senza_segnali_la_riga_non_cambia() -> None:
     riga = {"hazards": {"flood": {"class": "None", "score": 0.0}}}
     _con_segnali(riga, None)
     assert riga["hazards"]["flood"] == {"class": "None", "score": 0.0}
+
+
+def test_la_previsione_per_comune_tiene_anche_lo_zero() -> None:
+    """Il 30 settembre l'alluvione è uscita sotto soglia ovunque: tenendo solo
+    le celle da Moderato in su non restava una riga, e il grafico non aveva
+    tratteggio. Qui ogni comune ha la sua previsione, anche a 0,00."""
+    from types import SimpleNamespace
+
+    from limen.agents.workflows.forecast_history import per_comune
+    from limen.core.models.risk import FloodBreakdown, RiskLevel
+
+    def cella(cid: str, score: float, pioggia: float | None) -> Any:
+        return SimpleNamespace(
+            cell_id=cid,
+            score=score,
+            level=RiskLevel.None_,
+            breakdown=FloodBreakdown(susceptibility=0.4, pluvial=0.0, fluvial=0.0, rain_mm=pioggia),
+        )
+
+    out = per_comune(
+        [cella("a", 0.0, 3.2), cella("b", 0.0, 12.6), cella("c", 0.0, None)],
+        {"a": "065001", "b": "065001", "c": "065002"},
+    )
+
+    # Zero, ma c'è: e con la pioggia più alta fra le celle del comune.
+    assert out["065001"] == (0.0, "None", 12.6)
+    assert out["065002"] == (0.0, "None", None)
+
+
+def test_le_celle_senza_comune_restano_fuori() -> None:
+    from types import SimpleNamespace
+
+    from limen.agents.workflows.forecast_history import per_comune
+    from limen.core.models.risk import (
+        ComponentBreakdown,
+        MeteoBreakdown,
+        RiskLevel,
+        StaticBreakdown,
+    )
+
+    frana = ComponentBreakdown(
+        s=0.5,
+        m=0.1,
+        e=0.0,
+        f=0.0,
+        h=0.0,
+        static_terms=StaticBreakdown(
+            susc_ispra=0.5, iffi_density=0.1, slope=0.5, pai=0.5, litho_weight=0.5
+        ),
+        meteo_terms=MeteoBreakdown(
+            caine_excess=0.0, caine_norm=0.0, api_factor=0.0, soil_factor=0.5
+        ),
+    )
+    cella: Any = SimpleNamespace(
+        cell_id="mare", score=0.4, level=RiskLevel.Moderate, breakdown=frana
+    )
+    assert per_comune([cella], {}) == {}

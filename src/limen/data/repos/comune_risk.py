@@ -480,24 +480,24 @@ def _misurata(hazard: str, factors: Any) -> bool:
 
 
 #: Il futuro del comune: per ogni orizzonte, la cella peggiore **prevista**,
-#: dallo stato previsionale corrente (057).
+#: dalla previsione per comune (059).
 #:
 #: Non la cella peggiore di oggi, come per il passato: la previsione serve a
 #: vedere il versante che adesso è tranquillo e domani no, e seguire quella
-#: di oggi lo nasconderebbe. Il passato non può fare lo stesso perché lo
-#: storico è partizionato — 212 s — mentre questa tabella è piccola e ha una
-#: riga per cella.
+#: di oggi lo nasconderebbe. E a **ogni livello**, non solo da Moderato in su:
+#: con `latest_forecast` un'alluvione prevista sotto soglia ovunque non
+#: lasciava righe, e il grafico non disegnava nessun tratteggio — come se la
+#: previsione non ci fosse. «Previsto 0,00» è una previsione.
 _PREVISIONE_COMUNE = """
-SELECT lf.hazard_type::text                            AS hazard,
-       lf.horizon_h,
-       max(lf.target_at)                               AS target_at,
-       max(lf.score)                                   AS score,
-       (array_agg(lf.class ORDER BY lf.score DESC))[1] AS class
-FROM cell_comune cc
-JOIN latest_forecast lf ON lf.cell_id = cc.cell_id
-WHERE cc.istat_code = $1
-  AND lf.target_at > now()
-GROUP BY 1, 2
+SELECT hazard_type::text AS hazard,
+       horizon_h,
+       target_at,
+       score,
+       class,
+       rain_mm
+FROM latest_forecast_comune
+WHERE istat_code = $1
+  AND target_at > now()
 ORDER BY 1, 2
 """
 
@@ -535,13 +535,14 @@ async def comune_history(
 
     futuro: dict[str, list[dict[str, Any]]] = {}
     for r in previste:
-        futuro.setdefault(str(r["hazard"]), []).append(
-            {
-                "t": r["target_at"].isoformat(),
-                "score": round(float(r["score"]), 3),
-                "level": str(r["class"]),
-            }
-        )
+        punto: dict[str, Any] = {
+            "t": r["target_at"].isoformat(),
+            "score": round(float(r["score"]), 3),
+            "level": str(r["class"]),
+        }
+        if r["rain_mm"] is not None:
+            punto["rain_mm"] = round(float(r["rain_mm"]), 1)
+        futuro.setdefault(str(r["hazard"]), []).append(punto)
     for punti in futuro.values():
         punti.sort(key=lambda p: str(p["t"]))
 

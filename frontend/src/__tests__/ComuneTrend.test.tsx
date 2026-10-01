@@ -115,3 +115,25 @@ describe("ComuneTrend", () => {
     expect(container.textContent).toContain("0,58");
   });
 });
+
+describe("previsione d'alluvione", () => {
+  it("disegna il tratteggio anche a zero, e dice la pioggia prevista", async () => {
+    // Prevista sotto soglia ovunque, l'alluvione non lasciava righe e il
+    // grafico non mostrava nessun tratteggio, come se mancasse. «Previsto
+    // 0,00» è una previsione, e la pioggia è il numero che dice quanto manca.
+    getComuneHistory.mockResolvedValue({
+      observed: { flood: serie(3, 0) },
+      forecast: {
+        flood: [
+          { t: new Date(Date.now() + 24 * 3600_000).toISOString(), score: 0, rain_mm: 3.2 },
+          { t: new Date(Date.now() + 48 * 3600_000).toISOString(), score: 0, rain_mm: 12.6 },
+        ],
+      },
+    });
+    const { container } = render(<ComuneTrend istatCode="001001" />);
+    await waitFor(() => expect(container.querySelector("svg")).not.toBeNull());
+    const tracciati = [...container.querySelectorAll("svg path")];
+    expect(tracciati.some((t) => t.getAttribute("stroke-dasharray") === "3 3")).toBe(true);
+    expect(container.textContent).toContain("previsti 13 mm");
+  });
+});
