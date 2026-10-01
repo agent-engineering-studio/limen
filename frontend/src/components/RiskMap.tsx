@@ -15,6 +15,55 @@ import {
 const SOURCE_ID = "limen-risk";
 const LAYER_ID = "limen-risk-fill";
 const SELECTED_LAYER_ID = "limen-risk-selected";
+// Il comune scelto dalla colonna. Una sorgente GeoJSON e non le tile dei
+// comuni: quelle esistono solo fra gli zoom 7 e 11, e il comune va
+// evidenziato anche a zoom 13, quando le celle riempiono la vista.
+const HIGHLIGHT_SOURCE_ID = "limen-comune-evidenziato";
+const HIGHLIGHT_MASK_ID = "limen-comune-maschera";
+const HIGHLIGHT_CASING_ID = "limen-comune-bordo-fondo";
+const HIGHLIGHT_LINE_ID = "limen-comune-bordo";
+
+type Anello = [number, number][];
+type Poligono = Anello[];
+
+/** Il mondo meno il comune: scurire **fuori** fa risaltare la zona senza
+ *  coprire le celle che ci stanno dentro, che sono ciò che si vuole leggere. */
+export function maschera(feature: GeoJSON.Feature | null): GeoJSON.FeatureCollection {
+  if (feature === null || feature.geometry === null) {
+    return { type: "FeatureCollection", features: [] };
+  }
+  const g = feature.geometry;
+  const poligoni: Poligono[] =
+    g.type === "Polygon"
+      ? [g.coordinates as Poligono]
+      : g.type === "MultiPolygon"
+        ? (g.coordinates as Poligono[])
+        : [];
+  const mondo: Anello = [
+    [-180, -85],
+    [180, -85],
+    [180, 85],
+    [-180, 85],
+    [-180, -85],
+  ];
+  return {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: { ruolo: "maschera" },
+        geometry: {
+          type: "Polygon",
+          // L'anello esterno di ogni parte del comune diventa un buco nel
+          // mondo. I buchi del comune stesso — un'enclave — restano velati,
+          // ed è giusto: non sono suoi.
+          coordinates: [mondo, ...poligoni.flatMap((pg) => (pg[0] ? [pg[0]] : []))],
+        },
+      },
+      { ...feature, properties: { ...(feature.properties ?? {}), ruolo: "confine" } },
+    ],
+  };
+}
 const REGION_SOURCE_ID = "limen-region";
 const REGION_LAYER_ID = "limen-region-fill";
 const COMUNE_SOURCE_ID = "limen-comune";
@@ -114,6 +163,8 @@ export interface RiskMapProps {
   readonly selectedCellId?: string | null;
   /** Imperative ref for tests / parent controls (e.g. fly-to). */
   readonly mapRef?: { current: maplibregl.Map | null };
+  /** Il confine del comune scelto dalla colonna, da evidenziare. */
+  readonly comuneEvidenziato?: GeoJSON.Feature | null;
 }
 
 /**
@@ -133,6 +184,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   // palesemente rotto: questo stato serve a impedirlo.
   const [livelloAssente, setLivelloAssente] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const evidenziatoRef = useRef<GeoJSON.Feature | null>(props.comuneEvidenziato ?? null);
   const tileserv = (props.tileservUrl ?? config.tileservUrl).replace(/\/+$/, "");
   const { selected: hazard, view, multi, available } = useHazard();
   // Due sorgenti, non una. `v_risk_tiles` è fissata sul pericolo di default
@@ -196,6 +248,12 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     // Build the source set lazily so optional PMTiles overlays only
     // appear when their env URL is set — see `docs/geodata.md`.
     const sources: maplibregl.StyleSpecification["sources"] = {
+      [HIGHLIGHT_SOURCE_ID]: {
+        type: "geojson",
+        // Si riparte dal comune già scelto: la mappa si ricostruisce quando
+        // cambia il pericolo, e il confine non deve sparire per questo.
+        data: maschera(evidenziatoRef.current),
+      },
       osm: {
         type: "raster",
         tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
@@ -340,6 +398,31 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
           ]
         : []),
       {
+        // Fuori dal comune scelto: un velo, non un muro. Abbastanza da
+        // staccare la zona, non tanto da nascondere il contesto intorno.
+        id: HIGHLIGHT_MASK_ID,
+        type: "fill",
+        source: HIGHLIGHT_SOURCE_ID,
+        filter: ["==", ["get", "ruolo"], "maschera"],
+        paint: { "fill-color": "#141821", "fill-opacity": 0.38 },
+      },
+      {
+        // Il bordo ha un fondo chiaro sotto: sulle celle arancio e rosse una
+        // linea sola, di qualunque colore, si perde dove il colore è simile.
+        id: HIGHLIGHT_CASING_ID,
+        type: "line",
+        source: HIGHLIGHT_SOURCE_ID,
+        filter: ["==", ["get", "ruolo"], "confine"],
+        paint: { "line-color": "#ffffff", "line-width": 6, "line-opacity": 0.9 },
+      },
+      {
+        id: HIGHLIGHT_LINE_ID,
+        type: "line",
+        source: HIGHLIGHT_SOURCE_ID,
+        filter: ["==", ["get", "ruolo"], "confine"],
+        paint: { "line-color": "#1c3f7a", "line-width": 2.5 },
+      },
+      {
         // Selection outline: the filter starts matching nothing and is
         // swapped in the selectedCellId effect below.
         id: SELECTED_LAYER_ID,
@@ -467,6 +550,19 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tileserv, tileLayer, sourceLayer, tileQuery, hazard, view]);
+
+  // Il confine del comune, senza ricostruire la mappa.
+  useEffect(() => {
+    evidenziatoRef.current = props.comuneEvidenziato ?? null;
+    const map = props.mapRef?.current;
+    if (!map) return;
+    const apply = (): void => {
+      const src = map.getSource(HIGHLIGHT_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+      src?.setData(maschera(evidenziatoRef.current));
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("idle", apply);
+  }, [props.comuneEvidenziato, props.mapRef]);
 
   // Update the selection outline without rebuilding the map.
   useEffect(() => {

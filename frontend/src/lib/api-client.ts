@@ -13,6 +13,7 @@ import type {
   CellHistoryResponse,
   CellMultiHazardResponse,
   ComuneDetailResponse,
+  ComuneGeometry,
   ComuneHistory,
   ComuneListResponse,
   HazardType,
@@ -258,6 +259,15 @@ export class ApiClient {
   getComune(istatCode: string, signal?: AbortSignal): Promise<ComuneDetailResponse> {
     return this.request<ComuneDetailResponse>(
       `/api/comune/${encodeURIComponent(istatCode)}`,
+      {},
+      signal,
+    );
+  }
+
+  /** Il confine del comune in GeoJSON, con `bbox` per inquadrarlo. */
+  getComuneGeometry(istatCode: string, signal?: AbortSignal): Promise<ComuneGeometry> {
+    return this.request<ComuneGeometry>(
+      `/api/comune/${encodeURIComponent(istatCode)}/geometry`,
       {},
       signal,
     );
