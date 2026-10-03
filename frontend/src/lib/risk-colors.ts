@@ -1,8 +1,17 @@
 // Five-class risk palette + legend labels.
 //
-// Palette: ColorBrewer "YlOrRd" 5-class (colorblind-safe; WCAG-AA
-// contrast against white for the text labels rendered on top).
-// Reference: https://colorbrewer2.org/?type=sequential&scheme=YlOrRd&n=5
+// Una scala per il fondo scuro della sala operativa (#155): nessuno quasi
+// invisibile, basso un verde petrolio spento, poi giallo, arancio e rosso —
+// l'ordine delle allerte della Protezione civile, che chi legge questa
+// mappa conosce già.
+//
+// Non è la scala del design così com'era: lì alta e molto alta stavano a
+// 1,36:1 fra loro e scendevano a 1,25:1 per un deuteranope. Questa è stata
+// cercata perché **ogni coppia** di classi, non solo le adiacenti, resti
+// sopra 1,5:1 di contrasto di luminanza anche in simulazione di
+// deuteranopia, protanopia e tritanopia (Machado 2009), con le celle
+// dipinte al 70 % sopra la base scura. La tinta aggiunge separazione a chi
+// la vede; la luminanza è quello che resta a chi non la vede.
 //
 // We use **labels** in the legend (not just colours) so the map stays
 // readable without colour vision.
@@ -22,35 +31,35 @@ export const RISK_CLASSES: readonly RiskClass[] = [
     level: "None",
     label: "Nessuno",
     short: "Ø",
-    color: "#ffffb2",
+    color: "#151c25",
     range: [0.0, 0.15],
   },
   {
     level: "Low",
     label: "Basso",
     short: "L",
-    color: "#fecc5c",
+    color: "#134d47",
     range: [0.15, 0.35],
   },
   {
     level: "Moderate",
     label: "Moderato",
     short: "M",
-    color: "#fd8d3c",
+    color: "#f2d45c",
     range: [0.35, 0.55],
   },
   {
     level: "High",
     label: "Alto",
     short: "H",
-    color: "#f03b20",
+    color: "#f58a30",
     range: [0.55, 0.75],
   },
   {
     level: "VeryHigh",
     label: "Molto alto",
     short: "VH",
-    color: "#bd0026",
+    color: "#e33f5a",
     range: [0.75, 1.0],
   },
 ] as const;
@@ -60,6 +69,23 @@ export const RISK_COLOR_BY_LEVEL: Record<RiskLevel, string> =
     RiskLevel,
     string
   >;
+
+/**
+ * Il colore di classe quando è **testo** sul fondo scuro.
+ *
+ * Nessuno e basso sono tinte scure per scelta — la mappa non deve
+ * accendersi dove non succede niente — e come cifre su un pannello scuro
+ * sparirebbero (1,9:1 il verde petrolio). Qui schiarite fin sopra 4,5:1;
+ * dalla moderata in su la tinta della mappa basta già.
+ */
+export const RISK_TEXT_BY_LEVEL: Record<RiskLevel, string> = {
+  ...Object.fromEntries(RISK_CLASSES.map((c) => [c.level, c.color])),
+  None: "#94a3b4",
+  Low: "#5fb3a3",
+} as Record<RiskLevel, string>;
+
+/** Le classi scure, su cui il testo di un chip va chiaro e non scuro. */
+export const RISK_SCURE: ReadonlySet<RiskLevel> = new Set<RiskLevel>(["None", "Low"]);
 
 export const RISK_LABEL_IT_BY_LEVEL: Record<RiskLevel, string> =
   Object.fromEntries(RISK_CLASSES.map((c) => [c.level, c.label])) as Record<
@@ -73,46 +99,17 @@ export const RISK_LABEL_IT_BY_LEVEL: Record<RiskLevel, string> =
  * `worst_class` for the comune rollup). Features without an assessment yet
  * fall through to a neutral light grey.
  */
-// Una rampa per pericolo (#62, #63). Non decorazione: con tre pericoli sulla
-// stessa mappa il colore è l'unico indizio immediato di *cosa* si sta
-// guardando, e tre mappe rosso-arancio identiche si confondono.
-//
-// Tutte e tre sono sequenze ColorBrewer a 5 classi, scelte per restare
-// distinguibili fra loro anche in simulazione daltonica: YlOrRd per le frane,
-// YlOrBr per l'incendio (caldo, vicino ma più terroso), PuBu per l'alluvione
-// — l'acqua è l'unica delle tre che non si legge come "caldo", ed è giusto
-// che sia l'unica fredda.
-//
-// Le classi, le etichette e i range restano quelli: cambia solo la tinta.
-const WILDFIRE_COLORS: Record<RiskLevel, string> = {
-  None: "#ffffd4",
-  Low: "#fed98e",
-  Moderate: "#fe9929",
-  High: "#d95f0e",
-  VeryHigh: "#993404",
-};
-
-const FLOOD_COLORS: Record<RiskLevel, string> = {
-  None: "#f1eef6",
-  Low: "#bdc9e1",
-  Moderate: "#74a9cf",
-  High: "#2b8cbe",
-  VeryHigh: "#045a8d",
-};
-
-const COLORS_BY_HAZARD: Record<string, Record<RiskLevel, string>> = {
-  wildfire: WILDFIRE_COLORS,
-  flood: FLOOD_COLORS,
-};
-
-export function riskClassesFor(hazard: HazardType): readonly RiskClass[] {
-  const colors = COLORS_BY_HAZARD[hazard];
-  if (!colors) return RISK_CLASSES;
-  return RISK_CLASSES.map((c) => ({ ...c, color: colors[c.level] }));
+// Una scala sola per i tre pericoli (#155). Con tre rampe diverse la stessa
+// cella cambiava colore passando dalla vista d'insieme a quella del
+// pericolo che la determina; ora quale pericolo lo dicono l'intestazione
+// della mappa, il bordo e le lettere F/A/I, e il colore dice solo quanto.
+// Le funzioni restano per pericolo perché è la domanda giusta da fare.
+export function riskClassesFor(_hazard: HazardType): readonly RiskClass[] {
+  return RISK_CLASSES;
 }
 
-export function riskColorsFor(hazard: HazardType): Record<RiskLevel, string> {
-  return COLORS_BY_HAZARD[hazard] ?? RISK_COLOR_BY_LEVEL;
+export function riskColorsFor(_hazard: HazardType): Record<RiskLevel, string> {
+  return RISK_COLOR_BY_LEVEL;
 }
 
 /**
@@ -124,7 +121,7 @@ export function riskColorsFor(hazard: HazardType): Record<RiskLevel, string> {
  * illeggibile. Il perché della differenza sta nel popup e nella colonna,
  * dove c'è lo spazio per scriverlo a parole.
  */
-export const COLORE_IGNOTO = "#dadcdf";
+export const COLORE_IGNOTO = "#4f5965";
 
 export function maplibreColorMatch(
   prop = "risk_level",
@@ -157,12 +154,8 @@ export function maplibreColorMatch(
  * bordo delle celle in classe alta (:func:`maplibreWorstHazardLine`), il
  * popup e la colonna, dove c'è lo spazio per scriverlo a parole.
  *
- * L'obiezione che questo codice portava prima resta vera e va detta: la
- * stessa cella cambia colore passando dalla vista d'insieme a quella del
- * pericolo che la determina, perché le rampe per pericolo esistono ancora.
- * È il prezzo di avere una vista d'insieme leggibile, e la strada per
- * toglierlo è unificare anche le rampe — una decisione che riguarda tutte e
- * tre le mappe, non solo questa.
+ * Le rampe per pericolo sono state unificate (#155): una cella ha lo stesso
+ * colore nella vista d'insieme e in quella del pericolo che la determina.
  *
  * `worst_level` è l'attributo di `v_multi_hazard` (migrazione 037); il
  * ripiego copre le celle senza valutazione.
@@ -171,11 +164,18 @@ export function maplibreMultiHazardColorMatch(): unknown {
   return maplibreColorMatch("worst_level", "landslide");
 }
 
-/** Tinte dei pericoli: le stesse dei pallini nella colonna. */
+/**
+ * Identità dei pericoli: le stesse di `--hz-*` in styles.css.
+ *
+ * Lilla, ciano e rosa, fuori dalle tinte della scala: il rosso del design
+ * per l'incendio stava a 1,29:1 da «molto alto», e un chip «I» si leggeva
+ * come un allarme. Sono anche il bordo delle celle in classe alta, dove un
+ * bordo arancio su una cella arancio non si vedrebbe.
+ */
 export const HAZARD_HUE: Record<HazardType, string> = {
-  landslide: "#f03b20",
-  wildfire: "#d95f0e",
-  flood: "#2b8cbe",
+  landslide: "#c6a8ff",
+  wildfire: "#ff9ad5",
+  flood: "#6fd3ee",
 };
 
 /**

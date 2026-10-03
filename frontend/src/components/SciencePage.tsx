@@ -111,19 +111,19 @@ function LineChart({
           y1={PLOT.mt + ih}
           x2={PLOT.ml + iw}
           y2={PLOT.mt + ih}
-          stroke="#9aa1ad"
+          stroke="#3a4655"
         />
-        <line x1={PLOT.ml} y1={PLOT.mt} x2={PLOT.ml} y2={PLOT.mt + ih} stroke="#9aa1ad" />
+        <line x1={PLOT.ml} y1={PLOT.mt} x2={PLOT.ml} y2={PLOT.mt + ih} stroke="#3a4655" />
         <path d={path} fill="none" stroke={color} strokeWidth={2.5} />
         {marker ? (
           <g>
-            <circle cx={sx(marker.pt.x)} cy={sy(marker.pt.y)} r={4.5} fill="#111" />
-            <text x={sx(marker.pt.x) + 7} y={sy(marker.pt.y) - 6} fontSize={11} fill="#111">
+            <circle cx={sx(marker.pt.x)} cy={sy(marker.pt.y)} r={4.5} fill="#e6ecf2" />
+            <text x={sx(marker.pt.x) + 7} y={sy(marker.pt.y) - 6} fontSize={11} fill="#e6ecf2">
               {marker.label}
             </text>
           </g>
         ) : null}
-        <text x={PLOT.ml + iw / 2} y={PLOT.h - 4} fontSize={11} textAnchor="middle" fill="#5e6473">
+        <text x={PLOT.ml + iw / 2} y={PLOT.h - 4} fontSize={11} textAnchor="middle" fill="#94a3b4">
           {xLabel}
         </text>
         <text
@@ -131,7 +131,7 @@ function LineChart({
           y={PLOT.mt + ih / 2}
           fontSize={11}
           textAnchor="middle"
-          fill="#5e6473"
+          fill="#94a3b4"
           transform={`rotate(-90 12 ${PLOT.mt + ih / 2})`}
         >
           {yLabel}
@@ -420,9 +420,10 @@ export function ScienceContent({
           ))}
         </ul>
         <p className="exp-note">
-          Palette ColorBrewer YlOrRd (sicura per daltonismo); l&apos;informazione
-          non è mai affidata al solo colore — c&apos;è sempre etichetta e
-          intervallo. Cutoff e mapping da <code>classes:</code> e{" "}
+          Una scala sola per i tre pericoli, dal quasi-fondo al rosso; ogni
+          coppia di classi resta distinguibile per luminanza anche in
+          simulazione di daltonismo, e l&apos;informazione non è mai affidata
+          al solo colore — c&apos;è sempre etichetta e intervallo. Cutoff e mapping da <code>classes:</code> e{" "}
           <code>pc_alert:</code> nel YAML.
         </p>
 

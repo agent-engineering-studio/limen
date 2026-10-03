@@ -24,7 +24,7 @@ const DIVERGENCE_COLOR: maplibregl.ExpressionSpecification = [
   -0.3,
   "#2166ac", // IA vede molto MENO rischio
   0,
-  "#e6e6e6", // d'accordo
+  "#3a4655", // d'accordo
   0.3,
   "#762a83", // IA vede molto PIÙ rischio
 ];
@@ -68,7 +68,7 @@ export default function DivergenceMap(props: DivergenceMapProps): JSX.Element {
             paint: {
               "fill-color": DIVERGENCE_COLOR,
               "fill-opacity": 0.6,
-              "fill-outline-color": "#888",
+              "fill-outline-color": "#2c3846",
             },
           },
         ],
@@ -96,7 +96,7 @@ export default function DivergenceMap(props: DivergenceMapProps): JSX.Element {
           l&apos;IA vede <strong>meno</strong> rischio
         </span>
         <span>
-          <span className="dv-swatch" style={{ background: "#e6e6e6" }} aria-hidden />
+          <span className="dv-swatch" style={{ background: "#3a4655" }} aria-hidden />
           d&apos;accordo
         </span>
         <span>

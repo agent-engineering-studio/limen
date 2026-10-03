@@ -25,6 +25,7 @@ import {
   RISK_CLASSES,
   RISK_COLOR_BY_LEVEL,
   RISK_LABEL_IT_BY_LEVEL,
+  RISK_TEXT_BY_LEVEL,
 } from "../lib/risk-colors";
 import ComuneTrend from "./ComuneTrend";
 import PrevisioneTesta from "./PrevisioneTesta";
@@ -466,7 +467,7 @@ function Testata({
           span
           size="sm"
           fw={700}
-          c={RISK_COLOR_BY_LEVEL[picco.level]}
+          c={RISK_TEXT_BY_LEVEL[picco.level]}
           style={{ fontVariantNumeric: "tabular-nums" }}
         >
           {numero(picco.score)}

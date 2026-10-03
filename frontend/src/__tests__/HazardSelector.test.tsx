@@ -149,34 +149,15 @@ describe("LegendPanel", () => {
   });
 });
 
-describe("palette per pericolo", () => {
-  it("l'incendio non riusa i colori delle frane", async () => {
-    // Con due pericoli sulla stessa mappa il colore è l'unico indizio
-    // immediato di cosa si sta guardando: due rampe rosso-arancio identiche
-    // si confondono. Classi ed etichette restano le stesse, cambia la tinta.
-    const { riskClassesFor } = await import("../lib/risk-colors");
-    const frane = riskClassesFor("landslide");
-    const incendio = riskClassesFor("wildfire");
-
-    expect(incendio.map((c) => c.level)).toEqual(frane.map((c) => c.level));
-    expect(incendio.map((c) => c.label)).toEqual(frane.map((c) => c.label));
-    expect(incendio.every((c, i) => c.color !== frane[i]?.color)).toBe(true);
-  });
-});
-
 describe("palette dei tre pericoli", () => {
-  it("nessuna rampa è riusata da due pericoli", async () => {
-    // Con tre pericoli sulla stessa mappa il colore è l'unico indizio
-    // immediato di cosa si sta guardando. L'acqua è l'unica delle tre che non
-    // si legge come "caldo", ed è giusto che sia l'unica fredda.
+  it("una scala sola: la stessa cella ha lo stesso colore in ogni vista", async () => {
+    // Con tre rampe la cella cambiava colore passando dalla vista d'insieme
+    // a quella del pericolo che la determina (#155). Quale pericolo lo
+    // dicono l'intestazione, il bordo e le lettere F/A/I.
     const { riskClassesFor } = await import("../lib/risk-colors");
     const rampe = (["landslide", "wildfire", "flood"] as const).map((h) =>
       riskClassesFor(h).map((c) => c.color).join(","),
     );
-    expect(new Set(rampe).size).toBe(3);
-
-    // Classi ed etichette restano identiche: cambia solo la tinta.
-    const livelli = riskClassesFor("flood").map((c) => c.level);
-    expect(livelli).toEqual(riskClassesFor("landslide").map((c) => c.level));
+    expect(new Set(rampe).size).toBe(1);
   });
 });
