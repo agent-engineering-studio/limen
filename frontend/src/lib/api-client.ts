@@ -11,6 +11,7 @@ import type {
   AoiListResponse,
   CellBreakdownResponse,
   CellHistoryResponse,
+  CellRainOutlookResponse,
   CellMultiHazardResponse,
   ComuneDetailResponse,
   ComuneGeometry,
@@ -133,6 +134,15 @@ export class ApiClient {
     return this.request<CellBreakdownResponse>(
       `/api/cell/${encodeURIComponent(cellId)}/breakdown` +
         ApiClient.hazardQuery(hazard),
+      {},
+      signal,
+    );
+  }
+
+  /** La pioggia a 48 ore sulla cella, dalla nostra istanza meteo (#159). */
+  getCellRainOutlook(cellId: string, signal?: AbortSignal): Promise<CellRainOutlookResponse> {
+    return this.request<CellRainOutlookResponse>(
+      `/api/cell/${encodeURIComponent(cellId)}/rain-outlook`,
       {},
       signal,
     );

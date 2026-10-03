@@ -11,7 +11,7 @@ factory + a per-test pool and hand it to :func:`build_app_with_deps`.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Depends, Request
@@ -30,6 +30,7 @@ from limen.core.scoring.regional_thresholds import (
 from limen.core.scoring.resolver import resolve_challenger, resolve_scoring_engine
 from limen.data.caching.postgres_cache import DistributedCache, PostgresCache
 from limen.data.object_store import ObjectStore, build_object_store
+from limen.integrations.openmeteo.client import OpenMeteoHttpClient
 from limen.notifications.dispatcher import (
     NotificationDispatcher,
     build_default_dispatcher,
@@ -61,6 +62,9 @@ class AppDependencies:
     challenger_engine: ScoringEngine[HazardBreakdown] | None = None
     # V2.x — KG grounding service, only constructed when `kg.enabled` is true.
     grounding_service: GroundingService | None = None
+    # Il meteo che il riquadro della cella chiede (#159): lo stesso client, e
+    # quindi la stessa istanza, del punteggio.
+    openmeteo: OpenMeteoHttpClient = field(default_factory=OpenMeteoHttpClient)
 
     @classmethod
     async def build(

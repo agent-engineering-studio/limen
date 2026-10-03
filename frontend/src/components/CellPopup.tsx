@@ -7,6 +7,7 @@ import { RISK_COLOR_BY_LEVEL, RISK_LABEL_IT_BY_LEVEL, RISK_SCURE } from "../lib/
 import type {
   CellBreakdownResponse,
   CellMultiHazardResponse,
+  CellRainOutlookResponse,
   HazardType,
   RiskLevel,
 } from "../types";
@@ -188,32 +189,6 @@ function plainSummary(
   return parts.join(" ");
 }
 
-interface RainOutlook {
-  total48h: number;
-  peakMmh: number;
-}
-
-async function fetchRainOutlook(
-  lon: number,
-  lat: number,
-  signal: AbortSignal,
-): Promise<RainOutlook> {
-  const url =
-    "https://api.open-meteo.com/v1/forecast" +
-    `?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}` +
-    "&hourly=precipitation&forecast_days=2&timezone=UTC";
-  const resp = await fetch(url, { signal });
-  if (!resp.ok) throw new Error(`open-meteo ${resp.status}`);
-  const data = (await resp.json()) as {
-    hourly?: { precipitation?: (number | null)[] };
-  };
-  const rain = (data.hourly?.precipitation ?? []).map((v) => v ?? 0);
-  return {
-    total48h: rain.reduce((a, b) => a + b, 0),
-    peakMmh: rain.reduce((a, b) => Math.max(a, b), 0),
-  };
-}
-
 interface Component {
   key: string;
   label: string;
@@ -281,19 +256,24 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
   const onDismiss = props.onDismiss;
   const [data, setData] = useState<CellBreakdownResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [outlook, setOutlook] = useState<RainOutlook | null>(null);
+  const [outlook, setOutlook] = useState<CellRainOutlookResponse["outlook"]>(null);
 
+  // Dalla nostra API e non dall'API pubblica di Open-Meteo dal browser
+  // (#159): ogni clic consumava il tetto giornaliero che l'istanza propria
+  // esiste per non consumare, e leggeva una fonte diversa da quella del
+  // punteggio.
   useEffect(() => {
     setOutlook(null);
-    if (props.lon == null || props.lat == null || !cellId) return;
+    if (!cellId) return;
     const ctrl = new AbortController();
-    fetchRainOutlook(props.lon, props.lat, ctrl.signal)
-      .then(setOutlook)
+    defaultApiClient
+      .getCellRainOutlook(cellId, ctrl.signal)
+      .then((r) => setOutlook(r.outlook))
       .catch(() => {
         // Il popup resta utile anche senza il meteo.
       });
     return () => ctrl.abort();
-  }, [cellId, props.lon, props.lat]);
+  }, [cellId]);
 
   const { selected } = useHazard();
   // Tutti e tre i pericoli della cella, per le schede in testa al popup.
@@ -509,9 +489,9 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
           <span className="eyebrow" style={{ marginBottom: 2 }}>
             Meteo previsto · 48h
           </span>
-          pioggia <span className="mono">{outlook.total48h.toFixed(1)} mm</span>
+          pioggia <span className="mono">{outlook.total_mm.toFixed(1)} mm</span>
           {" · "}picco{" "}
-          <span className="mono">{outlook.peakMmh.toFixed(1)} mm/h</span>
+          <span className="mono">{outlook.peak_mmh.toFixed(1)} mm/h</span>
         </p>
       ) : null}
 

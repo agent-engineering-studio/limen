@@ -508,3 +508,11 @@ export interface JobStatusResponse {
   sweep: SweepStatus | null;
   per_aoi: JobRunStatus[];
 }
+
+/** `GET /api/cell/{id}/rain-outlook` (#159): `outlook` nullo se la fonte
+ *  meteo non risponde — «non lo so», non «niente pioggia». */
+export interface CellRainOutlookResponse {
+  cell_id: string;
+  hours: number;
+  outlook: { total_mm: number; peak_mmh: number } | null;
+}
