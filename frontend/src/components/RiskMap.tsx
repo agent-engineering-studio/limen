@@ -160,7 +160,11 @@ export interface RiskMapProps {
   readonly tileLayer?: string;
   /** Callback when the user clicks a cell — surfaces the cell_id and the
    *  clicked point, where the inspector opens. */
-  readonly onCellClick?: (cellId: string, lngLat?: { lng: number; lat: number }) => void;
+  readonly onCellClick?: (
+    cellId: string,
+    lngLat?: { lng: number; lat: number },
+    proprieta?: Record<string, unknown>,
+  ) => void;
   /** Cell to outline on the map (selection from the sidebar or a click). */
   readonly selectedCellId?: string | null;
   /** Imperative ref for tests / parent controls (e.g. fly-to). */
@@ -215,6 +219,10 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   const evidenziatoRef = useRef<GeoJSON.Feature | null>(props.comuneEvidenziato ?? null);
   const overlayRef = useRef<ReadonlySet<string>>(props.overlayAttivi ?? new Set());
   const sogliaRef = useRef(props.soloSopraSoglia ?? false);
+  // La vista si conserva quando la mappa si ricostruisce (cambio di pericolo
+  // o di sorgente): ripartire dal centro di default buttava via il comune
+  // che si stava guardando.
+  const cameraRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
   // Visibilità di un livello di contesto, letta allo stato corrente: la mappa
   // si ricostruisce a ogni cambio di pericolo, e senza questo i livelli
   // tornerebbero spenti mentre la casella resta spuntata.
@@ -268,6 +276,9 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   // (migrazione 029), quindi puntare `source-layer` a "public.risk_at" darebbe
   // tile validi e una mappa vuota — un guasto silenzioso, perché la richiesta
   // riesce. Il layer MVT è sempre quello, qualunque sia la sorgente.
+  // Ciò che obbliga a ricostruire la mappa: l'orizzonte no, si cambia con
+  // `setTiles` (sotto).
+  const chiaveSorgente = futuro ? tileQuery.replace(/p_horizon=\d+/, "p_horizon=*") : tileQuery;
   const sourceLayer =
     props.tileLayer ??
     (futuro
@@ -290,7 +301,14 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       ? "tutti i pericoli"
       : (available.find((h) => h.hazard === hazard)?.label_it ??
         (isDefaultHazard ? "frane" : hazard))) + (futuro ? `, previsione a ${orizzonte} ore` : "");
-  const onCellClick = props.onCellClick;
+  // Un ref e non il valore: la mappa non si ricostruisce fra una scadenza e
+  // l'altra, e il gestore registrato alla creazione leggerebbe la callback
+  // di allora — con l'orizzonte di allora.
+  const onCellClickRef = useRef(props.onCellClick);
+  useEffect(() => {
+    onCellClickRef.current = props.onCellClick;
+  }, [props.onCellClick]);
+  const haClick = props.onCellClick !== undefined;
   // L'attributo che porta la classe, per livello. Le regioni non ci sono:
   // `v_region_tiles` non espone `measured`, e filtrarle toglierebbe proprio
   // le regioni senza dato insieme a quelle tranquille.
@@ -690,8 +708,8 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         sources,
         layers,
       },
-      center: [config.defaultLon, config.defaultLat],
-      zoom: config.defaultZoom,
+      center: cameraRef.current?.center ?? [config.defaultLon, config.defaultLat],
+      zoom: cameraRef.current?.zoom ?? config.defaultZoom,
     });
 
     if (props.mapRef) {
@@ -701,11 +719,11 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     // In basso: in alto a destra stanno gli strumenti della mappa (#155).
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
 
-    if (onCellClick) {
+    if (haClick) {
       map.on("click", LAYER_ID, (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
         const cellId = e.features?.[0]?.properties?.["cell_id"];
         if (typeof cellId === "string") {
-          onCellClick(cellId, e.lngLat);
+          onCellClickRef.current?.(cellId, e.lngLat, e.features?.[0]?.properties ?? undefined);
         }
       });
     }
@@ -743,13 +761,26 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     });
 
     return () => {
+      const c = map.getCenter();
+      cameraRef.current = { center: [c.lng, c.lat], zoom: map.getZoom() };
       map.remove();
       if (props.mapRef) {
         props.mapRef.current = null;
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tileserv, tileLayer, sourceLayer, tileQuery, hazard, view]);
+  }, [tileserv, tileLayer, sourceLayer, chiaveSorgente, hazard, view]);
+
+  // Fra una scadenza e l'altra cambia solo il parametro della tile: si
+  // sostituiscono le tile della sorgente invece di ricostruire la mappa, che
+  // durante la riproduzione voleva dire ricaricare tutto ogni 2,5 secondi.
+  useEffect(() => {
+    if (!futuro) return;
+    const map = props.mapRef?.current;
+    const src = map?.getSource(SOURCE_ID) as maplibregl.VectorTileSource | undefined;
+    src?.setTiles([`${tileserv}/${tileLayer}/{z}/{x}/{y}.pbf${tileQuery}`]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tileQuery]);
 
   // I livelli di contesto, senza ricostruire la mappa.
   useEffect(() => {

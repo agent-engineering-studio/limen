@@ -8,7 +8,14 @@ import ComuniBoard from "./components/ComuniBoard";
 import DocsPage from "./components/DocsPage";
 import ExplainerPage from "./components/ExplainerPage";
 import { defaultApiClient } from "./lib/api-client";
-import type { CellSelection, ComuneCell, ComuneGeometry, ComuneRisk } from "./types";
+import { RISK_LABEL_IT_BY_LEVEL, RISK_TEXT_BY_LEVEL } from "./lib/risk-colors";
+import type {
+  CellSelection,
+  ComuneCell,
+  ComuneGeometry,
+  ComuneRisk,
+  RiskLevel,
+} from "./types";
 import FreshnessBadge from "./components/FreshnessBadge";
 import HomePage from "./components/HomePage";
 import IntegrationsPage from "./components/IntegrationsPage";
@@ -68,8 +75,9 @@ function LivelloAttivo({ orizzonte }: { orizzonte: number }): JSX.Element {
   const { multi, selected, available } = useHazard();
   const corse = useForecastSchedule()?.cells.last_run_by_hazard ?? {};
   const nome = available.find((h) => h.hazard === selected)?.label_it ?? selected;
-  // Nella vista d'insieme al futuro mancano i pericoli senza previsione per
-  // cella: va detto, o il loro silenzio si leggerebbe come «sotto soglia».
+  // Nella vista d'insieme al futuro mancano i pericoli senza una corsa
+  // previsionale: va detto, o il loro silenzio si leggerebbe come «sotto
+  // soglia».
   const senza = available
     .filter((h) => !(h.hazard in corse))
     .map((h) => h.label_it.toLowerCase());
@@ -83,7 +91,7 @@ function LivelloAttivo({ orizzonte }: { orizzonte: number }): JSX.Element {
       {orizzonte > 0 ? (
         <span className="map-testa-nota">
           previsione per cella, solo sopra soglia, da zoom 7
-          {multi && senza.length > 0 ? ` · ${senza.join(", ")}: solo per comune` : ""}
+          {multi && senza.length > 0 ? ` · ${senza.join(", ")}: previsione non calcolata` : ""}
         </span>
       ) : multi ? (
         <span className="map-testa-nota">il peggiore in ogni cella</span>
@@ -117,10 +125,44 @@ export function posizioneIspettore(
   return { left, top, maxHeight: mappa.height - top - margine };
 }
 
+/** Ciò che la tile della previsione dice della cella cliccata. */
+interface CellaPrevista {
+  orizzonte: number;
+  score: number;
+  level: RiskLevel;
+  hazard: string;
+  target: string | null;
+}
+
+/** In testa all'ispettore quando si guarda il futuro: il valore previsto
+ *  della cella, e la dichiarazione che il resto sotto è di adesso. Senza,
+ *  una cella alta a +48 h apriva i numeri bassi di oggi senza dirlo. */
+function TestaPrevista({ p }: { p: CellaPrevista }): JSX.Element {
+  const { available } = useHazard();
+  const nome = (available.find((h) => h.hazard === p.hazard)?.label_it ?? p.hazard).toLowerCase();
+  const quando = p.target
+    ? new Date(p.target).toLocaleString("it-IT", { weekday: "short", hour: "2-digit", minute: "2-digit" })
+    : `+${p.orizzonte} h`;
+  return (
+    <div className="ispettore-previsto" role="note">
+      <span className="eyebrow">Previsto a +{p.orizzonte} h · {quando}</span>
+      <span>
+        <strong className="mono" style={{ color: RISK_TEXT_BY_LEVEL[p.level] }}>
+          {p.score.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </strong>{" "}
+        {RISK_LABEL_IT_BY_LEVEL[p.level].toLowerCase()} · {nome}
+      </span>
+      <span className="ispettore-previsto-nota">Qui sotto i valori di adesso.</span>
+    </div>
+  );
+}
+
 export function App(): JSX.Element {
   const { view } = useHazard();
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const [selected, setSelected] = useState<CellSelection | null>(null);
+  const [selected, setSelected] = useState<(CellSelection & { previsto?: CellaPrevista }) | null>(
+    null,
+  );
   const [evidenziato, setEvidenziato] = useState<ComuneGeometry | null>(null);
   // Qui e non nel pannello: la mappa si ricostruisce a ogni cambio di
   // pericolo, e deve poter riaccendere i livelli che erano accesi.
@@ -151,11 +193,24 @@ export function App(): JSX.Element {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  const onMapClick = useCallback((cellId: string, lngLat?: { lng: number; lat: number }) => {
-    // Il punto cliccato, non il centro della cella: l'ispettore si apre lì
-    // accanto, dove l'occhio già sta.
-    setSelected({ cellId, lon: lngLat?.lng ?? null, lat: lngLat?.lat ?? null });
-  }, []);
+  const onMapClick = useCallback(
+    (cellId: string, lngLat?: { lng: number; lat: number }, p?: Record<string, unknown>) => {
+      // Il punto cliccato, non il centro della cella: l'ispettore si apre lì
+      // accanto, dove l'occhio già sta.
+      const previsto: CellaPrevista | undefined =
+        orizzonte > 0 && p && typeof p["risk_score"] === "number"
+          ? {
+              orizzonte,
+              score: p["risk_score"],
+              level: p["risk_level"] as RiskLevel,
+              hazard: String(p["worst_hazard"] ?? ""),
+              target: typeof p["target_at"] === "string" ? p["target_at"] : null,
+            }
+          : undefined;
+      setSelected({ cellId, lon: lngLat?.lng ?? null, lat: lngLat?.lat ?? null, previsto });
+    },
+    [orizzonte],
+  );
 
   // L'ispettore segue la cella mentre la mappa si muove: aperto in un
   // angolo fisso, il numero restava lontano dal posto di cui parlava.
@@ -312,6 +367,7 @@ export function App(): JSX.Element {
             className={`ispettore ${puntoIspettore ? "" : "is-angolo"}`}
             style={puntoIspettore ?? undefined}
           >
+            {selected.previsto ? <TestaPrevista p={selected.previsto} /> : null}
             <CellPopup
               cellId={selected.cellId}
               lon={selected.lon}

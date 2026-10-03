@@ -140,7 +140,7 @@ describe("la previsione sulla mappa", () => {
     expect(screen.getByRole("button", { name: /\+48 h/ }).textContent).not.toContain("passato");
   });
 
-  it("per l'alluvione, prevista solo per comune, il futuro non si sceglie", async () => {
+  it("un pericolo senza corsa previsionale non ha futuro da scegliere", async () => {
     vi.spyOn(defaultApiClient, "getHazards").mockResolvedValue(THREE);
     vi.spyOn(defaultApiClient, "getForecastSchedule").mockResolvedValue(corsa(2));
     const scelte: number[] = [];

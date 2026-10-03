@@ -32,8 +32,9 @@ export function Timeline({
   const { multi, selected, available } = useHazard();
   const [gira, setGira] = useState(false);
   const corse = schedule?.cells.last_run_by_hazard ?? {};
-  // Il pericolo scelto ha una previsione per cella? Per l'alluvione no: la
-  // sua previsione esiste solo per comune.
+  // Il pericolo scelto ha una corsa previsionale? Se c'è stata, una cella
+  // senza riga è prevista sotto Moderato; se non c'è stata, non si sa —
+  // e allora il futuro non si sceglie.
   const previsto = multi ? Object.keys(corse).length > 0 : selected in corse;
   const nome = available.find((h) => h.hazard === selected)?.label_it ?? selected;
   const ultima = Object.entries(corse)
@@ -51,9 +52,14 @@ export function Timeline({
 
   // Passando a un pericolo senza previsione per cella si torna all'adesso:
   // restare su «+48 h» mostrerebbe una mappa vuota che sembra tranquilla.
+  // E si ferma la riproduzione: lasciata andare, riporterebbe il futuro ogni
+  // 2,5 secondi e questo effetto lo toglierebbe, in un ciclo senza fine.
   useEffect(() => {
-    if (schedule !== null && !previsto && orizzonte > 0) onCambia(0);
-  }, [schedule, previsto, orizzonte, onCambia]);
+    if (schedule === null || previsto) return;
+    scorre.stop();
+    setGira(false);
+    if (orizzonte > 0) onCambia(0);
+  }, [schedule, previsto, orizzonte, onCambia, scorre]);
 
   const avvia = (): void => {
     if (gira) {
@@ -72,7 +78,7 @@ export function Timeline({
         onClick={avvia}
         disabled={!previsto}
         aria-label={gira ? "Ferma" : "Fai scorrere le scadenze"}
-        title={previsto ? undefined : `Per ${nome.toLowerCase()} la previsione c'è solo per comune`}
+        title={previsto ? undefined : `Per ${nome.toLowerCase()} non c'è ancora una corsa previsionale`}
       >
         {gira ? (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
@@ -91,7 +97,7 @@ export function Timeline({
           h === 0
             ? "adesso"
             : !previsto
-              ? "solo per comune"
+              ? "non calcolata"
               : bersaglio === null
                 ? "—"
                 : passato

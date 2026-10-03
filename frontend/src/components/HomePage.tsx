@@ -94,9 +94,8 @@ const VELOCITA = [
     tono: "futuro",
     titolo: "La previsione, ogni notte",
     testo:
-      "La stessa formula con la pioggia e il tempo attesi. Per frane e incendi " +
-      "cella per cella, per le alluvioni comune per comune. Sulla mappa si " +
-      "scorre con la timeline.",
+      "La stessa formula con la pioggia e il tempo attesi, cella per cella, per " +
+      "i tre pericoli. Sulla mappa si scorre con la timeline.",
     nota: "Open-Meteo · GloFAS",
   },
   {
