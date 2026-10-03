@@ -18,9 +18,11 @@ import OverlayControl from "./components/OverlayControl";
 import PrevisioneTesta from "./components/PrevisioneTesta";
 import RicercaComune from "./components/RicercaComune";
 import RiskMap from "./components/RiskMap";
+import Timeline from "./components/Timeline";
 import SciencePage from "./components/SciencePage";
 import ShadowDiagnosticsPage from "./components/ShadowDiagnosticsPage";
 import ShadowPanel from "./components/ShadowPanel";
+import { useForecastSchedule } from "./lib/forecast-schedule";
 import { useHazard } from "./lib/hazard";
 import { OVERLAYS } from "./lib/overlays";
 
@@ -62,16 +64,28 @@ function pageFromHash(): Page {
 /** Il riquadro «Livello attivo»: cosa colora la mappa, detto a parole. Con
  *  la vista d'insieme come default, senza questa riga non si saprebbe se il
  *  rosso di una cella è un incendio o una frana. */
-function LivelloAttivo(): JSX.Element {
+function LivelloAttivo({ orizzonte }: { orizzonte: number }): JSX.Element {
   const { multi, selected, available } = useHazard();
+  const corse = useForecastSchedule()?.cells.last_run_by_hazard ?? {};
   const nome = available.find((h) => h.hazard === selected)?.label_it ?? selected;
+  // Nella vista d'insieme al futuro mancano i pericoli senza previsione per
+  // cella: va detto, o il loro silenzio si leggerebbe come «sotto soglia».
+  const senza = available
+    .filter((h) => !(h.hazard in corse))
+    .map((h) => h.label_it.toLowerCase());
   return (
     <div className="map-testa" aria-live="polite">
       <span className="map-testa-occhiello">Livello attivo</span>
       <span className="map-testa-titolo">
-        {multi ? "Tutti i pericoli" : `Rischio ${nome.toLowerCase()}`} · adesso
+        {multi ? "Tutti i pericoli" : `Rischio ${nome.toLowerCase()}`} ·{" "}
+        {orizzonte === 0 ? "adesso" : `fra ${orizzonte} h`}
       </span>
-      {multi ? (
+      {orizzonte > 0 ? (
+        <span className="map-testa-nota">
+          previsione per cella, solo sopra soglia, da zoom 7
+          {multi && senza.length > 0 ? ` · ${senza.join(", ")}: solo per comune` : ""}
+        </span>
+      ) : multi ? (
         <span className="map-testa-nota">il peggiore in ogni cella</span>
       ) : null}
     </div>
@@ -124,6 +138,7 @@ export function App(): JSX.Element {
   // Acceso di default, come nel design: con un quarto d'Italia in classe
   // bassa la mappa era una coperta, e si cercava il moderato sotto di essa.
   const [soloSoglia, setSoloSoglia] = useState(true);
+  const [orizzonte, setOrizzonte] = useState(0);
   const [puntoIspettore, setPuntoIspettore] = useState<{
     left: number;
     top: number;
@@ -165,7 +180,7 @@ export function App(): JSX.Element {
     // `view`: la mappa si ricostruisce a ogni cambio di pericolo, e
     // l'ascoltatore resterebbe attaccato a quella vecchia. L'effetto della
     // mappa, che è un figlio, gira prima di questo: mapRef è già la nuova.
-  }, [selected?.lon, selected?.lat, view]);
+  }, [selected?.lon, selected?.lat, view, orizzonte]);
 
 
   // Dalla colonna alla mappa. Una classifica geografica su cui si clicca e
@@ -237,8 +252,10 @@ export function App(): JSX.Element {
           comuneEvidenziato={evidenziato}
           overlayAttivi={overlayAttivi}
           soloSopraSoglia={soloSoglia}
+          orizzonte={orizzonte}
         />
-        <LivelloAttivo />
+        <LivelloAttivo orizzonte={orizzonte} />
+        <Timeline orizzonte={orizzonte} onCambia={setOrizzonte} />
         <div className="map-strumenti">
           <UnstyledButton
             className="map-bottone"

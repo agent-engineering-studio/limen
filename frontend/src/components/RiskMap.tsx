@@ -171,7 +171,13 @@ export interface RiskMapProps {
   readonly overlayAttivi?: ReadonlySet<string>;
   /** Nasconde le aree sotto Moderato (#155). */
   readonly soloSopraSoglia?: boolean;
+  /** Ore nel futuro: 0 è adesso, 24/48/72 la previsione per cella (#155). */
+  readonly orizzonte?: number;
 }
+
+/** Da questo zoom in su le celle previste: a 6 una tile pesava 2,4 MB e
+ *  3,6 s, a 7 1 MB e mezzo secondo. */
+const CELL_MIN_ZOOM_PREVISIONE = 7;
 
 /** Le classi che restano con «solo sopra soglia». */
 const SOPRA_SOGLIA = ["Moderate", "High", "VeryHigh"];
@@ -230,46 +236,67 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   const isDefaultHazard = hazard === "landslide";
   // Le rollup regionali e comunali sono fissate sulle frane: quando il
   // selettore dice altro, le celle sono l'unica cosa che lo rispetta.
-  const cellMinZoom =
-    isDefaultHazard && !multi ? CELL_MIN_ZOOM_DEFAULT : CELL_MIN_ZOOM_OTHER;
+  const orizzonte = props.orizzonte ?? 0;
+  const futuro = orizzonte > 0;
+  const cellMinZoom = futuro
+    ? CELL_MIN_ZOOM_PREVISIONE
+    : isDefaultHazard && !multi
+      ? CELL_MIN_ZOOM_DEFAULT
+      : CELL_MIN_ZOOM_OTHER;
   // Tre sorgenti, non due: la vista d'insieme non è "un pericolo qualunque"
   // ma un'aggregazione, e `v_multi_hazard` (migrazione 037) è l'unica che dà
   // una riga per cella su tutti i pericoli insieme.
+  // Il futuro ha una sorgente sua, `forecast_at()` (migrazione 060), che
+  // legge la previsione per cella; senza `p_hazard` è il peggiore fra i
+  // pericoli previsti, come `multi_hazard_at()` per l'adesso.
   const tileLayer =
     props.tileLayer ??
-    (multi
-      ? "public.multi_hazard_at"
-      : isDefaultHazard
-        ? "public.v_risk_tiles"
-        : "public.risk_at");
-  const tileQuery =
-    multi || isDefaultHazard ? "" : `?p_hazard=${encodeURIComponent(hazard)}`;
+    (futuro
+      ? "public.forecast_at"
+      : multi
+        ? "public.multi_hazard_at"
+        : isDefaultHazard
+          ? "public.v_risk_tiles"
+          : "public.risk_at");
+  const tileQuery = futuro
+    ? `?p_horizon=${orizzonte}${multi ? "" : `&p_hazard=${encodeURIComponent(hazard)}`}`
+    : multi || isDefaultHazard
+      ? ""
+      : `?p_hazard=${encodeURIComponent(hazard)}`;
   // Il nome del layer *dentro* il tile non è il path da cui lo si scarica.
   // `risk_at()` serializza con `ST_AsMVT(..., 'public.v_risk_tiles', ...)`
   // (migrazione 029), quindi puntare `source-layer` a "public.risk_at" darebbe
   // tile validi e una mappa vuota — un guasto silenzioso, perché la richiesta
   // riesce. Il layer MVT è sempre quello, qualunque sia la sorgente.
   const sourceLayer =
-    props.tileLayer ?? (multi ? "public.v_multi_hazard" : "public.v_risk_tiles");
+    props.tileLayer ??
+    (futuro
+      ? "public.v_forecast_tiles"
+      : multi
+        ? "public.v_multi_hazard"
+        : "public.v_risk_tiles");
   // In vista d'insieme la classe sta in `worst_level`, non in `risk_level`:
   // sono due sorgenti diverse, e il layer di selezione legge `cell_id` in
   // entrambe.
-  const cellFillColor = multi
+  const cellFillColor = futuro
+    ? maplibreColorMatch("risk_level", hazard)
+    : multi
     ? maplibreMultiHazardColorMatch()
     : maplibreColorMatch("risk_level", hazard);
   // Il nome lo dà il backend (`/api/hazards`); il ripiego serve al primo
   // render e a un backend irraggiungibile.
-  const hazardLabel = multi
-    ? "tutti i pericoli"
-    : (available.find((h) => h.hazard === hazard)?.label_it ??
-      (isDefaultHazard ? "frane" : hazard));
+  const hazardLabel =
+    (multi
+      ? "tutti i pericoli"
+      : (available.find((h) => h.hazard === hazard)?.label_it ??
+        (isDefaultHazard ? "frane" : hazard))) + (futuro ? `, previsione a ${orizzonte} ore` : "");
   const onCellClick = props.onCellClick;
   // L'attributo che porta la classe, per livello. Le regioni non ci sono:
   // `v_region_tiles` non espone `measured`, e filtrarle toglierebbe proprio
   // le regioni senza dato insieme a quelle tranquille.
   const attributoClasse: Record<string, string> = {
     [COMUNE_LAYER_ID]: "worst_class",
-    [LAYER_ID]: multi ? "worst_level" : "risk_level",
+    [LAYER_ID]: multi && !futuro ? "worst_level" : "risk_level",
   };
 
   useEffect(() => {
@@ -395,6 +422,9 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         id: REGION_LAYER_ID,
         type: "fill",
         source: REGION_SOURCE_ID,
+        // Regioni e comuni dicono l'adesso: sotto una previsione direbbero
+        // un'altra cosa con gli stessi colori.
+        layout: { visibility: futuro ? "none" : "visible" },
         "source-layer": "public.v_region_tiles",
         maxzoom: cellMinZoom,
         paint: {
@@ -410,6 +440,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         id: COMUNE_LAYER_ID,
         type: "fill",
         source: COMUNE_SOURCE_ID,
+        layout: { visibility: futuro ? "none" : "visible" },
         "source-layer": "public.v_comune_tiles",
         minzoom: COMUNE_MIN_ZOOM,
         maxzoom: COMUNE_MAX_ZOOM,
@@ -430,6 +461,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         maxzoom: COMUNE_MAX_ZOOM,
         filter: ["in", ["get", "worst_class"], ["literal", ["High", "VeryHigh"]]],
         layout: {
+          visibility: futuro ? "none" : "visible",
           "text-field": ["to-string", ["get", "n_alert"]],
           // Dichiarato invece che lasciato al default ("Open Sans Regular"):
           // il default e' implicito e il server dei glifi potrebbe non averlo.
