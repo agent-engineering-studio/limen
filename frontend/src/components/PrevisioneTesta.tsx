@@ -5,7 +5,8 @@ import { useInterval } from "@mantine/hooks";
 
 import { defaultApiClient } from "../lib/api-client";
 import { RISK_COLOR_BY_LEVEL } from "../lib/risk-colors";
-import type { ForecastAlertItem, ForecastSchedule, RiskLevel } from "../types";
+import { useForecastSchedule } from "../lib/forecast-schedule";
+import type { ForecastAlertItem, RiskLevel } from "../types";
 
 // La testata della previsione, dentro la lista dei comuni e non in un
 // pannello a parte.
@@ -59,14 +60,9 @@ function oraLocale(iso: string): string {
   });
 }
 
-export default function PrevisioneTesta({
-  schedule,
-}: {
-  schedule: ForecastSchedule | null;
-}): JSX.Element {
+export default function PrevisioneTesta(): JSX.Element {
+  const schedule = useForecastSchedule();
   const [allerte, setAllerte] = useState<ForecastAlertItem[] | null>(null);
-  // Il conto alla rovescia si ridisegna ogni trenta secondi: al minuto basta,
-  // e un secondo che scorre in una colonna laterale è rumore.
   const [adesso, setAdesso] = useState(() => Date.now());
   useInterval(() => setAdesso(Date.now()), 30_000, { autoInvoke: true });
 
@@ -88,65 +84,23 @@ export default function PrevisioneTesta({
   const conPrevisione = Object.keys(corseCelle).map((h) => NOME[h] ?? h);
 
   return (
-    <Box className="prev-testa" aria-label="Stato della previsione">
-      <Group justify="space-between" wrap="nowrap" align="baseline">
-        <Text size="xs" fw={700} tt="uppercase" className="prev-titolo">
-          Previsione a 72 ore
-        </Text>
+    <section className="rail-sezione prev-testa" aria-label="Stato della previsione">
+      <div className="rail-testa">
+        <h2>Previsione 72 ore</h2>
         {prossimaCella ? (
-          <Text size="xs" fw={600} className="prev-timer">
-            prossima {prossimaCella}
-          </Text>
+          <span className="prev-timer mono">prossima {prossimaCella}</span>
         ) : null}
-      </Group>
-
-      <Text size="xs" c="dimmed" mt={2}>
-        {ultimaCella ? (
-          <>
-            Per comune: calcolata {quantoFa(ultimaCella, adesso)} (
-            {oraLocale(ultimaCella)})
-            {schedule?.cells.next_run_at
-              ? `, prossima ${oraLocale(schedule.cells.next_run_at)}`
-              : ""}
-            . Gira una volta al giorno, di notte.
-          </>
-        ) : (
-          "Per comune: nessuna previsione calcolata finora."
-        )}
-      </Text>
-
-      {conPrevisione.length > 0 && conPrevisione.length < 3 ? (
-        // Oggi la previsione per cella esiste solo per le frane. Dirlo qui
-        // evita che una riga senza previsione d'incendio si legga come
-        // «incendio previsto tranquillo».
-        <Text size="xs" c="dimmed" mt={2}>
-          Disponibile per: {conPrevisione.join(", ")}. Per gli altri pericoli
-          la riga mostra solo l&apos;adesso.
-        </Text>
-      ) : null}
-
-      <Text size="xs" c="dimmed" mt={4}>
-        {schedule?.running_since ? (
-          <>Allerta per regione: calcolo in corso da {quantoFa(schedule.running_since, adesso).replace(" fa", "")}.</>
-        ) : prossimaRegione ? (
-          <>
-            Allerta per regione: ogni {schedule?.interval_hours ?? 6} ore,
-            prossima {prossimaRegione}.
-          </>
-        ) : (
-          // Il worker non ha pubblicato l'orario: è appena ripartito, o è
-          // fermo. Meglio dirlo che indovinare dall'ultima corsa, che dopo un
-          // riavvio sbaglia di ore.
-          <>Allerta per regione: orario del prossimo calcolo non disponibile.</>
-        )}
-      </Text>
+      </div>
 
       {allerte === null ? null : allerte.length === 0 ? (
-        <Text size="xs" mt={4}>
-          Nessuna regione prevista sopra soglia nelle ultime 72 ore.
-        </Text>
+        <div className="prev-stato is-quiet">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M5 12l5 5L20 7" stroke="currentColor" strokeWidth="2" />
+          </svg>
+          <span>Nessuna regione prevista sopra soglia nelle ultime 72 ore</span>
+        </div>
       ) : (
-        <Box mt={4}>
+        <div className="prev-stato is-alert">
           {allerte.slice(0, 4).map((a) => (
             <Group key={`${a.aoi_id}-${a.dispatched_at}`} gap={6} wrap="nowrap">
               <Box
@@ -162,8 +116,36 @@ export default function PrevisioneTesta({
               </Text>
             </Group>
           ))}
-        </Box>
+        </div>
       )}
-    </Box>
+
+      <Text size="xs" c="dimmed">
+        {ultimaCella ? (
+          <>
+            Per comune: calcolata {quantoFa(ultimaCella, adesso)} (
+            {oraLocale(ultimaCella)})
+            {schedule?.cells.next_run_at
+              ? `, prossima ${oraLocale(schedule.cells.next_run_at)}`
+              : ""}
+            . Gira una volta al giorno, di notte.
+          </>
+        ) : (
+          "Per comune: nessuna previsione calcolata finora."
+        )}
+        {conPrevisione.length > 0 && conPrevisione.length < 3
+          ? ` Disponibile per: ${conPrevisione.join(", ")}.`
+          : ""}{" "}
+        {schedule?.running_since ? (
+          <>Allerta per regione: calcolo in corso da {quantoFa(schedule.running_since, adesso).replace(" fa", "")}.</>
+        ) : prossimaRegione ? (
+          <>
+            Allerta per regione: ogni {schedule?.interval_hours ?? 6} ore,
+            prossima {prossimaRegione}.
+          </>
+        ) : (
+          <>Allerta per regione: orario del prossimo calcolo non disponibile.</>
+        )}
+      </Text>
+    </section>
   );
 }

@@ -158,8 +158,9 @@ export interface RiskMapProps {
   readonly tileservUrl?: string;
   /** Layer/function name pg_tileserv exposes the matview as. */
   readonly tileLayer?: string;
-  /** Callback when the user clicks a cell — surfaces the cell_id. */
-  readonly onCellClick?: (cellId: string) => void;
+  /** Callback when the user clicks a cell — surfaces the cell_id and the
+   *  clicked point, where the inspector opens. */
+  readonly onCellClick?: (cellId: string, lngLat?: { lng: number; lat: number }) => void;
   /** Cell to outline on the map (selection from the sidebar or a click). */
   readonly selectedCellId?: string | null;
   /** Imperative ref for tests / parent controls (e.g. fly-to). */
@@ -168,6 +169,24 @@ export interface RiskMapProps {
   readonly comuneEvidenziato?: GeoJSON.Feature | null;
   /** I livelli di contesto accesi (id di `lib/overlays`). */
   readonly overlayAttivi?: ReadonlySet<string>;
+  /** Nasconde le aree sotto Moderato (#155). */
+  readonly soloSopraSoglia?: boolean;
+}
+
+/** Le classi che restano con «solo sopra soglia». */
+const SOPRA_SOGLIA = ["Moderate", "High", "VeryHigh"];
+
+/** Il filtro di «solo sopra soglia» su un attributo di classe, o `null`.
+ *
+ *  Le aree non misurate restano: sono grigie perché non si sa, e toglierle
+ *  insieme alle tranquille le farebbe passare per tranquille (#143). */
+export function filtroSoglia(prop: string, attivo: boolean): maplibregl.FilterSpecification | null {
+  if (!attivo) return null;
+  return [
+    "any",
+    ["==", ["get", "measured"], false],
+    ["in", ["get", prop], ["literal", SOPRA_SOGLIA]],
+  ] as maplibregl.FilterSpecification;
 }
 
 /**
@@ -189,6 +208,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const evidenziatoRef = useRef<GeoJSON.Feature | null>(props.comuneEvidenziato ?? null);
   const overlayRef = useRef<ReadonlySet<string>>(props.overlayAttivi ?? new Set());
+  const sogliaRef = useRef(props.soloSopraSoglia ?? false);
   // Visibilità di un livello di contesto, letta allo stato corrente: la mappa
   // si ricostruisce a ogni cambio di pericolo, e senza questo i livelli
   // tornerebbero spenti mentre la casella resta spuntata.
@@ -244,6 +264,12 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     : (available.find((h) => h.hazard === hazard)?.label_it ??
       (isDefaultHazard ? "frane" : hazard));
   const onCellClick = props.onCellClick;
+  // L'attributo che porta la classe, per livello: tre sorgenti, tre nomi.
+  const attributoClasse: Record<string, string> = {
+    [REGION_LAYER_ID]: "risk_level",
+    [COMUNE_LAYER_ID]: "worst_class",
+    [LAYER_ID]: multi ? "worst_level" : "risk_level",
+  };
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -255,6 +281,10 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     }
 
     const tilesUrl = `${tileserv}/${tileLayer}/{z}/{x}/{y}.pbf${tileQuery}`;
+    const conFiltro = (layerId: string): { filter?: maplibregl.FilterSpecification } => {
+      const f = filtroSoglia(attributoClasse[layerId] ?? "risk_level", sogliaRef.current);
+      return f ? { filter: f } : {};
+    };
 
     // Build the source set lazily so optional PMTiles overlays only
     // appear when their env URL is set — see `docs/geodata.md`.
@@ -374,6 +404,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
           "fill-opacity": 0.7,
           "fill-outline-color": "#2c3846",
         },
+        ...conFiltro(REGION_LAYER_ID),
       },
       {
         id: COMUNE_LAYER_ID,
@@ -387,6 +418,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
           "fill-opacity": 0.7,
           "fill-outline-color": "#2c3846",
         },
+        ...conFiltro(COMUNE_LAYER_ID),
       },
       {
         // Count of alerting cells — only on High+ comuni (keeps it uncluttered).
@@ -423,6 +455,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
           "fill-opacity": 0.7,
           "fill-outline-color": "#0a0e13",
         },
+        ...conFiltro(LAYER_ID),
       },
       ...(multi
         ? [
@@ -633,13 +666,14 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       props.mapRef.current = map;
     }
 
-    map.addControl(new maplibregl.NavigationControl(), "top-right");
+    // In basso: in alto a destra stanno gli strumenti della mappa (#155).
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
 
     if (onCellClick) {
       map.on("click", LAYER_ID, (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
         const cellId = e.features?.[0]?.properties?.["cell_id"];
         if (typeof cellId === "string") {
-          onCellClick(cellId);
+          onCellClick(cellId, e.lngLat);
         }
       });
     }
@@ -700,6 +734,21 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     if (map.isStyleLoaded()) apply();
     else map.once("idle", apply);
   }, [props.overlayAttivi, props.mapRef]);
+
+  // «Solo sopra soglia», senza ricostruire la mappa.
+  useEffect(() => {
+    sogliaRef.current = props.soloSopraSoglia ?? false;
+    const map = props.mapRef?.current;
+    if (!map) return;
+    const apply = (): void => {
+      for (const [id, prop] of Object.entries(attributoClasse)) {
+        if (map.getLayer(id)) map.setFilter(id, filtroSoglia(prop, sogliaRef.current));
+      }
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("idle", apply);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.soloSopraSoglia, props.mapRef]);
 
   // Il confine del comune, senza ricostruire la mappa.
   useEffect(() => {

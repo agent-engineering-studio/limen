@@ -50,7 +50,7 @@ describe("selettore", () => {
       </HazardProvider>,
     );
     await waitFor(() => expect(defaultApiClient.getHazards).toHaveBeenCalled());
-    expect(screen.queryByRole("button", { name: "tutti" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Tutti i pericoli" })).toBeNull();
   });
 });
 
@@ -65,7 +65,7 @@ describe("mappa in vista d'insieme", () => {
       </HazardProvider>,
     );
 
-    const tutti = await screen.findByRole("button", { name: "tutti" });
+    const tutti = await screen.findByRole("button", { name: "Tutti i pericoli" });
     fireEvent.click(tutti);
 
     await waitFor(() =>
@@ -97,7 +97,7 @@ describe("mappa in vista d'insieme", () => {
       expect(legend).toHaveBeenCalledWith(expect.anything(), "wildfire"),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "tutti" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tutti i pericoli" }));
     // La matrice 5×3 non c'è più: il segno della vista d'insieme è la
     // legenda a scala sola.
     expect(await screen.findByText(/Il colore dice/)).toBeInTheDocument();
@@ -132,7 +132,7 @@ describe("legenda in vista d'insieme", () => {
       </HazardProvider>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "tutti" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tutti i pericoli" }));
 
     expect(await screen.findByText(/Il colore dice/)).toBeInTheDocument();
     expect(screen.queryByRole("table")).toBeNull();

@@ -6,7 +6,9 @@ import { useHazard } from "../lib/hazard";
 import type { PanelFailure } from "../lib/panel-state";
 import { describeFailure, isStale, relativeTime } from "../lib/panel-state";
 import { verdictFromHazards } from "../lib/verdict";
-import type { NationalReportResponse } from "../types";
+import type { HazardType, NationalReportResponse } from "../types";
+import HazardSelector from "./HazardSelector";
+import type { RigaPericolo } from "./HazardSelector";
 import { PanelDegraded, PanelLoading } from "./PanelState";
 
 /**
@@ -21,7 +23,7 @@ export function NationalStrip(): JSX.Element {
   // degradato, che senza un modo per richiedere i dati sarebbe un bottone
   // che invita a ricaricare la pagina intera.
   const [tentativo, setTentativo] = useState(0);
-  const { selected } = useHazard();
+  const { selected, available } = useHazard();
   const riprova = useCallback(() => setTentativo((n) => n + 1), []);
 
   useEffect(() => {
@@ -44,18 +46,30 @@ export function NationalStrip(): JSX.Element {
     return () => ctrl.abort();
   }, [selected, tentativo]);
 
+  const testa = (
+    <div className="rail-testa">
+      <h2>Quadro nazionale</h2>
+      {report ? (
+        <span className="rail-meta mono">
+          {report.totals.cells.toLocaleString("it-IT")} celle · 1 km²
+        </span>
+      ) : null}
+    </div>
+  );
+
   if (failure) {
     return (
-      <section className="national-strip" aria-label="Quadro nazionale">
-        <h2>Italia · quadro nazionale</h2>
+      <section className="national-strip rail-sezione" aria-label="Quadro nazionale">
+        {testa}
         <PanelDegraded failure={failure} onRetry={riprova} />
       </section>
     );
   }
   if (!report) {
     return (
-      <section className="national-strip" aria-label="Quadro nazionale">
-        <h2>Italia · quadro nazionale</h2>
+      <section className="national-strip rail-sezione" aria-label="Quadro nazionale">
+        {testa}
+        <HazardSelector />
         <PanelLoading label="Carico il quadro nazionale" />
       </section>
     );
@@ -63,7 +77,7 @@ export function NationalStrip(): JSX.Element {
 
   // I tre indici insieme, non uno alla volta: sapere che l'incendio ha aree
   // in classe Alta mentre le frane non ne hanno richiedeva due clic e la
-  // memoria del numero visto prima.
+  // memoria del numero visto prima. Ora sono le righe del selettore stesso.
   const verdetto = verdictFromHazards(
     report.hazards.map((h) => ({
       hazard: h.hazard,
@@ -72,86 +86,62 @@ export function NationalStrip(): JSX.Element {
       computed_at: h.computed_at,
     })),
   );
+  const righe: Partial<Record<HazardType, RigaPericolo>> = {};
+  for (const l of verdetto.lines) {
+    const t = report.hazards.find((h) => h.hazard === l.hazard)?.totals;
+    if (!t) continue;
+    righe[l.hazard as HazardType] = {
+      cifra: (l.tone === "alert" ? t.high_or_above : t.moderate).toLocaleString("it-IT"),
+      dettaglio: l.text,
+      tono: l.tone,
+      // L'età per pericolo: con l'alluvione ferma da due giorni accanto
+      // all'incendio di un'ora fa, un solo «aggiornato» per tutta la sezione
+      // diceva una cosa falsa su una delle due.
+      eta: l.computed_at ? relativeTime(l.computed_at) : "mai calcolato",
+      vecchio: l.computed_at ? isStale(l.computed_at) : true,
+    };
+  }
   const vecchio = isStale(report.generated_at);
 
   return (
-    <section className="national-strip" aria-label="Quadro nazionale">
-      <div className={`verdict tone-${verdetto.headline.tone}`}>
-        <p className="verdict-text">{verdetto.headline.text}</p>
-        {verdetto.headline.note ? (
-          <p className="verdict-note">{verdetto.headline.note}</p>
-        ) : null}
-        {verdetto.lines.length > 1 ? (
-          <ul className="verdict-hazards">
-            {verdetto.lines.map((l) => (
-              <li key={l.hazard} className={`tone-${l.tone}`}>
-                <span className={`hazard-dot ${l.hazard}`} aria-hidden />
-                <span className="vh-label">{l.label}</span>
-                <span className="vh-text">{l.text}</span>
-                {/* L'età per pericolo: con l'alluvione ferma da due giorni
-                    accanto all'incendio di un'ora fa, un solo «aggiornato»
-                    per tutta la sezione diceva una cosa falsa su una delle
-                    due. */}
-                <span className={`vh-age ${l.computed_at && isStale(l.computed_at) ? "is-stale" : ""}`}>
-                  {l.computed_at ? relativeTime(l.computed_at) : "mai calcolato"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        <p className="verdict-meta">
-          quadro aggiornato {relativeTime(report.generated_at)} ·{" "}
-          {report.totals.regions} regioni
+    <section className="national-strip rail-sezione" aria-label="Quadro nazionale">
+      {testa}
+      {available.length >= 2 ? (
+        <HazardSelector righe={righe} />
+      ) : (
+        // Senza scelta da fare — un pericolo solo, o la lista che non è
+        // arrivata — il selettore non c'è, e la risposta resta a parole.
+        <div className={`verdict tone-${verdetto.headline.tone}`}>
+          <p className="verdict-text">{verdetto.headline.text}</p>
+          {verdetto.headline.note ? (
+            <p className="verdict-note">{verdetto.headline.note}</p>
+          ) : null}
+        </div>
+      )}
+      {vecchio ? (
+        // Numeri fermi da ore mostrati senza dirlo sono peggio di nessun
+        // numero: chi guarda li legge come «adesso».
+        <p className="verdict-stale">
+          Dati fermi da più di tre ore: il calcolo dovrebbe girare ogni ora.
         </p>
-        {vecchio ? (
-          // Numeri fermi da ore mostrati senza dirlo sono peggio di nessun
-          // numero: chi guarda li legge come «adesso».
-          <p className="verdict-stale">
-            Dati fermi da più di tre ore: il calcolo dovrebbe girare ogni ora.
-          </p>
-        ) : null}
-        <p className="verdict-disclaimer">
-          Limen affianca e non sostituisce l&apos;allertamento della Protezione
-          Civile. <a href="#/documentazione/01-limen-in-una-pagina">Cosa vuol dire</a>
-        </p>
-      </div>
-      {/* Le quattro caselle sono di **un** pericolo, non di tutti: le celle
-          non si sommano fra pericoli, sono le stesse celle. Il nome del
-          pericolo sta ora sopra le caselle e non in una riga staccata sotto
-          — con la testata che dice «Incendio: 5024 aree in classe Alta» e le
-          caselle che dicono «0 High+», la distanza fra le due cose era il
-          modo più facile di leggere un numero per un altro. */}
-      <p className="strip-stats-head">
-        {report.hazards.find((h) => h.hazard === report.hazard)?.label_it ??
-          report.hazard}
-        <span> · su {report.totals.cells.toLocaleString("it-IT")} celle</span>
+      ) : null}
+      <p className="rail-nota">
+        Quadro aggiornato {relativeTime(report.generated_at)} · {report.totals.regions}{" "}
+        regioni. Limen affianca e non sostituisce l&apos;allertamento della
+        Protezione Civile.{" "}
+        <a href="#/documentazione/01-limen-in-una-pagina">Cosa vuol dire</a>
       </p>
-      <div className="strip-stats">
-        <div>
-          <strong className="mono">{report.totals.high_or_above}</strong>
-          <span>High+</span>
-        </div>
-        <div>
-          <strong className="mono">
-            {report.totals.moderate.toLocaleString("it-IT")}
-          </strong>
-          <span>Moderate</span>
-        </div>
-        <div>
-          <strong className="mono">{report.alerts_24h}</strong>
-          <span>alert 24h</span>
-        </div>
-        <div>
-          <strong className="mono">{report.forecast_alerts_24h}</strong>
-          <span>previsioni</span>
-        </div>
-      </div>
       {/* Tutto il resto sta dietro un pannello a scomparsa. Sono numeri che
           si consultano, non che si sorvegliano: tenerli aperti allungava la
           colonna di tre schermate e spingeva i comuni — che è la lista su cui
           si decide qualcosa — sotto la piega. */}
       <details className="strip-more">
-        <summary>Dettaglio per pericolo, cascate e modello ML</summary>
+        <summary>Dettaglio: allerte, cascate e modello ML</summary>
+        <p className="strip-allerte">
+          <span className="mono">{report.alerts_24h}</span> allerte nelle 24 ore ·{" "}
+          <span className="mono">{report.forecast_alerts_24h}</span> previsioni sopra
+          soglia
+        </p>
         {report.hazards.length > 1 ? (
           <ul className="strip-hazards">
             {report.hazards.map((b) => (

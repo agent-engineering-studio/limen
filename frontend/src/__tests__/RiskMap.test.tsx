@@ -1,6 +1,7 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import HazardSelector from "../components/HazardSelector";
 import RiskMap from "../components/RiskMap";
 import { defaultApiClient } from "../lib/api-client";
 import { HazardProvider } from "../lib/hazard";
@@ -45,10 +46,13 @@ describe("RiskMap", () => {
 
     render(
       <HazardProvider>
+        <HazardSelector />
         <RiskMap tileservUrl="http://tiles.test" />
       </HazardProvider>,
     );
 
+    // Si parte dalla vista d'insieme (#155): il pericolo singolo si sceglie.
+    fireEvent.click(await screen.findByRole("button", { name: "Incendio" }));
     await waitFor(() =>
       expect(screen.getByTestId("risk-map").dataset["tileUrl"]).toBe(
         "http://tiles.test/public.risk_at/{z}/{x}/{y}.pbf?p_hazard=wildfire",
