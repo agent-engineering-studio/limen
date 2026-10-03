@@ -292,6 +292,31 @@ class OpenMeteoHttpClient:
             label="openmeteo.rainfall_grid",
         )
 
+    async def get_rain_outlook(
+        self, *, lon: float, lat: float, hours: int = 48
+    ) -> dict[str, float] | None:
+        """La pioggia delle prossime ``hours`` ore su un punto: totale e picco.
+
+        Per il riquadro della cella (#159), che prima chiedeva la stessa cosa
+        all'API pubblica dal browser — consumando il tetto giornaliero che
+        l'istanza propria esiste per non consumare. Passa dalla previsione
+        configurata (``forecast_url``), come il punteggio. ``None`` quando la
+        fonte non risponde: nessuna pioggia e nessun dato sono due risposte
+        diverse.
+        """
+        # Dall'ora in corso, ``hours`` campioni orari esatti.
+        inizio = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+        fine = inizio + timedelta(hours=hours)
+        serie = await self.get_rainfall_grid(
+            nodes=[(lon, lat)], window_start=inizio, window_end=fine, use_archive=False
+        )
+        campioni = [
+            s.precipitation_mm for s in (serie[0] if serie else []) if inizio <= s.timestamp < fine
+        ]
+        if not campioni:
+            return None
+        return {"total_mm": float(sum(campioni)), "peak_mmh": float(max(campioni))}
+
     async def get_fire_weather_grid(
         self,
         *,

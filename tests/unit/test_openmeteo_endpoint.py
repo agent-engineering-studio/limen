@@ -11,7 +11,9 @@ auto-ospitabile.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 
+import httpx
 import pytest
 
 from limen.config.settings import get_settings
@@ -87,3 +89,59 @@ def test_senza_modello_i_parametri_restano_quelli(monkeypatch: pytest.MonkeyPatc
 
     originali = {"hourly": "precipitation"}
     assert meteo_flood._with_model(originali) == originali
+
+
+def _ore(adesso: datetime, valori: list[float]) -> dict[str, object]:
+    """Una risposta oraria che parte due ore prima di `adesso`."""
+    inizio = adesso.replace(minute=0, second=0, microsecond=0) - timedelta(hours=2)
+    return {
+        "hourly": {
+            "time": [
+                (inizio + timedelta(hours=i)).strftime("%Y-%m-%dT%H:%M") for i in range(len(valori))
+            ],
+            "precipitation": valori,
+        }
+    }
+
+
+async def test_la_pioggia_del_riquadro_passa_dall_istanza_propria(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#159: il riquadro della cella chiedeva all'API pubblica dal browser."""
+    monkeypatch.setenv("OPENMETEO__FORECAST_URL", "http://openmeteo:8080/v1/forecast")
+    get_settings.cache_clear()
+    adesso = datetime.now(UTC)
+    # Due ore passate (fuori dalla finestra), poi 48 ore di pioggia, poi altre
+    # ore oltre le 48 che non vanno contate.
+    valori = [9.0, 9.0] + [1.0] * 47 + [4.0] + [9.0] * 20
+    chieste: list[str] = []
+
+    def risponde(req: httpx.Request) -> httpx.Response:
+        chieste.append(str(req.url))
+        return httpx.Response(200, json=_ore(adesso, valori))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(risponde)) as http:
+        esito = await meteo_client.OpenMeteoHttpClient(http_client=http).get_rain_outlook(
+            lon=13.9, lat=42.3
+        )
+
+    assert chieste and chieste[0].startswith("http://openmeteo:8080/v1/forecast")
+    assert esito is not None
+    assert esito["peak_mmh"] == 4.0
+    # Le ore già passate e quelle oltre le 48 restano fuori: 47 ore a 1 mm e una a 4.
+    assert esito["total_mm"] == 51.0
+
+
+async def test_senza_dati_il_riquadro_dice_non_lo_so(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Nessun campione non è «niente pioggia»: è `None`."""
+    monkeypatch.setenv("OPENMETEO__FORECAST_URL", "http://openmeteo:8080/v1/forecast")
+    get_settings.cache_clear()
+
+    def vuota(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"hourly": {"time": [], "precipitation": []}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(vuota)) as http:
+        esito = await meteo_client.OpenMeteoHttpClient(http_client=http).get_rain_outlook(
+            lon=13.9, lat=42.3
+        )
+    assert esito is None

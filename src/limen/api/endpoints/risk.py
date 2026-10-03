@@ -362,6 +362,31 @@ ORDER BY horizon_h
 """
 
 
+_CELL_CENTROID_SQL = """
+SELECT ST_X(ST_Centroid(geom)) AS lon, ST_Y(ST_Centroid(geom)) AS lat
+FROM grid_cells WHERE id = $1
+"""
+
+
+@router.get("/api/cell/{cell_id}/rain-outlook")
+async def cell_rain_outlook(cell_id: str, response: Response, deps: DepsDep) -> dict[str, Any]:
+    """La pioggia delle prossime 48 ore sul centro della cella (#159).
+
+    Dalla nostra istanza Open-Meteo, non dal browser verso l'API pubblica.
+    ``outlook`` è ``null`` quando la fonte non risponde: il riquadro deve poter
+    dire «non lo so» invece di «niente pioggia».
+    """
+    async with acquire() as conn:
+        row = await conn.fetchrow(_CELL_CENTROID_SQL, cell_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"cella sconosciuta: {cell_id}")
+    outlook = await deps.openmeteo.get_rain_outlook(lon=row["lon"], lat=row["lat"])
+    # Mezz'ora: la previsione oraria non cambia più spesso, e una mappa
+    # pubblica non deve tradurre ogni clic in una richiesta al servizio meteo.
+    response.headers["Cache-Control"] = "public, max-age=1800" if outlook else "no-store"
+    return {"cell_id": cell_id, "hours": 48, "outlook": outlook}
+
+
 @router.get("/api/cell/{cell_id}/history")
 async def cell_history(
     cell_id: str,
