@@ -264,9 +264,10 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     : (available.find((h) => h.hazard === hazard)?.label_it ??
       (isDefaultHazard ? "frane" : hazard));
   const onCellClick = props.onCellClick;
-  // L'attributo che porta la classe, per livello: tre sorgenti, tre nomi.
+  // L'attributo che porta la classe, per livello. Le regioni non ci sono:
+  // `v_region_tiles` non espone `measured`, e filtrarle toglierebbe proprio
+  // le regioni senza dato insieme a quelle tranquille.
   const attributoClasse: Record<string, string> = {
-    [REGION_LAYER_ID]: "risk_level",
     [COMUNE_LAYER_ID]: "worst_class",
     [LAYER_ID]: multi ? "worst_level" : "risk_level",
   };
@@ -404,7 +405,6 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
           "fill-opacity": 0.7,
           "fill-outline-color": "#2c3846",
         },
-        ...conFiltro(REGION_LAYER_ID),
       },
       {
         id: COMUNE_LAYER_ID,

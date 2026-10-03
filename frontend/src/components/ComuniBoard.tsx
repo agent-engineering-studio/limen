@@ -564,10 +564,18 @@ function Tendenza({
   previsti: Set<string>;
 }): JSX.Element | null {
   if (previsti.size === 0) return null;
-  const ora = piccoDi(comune, false);
-  const poi = piccoDi(comune, true);
+  // Solo i pericoli che hanno una previsione, da entrambe le parti: un
+  // incendio a 0,8 senza futuro contro una frana prevista in salita darebbe
+  // una freccia in calo che non dice niente di nessuno dei due.
+  const ora = Object.entries(comune.hazards)
+    .filter(([h, v]) => previsti.has(h) && v.measured)
+    .reduce<number | null>((m, [, v]) => (m === null || v.score > m ? v.score : m), null);
   if (ora === null) return null;
-  const delta = (poi?.score ?? 0) - ora.score;
+  // Senza riga previsionale un pericolo previsto sta sotto Moderato.
+  const poi = Object.entries(comune.forecast ?? {})
+    .filter(([h]) => previsti.has(h))
+    .reduce((m, [, f]) => Math.max(m, f.score), 0);
+  const delta = poi - ora;
   // Senza righe previsionali il futuro è sotto Moderato: se oggi si è sopra,
   // si scende.
   const verso = delta > 0.02 ? "su" : delta < -0.02 ? "giu" : "piatto";

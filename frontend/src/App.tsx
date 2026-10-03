@@ -104,6 +104,7 @@ export function posizioneIspettore(
 }
 
 export function App(): JSX.Element {
+  const { view } = useHazard();
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [selected, setSelected] = useState<CellSelection | null>(null);
   const [evidenziato, setEvidenziato] = useState<ComuneGeometry | null>(null);
@@ -161,7 +162,10 @@ export function App(): JSX.Element {
     return () => {
       map.off("move", aggiorna);
     };
-  }, [selected?.lon, selected?.lat]);
+    // `view`: la mappa si ricostruisce a ogni cambio di pericolo, e
+    // l'ascoltatore resterebbe attaccato a quella vecchia. L'effetto della
+    // mappa, che è un figlio, gira prima di questo: mapRef è già la nuova.
+  }, [selected?.lon, selected?.lat, view]);
 
 
   // Dalla colonna alla mappa. Una classifica geografica su cui si clicca e
