@@ -420,9 +420,10 @@ export function ScienceContent({
           ))}
         </ul>
         <p className="exp-note">
-          Palette ColorBrewer YlOrRd (sicura per daltonismo); l&apos;informazione
-          non è mai affidata al solo colore — c&apos;è sempre etichetta e
-          intervallo. Cutoff e mapping da <code>classes:</code> e{" "}
+          Una scala sola per i tre pericoli, dal quasi-fondo al rosso; ogni
+          coppia di classi resta distinguibile per luminanza anche in
+          simulazione di daltonismo, e l&apos;informazione non è mai affidata
+          al solo colore — c&apos;è sempre etichetta e intervallo. Cutoff e mapping da <code>classes:</code> e{" "}
           <code>pc_alert:</code> nel YAML.
         </p>
 

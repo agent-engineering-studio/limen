@@ -322,27 +322,28 @@ flowchart LR
   C --> A["L'avviso<br/>a chi, quando"]
 ```
 
-Il numero viene tagliato in cinque fasce, che sulla mappa usano la scala di
-colori dal giallo chiaro al rosso scuro (la tavolozza si chiama YlOrRd ed è
-scelta perché resta leggibile anche a chi ha una comune forma di daltonismo;
-il colore non è mai l'unica informazione, accanto c'è sempre l'etichetta
-scritta e l'intervallo numerico).
+Il numero viene tagliato in cinque fasce. Sulla mappa, che è scura, la scala
+va da un colore quasi uguale al fondo, passa per un verde petrolio spento e poi
+sale per giallo, arancio e rosso: l'ordine delle allerte della Protezione
+Civile. È scelta perché ogni fascia resta distinguibile dalle altre anche a chi
+ha una comune forma di daltonismo, e il colore non è mai l'unica informazione:
+accanto c'è sempre l'etichetta scritta e l'intervallo numerico.
 
-- **Nessuna, da 0 a 0,15** — colore chiarissimo, corrispondenza verde. Le
+- **Nessuna, da 0 a 0,15** — quasi il colore del fondo, corrispondenza verde. Le
   condizioni ordinarie. Non vuol dire "sicuro": vuol dire "nessun segnale".
   *Cosa fare:* niente di diverso dal solito.
-- **Bassa, da 0,15 a 0,35** — giallo tenue, corrispondenza verde. Qualche
+- **Bassa, da 0,15 a 0,35** — verde petrolio spento, corrispondenza verde. Qualche
   ingrediente è attivo: di solito il posto è predisposto ma il tempo è
   tranquillo, oppure piove su un posto tranquillo.
   *Cosa fare:* niente, ma se abiti in una cella che sta stabilmente qui vale
   la pena sapere perché — guarda il dettaglio della cella.
-- **Moderata, da 0,35 a 0,55** — arancio chiaro, corrispondenza allerta
-  gialla. Qui il sistema sta dicendo qualcosa: la pioggia ha superato la
-  soglia su un posto che ha già una predisposizione.
+- **Moderata, da 0,35 a 0,55** — giallo, corrispondenza allerta gialla. Qui
+  il sistema sta dicendo qualcosa: la pioggia ha superato la soglia su un
+  posto che ha già una predisposizione.
   *Cosa fare:* tenere d'occhio l'allerta ufficiale della tua regione, evitare
   i sottopassi e le strade di fondovalle se la pioggia continua, non
   parcheggiare sotto una scarpata.
-- **Alta, da 0,55 a 0,75** — arancio scuro, corrispondenza allerta arancione.
+- **Alta, da 0,55 a 0,75** — arancio, corrispondenza allerta arancione.
   Più ingredienti pesanti sono attivi insieme.
   *Cosa fare:* è il momento di seguire il piano di protezione civile
   comunale, non la mappa di Limen. Evitare gli spostamenti non necessari

@@ -23,7 +23,7 @@ from limen.data.db import acquire
 from limen.report.archive import prune_archive, write_build
 from limen.report.clustering import Cluster, anomaly_cutoff, load_clusters
 from limen.report.geojson import coord_label, zone_center, zone_feature_collection_json
-from limen.report.palette import color_for, label_for
+from limen.report.palette import color_for, label_for, text_color_for
 from limen.report.reasons import plain_summary, verdict
 from limen.report.render import ClusterView, ReportView, render_html
 from limen.report.trend import read_cell_trend, trend_points, trend_svg
@@ -158,6 +158,7 @@ def _cluster_to_view(c: Cluster, idx: int) -> ClusterView:
         level=level,
         level_label=label_for(level),
         level_color=color_for(level),
+        level_text_color=text_color_for(level),
         max_score=c.max_score,
         n_cells=len(c.cell_ids),
         map_id=f"zone-{idx}",

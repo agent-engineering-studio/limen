@@ -33,6 +33,7 @@ class ClusterView:
     level: RiskLevel
     level_label: str
     level_color: str
+    level_text_color: str
     max_score: float
     n_cells: int
     map_id: str
