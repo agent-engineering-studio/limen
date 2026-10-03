@@ -3,7 +3,7 @@ import type { JSX } from "react";
 
 import { defaultApiClient, ApiClientError } from "../lib/api-client";
 import { useHazard } from "../lib/hazard";
-import { RISK_COLOR_BY_LEVEL, RISK_LABEL_IT_BY_LEVEL } from "../lib/risk-colors";
+import { RISK_COLOR_BY_LEVEL, RISK_LABEL_IT_BY_LEVEL, RISK_SCURE } from "../lib/risk-colors";
 import type {
   CellBreakdownResponse,
   CellMultiHazardResponse,
@@ -235,21 +235,21 @@ const COMPONENTS_BY_HAZARD: Record<
   readonly { key: string; label: string; color: string }[]
 > = {
   landslide: [
-    { key: "s", label: "S statico", color: "#2456a3" },
-    { key: "m", label: "M meteo", color: "#e8720c" },
-    { key: "e", label: "E sismico", color: "#7a5cc0" },
-    { key: "f", label: "F post-incendio", color: "#b34a04" },
-    { key: "h", label: "H idrologico", color: "#2a8fb5" },
+    { key: "s", label: "S statico", color: "#7fa7e8" },
+    { key: "m", label: "M meteo", color: "#ff8a1f" },
+    { key: "e", label: "E sismico", color: "#c6a8ff" },
+    { key: "f", label: "F post-incendio", color: "#ffa552" },
+    { key: "h", label: "H idrologico", color: "#6fd3ee" },
   ],
   wildfire: [
-    { key: "fwi_norm", label: "FWI (tempo)", color: "#d95f0e" },
-    { key: "fuel", label: "Combustibile", color: "#238b45" },
-    { key: "slope", label: "Pendenza", color: "#7a5cc0" },
+    { key: "fwi_norm", label: "FWI (tempo)", color: "#ff9ad5" },
+    { key: "fuel", label: "Combustibile", color: "#6fcf97" },
+    { key: "slope", label: "Pendenza", color: "#c6a8ff" },
   ],
   flood: [
-    { key: "susceptibility", label: "Suscettibilità", color: "#045a8d" },
-    { key: "pluvial", label: "Pioggia", color: "#2b8cbe" },
-    { key: "fluvial", label: "Fiume", color: "#74a9cf" },
+    { key: "susceptibility", label: "Suscettibilità", color: "#7fa7e8" },
+    { key: "pluvial", label: "Pioggia", color: "#6fd3ee" },
+    { key: "fluvial", label: "Fiume", color: "#a8dff0" },
   ],
 };
 
@@ -402,7 +402,7 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
     return (
       <aside className="popup-card" role="dialog" aria-labelledby="cell-id">
         <h3 id="cell-id">Cella {cellId}</h3>
-        <p style={{ color: "#a72020" }}>{error}</p>
+        <p style={{ color: "var(--warn)" }}>{error}</p>
         {onDismiss ? (
           <button type="button" onClick={onDismiss}>
             chiudi
@@ -459,7 +459,7 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
       <h3 id="cell-id" style={{ margin: 0 }}>
         <span className="popup-score">{data.score.toFixed(2)}</span>
         <span
-          className={`level-chip ${level === "VeryHigh" ? "on-dark" : ""}`}
+          className={`level-chip ${RISK_SCURE.has(level) ? "on-dark" : ""}`}
           style={{ background: RISK_COLOR_BY_LEVEL[level] }}
         >
           {RISK_LABEL_IT_BY_LEVEL[level]}

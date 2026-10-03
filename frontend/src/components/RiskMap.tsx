@@ -328,7 +328,24 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       },
     };
     const layers: maplibregl.StyleSpecification["layers"] = [
-      { id: "osm", type: "raster", source: "osm" },
+      {
+        // La sala operativa è scura (#155) e le tile OSM sono chiare: le si
+        // inverte qui, in pittura. Con `brightness-min` sopra `max` il bianco
+        // della carta va al fondo e le strade escono chiare; desaturate,
+        // perché il colore della mappa deve restare quello del rischio.
+        id: "osm",
+        type: "raster",
+        source: "osm",
+        paint: {
+          "raster-brightness-min": 0.5,
+          "raster-brightness-max": 0.05,
+          "raster-saturation": -0.85,
+          // L'inversione porta l'azzurro del mare al marrone: mezzo giro di
+          // tinta lo riporta freddo.
+          "raster-hue-rotate": 180,
+          "raster-contrast": 0.1,
+        },
+      },
       {
         id: "wms-pai-layer",
         type: "raster",
@@ -354,8 +371,8 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
           // tiene la palette di default anche quando il selettore dice altro:
           // colorarla come l'incendio direbbe che mostra l'incendio.
           "fill-color": maplibreColorMatch() as never,
-          "fill-opacity": 0.45,
-          "fill-outline-color": "#555",
+          "fill-opacity": 0.7,
+          "fill-outline-color": "#2c3846",
         },
       },
       {
@@ -367,8 +384,8 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         maxzoom: COMUNE_MAX_ZOOM,
         paint: {
           "fill-color": maplibreColorMatch("worst_class") as never,
-          "fill-opacity": 0.5,
-          "fill-outline-color": "#ffffff",
+          "fill-opacity": 0.7,
+          "fill-outline-color": "#2c3846",
         },
       },
       {
@@ -389,7 +406,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         },
         paint: {
           "text-color": "#ffffff",
-          "text-halo-color": "#1a2733",
+          "text-halo-color": "#0a0e13",
           "text-halo-width": 1.5,
         },
       },
@@ -401,8 +418,10 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         minzoom: cellMinZoom,
         paint: {
           "fill-color": cellFillColor as never,
-          "fill-opacity": 0.55,
-          "fill-outline-color": "#333",
+          // 0,7 e non meno: la scala è verificata a questa opacità sopra la
+          // base scura, e più trasparente le classi si avvicinano.
+          "fill-opacity": 0.7,
+          "fill-outline-color": "#0a0e13",
         },
       },
       ...(multi
@@ -477,7 +496,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         type: "line",
         source: "ovl-idraulica",
         "source-layer": "public.flood_hazard_subdiv",
-        paint: { "line-color": "#08306b", "line-width": 0.6, "line-opacity": 0.6 },
+        paint: { "line-color": "#9ecae1", "line-width": 0.6, "line-opacity": 0.6 },
         layout: { visibility: visibile("ovl-idraulica-line") },
       },
       {
@@ -493,7 +512,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         type: "line",
         source: "ovl-alluvioni",
         "source-layer": "public.flood_events",
-        paint: { "line-color": "#005f80", "line-width": 1 },
+        paint: { "line-color": "#6fd3ee", "line-width": 1 },
         layout: { visibility: visibile("ovl-alluvioni-line") },
       },
       {
@@ -501,7 +520,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         type: "fill",
         source: "ovl-bruciate",
         "source-layer": "public.fire_perimeters",
-        paint: { "fill-color": "#3b1f14", "fill-opacity": 0.45 },
+        paint: { "fill-color": "#ff9ad5", "fill-opacity": 0.2 },
         layout: { visibility: visibile("ovl-bruciate-fill") },
       },
       {
@@ -509,7 +528,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         type: "line",
         source: "ovl-bruciate",
         "source-layer": "public.fire_perimeters",
-        paint: { "line-color": "#b30000", "line-width": 1.2 },
+        paint: { "line-color": "#ff9ad5", "line-width": 1.2 },
         layout: { visibility: visibile("ovl-bruciate-line") },
       },
       {
@@ -519,23 +538,23 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         type: "fill",
         source: HIGHLIGHT_SOURCE_ID,
         filter: ["==", ["get", "ruolo"], "maschera"],
-        paint: { "fill-color": "#141821", "fill-opacity": 0.38 },
+        paint: { "fill-color": "#000000", "fill-opacity": 0.5 },
       },
       {
-        // Il bordo ha un fondo chiaro sotto: sulle celle arancio e rosse una
-        // linea sola, di qualunque colore, si perde dove il colore è simile.
+        // Il bordo ha un fondo scuro sotto: sulle celle gialle una linea
+        // bianca sola si perderebbe dove il colore è simile.
         id: HIGHLIGHT_CASING_ID,
         type: "line",
         source: HIGHLIGHT_SOURCE_ID,
         filter: ["==", ["get", "ruolo"], "confine"],
-        paint: { "line-color": "#ffffff", "line-width": 6, "line-opacity": 0.9 },
+        paint: { "line-color": "#0a0e13", "line-width": 6, "line-opacity": 0.9 },
       },
       {
         id: HIGHLIGHT_LINE_ID,
         type: "line",
         source: HIGHLIGHT_SOURCE_ID,
         filter: ["==", ["get", "ruolo"], "confine"],
-        paint: { "line-color": "#1c3f7a", "line-width": 2.5 },
+        paint: { "line-color": "#ffffff", "line-width": 2.5 },
       },
       {
         // Selection outline: the filter starts matching nothing and is
@@ -545,7 +564,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         source: SOURCE_ID,
         "source-layer": sourceLayer,
         paint: {
-          "line-color": "#2456a3",
+          "line-color": "#ffffff",
           "line-width": 3,
         },
         filter: ["==", ["get", "cell_id"], "__none__"],
@@ -566,7 +585,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         paint: {
           "fill-color": PAI_FILL_COLOR,
           "fill-opacity": 0.25,
-          "fill-outline-color": "#555",
+          "fill-outline-color": "#2c3846",
         },
         // Hidden by default; the LegendPanel can toggle visibility.
         layout: { visibility: "none" },
@@ -586,8 +605,8 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         minzoom: 8,
         paint: {
           "circle-radius": 3,
-          "circle-color": "#7a0177",
-          "circle-stroke-color": "#ffffff",
+          "circle-color": "#c6a8ff",
+          "circle-stroke-color": "#0a0e13",
           "circle-stroke-width": 0.5,
           "circle-opacity": 0.8,
         },

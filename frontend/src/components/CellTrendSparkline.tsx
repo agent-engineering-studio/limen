@@ -93,14 +93,14 @@ export default function CellTrendSparkline({ cellId }: { cellId: string }): JSX.
     <svg className="cell-trend" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={alt}>
       <title>{alt}</title>
       {nowX !== null ? (
-        <line x1={nowX} y1={0} x2={nowX} y2={H} stroke="#c3c7cf" strokeDasharray="2 2" />
+        <line x1={nowX} y1={0} x2={nowX} y2={H} stroke="#3a4655" strokeDasharray="2 2" />
       ) : null}
-      {obs.length > 0 ? <path d={path(obs)} fill="none" stroke="#5e6473" strokeWidth={1.5} /> : null}
+      {obs.length > 0 ? <path d={path(obs)} fill="none" stroke="#94a3b4" strokeWidth={1.5} /> : null}
       {fc.length > 0 ? (
         <path
           d={path(fc)}
           fill="none"
-          stroke="#1f77b4"
+          stroke="#7fa7e8"
           strokeWidth={1.5}
           strokeDasharray="3 2"
         />

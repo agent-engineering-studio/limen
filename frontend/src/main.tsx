@@ -18,7 +18,7 @@ if (!root) {
 
 ReactDOM.createRoot(root).render(
     <React.StrictMode>
-        <MantineProvider theme={theme} defaultColorScheme="light">
+        <MantineProvider theme={theme} forceColorScheme="dark">
             <HazardProvider>
                 <App />
             </HazardProvider>

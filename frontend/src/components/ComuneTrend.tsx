@@ -170,11 +170,11 @@ export default function ComuneTrend({
               x2={W - PAD_R}
               y1={y(s.y)}
               y2={y(s.y)}
-              stroke="#e4e2dc"
+              stroke="#1e2733"
               strokeWidth={1}
               strokeDasharray="2 3"
             />
-            <text x={0} y={y(s.y) + 3} fontSize={7} fill="#9a968c">
+            <text x={0} y={y(s.y) + 3} fontSize={7} fill="#94a3b4">
               {s.label}
             </text>
           </g>
@@ -188,10 +188,10 @@ export default function ComuneTrend({
               x2={xAdesso}
               y1={PAD_T}
               y2={H - PAD_B}
-              stroke="#b9b5ab"
+              stroke="#3a4655"
               strokeWidth={1}
             />
-            <text x={xAdesso + 2} y={H - PAD_B + 9} fontSize={7} fill="#9a968c">
+            <text x={xAdesso + 2} y={H - PAD_B + 9} fontSize={7} fill="#94a3b4">
               ora
             </text>
           </g>
@@ -236,7 +236,7 @@ export default function ComuneTrend({
                   cx={p.x}
                   cy={p.y}
                   r={1.8}
-                  fill="#fff"
+                  fill="#0d1218"
                   stroke={HAZARD_HUE[h]}
                   strokeWidth={1.2}
                 />

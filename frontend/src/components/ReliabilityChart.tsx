@@ -39,15 +39,15 @@ export default function ReliabilityChart({
           le stanno vicino, meglio l&apos;IA è calibrata.
         </desc>
         {/* assi */}
-        <line x1={P.m} y1={P.m} x2={P.m} y2={P.m + ih} stroke="#9aa1ad" />
-        <line x1={P.m} y1={P.m + ih} x2={P.m + iw} y2={P.m + ih} stroke="#9aa1ad" />
+        <line x1={P.m} y1={P.m} x2={P.m} y2={P.m + ih} stroke="#3a4655" />
+        <line x1={P.m} y1={P.m + ih} x2={P.m + iw} y2={P.m + ih} stroke="#3a4655" />
         {/* diagonale = calibrazione perfetta */}
         <line
           x1={sx(0)}
           y1={sy(0)}
           x2={sx(1)}
           y2={sy(1)}
-          stroke="#9467bd"
+          stroke="#c6a8ff"
           strokeDasharray="4 4"
         />
         {/* punti (predetto, osservato) */}
@@ -57,12 +57,12 @@ export default function ReliabilityChart({
             cx={sx(b.predicted_mean)}
             cy={sy(b.observed_freq)}
             r={4}
-            fill="#1f77b4"
+            fill="#7fa7e8"
           >
             <title>{`previsto ${(b.predicted_mean * 100).toFixed(0)}% → osservato ${(b.observed_freq * 100).toFixed(0)}% (${b.count} celle)`}</title>
           </circle>
         ))}
-        <text x={P.m + iw / 2} y={P.h - 6} fontSize={11} textAnchor="middle" fill="#5e6473">
+        <text x={P.m + iw / 2} y={P.h - 6} fontSize={11} textAnchor="middle" fill="#94a3b4">
           probabilità prevista
         </text>
         <text
@@ -70,7 +70,7 @@ export default function ReliabilityChart({
           y={P.m + ih / 2}
           fontSize={11}
           textAnchor="middle"
-          fill="#5e6473"
+          fill="#94a3b4"
           transform={`rotate(-90 12 ${P.m + ih / 2})`}
         >
           frequenza osservata

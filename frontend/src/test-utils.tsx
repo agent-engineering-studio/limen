@@ -15,7 +15,7 @@ import { theme } from "./lib/theme";
 export function render(ui: ReactElement, options?: RenderOptions) {
   return renderBase(ui, {
     wrapper: ({ children }) => (
-      <MantineProvider theme={theme} defaultColorScheme="light">
+      <MantineProvider theme={theme} defaultColorScheme="dark">
         {children}
       </MantineProvider>
     ),

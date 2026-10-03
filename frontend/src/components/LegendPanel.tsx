@@ -63,7 +63,7 @@ function RigaNonMisurato(): JSX.Element {
           style={{ background: COLORE_IGNOTO }}
         />
         <span>
-          Non misurato <small style={{ color: "#5e6473" }}>(—)</small>
+          Non misurato <small style={{ color: "var(--muted)" }}>(—)</small>
         </span>
         <span className="legend-range">nessun dato</span>
       </li>
@@ -133,7 +133,7 @@ export function LegendPanel(): JSX.Element {
                 style={{ background: c.color }}
               />
               <span>
-                {c.label} <small style={{ color: "#5e6473" }}>({c.short})</small>
+                {c.label} <small style={{ color: "var(--muted)" }}>({c.short})</small>
               </span>
               <span className="legend-range">
                 {`${c.range[0].toFixed(2)}-${c.range[1].toFixed(2)}`}
@@ -191,7 +191,7 @@ export function LegendPanel(): JSX.Element {
             />
             <span>
               {c.label}{" "}
-              <small style={{ color: "#5e6473" }}>({c.short})</small>
+              <small style={{ color: "var(--muted)" }}>({c.short})</small>
               {((pc) =>
                 pc ? (
                   <span
