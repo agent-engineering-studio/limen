@@ -11,13 +11,13 @@ import {
   Skeleton,
   Stack,
   Text,
-  TextInput,
   Tooltip,
   UnstyledButton,
 } from "@mantine/core";
 import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
 
 import { defaultApiClient } from "../lib/api-client";
+import { useForecastSchedule } from "../lib/forecast-schedule";
 import { useHazard } from "../lib/hazard";
 import type { PanelFailure } from "../lib/panel-state";
 import { describeFailure } from "../lib/panel-state";
@@ -28,13 +28,13 @@ import {
   RISK_TEXT_BY_LEVEL,
 } from "../lib/risk-colors";
 import ComuneTrend from "./ComuneTrend";
-import PrevisioneTesta from "./PrevisioneTesta";
+import { LETTERA } from "./HazardSelector";
 import type {
   ComuneCell,
   ComuneForecast,
   ComuneHazard,
   ComuneRisk,
-  ForecastSchedule,
+  HazardType,
   RiskLevel,
 } from "../types";
 
@@ -103,15 +103,6 @@ function numero(n: number, cifre = 2): string {
 function banda(level: RiskLevel): string {
   const c = RISK_CLASSES.find((r) => r.level === level);
   return c ? `${numero(c.range[0])}–${numero(c.range[1])}` : "";
-}
-
-function Lente(): JSX.Element {
-  return (
-    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
-      <path d="M16 16l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
 }
 
 /** Come si leggono i due numeri. Sta accanto al titolo perché è lì che la
@@ -186,10 +177,25 @@ function ComeSiLegge(): JSX.Element {
   );
 }
 
+/** La lettera del pericolo nel chip, con il nome per intero a chi non vede
+ *  la lettera: «F» è una sigla, «Frana» è un'informazione. */
+function Sigla({ hazard, etichetta }: { hazard: string; etichetta: string }): JSX.Element {
+  return (
+    <>
+      <span className={`cb-sigla hz-${hazard}`} aria-hidden>
+        {LETTERA[hazard as HazardType] ?? etichetta.charAt(0)}
+      </span>
+      <span className="sr-only">{etichetta}</span>
+    </>
+  );
+}
+
 function Indicatore({
+  hazard,
   etichetta,
   dato,
 }: {
+  hazard: string;
   etichetta: string;
   dato: ComuneHazard | undefined;
 }): JSX.Element {
@@ -205,9 +211,7 @@ function Indicatore({
       >
         <Group gap={4} wrap="nowrap" className="cb-haz is-unknown">
           <Box className="cb-chip is-unknown" aria-hidden />
-          <Text span size="xs" fw={500}>
-            {etichetta}
-          </Text>
+          <Sigla hazard={hazard} etichetta={etichetta} />
           <Text span size="xs" fs="italic" c="dimmed">
             non misurato
           </Text>
@@ -244,10 +248,8 @@ function Indicatore({
           style={{ background: RISK_COLOR_BY_LEVEL[classe] }}
           aria-hidden
         />
-        <Text span size="xs" fw={500}>
-          {etichetta}
-        </Text>
-        <Text span size="xs" fw={700} style={{ fontVariantNumeric: "tabular-nums" }}>
+        <Sigla hazard={hazard} etichetta={etichetta} />
+        <Text span size="xs" fw={700} className="mono">
           {numero(dato.score)}
         </Text>
         <Text span size="xs" c="dimmed">
@@ -493,13 +495,22 @@ function PercheInCima({
   picco,
   prevista,
   etichette,
+  celle,
 }: {
   c: ComuneRisk;
   picco: Picco | null;
   prevista: boolean;
   etichette: Record<string, string>;
+  celle: number;
 }): JSX.Element | null {
-  if (picco === null) return null;
+  const quante = `${celle.toLocaleString("it-IT")} celle`;
+  if (picco === null) {
+    return (
+      <Text size="xs" c="dimmed" mt={3}>
+        {quante}
+      </Text>
+    );
+  }
   const nome = (etichette[picco.hazard] ?? NOME_PERICOLO[picco.hazard] ?? picco.hazard).toLowerCase();
   const oltre = prevista
     ? Object.values(c.forecast ?? {}).filter((f) => RANGO[f.class] >= RANGO.Moderate).length
@@ -526,16 +537,65 @@ function PercheInCima({
   if (oltre >= 2) motivi.push(<span key="n">{oltre} pericoli oltre soglia</span>);
   return (
     <Text size="xs" c="dimmed" mt={3} className="cb-perche">
-      In {prevista ? "cima fra 72 h" : "cima"} per:{" "}
+      {quante} · In {prevista ? "cima fra 72 h" : "cima"} per:{" "}
       {motivi.flatMap((m, k) => (k === 0 ? [m] : [<span key={`s${k}`}> · </span>, m]))}
     </Text>
+  );
+}
+
+/** «it-emilia-romagna» → «Emilia-Romagna». La provincia non arriva dal
+ *  servizio: la regione basta a distinguere i comuni omonimi. */
+function regione(aoi: string): string {
+  return aoi
+    .replace(/^it-/, "")
+    .split("-")
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(" ");
+}
+
+/** Il verso fra adesso e il picco previsto, accanto al numero. Tace quando
+ *  la previsione non c'è: una freccia piatta direbbe «stabile», ed è un'altra
+ *  cosa da «non lo so». */
+function Tendenza({
+  comune,
+  previsti,
+}: {
+  comune: ComuneRisk;
+  previsti: Set<string>;
+}): JSX.Element | null {
+  if (previsti.size === 0) return null;
+  // Solo i pericoli che hanno una previsione, da entrambe le parti: un
+  // incendio a 0,8 senza futuro contro una frana prevista in salita darebbe
+  // una freccia in calo che non dice niente di nessuno dei due.
+  const ora = Object.entries(comune.hazards)
+    .filter(([h, v]) => previsti.has(h) && v.measured)
+    .reduce<number | null>((m, [, v]) => (m === null || v.score > m ? v.score : m), null);
+  if (ora === null) return null;
+  // Senza riga previsionale un pericolo previsto sta sotto Moderato.
+  const poi = Object.entries(comune.forecast ?? {})
+    .filter(([h]) => previsti.has(h))
+    .reduce((m, [, f]) => Math.max(m, f.score), 0);
+  const delta = poi - ora;
+  // Senza righe previsionali il futuro è sotto Moderato: se oggi si è sopra,
+  // si scende.
+  const verso = delta > 0.02 ? "su" : delta < -0.02 ? "giu" : "piatto";
+  const segno = { su: "↗", giu: "↘", piatto: "→" }[verso];
+  const parola = { su: "in salita", giu: "in calo", piatto: "stabile" }[verso];
+  return (
+    <span className={`cb-tendenza is-${verso}`} title={`Fra 72 ore: ${parola}`}>
+      <span aria-hidden>{segno}</span>
+      <span className="sr-only">{parola}</span>
+    </span>
   );
 }
 
 export function ComuniBoard({
   onComune,
   onCella,
+  cerca = "",
 }: {
+  /** Il testo della ricerca, che sta nella barra in alto (#155). */
+  cerca?: string;
   /** Porta la mappa sul comune. Cliccare una riga senza che la mappa si
    *  muova è la cosa che rende inutile una classifica geografica. */
   onComune?: (c: ComuneRisk) => void;
@@ -543,14 +603,13 @@ export function ComuniBoard({
 } = {}): JSX.Element {
   const [comuni, setComuni] = useState<ComuneRisk[] | null>(null);
   const [failure, setFailure] = useState<PanelFailure | null>(null);
-  const [cerca, setCerca] = useState("");
   const [aperto, setAperto] = useState<string | null>(null);
   const [tentativo, setTentativo] = useState(0);
   // Adesso o previsto: la stessa lista, due domande. «Chi è messo peggio»
   // e «chi sta per esserlo» — la seconda è quella per cui esiste la
   // previsione, e trova il comune che oggi è sotto soglia e domani no.
   const [ordine, setOrdine] = useState<"now" | "forecast">("now");
-  const [schedule, setSchedule] = useState<ForecastSchedule | null>(null);
+  const schedule = useForecastSchedule();
   const { available } = useHazard();
   const riprova = useCallback(() => setTentativo((n) => n + 1), []);
 
@@ -573,17 +632,6 @@ export function ComuniBoard({
     return () => ctrl.abort();
   }, [termine, tentativo, ordine]);
 
-  useEffect(() => {
-    const ctrl = new AbortController();
-    defaultApiClient
-      .getForecastSchedule(ctrl.signal)
-      .then(setSchedule)
-      .catch(() => {
-        if (!ctrl.signal.aborted) setSchedule(null);
-      });
-    return () => ctrl.abort();
-  }, []);
-
   const previsti = useMemo(
     () => new Set(Object.keys(schedule?.cells.last_run_by_hazard ?? {})),
     [schedule],
@@ -605,33 +653,23 @@ export function ComuniBoard({
   );
 
   return (
-    <section className="comuni-board" aria-label="Rischio per comune">
-      <Group justify="space-between" wrap="nowrap" align="center">
-        <h2>Comuni · adesso e previsione</h2>
-        <ComeSiLegge />
-      </Group>
-      <PrevisioneTesta schedule={schedule} />
-      <SegmentedControl
-        fullWidth
-        size="xs"
-        mb="xs"
-        value={ordine}
-        onChange={(v) => setOrdine(v as "now" | "forecast")}
-        data={[
-          { value: "now", label: "Più esposti adesso" },
-          { value: "forecast", label: "Più esposti fra 72 h" },
-        ]}
-        aria-label="Ordina i comuni"
-      />
-      <TextInput
-        placeholder="Cerca il tuo comune"
-        aria-label="Cerca il tuo comune"
-        leftSection={<Lente />}
-        value={cerca}
-        onChange={(e) => setCerca(e.currentTarget.value)}
-        size="xs"
-        mb="sm"
-      />
+    <section className="comuni-board rail-sezione" aria-label="Rischio per comune">
+      <div className="rail-testa">
+        <Group gap={6} wrap="nowrap">
+          <h2>{termine ? "Comuni trovati" : "Comuni più esposti"}</h2>
+          <ComeSiLegge />
+        </Group>
+        <SegmentedControl
+          size="xs"
+          value={ordine}
+          onChange={(v) => setOrdine(v as "now" | "forecast")}
+          data={[
+            { value: "now", label: "Adesso" },
+            { value: "forecast", label: "Fra 72 h" },
+          ]}
+          aria-label="Ordina i comuni"
+        />
+      </div>
       {failure ? (
         <Alert color="gray" title={failure.title} role="alert">
           <Text size="xs">{failure.detail}</Text>
@@ -662,8 +700,9 @@ export function ComuniBoard({
         </Box>
       ) : (
         <Stack gap={0}>
-          {comuni.map((c) => {
+          {comuni.map((c, posizione) => {
             const apertoQui = aperto === c.istat_code;
+            const picco = piccoDi(c, ordine === "forecast");
             return (
               <Box key={c.istat_code} className="cb-row">
                 <UnstyledButton
@@ -674,53 +713,63 @@ export function ComuniBoard({
                   }}
                   aria-expanded={apertoQui}
                 >
-                  <Group justify="space-between" wrap="nowrap" align="baseline">
-                    <Text fw={650} size="sm">
-                      {c.name}
-                    </Text>
-                    <Testata
-                      picco={piccoDi(c, ordine === "forecast")}
-                      prevista={ordine === "forecast"}
-                      etichette={etichette}
-                    />
+                  <Group justify="space-between" wrap="nowrap" align="baseline" gap={8}>
+                    <Group gap={8} wrap="nowrap" align="baseline" style={{ minWidth: 0 }}>
+                      <span className="cb-rank mono" aria-hidden>
+                        {String(posizione + 1).padStart(2, "0")}
+                      </span>
+                      <Text fw={700} size="sm" truncate>
+                        {c.name}
+                      </Text>
+                      <Text size="xs" c="dimmed" className="cb-regione">
+                        {regione(c.aoi_id)}
+                      </Text>
+                    </Group>
+                    <Group gap={6} wrap="nowrap" align="baseline">
+                      <Testata
+                        picco={picco}
+                        prevista={ordine === "forecast"}
+                        etichette={etichette}
+                      />
+                      <Tendenza comune={c} previsti={previsti} />
+                    </Group>
                   </Group>
                   {((pk) =>
                     pk === null ? (
-                      <Box className="cb-bar is-unknown" mt={3} aria-hidden />
+                      <Box className="cb-bar is-unknown cb-rientro" mt={6} aria-hidden />
                     ) : (
                       // La barra è lo stesso numero della testata, su 0–1: prima
                       // era l'attenzione su 3, e la barra piena voleva dire una
                       // cosa diversa dal numero che le stava accanto.
                       <Progress
                         value={Math.min(100, pk.score * 100)}
-                        size={3}
-                        mt={3}
+                        size={4}
+                        mt={6}
+                        className="cb-rientro"
                         color={RISK_COLOR_BY_LEVEL[pk.level]}
                         aria-label={`${numero(pk.score)} su 1`}
                       />
-                    ))(piccoDi(c, ordine === "forecast"))}
-                  <Group gap="xs" mt={5} wrap="wrap">
+                    ))(picco)}
+                  <Group gap={6} mt={6} wrap="wrap" className="cb-rientro">
                     {colonne.map((col) => (
                       <Indicatore
                         key={col.hazard}
+                        hazard={col.hazard}
                         etichetta={col.label}
                         dato={c.hazards[col.hazard]}
                       />
                     ))}
                   </Group>
-                  <PercheInCima
-                    c={c}
-                    picco={piccoDi(c, ordine === "forecast")}
-                    prevista={ordine === "forecast"}
-                    etichette={etichette}
-                  />
-                  <RigaPrevisione comune={c} previsti={previsti} etichette={etichette} />
-                  <Group gap={6} mt={3}>
-                    <Text size="xs" c="dimmed">
-                      {c.n_cells.toLocaleString("it-IT")} celle
-                    </Text>
-
-                  </Group>
+                  <Box className="cb-rientro">
+                    <RigaPrevisione comune={c} previsti={previsti} etichette={etichette} />
+                    <PercheInCima
+                      c={c}
+                      picco={picco}
+                      prevista={ordine === "forecast"}
+                      etichette={etichette}
+                      celle={c.n_cells}
+                    />
+                  </Box>
                 </UnstyledButton>
                 <Collapse expanded={apertoQui}>
                   <Box pl="xs" pb="xs">

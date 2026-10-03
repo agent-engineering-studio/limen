@@ -61,7 +61,7 @@ describe("HazardSelector", () => {
     expect(container.querySelector(".hazard-selector")).toBeNull();
   });
 
-  it("rende un pulsante per pericolo quando ce n'è più di uno", async () => {
+  it("rende un pulsante per pericolo quando ce n'è più di uno, e parte da tutti", async () => {
     vi.spyOn(defaultApiClient, "getHazards").mockResolvedValue(TWO);
 
     render(
@@ -70,8 +70,13 @@ describe("HazardSelector", () => {
       </HazardProvider>,
     );
 
+    // Si apre sulla vista d'insieme (#155): il pericolo singolo è un filtro.
     const frana = await screen.findByRole("button", { name: "Frana" });
-    expect(frana).toHaveAttribute("aria-pressed", "true");
+    expect(frana).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Tutti i pericoli" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     expect(screen.getByRole("button", { name: "Alluvione" })).toHaveAttribute(
       "aria-pressed",
       "false",

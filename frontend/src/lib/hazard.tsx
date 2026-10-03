@@ -51,7 +51,10 @@ export function HazardProvider({ children }: { children: ReactNode }): JSX.Eleme
   // che oggi ha un solo elemento. Se il backend annuncia un default diverso,
   // l'effetto si ri-esegue con quello — una richiesta in più, non un errore.
   const [selected, setSelected] = useState<HazardType>(FALLBACK);
-  const [multi, setMulti] = useState(false);
+  // Si apre su tutti i pericoli (#155): la domanda con cui si arriva è «dove
+  // va male», non «dove va male per le frane». Il pericolo singolo è un
+  // filtro che si sceglie dal quadro nazionale.
+  const [multi, setMulti] = useState(true);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -59,6 +62,9 @@ export function HazardProvider({ children }: { children: ReactNode }): JSX.Eleme
       .getHazards(controller.signal)
       .then((res) => {
         setAvailable(res.items);
+        // Con un pericolo solo la vista d'insieme sarebbe quel pericolo con
+        // un altro nome.
+        if (res.items.length < 2) setMulti(false);
         // Il default lo decide il backend, non questa costante. Se il
         // backend ne annuncia uno che non è nell'elenco, si ripiega sul
         // primo disponibile invece di selezionare qualcosa di inesistente.

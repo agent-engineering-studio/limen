@@ -36,6 +36,7 @@ beforeEach(() => {
 });
 
 import ComuniBoard from "../components/ComuniBoard";
+import PrevisioneTesta from "../components/PrevisioneTesta";
 
 type Pericolo = {
   class: string;
@@ -228,10 +229,19 @@ describe("ComuniBoard", () => {
   it("la ricerca chiede al servizio il termine, non filtra le trenta righe in mano", async () => {
     // I comuni sono ottomila e in pagina ce ne sono trenta: filtrare qui
     // vorrebbe dire non trovare il proprio.
+    // Il campo sta nella barra in alto (#155); qui arriva il testo.
     getTopComuni.mockResolvedValue({ comuni: [] });
-    render(<ComuniBoard />);
-    await waitFor(() => expect(getTopComuni).toHaveBeenCalled());
-    expect(screen.getByLabelText("Cerca il tuo comune")).toBeInTheDocument();
+    render(<ComuniBoard cerca="Avezzano" />);
+    await waitFor(() =>
+      expect(getTopComuni).toHaveBeenCalledWith(
+        undefined,
+        30,
+        expect.anything(),
+        "Avezzano",
+        "now",
+      ),
+    );
+    expect(await screen.findByText("Comuni trovati")).toBeInTheDocument();
   });
 
   it("cliccare un comune porta la mappa sulle sue coordinate", async () => {
@@ -291,7 +301,7 @@ describe("ComuniBoard", () => {
     getTopComuni.mockResolvedValue({ comuni: [] });
     render(<ComuniBoard />);
     await waitFor(() => expect(getTopComuni).toHaveBeenCalled());
-    fireEvent.click(screen.getByText("Più esposti fra 72 h"));
+    fireEvent.click(screen.getByText("Fra 72 h"));
     await waitFor(() =>
       expect(getTopComuni).toHaveBeenLastCalledWith(
         undefined,
@@ -306,8 +316,8 @@ describe("ComuniBoard", () => {
   it("dice quando arriva la prossima previsione, e che è una al giorno", async () => {
     // Due calcoli, due timer: un solo conto alla rovescia da sei ore farebbe
     // credere che la curva di un comune si aggiorni quattro volte al giorno.
-    getTopComuni.mockResolvedValue({ comuni: [] });
-    const { container } = render(<ComuniBoard />);
+    // La previsione ha ora una sezione sua nella colonna (#155).
+    const { container } = render(<PrevisioneTesta />);
     await waitFor(() => expect(container.textContent).toContain("prossima tra"));
     expect(container.textContent).toContain("una volta al giorno");
     expect(container.textContent).toContain("ogni 6 ore");
