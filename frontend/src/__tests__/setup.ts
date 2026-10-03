@@ -34,6 +34,15 @@ vi.mock("maplibre-gl", () => {
       return document.createElement("canvas");
     }
     remove() {}
+    getCenter() {
+      return { lng: 12.5, lat: 41.9 };
+    }
+    getZoom() {
+      return 6;
+    }
+    getSource() {
+      return undefined;
+    }
     setLayoutProperty() {}
     setPaintProperty() {}
   }

@@ -24,7 +24,7 @@ describe("HomePage", () => {
   it("renders the pitch, the dashboard CTA and live stats", async () => {
     render(<HomePage />);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      /Rischio frana e inondazione/,
+      /Il rischio del territorio/,
     );
     // Nessun login: la dashboard è pubblica (#71).
     expect(screen.getByText("Apri la dashboard")).toBeInTheDocument();
@@ -36,5 +36,18 @@ describe("HomePage", () => {
     expect(screen.getByText("celle monitorate")).toBeInTheDocument();
     // License attributions are a legal requirement, not decoration.
     expect(screen.getAllByText(/ISPRA IdroGEO/).length).toBeGreaterThan(0);
+  });
+
+  it("non promette ciò che oggi non è vero", () => {
+    // #155: il design diceva «verificato su vent'anni di frane reali» (#122
+    // aperta), un ML che «corre accanto» (in produzione è spento) e il rischio
+    // come «S × M» (per le frane è una somma pesata).
+    const { container } = render(<HomePage />);
+    const testo = container.textContent ?? "";
+    expect(testo).not.toMatch(/vent.anni di frane/);
+    expect(testo).not.toMatch(/corre (accanto|in parallelo)/);
+    expect(testo).not.toContain("S × M");
+    expect(testo).not.toMatch(/AUC/);
+    expect(testo).toContain("0,35 S + 0,40 M");
   });
 });
