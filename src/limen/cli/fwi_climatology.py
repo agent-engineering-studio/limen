@@ -22,6 +22,7 @@ from __future__ import annotations
 import os
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
+from itertools import pairwise
 
 from limen.cli.fwi_backfill import _aoi_bbox, _int_env, _observations, params_from
 from limen.core.logging import get_logger
@@ -81,15 +82,34 @@ def accumula(
     return stato, avviati
 
 
+def copertura_valida(osservati: list[date], giorni: list[date], max_buco: int) -> bool:
+    """Un anno di un nodo è usabile se quasi ogni giorno ha il suo dato.
+
+    Una richiesta all'archivio che degrada restituisce una serie vuota: la
+    catena attraverserebbe il buco come se i giorni fossero consecutivi, e i
+    quantili di quel nodo resterebbero salvati come definitivi. Si chiede il
+    95 % dei giorni e nessun buco più lungo di quello che la catena operativa
+    sopporta (``max_gap_days``).
+    """
+    if len(osservati) < 0.95 * len(giorni):
+        return False
+    date_viste = [giorni[0] - timedelta(days=1), *sorted(osservati), giorni[-1] + timedelta(days=1)]
+    return all((b - a).days - 1 <= max_buco for a, b in pairwise(date_viste))
+
+
 async def _lotto(
     nodi: list[tuple[float, float]],
     anni: range,
     params: FwiParams,
     client: OpenMeteoHttpClient,
+    max_buco: int,
 ) -> list[NodoMese]:
     stati: dict[tuple[float, float], FwiState] = dict.fromkeys(nodi, params.initial_state)
     avviati: dict[tuple[float, float], int] = dict.fromkeys(nodi, 0)
     mesi: dict[tuple[float, float], dict[int, list[float]]] = {n: defaultdict(list) for n in nodi}
+    # Un nodo con un anno bucato non si scrive: resta da fare, e la prossima
+    # corsa lo riprova invece di tenerne una distribuzione falsata.
+    rotti: set[tuple[float, float]] = set()
     for anno in anni:
         primo, ultimo = date(anno, 1, 1), date(anno, 12, 31)
         giorni = [primo + timedelta(days=i) for i in range((ultimo - primo).days + 1)]
@@ -102,6 +122,8 @@ async def _lotto(
             use_archive=True,
         )
         for nodo, campioni in zip(nodi, serie, strict=True):
+            if nodo in rotti:
+                continue
             osservazioni = _observations(
                 MeteoSnapshot(
                     centroid_lon=nodo[0],
@@ -112,6 +134,10 @@ async def _lotto(
                 ),
                 giorni,
             )
+            if not copertura_valida(list(osservazioni), giorni, max_buco):
+                rotti.add(nodo)
+                log.warning("fwi.climatology.node_gap", lon=nodo[0], lat=nodo[1], year=anno)
+                continue
             stati[nodo], avviati[nodo] = accumula(
                 osservazioni, giorni, params, stati[nodo], avviati[nodo], mesi[nodo]
             )
@@ -127,6 +153,7 @@ async def _lotto(
             year_to=anni.stop - 1,
         )
         for nodo, per_mese in mesi.items()
+        if nodo not in rotti
         for mese, valori in sorted(per_mese.items())
         if valori
     ]
@@ -166,7 +193,9 @@ async def run() -> int:
         )
         scritti = 0
         for i in range(0, len(da_fare), _LOTTO):
-            righe = await _lotto(da_fare[i : i + _LOTTO], anni, params, client)
+            righe = await _lotto(
+                da_fare[i : i + _LOTTO], anni, params, client, thresholds.fwi.max_gap_days
+            )
             scritti += await fwi_climatology_repo.upsert_many(righe)
             log.info(
                 "fwi.climatology.batch",
@@ -179,4 +208,4 @@ async def run() -> int:
     return 0
 
 
-__all__ = ["accumula", "run"]
+__all__ = ["accumula", "copertura_valida", "run"]

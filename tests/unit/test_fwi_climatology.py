@@ -14,7 +14,7 @@ from datetime import date, timedelta
 import pytest
 
 from limen.cli.fwi_backfill import params_from
-from limen.cli.fwi_climatology import _AVVIAMENTO, accumula
+from limen.cli.fwi_climatology import _AVVIAMENTO, accumula, copertura_valida
 from limen.core.models.hazard import HazardType
 from limen.core.scoring.regional_thresholds import WildfireThresholds, load_hazard_thresholds
 from limen.core.scoring.wildfire.climatology import LIVELLI, percentile, quantili
@@ -64,3 +64,16 @@ def test_la_catena_scarta_l_avviamento_e_mette_ogni_giorno_nel_suo_mese() -> Non
     assert avviati == 89
     assert sum(len(v) for v in per_mese.values()) == 89 - _AVVIAMENTO
     assert set(per_mese) == {8, 9}
+
+
+def test_un_anno_bucato_non_entra_nella_distribuzione() -> None:
+    # Una richiesta degradata restituisce una serie vuota: senza questo
+    # controllo la catena attraverserebbe il buco come giorni consecutivi.
+    giorni = [date(2020, 1, 1) + timedelta(days=i) for i in range(366)]
+    assert copertura_valida(giorni, giorni, max_buco=5)
+    assert not copertura_valida([], giorni, max_buco=5)
+    # Il 97 % dei giorni, ma con un buco di otto: la catena non lo sopporta.
+    bucato = giorni[:100] + giorni[108:]
+    assert len(bucato) >= 0.95 * len(giorni)
+    assert not copertura_valida(bucato, giorni, max_buco=5)
+    assert copertura_valida(giorni[:100] + giorni[103:], giorni, max_buco=5)

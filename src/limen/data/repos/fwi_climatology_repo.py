@@ -59,8 +59,14 @@ async def nodi_fatti(year_from: int, year_to: int) -> set[tuple[float, float]]:
     return {(float(r["node_lon"]), float(r["node_lat"])) for r in rows}
 
 
-async def per_punto(lon: float, lat: float, month: int) -> NodoMese | None:
-    """Il nodo più vicino a (lon, lat) per quel mese, entro mezzo grado."""
+async def per_punto(lon: float, lat: float, month: int, raggio: float) -> NodoMese | None:
+    """Il nodo di (lon, lat) per quel mese, o ``None``.
+
+    ``raggio`` è la distanza massima, in gradi, dal nodo che la catena
+    operativa assegnerebbe al punto (metà diagonale del passo del reticolo).
+    Più largo, un nodo mancante verrebbe sostituito in silenzio da uno a
+    decine di chilometri, presentato come «questo punto».
+    """
     async with acquire() as conn:
         row = await conn.fetchrow(
             """
@@ -69,12 +75,15 @@ async def per_punto(lon: float, lat: float, month: int) -> NodoMese | None:
             WHERE month = $3
               AND node_lon::float8 BETWEEN $1::float8 - 0.5 AND $1::float8 + 0.5
               AND node_lat::float8 BETWEEN $2::float8 - 0.5 AND $2::float8 + 0.5
+              AND (node_lon::float8 - $1::float8) ^ 2 + (node_lat::float8 - $2::float8) ^ 2
+                  <= $4::float8 ^ 2
             ORDER BY (node_lon::float8 - $1::float8) ^ 2 + (node_lat::float8 - $2::float8) ^ 2
             LIMIT 1
             """,
             lon,
             lat,
             month,
+            raggio,
         )
     if row is None:
         return None
