@@ -7,6 +7,7 @@ import { posizioneIspettore } from "../App";
 import HazardSelector from "../components/HazardSelector";
 import RiskMap, { filtroSoglia } from "../components/RiskMap";
 import Timeline from "../components/Timeline";
+import { letturaIncendio } from "../components/CellPopup";
 import { defaultApiClient } from "../lib/api-client";
 import { HazardProvider } from "../lib/hazard";
 import type { ForecastSchedule, HazardsResponse } from "../types";
@@ -154,5 +155,26 @@ describe("la previsione sulla mappa", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /\+48 h/ })).toBeDisabled());
     // E si torna all'adesso: «+48 h» su una mappa vuota sembrerebbe quiete.
     await waitFor(() => expect(scelte).toContain(0));
+  });
+});
+
+describe("come leggere il numero dell'incendio", () => {
+  it("dice che è un pericolo potenziale, con la classe EFFIS e la siccità", () => {
+    // I valori di Montegiordano del 2 ottobre 2026: un ottobre mite ma
+    // secco, che EFFIS metteva nella stessa classe.
+    const righe = letturaIncendio({
+      fire_weather: { fwi: 36.23, dc: 543.1, day: "2026-10-02" },
+    });
+    expect(righe).not.toBeNull();
+    const testo = (righe ?? []).join(" ");
+    expect(testo).toContain("potenziale");
+    expect(testo).toContain("non la probabilità che parta");
+    expect(testo).toContain("High (21,3–38)");
+    expect(testo).toContain("DC 543");
+    expect(testo).toContain("piogge abbondanti");
+  });
+
+  it("senza meteo nel breakdown non inventa niente", () => {
+    expect(letturaIncendio({ fwi_norm: 0.5 })).toBeNull();
   });
 });

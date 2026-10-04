@@ -228,6 +228,12 @@ function Indicatore({
       ? `${Math.round(dato.rain_mm)} mm su ${Math.round(dato.rain_threshold_mm)}`
       : null;
   const senzaFiumi = dato.discharge_known === false;
+  // L'incendio è un pericolo potenziale: detto qui, dove il numero si legge
+  // per primo, «alto» non suona come un fuoco in corso.
+  const spiegaIncendio =
+    hazard === "wildfire"
+      ? " È il pericolo meteo potenziale — quanto si propagherebbe un fuoco se partisse — sulla scala FWI di Copernicus EFFIS."
+      : "";
   const spiegaAlluvione =
     pioggia === null
       ? ""
@@ -237,7 +243,7 @@ function Indicatore({
           : "");
   return (
     <Tooltip
-      label={`${etichetta}: ${numero(dato.score)} su 1 — ${RISK_LABEL_IT_BY_LEVEL[classe]} (${banda(classe)}). ${dato.n_cells} celle valutate, ${dato.n_alert} sopra la soglia di allerta.${spiegaAlluvione}`}
+      label={`${etichetta}: ${numero(dato.score)} su 1 — ${RISK_LABEL_IT_BY_LEVEL[classe]} (${banda(classe)}). ${dato.n_cells} celle valutate, ${dato.n_alert} sopra la soglia di allerta.${spiegaAlluvione}${spiegaIncendio}`}
       withArrow
       multiline
       w={250}
