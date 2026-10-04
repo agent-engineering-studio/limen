@@ -11,6 +11,7 @@ import type {
   AoiListResponse,
   CellBreakdownResponse,
   CellHistoryResponse,
+  CellFwiNormaleResponse,
   CellRainOutlookResponse,
   CellMultiHazardResponse,
   ComuneDetailResponse,
@@ -143,6 +144,21 @@ export class ApiClient {
   getCellRainOutlook(cellId: string, signal?: AbortSignal): Promise<CellRainOutlookResponse> {
     return this.request<CellRainOutlookResponse>(
       `/api/cell/${encodeURIComponent(cellId)}/rain-outlook`,
+      {},
+      signal,
+    );
+  }
+
+  /** A che percentile cade un FWI fra i giorni dello stesso mese in quel
+   *  punto (climatologia, migrazione 061). */
+  getCellFwiNormale(
+    cellId: string,
+    fwi: number,
+    month: number,
+    signal?: AbortSignal,
+  ): Promise<CellFwiNormaleResponse> {
+    return this.request<CellFwiNormaleResponse>(
+      `/api/cell/${encodeURIComponent(cellId)}/fwi-normale?fwi=${fwi.toFixed(2)}&month=${month}`,
       {},
       signal,
     );

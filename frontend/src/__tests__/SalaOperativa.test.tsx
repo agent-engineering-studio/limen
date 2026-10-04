@@ -174,6 +174,17 @@ describe("come leggere il numero dell'incendio", () => {
     expect(testo).toContain("piogge abbondanti");
   });
 
+  it("con la climatologia dice dove cade rispetto al solito del mese", () => {
+    const righe = letturaIncendio(
+      { fire_weather: { fwi: 36.23, dc: 543.1, day: "2026-10-02" } },
+      { percentile: 97, mediana: 6.6, p90: 15.2, giorni: 310, anni: [2016, 2025] },
+    );
+    const testo = (righe ?? []).join(" ");
+    expect(testo).toContain("Molto sopra il solito per ottobre");
+    expect(testo).toContain("97 %");
+    expect(testo).toContain("2016–2025");
+  });
+
   it("senza meteo nel breakdown non inventa niente", () => {
     expect(letturaIncendio({ fwi_norm: 0.5 })).toBeNull();
   });
