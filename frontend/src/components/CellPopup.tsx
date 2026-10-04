@@ -8,6 +8,7 @@ import type {
   CellBreakdownResponse,
   CellMultiHazardResponse,
   CellRainOutlookResponse,
+  FwiNormale,
   HazardType,
   RiskLevel,
 } from "../types";
@@ -133,7 +134,10 @@ function cifra(n: number, decimali = 1): string {
  *  se partisse — e lo dice anche la scala ufficiale: a Montegiordano il 2
  *  ottobre EFFIS dava la stessa classe. Il numero era giusto; mancava cosa
  *  vuol dire. `null` quando il breakdown non porta il meteo. */
-export function letturaIncendio(factors: Record<string, unknown>): string[] | null {
+export function letturaIncendio(
+  factors: Record<string, unknown>,
+  normale: FwiNormale | null = null,
+): string[] | null {
   const fw = factors["fire_weather"];
   if (typeof fw !== "object" || fw === null) return null;
   const meteo = fw as Record<string, unknown>;
@@ -152,6 +156,19 @@ export function letturaIncendio(factors: Record<string, unknown>): string[] | nu
   righe.push(
     `Indice meteo FWI ${cifra(fwi)}: classe ${classe} sulla scala di Copernicus EFFIS${giorno}.`,
   );
+  if (normale !== null && typeof meteo["day"] === "string") {
+    // Rispetto al solito: la classe è assoluta, uguale ad agosto e a
+    // ottobre; questa riga dice dove cade il valore fra i giorni dello
+    // stesso mese, nello stesso punto, negli anni dell'archivio.
+    const mese = new Date(meteo["day"]).toLocaleDateString("it-IT", { month: "long" });
+    const p = normale.percentile;
+    const giudizio =
+      p >= 90 ? "Molto sopra il solito" : p >= 75 ? "Sopra il solito" : p > 25 ? "Nella norma" : "Sotto il solito";
+    righe.push(
+      `${giudizio} per ${mese}: più alto del ${cifra(p, 0)} % dei giorni di ${mese} ` +
+        `${normale.anni[0]}–${normale.anni[1]} in questo punto, dove la mediana è FWI ${cifra(normale.mediana)}.`,
+    );
+  }
   if (dc !== null) {
     // Il DC scende solo con piogge vere (sopra 2,8 mm in un giorno): è la
     // memoria lunga della siccità, ed è lui che tiene alto l'indice dopo
@@ -315,6 +332,7 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
   const [data, setData] = useState<CellBreakdownResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [outlook, setOutlook] = useState<CellRainOutlookResponse["outlook"]>(null);
+  const [fwiNormale, setFwiNormale] = useState<FwiNormale | null>(null);
 
   // Dalla nostra API e non dall'API pubblica di Open-Meteo dal browser
   // (#159): ogni clic consumava il tetto giornaliero che l'istanza propria
@@ -434,6 +452,27 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
       </div>
     );
 
+  // Il normale del mese per l'incendio: chiesto solo quando il breakdown
+  // porta il meteo, cioè quando c'è un FWI da confrontare.
+  const meteoIncendio =
+    data?.factors && typeof data.factors["fire_weather"] === "object"
+      ? (data.factors["fire_weather"] as Record<string, unknown>)
+      : null;
+  const fwiOggi = typeof meteoIncendio?.["fwi"] === "number" ? meteoIncendio["fwi"] : null;
+  const giornoMeteo = typeof meteoIncendio?.["day"] === "string" ? meteoIncendio["day"] : null;
+  useEffect(() => {
+    setFwiNormale(null);
+    if (!cellId || hazard !== "wildfire" || fwiOggi === null || giornoMeteo === null) return;
+    const ctrl = new AbortController();
+    defaultApiClient
+      .getCellFwiNormale(cellId, fwiOggi, new Date(giornoMeteo).getMonth() + 1, ctrl.signal)
+      .then((r) => setFwiNormale(r.normale))
+      .catch(() => {
+        // Senza climatologia la lettura resta quella assoluta.
+      });
+    return () => ctrl.abort();
+  }, [cellId, hazard, fwiOggi, giornoMeteo]);
+
   if (!cellId) return null;
 
   if (error) {
@@ -525,7 +564,7 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
                   <p key={r}>{r}</p>
                 ))}
               </div>
-            ) : null)(letturaIncendio(factors))
+            ) : null)(letturaIncendio(factors, fwiNormale))
         : null}
       {props.priority != null && props.exposure ? (
         <p className="priority-line">

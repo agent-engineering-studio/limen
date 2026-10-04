@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import math
 from collections import Counter
+from functools import cache
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from limen.agents.chat_agents.briefing import deterministic_briefing
 from limen.agents.chat_agents.prompts_registry import has_narrative
@@ -20,7 +22,10 @@ from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import (
     RiskLevel,
 )
+from limen.core.scoring.regional_thresholds import WildfireThresholds, load_hazard_thresholds
+from limen.core.scoring.wildfire.climatology import percentile
 from limen.data.db import acquire
+from limen.data.repos import fwi_climatology_repo
 from limen.data.repos.assessment_repo import record_from_row
 
 router = APIRouter(tags=["risk"])
@@ -385,6 +390,53 @@ async def cell_rain_outlook(cell_id: str, response: Response, deps: DepsDep) -> 
     # pubblica non deve tradurre ogni clic in una richiesta al servizio meteo.
     response.headers["Cache-Control"] = "public, max-age=1800" if outlook else "no-store"
     return {"cell_id": cell_id, "hours": 48, "outlook": outlook}
+
+
+@cache
+def _raggio_nodo_fwi() -> float:
+    """Metà diagonale del reticolo FWI: la distanza massima fra un punto e il
+    suo nodo. Dal file dell'incendio, che è dove il passo è deciso."""
+    soglie = load_hazard_thresholds(HazardType.WILDFIRE)
+    if not isinstance(soglie, WildfireThresholds):
+        raise TypeError(f"soglie incendio inattese: {type(soglie).__name__}")
+    return soglie.fwi.node_spacing_deg * math.sqrt(2) / 2 + 1e-6
+
+
+@router.get("/api/cell/{cell_id}/fwi-normale")
+async def cell_fwi_normale(
+    cell_id: str,
+    response: Response,
+    fwi: float = Query(..., ge=0, le=500),
+    month: int = Query(..., ge=1, le=12),
+) -> dict[str, Any]:
+    """A che percentile cade ``fwi`` fra i giorni di ``month`` in questo punto.
+
+    Dalla climatologia di `limen fwi-climatology` (migrazione 061). Risponde
+    alla domanda che la classe assoluta non dice: è alto **rispetto al
+    solito**? ``normale`` è ``null`` finché la climatologia di quel nodo non
+    è stata calcolata — non lo so, non «nella norma».
+    """
+    async with acquire() as conn:
+        row = await conn.fetchrow(_CELL_CENTROID_SQL, cell_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"cella sconosciuta: {cell_id}")
+    clim = await fwi_climatology_repo.per_punto(
+        row["lon"], row["lat"], month, raggio=_raggio_nodo_fwi()
+    )
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    if clim is None:
+        return {"cell_id": cell_id, "normale": None}
+    q = clim.quantiles
+    return {
+        "cell_id": cell_id,
+        "normale": {
+            "percentile": round(percentile(fwi, q), 1),
+            "mediana": q[10],
+            "p90": q[18],
+            "giorni": clim.days,
+            "anni": [clim.year_from, clim.year_to],
+        },
+    }
 
 
 @router.get("/api/cell/{cell_id}/history")

@@ -516,3 +516,18 @@ export interface CellRainOutlookResponse {
   hours: number;
   outlook: { total_mm: number; peak_mmh: number } | null;
 }
+
+/** `GET /api/cell/{id}/fwi-normale`: `normale` nullo finché la climatologia
+ *  di quel punto non è calcolata — «non lo so», non «nella norma». */
+export interface FwiNormale {
+  percentile: number;
+  mediana: number;
+  p90: number;
+  giorni: number;
+  anni: [number, number];
+}
+
+export interface CellFwiNormaleResponse {
+  cell_id: string;
+  normale: FwiNormale | null;
+}
