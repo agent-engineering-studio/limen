@@ -111,6 +111,64 @@ const DRIVER_PROSE: Record<string, string> = {
   fluvial: "dalla portata prevista del fiume, sopra la sua normale",
 };
 
+/** Le classi FWI di Copernicus EFFIS, le stesse della sua legenda. */
+const CLASSI_EFFIS: readonly [number, string][] = [
+  [11.2, "Low (sotto 11,2)"],
+  [21.3, "Moderate (11,2–21,3)"],
+  [38.0, "High (21,3–38)"],
+  [50.0, "Very High (38–50)"],
+  [70.0, "Extreme (50–70)"],
+  [Infinity, "Very Extreme (oltre 70)"],
+];
+
+function cifra(n: number, decimali = 1): string {
+  return n.toLocaleString("it-IT", { minimumFractionDigits: decimali, maximumFractionDigits: decimali });
+}
+
+/** Come leggere il numero dell'incendio: cosa misura, a quale classe EFFIS
+ *  corrisponde e quanto è secco il suolo sotto.
+ *
+ *  Senza questo, uno 0,69 «Alto» in un ottobre mite si leggeva come un
+ *  allarme. È un pericolo **potenziale** — quanto si propagherebbe un fuoco
+ *  se partisse — e lo dice anche la scala ufficiale: a Montegiordano il 2
+ *  ottobre EFFIS dava la stessa classe. Il numero era giusto; mancava cosa
+ *  vuol dire. `null` quando il breakdown non porta il meteo. */
+export function letturaIncendio(factors: Record<string, unknown>): string[] | null {
+  const fw = factors["fire_weather"];
+  if (typeof fw !== "object" || fw === null) return null;
+  const meteo = fw as Record<string, unknown>;
+  const fwi = typeof meteo["fwi"] === "number" ? meteo["fwi"] : null;
+  const dc = typeof meteo["dc"] === "number" ? meteo["dc"] : null;
+  if (fwi === null) return null;
+  const righe = [
+    "È il pericolo meteorologico potenziale: quanto si propagherebbe un " +
+      "incendio se partisse, non la probabilità che parta.",
+  ];
+  const classe = CLASSI_EFFIS.find(([max]) => fwi < max)?.[1] ?? "";
+  const giorno =
+    typeof meteo["day"] === "string"
+      ? ` · meteo del ${new Date(meteo["day"]).toLocaleDateString("it-IT", { day: "numeric", month: "long" })}`
+      : "";
+  righe.push(
+    `Indice meteo FWI ${cifra(fwi)}: classe ${classe} sulla scala di Copernicus EFFIS${giorno}.`,
+  );
+  if (dc !== null) {
+    // Il DC scende solo con piogge vere (sopra 2,8 mm in un giorno): è la
+    // memoria lunga della siccità, ed è lui che tiene alto l'indice dopo
+    // un'estate secca anche quando le giornate si fanno miti.
+    const lettura =
+      dc >= 500
+        ? "suolo e combustibili grossi molto secchi, come a fine estate: si abbassa solo con piogge abbondanti"
+        : dc >= 350
+          ? "siccità marcata, che una pioggia leggera non cancella"
+          : dc >= 200
+            ? "siccità moderata"
+            : "nessuna siccità di fondo";
+    righe.push(`Codice di siccità DC ${cifra(dc, 0)}: ${lettura}.`);
+  }
+  return righe;
+}
+
 /** Spiegazione della cella in linguaggio piano — deterministica, dal
  * breakdown: niente LLM, niente numeri inventati. */
 function plainSummary(
@@ -458,6 +516,17 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
         );
       })()}
       <p className="plain-summary">{plainSummary(rowHazard, components, factors, props.exposure)}</p>
+      {rowHazard === "wildfire"
+        ? ((righe) =>
+            righe ? (
+              <div className="lettura-incendio">
+                <span className="eyebrow">Come leggere questo numero</span>
+                {righe.map((r) => (
+                  <p key={r}>{r}</p>
+                ))}
+              </div>
+            ) : null)(letturaIncendio(factors))
+        : null}
       {props.priority != null && props.exposure ? (
         <p className="priority-line">
           <span className="eyebrow" style={{ marginBottom: 2 }}>
