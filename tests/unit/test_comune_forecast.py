@@ -287,3 +287,23 @@ def test_le_celle_senza_comune_restano_fuori() -> None:
         cell_id="mare", score=0.4, level=RiskLevel.Moderate, breakdown=frana
     )
     assert per_comune([cella], {}) == {}
+
+
+def test_il_confronto_col_mese_va_solo_all_incendio() -> None:
+    """Le classi dell'incendio sono assolute: FWI e percentile del mese dicono
+    se il numero è insolito per la stagione, senza toccare il punteggio."""
+    from limen.data.repos.comune_risk import _con_segnali
+
+    riga = {
+        "hazards": {
+            "landslide": {"class": "Moderate", "score": 0.37},
+            "wildfire": {"class": "High", "score": 0.49},
+        }
+    }
+    incendio = {"fwi": 23.7, "fwi_month": 10, "fwi_percentile": 96}
+
+    _con_segnali(riga, None, incendio)
+
+    assert riga["hazards"]["wildfire"]["fwi_percentile"] == 96
+    assert riga["hazards"]["wildfire"]["score"] == 0.49
+    assert "fwi" not in riga["hazards"]["landslide"]

@@ -90,7 +90,10 @@ esposto. Per ognuno:
 - il **numero in testa** è il **pericolo peggiore** del comune, da 0 a 1, con
   il suo nome. Non è una media: un incendio alto non diventa basso perché oggi
   non piove;
-- i chip **F / A / I** danno i tre valori affiancati, sempre tutti;
+- i chip **F / A / I** danno i tre valori affiancati, sempre tutti. Accanto
+  all'alluvione, la pioggia prevista contro la soglia; accanto all'incendio,
+  l'FWI e **quanto è insolito per il mese** in quel punto («insolito per
+  ottobre (96°)», «nella norma per ottobre»);
 - la **freccia** dice il verso verso le 72 ore, confrontando solo i pericoli
   che hanno una previsione;
 - la riga **Allerta ufficiale** riporta il bollettino della Protezione Civile
@@ -285,7 +288,8 @@ come a ottobre. Per questo Limen tiene anche una **climatologia**: per ogni
 nodo e ogni mese, la distribuzione dell'FWI su dieci anni di archivio
 (2016-2025). L'ispettore la usa per dire, per esempio, «più alto del 98% dei
 giorni di ottobre in questo punto»: lo stesso valore ad agosto sarebbe
-ordinario.
+ordinario. Lo stesso confronto compare nella lista dei comuni, accanto al
+valore dell'incendio.
 
 ## La previsione
 

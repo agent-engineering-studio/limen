@@ -156,28 +156,34 @@ async def list_forecast_alerts(
     deps: DepsDep,  # noqa: ARG001 — DI presence
     since_hours: int = Query(72, ge=1, le=24 * 30),
     limit: int = Query(50, ge=1, le=500),
-    hazard: HazardType = DEFAULT_HAZARD,
+    hazard: HazardType | None = None,
 ) -> dict[str, list[dict[str, object]]]:
-    """Predictive (PREVISIONE) dispatches from the forecast sweep."""
+    """Predictive (PREVISIONE) dispatches from the forecast sweep.
+
+    Senza ``hazard``, tutti i pericoli. Il default era le frane, e il pannello
+    della previsione diceva «nessuna regione prevista sopra soglia» la mattina
+    in cui erano partiti avvisi d'incendio per cinque regioni.
+    """
     async with acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT aoi_id, horizon_h, max_level, max_score,
+            SELECT aoi_id, hazard_type, horizon_h, max_level, max_score,
                    cells_alerted, summary, dispatched_at
             FROM forecast_dispatches
             WHERE dispatched_at >= now() - make_interval(hours => $1)
-              AND hazard_type = $3
+              AND ($3::hazard_type IS NULL OR hazard_type = $3::hazard_type)
             ORDER BY dispatched_at DESC
             LIMIT $2
             """,
             since_hours,
             limit,
-            hazard.value,
+            hazard.value if hazard else None,
         )
     return {
         "items": [
             {
                 "aoi_id": str(r["aoi_id"]),
+                "hazard_type": str(r["hazard_type"]),
                 "horizon_h": int(r["horizon_h"]),
                 "max_level": str(r["max_level"]),
                 "max_score": float(r["max_score"]),

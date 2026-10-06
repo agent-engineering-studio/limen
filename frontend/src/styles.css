@@ -3281,3 +3281,7 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   color: var(--muted);
 }
 .riga-provenienza strong { color: var(--ink-soft); font-weight: 600; }
+
+/* L'incendio insolito per la stagione: lo stesso arancio del testo d'avviso,
+   perché è l'informazione che cambia la lettura del numero. */
+.cb-insolito { color: var(--amber) !important; }

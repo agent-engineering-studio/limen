@@ -149,6 +149,13 @@ class ComuneHazard(BaseModel):
     rain_mm: float | None = None
     rain_threshold_mm: float | None = None
     discharge_known: bool | None = None
+    #: Solo per l'incendio: l'FWI della cella peggiore e a che percentile cade
+    #: fra i giorni dello stesso mese in quel punto (2016-2025). Le classi sono
+    #: assolute, come quelle di EFFIS; questo dice se il valore è insolito per
+    #: la stagione. ``fwi_percentile`` nullo = climatologia assente.
+    fwi: float | None = None
+    fwi_month: int | None = None
+    fwi_percentile: int | None = None
 
     model_config = ConfigDict(populate_by_name=True)
 

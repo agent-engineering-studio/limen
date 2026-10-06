@@ -36,6 +36,10 @@ export interface ComuneHazard {
   rain_mm?: number | null;
   rain_threshold_mm?: number | null;
   discharge_known?: boolean | null;
+  /** Solo incendio: FWI della cella peggiore, mese, percentile nel mese. */
+  fwi?: number | null;
+  fwi_month?: number | null;
+  fwi_percentile?: number | null;
 }
 
 export interface ComuneRisk {
@@ -457,6 +461,7 @@ export interface NationalReportResponse {
 
 export interface ForecastAlertItem {
   aoi_id: string;
+  hazard_type: HazardType;
   horizon_h: number;
   max_level: string;
   max_score: number;
