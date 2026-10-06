@@ -1,10 +1,8 @@
-"""Il briefing asincrono non tocca i numeri (#78).
+"""La spiegazione asincrona: per regione, e senza toccare i numeri (#78).
 
-`test_llm_does_not_change_numeric_breakdown` prova l'invariante dentro il
-workflow, dove l'LLM annota un contesto in memoria. Dopo #78 la narrativa
-arriva **dopo**, con un UPDATE su righe già persistite: è un secondo modo di
-violare la stessa invariante, e stavolta su disco. Qui si prova che l'UPDATE
-tocca solo `explanation`.
+Dopo #78 la narrativa arriva **dopo** lo sweep. Dalla migrazione 064 sta in
+`spiegazioni_regione`, una tabella che lo sweep non tocca: prima finiva su
+`latest_risk`, che lo sweep riscrive ogni ora, e spariva al giro dopo.
 """
 
 from __future__ import annotations
@@ -21,9 +19,9 @@ from limen.agents.llm_factory.stub import StubLlmClientFactory
 from limen.api.dependencies import AppDependencies
 from limen.api.main import build_app_with_deps
 from limen.config.settings import Settings
-from limen.core.models.hazard import DEFAULT_HAZARD
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.data.db import acquire, get_pool
-from limen.data.repos import assessment_repo
+from limen.data.repos import assessment_repo, spiegazioni_repo
 from limen.integrations._http import SharedHttpClient
 
 pytestmark = pytest.mark.integration
@@ -125,10 +123,28 @@ async def seeded(reset_db: None) -> AsyncIterator[None]:
     yield
 
 
-async def test_the_summary_is_rebuilt_from_the_persisted_rows(seeded: None) -> None:
-    """Nessun `MonitoringContext` sopravvive fino al tick di arricchimento: le
-    righe persistite *sono* la valutazione."""
-    assessment = await assessment_repo.summary_by_run(_RUN_ID)
+async def _scrivi(testo: str, *, ripiego: bool = False) -> None:
+    await spiegazioni_repo.scrivi(
+        aoi_id=_AOI_ID,
+        hazard=DEFAULT_HAZARD,
+        run_id=_RUN_ID,
+        livello="VeryHigh",
+        modello="quality-cloud",
+        ripiego=ripiego,
+        testo=testo,
+        analisi={
+            "driver": "meteo_trigger",
+            "anomalies": [],
+            "attention_window_hours": 24,
+            "confidence": 0.7,
+        },
+    )
+
+
+async def test_the_summary_is_rebuilt_from_the_current_state(seeded: None) -> None:
+    """Nessun `MonitoringContext` sopravvive fino al tick di arricchimento:
+    lo stato corrente *è* la valutazione."""
+    assessment = await assessment_repo.summary_for_region(_AOI_ID, DEFAULT_HAZARD)
     assert assessment is not None
     assert assessment.aoi_id == _AOI_ID
     assert assessment.n_cells == 2
@@ -136,66 +152,38 @@ async def test_the_summary_is_rebuilt_from_the_persisted_rows(seeded: None) -> N
     assert assessment.cells_high_or_above == 1
     # Ordinate per punteggio: il prompt del briefing legge le prime.
     assert [c.cell_id for c in assessment.top_cells] == ["brief-cell-1", "brief-cell-2"]
-    assert assessment.briefing_it is None
 
 
-async def test_attaching_the_narrative_leaves_every_number_untouched(seeded: None) -> None:
+async def test_a_region_without_state_is_not_an_error(seeded: None) -> None:
+    assert await assessment_repo.summary_for_region(_AOI_ID, HazardType.WILDFIRE) is None
+
+
+async def test_writing_the_narrative_leaves_every_number_untouched(seeded: None) -> None:
     async with acquire() as conn:
         before = await conn.fetch(
-            "SELECT cell_id, score, class, factors, computed_at "
-            "FROM risk_assessments WHERE run_id = $1 ORDER BY cell_id",
-            _RUN_ID,
+            "SELECT cell_id, score, class, factors, computed_at FROM latest_risk ORDER BY cell_id"
         )
-
-    rows = await assessment_repo.attach_narrative(
-        _RUN_ID,
-        briefing_it="Testo narrativo di prova.",
-        analysis={
-            "driver": "rain",
-            "anomalies": [],
-            "attention_window_hours": 24,
-            "confidence": 0.7,
-        },
-    )
-    assert rows == 2
-
+    await _scrivi("Testo narrativo di prova.")
     async with acquire() as conn:
         after = await conn.fetch(
-            "SELECT cell_id, score, class, factors, computed_at, explanation "
-            "FROM risk_assessments WHERE run_id = $1 ORDER BY cell_id",
-            _RUN_ID,
+            "SELECT cell_id, score, class, factors, computed_at FROM latest_risk ORDER BY cell_id"
         )
+    assert [dict(r) for r in after] == [dict(r) for r in before]
 
-    for old, new in zip(before, after, strict=True):
-        assert new["score"] == old["score"]
-        assert new["class"] == old["class"]
-        assert new["factors"] == old["factors"]
-        assert new["computed_at"] == old["computed_at"]
-
-    explanation = await _explanation(after[0])
-    assert explanation["briefing_it"] == "Testo narrativo di prova."
-    assert explanation["analysis"]["driver"] == "rain"
-    # Fusione, non sostituzione: quello che lo sweep aveva scritto resta.
-    assert explanation["model_version"] == "v1-test"
+    letta = await spiegazioni_repo.leggi(_AOI_ID, DEFAULT_HAZARD)
+    assert letta is not None
+    assert letta.testo == "Testo narrativo di prova."
+    assert letta.analisi is not None and letta.analisi["driver"] == "meteo_trigger"
 
 
-async def test_a_second_pass_sees_the_briefing_already_there(seeded: None) -> None:
-    """Il job salta uno sweep già arricchito: la metrica in `job_runs` dice
-    com'era finito lo sweep, non com'è la riga adesso."""
-    await assessment_repo.attach_narrative(_RUN_ID, briefing_it="Primo testo.", analysis=None)
-    assessment = await assessment_repo.summary_by_run(_RUN_ID)
-    assert assessment is not None
-    assert assessment.briefing_it == "Primo testo."
-
-
-async def test_an_unknown_run_is_not_an_error(seeded: None) -> None:
-    """Retention può aver droppato la partizione: nessuna riga, nessun crash."""
-    assert await assessment_repo.summary_by_run(1) is None
-
-
-async def _explanation(row: asyncpg.Record) -> dict[str, object]:
-    value = row["explanation"]
-    return dict(json.loads(value)) if isinstance(value, str) else dict(value)
+async def test_la_spiegazione_sopravvive_allo_sweep_successivo(seeded: None) -> None:
+    """Il difetto della 064: lo sweep riscrive `latest_risk` per intero, e la
+    spiegazione attaccata lì spariva al giro dopo."""
+    await _scrivi("Scritta alle 12:05.")
+    async with acquire() as conn:
+        await conn.execute("SELECT rebuild_latest_risk()")
+    letta = await spiegazioni_repo.leggi(_AOI_ID, DEFAULT_HAZARD)
+    assert letta is not None and letta.testo == "Scritta alle 12:05."
 
 
 @pytest.fixture
@@ -234,12 +222,21 @@ async def test_the_api_shows_the_deterministic_text_while_the_briefing_is_pendin
 async def test_the_api_prefers_the_real_briefing_once_it_lands(
     client: httpx.AsyncClient,
 ) -> None:
-    await assessment_repo.attach_narrative(
-        _RUN_ID, briefing_it="Narrativa vera del modello.", analysis=None
-    )
+    await _scrivi("Narrativa vera del modello.")
     body = (await client.get(f"/api/aoi/{_AOI_ID}/risk/latest")).json()
     assert body["briefing_is_fallback"] is False
     assert body["briefing_it"] == "Narrativa vera del modello."
+    assert body["briefing_model"] == "quality-cloud"
+    assert body["briefing_written_at"] is not None
+    assert body["analysis"]["driver"] == "meteo_trigger"
+
+
+async def test_un_ripiego_non_viene_attribuito_all_ai(client: httpx.AsyncClient) -> None:
+    await _scrivi("Testo deterministico salvato.", ripiego=True)
+    body = (await client.get(f"/api/aoi/{_AOI_ID}/risk/latest")).json()
+    assert body["briefing_is_fallback"] is True
+    assert body["briefing_model"] is None
+    assert body["analysis"] is None
 
 
 async def test_il_riassunto_vede_tutta_la_regione_non_solo_le_celle_del_run(seeded: None) -> None:
@@ -262,8 +259,25 @@ async def test_il_riassunto_vede_tutta_la_regione_non_solo_le_celle_del_run(seed
             _RUN_ID + 1,
         )
         await conn.execute("SELECT rebuild_latest_risk()")
-    assessment = await assessment_repo.summary_by_run(_RUN_ID + 1)
+    assessment = await assessment_repo.summary_for_region(_AOI_ID, DEFAULT_HAZARD)
     assert assessment is not None
     assert assessment.n_cells == 2
     assert assessment.cells_by_level == {"VeryHigh": 1, "Moderate": 1}
     assert assessment.top_cells[0].cell_id == "brief-cell-1"
+
+
+async def test_la_spiegazione_della_regione_ha_il_suo_endpoint(client: httpx.AsyncClient) -> None:
+    vuota = (await client.get(f"/api/aoi/{_AOI_ID}/spiegazione")).json()
+    assert vuota["spiegazione"] is None
+    await _scrivi("Scritta dal modello.")
+    body = (await client.get(f"/api/aoi/{_AOI_ID}/spiegazione")).json()
+    assert body["spiegazione"]["testo"] == "Scritta dal modello."
+    assert body["spiegazione"]["modello"] == "quality-cloud"
+
+
+async def test_la_provenienza_dice_lo_stato_vero(client: httpx.AsyncClient) -> None:
+    body = (await client.get("/api/provenienza")).json()
+    assert body["motore"] == "deterministic"
+    assert body["sfidante_ml_attivo"] is False
+    assert body["correttore_pioggia"]["stato"] == "raccolta_dati"
+    assert body["correttore_pioggia"]["nodi_obiettivo"] == 150

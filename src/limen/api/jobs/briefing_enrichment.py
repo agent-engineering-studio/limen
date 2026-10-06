@@ -24,7 +24,7 @@ import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
-from limen.agents.chat_agents.briefing import BriefingAgent
+from limen.agents.chat_agents.briefing import BriefingAgent, briefing_di_ripiego
 from limen.agents.chat_agents.prompts_registry import has_narrative
 from limen.agents.chat_agents.risk_analyst import RiskAnalystAgent
 from limen.agents.workflows.main_workflow import level_reached
@@ -39,7 +39,7 @@ from limen.api.jobs.ids import (
 from limen.config.settings import SLOW_GENERATION_MODELS
 from limen.core.logging import get_logger
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
-from limen.data.repos import assessment_repo, job_runs_repo
+from limen.data.repos import assessment_repo, job_runs_repo, spiegazioni_repo
 
 log = get_logger(__name__)
 
@@ -124,31 +124,45 @@ async def _enrich_one(
     aoi_id: str,
     hazard: HazardType,
     run_id: int,
+    livello: str,
+    modello: str,
 ) -> int:
-    """Genera analisi + briefing per uno sweep e li riattacca. Ritorna le righe toccate."""
-    assessment = await assessment_repo.summary_by_run(run_id)
+    """Scrive analisi + spiegazione di una regione. Ritorna 1 se l'ha scritta l'AI."""
+    assessment = await assessment_repo.summary_for_region(aoi_id, hazard)
     if assessment is None:
-        log.info("job.briefing_enrichment.skip", reason="no rows", run_id=run_id, aoi_id=aoi_id)
+        log.info("job.briefing_enrichment.skip", reason="no state", run_id=run_id, aoi_id=aoi_id)
         return 0
-    if assessment.briefing_it:
-        # Già arricchito da un tick precedente: la metrica in `job_runs` dice
-        # com'era finito lo sweep, non com'è la riga adesso.
+    esistente = await spiegazioni_repo.leggi(aoi_id, hazard)
+    if esistente is not None and esistente.run_id == run_id and not esistente.ripiego:
+        # Già raccontato da un tick precedente: la metrica in `job_runs` dice
+        # com'era finito lo sweep, non se la spiegazione c'è.
         log.info("job.briefing_enrichment.skip", reason="already", run_id=run_id, aoi_id=aoi_id)
         return 0
 
     analysis = await analyst.analyse(assessment)
-    payload: dict[str, Any] = analysis.model_dump()
     briefing = await briefer.brief(assessment, analysis=analysis)
-    rows = await assessment_repo.attach_narrative(run_id, briefing_it=briefing, analysis=payload)
+    ripiego = briefing == briefing_di_ripiego(assessment)
+    await spiegazioni_repo.scrivi(
+        aoi_id=aoi_id,
+        hazard=hazard,
+        run_id=run_id,
+        livello=livello,
+        modello=modello,
+        ripiego=ripiego,
+        testo=briefing,
+        analisi=analysis.model_dump(),
+    )
     log.info(
         "job.briefing_enrichment.done",
         aoi_id=aoi_id,
         hazard=hazard.value,
         run_id=run_id,
-        rows=rows,
+        ripiego=ripiego,
         chars=len(briefing),
     )
-    return rows
+    # Un ripiego non conta come spiegata: al tick dopo si riprova, invece di
+    # lasciare la regione col testo deterministico per `briefing_min_hours`.
+    return 0 if ripiego else 1
 
 
 async def run_briefing_enrichment(deps: AppDependencies) -> dict[str, int]:
@@ -218,6 +232,8 @@ async def _run(deps: AppDependencies) -> dict[str, int]:
                     aoi_id=aoi_id,
                     hazard=hazard,
                     run_id=run_id,
+                    livello=livelli.get(run_id, "None"),
+                    modello=modello or "predefinito",
                 )
             except Exception as exc:
                 # Una regione che esplode non deve lasciare le altre senza

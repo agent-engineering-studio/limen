@@ -145,3 +145,48 @@ async def test_senza_dati_il_riquadro_dice_non_lo_so(monkeypatch: pytest.MonkeyP
             lon=13.9, lat=42.3
         )
     assert esito is None
+
+
+async def test_la_forbice_dei_modelli_chiede_tutti_i_modelli_in_una_volta(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Un modello senza dati sul punto manca dal risultato: non vale zero."""
+    monkeypatch.setenv("OPENMETEO__FORECAST_URL", "http://openmeteo:8080/v1/forecast")
+    get_settings.cache_clear()
+    chieste: list[httpx.URL] = []
+
+    def risponde(req: httpx.Request) -> httpx.Response:
+        chieste.append(req.url)
+        return httpx.Response(
+            200,
+            json={
+                "hourly": {
+                    "precipitation_a": [1.0] * 72,
+                    "precipitation_b": [0.5] * 72,
+                    "precipitation_c": [None] * 72,
+                }
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(risponde)) as http:
+        esito = await meteo_client.OpenMeteoHttpClient(http_client=http).get_rain_by_model(
+            lon=13.78, lat=45.65, models=("a", "b", "c")
+        )
+
+    assert len(chieste) == 1
+    assert chieste[0].params["models"] == "a,b,c"
+    assert esito == {"a": 72.0, "b": 36.0}
+
+
+async def test_la_forbice_senza_risposta_e_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENMETEO__FORECAST_URL", "http://openmeteo:8080/v1/forecast")
+    get_settings.cache_clear()
+
+    def vuota(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"hourly": {}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(vuota)) as http:
+        esito = await meteo_client.OpenMeteoHttpClient(http_client=http).get_rain_by_model(
+            lon=13.78, lat=45.65, models=("a",)
+        )
+    assert esito is None

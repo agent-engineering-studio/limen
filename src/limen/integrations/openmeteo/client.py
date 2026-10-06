@@ -317,6 +317,42 @@ class OpenMeteoHttpClient:
             return None
         return {"total_mm": float(sum(campioni)), "peak_mmh": float(max(campioni))}
 
+    async def get_rain_by_model(
+        self, *, lon: float, lat: float, models: tuple[str, ...], hours: int = 72
+    ) -> dict[str, float] | None:
+        """La pioggia delle prossime ``hours`` ore su un punto, modello per modello.
+
+        La previsione del punteggio legge un modello solo, e la forbice fra i
+        modelli non si vede: su Trieste, il 6 ottobre 2026, da 29 mm (GFS) a
+        93 mm (ECMWF IFS) nelle stesse 72 ore. Una sola richiesta per tutti i
+        modelli, alla previsione configurata. Un modello che non copre il
+        punto o l'orizzonte manca dal risultato invece di valere zero; ``None``
+        quando la fonte non risponde.
+        """
+        params: dict[str, Any] = {
+            "latitude": f"{lat:.4f}",
+            "longitude": f"{lon:.4f}",
+            "hourly": "precipitation",
+            "forecast_hours": hours,
+            "models": ",".join(models),
+            "timezone": "UTC",
+        }
+        try:
+            resp = await fetch_with_retry(
+                "GET", forecast_url(), client=await self._client(), params=params
+            )
+        except _DEGRADATION_EXC as exc:
+            log.warning("integration.degraded", label="openmeteo.rain_by_model", error=str(exc))
+            return None
+        hourly = resp.json().get("hourly") or {}
+        out: dict[str, float] = {}
+        for model in models:
+            serie = hourly.get(f"precipitation_{model}") or []
+            if len(serie) < hours or any(v is None for v in serie[:hours]):
+                continue
+            out[model] = float(sum(serie[:hours]))
+        return out or None
+
     async def get_fire_weather_grid(
         self,
         *,

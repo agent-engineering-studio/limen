@@ -43,6 +43,7 @@ from limen.integrations.openmeteo.client import OpenMeteoHttpClient
 from limen.integrations.openmeteo.grid import build_snapped_nodes
 from limen.integrations.openmeteo.previous_runs import (
     MODELLI,
+    NODI_CORRETTORE,
     QuotaEsauritaError,
     previsioni_giornaliere,
 )
@@ -126,7 +127,7 @@ async def _osservate(lon: float, lat: float, inizio: date, fine: date) -> dict[d
 
 
 async def run_fetch() -> int:
-    n = max(_int_env("LIMEN_RAIN_ENS_NODES", 150), 1)
+    n = max(_int_env("LIMEN_RAIN_ENS_NODES", NODI_CORRETTORE), 1)
     per_corsa = max(_int_env("LIMEN_RAIN_ENS_NODES_PER_RUN", 30), 1)
     inizio = _date_env("LIMEN_RAIN_ENS_START", date(2024, 3, 1))
     # L'archivio ERA5 è indietro di qualche giorno sul tempo reale.

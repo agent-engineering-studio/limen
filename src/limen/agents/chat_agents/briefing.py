@@ -148,6 +148,16 @@ def _fallback_briefing(assessment: AggregateAssessment, *, reason: str) -> str:
     engine from a dead one.
     """
     log.warning("llm.fallback", role="Briefing", reason=reason)
+    return briefing_di_ripiego(assessment)
+
+
+def briefing_di_ripiego(assessment: AggregateAssessment) -> str:
+    """Il testo deterministico di una regione: lo stesso del ripiego.
+
+    Pubblico perché chi salva la spiegazione deve poter dire se il testo che
+    ha in mano l'ha scritto il modello o no — da fuori i due sono
+    indistinguibili, e la SPA non deve attribuire all'AI un testo suo.
+    """
     top = assessment.top_cells[0] if assessment.top_cells else None
     return deterministic_briefing(
         aoi_id=assessment.aoi_id,

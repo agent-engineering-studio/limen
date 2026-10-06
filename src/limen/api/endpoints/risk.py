@@ -17,6 +17,7 @@ from limen.api.schemas import (
     CellBreakdownResponse,
     LatestAssessmentResponse,
 )
+from limen.config.settings import ScoringMode
 from limen.core.models.context import RiskAnalysisDTO
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import (
@@ -25,8 +26,11 @@ from limen.core.models.risk import (
 from limen.core.scoring.regional_thresholds import WildfireThresholds, load_hazard_thresholds
 from limen.core.scoring.wildfire.climatology import percentile
 from limen.data.db import acquire
-from limen.data.repos import fwi_climatology_repo
+from limen.data.repos import fwi_climatology_repo, spiegazioni_repo
 from limen.data.repos.assessment_repo import record_from_row
+from limen.integrations.openmeteo.previous_runs import MODELLI as MODELLI_PIOGGIA
+from limen.integrations.openmeteo.previous_runs import NODI_CORRETTORE
+from limen.integrations.openmeteo.previous_runs import NOMI as NOMI_MODELLI
 
 router = APIRouter(tags=["risk"])
 
@@ -83,20 +87,21 @@ async def latest_assessment(
         )
 
     records = [record_from_row(r) for r in rows]
-    explanation = _coerce_json(rows[0]["explanation"])
-    analysis_payload = explanation.get("analysis")
-    analysis = RiskAnalysisDTO.model_validate(analysis_payload) if analysis_payload else None
-
     by_level = Counter(r.level.value for r in records)
     high_or_above = sum(1 for r in records if r.level in {RiskLevel.High, RiskLevel.VeryHigh})
 
-    # Lo sweep orario non chiama più l'LLM (#78): `briefing_it` è NULL finché
-    # `briefing_enrichment` non passa, e per le regioni non escalate resta
-    # NULL per sempre. Un pannello vuoto sarebbe una regressione rispetto a
-    # prima, quindi si mostra il testo deterministico — lo stesso che
-    # `BriefingAgent` produce in degradazione — e si dice che lo è.
-    stored = explanation.get("briefing_it")
-    briefing_it = str(stored) if stored else None
+    # La spiegazione è per regione, in una tabella sua (migrazione 064): lo
+    # sweep orario riscrive `latest_risk` ogni ora e la cancellava. Finché
+    # l'AI non l'ha scritta — o se l'ultima volta il modello non ha risposto —
+    # si mostra il testo deterministico e si dice che lo è.
+    spiegazione = await spiegazioni_repo.leggi(aoi_id, hazard)
+    dall_ai = spiegazione is not None and not spiegazione.ripiego
+    analysis = (
+        RiskAnalysisDTO.model_validate(spiegazione.analisi)
+        if dall_ai and spiegazione is not None and spiegazione.analisi
+        else None
+    )
+    briefing_it: str | None = spiegazione.testo if dall_ai and spiegazione else None
     briefing_is_fallback = briefing_it is None and has_narrative(hazard)
     if briefing_is_fallback:
         briefing_it = deterministic_briefing(
@@ -118,6 +123,8 @@ async def latest_assessment(
         cells_by_level=dict(by_level),
         briefing_it=briefing_it,
         briefing_is_fallback=briefing_is_fallback,
+        briefing_model=spiegazione.modello if dall_ai and spiegazione else None,
+        briefing_written_at=spiegazione.scritta if dall_ai and spiegazione else None,
         analysis=analysis,
     )
 
@@ -391,6 +398,79 @@ async def cell_rain_outlook(cell_id: str, response: Response, deps: DepsDep) -> 
     # pubblica non deve tradurre ogni clic in una richiesta al servizio meteo.
     response.headers["Cache-Control"] = "public, max-age=1800" if outlook else "no-store"
     return {"cell_id": cell_id, "hours": 48, "outlook": outlook}
+
+
+@router.get("/api/cell/{cell_id}/rain-models")
+async def cell_rain_models(cell_id: str, response: Response, deps: DepsDep) -> dict[str, Any]:
+    """La pioggia delle prossime 72 ore sulla cella secondo cinque modelli meteo.
+
+    Il punteggio legge un modello solo; questa è la forbice che quel numero
+    nasconde. ``modelli`` è vuoto quando la fonte non risponde.
+    """
+    async with acquire() as conn:
+        row = await conn.fetchrow(_CELL_CENTROID_SQL, cell_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"cella sconosciuta: {cell_id}")
+    per_modello = await deps.openmeteo.get_rain_by_model(
+        lon=row["lon"], lat=row["lat"], models=MODELLI_PIOGGIA
+    )
+    response.headers["Cache-Control"] = "public, max-age=1800" if per_modello else "no-store"
+    modelli = [
+        {"id": m, "nome": NOMI_MODELLI[m], "mm": round(mm, 1)}
+        for m, mm in sorted((per_modello or {}).items(), key=lambda kv: kv[1])
+    ]
+    return {"cell_id": cell_id, "hours": 72, "modelli": modelli}
+
+
+@router.get("/api/aoi/{aoi_id}/spiegazione")
+async def aoi_spiegazione(
+    aoi_id: str, response: Response, hazard: HazardType = DEFAULT_HAZARD
+) -> dict[str, Any]:
+    """La spiegazione scritta dall'AI per una regione e un pericolo.
+
+    ``spiegazione`` è ``null`` finché il modello non l'ha scritta, o se
+    l'ultima volta non ha risposto: un testo deterministico non va
+    attribuito all'AI.
+    """
+    s = await spiegazioni_repo.leggi(aoi_id, hazard)
+    response.headers["Cache-Control"] = "public, max-age=300"
+    if s is None or s.ripiego:
+        return {"aoi_id": aoi_id, "hazard_type": hazard.value, "spiegazione": None}
+    return {
+        "aoi_id": aoi_id,
+        "hazard_type": hazard.value,
+        "spiegazione": {
+            "testo": s.testo,
+            "modello": s.modello,
+            "scritta": s.scritta.isoformat(),
+            "livello": s.livello,
+            "analisi": s.analisi,
+        },
+    }
+
+
+@router.get("/api/provenienza")
+async def provenienza(response: Response, deps: DepsDep) -> dict[str, Any]:
+    """Da dove vengono i numeri della mappa: chi calcola, con che meteo,
+    cosa fanno oggi ML e AI. Lo stato reale della configurazione, non una
+    descrizione — se uno sfidante si accende, questa risposta cambia."""
+    cfg = deps.settings
+    async with acquire() as conn:
+        nodi = await conn.fetchval(
+            "SELECT count(*) FROM (SELECT DISTINCT node_lon, node_lat FROM rain_ens_forecast) n"
+        )
+    response.headers["Cache-Control"] = "public, max-age=300"
+    return {
+        "motore": cfg.scoring.engine.value,
+        "sfidante_ml_attivo": cfg.scoring.mode != ScoringMode.CHAMPION_ONLY,
+        "meteo_modello": cfg.openmeteo.models or "best_match",
+        "correttore_pioggia": {
+            "stato": "raccolta_dati",
+            "nodi_raccolti": int(nodi or 0),
+            "nodi_obiettivo": NODI_CORRETTORE,
+        },
+        "spiegazioni_modello": cfg.llm.models.briefing or None,
+    }
 
 
 @cache

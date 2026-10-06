@@ -176,6 +176,9 @@ async def reset_db(pg_pool: asyncpg.Pool) -> AsyncIterator[None]:
         # test non tocca la griglia — altrimenti la vista mostrerebbe i
         # punteggi dello sweep precedente.
         "latest_risk",
+        # Spiegazioni dell'AI per regione (064): la chiave è (regione,
+        # pericolo), quindi un test erediterebbe il testo di quello prima.
+        "spiegazioni_regione",
     ]
     async with acquire() as conn:
         with contextlib.suppress(Exception):
