@@ -291,6 +291,29 @@ giorni di ottobre in questo punto»: lo stesso valore ad agosto sarebbe
 ordinario. Lo stesso confronto compare nella lista dei comuni, accanto al
 valore dell'incendio.
 
+**Perché le classi non si abbassano in autunno.** Si potrebbe pensare che un
+«alto» di ottobre valga meno di uno d'agosto, visto che a ottobre brucia l'1 %
+dell'area dell'anno. Lo abbiamo misurato: rigiocando l'indice su 300 nodi dal
+2016 al 2024 e confrontandolo con i fuochi osservati da satellite (NASA FIRMS)
+su vegetazione naturale, in un giorno di classe alta la probabilità di un
+fuoco è 1,18 % in luglio-agosto e 0,97 % a ottobre. Ottobre brucia poco perché
+ha pochi giorni alti — il 7 % contro il 38 % — non perché «alto» valga meno.
+Le classi restano quelle di EFFIS, e il confronto col mese serve a dire quando
+un giorno alto è raro, non a ridimensionarlo.
+
+| Mese | Fuoco in un giorno «alto» | In un giorno «molto alto» | Giorni alti o più |
+|---|---|---|---|
+| Luglio-agosto | 1,18 % | 3,49 % | 38 % |
+| Settembre | 0,78 % | 1,66 % | 21 % |
+| Ottobre | 0,97 % | 1,92 % | 7 % |
+| Novembre | 0,81 % | 0,85 % | 2 % |
+
+Una cautela sul confronto col mese: la climatologia è calcolata sulla
+rianalisi ERA5, il valore di oggi sui modelli di previsione, che sugli stessi
+giorni danno un FWI più alto di circa il 10 % (qualche km/h di vento in più).
+Il percentile mostrato è quindi un po' gonfiato: «96°» va letto come «fra i
+giorni più secchi del mese», non come una cifra esatta.
+
 ## La previsione
 
 ### Tre cadenze
