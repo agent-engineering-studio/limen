@@ -14,6 +14,7 @@ from typing import Any
 
 from limen.api.jobs import briefing_enrichment as be
 from limen.api.jobs.briefing_enrichment import _candidates
+from limen.config.settings import LLMSettings
 from limen.core.models.hazard import HazardType
 from limen.data.repos.job_runs_repo import JobRun
 
@@ -170,6 +171,8 @@ class _Settings:
     class llm:  # noqa: N801
         briefing_lookback_hours = 3
         briefing_min_level = "Moderate"
+        models = LLMSettings().models
+        slow_models_allowed = LLMSettings().slow_models_allowed
 
 
 class _Factory:

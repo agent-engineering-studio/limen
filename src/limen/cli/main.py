@@ -60,6 +60,8 @@ from limen.cli.mcp_serve import run as _run_mcp_serve
 from limen.cli.migrate import run as _run_migrate
 from limen.cli.monitor_once import run as _run_monitor_once
 from limen.cli.partitions import run as _run_partitions
+from limen.cli.rain_ensemble import run_fetch as _run_rain_ens_fetch
+from limen.cli.rain_ensemble import run_train as _run_rain_ens_train
 from limen.cli.report import run as _run_report_build
 from limen.cli.review_alerts import run as _run_review_alerts
 from limen.cli.seed import run as _run_seed
@@ -143,6 +145,17 @@ def _build_parser() -> argparse.ArgumentParser:
             "replay the FWI chain against EFFIS burnt-area perimeters "
             "(env: LIMEN_BACKTEST_WILDFIRE_AOI / _START / _END / _LEVEL)"
         ),
+    )
+    sub.add_parser(
+        "rain-ensemble-fetch",
+        help=(
+            "collect multi-model 72h rain forecasts and ERA5 rain for the ensemble "
+            "corrector, a batch at a time (env: LIMEN_RAIN_ENS_*)"
+        ),
+    )
+    sub.add_parser(
+        "rain-ensemble-train",
+        help="train and evaluate the multi-model rain corrector with spatial-block CV",
     )
     sub.add_parser(
         "fwi-climatology",
@@ -294,6 +307,8 @@ def main(argv: list[str] | None = None) -> int:
         "backtest-wildfire": _run_backtest_wildfire,
         "fwi-backfill": _run_fwi_backfill,
         "fwi-climatology": _run_fwi_climatology,
+        "rain-ensemble-fetch": _run_rain_ens_fetch,
+        "rain-ensemble-train": _run_rain_ens_train,
         "monitor-once": _run_monitor_once,
         "forecast": _run_forecast,
         "serve": _run_server,
