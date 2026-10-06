@@ -60,8 +60,10 @@ in locale/produzione si usa **Ollama** (host, modello qwen).
 [`docs/divulgazione/`](./docs/divulgazione/README.md) spiega senza gergo come
 viene calcolato il rischio di ogni cella, cosa fanno (e cosa non fanno) il
 modello ML e gli agenti AI, da quali fonti aperte arrivano i dati e perché
-l'LLM gira su un server proprio. Le stesse pagine sono nella SPA alla voce
-**Documentazione** (`#/documentazione`).
+l'LLM gira su un server proprio. Nella SPA, alla voce **Come funziona**
+(`#/come-funziona`), una pagina unica raccoglie tutto il motore — dati,
+formule, previsione, ML, AI, geografia: è
+[`docs/guida/limen.md`](./docs/guida/limen.md).
 
 Approfondimenti: [`docs/demo.md`](./docs/demo.md) (demo locale su un AOI piccolo),
 [`docs/architecture.md`](./docs/architecture.md),
@@ -292,8 +294,9 @@ Completati di recente:
   gateway agentico (es. OpenClaw `/hooks`, bearer token) — pull via MCP per
   le domande, push via webhook per gli eventi. Config:
   `NOTIFICATIONS__ENABLED_CHANNELS=["webhook"]` + `NOTIFICATIONS__WEBHOOK__URL/TOKEN`.
-- **Pagina divulgativa** «Come funziona» nel frontend (`#/come-funziona`)
-  con simulatore che usa la formula reale di produzione.
+- **Guida unica** «Come funziona» nel frontend (`#/come-funziona`, una
+  sotto-rotta per sezione) con simulatore che usa la formula reale di
+  produzione.
 - **Cartella `llm-training/`**: dataset (assessment → briefing) in formato
   Alpaca + guida passo-passo per l'eventuale fine-tuning con LLaMA-Factory.
 

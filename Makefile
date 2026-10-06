@@ -473,7 +473,7 @@ check: lint typecheck test docs-links
 docs-links:
 	$(UV) run python scripts/check_doc_links.py
 
-# Porta docs/divulgazione/*.md dentro il bundle della SPA: la build Docker
+# Porta docs/guida/limen.md dentro il bundle della SPA: la build Docker
 # del frontend non ha docs/ nel contesto. Un test verifica l'allineamento.
 docs-bundle:
 	$(UV) run python scripts/build_docs_bundle.py

@@ -133,8 +133,9 @@ dire "sta succedendo", un'altra è dire "potrebbe succedere".
   (`#/come-funziona`) si muovono i cursori della pioggia e della pendenza e
   si vede il punteggio cambiare. Non è una demo con numeri finti: usa la
   formula di produzione.
-- **Questa documentazione** — nell'applicazione alla voce Documentazione
-  (`#/documentazione`) trovi esattamente le pagine che stai leggendo.
+- **La guida completa** — nell'applicazione, alla voce «Come funziona», una
+  sola pagina raccoglie tutto il motore: dati, formule, previsione, ML e AI
+  (fonte: [`docs/guida/limen.md`](../guida/limen.md)).
 
 ## Da qui in poi
 

@@ -4,10 +4,8 @@ import {
   parseInline,
   parseMarkdown,
   parseMermaidFlow,
-  resolveHref,
+  slugify,
 } from "../lib/markdown";
-
-const SLUGS = ["indice", "02-come-si-calcola-il-rischio", "glossario"];
 
 describe("parseMarkdown", () => {
   it("riconosce titoli, paragrafi ed elenchi", () => {
@@ -111,27 +109,44 @@ describe("parseInline, link dentro il grassetto", () => {
   });
 });
 
-describe("resolveHref", () => {
-  it("manda i rimandi fra pagine sulla rotta interna", () => {
-    expect(resolveHref("./02-come-si-calcola-il-rischio.md", SLUGS)).toBe(
-      "#/documentazione/02-come-si-calcola-il-rischio",
-    );
+describe("tabelle", () => {
+  it("legge intestazione e righe", () => {
+    const blocks = parseMarkdown("| A | B |\n|---|---|\n| uno | **due** |\n| tre | quattro |");
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        header: ["A", "B"],
+        rows: [
+          ["uno", "**due**"],
+          ["tre", "quattro"],
+        ],
+      },
+    ]);
   });
 
-  it("tiene l'ancora quando c'è", () => {
-    expect(resolveHref("./glossario.md#backtest", SLUGS)).toBe(
-      "#/documentazione/glossario#backtest",
-    );
+  it("una riga con le barre ma senza separatore resta un paragrafo", () => {
+    expect(parseMarkdown("| non è una tabella |")[0]?.kind).toBe("paragraph");
   });
 
-  it("manda al repository quello che non è una pagina della sezione", () => {
-    expect(resolveHref("../../src/limen/config/hazards/landslide.yaml", SLUGS)).toBe(
-      "https://github.com/agent-engineering-studio/limen/blob/main/src/limen/config/hazards/landslide.yaml",
-    );
+  it("chiude il paragrafo che la precede", () => {
+    const blocks = parseMarkdown("testo\n| A |\n|---|\n| x |");
+    expect(blocks.map((b) => b.kind)).toEqual(["paragraph", "table"]);
   });
+});
 
-  it("lascia stare gli indirizzi assoluti", () => {
-    expect(resolveHref("https://example.org", SLUGS)).toBe("https://example.org");
+describe("componenti", () => {
+  it("il marcatore diventa un blocco componente", () => {
+    expect(parseMarkdown("<!-- componente: simulatore -->")).toEqual([
+      { kind: "component", name: "simulatore" },
+    ]);
+  });
+});
+
+describe("slugify", () => {
+  it("toglie accenti e punteggiatura", () => {
+    expect(slugify("Il layer AI: cosa fa e cosa non può")).toBe(
+      "il-layer-ai-cosa-fa-e-cosa-non-puo",
+    );
   });
 });
 

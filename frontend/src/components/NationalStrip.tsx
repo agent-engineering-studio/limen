@@ -129,7 +129,7 @@ export function NationalStrip(): JSX.Element {
         Quadro aggiornato {relativeTime(report.generated_at)} · {report.totals.regions}{" "}
         regioni. Limen affianca e non sostituisce l&apos;allertamento della
         Protezione Civile.{" "}
-        <a href="#/documentazione/01-limen-in-una-pagina">Cosa vuol dire</a>
+        <a href="#/come-funziona">Cosa vuol dire</a>
       </p>
       {/* Tutto il resto sta dietro un pannello a scomparsa. Sono numeri che
           si consultano, non che si sorvegliano: tenerli aperti allungava la

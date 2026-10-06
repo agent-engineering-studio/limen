@@ -62,5 +62,6 @@ controllare. Dove una cifra non era verificabile, sta scritto
 `TODO(verificare)` invece di un numero inventato: preferiamo un buco
 dichiarato a una precisione finta.
 
-Le stesse pagine sono leggibili nell'applicazione web alla voce
-**Documentazione** (`#/documentazione`): sono gli stessi file, renderizzati.
+Nell'applicazione web, alla voce **Come funziona** (`#/come-funziona`), c'è
+una pagina unica che raccoglie tutto il motore: è
+[`docs/guida/limen.md`](../guida/limen.md), renderizzata.
