@@ -11,9 +11,11 @@ deterministic and unaffected — the LLM only ever reformulates — so a hazard
 without a prompt simply ships without prose, and says so in the log.
 
 Adding one is a **file drop**: name it ``<agent>.<hazard>.it.md`` next to the
-landslide files and it is picked up here, no code change. The RiskAnalyst
-schema's ``driver`` values would need extending too, which is why the wildfire
-prompts are a deliberate follow-up rather than something improvised here.
+landslide files and it is picked up here, no code change, plus the hazard's
+causes in the RiskAnalyst schema's ``driver`` enum. Flood and wildfire got
+theirs with #155: the flood prompt says the score looks **ahead** (rain
+forecast over 72 hours), the wildfire one that it is a **potential** danger,
+not the chance that a fire starts.
 """
 
 from __future__ import annotations

@@ -104,6 +104,7 @@ async def latest_assessment(
             n_cells=len(records),
             cells_by_level=dict(by_level),
             dominant_level=records[0].level.value,
+            hazard=hazard,
         )
 
     return LatestAssessmentResponse(

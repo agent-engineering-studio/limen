@@ -240,9 +240,11 @@ def test_the_llm_narrative_runs_only_where_a_prompt_exists() -> None:
     from limen.agents.chat_agents.prompts_registry import has_narrative
 
     assert has_narrative(DEFAULT_HAZARD) is True
-    assert has_narrative(HazardType.WILDFIRE) is False
+    # Dalla #155 anche alluvione e incendio hanno i loro prompt.
+    assert has_narrative(HazardType.WILDFIRE) is True
+    assert has_narrative(HazardType.FLOOD) is True
 
     landslide = build_hazard_workflow(DEFAULT_HAZARD, _deps())
     wildfire = build_hazard_workflow(HazardType.WILDFIRE, _deps())
-    # Incendio: +1 per FwiUpdate, -2 per i nodi LLM.
-    assert wildfire.step_count == landslide.step_count - 1
+    # Incendio: +1 per FwiUpdate, e ora i due nodi LLM come le frane.
+    assert wildfire.step_count == landslide.step_count + 1

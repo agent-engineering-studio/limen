@@ -19,21 +19,22 @@ from __future__ import annotations
 import asyncio
 import re
 from collections.abc import Mapping
+from functools import cache
 from importlib import resources
 
+from limen.agents.chat_agents.prompts_registry import PROMPT_PACKAGE, prompt_file
 from limen.agents.chat_agents.risk_analyst import RiskAnalysis
 from limen.agents.grounding.format import format_citations
 from limen.agents.grounding.service import GroundingService
 from limen.agents.llm_factory.base import ChatClient, ChatMessage
 from limen.core.logging import get_logger
 from limen.core.models.context import AggregateAssessment, CellRiskRecord
-from limen.core.models.risk import ComponentBreakdown
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
+from limen.core.models.risk import ComponentBreakdown, FloodBreakdown, WildfireBreakdown
 from limen.knowledge.schema import GroundingQuery, GroundingResult
 
 log = get_logger(__name__)
 
-_PROMPT_PACKAGE = "limen.agents.chat_agents.prompts"
-_PROMPT_FILE = "briefing.it.md"
 
 MIN_WORDS = 150
 MAX_WORDS = 250
@@ -41,8 +42,13 @@ MAX_WORDS = 250
 _WORD_RE = re.compile(r"[\w\-']+", re.UNICODE)
 
 
-def _load_system_prompt() -> str:
-    return resources.files(_PROMPT_PACKAGE).joinpath(_PROMPT_FILE).read_text(encoding="utf-8")
+@cache
+def _load_system_prompt(hazard: HazardType = DEFAULT_HAZARD) -> str:
+    """Il prompt del pericolo (#155): una persona da frane che racconta un
+    incendio è peggio del silenzio."""
+    nome = prompt_file("briefing", hazard) or prompt_file("briefing", DEFAULT_HAZARD)
+    assert nome is not None
+    return resources.files(PROMPT_PACKAGE).joinpath(nome).read_text(encoding="utf-8")
 
 
 def count_words(text: str) -> int:
@@ -69,6 +75,7 @@ def deterministic_briefing(
     n_cells: int,
     cells_by_level: Mapping[str, int],
     dominant_level: str,
+    hazard: HazardType = DEFAULT_HAZARD,
 ) -> str:
     """Il briefing italiano ricavato dai soli numeri, senza LLM.
 
@@ -78,33 +85,56 @@ def deterministic_briefing(
     che leggono una riga scritta dallo sweep orario, dove ``briefing_it`` è
     NULL per costruzione finché ``briefing_enrichment`` non passa.
 
-    Il testo è quello del pericolo frane — soglia Caine, densità IFFI, classe
-    PAI — perché è l'unico pericolo con una narrativa (``has_narrative``): un
-    riassunto che parla di soglie pluviometriche accanto a un punteggio
-    d'incendio sarebbe peggio del silenzio. Chi chiama per un altro pericolo
-    non deve chiamare.
+    Il corpo è **per pericolo** (#155): un riassunto che parla di soglie
+    pluviometriche e frane storiche accanto a un punteggio d'incendio sarebbe
+    peggio del silenzio.
 
     La chiusa dice "senza il modello narrativo" e non "in assenza di una
     risposta valida": ora il caso normale è l'attesa, non il guasto.
     """
     counts = ", ".join(f"{k}: {v}" for k, v in sorted(cells_by_level.items()))
-    base = (
+    testa = (
         f"La valutazione automatica del modello deterministico Limen indica per l'area "
         f"{aoi_id} una classe dominante {dominant_level}. "
         f"Le celle valutate sono {n_cells}; "
         f"la distribuzione per classe è {{{counts}}}. "
-        f"Il contributo statico riflette suscettibilità storica, densità IFFI, "
-        f"pendenza, classe PAI e indice litologico; il contributo meteorico "
-        f"riflette l'eccesso sulla soglia Caine, l'indice di precipitazione "
-        f"antecedente e l'umidità del suolo. La componente sismica considera "
-        f"gli eventi con magnitudo significativa nelle ultime giornate; "
-        f"la componente post-incendio è attiva solo entro la finestra di amplificazione. "
-        f"Le aree più esposte coincidono con i settori a maggiore densità di "
-        f"frane storiche e pendenze rilevanti; nei prossimi cicli la diagnosi "
-        f"verrà rivalutata con cadenza oraria appoggiandosi alle nuove osservazioni "
-        f"meteorologiche e sismologiche disponibili. La diagnosi numerica resta "
-        f"autorevole; il presente testo è un riassunto deterministico, prodotto "
-        f"senza il modello narrativo."
+    )
+    coda = (
+        "La diagnosi numerica resta autorevole; il presente testo è un riassunto "
+        "deterministico, prodotto senza il modello narrativo."
+    )
+    if hazard is HazardType.FLOOD:
+        corpo = (
+            "Per l'alluvione il punteggio guarda avanti: combina la suscettibilità "
+            "idraulica del luogo con il più forte fra la pioggia prevista nelle prossime "
+            "72 ore e la portata prevista dei fiumi rispetto alla loro piena ordinaria. "
+            "Un luogo in alto non si allaga anche se piove a valle, e un fiume di cui non "
+            "si conosce la portata non conta come un fiume basso. La valutazione si "
+            "aggiorna a ogni ciclo orario con le nuove previsioni; l'allerta che vale è "
+            "quella del bollettino della Protezione Civile. "
+        )
+        return trim_to_max(testa + corpo + coda, MAX_WORDS)
+    if hazard is HazardType.WILDFIRE:
+        corpo = (
+            "Per l'incendio il punteggio è il pericolo meteorologico potenziale: quanto si "
+            "propagherebbe un fuoco se partisse, non la probabilità che parta. Nasce "
+            "dall'indice FWI, che misura quanto sono secchi i combustibili dopo i giorni "
+            "di caldo, vento e pioggia, ed è modulato dal tipo di vegetazione e dalla "
+            "pendenza. La valutazione si aggiorna a ogni ciclo orario con il meteo del "
+            "giorno. "
+        )
+        return trim_to_max(testa + corpo + coda, MAX_WORDS)
+    base = (
+        testa + "Il contributo statico riflette suscettibilità storica, densità IFFI, "
+        "pendenza, classe PAI e indice litologico; il contributo meteorico "
+        "riflette l'eccesso sulla soglia Caine, l'indice di precipitazione "
+        "antecedente e l'umidità del suolo. La componente sismica considera "
+        "gli eventi con magnitudo significativa nelle ultime giornate; "
+        "la componente post-incendio è attiva solo entro la finestra di amplificazione. "
+        "Le aree più esposte coincidono con i settori a maggiore densità di "
+        "frane storiche e pendenze rilevanti; nei prossimi cicli la diagnosi "
+        "verrà rivalutata con cadenza oraria appoggiandosi alle nuove osservazioni "
+        "meteorologiche e sismologiche disponibili. " + coda
     )
     return trim_to_max(base, MAX_WORDS)
 
@@ -124,6 +154,7 @@ def _fallback_briefing(assessment: AggregateAssessment, *, reason: str) -> str:
         n_cells=assessment.n_cells,
         cells_by_level=assessment.cells_by_level,
         dominant_level=top.level.value if top else "None",
+        hazard=assessment.hazard_type,
     )
 
 
@@ -138,6 +169,26 @@ def _caine_note(cell: CellRiskRecord) -> str:
         return ""
     superata = "sì" if breakdown.meteo_terms.caine_excess > 0 else "no"
     return f" soglia_caine_superata={superata}"
+
+
+def _note_pericolo(cell: CellRiskRecord) -> str:
+    """I dati grezzi che spiegano il numero, per pericolo.
+
+    Per l'alluvione la pioggia prevista nelle 72 ore e il rapporto di portata
+    del fiume (``n.d.`` quando il fiume non è noto, che non vuol dire basso);
+    per l'incendio l'indice FWI e il codice di siccità DC. Sono i numeri che
+    il prompt chiede di usare: senza, il modello parafraserebbe il punteggio.
+    """
+    b = cell.breakdown
+    if isinstance(b, ComponentBreakdown):
+        return _caine_note(cell)
+    if isinstance(b, FloodBreakdown):
+        pioggia = "n.d." if b.rain_mm is None else f"{b.rain_mm:.0f}"
+        fiume = "n.d." if b.discharge_ratio is None else f"{b.discharge_ratio:.2f}"
+        return f" pioggia_prevista_72h_mm={pioggia} portata_su_piena_ordinaria={fiume}"
+    if isinstance(b, WildfireBreakdown) and b.fire_weather is not None:
+        return f" fwi={b.fire_weather.fwi:.1f} dc={b.fire_weather.dc:.0f}"
+    return ""
 
 
 class BriefingAgent:
@@ -159,7 +210,6 @@ class BriefingAgent:
         grounding: GroundingService | None = None,
     ) -> None:
         self._client = client
-        self._system_prompt = _load_system_prompt()
         self._grounding = grounding
 
     def _user_message(
@@ -178,7 +228,7 @@ class BriefingAgent:
             drivers_txt = ", ".join(f"{name}={value:.2f}" for name, value in drivers)
             top_lines.append(
                 f"- {c.cell_id} score={c.score:.3f} level={c.level.value} "
-                f"driver=[{drivers_txt}]{_caine_note(c)}"
+                f"driver=[{drivers_txt}]{_note_pericolo(c)}"
             )
         analysis_part = ""
         if analysis is not None:
@@ -191,6 +241,7 @@ class BriefingAgent:
             )
         return (
             f"Aoi: {assessment.aoi_id}\n"
+            f"Pericolo: {assessment.hazard_type.value}\n"
             f"Model: {assessment.model_version}\n"
             f"Celle: {assessment.n_cells}; "
             f"high+: {assessment.cells_high_or_above}; "
@@ -204,7 +255,7 @@ class BriefingAgent:
         analysis: RiskAnalysis | None = None,
     ) -> str:
         messages: list[ChatMessage] = [
-            ChatMessage(role="system", content=self._system_prompt),
+            ChatMessage(role="system", content=_load_system_prompt(assessment.hazard_type)),
             ChatMessage(role="user", content=self._user_message(assessment, analysis)),
         ]
 
