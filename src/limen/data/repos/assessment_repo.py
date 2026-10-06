@@ -119,42 +119,63 @@ def record_from_row(row: Any) -> CellRiskRecord:
 
 
 async def summary_by_run(run_id: int, *, top_k: int = TOP_CELLS) -> AggregateAssessment | None:
-    """Ricostruisci il riassunto di uno sweep dalle righe che ha scritto.
+    """Il riassunto di una regione per lo sweep ``run_id``, dallo stato attuale.
 
     Il briefing asincrono gira minuti dopo lo sweep, in un altro tick e
     potenzialmente in un altro processo: il `MonitoringContext` non esiste più.
-    Serializzarlo in `job_runs.metrics` — che la issue proponeva come
-    alternativa — vorrebbe dire tenere due copie della stessa valutazione e
-    farle divergere alla prima aggiunta al breakdown. Le righe persistite
-    *sono* la valutazione.
+    Dallo sweep si prendono i metadati — regione, pericolo, orizzonte,
+    versione, il `briefing_it` già memorizzato — ma **conteggi e celle
+    peggiori vengono da `latest_risk`** (#155). Lo sweep orario scrive solo le
+    celle cambiate (#135), quindi le righe di un run sono una parte della
+    regione: la spiegazione dell'incendio in Calabria parlava di «384 celle,
+    nessuna alta» mentre la regione ne ha migliaia e Montegiordano era alta.
+    Le celle non misurate restano fuori dai conteggi, come dall'attenzione:
+    «non so» non è «nessuno».
 
     Ritorna ``None`` se lo sweep non ha lasciato righe (retention, o un run_id
-    inventato). Il `briefing_it` che porta è quello già memorizzato: chi
-    arricchisce lo usa per capire di essere in ritardo su se stesso.
+    inventato).
     """
     async with acquire() as conn:
-        rows = await conn.fetch(
+        head = await conn.fetchrow(
             """
-            SELECT ra.cell_id, ra.hazard_type, ra.horizon, ra.pipeline_version,
-                   ra.computed_at, ra.score, ra.class, ra.factors, ra.explanation,
-                   g.aoi_id
+            SELECT ra.hazard_type, ra.horizon, ra.pipeline_version,
+                   ra.computed_at, ra.explanation, g.aoi_id
             FROM risk_assessments ra
             JOIN grid_cells g ON g.id = ra.cell_id
             WHERE ra.run_id = $1
-            ORDER BY ra.score DESC
-            LIMIT $2
+            LIMIT 1
             """,
             run_id,
+        )
+        if head is None:
+            return None
+        rows = await conn.fetch(
+            """
+            SELECT lr.cell_id, lr.hazard_type, lr.score, lr.class, lr.factors
+            FROM latest_risk lr
+            JOIN grid_cells g ON g.id = lr.cell_id
+            WHERE g.aoi_id = $1 AND lr.hazard_type = $2
+              AND lr.score IS NOT NULL AND COALESCE(lr.measured, true)
+            ORDER BY lr.score DESC, lr.cell_id
+            LIMIT $3
+            """,
+            head["aoi_id"],
+            head["hazard_type"],
             top_k,
         )
         counts = await conn.fetch(
-            "SELECT class, count(*) AS n FROM risk_assessments WHERE run_id = $1 GROUP BY class",
-            run_id,
+            """
+            SELECT lr.class, count(*) AS n
+            FROM latest_risk lr
+            JOIN grid_cells g ON g.id = lr.cell_id
+            WHERE g.aoi_id = $1 AND lr.hazard_type = $2
+              AND lr.score IS NOT NULL AND COALESCE(lr.measured, true)
+            GROUP BY lr.class
+            """,
+            head["aoi_id"],
+            head["hazard_type"],
         )
-    if not rows:
-        return None
 
-    head = rows[0]
     hazard = HazardType(head["hazard_type"])
     explanation = _coerce_json(head["explanation"])
     by_level = {str(r["class"]): int(r["n"]) for r in counts}

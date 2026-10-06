@@ -240,3 +240,30 @@ async def test_the_api_prefers_the_real_briefing_once_it_lands(
     body = (await client.get(f"/api/aoi/{_AOI_ID}/risk/latest")).json()
     assert body["briefing_is_fallback"] is False
     assert body["briefing_it"] == "Narrativa vera del modello."
+
+
+async def test_il_riassunto_vede_tutta_la_regione_non_solo_le_celle_del_run(seeded: None) -> None:
+    """#155: lo sweep orario scrive solo le celle cambiate (#135). Un run che
+    ha toccato una cella sola non deve far raccontare una regione di una
+    cella: conteggi e celle peggiori vengono dallo stato attuale."""
+    async with acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO risk_assessments (
+                cell_id, computed_at, hazard_type, horizon, score, class,
+                factors, explanation, pipeline_version, run_id
+            ) VALUES ($1, now(), $2, '24h', 0.44, 'Moderate', $3::jsonb,
+                      jsonb_build_object('model_version', 'v1-test'),
+                      'v1-deterministic', $4)
+            """,
+            "brief-cell-2",
+            DEFAULT_HAZARD.value,
+            json.dumps(_FACTORS),
+            _RUN_ID + 1,
+        )
+        await conn.execute("SELECT rebuild_latest_risk()")
+    assessment = await assessment_repo.summary_by_run(_RUN_ID + 1)
+    assert assessment is not None
+    assert assessment.n_cells == 2
+    assert assessment.cells_by_level == {"VeryHigh": 1, "Moderate": 1}
+    assert assessment.top_cells[0].cell_id == "brief-cell-1"
