@@ -225,7 +225,7 @@ function Indicatore({
   // un «0,00» ripetuto per settimane non dice quanto manca.
   const pioggia =
     dato.rain_mm != null && dato.rain_threshold_mm != null
-      ? `${Math.round(dato.rain_mm)} mm su ${Math.round(dato.rain_threshold_mm)}`
+      ? `${Math.round(dato.rain_mm)} mm previsti in 72 h, soglia ${Math.round(dato.rain_threshold_mm)}`
       : null;
   const senzaFiumi = dato.discharge_known === false;
   // L'incendio è un pericolo potenziale: detto qui, dove il numero si legge
@@ -237,7 +237,7 @@ function Indicatore({
   const spiegaAlluvione =
     pioggia === null
       ? ""
-      : ` Pioggia prevista in 72 ore: ${pioggia} mm di soglia — sotto la soglia il ramo pluviale vale zero.` +
+      : ` Il numero dell'alluvione guarda avanti: è calcolato sulla pioggia prevista nelle prossime 72 ore (${pioggia} mm), non su quella che cade adesso — sotto la soglia il ramo pluviale vale zero.` +
         (senzaFiumi
           ? " La portata dei fiumi oggi non è disponibile (GloFAS), quindi conta solo la pioggia."
           : "");

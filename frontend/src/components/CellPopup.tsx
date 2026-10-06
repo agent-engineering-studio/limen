@@ -203,6 +203,13 @@ function plainSummary(
   if (hazard === "flood") {
     const pluvial = pickScalar(factors, "pluvial");
     const fluvial = pickScalar(factors, "fluvial");
+    const pioggia = factors["rain_mm"];
+    parts.push(
+      "Questo numero guarda avanti: è calcolato sulla pioggia prevista nelle " +
+        "prossime 72 ore" +
+        (typeof pioggia === "number" ? ` (${Math.round(pioggia)} mm)` : "") +
+        ", non su quella che cade adesso.",
+    );
     if (pluvial === 0 && fluvial === 0) {
       parts.push(
         "Nessun segnale in corso: il punteggio riflette solo dove si trova " +

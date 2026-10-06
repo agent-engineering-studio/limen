@@ -86,7 +86,11 @@ function LivelloAttivo({ orizzonte }: { orizzonte: number }): JSX.Element {
       <span className="map-testa-occhiello">Livello attivo</span>
       <span className="map-testa-titolo">
         {multi ? "Tutti i pericoli" : `Rischio ${nome.toLowerCase()}`} ·{" "}
-        {orizzonte === 0 ? "adesso" : `fra ${orizzonte} h`}
+        {orizzonte > 0
+          ? `fra ${orizzonte} h`
+          : !multi && selected === "flood"
+            ? "prossime 72 h"
+            : "adesso"}
       </span>
       {orizzonte > 0 ? (
         <span className="map-testa-nota">
@@ -94,7 +98,13 @@ function LivelloAttivo({ orizzonte }: { orizzonte: number }): JSX.Element {
           {multi && senza.length > 0 ? ` · ${senza.join(", ")}: previsione non calcolata` : ""}
         </span>
       ) : multi ? (
-        <span className="map-testa-nota">il peggiore in ogni cella</span>
+        <span className="map-testa-nota">
+          il peggiore in ogni cella · l&apos;alluvione guarda la pioggia prevista nelle prossime 72 h
+        </span>
+      ) : selected === "flood" ? (
+        // L'alluvione si calcola sulla pioggia attesa, non su quella che
+        // cade: «adesso» faceva leggere 0,80 su Trieste sotto il sole.
+        <span className="map-testa-nota">calcolata sulla pioggia prevista, non su quella che cade ora</span>
       ) : null}
     </div>
   );
