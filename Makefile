@@ -53,7 +53,7 @@ COMPOSE_BUILD := $(if $(wildcard .env),--env-file .env) \
 # here — it runs from its own repo (see the note in docker-compose.demo.yml).
 BUILD_PROFILES ?= --profile geoserver --profile frontend --profile geodata
 
-.PHONY: help install docs-links docs-bundle \
+.PHONY: inference-up inference-up-colibri inference-down inference-logs inference-check help install docs-links docs-bundle \
         up down build rebuild up-host-ollama \
         up-dev down-dev logs migrate seed bootstrap-static calibrate backtest serve \
         data-status static-data flood-data flood-events backtest-flood fire-history \
@@ -354,6 +354,29 @@ observability:
 
 observability-down:
 	docker compose -f $(COMPOSE_DEMO) -f $(COMPOSE_OBS) down
+
+# ---------------------------------------------------------------------------
+# Inference stack in containers (LiteLLM, llama-swap, embedding, colibrì)
+# ---------------------------------------------------------------------------
+# Sull'host attuale gira come unità systemd: questo serve a replicarlo.
+COMPOSE_INF = docker compose -f infra/docker/docker-compose.inference.yml
+
+inference-up:  ## Avvia LiteLLM, llama-swap ed embedding (colibrì: inference-up-colibri)
+	@test -f infra/inference/secrets.env || { echo "Manca infra/inference/secrets.env: copia secrets.env.example e valorizza"; exit 1; }
+	$(COMPOSE_INF) up -d
+
+inference-up-colibri:  ## Compila e avvia anche colibrì (GLM-5.2, ~400 GB di modello)
+	@test -f infra/inference/secrets.env || { echo "Manca infra/inference/secrets.env: copia secrets.env.example e valorizza"; exit 1; }
+	$(COMPOSE_INF) --profile colibri up -d --build
+
+inference-down:  ## Ferma lo stack d'inferenza in container
+	$(COMPOSE_INF) --profile colibri down
+
+inference-logs:  ## Log dello stack d'inferenza
+	$(COMPOSE_INF) --profile colibri logs -f --tail=100
+
+inference-check:  ## Quali modelli risponde il gateway in container
+	@curl -sf http://127.0.0.1:$${LIMEN_LITELLM_PORT:-8091}/v1/models | python3 -c 'import json,sys; print([m["id"] for m in json.load(sys.stdin)["data"]])'
 
 # ---------------------------------------------------------------------------
 # GeoServer vector-data layer (opt-in — mcp-geo-server integration)

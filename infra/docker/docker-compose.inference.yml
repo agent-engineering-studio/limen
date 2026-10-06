@@ -1,0 +1,156 @@
+# Stack d'inferenza in container: LiteLLM, llama-swap (llama.cpp su GPU),
+# l'embedding (llama.cpp su CPU) e colibrì (GLM-5.2, CUDA).
+#
+# Su questo server gli stessi servizi girano come unità systemd sull'host
+# (litellm, llama-swap, llama-embed, colibri). Questo file serve a replicare
+# lo stack su un'altra macchina — o a migrare questa, fermando prima le
+# unità: le porte di default sono le stesse.
+#
+#   cp infra/inference/secrets.env.example infra/inference/secrets.env   # e valorizza
+#   make inference-up
+#   make inference-check
+#
+# Requisiti della macchina:
+#   * Docker con NVIDIA Container Toolkit (runtime `nvidia`) per llama-swap e
+#     colibrì; l'embedding è su CPU.
+#   * I modelli in LIMEN_MODELS_DIR (default /srv/models): `gguf/` per
+#     llama.cpp (~8 GB) e `colibri/glm52_i4` per colibrì (~400 GB, su NVMe:
+#     colibrì legge gli esperti da disco). Nessun modello entra nelle immagini.
+#   * Per colibrì, COLIBRI_CUDA_ARCH della GPU di destinazione (sm_75 per la
+#     Quadro RTX 4000 di questo server, sm_86 per una RTX 30, sm_89 per una 40).
+#
+# Limen raggiunge il gateway in due modi: dalla stessa rete Docker
+# (LLM__LLAMACPP_BASE_URL=http://litellm:4000, rete `limen_default`
+# condivisa) oppure dall'host sulla porta pubblicata. Le porte si legano al
+# loopback (LIMEN_*_BIND), come il resto dello stack: l'esposizione passa da
+# un reverse proxy.
+
+name: limen-inference
+
+x-gpu: &gpu
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+
+services:
+  litellm:
+    image: ghcr.io/berriai/litellm:v1.98.0
+    container_name: limen-litellm
+    restart: unless-stopped
+    command: ["--config", "/etc/litellm/config.yaml", "--host", "0.0.0.0", "--port", "4000"]
+    env_file:
+      - ../inference/secrets.env
+    volumes:
+      - ../inference/litellm.yaml:/etc/litellm/config.yaml:ro
+    ports:
+      - "${LIMEN_LITELLM_BIND:-127.0.0.1}:${LIMEN_LITELLM_PORT:-8091}:4000"
+    depends_on:
+      - llama-swap
+      - llama-embed
+    networks: [inferenza, limen]
+    mem_limit: 2g
+
+  llama-swap:
+    image: ghcr.io/mostlygeek/llama-swap:v259-cuda-b11176
+    container_name: limen-llama-swap
+    restart: unless-stopped
+    command: ["--config", "/config/config.yaml", "--listen", "0.0.0.0:8080"]
+    volumes:
+      - ../inference/llama-swap.yaml:/config/config.yaml:ro
+      - ${LIMEN_MODELS_DIR:-/srv/models}/gguf:/models/gguf:ro
+    ports:
+      - "${LIMEN_LLAMASWAP_BIND:-127.0.0.1}:${LIMEN_LLAMASWAP_PORT:-8083}:8080"
+    networks: [inferenza]
+    mem_limit: 6g
+    <<: *gpu
+
+  llama-embed:
+    image: ghcr.io/ggml-org/llama.cpp:server-b11434
+    container_name: limen-llama-embed
+    restart: unless-stopped
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --model
+      - /models/gguf/Qwen3-Embedding-0.6B-Q8_0.gguf
+      - --embedding
+      - --pooling
+      - last
+      - --embd-normalize
+      - "2"
+      - -c
+      - "8192"
+      - -ub
+      - "8192"
+      - -ngl
+      - "0"
+      - -t
+      - "6"
+    volumes:
+      - ${LIMEN_MODELS_DIR:-/srv/models}/gguf:/models/gguf:ro
+    ports:
+      - "${LIMEN_EMBED_BIND:-127.0.0.1}:${LIMEN_EMBED_PORT:-8082}:8080"
+    networks: [inferenza]
+    mem_limit: 2g
+
+  colibri:
+    build:
+      context: ../inference/colibri
+      dockerfile: Dockerfile.cuda
+      args:
+        CUDA_ARCH: ${COLIBRI_CUDA_ARCH:-sm_75}
+        COLIBRI_REF: ${COLIBRI_REF:-main}
+    image: limen/colibri:cuda
+    container_name: limen-colibri
+    restart: unless-stopped
+    env_file:
+      - ../inference/secrets.env
+    environment:
+      COLI_NUMA: "1"
+      CUDA_EXPERT_GB: "0"
+      COLI_CUDA_PIPE: "2"
+      PIPE: "1"
+      PILOT: "1"
+      # LiteLLM lo chiama per nome di servizio: senza, colibrì rifiuta la
+      # richiesta perché l'host non è fra quelli ammessi.
+      COLI_ALLOWED_HOSTS: colibri
+    command:
+      - serve
+      - --model
+      - /model
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
+      - --model-id
+      - glm52
+      - --vram
+      - "2"
+      - --kv-slots
+      - "2"
+      - --policy
+      - balanced
+    volumes:
+      - ${LIMEN_MODELS_DIR:-/srv/models}/colibri/glm52_i4:/model:ro
+    ports:
+      - "${LIMEN_COLIBRI_BIND:-127.0.0.1}:${LIMEN_COLIBRI_PORT:-8070}:5000"
+    # Lo streaming degli esperti tocca molta page cache.
+    shm_size: 2gb
+    networks: [inferenza]
+    # Solo con il profilo: 400 GB di modello e decine di GB di RAM non sono
+    # una cosa da avviare per sbaglio.
+    profiles: [colibri]
+    <<: *gpu
+
+networks:
+  inferenza: {}
+  # La rete dello stack Limen, per raggiungere `litellm` per nome.
+  limen:
+    name: ${LIMEN_DOCKER_NETWORK:-limen_default}
+    external: true

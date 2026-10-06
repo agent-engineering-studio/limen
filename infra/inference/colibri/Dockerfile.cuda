@@ -1,0 +1,45 @@
+# colibrì con il backend CUDA, compilato dal sorgente.
+#
+# Il Dockerfile ufficiale (docker/Dockerfile.slim del progetto) è solo CPU.
+# Sull'host colibrì gira con la pipeline CUDA (--vram, COLI_CUDA_PIPE), quindi
+# qui si compila con CUDA=1. CUDA_ARCH va scelto per la GPU di destinazione:
+# `native` non funziona in una build Docker (non c'è GPU durante la build), e
+# il profilo `portable` del progetto parte da sm_80, quindi non copre la
+# Quadro RTX 4000 di questo server (Turing, sm_75).
+#
+#   docker build --build-arg CUDA_ARCH=sm_75 -t limen/colibri:cuda .
+#
+# Il modello (~400 GB) non entra nell'immagine: si monta su /model.
+
+ARG CUDA_VERSION=12.4.1
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04 AS build
+ARG COLIBRI_REPO=https://github.com/JustVugg/colibri.git
+ARG COLIBRI_REF=main
+ARG CUDA_ARCH=sm_75
+ARG ARCH=x86-64-v3
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential make git ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+RUN git clone "${COLIBRI_REPO}" . && git checkout "${COLIBRI_REF}"
+RUN make -C c glm CUDA=1 CUDA_ARCH=${CUDA_ARCH} ARCH=${ARCH}
+
+ARG CUDA_VERSION=12.4.1
+FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu22.04
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3 libgomp1 && \
+    rm -rf /var/lib/apt/lists/* && \
+    useradd -m -u 1000 colibri
+WORKDIR /app
+COPY --from=build /src/c/colibri ./colibri
+COPY --from=build /src/c/coli /src/c/version.py /src/c/openai_server.py /src/c/v4_dsml.py \
+     /src/c/family_registry.py /src/c/resource_plan.py /src/c/doctor.py /src/c/autotune.py ./
+COPY --from=build /src/c/tools/ ./tools/
+ENV COLI_MODEL=/model \
+    COLI_ENGINE=/app/colibri \
+    PYTHONUNBUFFERED=1
+VOLUME ["/model"]
+EXPOSE 5000
+USER colibri
+ENTRYPOINT ["python3", "/app/coli"]
+CMD ["info"]

@@ -69,3 +69,6 @@ mlruns/
 
 # Cache locale degli spike (scripts/spike_*.py): dati pubblici riscaricabili.
 .cache/
+
+# Segreti dello stack d'inferenza (chiavi Anthropic e colibrì)
+infra/inference/secrets.env
