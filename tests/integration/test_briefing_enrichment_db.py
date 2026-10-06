@@ -281,3 +281,10 @@ async def test_la_provenienza_dice_lo_stato_vero(client: httpx.AsyncClient) -> N
     assert body["sfidante_ml_attivo"] is False
     assert body["correttore_pioggia"]["stato"] == "raccolta_dati"
     assert body["correttore_pioggia"]["nodi_obiettivo"] == 150
+
+
+async def test_recenti_conta_solo_le_spiegazioni_vere(seeded: None) -> None:
+    await _scrivi("Scritta dal modello.")
+    assert await spiegazioni_repo.recenti(12) == {(_AOI_ID, DEFAULT_HAZARD.value): "VeryHigh"}
+    await _scrivi("Ripiego.", ripiego=True)
+    assert await spiegazioni_repo.recenti(12) == {}
