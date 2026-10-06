@@ -12,13 +12,6 @@ import {
 } from "../lib/risk-colors";
 import type { HazardType, LegendClass, RiskLevel } from "../types";
 
-const PC_COLOR: Record<string, string> = {
-  verde: "#2e8540",
-  gialla: "#c9a20a",
-  arancione: "#d9730d",
-  rossa: "#c92a2a",
-};
-
 /** I cinque colori in una riga: resta visibile anche con la legenda chiusa. */
 /** La scala di riferimento della vista d'insieme: quella del pericolo di
  *  default. Nominata una volta perché è una scelta, non un dettaglio. */
@@ -50,6 +43,21 @@ function ScalaColori({
  * When the backend is reachable, each class also shows its Protezione
  * Civile alert colour (presentation-only mapping from /api/legend).
  */
+/** La scala segue l'ordine dei colori delle allerte per farsi leggere, ed è
+ *  proprio per questo che va detto: una cella rossa non è un'allerta rossa.
+ *  Un operatore della Protezione civile legge quei colori come livelli di
+ *  allerta, e davanti a «rosso» e a un bollettino verde non sa a chi credere. */
+function NonEAllerta(): JSX.Element {
+  return (
+    <p className="legend-note legend-non-allerta">
+      Questi colori sono il <strong>pericolo stimato</strong> da Limen, non un
+      livello di allerta: una cella rossa non è un&apos;allerta rossa.
+      L&apos;allerta ufficiale è nel livello «Allerte Protezione Civile» e nella
+      riga di ogni comune.
+    </p>
+  );
+}
+
 /** «Non misurato» sta in legenda perché sulla mappa è un colore come gli
  *  altri, e senza la riga resterebbe un grigio senza nome (#143). */
 function RigaNonMisurato(): JSX.Element {
@@ -72,7 +80,6 @@ function RigaNonMisurato(): JSX.Element {
 }
 
 export function LegendPanel(): JSX.Element {
-  const [pcByLevel, setPcByLevel] = useState<Record<string, string>>({});
   // I cutoff arrivano dal backend perché sono **per pericolo** (#84): quelli
   // statici in RISK_CLASSES sono le soglie delle frane, e mostrarli per un
   // altro pericolo etichetterebbe male i suoi colori. Restano solo come
@@ -81,25 +88,21 @@ export function LegendPanel(): JSX.Element {
   const { selected, multi, available } = useHazard();
 
   useEffect(() => {
-    // I chip di allerta sono per pericolo: senza azzerarli, una legenda che
-    // fallisce dopo un cambio lascerebbe quelli del pericolo precedente.
-    setPcByLevel({});
+    // I cutoff sono per pericolo: senza azzerarli, una legenda che fallisce
+    // dopo un cambio lascerebbe quelli del pericolo precedente.
     setRanges({});
     const controller = new AbortController();
     defaultApiClient
       .getLegend(controller.signal, selected)
       .then((legend) => {
-        const map: Record<string, string> = {};
         const bounds: Record<string, [number, number]> = {};
         legend.classes.forEach((c: LegendClass) => {
-          map[c.level] = c.pc_alert;
           bounds[c.level] = [c.lo, c.hi];
         });
-        setPcByLevel(map);
         setRanges(bounds);
       })
       .catch(() => {
-        // Static legend still renders — the PC chips are additive.
+        // La legenda statica resta: le soglie del backend sono un di più.
       });
     return () => controller.abort();
   }, [selected]);
@@ -121,8 +124,9 @@ export function LegendPanel(): JSX.Element {
             levels={RISK_CLASSES.map((c) => c.level)}
             hazard={SCALA_RIFERIMENTO}
           />
-          Classi di rischio · tutti i pericoli
+          Pericolo stimato · tutti i pericoli · non è l&apos;allerta
         </summary>
+        <NonEAllerta />
         <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
           {riskClassesFor(SCALA_RIFERIMENTO).map((c) => (
             <li key={c.level} className="legend-row">
@@ -150,9 +154,10 @@ export function LegendPanel(): JSX.Element {
         </p>
         <p className="legend-note">
           Il colore dice <strong>quanto</strong>: è la classe del pericolo
-          peggiore in quel punto. <strong>Quale</strong> pericolo lo dice il
-          bordo, sulle sole celle in classe Alta o superiore — dove la domanda
-          nasce davvero.
+          peggiore in quel punto. <strong>Quale</strong> pericolo lo dicono la
+          lettera dentro la cella (<strong>A</strong> alluvione,{" "}
+          <strong>F</strong> frana, <strong>I</strong> incendio, da vicino) e il
+          bordo, sulle sole celle in classe Alta o superiore.
         </p>
         <ul className="legend-hazards">
           {available.map((h) => (
@@ -178,8 +183,9 @@ export function LegendPanel(): JSX.Element {
     <details className="legend-panel" aria-label="Legenda classi di rischio">
       <summary>
         <ScalaColori levels={riskClassesFor(selected).map((c) => c.level)} hazard={selected} />
-        Classi di rischio
+        Pericolo stimato · non è l&apos;allerta
       </summary>
+      <NonEAllerta />
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
         {riskClassesFor(selected).map((c) => (
           <li key={c.level} className="legend-row">
@@ -192,16 +198,6 @@ export function LegendPanel(): JSX.Element {
             <span>
               {c.label}{" "}
               <small style={{ color: "var(--muted)" }}>({c.short})</small>
-              {((pc) =>
-                pc ? (
-                  <span
-                    className="pc-chip"
-                    title={`Allerta Protezione Civile: ${pc}`}
-                    style={{ background: PC_COLOR[pc] ?? "#888" }}
-                  >
-                    {pc}
-                  </span>
-                ) : null)(pcByLevel[c.level])}
             </span>
             <span className="legend-range">
               {((r) => `${r[0].toFixed(2)}-${r[1].toFixed(2)}`)(

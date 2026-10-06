@@ -71,6 +71,7 @@ const COMUNE_SOURCE_ID = "limen-comune";
 const COMUNE_LAYER_ID = "limen-comune-fill";
 const COMUNE_BADGE_ID = "limen-comune-badge";
 const WORST_HAZARD_LAYER_ID = "limen-worst-hazard";
+const WORST_HAZARD_LETTER_ID = "limen-worst-hazard-lettera";
 const COMUNE_MIN_ZOOM = 7;
 const COMUNE_MAX_ZOOM = 11;
 // Sotto questo zoom una cella da 1 km è sub-pixel: mostriamo il
@@ -529,6 +530,43 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
               paint: {
                 "line-color": maplibreWorstHazardLine() as never,
                 "line-width": 1.6,
+              },
+              filter: [
+                "in",
+                ["get", "worst_level"],
+                ["literal", ["High", "VeryHigh"]],
+              ] as never,
+            },
+            {
+              // La lettera del pericolo dentro la cella, da vicino. Il bordo
+              // da solo non bastava: un operatore davanti a una cella rossa
+              // chiedeva «allerta di che cosa?», e un bordo ciano su rosso a
+              // 1,6 px non risponde. A, F, I come nella lista dei comuni.
+              id: WORST_HAZARD_LETTER_ID,
+              type: "symbol" as const,
+              source: SOURCE_ID,
+              "source-layer": sourceLayer,
+              minzoom: 10,
+              layout: {
+                "text-field": [
+                  "match",
+                  ["get", "worst_hazard"],
+                  "flood",
+                  "A",
+                  "landslide",
+                  "F",
+                  "wildfire",
+                  "I",
+                  "",
+                ] as never,
+                "text-font": ["Open Sans Regular"],
+                "text-size": 12,
+                "text-allow-overlap": true,
+              },
+              paint: {
+                "text-color": maplibreWorstHazardLine() as never,
+                "text-halo-color": "#0a0e13",
+                "text-halo-width": 1.6,
               },
               filter: [
                 "in",

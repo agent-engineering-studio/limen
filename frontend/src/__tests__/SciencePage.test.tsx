@@ -20,17 +20,9 @@ const MODEL: ModelCard = {
   post_fire: { peak_months: 6, curve_denominator: 50, window_months_max: 24 },
 };
 
-const PC = {
-  None: "verde",
-  Low: "verde",
-  Moderate: "gialla",
-  High: "arancione",
-  VeryHigh: "rossa",
-};
-
 describe("ScienceContent", () => {
   it("covers the components, aggregation, V1-vs-V2 and the five classes", () => {
-    render(<ScienceContent model={MODEL} pcByLevel={PC} version="limen-deterministic-v1" />);
+    render(<ScienceContent model={MODEL} version="limen-deterministic-v1" />);
     expect(screen.getByText("Il modello, spiegato")).toBeInTheDocument();
     // component codes S/M/E/F/H(/K) — appear at least in the block badges
     for (const code of ["S", "M", "E", "F", "H", "K"]) {
@@ -40,17 +32,17 @@ describe("ScienceContent", () => {
     expect(screen.getAllByText("40%").length).toBeGreaterThan(0); // meteo weight
     // the honesty section
     expect(screen.getByText(/NON una probabilità/)).toBeInTheDocument();
-    // five class labels with ranges + PC mapping
+    // le cinque classi con gli intervalli, e la precisazione che non sono allerte
     expect(screen.getByText("Molto alto")).toBeInTheDocument();
     expect(screen.getByText("0.75–1.00")).toBeInTheDocument();
-    expect(screen.getByText(/allerta rossa/)).toBeInTheDocument();
+    expect(screen.getByText(/una classe non è un livello di allerta/)).toBeInTheDocument();
     // spatial-block CV + SHAP + glossary (each appears in body and glossary/note)
     expect(screen.getAllByText(/blocchi spaziali/).length).toBeGreaterThan(0);
     expect(screen.getAllByText("SHAP").length).toBeGreaterThan(0);
   });
 
   it("includes the plain-language ML theory and external references", () => {
-    render(<ScienceContent model={MODEL} pcByLevel={PC} version="v1" />);
+    render(<ScienceContent model={MODEL} version="v1" />);
     expect(screen.getByText(/come funziona l'algoritmo/i)).toBeInTheDocument();
     expect(screen.getByText(/Gradient boosting/)).toBeInTheDocument();
     expect(screen.getByText(/Per approfondire il ML/)).toBeInTheDocument();
