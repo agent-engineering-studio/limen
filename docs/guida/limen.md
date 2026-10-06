@@ -10,9 +10,11 @@ numero può leggerlo bene, e usarlo per anticipare un disastro invece di
 inseguirlo.
 
 > Limen **affianca** l'allertamento ufficiale della Protezione Civile e non
-> lo sostituisce. Nessun suo numero ha valore legale. Quando Limen e il
-> bollettino ufficiale dicono cose diverse, **vale il bollettino**: la mappa
-> te li mostra uno accanto all'altro proprio per questo.
+> lo sostituisce: l'allerta che ha valore legale è quella del bollettino. Ma
+> un bollettino dà un colore per zona e per due giorni; Limen dice **dove**
+> dentro la zona, **perché**, e **cosa arriva dopo**. La mappa li mostra uno
+> accanto all'altro, e quando Limen vede qualcosa che il bollettino non ha
+> lo dice: è il suo lavoro.
 
 <!-- schema-fase: tutte -->
 
@@ -22,6 +24,32 @@ flowchart LR
   P --> C["La classe<br/>cinque livelli"]
   C --> A["L'avviso<br/>a chi, quando"]
 ```
+
+## Cosa aggiunge al bollettino
+
+| | Bollettino di criticità | Limen |
+|---|---|---|
+| **Dove** | Una zona di allerta: decine di comuni insieme (187 in Italia) | Ogni chilometro quadrato: quale versante, quale tratto di pianura |
+| **Quando** | Oggi e domani, emesso una volta al giorno entro le 16 | Ogni ora, e la previsione fino a 72 ore |
+| **Cosa** | Rischio idrogeologico, idraulico, temporali | Frane, alluvioni **e incendi** |
+| **Perché** | Un colore | I numeri che lo producono: pioggia contro soglia, portata del fiume, siccità, pendenza, frane del passato |
+| **Valore legale** | Sì: è l'allerta | No: è un'anticipazione da verificare |
+
+Il confronto nella lista dei comuni è per tipo di rischio — frane contro
+idrogeologico, alluvione contro idraulico — e ha tre esiti:
+
+- **Limen vede prima**: un pericolo alto, o previsto alto, dove la zona non ha
+  allerta. La riga dice su quante celle, con che pioggia e quando arriva il
+  picco, anche se cade oltre i due giorni del bollettino. È il caso per cui
+  Limen esiste: un segnale locale da tenere d'occhio prima che diventi
+  un'allerta.
+- **Limen conferma e dice dove**: entrambi segnalano; Limen indica le celle.
+- **Il bollettino è più severo**: si segue il bollettino. Spesso è un
+  temporale, che il bollettino prevede a scala di zona e una griglia meteo
+  non vede ancora.
+
+Per gli incendi il bollettino idrogeologico non dice niente: lì il segnale è
+solo di Limen.
 
 ## In breve
 
@@ -446,8 +474,10 @@ Una sequenza che usa tutto quello che Limen sa fare:
    l'incendio, quanto è insolito per il mese.
 6. **Contesto.** Frane censite, aree PAI, aree bruciate di recente,
    alluvioni passate: spesso dicono più del numero.
-7. **Divergenze.** Quando Limen segnala più del bollettino è un segnale da
-   approfondire, non un'allerta; quando segnala meno, vale il bollettino.
+7. **Divergenze.** Quando Limen vede prima del bollettino, la riga dice
+   cosa, dove e quando: è il preavviso che un bollettino di zona non può
+   dare, da verificare sul territorio. Quando il bollettino è più severo, si
+   segue il bollettino.
 
 ## Limiti dichiarati
 

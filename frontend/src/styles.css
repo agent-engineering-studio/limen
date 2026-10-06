@@ -3090,7 +3090,14 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   border: 1px solid rgb(255 255 255 / 30%);
   transform: translateY(1px);
 }
-.cb-allerta-nota { color: var(--amber-deep); font-weight: 600; }
+/* Il confronto con il bollettino: in arancio quando Limen vede qualcosa che
+   il bollettino non ha — è il suo valore aggiunto, non un errore da
+   nascondere — in rosso tenue quando il bollettino è più severo. */
+.cb-confronto { margin: 2px 0 0 14px; line-height: 1.45; }
+.cb-confronto.is-oltre { color: var(--amber); }
+.cb-confronto.is-sotto { color: var(--warn); }
+.cb-confronto.is-concorde,
+.cb-confronto.is-solo-limen { color: var(--ink-soft); }
 
 /* ------------------------------------------------------------------ */
 /* La guida unica (#/come-funziona)                                     */
