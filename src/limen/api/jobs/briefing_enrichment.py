@@ -192,13 +192,15 @@ async def _run(deps: AppDependencies) -> dict[str, int]:
     }
     # Dalla tabella delle spiegazioni, non dalle righe di `job_runs`: quelle
     # dicevano «spiegata» anche quando lo sweep aveva già cancellato il testo
-    # (prima della 064), e la regione restava muta fino a 12 ore.
-    spiegate = await spiegazioni_repo.recenti(llm.briefing_min_hours)
-    pending = [
-        (aoi, hazard, run_id)
-        for aoi, hazard, run_id in pending
-        if spiegate.get((aoi, hazard.value)) != livelli.get(run_id)
-    ]
+    # (prima della 064), e la regione restava muta fino a 12 ore. Solo se c'è
+    # qualcosa da filtrare: un tick senza candidati non tocca il database.
+    if pending:
+        spiegate = await spiegazioni_repo.recenti(llm.briefing_min_hours)
+        pending = [
+            (aoi, hazard, run_id)
+            for aoi, hazard, run_id in pending
+            if spiegate.get((aoi, hazard.value)) != livelli.get(run_id)
+        ]
     if not pending:
         log.info("job.briefing_enrichment.nothing", considered=len(runs))
         return {}
