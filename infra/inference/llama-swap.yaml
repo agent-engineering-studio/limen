@@ -1,0 +1,51 @@
+# llama-swap in container: gli stessi modelli di /etc/llama-swap/config.yaml.
+# Nell'immagine `-cuda` il server llama.cpp sta in /app/llama-server; i
+# modelli sono montati in sola lettura su /models.
+
+healthCheckTimeout: 300
+logLevel: info
+
+macros:
+  srv: >
+    /app/llama-server
+    --host 127.0.0.1 --port ${PORT}
+    --no-warmup --metrics --flash-attn on
+
+models:
+  # Conversazionale leggero: routing, JSON vincolato, alta frequenza.
+  "chat-4b":
+    cmd: >
+      ${srv}
+      --model /models/gguf/Qwen3VL-4B-Instruct-Q4_K_M.gguf
+      -ngl 99 -c 32768
+      --cache-type-k q8_0 --cache-type-v q8_0
+      -t 4
+    ttl: 600
+
+  # Prosa italiana, sintesi.
+  "chat-8b":
+    cmd: >
+      ${srv}
+      --model /models/gguf/Qwen3-8B-Q4_K_M.gguf
+      -ngl 99 -c 16384
+      --cache-type-k q8_0 --cache-type-v q8_0
+      -t 4
+    ttl: 900
+
+  # Estrazione per il knowledge graph: contesto corto, molte richieste in
+  # parallelo. Con 8 slot su 8192 token ognuno ne ha 1024: non regge un
+  # prompt lungo (il RiskAnalyst di alluvione e incendio va su quality-cloud).
+  "extract-4b":
+    cmd: >
+      ${srv}
+      --model /models/gguf/Qwen3VL-4B-Instruct-Q4_K_M.gguf
+      -ngl 99 -c 8192
+      --parallel 8 --cont-batching
+      -t 4
+    ttl: 1800
+
+groups:
+  gpu:
+    swap: true        # un solo modello in VRAM alla volta
+    exclusive: false
+    members: ["chat-4b", "chat-8b", "extract-4b"]

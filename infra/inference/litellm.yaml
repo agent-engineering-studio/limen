@@ -1,0 +1,65 @@
+# LiteLLM in container: lo stesso gateway di /etc/litellm/config.yaml, con i
+# servizi raggiunti per nome sulla rete del compose invece che su 127.0.0.1.
+# I nomi dei modelli sono il contratto con Limen: non cambiarli qui senza
+# cambiare LLM__MODELS__* (vedi docs/inference.md).
+
+model_list:
+  - model_name: fast
+    litellm_params:
+      model: openai/chat-4b
+      api_base: http://llama-swap:8080/v1
+      api_key: none
+
+  - model_name: chat
+    litellm_params:
+      model: openai/chat-8b
+      api_base: http://llama-swap:8080/v1
+      api_key: none
+
+  - model_name: extract
+    litellm_params:
+      model: openai/extract-4b
+      api_base: http://llama-swap:8080/v1
+      api_key: none
+
+  - model_name: embed
+    litellm_params:
+      model: openai/embed
+      api_base: http://llama-embed:8080/v1
+      api_key: none
+
+  # colibrì (GLM-5.2): genera a decine di secondi per token, quindi solo per
+  # i ruoli asincroni e di notte (LLM__SLOW_MODELS_WINDOW_UTC).
+  - model_name: quality-local
+    litellm_params:
+      model: openai/glm52
+      api_base: http://colibri:5000/v1
+      api_key: os.environ/COLI_API_KEY
+      timeout: 5400
+
+  # colibrì per nome proprio, senza fallback: chi lo chiede vuole quel
+  # modello, non Claude al suo posto.
+  - model_name: glm52
+    litellm_params:
+      model: openai/glm52
+      api_base: http://colibri:5000/v1
+      api_key: os.environ/COLI_API_KEY
+      timeout: 5400
+
+  # Claude, attivo solo se ANTHROPIC_API_KEY è valorizzata nel file dei
+  # segreti. La chiave va creata dentro un workspace della console.
+  - model_name: quality-cloud
+    litellm_params:
+      model: anthropic/claude-sonnet-5-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+router_settings:
+  fallbacks:
+    - quality-local: ["quality-cloud"]
+
+litellm_settings:
+  # Un job che entra in loop su un endpoint a pagamento è il modo più comune
+  # di scoprire il proprio limite di carta di credito.
+  max_budget: 50
+  budget_duration: 30d
+  drop_params: true

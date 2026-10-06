@@ -189,6 +189,34 @@ Sempre `warning`, mai `info`, ed emesso da un solo punto per agente
 `briefing.py`) così che un grep li trovi tutti. Un ciclo che lo emette ha
 prodotto un'analisi *degradata* pur sembrando normale.
 
+## Replicare lo stack su un'altra macchina
+
+Su questo server il gateway, llama-swap, l'embedding e colibrì girano come
+unità systemd sull'host. Per portarli altrove c'è un Compose a sé,
+`infra/docker/docker-compose.inference.yml` (progetto `limen-inference`), con
+le stesse porte e gli stessi nomi di modello:
+
+| Servizio | Immagine | Porta | Note |
+|---|---|---|---|
+| `litellm` | `ghcr.io/berriai/litellm` | 8091 | config `infra/inference/litellm.yaml` |
+| `llama-swap` | `ghcr.io/mostlygeek/llama-swap` (CUDA) | 8083 | config `infra/inference/llama-swap.yaml`, modelli in `$LIMEN_MODELS_DIR/gguf` |
+| `llama-embed` | `ghcr.io/ggml-org/llama.cpp:server` | 8082 | CPU |
+| `colibri` | costruita da `infra/inference/colibri/Dockerfile.cuda` | 8070 | profilo `colibri`; `COLIBRI_CUDA_ARCH` della GPU di destinazione |
+
+```bash
+cp infra/inference/secrets.env.example infra/inference/secrets.env  # chiavi, mai nel repo
+make inference-up            # gateway + llama-swap + embedding
+make inference-up-colibri    # anche colibrì (compila l'immagine, ~400 GB di modello)
+make inference-check         # i nomi di modello che il gateway espone
+```
+
+Servono Docker con NVIDIA Container Toolkit e i modelli in
+`LIMEN_MODELS_DIR` (default `/srv/models`): nessun peso entra nelle immagini.
+Il gateway si aggancia anche alla rete `limen_default`, quindi dal container
+API basta `LLM__LLAMACPP_BASE_URL=http://litellm:4000`. Su questo server le
+porte sono già prese dalle unità systemd: fermale prima di avviare il
+Compose, o sposta le porte con `LIMEN_*_PORT`.
+
 ## Gli altri servizi
 
 | Servizio | Provider | Variabili |
