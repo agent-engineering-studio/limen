@@ -218,10 +218,87 @@ async def _segnali_alluvione(conn: Any, istat_codes: list[str]) -> dict[str, dic
     }
 
 
-def _con_segnali(comune: dict[str, Any], segnali: dict[str, Any] | None) -> dict[str, Any]:
+#: L'FWI della cella d'incendio peggiore del comune, e il quantile del suo
+#: mese nel nodo di climatologia più vicino. Il nodo deve stare entro metà
+#: diagonale del reticolo FWI: più largo, un nodo mancante verrebbe sostituito
+#: in silenzio da uno a decine di chilometri.
+_SEGNALI_INCENDIO = """
+WITH peggiore AS (
+    SELECT DISTINCT ON (cc.istat_code)
+           cc.istat_code,
+           (lr.factors->'fire_weather'->>'fwi')::float8 AS fwi,
+           (lr.factors->'fire_weather'->>'day')::date   AS giorno,
+           ST_X(ST_Centroid(g.geom))                     AS lon,
+           ST_Y(ST_Centroid(g.geom))                     AS lat
+    FROM cell_comune cc
+    JOIN latest_risk lr ON lr.cell_id = cc.cell_id AND lr.hazard_type = 'wildfire'
+    JOIN grid_cells g ON g.id = cc.cell_id
+    WHERE cc.istat_code = ANY($1::text[])
+      AND lr.factors->'fire_weather'->>'fwi' IS NOT NULL
+    ORDER BY cc.istat_code, lr.score DESC
+)
+SELECT p.istat_code, p.fwi, extract(month FROM p.giorno)::int AS mese, n.quantiles
+FROM peggiore p
+LEFT JOIN LATERAL (
+    SELECT fc.quantiles
+    FROM fwi_climatology fc
+    WHERE fc.month = extract(month FROM p.giorno)
+      AND fc.node_lon::float8 BETWEEN p.lon - 0.5 AND p.lon + 0.5
+      AND fc.node_lat::float8 BETWEEN p.lat - 0.5 AND p.lat + 0.5
+      AND (fc.node_lon::float8 - p.lon) ^ 2 + (fc.node_lat::float8 - p.lat) ^ 2 <= $2::float8 ^ 2
+    ORDER BY (fc.node_lon::float8 - p.lon) ^ 2 + (fc.node_lat::float8 - p.lat) ^ 2
+    LIMIT 1
+) n ON true
+"""
+
+
+async def _segnali_incendio(conn: Any, istat_codes: list[str]) -> dict[str, dict[str, Any]]:
+    """FWI e quanto è insolito per il mese, per comune.
+
+    Le classi dell'incendio sono assolute, quelle di EFFIS: FWI 24 è «alto» ad
+    agosto come a ottobre. Ma a ottobre brucia l'1 % dell'area dell'anno, e
+    lo stesso numero dice cose diverse. Il percentile lo mette accanto, senza
+    toccare il punteggio. ``None`` dove la climatologia non c'è: «non lo so»,
+    non «nella norma».
+    """
+    if not istat_codes:
+        return {}
+    import math
+
+    from limen.core.models.hazard import HazardType
+    from limen.core.scoring.regional_thresholds import WildfireThresholds, load_hazard_thresholds
+    from limen.core.scoring.wildfire.climatology import percentile
+
+    soglie = load_hazard_thresholds(HazardType.WILDFIRE)
+    if not isinstance(soglie, WildfireThresholds):
+        raise TypeError(f"wildfire needs WildfireThresholds, got {type(soglie).__name__}")
+    raggio = soglie.fwi.node_spacing_deg * math.sqrt(2) / 2 + 1e-6
+    rows = await conn.fetch(_SEGNALI_INCENDIO, istat_codes, raggio)
+    return {
+        str(r["istat_code"]): {
+            "fwi": round(float(r["fwi"]), 1),
+            "fwi_month": int(r["mese"]),
+            "fwi_percentile": (
+                None
+                if r["quantiles"] is None
+                else round(percentile(float(r["fwi"]), list(r["quantiles"])))
+            ),
+        }
+        for r in rows
+    }
+
+
+def _con_segnali(
+    comune: dict[str, Any],
+    segnali: dict[str, Any] | None,
+    incendio: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     alluvione = comune["hazards"].get("flood")
     if alluvione is not None and segnali is not None:
         alluvione.update(segnali)
+    fuoco = comune["hazards"].get("wildfire")
+    if fuoco is not None and incendio is not None:
+        fuoco.update(incendio)
     return comune
 
 
@@ -343,12 +420,14 @@ async def top_comuni(
         codici = [str(r["istat_code"]) for r in rows]
         previsioni = await _previsioni(conn, codici)
         segnali = await _segnali_alluvione(conn, codici)
+        incendi = await _segnali_incendio(conn, codici)
         allerte = await dpc_allerte_repo.per_comuni(conn, codici)
     comuni = [
         {
             **_con_segnali(
                 _con_previsione(_to_comune(r), previsioni.get(str(r["istat_code"]), {})),
                 segnali.get(str(r["istat_code"])),
+                incendi.get(str(r["istat_code"])),
             ),
             "allerta_ufficiale": allerte.get(str(r["istat_code"])),
         }
@@ -386,11 +465,13 @@ async def comune_detail(istat_code: str) -> dict[str, Any] | None:
         )
         previsioni = await _previsioni(conn, [istat_code])
         segnali = await _segnali_alluvione(conn, [istat_code])
+        incendi = await _segnali_incendio(conn, [istat_code])
         allerte = await dpc_allerte_repo.per_comuni(conn, [istat_code])
     out = {
         **_con_segnali(
             _con_previsione(_to_comune(row), previsioni.get(istat_code, {})),
             segnali.get(istat_code),
+            incendi.get(istat_code),
         ),
         "allerta_ufficiale": allerte.get(istat_code),
     }

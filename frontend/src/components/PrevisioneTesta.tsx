@@ -4,7 +4,7 @@ import { Box, Group, Text } from "@mantine/core";
 import { useInterval } from "@mantine/hooks";
 
 import { defaultApiClient } from "../lib/api-client";
-import { RISK_COLOR_BY_LEVEL } from "../lib/risk-colors";
+import { RISK_COLOR_BY_LEVEL, RISK_LABEL_IT_BY_LEVEL } from "../lib/risk-colors";
 import { useForecastSchedule } from "../lib/forecast-schedule";
 import type { ForecastAlertItem, RiskLevel } from "../types";
 import { RigaProvenienza } from "./ComeNasce";
@@ -100,10 +100,16 @@ export default function PrevisioneTesta(): JSX.Element {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
             <path d="M5 12l5 5L20 7" stroke="currentColor" strokeWidth="2" />
           </svg>
-          <span>Nessuna regione prevista sopra soglia nelle ultime 72 ore</span>
+          <span>
+            Nessun avviso previsionale nelle ultime 72 ore: nessuna regione con
+            celle previste in classe alta. La mappa mostra anche le moderate.
+          </span>
         </div>
       ) : (
         <div className="prev-stato is-alert">
+          <Text size="xs" c="dimmed">
+            Avvisi previsionali inviati nelle ultime 72 ore
+          </Text>
           {allerte.slice(0, 4).map((a) => (
             <Group key={`${a.aoi_id}-${a.dispatched_at}`} gap={6} wrap="nowrap">
               <Box
@@ -115,10 +121,17 @@ export default function PrevisioneTesta(): JSX.Element {
               />
               <Text size="xs">
                 <strong>{a.aoi_id.replace(/^it-/, "").replace(/-/g, " ")}</strong>{" "}
-                · {a.cells_alerted} celle ≥ {a.max_level} a +{a.horizon_h} h
+                · {NOME[a.hazard_type] ?? a.hazard_type} · {a.cells_alerted} celle ≥{" "}
+                {RISK_LABEL_IT_BY_LEVEL[a.max_level as RiskLevel] ?? a.max_level} a +
+                {a.horizon_h} h
               </Text>
             </Group>
           ))}
+          {allerte.length > 4 ? (
+            <Text size="xs" c="dimmed">
+              e altri {allerte.length - 4}
+            </Text>
+          ) : null}
         </div>
       )}
 

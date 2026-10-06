@@ -65,7 +65,7 @@ async def test_unknown_hazard_is_a_client_error(client: httpx.AsyncClient, path:
     assert (await client.get(f"{path}?hazard=pippo")).status_code == 422
 
 
-@pytest.mark.parametrize("path", ["/api/alerts", "/api/alerts/forecast", "/api/legend"])
+@pytest.mark.parametrize("path", ["/api/alerts", "/api/legend"])
 async def test_omitting_the_parameter_matches_the_explicit_default(
     client: httpx.AsyncClient, path: str
 ) -> None:
@@ -201,3 +201,33 @@ async def test_alerts_of_a_hazard_without_a_yaml_degrade_instead_of_failing(
     assert [i["hazard_type"] for i in items] == [HazardType.FLOOD.value]
     # Esposizione neutra ⇒ priorità uguale al punteggio.
     assert items[0]["priority"] == pytest.approx(items[0]["score"])
+
+
+async def test_gli_avvisi_previsionali_senza_pericolo_sono_tutti(
+    client: httpx.AsyncClient,
+) -> None:
+    """Il pannello della previsione diceva «nessuna regione prevista» la
+    mattina in cui erano partiti avvisi d'incendio: l'endpoint filtrava sulle
+    frane per default."""
+    async with acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO aoi (id, name, kind, geom)
+            VALUES ('it-avvisi', 'Avvisi', 'region',
+                    ST_Multi(ST_MakeEnvelope(16.0, 40.0, 16.1, 40.1, 4326)))
+            ON CONFLICT (id) DO NOTHING
+            """
+        )
+        for hazard in ("landslide", "wildfire"):
+            await conn.execute(
+                """
+                INSERT INTO forecast_dispatches
+                    (aoi_id, horizon_h, max_level, max_score, cells_alerted, hazard_type)
+                VALUES ('it-avvisi', 48, 'High', 0.6, 3, $1::hazard_type)
+                """,
+                hazard,
+            )
+    tutti = (await client.get("/api/alerts/forecast")).json()["items"]
+    assert sorted(i["hazard_type"] for i in tutti) == ["landslide", "wildfire"]
+    solo = (await client.get("/api/alerts/forecast?hazard=wildfire")).json()["items"]
+    assert [i["hazard_type"] for i in solo] == ["wildfire"]

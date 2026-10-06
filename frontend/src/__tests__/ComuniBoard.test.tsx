@@ -54,6 +54,9 @@ type Pericolo = {
   rain_mm?: number;
   rain_threshold_mm?: number;
   discharge_known?: boolean;
+  fwi?: number;
+  fwi_month?: number;
+  fwi_percentile?: number | null;
 };
 
 type Previsto = { class: string; score: number; horizon_h: number; priority: number };
@@ -164,6 +167,32 @@ describe("ComuniBoard", () => {
     await waitFor(() => expect(screen.getByText("Ispani")).toBeInTheDocument());
     expect(container.textContent).toContain("18 mm previsti in 72 h, soglia 40");
     expect(container.textContent).toContain("fiumi n.d.");
+  });
+
+  it("l'incendio dice se il valore è insolito per il mese", async () => {
+    // FWI 24 è «alto» ad agosto come a ottobre, ma a ottobre brucia l'1 %
+    // dell'area dell'anno: il percentile del mese cambia la lettura.
+    getTopComuni.mockResolvedValue({
+      comuni: [
+        comune("Montegiordano", {
+          wildfire: {
+            class: "High",
+            n_cells: 30,
+            n_alert: 4,
+            fwi: 23.7,
+            fwi_month: 10,
+            fwi_percentile: 96,
+          },
+        }),
+        comune("Tursi", {
+          wildfire: { class: "Low", n_cells: 20, n_alert: 0, fwi: 8, fwi_month: 10, fwi_percentile: 45 },
+        }),
+      ],
+    });
+    const { container } = render(<ComuniBoard />);
+    await waitFor(() => expect(screen.getByText("Montegiordano")).toBeInTheDocument());
+    expect(container.textContent).toContain("FWI 24 · insolito per ottobre (96°)");
+    expect(container.textContent).toContain("nella norma per ottobre");
   });
 
   it("un pericolo non misurato non si mostra come «nessuno»", async () => {

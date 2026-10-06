@@ -231,11 +231,13 @@ function Indicatore({
       ? `${Math.round(dato.rain_mm)} mm previsti in 72 h, soglia ${Math.round(dato.rain_threshold_mm)}`
       : null;
   const senzaFiumi = dato.discharge_known === false;
+  const stagione = rispettoAlSolito(dato.fwi_percentile, dato.fwi_month);
   // L'incendio è un pericolo potenziale: detto qui, dove il numero si legge
   // per primo, «alto» non suona come un fuoco in corso.
   const spiegaIncendio =
     hazard === "wildfire"
-      ? " È il pericolo meteo potenziale — quanto si propagherebbe un fuoco se partisse — sulla scala FWI di Copernicus EFFIS."
+      ? " È il pericolo meteo potenziale — quanto si propagherebbe un fuoco se partisse — sulla scala FWI di Copernicus EFFIS." +
+        (stagione ? ` ${stagione.lungo}` : "")
       : "";
   const spiegaAlluvione =
     pioggia === null
@@ -264,6 +266,17 @@ function Indicatore({
         <Text span size="xs" c="dimmed">
           {ABBREVIAZIONE[classe]}
         </Text>
+        {hazard === "wildfire" && dato.fwi != null ? (
+          <Text
+            span
+            size="xs"
+            c="dimmed"
+            className={`cb-pioggia ${stagione?.insolito ? "cb-insolito" : ""}`}
+          >
+            · FWI {Math.round(dato.fwi)}
+            {stagione ? ` · ${stagione.testo}` : ""}
+          </Text>
+        ) : null}
         {pioggia !== null ? (
           <Text span size="xs" c="dimmed" className="cb-pioggia">
             · {pioggia}
@@ -273,6 +286,37 @@ function Indicatore({
       </Group>
     </Tooltip>
   );
+}
+
+const MESI = [
+  "gennaio",
+  "febbraio",
+  "marzo",
+  "aprile",
+  "maggio",
+  "giugno",
+  "luglio",
+  "agosto",
+  "settembre",
+  "ottobre",
+  "novembre",
+  "dicembre",
+];
+
+/** L'FWI rispetto ai giorni dello stesso mese in quel punto (2016-2025).
+ *  Le classi dell'incendio sono assolute, come quelle di EFFIS: FWI 24 è
+ *  «alto» ad agosto come a ottobre, ma a ottobre brucia l'1 % dell'area
+ *  dell'anno. `null` senza climatologia: «non lo so», non «nella norma». */
+export function rispettoAlSolito(
+  percentile: number | null | undefined,
+  mese: number | null | undefined,
+): { testo: string; lungo: string; insolito: boolean } | null {
+  if (percentile == null || mese == null) return null;
+  const nome = MESI[mese - 1] ?? "";
+  const lungo = `Qui l'FWI di oggi è più alto del ${percentile}% dei giorni di ${nome} degli ultimi dieci anni.`;
+  if (percentile >= 90) return { testo: `insolito per ${nome} (${percentile}°)`, lungo, insolito: true };
+  if (percentile >= 60) return { testo: `sopra il solito per ${nome}`, lungo, insolito: false };
+  return { testo: `nella norma per ${nome}`, lungo, insolito: false };
 }
 
 /** Dove va il comune: il pericolo con il picco previsto più alto, di quanto
