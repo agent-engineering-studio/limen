@@ -18,6 +18,7 @@ from limen.api.jobs._tracking import track_job
 from limen.api.jobs.alert_digest import run_alert_digest
 from limen.api.jobs.briefing_enrichment import run_briefing_enrichment
 from limen.api.jobs.daily_report import run_daily_report
+from limen.api.jobs.dpc_bollettini import run_dpc_bollettini
 from limen.api.jobs.firms_monitoring import run_firms_monitoring
 from limen.api.jobs.forecast_monitoring import run_forecast_monitoring
 from limen.api.jobs.geodata_export import run_geodata_export_job
@@ -39,6 +40,7 @@ from limen.api.jobs.ids import (  # noqa: E402
     JOB_ALERT_DIGEST,
     JOB_BRIEFING_ENRICHMENT,
     JOB_DAILY_REPORT,
+    JOB_DPC_BOLLETTINI,
     JOB_FIRMS_MONITORING,
     JOB_FORECAST_MONITORING,
     JOB_GEODATA_EXPORT,
@@ -193,6 +195,21 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
             interval_minutes=deps.settings.firms.interval_minutes,
             sources=deps.settings.firms.sources,
             min_hotspots=deps.settings.firms.min_hotspots,
+        )
+
+    if cfg.enable_dpc_bollettini:
+        await scheduler.add_schedule(
+            track_job(JOB_DPC_BOLLETTINI)(run_dpc_bollettini),
+            args=(deps,),
+            trigger=_deferred_interval(minutes=cfg.dpc_bollettini_minutes),
+            id=JOB_DPC_BOLLETTINI,
+            conflict_policy=ConflictPolicy.replace,
+        )
+        registered.append(JOB_DPC_BOLLETTINI)
+        log.info(
+            "scheduler.registered",
+            job=JOB_DPC_BOLLETTINI,
+            interval_minutes=cfg.dpc_bollettini_minutes,
         )
 
     if cfg.enable_weekly_idrogeo:

@@ -331,6 +331,10 @@ class SchedulerSettings(BaseSettings):
     # database, e con l'LLM che domina il tempo per regione bastano poche
     # regioni concorrenti per riempire l'attesa.
     sweep_concurrency: int = Field(default=4, ge=1, le=32)
+    # Il bollettino di criticità DPC: esce entro le 16:00 e a volte si
+    # aggiorna dopo, quindi un controllo all'ora. Pubblico, nessuna chiave.
+    enable_dpc_bollettini: bool = True
+    dpc_bollettini_minutes: int = Field(default=60, ge=10)
     # Run the ISPRA IdroGEO sync every N hours.
     weekly_idrogeo_hours: int = Field(default=24 * 7, ge=1)
     # Hot-table partition maintenance + retention. Partitions are created a

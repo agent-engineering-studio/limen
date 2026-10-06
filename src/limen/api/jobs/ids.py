@@ -25,6 +25,7 @@ JOB_GEODATA_EXPORT = "limen-geodata-export"
 JOB_HTML_REPORT = "limen-html-report"
 JOB_BRIEFING_ENRICHMENT = "limen-briefing-enrichment"
 JOB_NIGHTLY = "limen-nightly"
+JOB_DPC_BOLLETTINI = "limen-dpc-bollettini"
 
 
 __all__ = [
@@ -32,6 +33,7 @@ __all__ = [
     "JOB_BRIEFING_ENRICHMENT",
     "JOB_CACHE_CLEANUP",
     "JOB_DAILY_REPORT",
+    "JOB_DPC_BOLLETTINI",
     "JOB_DRIFT_MONITOR",
     "JOB_FIRMS_MONITORING",
     "JOB_FORECAST_HISTORY",

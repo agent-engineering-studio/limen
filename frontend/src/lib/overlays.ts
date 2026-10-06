@@ -10,7 +10,7 @@
 // erano gli unici due; alluvione e incendio avevano i dati nel database — le
 // tile le pubblicava già pg_tileserv — e nessun interruttore.
 
-export type GruppoOverlay = "landslide" | "flood" | "wildfire";
+export type GruppoOverlay = "ufficiale" | "landslide" | "flood" | "wildfire";
 
 export interface Overlay {
   /** Chiave dello stato acceso/spento. */
@@ -26,7 +26,28 @@ export interface Overlay {
   classi?: readonly { colore: string; label: string }[];
 }
 
+/** I colori delle allerte ufficiali: quelli della Protezione Civile, non la
+ *  nostra scala — sono un'altra fonte, e devono leggersi come tale. */
+export const COLORE_ALLERTA: Record<number, string> = {
+  0: "#4caf50",
+  1: "#ffd400",
+  2: "#ff8c00",
+  3: "#e2001a",
+};
+
 export const OVERLAYS: readonly Overlay[] = [
+  {
+    id: "dpc",
+    gruppo: "ufficiale",
+    label: "Allerte Protezione Civile (oggi)",
+    fonte: "DPC, bollettino di criticità nazionale (CC-BY 4.0)",
+    layerIds: ["ovl-dpc-fill", "ovl-dpc-line"],
+    classi: [
+      { colore: COLORE_ALLERTA[1] ?? "", label: "gialla" },
+      { colore: COLORE_ALLERTA[2] ?? "", label: "arancione" },
+      { colore: COLORE_ALLERTA[3] ?? "", label: "rossa" },
+    ],
+  },
   {
     id: "pai",
     gruppo: "landslide",
@@ -75,6 +96,7 @@ export const OVERLAYS: readonly Overlay[] = [
 ];
 
 export const NOME_GRUPPO: Record<GruppoOverlay, string> = {
+  ufficiale: "Allertamento ufficiale",
   landslide: "Frane",
   flood: "Alluvioni",
   wildfire: "Incendi",

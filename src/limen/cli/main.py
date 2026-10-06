@@ -41,6 +41,7 @@ from limen.cli.bootstrap_static import FORCE_ENV as BOOTSTRAP_FORCE_ENV
 from limen.cli.bootstrap_static import run as _run_bootstrap_static
 from limen.cli.calibrate import run as _run_calibrate
 from limen.cli.data_status import run as _run_data_status
+from limen.cli.dpc_bollettini import run as _run_dpc_bollettini
 from limen.cli.effis_sync import run as _run_effis_sync
 from limen.cli.firms_sync import run as _run_firms_sync
 from limen.cli.forecast import run as _run_forecast
@@ -145,6 +146,10 @@ def _build_parser() -> argparse.ArgumentParser:
             "replay the FWI chain against EFFIS burnt-area perimeters "
             "(env: LIMEN_BACKTEST_WILDFIRE_AOI / _START / _END / _LEVEL)"
         ),
+    )
+    sub.add_parser(
+        "dpc-bollettini",
+        help="import the latest national alert bulletin of the Protezione Civile (DPC)",
     )
     sub.add_parser(
         "rain-ensemble-fetch",
@@ -307,6 +312,7 @@ def main(argv: list[str] | None = None) -> int:
         "backtest-wildfire": _run_backtest_wildfire,
         "fwi-backfill": _run_fwi_backfill,
         "fwi-climatology": _run_fwi_climatology,
+        "dpc-bollettini": _run_dpc_bollettini,
         "rain-ensemble-fetch": _run_rain_ens_fetch,
         "rain-ensemble-train": _run_rain_ens_train,
         "monitor-once": _run_monitor_once,

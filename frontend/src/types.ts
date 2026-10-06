@@ -63,6 +63,8 @@ export interface ComuneRisk {
    *  Moderato**, non ignoto: lo stato previsionale tiene solo le celle sopra
    *  soglia. */
   forecast: Record<string, ComuneForecast>;
+  /** Il bollettino DPC per la zona del comune, se importato. */
+  allerta_ufficiale?: AllertaUfficiale | null;
   /** L'attenzione sul futuro, con la stessa regola: più alta ⇒ sta salendo. */
   forecast_attention: number | null;
 }
@@ -530,4 +532,21 @@ export interface FwiNormale {
 export interface CellFwiNormaleResponse {
   cell_id: string;
   normale: FwiNormale | null;
+}
+
+/** Un giorno del bollettino DPC: 0 nessuna allerta, 1 gialla, 2 arancione, 3 rossa. */
+export interface AllertaGiorno {
+  valido: string;
+  livello: number;
+  idrogeologico: number;
+  idraulico: number;
+  temporali: number;
+}
+
+/** L'allerta ufficiale per la zona del comune: l'unica che vale. */
+export interface AllertaUfficiale {
+  zona: string;
+  emesso: string;
+  oggi: AllertaGiorno | null;
+  domani: AllertaGiorno | null;
 }

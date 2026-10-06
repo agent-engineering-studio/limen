@@ -3079,3 +3079,15 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
 .lettura-incendio .eyebrow { display: block; font-size: 10px; margin: 0 0 4px; }
 .lettura-incendio p { margin: 0 0 4px; color: var(--ink-soft); }
 .lettura-incendio p:last-child { margin-bottom: 0; }
+
+/* L'allerta ufficiale DPC nella riga del comune: colori della Protezione
+   Civile, un pallino e non un chip, perché è un'altra fonte. */
+.cb-allerta-punto {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid rgb(255 255 255 / 30%);
+  transform: translateY(1px);
+}
+.cb-allerta-nota { color: var(--amber-deep); font-weight: 600; }
