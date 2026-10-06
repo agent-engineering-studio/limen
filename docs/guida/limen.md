@@ -74,17 +74,25 @@ Civile, che chi legge conosce già. La scala è scelta perché **ogni coppia di
 classi resti distinguibile anche per chi non vede i colori** (deuteranopia,
 protanopia, tritanopia): un test automatico lo verifica a ogni modifica.
 
-Il colore dice **quanto**; il pericolo lo dicono le lettere **F** (frana),
-**A** (alluvione), **I** (incendio), il bordo colorato delle celle in classe
-alta e l'intestazione «Livello attivo» in alto a sinistra.
+Il colore dice **quanto**; il pericolo lo dicono le lettere **A** (alluvione),
+**F** (frana), **I** (incendio) dentro le celle in classe alta (da zoom 10),
+il bordo colorato delle stesse celle e l'intestazione «Livello attivo» in
+alto a sinistra. Nella vista «Tutti i pericoli» ogni cella mostra il peggiore
+dei tre: la lettera è il modo di sapere quale.
 
-| Classe | Significato operativo | Corrispondenza allerta |
-|---|---|---|
-| Nessuno | Condizioni ordinarie. Non vuol dire «sicuro»: vuol dire «nessun segnale» | verde |
-| Basso | Qualche ingrediente è attivo, ma non insieme | verde |
-| Moderato | Il sistema comincia a dire qualcosa: un innesco su un posto predisposto | gialla |
-| Alto | Più ingredienti pesanti insieme | arancione |
-| Molto alto | La condizione peggiore che il modello sa riconoscere | rossa |
+| Classe | Significato operativo |
+|---|---|
+| Nessuno | Condizioni ordinarie. Non vuol dire «sicuro»: vuol dire «nessun segnale» |
+| Basso | Qualche ingrediente è attivo, ma non insieme |
+| Moderato | Il sistema comincia a dire qualcosa: un innesco su un posto predisposto |
+| Alto | Più ingredienti pesanti insieme |
+| Molto alto | La condizione peggiore che il modello sa riconoscere |
+
+> **Una cella rossa non è un'allerta rossa.** I colori seguono l'ordine di
+> quelli delle allerte perché si leggono senza legenda, ma dicono il
+> **pericolo stimato** da Limen in quel chilometro quadrato. L'allerta, con il
+> suo colore, è solo quella del bollettino: sulla mappa nel livello «Allerte
+> Protezione Civile», nella lista nella riga di ogni comune.
 
 Ogni pericolo ha le sue soglie fra le classi, perché i numeri non hanno lo
 stesso significato: sono nella sezione dei motori.

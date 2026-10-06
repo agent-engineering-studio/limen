@@ -92,12 +92,14 @@ function LivelloAttivo({ orizzonte }: { orizzonte: number }): JSX.Element {
       </span>
       {orizzonte > 0 ? (
         <span className="map-testa-nota">
-          previsione per cella, solo sopra soglia, da zoom 7
+          pericolo stimato, non allerta · previsione per cella, solo sopra soglia, da zoom 7
+          {multi ? " · la lettera dice quale pericolo (A, F, I)" : ""}
           {multi && senza.length > 0 ? ` · ${senza.join(", ")}: previsione non calcolata` : ""}
         </span>
       ) : multi ? (
         <span className="map-testa-nota">
-          il peggiore in ogni cella · l&apos;alluvione guarda la pioggia prevista nelle prossime 72 h
+          pericolo stimato, non allerta · il peggiore in ogni cella, la lettera dice quale (A
+          alluvione, F frana, I incendio) · l&apos;alluvione guarda la pioggia delle prossime 72 h
         </span>
       ) : selected === "flood" ? (
         // L'alluvione si calcola sulla pioggia attesa, non su quella che

@@ -11,7 +11,7 @@ import type { JSX } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
 import { RISK_CLASSES } from "../lib/risk-colors";
-import type { LegendResponse, ModelCard, RiskLevel } from "../types";
+import type { LegendResponse, ModelCard } from "../types";
 import { ChapterFooter, CourseHeader } from "./Course";
 
 // Linguaggio visivo S/M/E/F/H condiviso con CellPopup / builder del report.
@@ -151,13 +151,6 @@ function sample(fn: (t: number) => number, t0: number, t1: number, n = 48): Pt[]
   return pts;
 }
 
-const PC_LABEL: Record<string, string> = {
-  verde: "verde",
-  gialla: "gialla",
-  arancione: "arancione",
-  rossa: "rossa",
-};
-
 const COMPONENTS: {
   key: keyof ModelCard["weights"];
   code: string;
@@ -208,11 +201,9 @@ const COMPONENTS: {
 // ---------------------------------------------------------------------------
 export function ScienceContent({
   model,
-  pcByLevel,
   version,
 }: {
   model: ModelCard;
-  pcByLevel: Record<string, string>;
   version: string;
 }): JSX.Element {
   const caine = model.caine.macroregions.italy_default ?? { alpha: 7.19, beta: 0.568 };
@@ -402,8 +393,10 @@ export function ScienceContent({
         <h3>5. Dalla soglia alle 5 classi</h3>
         <p className="sci-plain">
           In parole semplici: il punteggio 0–1 diventa una delle cinque classi,
-          ognuna con la sua etichetta, il suo intervallo e il colore della scala
-          di allerta della Protezione Civile.
+          ognuna con la sua etichetta e il suo intervallo. I colori seguono
+          l&apos;ordine di quelli delle allerte perché si leggono senza
+          legenda, ma una classe non è un livello di allerta: l&apos;allerta è
+          quella del bollettino della Protezione Civile.
         </p>
         <ul className="sci-scale" aria-label="Cinque classi di rischio">
           {RISK_CLASSES.map((c) => (
@@ -413,9 +406,6 @@ export function ScienceContent({
               <span className="sci-scale-range">
                 {c.range[0].toFixed(2)}–{c.range[1].toFixed(2)}
               </span>
-              <span className="sci-scale-pc">
-                allerta {PC_LABEL[pcByLevel[c.level] ?? ""] ?? "—"}
-              </span>
             </li>
           ))}
         </ul>
@@ -423,8 +413,7 @@ export function ScienceContent({
           Una scala sola per i tre pericoli, dal quasi-fondo al rosso; ogni
           coppia di classi resta distinguibile per luminanza anche in
           simulazione di daltonismo, e l&apos;informazione non è mai affidata
-          al solo colore — c&apos;è sempre etichetta e intervallo. Cutoff e mapping da <code>classes:</code> e{" "}
-          <code>pc_alert:</code> nel YAML.
+          al solo colore — c&apos;è sempre etichetta e intervallo. Cutoff da <code>classes:</code> nel YAML.
         </p>
 
         {/* 6. V1 vs V2 */}
@@ -676,14 +665,5 @@ export default function SciencePage(): JSX.Element {
       </div>
     );
   }
-  const pcByLevel: Record<string, string> = Object.fromEntries(
-    legend.classes.map((c: { level: RiskLevel; pc_alert: string }) => [c.level, c.pc_alert]),
-  );
-  return (
-    <ScienceContent
-      model={legend.model}
-      pcByLevel={pcByLevel}
-      version={legend.model_version}
-    />
-  );
+  return <ScienceContent model={legend.model} version={legend.model_version} />;
 }
