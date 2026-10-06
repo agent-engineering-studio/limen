@@ -88,3 +88,18 @@ async def leggi(aoi_id: str, hazard: HazardType) -> Spiegazione | None:
         testo=str(row["testo"]),
         analisi=analisi,
     )
+
+
+async def recenti(hours: int) -> dict[tuple[str, str], str]:
+    """``(regione, pericolo) → classe`` delle spiegazioni scritte dall'AI
+    nelle ultime ``hours`` ore. Un ripiego non conta: va riprovato."""
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT aoi_id, hazard_type, livello
+            FROM spiegazioni_regione
+            WHERE NOT ripiego AND scritta > now() - make_interval(hours => $1)
+            """,
+            hours,
+        )
+    return {(str(r["aoi_id"]), str(r["hazard_type"])): str(r["livello"]) for r in rows}

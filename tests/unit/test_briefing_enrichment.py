@@ -243,6 +243,11 @@ def _patch_tracking(monkeypatch: Any) -> list[dict[str, Any]]:
         rows.append(metrics)
 
     monkeypatch.setattr(be, "tracked", _tracked)
+
+    async def _nessuna(_hours: int) -> dict[tuple[str, str], str]:
+        return {}
+
+    monkeypatch.setattr(be.spiegazioni_repo, "recenti", _nessuna)
     monkeypatch.setattr(be, "RiskAnalystAgent", lambda _c: _Analyst())
     monkeypatch.setattr(be, "BriefingAgent", lambda _c, grounding=None: _Briefer())
     return rows
@@ -315,30 +320,34 @@ def test_la_classe_dominante_e_la_piu_alta_con_celle() -> None:
     assert be.livello_dominante({}) == "None"
 
 
-def test_una_regione_gia_spiegata_con_la_stessa_classe_non_si_rispiega() -> None:
-    """#155: con tre pericoli e un modello a pagamento, ogni sweep orario
-    rispiegato sarebbero fino a 1.440 spiegazioni al giorno."""
-    ora = datetime(2026, 10, 6, 10, tzinfo=UTC)
+async def test_una_regione_gia_spiegata_con_la_stessa_classe_non_si_rispiega(
+    monkeypatch: Any,
+) -> None:
+    """Ogni sweep orario è un run nuovo: senza questo filtro una regione
+    ferma si rispiegherebbe ogni ora. La fonte è la tabella delle
+    spiegazioni, non `job_runs`."""
 
-    def corsa(scope: str, metrics: dict[str, Any], status: str = "ok") -> JobRun:
-        return JobRun(
-            id=1,
-            job_id="limen-briefing-enrichment",
-            scope=scope,
-            started_at=ora,
-            finished_at=ora,
-            status=status,
-            metrics=metrics,
-            error=None,
-            host="h",
-        )
-
-    spiegate = be.gia_spiegate(
-        [
-            corsa("it-fvg", {"hazard": "flood", "rows": 10, "livello": "VeryHigh"}),
-            # Senza righe scritte non conta: la spiegazione non c'è.
-            corsa("it-puglia", {"hazard": "flood", "rows": 0, "livello": "High"}),
-            corsa("it-sicilia", {"hazard": "wildfire", "rows": 5, "livello": "High"}, "error"),
+    async def _finished(job: str, *, hours: int) -> list[Any]:
+        if job != "limen-hourly-monitoring":
+            return []
+        return [
+            _run("it-puglia", assessment_id=1, cells_by_level={"High": 3}),
+            _run("it-molise", assessment_id=2, cells_by_level={"High": 3}),
         ]
-    )
-    assert spiegate == {("it-fvg", "flood"): "VeryHigh"}
+
+    async def _recenti(_hours: int) -> dict[tuple[str, str], str]:
+        return {("it-puglia", "landslide"): "High", ("it-molise", "landslide"): "Moderate"}
+
+    viste: list[str] = []
+
+    async def _enrich(**kw: Any) -> int:
+        viste.append(kw["aoi_id"])
+        return 1
+
+    monkeypatch.setattr(be.job_runs_repo, "finished_since", _finished)
+    _patch_tracking(monkeypatch)
+    monkeypatch.setattr(be.spiegazioni_repo, "recenti", _recenti)
+    monkeypatch.setattr(be, "_enrich_one", _enrich)
+    await be.run_briefing_enrichment(_Deps())
+    # Puglia è già spiegata alla stessa classe; il Molise è salito.
+    assert viste == ["it-molise"]

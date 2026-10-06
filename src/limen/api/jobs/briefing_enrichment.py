@@ -67,20 +67,6 @@ def livello_dominante(cells_by_level: dict[str, Any]) -> str:
     return presenti[-1] if presenti else "None"
 
 
-def gia_spiegate(recenti: list[job_runs_repo.JobRun]) -> dict[tuple[str, str], str]:
-    """``(regione, pericolo) → classe`` delle spiegazioni scritte di recente.
-
-    La più recente per coppia: è quella che il lettore ha davanti.
-    """
-    out: dict[tuple[str, str], str] = {}
-    for run in sorted(recenti, key=lambda r: r.finished_at or r.started_at, reverse=True):
-        m = run.metrics
-        if run.status != "ok" or run.scope is None or not m.get("rows") or "livello" not in m:
-            continue
-        out.setdefault((run.scope, str(m.get("hazard"))), str(m["livello"]))
-    return out
-
-
 def _candidates(
     runs: list[job_runs_repo.JobRun], *, min_level: str
 ) -> list[tuple[str, HazardType, int]]:
@@ -204,9 +190,10 @@ async def _run(deps: AppDependencies) -> dict[str, int]:
         for r in runs
         if isinstance(r.metrics.get("assessment_id"), int)
     }
-    spiegate = gia_spiegate(
-        await job_runs_repo.finished_since(JOB_BRIEFING_ENRICHMENT, hours=llm.briefing_min_hours)
-    )
+    # Dalla tabella delle spiegazioni, non dalle righe di `job_runs`: quelle
+    # dicevano «spiegata» anche quando lo sweep aveva già cancellato il testo
+    # (prima della 064), e la regione restava muta fino a 12 ore.
+    spiegate = await spiegazioni_repo.recenti(llm.briefing_min_hours)
     pending = [
         (aoi, hazard, run_id)
         for aoi, hazard, run_id in pending
