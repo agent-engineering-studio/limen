@@ -58,6 +58,29 @@ _lock = asyncio.Lock()
 SOURCE_JOBS = (JOB_HOURLY_MONITORING, JOB_NOWCAST_MONITORING, JOB_FIRMS_MONITORING)
 
 
+_ORDINE_LIVELLI = ("None", "Low", "Moderate", "High", "VeryHigh")
+
+
+def livello_dominante(cells_by_level: dict[str, Any]) -> str:
+    """La classe più alta con almeno una cella: è ciò che la spiegazione racconta."""
+    presenti = [lv for lv in _ORDINE_LIVELLI if int(cells_by_level.get(lv) or 0) > 0]
+    return presenti[-1] if presenti else "None"
+
+
+def gia_spiegate(recenti: list[job_runs_repo.JobRun]) -> dict[tuple[str, str], str]:
+    """``(regione, pericolo) → classe`` delle spiegazioni scritte di recente.
+
+    La più recente per coppia: è quella che il lettore ha davanti.
+    """
+    out: dict[tuple[str, str], str] = {}
+    for run in sorted(recenti, key=lambda r: r.finished_at or r.started_at, reverse=True):
+        m = run.metrics
+        if run.status != "ok" or run.scope is None or not m.get("rows") or "livello" not in m:
+            continue
+        out.setdefault((run.scope, str(m.get("hazard"))), str(m["livello"]))
+    return out
+
+
 def _candidates(
     runs: list[job_runs_repo.JobRun], *, min_level: str
 ) -> list[tuple[str, HazardType, int]]:
@@ -159,6 +182,22 @@ async def _run(deps: AppDependencies) -> dict[str, int]:
     # per regione, e mescolare tre liste già ordinate non dà una lista ordinata.
     runs.sort(key=lambda r: r.finished_at or r.started_at, reverse=True)
     pending = _candidates(runs, min_level=llm.briefing_min_level)
+    # Livello dominante di ciascun candidato, dalle metriche del suo sweep.
+    livelli = {
+        int(r.metrics["assessment_id"]): livello_dominante(
+            dict(r.metrics.get("cells_by_level") or {})
+        )
+        for r in runs
+        if isinstance(r.metrics.get("assessment_id"), int)
+    }
+    spiegate = gia_spiegate(
+        await job_runs_repo.finished_since(JOB_BRIEFING_ENRICHMENT, hours=llm.briefing_min_hours)
+    )
+    pending = [
+        (aoi, hazard, run_id)
+        for aoi, hazard, run_id in pending
+        if spiegate.get((aoi, hazard.value)) != livelli.get(run_id)
+    ]
     if not pending:
         log.info("job.briefing_enrichment.nothing", considered=len(runs))
         return {}
@@ -171,6 +210,7 @@ async def _run(deps: AppDependencies) -> dict[str, int]:
         async with tracked(JOB_BRIEFING_ENRICHMENT, scope=aoi_id) as metrics:
             metrics["hazard"] = hazard.value
             metrics["run_id"] = run_id
+            metrics["livello"] = livelli.get(run_id, "None")
             try:
                 rows = await _enrich_one(
                     analyst=analyst,

@@ -246,6 +246,11 @@ class LLMSettings(BaseSettings):
     # un riavvio del worker non deve lasciare regioni senza narrativa.
     briefing_interval_minutes: int = Field(default=10, ge=1)
     briefing_lookback_hours: int = Field(default=3, ge=1)
+    # Una regione si rispiega solo se la sua classe dominante è cambiata o
+    # dopo queste ore (#155). Senza, ogni sweep orario è uno sweep nuovo e,
+    # con tre pericoli e un modello a pagamento, sarebbero fino a 1.440
+    # spiegazioni al giorno per dire spesso la stessa cosa.
+    briefing_min_hours: int = Field(default=12, ge=1)
 
     # Le ore UTC in cui un modello lento (colibrì/GLM-5.2) può girare:
     # [inizio, fine), a cavallo della mezzanotte se inizio > fine. Il server

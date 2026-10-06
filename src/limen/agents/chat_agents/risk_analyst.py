@@ -16,23 +16,27 @@ Behaviour:
 from __future__ import annotations
 
 import json
+from functools import cache
 from importlib import resources
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from limen.agents.chat_agents.prompts_registry import PROMPT_PACKAGE, prompt_file
 from limen.agents.llm_factory.base import ChatClient, ChatMessage
 from limen.core.logging import get_logger
 from limen.core.models.context import AggregateAssessment, CellRiskRecord
+from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 
 log = get_logger(__name__)
 
-_PROMPT_PACKAGE = "limen.agents.chat_agents.prompts"
-_PROMPT_FILE = "risk_analyst.it.md"
 
-
-def _load_system_prompt() -> str:
-    return resources.files(_PROMPT_PACKAGE).joinpath(_PROMPT_FILE).read_text(encoding="utf-8")
+@cache
+def _load_system_prompt(hazard: HazardType = DEFAULT_HAZARD) -> str:
+    """Il prompt del pericolo: ogni pericolo ha le sue cause (#155)."""
+    nome = prompt_file("risk_analyst", hazard) or prompt_file("risk_analyst", DEFAULT_HAZARD)
+    assert nome is not None
+    return resources.files(PROMPT_PACKAGE).joinpath(nome).read_text(encoding="utf-8")
 
 
 class RiskAnalysis(BaseModel):
@@ -40,12 +44,22 @@ class RiskAnalysis(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    # Le cause di ciascun pericolo: le prime cinque sono delle frane, poi
+    # alluvione (pioggia, fiume, terreno) e incendio (tempo, combustibile,
+    # pendenza). Un pericolo usa solo le sue, e il suo prompt elenca solo
+    # quelle.
     driver: Literal[
         "static_susceptibility",
         "meteo_trigger",
         "seismic_event",
         "post_fire_destabilization",
         "human_activity",
+        "pluvial_rain",
+        "river_discharge",
+        "hydraulic_susceptibility",
+        "fire_weather",
+        "fuel_load",
+        "terrain_slope",
     ]
     anomalies: list[str] = Field(default_factory=list)
     attention_window_hours: Literal[12, 24, 48, 72]
@@ -64,6 +78,7 @@ def _summarise_for_prompt(a: AggregateAssessment) -> str:
     ]
     return (
         f"AOI: {a.aoi_id}\n"
+        f"Hazard: {a.hazard_type.value}\n"
         f"Horizon: {a.horizon}\n"
         f"Model version: {a.model_version}\n"
         f"Cells scored: {a.n_cells}\n"
@@ -73,17 +88,27 @@ def _summarise_for_prompt(a: AggregateAssessment) -> str:
     )
 
 
-def _neutral_fallback(reason: str) -> RiskAnalysis:
+#: La causa «di fondo» di ciascun pericolo, quella del ripiego neutro.
+_DRIVER_NEUTRO: dict[HazardType, str] = {
+    HazardType.LANDSLIDE: "static_susceptibility",
+    HazardType.FLOOD: "hydraulic_susceptibility",
+    HazardType.WILDFIRE: "fuel_load",
+}
+
+
+def _neutral_fallback(reason: str, hazard: HazardType = DEFAULT_HAZARD) -> RiskAnalysis:
     # `llm.fallback` is the single event that says "the engine did not answer
     # and the deterministic path took over". Always a warning, never info: it
     # is how a broken engine is told apart from a working one, and a run that
     # emits it produced a *degraded* analysis while otherwise looking normal.
     log.warning("llm.fallback", role=RiskAnalystAgent.role_name, reason=reason)
-    return RiskAnalysis(
-        driver="static_susceptibility",
-        anomalies=[f"LLM fallback: {reason}"],
-        attention_window_hours=24,
-        confidence=0.30,
+    return RiskAnalysis.model_validate(
+        {
+            "driver": _DRIVER_NEUTRO.get(hazard, "static_susceptibility"),
+            "anomalies": [f"LLM fallback: {reason}"],
+            "attention_window_hours": 24,
+            "confidence": 0.30,
+        }
     )
 
 
@@ -94,12 +119,12 @@ class RiskAnalystAgent:
 
     def __init__(self, client: ChatClient) -> None:
         self._client = client
-        self._system_prompt = _load_system_prompt()
 
     async def analyse(self, assessment: AggregateAssessment) -> RiskAnalysis:
+        hazard = assessment.hazard_type
         user_msg = _summarise_for_prompt(assessment)
         messages: list[ChatMessage] = [
-            ChatMessage(role="system", content=self._system_prompt),
+            ChatMessage(role="system", content=_load_system_prompt(hazard)),
             ChatMessage(role="user", content=user_msg),
         ]
 
@@ -110,7 +135,7 @@ class RiskAnalystAgent:
         except (ValidationError, json.JSONDecodeError) as exc:
             log.warning("risk_analyst.repair_retry", error=str(exc))
         except Exception as exc:  # network etc. — never block the workflow
-            return _neutral_fallback(f"chat client error: {type(exc).__name__}: {exc}")
+            return _neutral_fallback(f"chat client error: {type(exc).__name__}: {exc}", hazard)
 
         # One repair retry: feed the bad output + the error back to the model.
         repair_msg = ChatMessage(
@@ -129,6 +154,6 @@ class RiskAnalystAgent:
             raw_retry = await self._client.chat(retry_messages, response_format="json_object")
             return RiskAnalysis.model_validate_json(raw_retry)
         except (ValidationError, json.JSONDecodeError) as exc:
-            return _neutral_fallback(f"validation failed after retry: {exc}")
+            return _neutral_fallback(f"validation failed after retry: {exc}", hazard)
         except Exception as exc:
-            return _neutral_fallback(f"chat client error during retry: {exc}")
+            return _neutral_fallback(f"chat client error during retry: {exc}", hazard)

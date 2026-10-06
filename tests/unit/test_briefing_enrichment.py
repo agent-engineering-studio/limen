@@ -12,6 +12,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
+
 from limen.api.jobs import briefing_enrichment as be
 from limen.api.jobs.briefing_enrichment import _candidates
 from limen.config.settings import LLMSettings
@@ -70,10 +72,18 @@ def test_a_sweep_that_never_persisted_is_not() -> None:
     assert _candidates([_run("it-marche", assessment_id=None)], min_level="Moderate") == []
 
 
-def test_a_hazard_without_a_prompt_is_not() -> None:
-    """Nessuna prosa è meglio di prosa sbagliata: il prompt del briefing si
-    apre con "spiega il rischio frane"."""
+def test_a_hazard_without_a_prompt_is_not(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Nessuna prosa è meglio di prosa sbagliata: un pericolo senza il suo
+    prompt non riceve quello di un altro."""
+    monkeypatch.setattr(be, "has_narrative", lambda h: h is HazardType.LANDSLIDE)
     assert _candidates([_run("it-sicilia", hazard="wildfire")], min_level="Moderate") == []
+
+
+def test_l_incendio_ha_ora_la_sua_spiegazione() -> None:
+    """#155: alluvione e incendio hanno i loro prompt."""
+    assert _candidates([_run("it-sicilia", hazard="wildfire")], min_level="Moderate") == [
+        ("it-sicilia", HazardType.WILDFIRE, 1)
+    ]
 
 
 def test_only_the_most_recent_sweep_per_region_wins() -> None:
@@ -171,6 +181,7 @@ class _Settings:
     class llm:  # noqa: N801
         briefing_lookback_hours = 3
         briefing_min_level = "Moderate"
+        briefing_min_hours = 12
         models = LLMSettings().models
         slow_models_allowed = LLMSettings().slow_models_allowed
 
@@ -264,3 +275,37 @@ async def test_a_concurrent_tick_is_skipped(monkeypatch: Any) -> None:
         assert await be.run_briefing_enrichment(_Deps()) == {}
     finally:
         be._lock.release()
+
+
+def test_la_classe_dominante_e_la_piu_alta_con_celle() -> None:
+    assert be.livello_dominante({"Low": 5, "High": 1, "VeryHigh": 0}) == "High"
+    assert be.livello_dominante({}) == "None"
+
+
+def test_una_regione_gia_spiegata_con_la_stessa_classe_non_si_rispiega() -> None:
+    """#155: con tre pericoli e un modello a pagamento, ogni sweep orario
+    rispiegato sarebbero fino a 1.440 spiegazioni al giorno."""
+    ora = datetime(2026, 10, 6, 10, tzinfo=UTC)
+
+    def corsa(scope: str, metrics: dict[str, Any], status: str = "ok") -> JobRun:
+        return JobRun(
+            id=1,
+            job_id="limen-briefing-enrichment",
+            scope=scope,
+            started_at=ora,
+            finished_at=ora,
+            status=status,
+            metrics=metrics,
+            error=None,
+            host="h",
+        )
+
+    spiegate = be.gia_spiegate(
+        [
+            corsa("it-fvg", {"hazard": "flood", "rows": 10, "livello": "VeryHigh"}),
+            # Senza righe scritte non conta: la spiegazione non c'è.
+            corsa("it-puglia", {"hazard": "flood", "rows": 0, "livello": "High"}),
+            corsa("it-sicilia", {"hazard": "wildfire", "rows": 5, "livello": "High"}, "error"),
+        ]
+    )
+    assert spiegate == {("it-fvg", "flood"): "VeryHigh"}
