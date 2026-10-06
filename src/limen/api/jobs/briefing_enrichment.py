@@ -21,6 +21,7 @@ briefing concorrenti su un gateway locale sono venti timeout.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from typing import Any
 
 from limen.agents.chat_agents.briefing import BriefingAgent
@@ -35,6 +36,7 @@ from limen.api.jobs.ids import (
     JOB_HOURLY_MONITORING,
     JOB_NOWCAST_MONITORING,
 )
+from limen.config.settings import SLOW_GENERATION_MODELS
 from limen.core.logging import get_logger
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.data.repos import assessment_repo, job_runs_repo
@@ -137,6 +139,19 @@ async def run_briefing_enrichment(deps: AppDependencies) -> dict[str, int]:
 
 async def _run(deps: AppDependencies) -> dict[str, int]:
     llm = deps.settings.llm
+    modello = (llm.models.model_dump().get("briefing") or "").strip()
+    ora = datetime.now(UTC).hour
+    if modello in SLOW_GENERATION_MODELS and not llm.slow_models_allowed(ora):
+        # Colibrì solo di notte: di giorno il server serve la mappa e gli
+        # sweep. Le regioni restano in lista e si raccontano alla prima ora
+        # utile, perché i candidati si ricostruiscono a ogni tick.
+        log.info(
+            "job.briefing_enrichment.skip",
+            reason="slow model outside window",
+            model=modello,
+            hour_utc=ora,
+        )
+        return {}
     runs: list[job_runs_repo.JobRun] = []
     for job_id in SOURCE_JOBS:
         runs.extend(await job_runs_repo.finished_since(job_id, hours=llm.briefing_lookback_hours))

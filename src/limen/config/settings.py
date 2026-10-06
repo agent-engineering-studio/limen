@@ -247,6 +247,21 @@ class LLMSettings(BaseSettings):
     briefing_interval_minutes: int = Field(default=10, ge=1)
     briefing_lookback_hours: int = Field(default=3, ge=1)
 
+    # Le ore UTC in cui un modello lento (colibrì/GLM-5.2) può girare:
+    # [inizio, fine), a cavallo della mezzanotte se inizio > fine. Il server
+    # è uno solo, con 30 GB di RAM condivisi con Postgres e Open-Meteo, e
+    # colibrì legge 400 GB da disco: di giorno toglierebbe risorse alla mappa
+    # e agli sweep. Default 20→2 UTC (22-4 ora italiana d'estate): chiude
+    # prima del lavoro notturno delle 02:00, che è il più pesante del giorno.
+    slow_models_window_utc: tuple[int, int] = (20, 2)
+
+    def slow_models_allowed(self, hour_utc: int) -> bool:
+        """Se a quest'ora un modello di :data:`SLOW_GENERATION_MODELS` può girare."""
+        inizio, fine = self.slow_models_window_utc
+        if inizio <= fine:
+            return inizio <= hour_utc < fine
+        return hour_utc >= inizio or hour_utc < fine
+
     @field_validator("llamacpp_role_timeout_seconds")
     @classmethod
     def _positive_role_timeouts(cls, v: dict[str, float]) -> dict[str, float]:
