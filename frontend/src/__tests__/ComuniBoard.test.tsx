@@ -155,7 +155,7 @@ describe("ComuniBoard", () => {
     });
     const { container } = render(<ComuniBoard />);
     await waitFor(() => expect(screen.getByText("Ispani")).toBeInTheDocument());
-    expect(container.textContent).toContain("18 mm su 40");
+    expect(container.textContent).toContain("18 mm previsti in 72 h, soglia 40");
     expect(container.textContent).toContain("fiumi n.d.");
   });
 

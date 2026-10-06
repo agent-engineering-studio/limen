@@ -171,8 +171,12 @@ async def test_firms_sync_degrades_when_firms_is_unreachable(
 async def test_hotspots_open_the_post_fire_window_without_an_effis_perimeter(
     reset_db: None, pg_pool: object
 ) -> None:
-    """`months_since_fire` comes from FIRMS days before the perimeter exists."""
-    aoi_id, lat, lon = await _seed_test_aoi()
+    """`months_since_fire` comes from FIRMS days before the perimeter exists.
+
+    E solo per la cella in cui il fuoco è caduto (#146): prima il valore era
+    uno per regione, copiato su ogni cella.
+    """
+    aoi_id, lat, lon = await _seed_test_aoi(with_grid=True)
     today = datetime.now(UTC).date()
     await upsert_hotspots(
         [
@@ -191,6 +195,18 @@ async def test_hotspots_open_the_post_fire_window_without_an_effis_perimeter(
 
     updated = await FireCheckExecutor(min_hotspots=2).run(ctx)
     assert updated.months_since_fire == pytest.approx(0.0)
+    async with acquire() as conn:
+        bruciata = await conn.fetchval(
+            "SELECT id FROM grid_cells WHERE aoi_id = $1 "
+            "AND ST_Intersects(geom, ST_SetSRID(ST_MakePoint($2, $3), 4326))",
+            aoi_id,
+            lon,
+            lat,
+        )
+        totale = await conn.fetchval("SELECT count(*) FROM grid_cells WHERE aoi_id = $1", aoi_id)
+    assert set(updated.fuoco_per_cella) == {bruciata}
+    assert updated.fuoco_per_cella[bruciata][0] == pytest.approx(0.0)
+    assert totale > 1
 
     # Below the clustering threshold the same detections must not count:
     # one flare or glint pixel is not a fire.
@@ -209,7 +225,7 @@ async def test_industrial_hotspots_do_not_open_the_post_fire_window(
     riteneva bruciato qualcosa in 272 giorni su 366 e teneva l'amplificazione
     post-incendio accesa tutto l'anno.
     """
-    aoi_id, lat, lon = await _seed_test_aoi()
+    aoi_id, lat, lon = await _seed_test_aoi(with_grid=True)
     today = datetime.now(UTC).date()
     await upsert_hotspots(
         [
@@ -230,6 +246,7 @@ async def test_industrial_hotspots_do_not_open_the_post_fire_window(
     updated = await FireCheckExecutor(min_hotspots=2).run(ctx)
 
     assert updated.months_since_fire is None
+    assert updated.fuoco_per_cella == {}
 
 
 async def test_firms_monitoring_triggers_the_aoi_once_then_cools_down(

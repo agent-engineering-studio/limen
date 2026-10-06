@@ -119,8 +119,10 @@ def assemble_bundles(
             river_discharge_ratio=flood_river,
             coastal_surge_norm=ctx.coastal_surge_norm,
             seismic_history=seismic,
-            months_since_fire=ctx.months_since_fire,
-            fire_severity=ctx.fire_severity,
+            # Per cella (#146): la data dell'incendio che tocca **questa**
+            # cella, non il più recente della regione.
+            months_since_fire=fuoco[0] if (fuoco := ctx.fuoco_per_cella.get(cell_id)) else None,
+            fire_severity=fuoco[1] if fuoco else None,
             fire_weather=fire_weather,
             sensor_features=ctx.sensor_features_by_cell.get(cell_id),
         )

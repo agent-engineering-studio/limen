@@ -56,3 +56,21 @@ def test_empty_node_series_and_missing_centroid_fall_back() -> None:
     }
     # west: nearest node empty → AOI fallback; east: no centroid → AOI fallback.
     assert by_cell == {"c-west": 1.0, "c-east": 1.0}
+
+
+def test_l_incendio_tocca_solo_la_cella_bruciata() -> None:
+    """#146: il riepilogo dell'AOI non arriva più alle celle.
+
+    Prima un incendio in un angolo della regione dava la spinta post-incendio
+    a ogni cella: il centro di Trieste per un fuoco sul Carso.
+    """
+    ctx = _ctx(
+        months_since_fire=1.7,
+        fire_severity=0.9,
+        fuoco_per_cella={"c-west": (1.7, 0.9)},
+    )
+    per_cella = {
+        b.cell_id: (b.dynamic.months_since_fire, b.dynamic.fire_severity)
+        for b in assemble_bundles(ctx)
+    }
+    assert per_cella == {"c-west": (1.7, 0.9), "c-east": (None, None)}

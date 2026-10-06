@@ -137,10 +137,16 @@ class MonitoringContext(BaseModel):
     fwi_nodes: Sequence[tuple[float, float]] = Field(default_factory=tuple)
     fwi_by_node: Sequence[FireWeatherState | None] = Field(default_factory=tuple)
     seismic_events: Sequence[SeismicHistoryEvent] = Field(default_factory=tuple)
+    #: Riepilogo per l'AOI — l'incendio più recente che la tocca — solo per i
+    #: log e i resoconti. **Non** entra nel punteggio: copiato su ogni cella
+    #: dava a Trieste la spinta di un incendio a cento chilometri (#146).
     months_since_fire: float | None = None
     #: Severità del bruciato in [0,1] (#67). La calcola FireCheck dalla
     #: densità di FRP del perimetro, non il motore.
     fire_severity: float | None = None
+    #: Per cella, solo quelle toccate da un incendio: (mesi dall'incendio,
+    #: severità o ``None``). Una cella assente non ha bruciato nella finestra.
+    fuoco_per_cella: dict[str, tuple[float, float | None]] = Field(default_factory=dict)
     sensor_payload: dict[str, Any] | None = None
     # V1.5 — populated by SensorFetchExecutor when enable_insitu=True.
     sensor_features_by_cell: dict[str, SensorFeatures] = Field(default_factory=dict)
