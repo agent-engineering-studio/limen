@@ -8,6 +8,7 @@ import HazardSelector from "../components/HazardSelector";
 import RiskMap, { filtroSoglia } from "../components/RiskMap";
 import Timeline from "../components/Timeline";
 import { letturaIncendio } from "../components/CellPopup";
+import { RigaAllerta } from "../components/ComuniBoard";
 import { defaultApiClient } from "../lib/api-client";
 import { HazardProvider } from "../lib/hazard";
 import type { ForecastSchedule, HazardsResponse } from "../types";
@@ -187,5 +188,39 @@ describe("come leggere il numero dell'incendio", () => {
 
   it("senza meteo nel breakdown non inventa niente", () => {
     expect(letturaIncendio({ fwi_norm: 0.5 })).toBeNull();
+  });
+});
+
+describe("l'allerta ufficiale accanto al nostro numero", () => {
+  const nessuna = { valido: "2026-10-06", livello: 0, idrogeologico: 0, idraulico: 0, temporali: 0 };
+
+  it("quando Limen segnala più del bollettino lo dice, e dice quale vale", () => {
+    // Trieste, 6 ottobre 2026: 0,75 per alluvione sulle 72 ore, nessuna
+    // allerta nel bollettino per oggi e domani.
+    const { container } = render(
+      <RigaAllerta
+        allerta={{ zona: "Bacino di Levante / Carso", emesso: "2026-10-05T14:17:00+02:00", oggi: nessuna, domani: nessuna }}
+        picco={{ hazard: "flood", score: 0.75, level: "VeryHigh" }}
+      />,
+    );
+    expect(container.textContent).toContain("Allerta ufficiale");
+    expect(container.textContent).toContain("oggi nessuna");
+    expect(container.textContent).toContain("vale il bollettino");
+  });
+
+  it("dice i rischi per cui è in allerta", () => {
+    const { container } = render(
+      <RigaAllerta
+        allerta={{
+          zona: "Zona B",
+          emesso: "2026-10-05T14:17:00+02:00",
+          oggi: { ...nessuna, livello: 1, temporali: 1 },
+          domani: nessuna,
+        }}
+        picco={{ hazard: "landslide", score: 0.4, level: "Moderate" }}
+      />,
+    );
+    expect(container.textContent).toContain("oggi gialla (temporali)");
+    expect(container.textContent).not.toContain("vale il bollettino");
   });
 });

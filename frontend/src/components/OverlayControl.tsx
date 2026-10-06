@@ -8,7 +8,7 @@ export interface OverlayControlProps {
   readonly onToggle: (id: string) => void;
 }
 
-const GRUPPI: GruppoOverlay[] = ["landslide", "flood", "wildfire"];
+const GRUPPI: GruppoOverlay[] = ["ufficiale", "landslide", "flood", "wildfire"];
 
 /** Gli interruttori dei livelli di contesto, per pericolo.
  *

@@ -28,8 +28,11 @@ import {
   RISK_TEXT_BY_LEVEL,
 } from "../lib/risk-colors";
 import ComuneTrend from "./ComuneTrend";
+import { COLORE_ALLERTA } from "../lib/overlays";
 import { LETTERA } from "./HazardSelector";
 import type {
+  AllertaGiorno,
+  AllertaUfficiale,
   ComuneCell,
   ComuneForecast,
   ComuneHazard,
@@ -549,6 +552,64 @@ function PercheInCima({
   );
 }
 
+const COLORE_NOME = ["nessuna", "gialla", "arancione", "rossa"] as const;
+
+function giornoAllerta(g: AllertaGiorno | null | undefined): string {
+  if (!g) return "n.d.";
+  if (g.livello === 0) return "nessuna";
+  const rischi = (
+    [
+      ["idrogeologico", g.idrogeologico],
+      ["idraulico", g.idraulico],
+      ["temporali", g.temporali],
+    ] as const
+  )
+    .filter(([, v]) => v > 0)
+    .map(([nome]) => nome);
+  return `${COLORE_NOME[g.livello] ?? "?"} (${rischi.join(", ")})`;
+}
+
+/** L'allerta ufficiale della zona del comune, accanto al nostro numero.
+ *
+ *  È l'unica che vale: Limen la affianca, non la sostituisce. Quando le due
+ *  letture divergono lo si dice, e si dice quale vale — il 6 ottobre Trieste
+ *  era a 0,75 per alluvione sulle 72 ore e in «nessuna allerta» nel
+ *  bollettino per oggi e domani. */
+export function RigaAllerta({
+  allerta,
+  picco,
+}: {
+  allerta: AllertaUfficiale | null | undefined;
+  picco: Picco | null;
+}): JSX.Element | null {
+  if (!allerta) return null;
+  const massima = Math.max(allerta.oggi?.livello ?? 0, allerta.domani?.livello ?? 0);
+  const nostro = picco ? RANGO[picco.level] : 0;
+  const nota =
+    nostro >= RANGO.High && massima === 0
+      ? " · Limen segnala più del bollettino: vale il bollettino"
+      : massima >= 2 && nostro < RANGO.Moderate
+        ? " · il bollettino segnala più di Limen"
+        : "";
+  return (
+    <Group gap={6} wrap="nowrap" mt={4} className="cb-allerta" align="baseline">
+      <span
+        className="cb-allerta-punto"
+        style={{ background: COLORE_ALLERTA[massima] }}
+        aria-hidden
+      />
+      <Text span size="xs">
+        <strong>Allerta ufficiale</strong>{" "}
+        <Text span size="xs" c="dimmed">
+          ({allerta.zona})
+        </Text>
+        : oggi {giornoAllerta(allerta.oggi)} · domani {giornoAllerta(allerta.domani)}
+        {nota ? <span className="cb-allerta-nota">{nota}</span> : null}
+      </Text>
+    </Group>
+  );
+}
+
 /** «it-emilia-romagna» → «Emilia-Romagna». La provincia non arriva dal
  *  servizio: la regione basta a distinguere i comuni omonimi. */
 function regione(aoi: string): string {
@@ -767,6 +828,7 @@ export function ComuniBoard({
                     ))}
                   </Group>
                   <Box className="cb-rientro">
+                    <RigaAllerta allerta={c.allerta_ufficiale} picco={piccoDi(c, false)} />
                     <RigaPrevisione comune={c} previsti={previsti} etichette={etichette} />
                     <PercheInCima
                       c={c}

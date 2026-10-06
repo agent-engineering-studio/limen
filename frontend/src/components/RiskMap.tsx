@@ -6,7 +6,7 @@ import { Protocol } from "pmtiles";
 
 import { config } from "../lib/env";
 import { useHazard } from "../lib/hazard";
-import { OVERLAYS } from "../lib/overlays";
+import { COLORE_ALLERTA, OVERLAYS } from "../lib/overlays";
 import {
   maplibreColorMatch,
   maplibreMultiHazardColorMatch,
@@ -384,6 +384,12 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         minzoom: 8,
         attribution: "Copernicus EMS",
       },
+      // Le allerte ufficiali di oggi (migrazione 063): 187 zone, leggere.
+      "ovl-dpc": {
+        type: "vector",
+        tiles: [`${tileserv}/public.v_dpc_allerte_oggi/{z}/{x}/{y}.pbf?properties=zona,livello`],
+        attribution: "Protezione Civile, bollettino di criticità (CC-BY 4.0)",
+      },
       "ovl-bruciate": {
         type: "vector",
         tiles: [`${tileserv}/public.fire_perimeters/{z}/{x}/{y}.pbf?properties=fire_date,area_ha`],
@@ -605,6 +611,36 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         "source-layer": "public.fire_perimeters",
         paint: { "fill-color": "#ff9ad5", "fill-opacity": 0.2 },
         layout: { visibility: visibile("ovl-bruciate-fill") },
+      },
+      {
+        // Solo le zone in allerta si colorano: il verde su tutta Italia
+        // coprirebbe la mappa per dire «niente».
+        id: "ovl-dpc-fill",
+        type: "fill",
+        source: "ovl-dpc",
+        "source-layer": "public.v_dpc_allerte_oggi",
+        filter: [">", ["get", "livello"], 0],
+        paint: {
+          "fill-color": [
+            "match",
+            ["get", "livello"],
+            1,
+            COLORE_ALLERTA[1] ?? "",
+            2,
+            COLORE_ALLERTA[2] ?? "",
+            COLORE_ALLERTA[3] ?? "",
+          ],
+          "fill-opacity": 0.25,
+        },
+        layout: { visibility: visibile("ovl-dpc-fill") },
+      },
+      {
+        id: "ovl-dpc-line",
+        type: "line",
+        source: "ovl-dpc",
+        "source-layer": "public.v_dpc_allerte_oggi",
+        paint: { "line-color": "#c3ccd6", "line-width": 0.8, "line-opacity": 0.6 },
+        layout: { visibility: visibile("ovl-dpc-line") },
       },
       {
         id: "ovl-bruciate-line",

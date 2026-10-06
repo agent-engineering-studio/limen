@@ -7,7 +7,7 @@ MonitoringContext, AggregateAssessment) already live in
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -162,6 +162,30 @@ class ComuneForecast(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class AllertaGiorno(BaseModel):
+    """Un giorno del bollettino DPC per la zona del comune: 0 nessuna allerta,
+    1 gialla, 2 arancione, 3 rossa."""
+
+    valido: date
+    livello: int
+    idrogeologico: int
+    idraulico: int
+    temporali: int
+
+
+class AllertaUfficiale(BaseModel):
+    """L'allerta della Protezione Civile per la zona del comune (#155).
+
+    Accanto al nostro numero perché è l'unica che vale: Limen affianca e non
+    sostituisce l'allertamento ufficiale.
+    """
+
+    zona: str
+    emesso: datetime
+    oggi: AllertaGiorno | None = None
+    domani: AllertaGiorno | None = None
+
+
 class ComuneRisk(BaseModel):
     istat_code: str
     name: str
@@ -193,6 +217,9 @@ class ComuneRisk(BaseModel):
     #: Moderato**, non ignoto: lo stato previsionale tiene solo le celle sopra
     #: soglia.
     forecast: dict[str, ComuneForecast] = Field(default_factory=dict)
+    #: Il bollettino DPC per la zona del comune; `None` se non è ancora stato
+    #: importato o il comune non cade in nessuna zona.
+    allerta_ufficiale: AllertaUfficiale | None = None
     #: Lo stesso numero di `attention`, sul futuro e con la stessa regola:
     #: se è più alto, il comune sta salendo.
     forecast_attention: float | None = None
