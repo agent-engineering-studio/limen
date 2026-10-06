@@ -222,7 +222,7 @@ export function LegendPanel(): JSX.Element {
         Le liste mettono prima le celle vicine a centri abitati e strade
         (🏠 🛣): stesso rischio, più conseguenze. Colori e numeri seguono
         sempre la scala qui sopra.{" "}
-        <a href="#/documentazione/02-come-si-calcola-il-rischio">
+        <a href="#/come-funziona/i-tre-motori">
           Come si calcola il rischio
         </a>
       </p>

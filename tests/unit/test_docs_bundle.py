@@ -1,9 +1,9 @@
-"""Il bundle della SPA deve restare allineato a `docs/divulgazione/`.
+"""Il bundle della SPA deve restare allineato a `docs/guida/limen.md`.
 
-Il generato (`frontend/src/content/divulgazione.ts`) esiste perché il
-contesto Docker del frontend non contiene `docs/`: senza di esso la build
-dell'immagine fallirebbe su un import fuori contesto. Il prezzo è che i
-Markdown possono cambiare senza che il bundle se ne accorga, e la SPA
+Il generato (`frontend/src/content/guida.ts`) esiste perché il contesto
+Docker del frontend non contiene `docs/`: senza di esso la build
+dell'immagine fallirebbe su un import fuori contesto. Il prezzo è che il
+Markdown può cambiare senza che il bundle se ne accorga, e la SPA
 pubblicherebbe in silenzio un testo diverso da quello del repository.
 
 Il test vive qui e non fra quelli del frontend perché `tsconfig.json`
@@ -19,7 +19,7 @@ from types import ModuleType
 
 ROOT = Path(__file__).resolve().parents[2]
 GENERATOR = ROOT / "scripts" / "build_docs_bundle.py"
-BUNDLE = ROOT / "frontend" / "src" / "content" / "divulgazione.ts"
+BUNDLE = ROOT / "frontend" / "src" / "content" / "guida.ts"
 
 
 def _load_generator() -> ModuleType:
@@ -30,17 +30,9 @@ def _load_generator() -> ModuleType:
     return module
 
 
-def test_bundle_matches_markdown_sources() -> None:
+def test_bundle_matches_markdown_source() -> None:
     generated = _load_generator().build()
     assert BUNDLE.read_text(encoding="utf-8") == generated, (
-        "frontend/src/content/divulgazione.ts è disallineato dai Markdown: "
+        "frontend/src/content/guida.ts è disallineato da docs/guida/limen.md: "
         "esegui `make docs-bundle`"
     )
-
-
-def test_every_page_is_in_the_bundle() -> None:
-    module = _load_generator()
-    names = {path.name for path in module.SOURCE.glob("*.md")}
-    generated = module.build()
-    for name in names:
-        assert f'"{name}"' in generated, f"{name} manca dal bundle"

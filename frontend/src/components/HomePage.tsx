@@ -230,7 +230,7 @@ export function HomePage(): JSX.Element {
           <h2 id="home-fonti">Fonti pubbliche, metodo aperto.</h2>
           <p className="home-lede">
             Quello che il calcolo non sa fare è scritto anch&apos;esso:{" "}
-            <a href="#/documentazione/02-come-si-calcola-il-rischio">
+            <a href="#/come-funziona/limiti-dichiarati">
               cosa questo calcolo non può sapere
             </a>
             .

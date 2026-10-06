@@ -1,6 +1,6 @@
 // Un renderer Markdown minimo, invece di una dipendenza.
 //
-// Il contenuto non arriva dall'utente: sono i file di `docs/divulgazione/`,
+// Il contenuto non arriva dall'utente: è `docs/guida/limen.md`,
 // scritti da noi e inclusi nel bundle a build time. Il problema che una
 // libreria risolve — sanificare HTML ostile — qui non esiste, mentre quello
 // che resta (titoli, elenchi, grassetto, link, blocchi di codice) sta in
@@ -27,7 +27,9 @@ export type Block =
   | { kind: "quote"; text: string }
   | { kind: "code"; text: string }
   | { kind: "diagram"; phase: FlowPhase }
-  | { kind: "flow"; steps: FlowStep[] };
+  | { kind: "flow"; steps: FlowStep[] }
+  | { kind: "table"; header: string[]; rows: string[][] }
+  | { kind: "component"; name: string };
 
 export type Inline =
   | { kind: "text"; text: string }
@@ -40,6 +42,11 @@ export type Inline =
   | { kind: "em"; parts: Inline[] };
 
 const MARKER = /^<!--\s*schema-fase:\s*([a-z]+)\s*-->$/;
+// Un componente interattivo in mezzo al testo: su GitHub il commento non si
+// vede, nella SPA diventa il simulatore.
+const COMPONENT = /^<!--\s*componente:\s*([a-z-]+)\s*-->$/;
+const TABLE_ROW = /^\|.*\|$/;
+const TABLE_RULE = /^\|(\s*:?-+:?\s*\|)+$/;
 const HEADING = /^(#{1,4})\s+(.*)$/;
 const UL = /^[-*]\s+(.*)$/;
 const OL = /^\d+[.)]\s+(.*)$/;
@@ -65,6 +72,23 @@ export function parseMermaidFlow(code: string): FlowStep[] {
   return steps;
 }
 
+function tableCells(row: string): string[] {
+  return row
+    .slice(1, -1)
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+/** L'ancora di un titolo: minuscole, senza accenti, parole unite da trattini. */
+export function slugify(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export function parseMarkdown(source: string): Block[] {
   const lines = source.replace(/\r\n/g, "\n").split("\n");
   const blocks: Block[] = [];
@@ -78,6 +102,25 @@ export function parseMarkdown(source: string): Block[] {
 
     if (trimmed === "") {
       i += 1;
+      continue;
+    }
+
+    const component = COMPONENT.exec(trimmed);
+    if (component) {
+      blocks.push({ kind: "component", name: component[1] ?? "" });
+      i += 1;
+      continue;
+    }
+
+    if (TABLE_ROW.test(trimmed) && TABLE_RULE.test((lines[i + 1] ?? "").trim())) {
+      const header = tableCells(trimmed);
+      const rows: string[][] = [];
+      i += 2;
+      while (i < lines.length && TABLE_ROW.test((lines[i] ?? "").trim())) {
+        rows.push(tableCells((lines[i] ?? "").trim()));
+        i += 1;
+      }
+      blocks.push({ kind: "table", header, rows });
       continue;
     }
 
@@ -166,6 +209,8 @@ export function parseMarkdown(source: string): Block[] {
         inner.startsWith(">") ||
         HEADING.test(inner) ||
         MARKER.test(inner) ||
+        COMPONENT.test(inner) ||
+        (TABLE_ROW.test(inner) && TABLE_RULE.test((lines[i + 1] ?? "").trim())) ||
         UL.test(inner) ||
         OL.test(inner)
       ) {
@@ -216,37 +261,4 @@ export function parseInline(text: string): Inline[] {
     rest = rest.slice(match.index + token.length);
   }
   return out.filter((part) => part.kind !== "text" || part.text !== "");
-}
-
-const REPO_BLOB = "https://github.com/agent-engineering-studio/limen/blob/main";
-
-/**
- * Traduce un link relativo dei Markdown in qualcosa di cliccabile nella SPA.
- *
- * Le pagine si citano a vicenda con percorsi di file: dentro l'applicazione
- * devono diventare rotte, e tutto il resto (codice, LICENSE, altri documenti)
- * deve puntare al repository, altrimenti il link è morto.
- */
-export function resolveHref(href: string, knownSlugs: readonly string[]): string {
-  if (/^(https?:|mailto:|#)/.test(href)) {
-    return href;
-  }
-  const [rawPath, anchor] = href.split("#");
-  const path = rawPath ?? "";
-  const file = path.split("/").pop() ?? "";
-  if (file.endsWith(".md")) {
-    const stem = file.slice(0, -3);
-    const slug = stem === "README" && !path.includes("..") ? "indice" : stem;
-    if (knownSlugs.includes(slug) && !path.startsWith("../..")) {
-      return `#/documentazione/${slug}${anchor ? `#${anchor}` : ""}`;
-    }
-  }
-  // Percorso relativo a docs/divulgazione/, normalizzato senza `..`.
-  const parts = "docs/divulgazione".split("/");
-  for (const segment of path.split("/")) {
-    if (segment === "." || segment === "") continue;
-    if (segment === "..") parts.pop();
-    else parts.push(segment);
-  }
-  return `${REPO_BLOB}/${parts.join("/")}`;
 }

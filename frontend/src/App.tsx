@@ -5,8 +5,7 @@ import { Popover, Switch, UnstyledButton } from "@mantine/core";
 
 import CellPopup from "./components/CellPopup";
 import ComuniBoard from "./components/ComuniBoard";
-import DocsPage from "./components/DocsPage";
-import ExplainerPage from "./components/ExplainerPage";
+import GuidaPage from "./components/GuidaPage";
 import { defaultApiClient } from "./lib/api-client";
 import { RISK_LABEL_IT_BY_LEVEL, RISK_TEXT_BY_LEVEL } from "./lib/risk-colors";
 import type {
@@ -36,24 +35,23 @@ import { OVERLAYS } from "./lib/overlays";
 type Page =
   | "home"
   | "dashboard"
-  | "explainer"
-  | "docs"
+  | "guida"
   | "science"
   | "shadow"
   | "integrations";
 
 function pageFromHash(): Page {
-  // La documentazione ha una sotto-rotta per pagina, quindi il confronto
-  // esatto non basta: `#/documentazione/glossario` è la stessa sezione.
-  if (window.location.hash.startsWith("#/documentazione")) {
-    return "docs";
+  // La guida ha una sotto-rotta per sezione, quindi il confronto esatto non
+  // basta. La vecchia documentazione in sei pagine è confluita nella guida:
+  // i suoi link condivisi aprono quella.
+  const hash = window.location.hash;
+  if (hash.startsWith("#/come-funziona") || hash.startsWith("#/documentazione")) {
+    return "guida";
   }
   switch (window.location.hash) {
     case "#/dashboard":
     case "#/italia": // vecchio deep-link: il quadro nazionale vive in dashboard
       return "dashboard";
-    case "#/come-funziona":
-      return "explainer";
     case "#/modello":
       return "science";
     case "#/diagnostica-ml":
@@ -410,14 +408,9 @@ export function App(): JSX.Element {
           </a>
           <a
             href="#/come-funziona"
-            className={
-              page === "explainer" || page === "science" || page === "shadow" ? "on" : ""
-            }
+            className={page === "guida" || page === "science" || page === "shadow" ? "on" : ""}
           >
-            Cos&apos;è Limen
-          </a>
-          <a href="#/documentazione" className={page === "docs" ? "on" : ""}>
-            Documentazione
+            Come funziona
           </a>
           <a href="#/integrazioni" className={page === "integrations" ? "on" : ""}>
             Integrazioni
@@ -438,13 +431,9 @@ export function App(): JSX.Element {
 
       {page === "home" ? (
         <HomePage />
-      ) : page === "explainer" ? (
+      ) : page === "guida" ? (
         <div className="explainer-area">
-          <ExplainerPage />
-        </div>
-      ) : page === "docs" ? (
-        <div className="explainer-area">
-          <DocsPage />
+          <GuidaPage />
         </div>
       ) : page === "science" ? (
         <div className="explainer-area">

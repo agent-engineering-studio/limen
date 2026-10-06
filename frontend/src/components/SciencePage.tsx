@@ -620,7 +620,7 @@ export function ScienceContent({
 
         <p className="exp-note sci-see-also">
           Approfondimenti:{" "}
-          <a href="#/come-funziona">pagina divulgativa con simulatore</a> ·{" "}
+          <a href="#/come-funziona">guida completa, con il simulatore</a> ·{" "}
           <a
             href="https://github.com/agent-engineering-studio/limen/blob/main/docs/scoring-model.md"
             target="_blank"

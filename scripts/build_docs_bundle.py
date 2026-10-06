@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Porta le pagine di `docs/divulgazione/` dentro il bundle del frontend.
+"""Porta la guida `docs/guida/limen.md` dentro il bundle del frontend.
 
-Perché un file generato invece di importare i Markdown direttamente. La SPA
+Perché un file generato invece di importare il Markdown direttamente. La SPA
 si costruisce con il contesto Docker limitato a `frontend/`: `docs/` non
 esiste dentro l'immagine, quindi un `import "../../docs/..."` funzionerebbe
 in sviluppo e fallirebbe nella build di produzione — il caso peggiore, un
 guasto che si vede solo in fondo. Il generato vive dentro `frontend/src`,
-quindi la build funziona ovunque, e un test verifica che sia allineato ai
-Markdown: la fonte di verità resta `docs/divulgazione/`.
+quindi la build funziona ovunque, e un test verifica che sia allineato al
+Markdown: la fonte di verità resta `docs/guida/limen.md`.
 
 Uso: `make docs-bundle` (oppure `python scripts/build_docs_bundle.py`).
 """
@@ -15,58 +15,24 @@ Uso: `make docs-bundle` (oppure `python scripts/build_docs_bundle.py`).
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = ROOT / "docs" / "divulgazione"
-TARGET = ROOT / "frontend" / "src" / "content" / "divulgazione.ts"
-
-#: L'indice della cartella diventa la pagina di apertura della sezione.
-SLUGS = {"README": "indice"}
-
-HEADING = re.compile(r"^#\s+(.+)$", re.MULTILINE)
-
-
-def slug_for(stem: str) -> str:
-    return SLUGS.get(stem, stem)
+SOURCE = ROOT / "docs" / "guida" / "limen.md"
+TARGET = ROOT / "frontend" / "src" / "content" / "guida.ts"
 
 
 def build() -> str:
-    pages = []
-    for md in sorted(SOURCE.glob("*.md"), key=lambda p: (p.stem != "README", p.stem)):
-        text = md.read_text(encoding="utf-8")
-        match = HEADING.search(text)
-        if match is None:
-            raise SystemExit(f"{md.name}: manca il titolo di primo livello")
-        pages.append(
-            {
-                "slug": slug_for(md.stem),
-                "file": md.name,
-                "title": match.group(1).strip(),
-                "markdown": text,
-            }
-        )
-    body = ",\n".join(
-        "  {\n"
-        + "".join(
-            f"    {key}: {json.dumps(value, ensure_ascii=False)},\n" for key, value in page.items()
-        )
-        + "  }"
-        for page in pages
-    )
+    text = SOURCE.read_text(encoding="utf-8")
+    if not text.startswith("# "):
+        raise SystemExit(f"{SOURCE.name}: manca il titolo di primo livello")
     return (
         "// GENERATO DA scripts/build_docs_bundle.py — non modificare a mano.\n"
-        "// La fonte è docs/divulgazione/*.md; rigenera con `make docs-bundle`.\n"
+        "// La fonte è docs/guida/limen.md; rigenera con `make docs-bundle`.\n"
         "\n"
-        "export interface DocPage {\n"
-        "  slug: string;\n"
-        "  file: string;\n"
-        "  title: string;\n"
-        "  markdown: string;\n"
-        "}\n"
+        f"export const GUIDA_FILE = {json.dumps('docs/guida/' + SOURCE.name)};\n"
         "\n"
-        "export const DOC_PAGES: [DocPage, ...DocPage[]] = [\n" + body + ",\n];\n"
+        f"export const GUIDA_MARKDOWN = {json.dumps(text, ensure_ascii=False)};\n"
     )
 
 
