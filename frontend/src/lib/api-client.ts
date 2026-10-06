@@ -23,6 +23,9 @@ import type {
   JobStatusResponse,
   HealthResponse,
   LatestAssessmentResponse,
+  ProvenienzaResponse,
+  RainModelsResponse,
+  SpiegazioneResponse,
   ReliabilityResponse,
   ShadowSummaryResponse,
 } from "../types";
@@ -147,6 +150,33 @@ export class ApiClient {
       {},
       signal,
     );
+  }
+
+  /** La pioggia a 72 ore sulla cella secondo cinque modelli meteo. */
+  getCellRainModels(cellId: string, signal?: AbortSignal): Promise<RainModelsResponse> {
+    return this.request<RainModelsResponse>(
+      `/api/cell/${encodeURIComponent(cellId)}/rain-models`,
+      {},
+      signal,
+    );
+  }
+
+  /** La spiegazione scritta dall'AI per una regione e un pericolo. */
+  getAoiSpiegazione(
+    aoiId: string,
+    hazard: HazardType,
+    signal?: AbortSignal,
+  ): Promise<SpiegazioneResponse> {
+    return this.request<SpiegazioneResponse>(
+      `/api/aoi/${encodeURIComponent(aoiId)}/spiegazione?hazard=${hazard}`,
+      {},
+      signal,
+    );
+  }
+
+  /** Chi calcola i numeri, con quale meteo, e cosa fanno oggi ML e AI. */
+  getProvenienza(signal?: AbortSignal): Promise<ProvenienzaResponse> {
+    return this.request<ProvenienzaResponse>("/api/provenienza", {}, signal);
   }
 
   /** A che percentile cade un FWI fra i giorni dello stesso mese in quel

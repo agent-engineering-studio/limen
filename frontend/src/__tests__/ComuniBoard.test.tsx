@@ -11,7 +11,14 @@ vi.mock("../lib/api-client", async (importActual) => {
   const vero = await importActual<typeof import("../lib/api-client")>();
   return {
     ...vero,
-    defaultApiClient: { getTopComuni, getForecastSchedule, getForecastAlerts },
+    defaultApiClient: {
+      getTopComuni,
+      getForecastSchedule,
+      getForecastAlerts,
+      // La riga di provenienza del pannello della previsione: qui non è il
+      // soggetto, basta che non risponda.
+      getProvenienza: () => new Promise(() => undefined),
+    },
   };
 });
 

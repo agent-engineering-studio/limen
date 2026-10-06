@@ -118,34 +118,33 @@ def record_from_row(row: Any) -> CellRiskRecord:
     )
 
 
-async def summary_by_run(run_id: int, *, top_k: int = TOP_CELLS) -> AggregateAssessment | None:
-    """Il riassunto di una regione per lo sweep ``run_id``, dallo stato attuale.
+async def summary_for_region(
+    aoi_id: str, hazard: HazardType, *, top_k: int = TOP_CELLS
+) -> AggregateAssessment | None:
+    """Il riassunto di una regione per un pericolo, dallo stato attuale.
 
-    Il briefing asincrono gira minuti dopo lo sweep, in un altro tick e
-    potenzialmente in un altro processo: il `MonitoringContext` non esiste più.
-    Dallo sweep si prendono i metadati — regione, pericolo, orizzonte,
-    versione, il `briefing_it` già memorizzato — ma **conteggi e celle
-    peggiori vengono da `latest_risk`** (#155). Lo sweep orario scrive solo le
-    celle cambiate (#135), quindi le righe di un run sono una parte della
-    regione: la spiegazione dell'incendio in Calabria parlava di «384 celle,
-    nessuna alta» mentre la regione ne ha migliaia e Montegiordano era alta.
-    Le celle non misurate restano fuori dai conteggi, come dall'attenzione:
-    «non so» non è «nessuno».
+    Tutto da `latest_risk`, che è ciò che la mappa disegna, e niente dalle
+    righe di uno sweep: lo sweep orario scrive nello storico solo le celle
+    cambiate (#135), quindi un giro tranquillo non lascia righe — e un
+    riassunto costruito da lì diceva «no rows» proprio quando la regione era
+    ferma, o raccontava «384 celle, nessuna alta» di una regione che ne aveva
+    migliaia (#155). Le celle non misurate restano fuori dai conteggi, come
+    dall'attenzione: «non so» non è «nessuno».
 
-    Ritorna ``None`` se lo sweep non ha lasciato righe (retention, o un run_id
-    inventato).
+    Ritorna ``None`` se la regione non ha ancora uno stato per quel pericolo.
     """
     async with acquire() as conn:
         head = await conn.fetchrow(
             """
-            SELECT ra.hazard_type, ra.horizon, ra.pipeline_version,
-                   ra.computed_at, ra.explanation, g.aoi_id
-            FROM risk_assessments ra
-            JOIN grid_cells g ON g.id = ra.cell_id
-            WHERE ra.run_id = $1
+            SELECT lr.horizon, lr.pipeline_version, lr.computed_at, lr.explanation
+            FROM latest_risk lr
+            JOIN grid_cells g ON g.id = lr.cell_id
+            WHERE g.aoi_id = $1 AND lr.hazard_type = $2
+            ORDER BY lr.computed_at DESC
             LIMIT 1
             """,
-            run_id,
+            aoi_id,
+            hazard.value,
         )
         if head is None:
             return None
@@ -159,8 +158,8 @@ async def summary_by_run(run_id: int, *, top_k: int = TOP_CELLS) -> AggregateAss
             ORDER BY lr.score DESC, lr.cell_id
             LIMIT $3
             """,
-            head["aoi_id"],
-            head["hazard_type"],
+            aoi_id,
+            hazard.value,
             top_k,
         )
         counts = await conn.fetch(
@@ -172,17 +171,16 @@ async def summary_by_run(run_id: int, *, top_k: int = TOP_CELLS) -> AggregateAss
               AND lr.score IS NOT NULL AND COALESCE(lr.measured, true)
             GROUP BY lr.class
             """,
-            head["aoi_id"],
-            head["hazard_type"],
+            aoi_id,
+            hazard.value,
         )
 
-    hazard = HazardType(head["hazard_type"])
     explanation = _coerce_json(head["explanation"])
     by_level = {str(r["class"]): int(r["n"]) for r in counts}
     top_cells = [record_from_row(r) for r in rows]
     valuation = explanation.get("valuation_time")
     return AggregateAssessment(
-        aoi_id=str(head["aoi_id"]),
+        aoi_id=aoi_id,
         hazard_type=hazard,
         horizon=str(head["horizon"]),
         pipeline_version=str(head["pipeline_version"]),
@@ -195,73 +193,14 @@ async def summary_by_run(run_id: int, *, top_k: int = TOP_CELLS) -> AggregateAss
         + by_level.get(RiskLevel.VeryHigh.value, 0),
         cells_by_level=by_level,
         top_cells=top_cells,
-        briefing_it=str(explanation["briefing_it"]) if explanation.get("briefing_it") else None,
     )
-
-
-async def attach_narrative(
-    run_id: int,
-    *,
-    briefing_it: str,
-    analysis: dict[str, Any] | None,
-) -> int:
-    """Aggiungi narrativa e analisi alle righe di uno sweep. Ritorna le righe toccate.
-
-    `explanation || jsonb_build_object(...)`: una fusione, non una
-    sostituzione, così `model_version` e `valuation_time` restano quelli
-    scritti dallo sweep. E soltanto `explanation`: `score`, `class` e `factors`
-    non compaiono nella SET, che è l'invariante "l'LLM non tocca i numeri"
-    scritta in SQL invece che sperata.
-    """
-    payload = json.dumps(analysis, default=str) if analysis is not None else None
-    async with acquire() as conn, conn.transaction():
-        status = await conn.execute(
-            """
-            UPDATE risk_assessments
-            SET explanation = explanation || jsonb_build_object(
-                    'briefing_it', $2::text,
-                    'analysis', $3::jsonb
-                )
-            WHERE run_id = $1
-            """,
-            run_id,
-            briefing_it,
-            payload,
-        )
-        # Lo stesso testo va su `latest_risk`, che dalla #125 è ciò che la
-        # mappa e le API leggono: senza questa riga il briefing resterebbe
-        # nello storico e non lo vedrebbe nessuno. Anche qui solo
-        # `explanation`, e per le sole celle di quello sweep — l'invariante
-        # "l'LLM non tocca i numeri" vale identica sulle due tabelle.
-        # Per `run_id` e non unendo a `risk_assessments` (#135): con lo
-        # storico rado quell'unione troverebbe le sole celle cambiate, e il
-        # briefing arriverebbe a una manciata di celle invece che all'area
-        # intera. `latest_risk.run_id` dice quale sweep ha prodotto lo stato,
-        # che è esattamente l'insieme a cui la narrativa si riferisce.
-        await conn.execute(
-            """
-            UPDATE latest_risk
-            SET explanation = explanation || jsonb_build_object(
-                    'briefing_it', $2::text,
-                    'analysis', $3::jsonb
-                )
-            WHERE run_id = $1
-            """,
-            run_id,
-            briefing_it,
-            payload,
-        )
-    updated = int(status.split()[-1]) if status else 0
-    log.info("assessment.narrative_attached", run_id=run_id, rows=updated)
-    return updated
 
 
 __all__ = [
     "TOP_CELLS",
     "RiskAssessment",
-    "attach_narrative",
     "insert",
     "latest_for_cell",
     "record_from_row",
-    "summary_by_run",
+    "summary_for_region",
 ]

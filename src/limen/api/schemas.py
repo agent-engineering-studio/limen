@@ -69,6 +69,11 @@ class LatestAssessmentResponse(BaseModel):
     #: briefing arriva dopo. Senza questo flag la SPA presenterebbe un
     #: segnaposto come se fosse l'analisi.
     briefing_is_fallback: bool = False
+    #: Il nome del modello sul gateway che ha scritto ``briefing_it``
+    #: (``quality-cloud`` = Claude), e quando. ``None`` quando il testo è
+    #: deterministico: la SPA dice chi ha scritto cosa.
+    briefing_model: str | None = None
+    briefing_written_at: datetime | None = None
     analysis: RiskAnalysisDTO | None = None
 
 

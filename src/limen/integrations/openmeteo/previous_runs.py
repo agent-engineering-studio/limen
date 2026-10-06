@@ -32,6 +32,20 @@ MODELLI: tuple[str, ...] = (
     "ecmwf_aifs025_single",
 )
 
+#: Quanti nodi servono al correttore della pioggia prima di addestrarlo sul
+#: serio: il campione che `limen rain-ensemble fetch` raccoglie a lotti.
+NODI_CORRETTORE = 150
+
+#: Come si chiamano per chi legge la mappa. AIFS è anch'esso intelligenza
+#: artificiale — una rete neurale addestrata sulle rianalisi — e va detto.
+NOMI: dict[str, str] = {
+    "icon_seamless": "ICON (DWD, Germania)",
+    "meteofrance_seamless": "Météo-France",
+    "ecmwf_ifs025": "ECMWF IFS",
+    "gfs_seamless": "GFS (NOAA, USA)",
+    "ecmwf_aifs025_single": "ECMWF AIFS (rete neurale)",
+}
+
 #: Anticipo in giorni → variabile. Niente anticipo 0 (la corsa più recente):
 #: il correttore non lo usa, e oltre dieci serie l'API pubblica conta ogni
 #: richiesta come più chiamate sul tetto che serve anche a GloFAS.

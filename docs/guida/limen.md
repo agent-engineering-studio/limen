@@ -79,7 +79,7 @@ conteggio.
 | **Solo sopra soglia** | Nasconde le celle sotto Moderato: un quarto d'Italia è in classe bassa e coprirebbe la mappa. Le celle non misurate restano visibili |
 | **Livelli** | Contesto da sovrapporre: allerte ufficiali di oggi, frane censite (IFFI), pericolosità PAI, pericolosità idraulica, alluvioni osservate, aree bruciate |
 | **Timeline** Ora / +24 / +48 / +72 h | Scorre la previsione per cella; sotto ogni scadenza c'è il momento vero, e una scadenza già passata lo dice |
-| **Ispettore** (clic su una cella) | Il punteggio di ogni pericolo, le sue componenti, la spiegazione, la pioggia prevista; sul futuro mostra il valore previsto e dichiara che il resto è di adesso |
+| **Ispettore** (clic su una cella) | Il punteggio di ogni pericolo, le sue componenti, la pioggia prevista; sul futuro mostra il valore previsto e dichiara che il resto è di adesso. In fondo, **«Come nasce questo numero»**: chi ha fatto cosa (formula, meteo, ML, AI), la pioggia secondo cinque modelli meteo e la spiegazione della regione scritta dall'AI, con il nome del modello e l'ora |
 | **Ricerca** (⌘K) | Porta la mappa sul comune e ne evidenzia il confine |
 
 ### La lista dei comuni
@@ -315,9 +315,10 @@ gli avvisi previsionali.
 ### Il limite di ogni previsione: i modelli non sono d'accordo
 
 Su Trieste, il 6 ottobre 2026, la pioggia prevista in 72 ore andava da 29 mm
-(GFS) a 108 mm (ICON) secondo il modello meteorologico. Limen oggi legge un
-modello solo, e la forbice non si vede. È il primo lavoro del machine
-learning, descritto qui sotto.
+(GFS) a 93 mm (ECMWF IFS) secondo il modello meteorologico. Il punteggio legge
+un modello solo; l'ispettore della cella mostra la forbice di tutti e cinque,
+così si vede quanto quel numero è incerto. Pesarli bene è il primo lavoro del
+machine learning, descritto qui sotto.
 
 ## Il layer machine learning
 
@@ -381,7 +382,10 @@ un fiume basso; quello dell'incendio che è un pericolo potenziale, non la
 probabilità di un fuoco. Un pericolo senza prompt resta senza spiegazione:
 una voce che racconta le frane parlando di un incendio è peggio del
 silenzio. Una regione si rispiega solo quando la sua classe dominante cambia,
-o dopo 12 ore.
+o dopo 12 ore. La spiegazione si legge nell'ispettore di qualunque cella della
+regione, firmata con il modello che l'ha scritta; se il modello non ha
+risposto, la pagina mostra il testo deterministico e non lo attribuisce
+all'AI.
 
 ### I modelli e dove girano
 

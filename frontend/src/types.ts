@@ -550,3 +550,34 @@ export interface AllertaUfficiale {
   oggi: AllertaGiorno | null;
   domani: AllertaGiorno | null;
 }
+
+/** `GET /api/cell/{id}/rain-models`: la pioggia a 72 ore secondo cinque
+ *  modelli meteo, dal più asciutto al più piovoso. Vuoto se la fonte tace. */
+export interface RainModelsResponse {
+  cell_id: string;
+  hours: number;
+  modelli: { id: string; nome: string; mm: number }[];
+}
+
+/** `GET /api/aoi/{id}/spiegazione`: il testo che l'AI ha scritto per la
+ *  regione. `null` finché non l'ha scritto, o se il modello non ha risposto. */
+export interface SpiegazioneResponse {
+  aoi_id: string;
+  hazard_type: HazardType;
+  spiegazione: {
+    testo: string;
+    modello: string;
+    scritta: string;
+    livello: string;
+    analisi: RiskAnalysisDTO | null;
+  } | null;
+}
+
+/** `GET /api/provenienza`: chi calcola i numeri e cosa fanno oggi ML e AI. */
+export interface ProvenienzaResponse {
+  motore: string;
+  sfidante_ml_attivo: boolean;
+  meteo_modello: string;
+  correttore_pioggia: { stato: string; nodi_raccolti: number; nodi_obiettivo: number };
+  spiegazioni_modello: string | null;
+}

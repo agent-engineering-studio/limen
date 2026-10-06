@@ -18,6 +18,7 @@ from limen.api.jobs import briefing_enrichment as be
 from limen.api.jobs.briefing_enrichment import _candidates
 from limen.config.settings import LLMSettings
 from limen.core.models.hazard import HazardType
+from limen.data.repos import spiegazioni_repo
 from limen.data.repos.job_runs_repo import JobRun
 
 
@@ -105,11 +106,6 @@ def test_min_level_none_takes_every_sweep() -> None:
 # ---------------------------------------------------------------------------
 
 
-class _Assessment:
-    def __init__(self, briefing: str | None = None) -> None:
-        self.briefing_it = briefing
-
-
 class _Analysis:
     def model_dump(self) -> dict[str, Any]:
         return {"driver": "rain", "anomalies": [], "attention_window_hours": 24, "confidence": 0.7}
@@ -121,60 +117,97 @@ class _Analyst:
 
 
 class _Briefer:
+    def __init__(self, testo: str = "Testo del briefing.") -> None:
+        self.testo = testo
+
     async def brief(self, _assessment: Any, *, analysis: Any) -> str:
-        return "Testo del briefing."
+        return self.testo
 
 
-async def test_enrich_one_attaches_briefing_and_analysis(monkeypatch: Any) -> None:
-    attached: dict[str, Any] = {}
+def _esistente(run_id: int, *, ripiego: bool) -> spiegazioni_repo.Spiegazione:
+    return spiegazioni_repo.Spiegazione(
+        aoi_id="it-x",
+        hazard=HazardType.LANDSLIDE,
+        run_id=run_id,
+        livello="High",
+        scritta=datetime(2026, 10, 6, tzinfo=UTC),
+        modello="quality-cloud",
+        ripiego=ripiego,
+        testo="già scritto",
+        analisi=None,
+    )
 
-    async def _summary(run_id: int) -> _Assessment:
-        return _Assessment()
 
-    async def _attach(run_id: int, *, briefing_it: str, analysis: dict[str, Any]) -> int:
-        attached.update(run_id=run_id, briefing_it=briefing_it, analysis=analysis)
-        return 10353
+def _patch_repos(
+    monkeypatch: Any, *, esistente: spiegazioni_repo.Spiegazione | None = None
+) -> dict[str, Any]:
+    scritto: dict[str, Any] = {}
 
-    monkeypatch.setattr(be.assessment_repo, "summary_by_run", _summary)
-    monkeypatch.setattr(be.assessment_repo, "attach_narrative", _attach)
+    async def _summary(aoi_id: str, hazard: HazardType) -> object:
+        return object()
 
-    rows = await be._enrich_one(
-        analyst=_Analyst(),
-        briefer=_Briefer(),
+    async def _leggi(aoi_id: str, hazard: HazardType) -> Any:
+        return esistente
+
+    async def _scrivi(**kw: Any) -> None:
+        scritto.update(kw)
+
+    monkeypatch.setattr(be.assessment_repo, "summary_for_region", _summary)
+    monkeypatch.setattr(be.spiegazioni_repo, "leggi", _leggi)
+    monkeypatch.setattr(be.spiegazioni_repo, "scrivi", _scrivi)
+    monkeypatch.setattr(be, "briefing_di_ripiego", lambda _a: "Testo deterministico.")
+    return scritto
+
+
+async def _enrich(briefer: Any, *, analyst: Any = None, run_id: int = 7) -> int:
+    return await be._enrich_one(
+        analyst=analyst or _Analyst(),
+        briefer=briefer,
         aoi_id="it-basilicata",
         hazard=HazardType.LANDSLIDE,
-        run_id=7,
+        run_id=run_id,
+        livello="High",
+        modello="quality-cloud",
     )
-    assert rows == 10353
-    assert attached["run_id"] == 7
-    assert attached["briefing_it"] == "Testo del briefing."
-    assert attached["analysis"]["driver"] == "rain"
 
 
-async def test_enrich_one_skips_missing_rows_and_already_enriched(monkeypatch: Any) -> None:
-    """Righe assenti (retention) e briefing già presente (tick precedente):
-    in entrambi i casi nessuna chiamata LLM — sono minuti di gateway risparmiati."""
+async def test_la_spiegazione_va_nella_tabella_della_regione(monkeypatch: Any) -> None:
+    scritto = _patch_repos(monkeypatch)
+    assert await _enrich(_Briefer()) == 1
+    assert scritto["aoi_id"] == "it-basilicata"
+    assert scritto["run_id"] == 7
+    assert scritto["testo"] == "Testo del briefing."
+    assert scritto["modello"] == "quality-cloud"
+    assert scritto["ripiego"] is False
+    assert scritto["analisi"]["driver"] == "rain"
 
+
+async def test_un_ripiego_si_salva_ma_non_conta_come_spiegata(monkeypatch: Any) -> None:
+    """Il modello non ha risposto: il testo è quello deterministico. Si salva
+    marcato, così la SPA non lo attribuisce all'AI, e al tick dopo si riprova."""
+    scritto = _patch_repos(monkeypatch)
+    assert await _enrich(_Briefer("Testo deterministico.")) == 0
+    assert scritto["ripiego"] is True
+
+
+async def test_una_regione_senza_stato_o_gia_spiegata_non_chiama_l_llm(monkeypatch: Any) -> None:
     class _NeverCalled:
         async def analyse(self, _a: Any) -> Any:
             raise AssertionError("l'LLM non doveva essere chiamato")
 
-    for answer in (None, _Assessment(briefing="già scritto")):
+    _patch_repos(monkeypatch, esistente=_esistente(1, ripiego=False))
+    assert await _enrich(_Briefer(), analyst=_NeverCalled(), run_id=1) == 0
 
-        async def _summary(run_id: int, answer: Any = answer) -> Any:
-            return answer
+    async def _nessuno(aoi_id: str, hazard: HazardType) -> None:
+        return None
 
-        monkeypatch.setattr(be.assessment_repo, "summary_by_run", _summary)
-        assert (
-            await be._enrich_one(
-                analyst=_NeverCalled(),
-                briefer=_Briefer(),
-                aoi_id="it-x",
-                hazard=HazardType.LANDSLIDE,
-                run_id=1,
-            )
-            == 0
-        )
+    monkeypatch.setattr(be.assessment_repo, "summary_for_region", _nessuno)
+    assert await _enrich(_Briefer(), analyst=_NeverCalled()) == 0
+
+
+async def test_dopo_un_ripiego_lo_stesso_sweep_si_riprova(monkeypatch: Any) -> None:
+    _patch_repos(monkeypatch, esistente=_esistente(7, ripiego=True))
+    assert await _enrich(_Briefer(), run_id=7) == 1
 
 
 class _Settings:

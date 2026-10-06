@@ -3219,3 +3219,65 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
 .guida-testo .sim {
   margin: 1.6em 0;
 }
+
+/* «Come nasce questo numero» nell'ispettore: chi ha fatto cosa. */
+.come-nasce {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.come-nasce .eyebrow { display: block; font-size: 10px; margin: 0 0 6px; }
+.cn-chi {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 3px 10px;
+  margin: 0;
+}
+.cn-chi dt { color: var(--muted); }
+.cn-chi dd { margin: 0; color: var(--ink-soft); }
+.cn-blocco {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+}
+.cn-blocco p { margin: 6px 0 0; color: var(--ink-soft); }
+.cn-nota { font-size: 11.5px; color: var(--muted) !important; }
+.cn-forbice { list-style: none; margin: 0; padding: 0; }
+.cn-forbice li {
+  display: grid;
+  grid-template-columns: minmax(0, 9.5em) 1fr 4.2em;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+.cn-modello { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cn-forbice .mono { text-align: right; }
+.cn-barra {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--panel-raised);
+  overflow: hidden;
+}
+.cn-barra span { display: block; height: 100%; background: var(--hz-flood); }
+.cn-ai summary { cursor: pointer; list-style: none; }
+.cn-ai summary::-webkit-details-marker { display: none; }
+.cn-ai summary .eyebrow { margin-bottom: 2px; }
+.cn-firma { display: block; font-size: 11.5px; color: var(--hz-landslide); }
+.cn-ai summary::after {
+  content: "leggi ▾";
+  font-size: 11px;
+  color: var(--accent);
+}
+.cn-ai[open] summary::after { content: "chiudi ▴"; }
+.cn-analisi { font-size: 12px; }
+.riga-provenienza {
+  margin: 6px 0 8px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.riga-provenienza strong { color: var(--ink-soft); font-weight: 600; }

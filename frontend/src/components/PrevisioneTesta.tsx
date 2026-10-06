@@ -7,6 +7,7 @@ import { defaultApiClient } from "../lib/api-client";
 import { RISK_COLOR_BY_LEVEL } from "../lib/risk-colors";
 import { useForecastSchedule } from "../lib/forecast-schedule";
 import type { ForecastAlertItem, RiskLevel } from "../types";
+import { RigaProvenienza } from "./ComeNasce";
 
 // La testata della previsione, dentro la lista dei comuni e non in un
 // pannello a parte.
@@ -91,6 +92,8 @@ export default function PrevisioneTesta(): JSX.Element {
           <span className="prev-timer mono">prossima {prossimaCella}</span>
         ) : null}
       </div>
+
+      <RigaProvenienza />
 
       {allerte === null ? null : allerte.length === 0 ? (
         <div className="prev-stato is-quiet">
