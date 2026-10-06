@@ -619,38 +619,131 @@ function giornoAllerta(g: AllertaGiorno | null | undefined): string {
  *  letture divergono lo si dice, e si dice quale vale — il 6 ottobre Trieste
  *  era a 0,75 per alluvione sulle 72 ore e in «nessuna allerta» nel
  *  bollettino per oggi e domani. */
+/** Il pericolo di Limen e il rischio del bollettino che parlano della stessa
+ *  cosa. Il bollettino idrogeologico/idraulico non copre gli incendi. */
+const TIPO_BOLLETTINO: Record<string, "idrogeologico" | "idraulico"> = {
+  landslide: "idrogeologico",
+  flood: "idraulico",
+};
+
+const NOME_HAZ: Record<string, string> = {
+  landslide: "frana",
+  flood: "alluvione",
+  wildfire: "incendio",
+};
+
+export interface ConfrontoBollettino {
+  tono: "oltre" | "concorde" | "sotto" | "solo-limen";
+  testo: string;
+}
+
+function fineDomani(emesso: string): number {
+  // Il bollettino copre oggi e domani, ora italiana: basta la mezzanotte di
+  // dopodomani, con un margine che non sposta il giorno.
+  const d = new Date(emesso);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime() + 2 * 86_400_000;
+}
+
+/** Cosa Limen aggiunge al bollettino per questo comune, o dove il bollettino
+ *  è più severo. Il confronto è per tipo di rischio — frane con
+ *  idrogeologico, alluvione con idraulico — mai il pericolo peggiore contro
+ *  il livello complessivo: un incendio alto non contraddice un bollettino
+ *  idrogeologico verde. */
+export function confrontoBollettino(
+  allerta: AllertaUfficiale,
+  comune: Pick<ComuneRisk, "hazards" | "forecast">,
+): ConfrontoBollettino | null {
+  const giorni = [allerta.oggi, allerta.domani].filter((g): g is AllertaGiorno => g != null);
+  const bollettino = (tipo: "idrogeologico" | "idraulico"): number =>
+    Math.max(0, ...giorni.map((g) => Math.max(g[tipo], g.temporali)));
+
+  const oltre: string[] = [];
+  const concordi: string[] = [];
+  const sotto: string[] = [];
+  for (const [hazard, tipo] of Object.entries(TIPO_BOLLETTINO)) {
+    const ora = comune.hazards[hazard];
+    const previsto = comune.forecast?.[hazard];
+    const rangoOra = ora?.measured ? RANGO[ora.class] : 0;
+    const rangoPrevisto = previsto ? RANGO[previsto.class] : 0;
+    const livello = bollettino(tipo);
+    const nome = NOME_HAZ[hazard] ?? hazard;
+    if (Math.max(rangoOra, rangoPrevisto) >= RANGO.High && livello === 0) {
+      const dove = ora && ora.n_alert > 0 ? ` su ${ora.n_alert} celle` : "";
+      const perche =
+        hazard === "flood" && ora?.rain_mm != null ? ` (${Math.round(ora.rain_mm)} mm previsti in 72 h)` : "";
+      const quando =
+        previsto && RANGO[previsto.class] >= RANGO.High && new Date(previsto.target_at).getTime() >= fineDomani(allerta.emesso)
+          ? `, con il picco ${new Date(previsto.target_at).toLocaleDateString("it-IT", { weekday: "short", day: "numeric" })}: oltre i due giorni del bollettino`
+          : "";
+      const stato =
+        ora && rangoOra >= RANGO.High
+          ? `in classe ${ora.class === "VeryHigh" ? "molto alta" : "alta"}`
+          : "prevista in classe alta";
+      oltre.push(`${nome} ${stato}${dove}${perche}${quando}`);
+    } else if (livello > 0 && Math.max(rangoOra, rangoPrevisto) >= RANGO.Moderate) {
+      concordi.push(`${nome}${ora && ora.n_alert > 0 ? `: ${ora.n_alert} celle sopra soglia` : ""}`);
+    } else if (livello >= 2 && Math.max(rangoOra, rangoPrevisto) < RANGO.Moderate) {
+      sotto.push(nome);
+    }
+  }
+  if (oltre.length > 0) {
+    return {
+      tono: "oltre",
+      testo: `Limen vede prima: ${oltre.join("; ")}. Il bollettino di zona non ha allerta: è un segnale locale da tenere d'occhio, non un'allerta.`,
+    };
+  }
+  if (sotto.length > 0) {
+    return {
+      tono: "sotto",
+      testo: `Il bollettino è più severo di Limen per ${sotto.join(" e ")}: segui il bollettino.`,
+    };
+  }
+  if (concordi.length > 0) {
+    return { tono: "concorde", testo: `Limen conferma il bollettino e dice dove — ${concordi.join("; ")}.` };
+  }
+  const fuoco = comune.hazards["wildfire"];
+  if (fuoco?.measured && RANGO[fuoco.class] >= RANGO.High) {
+    return {
+      tono: "solo-limen",
+      testo: "Incendio alto: il bollettino idrogeologico non copre gli incendi, questo segnale è solo di Limen.",
+    };
+  }
+  return null;
+}
+
 export function RigaAllerta({
   allerta,
-  picco,
+  comune,
 }: {
   allerta: AllertaUfficiale | null | undefined;
-  picco: Picco | null;
+  comune: Pick<ComuneRisk, "hazards" | "forecast">;
 }): JSX.Element | null {
   if (!allerta) return null;
   const massima = Math.max(allerta.oggi?.livello ?? 0, allerta.domani?.livello ?? 0);
-  const nostro = picco ? RANGO[picco.level] : 0;
-  const nota =
-    nostro >= RANGO.High && massima === 0
-      ? " · Limen segnala più del bollettino: vale il bollettino"
-      : massima >= 2 && nostro < RANGO.Moderate
-        ? " · il bollettino segnala più di Limen"
-        : "";
+  const confronto = confrontoBollettino(allerta, comune);
   return (
-    <Group gap={6} wrap="nowrap" mt={4} className="cb-allerta" align="baseline">
-      <span
-        className="cb-allerta-punto"
-        style={{ background: COLORE_ALLERTA[massima] }}
-        aria-hidden
-      />
-      <Text span size="xs">
-        <strong>Allerta ufficiale</strong>{" "}
-        <Text span size="xs" c="dimmed">
-          ({allerta.zona})
+    <Box mt={4} className="cb-allerta">
+      <Group gap={6} wrap="nowrap" align="baseline">
+        <span
+          className="cb-allerta-punto"
+          style={{ background: COLORE_ALLERTA[massima] }}
+          aria-hidden
+        />
+        <Text span size="xs">
+          <strong>Allerta ufficiale</strong>{" "}
+          <Text span size="xs" c="dimmed">
+            ({allerta.zona})
+          </Text>
+          : oggi {giornoAllerta(allerta.oggi)} · domani {giornoAllerta(allerta.domani)}
         </Text>
-        : oggi {giornoAllerta(allerta.oggi)} · domani {giornoAllerta(allerta.domani)}
-        {nota ? <span className="cb-allerta-nota">{nota}</span> : null}
-      </Text>
-    </Group>
+      </Group>
+      {confronto ? (
+        <Text size="xs" className={`cb-confronto is-${confronto.tono}`}>
+          {confronto.testo}
+        </Text>
+      ) : null}
+    </Box>
   );
 }
 
@@ -872,7 +965,7 @@ export function ComuniBoard({
                     ))}
                   </Group>
                   <Box className="cb-rientro">
-                    <RigaAllerta allerta={c.allerta_ufficiale} picco={piccoDi(c, false)} />
+                    <RigaAllerta allerta={c.allerta_ufficiale} comune={c} />
                     <RigaPrevisione comune={c} previsti={previsti} etichette={etichette} />
                     <PercheInCima
                       c={c}

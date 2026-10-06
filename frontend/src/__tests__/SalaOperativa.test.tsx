@@ -11,7 +11,7 @@ import { letturaIncendio } from "../components/CellPopup";
 import { RigaAllerta } from "../components/ComuniBoard";
 import { defaultApiClient } from "../lib/api-client";
 import { HazardProvider } from "../lib/hazard";
-import type { ForecastSchedule, HazardsResponse } from "../types";
+import type { ComuneHazard, ForecastSchedule, HazardsResponse } from "../types";
 
 const THREE: HazardsResponse = {
   items: [
@@ -193,34 +193,81 @@ describe("come leggere il numero dell'incendio", () => {
 
 describe("l'allerta ufficiale accanto al nostro numero", () => {
   const nessuna = { valido: "2026-10-06", livello: 0, idrogeologico: 0, idraulico: 0, temporali: 0 };
-
-  it("quando Limen segnala più del bollettino lo dice, e dice quale vale", () => {
-    // Trieste, 6 ottobre 2026: 0,75 per alluvione sulle 72 ore, nessuna
-    // allerta nel bollettino per oggi e domani.
-    const { container } = render(
-      <RigaAllerta
-        allerta={{ zona: "Bacino di Levante / Carso", emesso: "2026-10-05T14:17:00+02:00", oggi: nessuna, domani: nessuna }}
-        picco={{ hazard: "flood", score: 0.75, level: "VeryHigh" }}
-      />,
-    );
-    expect(container.textContent).toContain("Allerta ufficiale");
-    expect(container.textContent).toContain("oggi nessuna");
-    expect(container.textContent).toContain("vale il bollettino");
+  const emesso = "2026-10-06T14:17:00+02:00";
+  const pericolo = (h: Partial<ComuneHazard>): ComuneHazard => ({
+    class: "None",
+    score: 0,
+    priority: 0,
+    n_cells: 40,
+    n_alert: 0,
+    measured: true,
+    ...h,
   });
 
-  it("dice i rischi per cui è in allerta", () => {
+  it("quando Limen vede prima, dice cosa, dove e quando", () => {
+    // Gorizia, 6 ottobre 2026: alluvione alta su 18 celle con 105 mm
+    // previsti in 72 ore, nessuna allerta nel bollettino.
+    const { container } = render(
+      <RigaAllerta
+        allerta={{ zona: "Bacino dell'Isonzo", emesso, oggi: nessuna, domani: nessuna }}
+        comune={{
+          hazards: { flood: pericolo({ class: "High", score: 0.58, n_alert: 18, rain_mm: 105 }) },
+          forecast: {
+            flood: {
+              class: "High",
+              score: 0.6,
+              horizon_h: 72,
+              target_at: "2026-10-09T04:26:00+02:00",
+              priority: 0.6,
+            },
+          },
+        }}
+      />,
+    );
+    const testo = container.textContent ?? "";
+    expect(testo).toContain("Limen vede prima: alluvione in classe alta su 18 celle (105 mm previsti in 72 h)");
+    expect(testo).toContain("oltre i due giorni del bollettino");
+    expect(testo).not.toContain("vale il bollettino");
+  });
+
+  it("un incendio alto non contraddice un bollettino idrogeologico verde", () => {
+    const { container } = render(
+      <RigaAllerta
+        allerta={{ zona: "Zona A", emesso, oggi: nessuna, domani: nessuna }}
+        comune={{ hazards: { wildfire: pericolo({ class: "High", score: 0.5 }) }, forecast: {} }}
+      />,
+    );
+    expect(container.textContent).toContain("il bollettino idrogeologico non copre gli incendi");
+    expect(container.textContent).not.toContain("Limen vede prima");
+  });
+
+  it("quando il bollettino è più severo, si segue il bollettino", () => {
     const { container } = render(
       <RigaAllerta
         allerta={{
           zona: "Zona B",
-          emesso: "2026-10-05T14:17:00+02:00",
-          oggi: { ...nessuna, livello: 1, temporali: 1 },
+          emesso,
+          oggi: { ...nessuna, livello: 2, idrogeologico: 2 },
           domani: nessuna,
         }}
-        picco={{ hazard: "landslide", score: 0.4, level: "Moderate" }}
+        comune={{ hazards: { landslide: pericolo({ class: "Low", score: 0.2 }) }, forecast: {} }}
+      />,
+    );
+    expect(container.textContent).toContain("oggi arancione (idrogeologico)");
+    expect(container.textContent).toContain("Il bollettino è più severo di Limen per frana");
+  });
+
+  it("quando concordano, Limen dice dove", () => {
+    const { container } = render(
+      <RigaAllerta
+        allerta={{ zona: "Zona C", emesso, oggi: { ...nessuna, livello: 1, temporali: 1 }, domani: nessuna }}
+        comune={{
+          hazards: { landslide: pericolo({ class: "Moderate", score: 0.4, n_alert: 3 }) },
+          forecast: {},
+        }}
       />,
     );
     expect(container.textContent).toContain("oggi gialla (temporali)");
-    expect(container.textContent).not.toContain("vale il bollettino");
+    expect(container.textContent).toContain("Limen conferma il bollettino e dice dove — frana: 3 celle sopra soglia");
   });
 });
