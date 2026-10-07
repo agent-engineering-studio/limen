@@ -65,6 +65,12 @@ describe("attacco", () => {
   it("tiene le prime due frasi", () => {
     expect(attacco("Uno. Due! Tre? Quattro.")).toBe("Uno. Due!");
   });
+
+  it("il punto delle migliaia non chiude la frase", () => {
+    expect(attacco("Su 23.214 aree nessuna è alta. Poche sono moderate. Fine.")).toBe(
+      "Su 23.214 aree nessuna è alta. Poche sono moderate.",
+    );
+  });
 });
 
 describe("RegioniPage", () => {
@@ -75,10 +81,12 @@ describe("RegioniPage", () => {
     expect(await screen.findByText("Piemonte")).toBeTruthy();
     const testo = container.textContent ?? "";
     expect(testo).toContain("Allagamenti · molto alto");
-    expect(testo).toContain("Allagamenti: 35 aree in classe alta adesso");
+    expect(testo).toContain("Allagamenti 35 aree in classe alta adesso");
     expect(testo).toContain("oggi nessuna · domani non ancora emessa");
     expect(testo).toContain("Limone Piemonte");
-    expect(testo).toContain("Claude (Anthropic)");
+    // Il modello non si nomina nei racconti: basta il logo in testata.
+    expect(testo).not.toContain("Claude");
+    expect(screen.getByAltText("Anthropic")).toBeTruthy();
     expect(testo).toContain("la pioggia prevista");
     expect(testo).toContain("non l'allerta");
     expect(testo).not.toMatch(/alluvion/i);

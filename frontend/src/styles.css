@@ -3296,42 +3296,55 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
 /* ------------------------------------------------------------------ */
 /* Regioni da monitorare (#/regioni)                                   */
 /* ------------------------------------------------------------------ */
+/* Leggibilità prima di tutto: testo a 15 px, righe corte, spazio fra le
+   schede. È una pagina che si legge, non un cruscotto che si scorre. */
 .regioni {
-  max-width: 1240px;
+  max-width: 1440px;
   margin: 0 auto;
-  padding: 28px 16px 80px;
+  padding: 32px 24px 96px;
+  font-size: 15px;
 }
-.reg-intestazione h2 { font-size: 26px; margin: 0.1em 0 0.3em; }
-.reg-sotto { max-width: 78ch; color: var(--ink-soft); line-height: 1.55; font-size: 14px; }
+.reg-titolo { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.reg-intestazione h2 { font-size: 30px; margin: 0.1em 0 0.3em; }
+.reg-ai-marchio {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.reg-ai-marchio img { height: 13px; width: auto; display: block; }
+.reg-sotto { max-width: 80ch; color: var(--ink-soft); line-height: 1.6; font-size: 15px; }
 .reg-corpo {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 20px;
-  margin-top: 18px;
+  gap: 28px;
+  margin-top: 24px;
 }
 .reg-mappa {
-  height: 340px;
-  border-radius: 12px;
+  height: 380px;
+  border-radius: 14px;
   overflow: hidden;
   border: 1px solid var(--panel-border);
 }
-@media (min-width: 1000px) {
-  .reg-corpo { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); }
-  .reg-mappa { position: sticky; top: 16px; height: calc(100vh - 140px); min-height: 480px; }
+@media (min-width: 1100px) {
+  .reg-corpo { grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); }
+  .reg-mappa { position: sticky; top: 16px; height: calc(100vh - 150px); min-height: 520px; }
 }
-.reg-lista { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.reg-lista { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 .reg-scheda {
   border: 1px solid var(--panel-border);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--panel);
-  padding: 12px 14px;
-  scroll-margin-top: 12px;
+  padding: 18px 22px 20px;
+  scroll-margin-top: 16px;
 }
-.reg-scheda.on { border-color: var(--ink-soft); }
+.reg-scheda.on { border-color: var(--ink-soft); box-shadow: 0 0 0 1px var(--ink-soft); }
 .reg-testa {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
   background: none;
   border: 0;
@@ -3341,37 +3354,53 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   text-align: left;
   flex-wrap: wrap;
 }
-.reg-pos { color: var(--muted); font-size: 12px; min-width: 1.6em; }
-.reg-nome { font-weight: 700; font-size: 16px; flex: 1 1 auto; }
-.reg-quiete { color: var(--muted); font-size: 12px; }
-.reg-numeri { margin: 8px 0 0; padding-left: 1.1em; font-size: 13px; color: var(--ink-soft); }
-.reg-numeri li { margin: 2px 0; }
-.reg-allerta, .reg-comuni { margin: 8px 0 0; font-size: 13px; color: var(--ink-soft); }
+.reg-pos { color: var(--muted); font-size: 13px; min-width: 1.6em; }
+.reg-nome { font-weight: 700; font-size: 20px; flex: 1 1 auto; }
+.reg-testa .level-chip { font-size: 12.5px; padding: 3px 10px; }
+.reg-quiete { color: var(--muted); font-size: 13px; }
+.reg-numeri { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 6px; }
+.reg-numeri li { color: var(--ink-soft); line-height: 1.5; }
+.reg-numeri strong { color: var(--ink); font-weight: 600; margin-right: 4px; }
+.reg-allerta, .reg-comuni { margin: 12px 0 0; color: var(--ink-soft); line-height: 1.5; }
+.reg-allerta .cb-allerta-punto {
+  display: inline-block;
+  vertical-align: baseline;
+  margin-right: 8px;
+}
 .reg-lettera {
   display: inline-block;
-  font-size: 10.5px;
+  min-width: 1.5em;
+  text-align: center;
+  font-size: 11px;
   font-weight: 700;
-  padding: 0 4px;
+  padding: 1px 4px;
+  margin-right: 8px;
   border-radius: 4px;
   border: 1px solid var(--panel-border);
-  color: var(--muted);
+  color: var(--ink-soft);
 }
+.reg-comuni .reg-lettera { margin: 0 0 0 4px; }
 .reg-ai {
-  margin-top: 10px;
-  padding: 10px 12px;
-  border-radius: 8px;
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 10px;
   background: var(--bg);
   border: 1px solid var(--panel-border);
-  font-size: 13px;
-  line-height: 1.55;
+  line-height: 1.65;
 }
 .reg-ai summary { cursor: pointer; list-style: none; }
 .reg-ai summary::-webkit-details-marker { display: none; }
-.reg-ai-titolo { display: block; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
-.reg-ai-firma { display: block; font-size: 11.5px; color: var(--hz-landslide); margin: 2px 0 4px; }
-.reg-ai-attacco { display: block; color: var(--ink-soft); }
+.reg-ai-titolo {
+  display: block;
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.reg-ai-attacco { display: block; color: var(--ink-soft); max-width: 72ch; }
 .reg-ai[open] .reg-ai-attacco { display: none; }
-.reg-ai summary::after { content: "leggi tutto ▾"; display: block; margin-top: 4px; font-size: 11.5px; color: var(--accent); }
+.reg-ai summary::after { content: "leggi tutto ▾"; display: block; margin-top: 6px; font-size: 13px; color: var(--accent); }
 .reg-ai[open] summary::after { content: "chiudi ▴"; }
-.reg-ai p { margin: 6px 0 0; color: var(--ink-soft); }
-.reg-ai-analisi { font-size: 12px; }
+.reg-ai p { margin: 10px 0 0; color: var(--ink-soft); max-width: 72ch; }
+.reg-ai-analisi { font-size: 13.5px; color: var(--ink) !important; }

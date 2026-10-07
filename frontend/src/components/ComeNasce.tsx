@@ -15,23 +15,6 @@ import type {
   RainModelsResponse,
 } from "../types";
 
-/** Il nome di un modello del gateway per chi legge la mappa. */
-export function modelloLeggibile(alias: string): string {
-  switch (alias) {
-    case "quality-cloud":
-      return "Claude (Anthropic)";
-    case "quality-local":
-    case "glm52":
-      return "GLM-5.2, sul nostro server";
-    case "fast":
-    case "chat":
-    case "extract":
-      return "Qwen3, sul nostro server";
-    default:
-      return alias;
-  }
-}
-
 /** La provenienza, chiesta una volta per pagina: non cambia fra due clic. */
 let provenienzaInVolo: Promise<ProvenienzaResponse> | null = null;
 export function useProvenienza(): ProvenienzaResponse | null {
