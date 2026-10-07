@@ -231,6 +231,7 @@ function Indicatore({
       ? `${Math.round(dato.rain_mm)} mm previsti in 72 h, soglia ${Math.round(dato.rain_threshold_mm)}`
       : null;
   const senzaFiumi = dato.discharge_known === false;
+  const rarita = pioggia !== null ? raritaPioggia(dato.rain_volte_anno) : null;
   const stagione = rispettoAlSolito(dato.fwi_percentile, dato.fwi_month);
   // L'incendio è un pericolo potenziale: detto qui, dove il numero si legge
   // per primo, «alto» non suona come un fuoco in corso.
@@ -280,6 +281,9 @@ function Indicatore({
         {pioggia !== null ? (
           <Text span size="xs" c="dimmed" className="cb-pioggia">
             · {pioggia}
+            {rarita ? (
+              <span className={rarita.rara ? "cb-insolito" : undefined}> · {rarita.testo}</span>
+            ) : null}
             {senzaFiumi ? " · fiumi n.d." : ""}
           </Text>
         ) : null}
@@ -307,6 +311,20 @@ const MESI = [
  *  Le classi dell'incendio sono assolute, come quelle di EFFIS: FWI 24 è
  *  «alto» ad agosto come a ottobre, ma a ottobre brucia l'1 % dell'area
  *  dell'anno. `null` senza climatologia: «non lo so», non «nella norma». */
+/** Quanto è rara la pioggia prevista nel suo luogo (ERA5 2016-2025).
+ *  Contesto, non punteggio: «105 mm» a Trieste capita ogni anno, a Bari mai.
+ *  `null` quando non c'è climatologia o la pioggia è ordinaria. */
+export function raritaPioggia(
+  volte: number | null | undefined,
+): { testo: string; rara: boolean } | null {
+  if (volte == null) return null;
+  if (volte >= 1.5) return { testo: `qui capita ~${Math.round(volte)} volte l'anno`, rara: false };
+  if (volte >= 0.5) return { testo: "qui capita circa una volta l'anno", rara: false };
+  if (volte >= 0.1)
+    return { testo: `qui capita una volta ogni ~${Math.round(1 / volte)} anni`, rara: true };
+  return { testo: "qui più rara di una volta in dieci anni", rara: true };
+}
+
 export function rispettoAlSolito(
   percentile: number | null | undefined,
   mese: number | null | undefined,

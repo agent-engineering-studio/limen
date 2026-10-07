@@ -36,6 +36,8 @@ export interface ComuneHazard {
   rain_mm?: number | null;
   rain_threshold_mm?: number | null;
   discharge_known?: boolean | null;
+  /** Solo allagamenti: quante volte l'anno, lì, tre giorni portano quei mm. */
+  rain_volte_anno?: number | null;
   /** Solo incendio: FWI della cella peggiore, mese, percentile nel mese. */
   fwi?: number | null;
   fwi_month?: number | null;

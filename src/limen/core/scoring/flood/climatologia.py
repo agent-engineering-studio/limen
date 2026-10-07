@@ -69,3 +69,17 @@ def livello_del_valore(valore: float, q: Sequence[float]) -> float:
                 q[i] - q[i - 1]
             )
     return 1.0
+
+
+def volte_l_anno(valore: float, q: Sequence[float]) -> float | None:
+    """Quante volte l'anno, in quel luogo, tre giorni portano almeno ``valore``.
+
+    Dai giorni dell'anno sopra quel livello, divisi per tre perché un evento
+    occupa tre somme mobili consecutive. ``None`` quando il valore sta sotto
+    il primo quantile salvato: è pioggia frequente, oltre venti volte l'anno.
+    Zero quando supera il massimo del decennio.
+    """
+    livello = livello_del_valore(valore, q)
+    if valore <= q[0]:
+        return None
+    return (1.0 - livello) * 365.25 / 3.0

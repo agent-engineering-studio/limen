@@ -39,7 +39,7 @@ from limen.core.models.risk import (
     RiskScore,
 )
 from limen.core.scoring.base import ScoringEngine, classify_score
-from limen.core.scoring.flood.trigger import fluvial_trigger, pluvial_trigger
+from limen.core.scoring.flood.trigger import fluvial_trigger, pluvial_trigger, soglie_pioggia
 from limen.core.scoring.regional_thresholds import FloodThresholds
 
 
@@ -71,12 +71,14 @@ class FloodScoringEngine(ScoringEngine[FloodBreakdown]):
             else static.flood_hazard_norm
         )
 
+        soglie = soglie_pioggia(t.pluvial, dyn.flood_rain_quantiles)
         pluvial = pluvial_trigger(
             dyn.flood_forecast_rain_72h_mm,
             soil_moisture=dyn.soil_moisture_0_7,
             imperviousness=static.imperviousness_norm,
             pluvial=t.pluvial,
             imperviousness_cfg=t.imperviousness,
+            soglie=soglie,
         )
         # Cascata incendio → alluvione, sul solo ramo pluviale.
         post_fire = post_fire_flood_multiplier(
@@ -99,6 +101,8 @@ class FloodScoringEngine(ScoringEngine[FloodBreakdown]):
                 mapped=static.flood_hazard_norm is not None,
                 discharge_ratio=dyn.river_discharge_ratio,
                 rain_mm=dyn.flood_forecast_rain_72h_mm,
+                rain_threshold_mm=soglie[0],
+                rain_saturation_mm=soglie[1],
                 post_fire_multiplier=post_fire,
                 months_since_fire=dyn.months_since_fire,
             ),

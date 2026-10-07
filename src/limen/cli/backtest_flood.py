@@ -37,6 +37,8 @@ Env:
 * ``LIMEN_BACKTEST_FLOOD_LEVEL``  — livello che conta come allerta (default ``High``).
 * ``LIMEN_BACKTEST_FLOOD_MODE``   — ``issued`` | ``observed`` | ``both`` (default).
 * ``LIMEN_BACKTEST_FLOOD_NODE_DEG`` — passo del reticolo meteo (default 0.1°).
+* ``LIMEN_BACKTEST_FLOOD_SOGLIE`` — ``locali`` (default: quelle del nodo,
+  se `flood.yaml` le chiede e il nodo ha una climatologia) | ``nazionali``.
 """
 
 from __future__ import annotations
@@ -65,7 +67,7 @@ from limen.core.scoring.regional_thresholds import (
 )
 from limen.data.db import acquire, lifespan_pool
 from limen.data.migrate import run_migrations
-from limen.data.repos import flood_events_repo
+from limen.data.repos import flood_events_repo, pioggia_climatologia_repo
 from limen.data.repos.flood_events_repo import ActivationSummary
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.copernicus_ems.client import catalogue_provenance
@@ -84,6 +86,7 @@ _END_ENV = "LIMEN_BACKTEST_FLOOD_END"
 _LEVEL_ENV = "LIMEN_BACKTEST_FLOOD_LEVEL"
 _MODE_ENV = "LIMEN_BACKTEST_FLOOD_MODE"
 _NODE_ENV = "LIMEN_BACKTEST_FLOOD_NODE_DEG"
+_SOGLIE_ENV = "LIMEN_BACKTEST_FLOOD_SOGLIE"
 
 #: Passo del reticolo meteo. 0.1° (~11 km) come il resto della pipeline flood.
 _DEFAULT_NODE_DEG = 0.1
@@ -649,8 +652,14 @@ def _replay(
     alert_level: RiskLevel,
     thresholds: FloodThresholds,
     engine: FloodScoringEngine,
+    quantili_nodo: Sequence[tuple[float, ...] | None] = (),
 ) -> _Tally:
-    """Rigioca una finestra e restituisce i tallies."""
+    """Rigioca una finestra e restituisce i tallies.
+
+    ``quantili_nodo`` (allineati ai nodi) danno le soglie locali della pioggia;
+    vuoto ⇒ soglie nazionali. Il pre-filtro sulla soglia nazionale resta
+    esatto: le soglie locali non scendono mai sotto di essa (`floor_mm`).
+    """
     tally = _Tally.empty()
     tally.truth = dict(truth)
 
@@ -690,6 +699,9 @@ def _replay(
                     valuation_time=moment,
                     flood_forecast_rain_72h_mm=rain,
                     river_discharge_ratio=ratio,
+                    flood_rain_quantiles=(
+                        quantili_nodo[cell_node[position]] if quantili_nodo else None
+                    ),
                     # NaN è il segnaposto di "il nodo non ha umidità per quel
                     # giorno": il trigger tratta None come a metà fra asciutto
                     # e saturo, che è la scelta giusta e documentata.
@@ -1038,6 +1050,13 @@ async def run() -> int:
                     continue
                 nodes, cell_node = _nodes_from_cells(cells, spacing=node_deg)
                 engine = FloodScoringEngine(thresholds)
+                quantili_nodo: tuple[tuple[float, ...] | None, ...] = ()
+                if os.getenv(_SOGLIE_ENV, "locali") == "locali":
+                    trovati = await pioggia_climatologia_repo.per_nodi(nodes)
+                    quantili_nodo = tuple(
+                        tuple(q) if (q := trovati.get((round(lo, 4), round(la, 4)))) else None
+                        for lo, la in nodes
+                    )
                 span_start = min(w[0] for w in windows)
                 span_end = max(w[1] for w in windows)
                 # Le portate si leggono qui, una volta, sull'arco di **tutte**
@@ -1112,6 +1131,7 @@ async def run() -> int:
                                 alert_level=alert_level,
                                 thresholds=thresholds,
                                 engine=engine,
+                                quantili_nodo=quantili_nodo,
                             )
                         )
                     if not tally.measurable:

@@ -187,13 +187,34 @@ GROUP BY 1
 #: ramo pluviale vale zero — e un «0,00» ripetuto per settimane non dice
 #: quanto manca. Il numero che lo dice è la pioggia prevista contro la soglia.
 _SEGNALI_ALLUVIONE = """
+WITH s AS (
 SELECT cc.istat_code,
        max((lr.factors->>'rain_mm')::float8)               AS rain_mm,
-       bool_or(lr.factors->>'discharge_ratio' IS NOT NULL) AS portata
+       -- La soglia della cella con più pioggia: locale dalla migrazione 065,
+       -- assente nelle righe scritte prima (allora valeva quella nazionale).
+       (array_agg((lr.factors->>'rain_threshold_mm')::float8
+                  ORDER BY (lr.factors->>'rain_mm')::float8 DESC NULLS LAST))[1]
+                                                            AS soglia,
+       bool_or(lr.factors->>'discharge_ratio' IS NOT NULL) AS portata,
+       -- Dove cade la pioggia più alta: il nodo di climatologia più vicino
+       -- dice quanto è rara lì.
+       (array_agg(ST_PointOnSurface(g.geom)
+                  ORDER BY (lr.factors->>'rain_mm')::float8 DESC NULLS LAST))[1] AS punto
 FROM cell_comune cc
 JOIN latest_risk lr ON lr.cell_id = cc.cell_id AND lr.hazard_type = 'flood'
+JOIN grid_cells g ON g.id = cc.cell_id
 WHERE cc.istat_code = ANY($1::text[])
 GROUP BY 1
+)
+SELECT s.istat_code, s.rain_mm, s.soglia, s.portata, n.quantili
+FROM s
+LEFT JOIN LATERAL (
+    SELECT c.quantili FROM pioggia_climatologia c
+    WHERE c.node_lon::float8 BETWEEN ST_X(s.punto) - 0.1 AND ST_X(s.punto) + 0.1
+      AND c.node_lat::float8 BETWEEN ST_Y(s.punto) - 0.1 AND ST_Y(s.punto) + 0.1
+    ORDER BY (c.node_lon::float8 - ST_X(s.punto)) ^ 2 + (c.node_lat::float8 - ST_Y(s.punto)) ^ 2
+    LIMIT 1
+) n ON true
 """
 
 
@@ -211,8 +232,12 @@ async def _segnali_alluvione(conn: Any, istat_codes: list[str]) -> dict[str, dic
     return {
         str(r["istat_code"]): {
             "rain_mm": None if r["rain_mm"] is None else round(float(r["rain_mm"]), 1),
-            "rain_threshold_mm": soglia,
+            "rain_threshold_mm": soglia if r["soglia"] is None else round(float(r["soglia"]), 1),
             "discharge_known": bool(r["portata"]),
+            # Quanto è rara questa pioggia lì: «105 mm» a Trieste capita ogni
+            # anno, a Bari mai nel decennio. ``None`` = climatologia assente o
+            # pioggia frequente.
+            "rain_volte_anno": _volte(r["rain_mm"], r["quantili"]),
         }
         for r in rows
     }
@@ -286,6 +311,15 @@ async def _segnali_incendio(conn: Any, istat_codes: list[str]) -> dict[str, dict
         }
         for r in rows
     }
+
+
+def _volte(rain: float | None, quantili: list[float] | None) -> float | None:
+    from limen.core.scoring.flood.climatologia import volte_l_anno
+
+    if rain is None or quantili is None or rain <= 0:
+        return None
+    volte = volte_l_anno(float(rain), quantili)
+    return None if volte is None else round(volte, 2)
 
 
 def _con_segnali(

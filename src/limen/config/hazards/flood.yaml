@@ -83,6 +83,33 @@ pluvial:
   saturation_mm: 120.0
   window_hours:  72
 
+  # Soglie relative al clima del nodo: provate e **non accese** (7 ottobre 2026).
+  #
+  # A Trieste 105 mm in tre giorni capitano circa una volta l'anno (ERA5
+  # 2016-2025), e con 40 → 120 mm davano «molto alto» a un autunno ordinario
+  # mentre il bollettino regionale non dava allerta. La prova: soglia = il
+  # percentile locale delle somme a 72 ore che 40 mm rappresentano nelle
+  # regioni di taratura (0,965 sui 464 nodi di Emilia-Romagna e Toscana),
+  # saturazione allo stesso rapporto 120/40, mai sotto 40 mm. Backtest
+  # `issued` contro i perimetri Copernicus EMS (`LIMEN_BACKTEST_FLOOD_SOGLIE`):
+  #
+  #                    hit rate        tasso base      FAR
+  #   Emilia-Romagna   76,8 → 76,8 %   7,25 → 7,25 %   invariato
+  #   Lombardia        73,3 → 63,7 %   6,74 → 5,36 %   40,7 → 36,0 %
+  #   Toscana           5,6 →  0,0 %   0,31 → 0,00 %
+  #   altre sei        invariate (soglia al minimo di 40 mm)
+  #
+  # Meno segnali a vuoto, ma alluvioni vere perse in Lombardia e Toscana: il
+  # criterio era «senza perderne», e non passa. Il codice resta (blocco
+  # `local`, `PluvialLocalBlock`), la climatologia pure, e serve già a dire
+  # in pagina quanto è rara una pioggia nel suo luogo. Per riaccenderle basta
+  # questo blocco:
+  #
+  #   local:
+  #     threshold_level:  0.965
+  #     saturation_ratio: 3.0
+  #     floor_mm:         40.0
+
   # Suolo già saturo ⇒ la stessa pioggia scorre invece di infiltrarsi.
   wet_soil: 0.35
   # Suolo completamente asciutto: la prima pioggia se la beve il terreno.

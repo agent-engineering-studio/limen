@@ -707,6 +707,27 @@ class ImperviousnessBlock(_StrictModel):
     max_multiplier: float = Field(..., ge=1.0)
 
 
+class PluvialLocalBlock(_StrictModel):
+    """Soglie della pioggia relative al clima del nodo, invece che nazionali.
+
+    Le soglie in mm sono state tarate su alluvioni vere in Emilia-Romagna e
+    Toscana. Usate tali e quali a Trieste, dove 105 mm in tre giorni capitano
+    ogni anno, danno «molto alto» a un autunno ordinario. Qui la soglia è il
+    valore della distribuzione locale delle somme a 72 ore
+    (`pioggia_climatologia`) al livello che 40 mm rappresentano nella regione
+    di taratura, e la saturazione sta allo stesso rapporto 120/40. Così la
+    taratura resta la stessa dove è stata fatta, e altrove significa la
+    stessa rarità.
+    """
+
+    #: Livello (frazione, 0-1) della distribuzione locale per la soglia.
+    threshold_level: float = Field(..., gt=0.0, lt=1.0)
+    #: Saturazione = soglia × questo rapporto.
+    saturation_ratio: float = Field(..., gt=1.0)
+    #: La soglia locale non scende mai sotto questi mm.
+    floor_mm: float = Field(..., gt=0.0)
+
+
 class PluvialBlock(_StrictModel):
     """Intensity-duration threshold for local (flash) flooding.
 
@@ -726,6 +747,9 @@ class PluvialBlock(_StrictModel):
     wet_soil: float = Field(..., ge=0.0, le=1.0)
     #: Damping applied to a completely dry soil. 1.0 = no damping.
     dry_soil_factor: float = Field(..., ge=0.0, le=1.0)
+    #: Soglie relative al clima del nodo. Assente ⇒ le soglie nazionali qui
+    #: sopra valgono ovunque, come prima.
+    local: PluvialLocalBlock | None = None
 
     @model_validator(mode="after")
     def _saturation_above_threshold(self) -> PluvialBlock:

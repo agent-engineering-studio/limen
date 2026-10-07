@@ -85,7 +85,9 @@ class FloodForecastFetchExecutor(Executor):
             nodes=len(sig.nodes),
             nodes_with_river=sum(1 for r in sig.river_ratio_by_node if r is not None),
         )
+        quantili = await _quantili_per_nodo(list(sig.nodes)) if sig.nodes else ()
         return ctx.with_update(
+            flood_rain_quantiles_by_node=quantili,
             flood_forecast_rain_72h_mm=sig.rain_72h_mm,
             river_discharge_ratio=sig.river_discharge_ratio,
             coastal_surge_norm=sig.coastal_surge_norm,
@@ -93,3 +95,24 @@ class FloodForecastFetchExecutor(Executor):
             flood_rain_by_node=sig.rain_by_node,
             flood_river_ratio_by_node=sig.river_ratio_by_node,
         )
+
+
+async def _quantili_per_nodo(
+    nodi: list[tuple[float, float]],
+) -> tuple[tuple[float, ...] | None, ...]:
+    """La climatologia della pioggia di ciascun nodo, allineata ai nodi.
+
+    Una lettura che fallisce non ferma lo sweep: senza climatologia il motore
+    usa le soglie nazionali, su cui è stato tarato.
+    """
+    from limen.data.repos import pioggia_climatologia_repo
+
+    try:
+        trovati = await pioggia_climatologia_repo.per_nodi(nodi)
+    except Exception as exc:
+        log.warning("integration.degraded", label="pioggia_climatologia", error=str(exc))
+        return ()
+    return tuple(
+        tuple(q) if (q := trovati.get((round(lon, 4), round(lat, 4)))) is not None else None
+        for lon, lat in nodi
+    )

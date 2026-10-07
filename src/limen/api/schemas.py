@@ -149,6 +149,10 @@ class ComuneHazard(BaseModel):
     rain_mm: float | None = None
     rain_threshold_mm: float | None = None
     discharge_known: bool | None = None
+    #: Solo per gli allagamenti: quante volte l'anno, nel punto della pioggia
+    #: più alta, tre giorni portano almeno quei mm (ERA5 2016-2025). Contesto,
+    #: non punteggio: «105 mm» a Trieste capita ogni anno, a Bari mai.
+    rain_volte_anno: float | None = None
     #: Solo per l'incendio: l'FWI della cella peggiore e a che percentile cade
     #: fra i giorni dello stesso mese in quel punto (2016-2025). Le classi sono
     #: assolute, come quelle di EFFIS; questo dice se il valore è insolito per

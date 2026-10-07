@@ -290,6 +290,20 @@ punteggio = suscettibilità idraulica × max(pioggia, fiume)
   con picco a 4 mesi e nulla oltre 18, **solo nelle celle davvero toccate**
   da un perimetro EFFIS o da fuochi FIRMS.
 
+**Quanto è rara quella pioggia lì.** Le soglie della pioggia sono le stesse
+in tutta Italia, e il clima no: 105 mm in tre giorni a Trieste capitano circa
+una volta l'anno, a Bari mai nel decennio 2016-2025. Limen tiene per ogni nodo
+la distribuzione delle piogge a 72 ore di dieci anni (ERA5), e nella lista dei
+comuni scrive accanto ai millimetri quanto spesso capitano in quel punto: «qui
+capita circa una volta l'anno», oppure «qui capita una volta ogni ~8 anni».
+
+Abbiamo anche provato a usare questa distribuzione per **spostare le soglie**
+nei climi piovosi. Misurato sulle alluvioni osservate da satellite, toglieva
+segnali a vuoto ma perdeva alluvioni vere: in Lombardia il 73 % degli eventi
+segnalati scendeva al 64 %. Per un sistema che serve ad anticipare, perdere
+eventi è il difetto peggiore, quindi le soglie restano quelle tarate e la
+rarità resta un'informazione accanto al numero.
+
 > Il numero degli allagamenti **guarda avanti**: può essere alto sotto un cielo
 > sereno, se il peggioramento è atteso nei prossimi tre giorni. Per questo la
 > mappa scrive «prossime 72 h» e non «adesso».
