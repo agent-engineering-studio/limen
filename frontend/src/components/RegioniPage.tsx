@@ -213,6 +213,8 @@ function MappaRegioni({
   const mappa = useRef<maplibregl.Map | null>(null);
   const onScegliRef = useRef(onScegli);
   onScegliRef.current = onScegli;
+  const sceltaRef = useRef(scelta);
+  sceltaRef.current = scelta;
 
   const dati = useMemo(
     () => ({
@@ -272,7 +274,7 @@ function MappaRegioni({
             type: "line",
             source: "aree",
             paint: { "line-color": "#ffffff", "line-width": 2.5 },
-            filter: ["==", ["get", "aoi_id"], ""],
+            filter: ["==", ["get", "aoi_id"], sceltaRef.current ?? ""],
           },
           {
             id: "reg-lettera",
@@ -305,8 +307,18 @@ function MappaRegioni({
     };
   }, [dati]);
 
+  // Solo a stile caricato: prima MapLibre lancia «Style is not done
+  // loading», e un'eccezione in un effetto smontava l'intera applicazione —
+  // la pagina restava nera. Prima del caricamento basta il filtro scritto
+  // nello stile alla creazione.
   useEffect(() => {
-    mappa.current?.setFilter("reg-scelta", ["==", ["get", "aoi_id"], scelta ?? ""]);
+    const map = mappa.current;
+    if (!map) return;
+    const applica = (): void => {
+      map.setFilter("reg-scelta", ["==", ["get", "aoi_id"], scelta ?? ""]);
+    };
+    if (map.isStyleLoaded()) applica();
+    else map.once("load", applica);
   }, [scelta]);
 
   return (
