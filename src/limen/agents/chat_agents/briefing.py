@@ -36,8 +36,10 @@ from limen.knowledge.schema import GroundingQuery, GroundingResult
 log = get_logger(__name__)
 
 
-MIN_WORDS = 150
-MAX_WORDS = 250
+# Un racconto che spiega i concetti, non un elenco di numeri: più lungo del
+# riassunto di prima, ma ancora leggibile in due minuti.
+MIN_WORDS = 220
+MAX_WORDS = 400
 # Regex captures word-like runs including hyphenated forms (e.g. "post-incendio").
 _WORD_RE = re.compile(r"[\w\-']+", re.UNICODE)
 
@@ -306,7 +308,8 @@ class BriefingAgent:
             role="user",
             content=(
                 f"Il briefing precedente era di {words} parole. "
-                "Espandi il contenuto fino a stare nell'intervallo 150-250 parole, "
+                "Espandi il contenuto fino a stare nell'intervallo "
+                f"{MIN_WORDS}-{MAX_WORDS} parole, "
                 "**senza introdurre nuovi numeri** non presenti nei dati. "
                 "Mantieni stile e regole."
             ),

@@ -117,7 +117,7 @@ conteggio.
 | **Timeline** Ora / +24 / +48 / +72 h | Scorre la previsione per cella; sotto ogni scadenza c'è il momento vero, e una scadenza già passata lo dice |
 | **Ispettore** (clic su una cella) | Il punteggio di ogni pericolo, le sue componenti, la pioggia prevista; sul futuro mostra il valore previsto e dichiara che il resto è di adesso. In fondo, **«Come nasce questo numero»**: chi ha fatto cosa (formula, meteo, ML, AI), la pioggia secondo cinque modelli meteo e il link al racconto della regione in «Regioni da monitorare» |
 | **Ricerca** (⌘K) | Porta la mappa sul comune e ne evidenzia il confine |
-| **Regioni da monitorare** (menu) | Le venti regioni in ordine di pericolo stimato, con l'allerta ufficiale, i comuni da guardare e il racconto dell'AI di ciascuna |
+| **Regioni da monitorare** (menu) | Le venti regioni in ordine di pericolo stimato, con l'allerta ufficiale, i comuni da guardare e il racconto dell'AI di ciascuna; il rapporto si scarica in PDF, per tutta Italia o per una regione |
 
 ### La lista dei comuni
 

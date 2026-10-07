@@ -146,7 +146,7 @@ async def test_briefing_trims_overlong_response() -> None:
 
 async def test_briefing_regenerates_when_too_short() -> None:
     short = "Solo poche parole."
-    long_ok = " ".join(["alfa"] * 200)
+    long_ok = " ".join(["alfa"] * 300)
     client = StubChatClient(canned_responses=[short, long_ok])
     agent = BriefingAgent(client)
     text = await agent.brief(_assessment())

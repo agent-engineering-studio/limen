@@ -163,6 +163,13 @@ function Scheda({
         {r.allerta?.domani != null ? ALLERTA[r.allerta.domani] : "non ancora emessa"}
       </p>
 
+      <a
+        className="reg-pdf-regione"
+        href={`${config.apiUrl.replace(/\/+$/, "")}/api/regioni/rapporto.pdf?aoi=${encodeURIComponent(r.aoi_id)}`}
+        download
+      >
+        PDF di questa regione
+      </a>
       {r.comuni.length > 0 ? (
         <p className="reg-comuni">
           Comuni da guardare:{" "}
@@ -374,6 +381,13 @@ export default function RegioniPage(): JSX.Element {
         <p className="exp-eyebrow">Sala operativa</p>
         <div className="reg-titolo">
           <h2>Regioni da monitorare</h2>
+          <a
+            className="reg-pdf"
+            href={`${config.apiUrl.replace(/\/+$/, "")}/api/regioni/rapporto.pdf`}
+            download
+          >
+            Scarica il rapporto (PDF)
+          </a>
           <span className="reg-ai-marchio">
             Racconti scritti con
             <img src={`${import.meta.env.BASE_URL}brand/anthropic-logo-ivory.svg`} alt="Anthropic" />
