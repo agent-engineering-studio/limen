@@ -94,6 +94,9 @@ async def run() -> int:
                 """
             )
             tagged = await conn.fetchval("SELECT COUNT(*) FROM cell_comune")
+            # I comuni troppo piccoli per contenere il centro di una cella
+            # leggono quelle che intersecano (#152).
+            await conn.execute("SELECT refresh_cell_comune_extra()")
         async with acquire() as conn:
             # refresh_mv_comune_risk() directly, not the latest-risk chain:
             # that one debounces to once per 5 minutes, so right after a sweep

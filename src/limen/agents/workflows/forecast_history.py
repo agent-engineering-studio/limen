@@ -81,32 +81,32 @@ FROM unnest($3::text[], $4::float8[], $5::text[], $6::float8[])
 
 
 def per_comune(
-    cell_results: list[CellRiskRecord], comune_of: dict[str, str]
+    cell_results: list[CellRiskRecord], comuni_of: dict[str, list[str]]
 ) -> dict[str, tuple[float, str, float | None]]:
     """Pure: per comune, il punteggio più alto, la sua classe e la pioggia.
 
     Tutte le celle, non solo quelle sopra soglia: è il punto della tabella.
     La pioggia c'è solo per l'alluvione — è il suo breakdown a portarla — e
-    per gli altri pericoli resta ``None``.
+    per gli altri pericoli resta ``None``. Una cella può valere per più
+    comuni: quella che contiene il centro e, per i comuni troppo piccoli per
+    averne una propria (#152), quelli che interseca.
     """
     from limen.core.models.risk import FloodBreakdown
 
     out: dict[str, tuple[float, str, float | None]] = {}
     for c in cell_results:
-        istat = comune_of.get(c.cell_id)
-        if istat is None:
-            continue
         pioggia = c.breakdown.rain_mm if isinstance(c.breakdown, FloodBreakdown) else None
-        corrente = out.get(istat)
-        if corrente is None:
-            out[istat] = (float(c.score), c.level.value, pioggia)
-            continue
-        punteggio, classe, p = corrente
-        if float(c.score) > punteggio:
-            punteggio, classe = float(c.score), c.level.value
-        if pioggia is not None:
-            p = pioggia if p is None else max(p, pioggia)
-        out[istat] = (punteggio, classe, p)
+        for istat in comuni_of.get(c.cell_id, []):
+            corrente = out.get(istat)
+            if corrente is None:
+                out[istat] = (float(c.score), c.level.value, pioggia)
+                continue
+            punteggio, classe, p = corrente
+            if float(c.score) > punteggio:
+                punteggio, classe = float(c.score), c.level.value
+            if pioggia is not None:
+                p = pioggia if p is None else max(p, pioggia)
+            out[istat] = (punteggio, classe, p)
     return out
 
 
@@ -172,10 +172,13 @@ async def persist_forecast_run(
             [c.level.value for c in keep],
         )
         righe = await conn.fetch(
-            "SELECT cell_id, istat_code FROM cell_comune WHERE cell_id = ANY($1::text[])",
+            "SELECT cell_id, istat_code FROM cell_comune_tutte WHERE cell_id = ANY($1::text[])",
             [c.cell_id for c in cell_results],
         )
-        comuni = per_comune(cell_results, {str(r["cell_id"]): str(r["istat_code"]) for r in righe})
+        comuni_of: dict[str, list[str]] = {}
+        for r in righe:
+            comuni_of.setdefault(str(r["cell_id"]), []).append(str(r["istat_code"]))
+        comuni = per_comune(cell_results, comuni_of)
         if comuni:
             codici = list(comuni)
             await conn.execute(_COMUNE_DELETE_SQL, hazard.value, horizon_h, codici)
