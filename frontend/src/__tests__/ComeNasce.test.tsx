@@ -5,7 +5,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import ComeNasce, { modelloLeggibile, RigaProvenienza } from "../components/ComeNasce";
+import ComeNasce, { RigaProvenienza } from "../components/ComeNasce";
 import { defaultApiClient } from "../lib/api-client";
 import type { ProvenienzaResponse, RainModelsResponse } from "../types";
 
@@ -30,13 +30,6 @@ const MODELLI: RainModelsResponse = {
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.spyOn(defaultApiClient, "getProvenienza").mockResolvedValue(PROVENIENZA);
-});
-
-describe("modelloLeggibile", () => {
-  it("dà un nome umano ai modelli del gateway", () => {
-    expect(modelloLeggibile("quality-cloud")).toBe("Claude (Anthropic)");
-    expect(modelloLeggibile("sconosciuto")).toBe("sconosciuto");
-  });
 });
 
 describe("ComeNasce", () => {

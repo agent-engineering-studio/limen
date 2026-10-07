@@ -18,7 +18,6 @@ import { config } from "../lib/env";
 import { COLORE_ALLERTA } from "../lib/overlays";
 import { RISK_COLOR_BY_LEVEL, RISK_LABEL_IT_BY_LEVEL, RISK_SCURE } from "../lib/risk-colors";
 import type { HazardType, RegioneMonitorata } from "../types";
-import { modelloLeggibile } from "./ComeNasce";
 
 const ROUTE = "#/regioni";
 
@@ -70,16 +69,20 @@ function numero(n: number): string {
 
 /** Le prime frasi di un testo: la scheda non deve diventare un muro. */
 export function attacco(testo: string, frasi = 2): string {
-  const parti = testo.replace(/\s+/g, " ").match(/[^.!?]+[.!?]+/g) ?? [testo];
-  return parti
+  // Una frase finisce su . ! ? seguiti da spazio e maiuscola: il punto delle
+  // migliaia («23.214 aree») non chiude niente, e prima troncava il testo a
+  // «Su 23.».
+  return testo
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý«"])/)
     .slice(0, frasi)
-    .map((p) => p.trim())
     .join(" ");
 }
 
 /** Le righe dei numeri: un pericolo compare se ha qualcosa da dire. */
-function righePericoli(r: RegioneMonitorata): string[] {
-  const out: string[] = [];
+function righePericoli(r: RegioneMonitorata): { hazard: HazardType; testo: string }[] {
+  const out: { hazard: HazardType; testo: string }[] = [];
   for (const h of ["flood", "landslide", "wildfire"] as HazardType[]) {
     const ora = r.pericoli[h];
     const poi = r.previsto[h];
@@ -91,7 +94,7 @@ function righePericoli(r: RegioneMonitorata): string[] {
         `picco previsto ${RISK_LABEL_IT_BY_LEVEL[poi.classe].toLowerCase()} ${giorno(poi.target_at)}`,
       );
     }
-    if (parti.length > 0) out.push(`${NOME_PERICOLO[h]}: ${parti.join(" · ")}`);
+    if (parti.length > 0) out.push({ hazard: h, testo: parti.join(" · ") });
   }
   return out;
 }
@@ -139,7 +142,12 @@ function Scheda({
       {righe.length > 0 ? (
         <ul className="reg-numeri">
           {righe.map((t) => (
-            <li key={t}>{t}</li>
+            <li key={t.hazard}>
+              <span className="reg-lettera" aria-hidden>
+                {LETTERA[t.hazard]}
+              </span>
+              <strong>{NOME_PERICOLO[t.hazard]}</strong> {t.testo}
+            </li>
           ))}
         </ul>
       ) : null}
@@ -177,10 +185,7 @@ function Scheda({
           <details key={h} className="reg-ai" open={scelta && h === p?.hazard}>
             <summary>
               <span className="reg-ai-titolo">
-                {NOME_PERICOLO[h]} · il racconto dell&apos;AI
-              </span>
-              <span className="reg-ai-firma">
-                {modelloLeggibile(s.modello)} · {ora(s.scritta)}
+                {NOME_PERICOLO[h]} · il racconto dell&apos;AI · {ora(s.scritta)}
               </span>
               <span className="reg-ai-attacco">{attacco(s.testo)}</span>
             </summary>
@@ -367,7 +372,13 @@ export default function RegioniPage(): JSX.Element {
     <div className="regioni">
       <header className="reg-intestazione">
         <p className="exp-eyebrow">Sala operativa</p>
-        <h2>Regioni da monitorare</h2>
+        <div className="reg-titolo">
+          <h2>Regioni da monitorare</h2>
+          <span className="reg-ai-marchio">
+            Racconti scritti con
+            <img src={`${import.meta.env.BASE_URL}brand/anthropic-logo-ivory.svg`} alt="Anthropic" />
+          </span>
+        </div>
         <p className="reg-sotto">
           Le regioni in ordine di pericolo stimato, adesso e nelle prossime 72 ore. L&apos;ordine
           lo decidono i numeri; il racconto di ogni regione è scritto dall&apos;AI e non cambia

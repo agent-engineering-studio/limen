@@ -115,7 +115,7 @@ conteggio.
 | **Solo sopra soglia** | Nasconde le celle sotto Moderato: un quarto d'Italia è in classe bassa e coprirebbe la mappa. Le celle non misurate restano visibili |
 | **Livelli** | Contesto da sovrapporre: allerte ufficiali di oggi, frane censite (IFFI), pericolosità PAI, pericolosità idraulica, alluvioni osservate, aree bruciate |
 | **Timeline** Ora / +24 / +48 / +72 h | Scorre la previsione per cella; sotto ogni scadenza c'è il momento vero, e una scadenza già passata lo dice |
-| **Ispettore** (clic su una cella) | Il punteggio di ogni pericolo, le sue componenti, la pioggia prevista; sul futuro mostra il valore previsto e dichiara che il resto è di adesso. In fondo, **«Come nasce questo numero»**: chi ha fatto cosa (formula, meteo, ML, AI), la pioggia secondo cinque modelli meteo e la spiegazione della regione scritta dall'AI, con il nome del modello e l'ora |
+| **Ispettore** (clic su una cella) | Il punteggio di ogni pericolo, le sue componenti, la pioggia prevista; sul futuro mostra il valore previsto e dichiara che il resto è di adesso. In fondo, **«Come nasce questo numero»**: chi ha fatto cosa (formula, meteo, ML, AI), la pioggia secondo cinque modelli meteo e il link al racconto della regione in «Regioni da monitorare» |
 | **Ricerca** (⌘K) | Porta la mappa sul comune e ne evidenzia il confine |
 | **Regioni da monitorare** (menu) | Le venti regioni in ordine di pericolo stimato, con l'allerta ufficiale, i comuni da guardare e il racconto dell'AI di ciascuna |
 
@@ -466,8 +466,8 @@ probabilità di un fuoco. Un pericolo senza prompt resta senza spiegazione:
 una voce che racconta le frane parlando di un incendio è peggio del
 silenzio. Una regione si rispiega solo quando la sua classe dominante cambia,
 o dopo 12 ore. La spiegazione si legge nella pagina **Regioni da monitorare**, una
-volta per regione e accanto ai numeri da cui nasce, firmata con il modello
-che l'ha scritta. L'ordine delle regioni lo decidono i numeri — la classe più
+volta per regione e accanto ai numeri da cui nasce, con l'ora in cui è stata
+scritta; il marchio di chi fornisce il modello sta in testata. L'ordine delle regioni lo decidono i numeri — la classe più
 alta, adesso o prevista, poi le aree in classe alta —: l'AI racconta una
 regione, non la sceglie. Se il modello non ha risposto, il testo non viene
 attribuito all'AI.
