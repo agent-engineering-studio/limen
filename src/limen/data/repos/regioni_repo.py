@@ -55,7 +55,7 @@ WITH c AS (
            (array_agg(lr.hazard_type::text ORDER BY lr.score DESC))[1] AS hazard,
            count(*) AS alte
     FROM latest_risk lr
-    JOIN cell_comune cc ON cc.cell_id = lr.cell_id
+    JOIN cell_comune_tutte cc ON cc.cell_id = lr.cell_id
     WHERE COALESCE(lr.measured, true) AND lr.class IN ('High', 'VeryHigh')
     GROUP BY 1
 ), r AS (

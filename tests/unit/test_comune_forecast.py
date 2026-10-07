@@ -251,12 +251,30 @@ def test_la_previsione_per_comune_tiene_anche_lo_zero() -> None:
 
     out = per_comune(
         [cella("a", 0.0, 3.2), cella("b", 0.0, 12.6), cella("c", 0.0, None)],
-        {"a": "065001", "b": "065001", "c": "065002"},
+        {"a": ["065001"], "b": ["065001"], "c": ["065002"]},
     )
 
     # Zero, ma c'è: e con la pioggia più alta fra le celle del comune.
     assert out["065001"] == (0.0, "None", 12.6)
     assert out["065002"] == (0.0, "None", None)
+
+
+def test_una_cella_vale_anche_per_il_comune_troppo_piccolo() -> None:
+    """#152: Atrani non contiene il centro di nessuna cella e legge quella che
+    lo interseca, che appartiene anche ad Amalfi."""
+    from types import SimpleNamespace
+
+    from limen.agents.workflows.forecast_history import per_comune
+    from limen.core.models.risk import FloodBreakdown, RiskLevel
+
+    cella: Any = SimpleNamespace(
+        cell_id="x",
+        score=0.6,
+        level=RiskLevel.High,
+        breakdown=FloodBreakdown(susceptibility=0.8, pluvial=0.7, fluvial=0.0, rain_mm=90.0),
+    )
+    out = per_comune([cella], {"x": ["065006", "065011"]})
+    assert out["065006"] == out["065011"] == (0.6, "High", 90.0)
 
 
 def test_le_celle_senza_comune_restano_fuori() -> None:
