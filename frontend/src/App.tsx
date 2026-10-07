@@ -5,6 +5,7 @@ import { Popover, Switch, UnstyledButton } from "@mantine/core";
 
 import CellPopup from "./components/CellPopup";
 import ComuniBoard from "./components/ComuniBoard";
+import ErroreLocale from "./components/ErroreLocale";
 import GuidaPage from "./components/GuidaPage";
 import RegioniPage from "./components/RegioniPage";
 import { defaultApiClient } from "./lib/api-client";
@@ -439,31 +440,33 @@ export function App(): JSX.Element {
         <FreshnessBadge />
       </header>
 
-      {page === "home" ? (
-        <HomePage />
-      ) : page === "regioni" ? (
-        <div className="explainer-area">
-          <RegioniPage />
-        </div>
-      ) : page === "guida" ? (
-        <div className="explainer-area">
-          <GuidaPage />
-        </div>
-      ) : page === "science" ? (
-        <div className="explainer-area">
-          <SciencePage />
-        </div>
-      ) : page === "shadow" ? (
-        <div className="explainer-area">
-          <ShadowDiagnosticsPage />
-        </div>
-      ) : page === "integrations" ? (
-        <div className="explainer-area">
-          <IntegrationsPage />
-        </div>
-      ) : (
-        dashboard
-      )}
+      <ErroreLocale chiave={page}>
+        {page === "home" ? (
+          <HomePage />
+        ) : page === "regioni" ? (
+          <div className="explainer-area">
+            <RegioniPage />
+          </div>
+        ) : page === "guida" ? (
+          <div className="explainer-area">
+            <GuidaPage />
+          </div>
+        ) : page === "science" ? (
+          <div className="explainer-area">
+            <SciencePage />
+          </div>
+        ) : page === "shadow" ? (
+          <div className="explainer-area">
+            <ShadowDiagnosticsPage />
+          </div>
+        ) : page === "integrations" ? (
+          <div className="explainer-area">
+            <IntegrationsPage />
+          </div>
+        ) : (
+          dashboard
+        )}
+      </ErroreLocale>
     </div>
   );
 }

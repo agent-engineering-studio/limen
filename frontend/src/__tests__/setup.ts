@@ -46,6 +46,12 @@ vi.mock("maplibre-gl", () => {
     setLayoutProperty() {}
     setPaintProperty() {}
     setFilter() {}
+    isStyleLoaded() {
+      return false;
+    }
+    once() {
+      return this;
+    }
   }
   return {
     default: { Map: FakeMap, NavigationControl: class {}, Popup: class {} },
@@ -82,3 +88,7 @@ if (!("ResizeObserver" in window)) {
   }
   (window as unknown as { ResizeObserver: unknown }).ResizeObserver = ResizeObserverStub;
 }
+
+// jsdom non implementa lo scorrimento: le pagine con una sotto-rotta (guida,
+// regioni) portano in vista la sezione chiesta.
+Element.prototype.scrollIntoView = function scrollIntoView(): void {};

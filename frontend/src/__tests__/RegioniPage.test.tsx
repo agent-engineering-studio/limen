@@ -93,3 +93,21 @@ describe("RegioniPage", () => {
     expect(await screen.findByRole("alert")).toBeTruthy();
   });
 });
+
+describe("RegioniPage e la mappa", () => {
+  it("non tocca i filtri prima che lo stile sia caricato", async () => {
+    // Il 7 ottobre 2026 la pagina era nera: `setFilter` prima del caricamento
+    // dello stile lancia in MapLibre, e l'eccezione smontava l'applicazione.
+    const maplibre = (await import("maplibre-gl")).default;
+    const spia = vi
+      .spyOn(maplibre.Map.prototype, "setFilter")
+      .mockImplementation(() => {
+        throw new Error("Style is not done loading.");
+      });
+    window.location.hash = "#/regioni/it-piemonte";
+    vi.spyOn(defaultApiClient, "getRegioni").mockResolvedValue({ regioni: [PIEMONTE, MOLISE] });
+    render(<RegioniPage />);
+    expect(await screen.findByText("Piemonte")).toBeTruthy();
+    expect(spia).not.toHaveBeenCalled();
+  });
+});
