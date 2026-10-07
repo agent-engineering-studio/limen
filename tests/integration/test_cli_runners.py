@@ -14,6 +14,7 @@ import os
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import cast
 
 import httpx
 import pytest
@@ -171,8 +172,14 @@ async def test_backtest_runs(
     os.chdir(tmp_path)
     try:
         with respx.mock(assert_all_called=False) as mock:
-            mock.get(FORECAST_URL).mock(return_value=httpx.Response(200, json=_hourly_payload()))
-            mock.get(ARCHIVE_URL).mock(return_value=httpx.Response(200, json=_archive_payload()))
+            # Almeno un'ora di pioggia: con lo zero ovunque il backtest si
+            # ferma, perché misurerebbe la sola metà statica del motore (#122).
+            piovoso = _hourly_payload()
+            cast(dict[str, list[float]], piovoso["hourly"])["precipitation"][0] = 4.0
+            mock.get(FORECAST_URL).mock(return_value=httpx.Response(200, json=piovoso))
+            mock.get(ARCHIVE_URL).mock(
+                return_value=httpx.Response(200, json={**piovoso, **_archive_payload()})
+            )
             rc = await run_backtest()
     finally:
         os.chdir(cwd_before)
