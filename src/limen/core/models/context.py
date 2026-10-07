@@ -129,6 +129,9 @@ class MonitoringContext(BaseModel):
     flood_nodes: Sequence[tuple[float, float]] = Field(default_factory=tuple)
     flood_rain_by_node: Sequence[float | None] = Field(default_factory=tuple)
     flood_river_ratio_by_node: Sequence[float | None] = Field(default_factory=tuple)
+    #: Quantili della pioggia a 72 ore per nodo (migrazione 065), allineati
+    #: a ``flood_nodes``; ``None`` dove il nodo non ha climatologia.
+    flood_rain_quantiles_by_node: Sequence[tuple[float, ...] | None] = Field(default_factory=tuple)
     # Fase 2 (#62) — la catena FWI del giorno, per nodo del reticolo globale.
     # Popolata dallo step FwiUpdate solo nel workflow incendio; l'assembler dà
     # a ogni cella la catena del nodo più vicino. `None` in una posizione =

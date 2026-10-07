@@ -54,6 +54,7 @@ type Pericolo = {
   rain_mm?: number;
   rain_threshold_mm?: number;
   discharge_known?: boolean;
+  rain_volte_anno?: number | null;
   fwi?: number;
   fwi_month?: number;
   fwi_percentile?: number | null;
@@ -193,6 +194,25 @@ describe("ComuniBoard", () => {
     await waitFor(() => expect(screen.getByText("Montegiordano")).toBeInTheDocument());
     expect(container.textContent).toContain("FWI 24 · insolito per ottobre (96°)");
     expect(container.textContent).toContain("nella norma per ottobre");
+  });
+
+  it("gli allagamenti dicono quanto è rara la pioggia nel suo luogo", async () => {
+    // Trieste e Ferriere, 7 ottobre 2026: la stessa pioggia è ordinaria in
+    // un posto e rara nell'altro, e il numero da solo non lo dice.
+    getTopComuni.mockResolvedValue({
+      comuni: [
+        comune("Limone Piemonte", {
+          flood: { class: "VeryHigh", n_cells: 71, n_alert: 31, rain_mm: 119, rain_threshold_mm: 40, rain_volte_anno: 0.73 },
+        }),
+        comune("Ferriere", {
+          flood: { class: "VeryHigh", n_cells: 40, n_alert: 20, rain_mm: 122, rain_threshold_mm: 40, rain_volte_anno: 0.13 },
+        }),
+      ],
+    });
+    const { container } = render(<ComuniBoard />);
+    await waitFor(() => expect(screen.getByText("Ferriere")).toBeInTheDocument());
+    expect(container.textContent).toContain("qui capita circa una volta l'anno");
+    expect(container.textContent).toContain("qui capita una volta ogni ~8 anni");
   });
 
   it("un pericolo non misurato non si mostra come «nessuno»", async () => {

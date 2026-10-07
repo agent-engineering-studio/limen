@@ -17,13 +17,16 @@ not the other, and the two are mitigated by different things.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
+from limen.core.scoring.flood.climatologia import LIVELLI, valore_al_livello
 from limen.core.scoring.regional_thresholds import (
     FluvialBlock,
     ImperviousnessBlock,
     PluvialBlock,
 )
 
-__all__ = ["fluvial_trigger", "pluvial_trigger"]
+__all__ = ["fluvial_trigger", "pluvial_trigger", "soglie_pioggia"]
 
 
 def _ramp(value: float, lo: float, hi: float) -> float:
@@ -35,6 +38,20 @@ def _ramp(value: float, lo: float, hi: float) -> float:
     return (value - lo) / (hi - lo)
 
 
+def soglie_pioggia(pluvial: PluvialBlock, quantili: Sequence[float] | None) -> tuple[float, float]:
+    """Soglia e saturazione della pioggia per una cella, in mm.
+
+    Locali quando la configurazione le chiede e il nodo ha una climatologia;
+    nazionali altrimenti. Un nodo senza climatologia non resta senza soglia:
+    prende quella su cui il motore è stato tarato.
+    """
+    local = pluvial.local
+    if local is None or quantili is None or len(quantili) != len(LIVELLI):
+        return pluvial.threshold_mm, pluvial.saturation_mm
+    soglia = max(valore_al_livello(local.threshold_level, quantili), local.floor_mm)
+    return soglia, soglia * local.saturation_ratio
+
+
 def pluvial_trigger(
     rain_mm: float | None,
     *,
@@ -42,6 +59,7 @@ def pluvial_trigger(
     imperviousness: float | None,
     pluvial: PluvialBlock,
     imperviousness_cfg: ImperviousnessBlock,
+    soglie: tuple[float, float] | None = None,
 ) -> float:
     """Local flooding from rain, in [0, 1]. ``None`` rain ⇒ 0.
 
@@ -59,7 +77,8 @@ def pluvial_trigger(
     if rain_mm is None:
         return 0.0
 
-    base = _ramp(rain_mm, pluvial.threshold_mm, pluvial.saturation_mm)
+    soglia, saturazione = soglie or (pluvial.threshold_mm, pluvial.saturation_mm)
+    base = _ramp(rain_mm, soglia, saturazione)
     if base <= 0.0:
         return 0.0
 

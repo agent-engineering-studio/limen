@@ -353,6 +353,43 @@ class OpenMeteoHttpClient:
             out[model] = float(sum(serie[:hours]))
         return out or None
 
+    async def get_daily_rain_grid(
+        self,
+        *,
+        nodes: list[tuple[float, float]],
+        start: date,
+        end: date,
+    ) -> list[list[float | None]]:
+        """La pioggia giornaliera dall'archivio, per più nodi in una richiesta.
+
+        Giornaliera e non oraria: dieci anni orari per cento nodi sono quasi
+        nove milioni di numeri in una risposta, giornalieri sono 365 mila. Per
+        la climatologia delle somme su tre giorni basta il giorno. Un nodo
+        senza risposta torna come lista vuota.
+        """
+        params: dict[str, Any] = {
+            "latitude": ",".join(f"{lat:.4f}" for _, lat in nodes),
+            "longitude": ",".join(f"{lon:.4f}" for lon, _ in nodes),
+            "daily": "precipitation_sum",
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+            "timezone": "UTC",
+        }
+        try:
+            resp = await fetch_with_retry(
+                "GET", archive_url(), client=await self._client(), params=params
+            )
+        except _DEGRADATION_EXC as exc:
+            log.warning("integration.degraded", label="openmeteo.daily_rain_grid", error=str(exc))
+            return [[] for _ in nodes]
+        payload = resp.json()
+        risultati = payload if isinstance(payload, list) else [payload]
+        out: list[list[float | None]] = []
+        for nodo in risultati:
+            valori = (nodo.get("daily") or {}).get("precipitation_sum") or []
+            out.append([None if v is None else float(v) for v in valori])
+        return out
+
     async def get_fire_weather_grid(
         self,
         *,

@@ -101,12 +101,15 @@ def assemble_bundles(
 
         flood_rain = ctx.flood_forecast_rain_72h_mm
         flood_river = ctx.river_discharge_ratio
+        flood_quantili: tuple[float, ...] | None = None
         if use_flood_grid:
             centroid = ctx.cell_centroids.get(cell_id)
             if centroid is not None:
                 i = nearest_node(centroid[0], centroid[1], flood_nodes)
                 flood_rain = ctx.flood_rain_by_node[i]
                 flood_river = ctx.flood_river_ratio_by_node[i]
+                if len(ctx.flood_rain_quantiles_by_node) == len(flood_nodes):
+                    flood_quantili = ctx.flood_rain_quantiles_by_node[i]
 
         sf = ctx.static_by_cell.get(cell_id) or StaticFactors(cell_id=cell_id)
         dyn = DynamicInputs(
@@ -117,6 +120,7 @@ def assemble_bundles(
             snow_depth_m=ctx.snow_depth_m,
             flood_forecast_rain_72h_mm=flood_rain,
             river_discharge_ratio=flood_river,
+            flood_rain_quantiles=flood_quantili,
             coastal_surge_norm=ctx.coastal_surge_norm,
             seismic_history=seismic,
             # Per cella (#146): la data dell'incendio che tocca **questa**

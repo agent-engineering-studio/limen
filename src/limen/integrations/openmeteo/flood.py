@@ -92,7 +92,7 @@ class FloodSignals:
 #: segnale fluviale; a 0.1° sono 20 su 176. Più fitto non regge una sola
 #: richiesta — 0.05° fa 677 punti e l'API risponde con qualcosa che non è
 #: JSON — ed è anche il motivo per cui le richieste vanno a lotti.
-_NODE_SPACING_DEG = 0.1
+NODE_SPACING_DEG = 0.1
 
 #: Punti per richiesta. Lo stesso limite che usa la griglia di pioggia.
 _GRID_BATCH = 100
@@ -383,7 +383,7 @@ class OpenMeteoFloodClient:
 
         from limen.integrations.openmeteo.grid import build_snapped_nodes
 
-        nodes = build_snapped_nodes(bbox, spacing=_NODE_SPACING_DEG)
+        nodes = build_snapped_nodes(bbox, spacing=NODE_SPACING_DEG)
         rain = await self._pluvial_by_node(nodes, valuation_time, horizon_hours)
         reference = await self._cached_reference(
             nodes,

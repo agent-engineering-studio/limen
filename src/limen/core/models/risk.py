@@ -123,6 +123,10 @@ class DynamicInputs(_Frozen):
     flood_forecast_rain_72h_mm: float | None = Field(default=None, ge=0.0)
     # fluvial: forecast peak river discharge / seasonal normal (Open-Meteo Flood).
     river_discharge_ratio: float | None = Field(default=None, ge=0.0)
+    #: La distribuzione locale delle piogge a 72 ore del nodo della cella
+    #: (quantili ai livelli di `core/scoring/flood/climatologia.py`), per le
+    #: soglie locali degli allagamenti. ``None`` ⇒ soglie nazionali.
+    flood_rain_quantiles: tuple[float, ...] | None = None
     # coastal: normalised sea surge / wave signal in [0,1] (Open-Meteo Marine).
     coastal_surge_norm: float | None = Field(default=None, ge=0.0, le=1.0)
     seismic_history: tuple[SeismicHistoryEvent, ...] = ()
@@ -427,6 +431,12 @@ class FloodBreakdown(HazardBreakdown):
     #: I segnali grezzi, per verificabilità.
     discharge_ratio: float | None = None
     rain_mm: float | None = None
+    #: Le soglie della pioggia usate per questa cella, mm: locali quando il
+    #: nodo ha una climatologia (migrazione 065), nazionali altrimenti. Nel
+    #: breakdown perché «105 mm, soglia 92» e «105 mm, soglia 40» sono due
+    #: letture diverse dello stesso numero.
+    rain_threshold_mm: float | None = None
+    rain_saturation_mm: float | None = None
 
     #: Cascata incendio → alluvione (#58). 1.0 = nessuna amplificazione.
     #: Nel breakdown e non solo nel punteggio: un operatore che vede un
@@ -450,6 +460,8 @@ class FloodBreakdown(HazardBreakdown):
             "mapped": self.mapped,
             "discharge_ratio": self.discharge_ratio,
             "rain_mm": self.rain_mm,
+            "rain_threshold_mm": self.rain_threshold_mm,
+            "rain_saturation_mm": self.rain_saturation_mm,
             "post_fire_multiplier": self.post_fire_multiplier,
             "months_since_fire": self.months_since_fire,
         }
