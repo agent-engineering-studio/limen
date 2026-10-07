@@ -67,6 +67,7 @@ dev = [
     # Workspace member — installed editable so `geodata.*` is importable
     # from the test harness without a separate `uv pip install -e`.
     "limen-geodata",
+    "types-reportlab>=5.0.0.20261006",
 ]
 storage = [
     "boto3>=1.35",
@@ -100,6 +101,7 @@ dl = [
 ]
 report = [
     "jinja2>=3.1",
+    "reportlab>=5.0.1",
 ]
 
 [build-system]

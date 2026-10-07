@@ -91,6 +91,10 @@ describe("RegioniPage", () => {
     expect(testo).toContain("non l'allerta");
     expect(testo).not.toMatch(/alluvion/i);
     expect(testo).toContain("nessun segnale");
+    const pdf = screen.getByRole("link", { name: "Scarica il rapporto (PDF)" });
+    expect(pdf.getAttribute("href")).toMatch(/\/api\/regioni\/rapporto\.pdf$/);
+    const una = screen.getAllByRole("link", { name: "PDF di questa regione" })[0];
+    expect(una?.getAttribute("href")).toContain("rapporto.pdf?aoi=it-piemonte");
     const nomi = [...container.querySelectorAll(".reg-nome")].map((n) => n.textContent);
     expect(nomi).toEqual(["Piemonte", "Molise"]);
   });

@@ -3404,3 +3404,17 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
 .reg-ai[open] summary::after { content: "chiudi ▴"; }
 .reg-ai p { margin: 10px 0 0; color: var(--ink-soft); max-width: 72ch; }
 .reg-ai-analisi { font-size: 13.5px; color: var(--ink) !important; }
+
+.reg-pdf {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.reg-pdf:hover { background: var(--accent); color: var(--bg); }
+.reg-pdf-regione { display: inline-block; margin-top: 10px; font-size: 12.5px; color: var(--accent); }

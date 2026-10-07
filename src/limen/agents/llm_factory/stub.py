@@ -32,8 +32,8 @@ _DEFAULT_RISK_ANALYSIS_JSON = json.dumps(
 )
 
 
-# 187 words — comfortably inside the [150, 250] window expected by the
-# Briefing post-processor. Plain Italian, no figures invented (the
+# About 290 words, in paragraphs — inside the [220, 400] window expected by
+# the Briefing post-processor. Plain Italian, no figures invented (the
 # briefing-agent prompt forbids new numbers).
 _DEFAULT_BRIEFING_IT = (
     "Le condizioni osservate indicano un rischio gestibile ma in evoluzione "
@@ -53,7 +53,17 @@ _DEFAULT_BRIEFING_IT = (
     "scelta operativa suggerita è mantenere uno stato di vigilanza ordinaria, "
     "verificando l'evoluzione del prossimo passaggio frontale e aggiornando "
     "la diagnosi non appena saranno disponibili nuovi dati di umidità del "
-    "suolo o nuovi rilievi geofisici delle stazioni INGV nell'area."
+    "suolo o nuovi rilievi geofisici delle stazioni INGV nell'area.\n\n"
+    "Vale la pena ricordare perché un versante frana. Serve un luogo "
+    "predisposto, con pendenze forti, rocce che si sgretolano o argille che "
+    "con l'acqua perdono attrito, e spesso il segno di frane già avvenute. "
+    "Questa predisposizione non cambia da un giorno all'altro. A svegliarla è "
+    "quasi sempre l'acqua: una pioggia intensa oltre la soglia critica, "
+    "oppure giorni di pioggia che hanno impregnato il terreno come una spugna. "
+    "Lo stesso versante col sole resta fermo, e la stessa pioggia in pianura "
+    "non fa franare niente.\n\n"
+    "La valutazione si aggiorna ogni ora con i nuovi dati, e l'allerta che "
+    "vale resta quella del bollettino della Protezione Civile."
 )
 
 

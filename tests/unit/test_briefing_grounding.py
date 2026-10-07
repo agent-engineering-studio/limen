@@ -33,7 +33,7 @@ class _FakeChatClient:
     """Returns a single canned 200-word briefing every time."""
 
     def __init__(self, text: str | None = None, raise_on_call: bool = False) -> None:
-        self._text = text or _two_hundred_words()
+        self._text = text or _trecento_parole()
         self._raise = raise_on_call
         self.calls: int = 0
 
@@ -44,9 +44,9 @@ class _FakeChatClient:
         return self._text
 
 
-def _two_hundred_words() -> str:
-    # 200 distinct tokens — easily inside the 150-250 band.
-    return " ".join(f"parola{i}" for i in range(200))
+def _trecento_parole() -> str:
+    # 300 distinct tokens — easily inside the 220-400 band.
+    return " ".join(f"parola{i}" for i in range(300))
 
 
 class _StubCache:
