@@ -20,6 +20,7 @@ from limen.api.jobs.briefing_enrichment import run_briefing_enrichment
 from limen.api.jobs.daily_report import run_daily_report
 from limen.api.jobs.dpc_bollettini import run_dpc_bollettini
 from limen.api.jobs.firms_monitoring import run_firms_monitoring
+from limen.api.jobs.forecast_history import run_forecast_history_job
 from limen.api.jobs.forecast_monitoring import run_forecast_monitoring
 from limen.api.jobs.geodata_export import run_geodata_export_job
 from limen.api.jobs.hourly_monitoring import run_hourly_monitoring
@@ -42,6 +43,7 @@ from limen.api.jobs.ids import (  # noqa: E402
     JOB_DAILY_REPORT,
     JOB_DPC_BOLLETTINI,
     JOB_FIRMS_MONITORING,
+    JOB_FORECAST_HISTORY,
     JOB_FORECAST_MONITORING,
     JOB_GEODATA_EXPORT,
     JOB_HOURLY_MONITORING,
@@ -301,6 +303,20 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
     )
     registered.append(JOB_NIGHTLY)
     log.info("scheduler.registered", job=JOB_NIGHTLY, hour_utc=cfg.nightly_hour_utc)
+
+    # La previsione per cella: fuori dalla notte, quattro volte al giorno.
+    # Un solo schedule — la notte non la ricalcola più, così non gira due
+    # volte.
+    ore = ",".join(str(h) for h in sorted(set(cfg.forecast_cells_hours_utc)))
+    await scheduler.add_schedule(
+        track_job(JOB_FORECAST_HISTORY)(run_forecast_history_job),
+        args=(deps,),
+        trigger=CronTrigger(hour=ore, minute=cfg.forecast_cells_minute),
+        id=JOB_FORECAST_HISTORY,
+        conflict_policy=ConflictPolicy.replace,
+    )
+    registered.append(JOB_FORECAST_HISTORY)
+    log.info("scheduler.registered", job=JOB_FORECAST_HISTORY, hours_utc=ore)
 
     if deps.settings.geodata.enable_periodic_export:
         await scheduler.add_schedule(

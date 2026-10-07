@@ -61,9 +61,6 @@ def stubbed(monkeypatch: pytest.MonkeyPatch) -> None:
     async def drift(_deps: object) -> int:
         return 1
 
-    async def forecast(_deps: object) -> int:
-        return 7
-
     async def partitions(_deps: object) -> dict[str, int]:
         return {"risk_assessments": 1}
 
@@ -78,7 +75,6 @@ def stubbed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(nightly, "_storage", storage)
     monkeypatch.setattr(nightly, "_shadow_ml", shadow)
     monkeypatch.setattr(nightly, "run_drift_monitor_job", drift)
-    monkeypatch.setattr(nightly, "run_forecast_history_job", forecast)
     monkeypatch.setattr(nightly, "run_partitions_job", partitions)
     monkeypatch.setattr(nightly, "run_cache_cleanup_job", cache)
 
@@ -334,3 +330,9 @@ async def test_retrain_kills_a_hung_training(monkeypatch: pytest.MonkeyPatch) ->
     assert out["status"] == "error"
     assert "timed out" in out["reason"]
     assert proc.killed is True
+
+
+def test_la_notte_non_ricalcola_la_previsione_per_cella() -> None:
+    """Gira quattro volte al giorno con il suo schedule: se restasse anche
+    qui, alle due di notte girerebbe due volte."""
+    assert "forecast_history" not in STEPS
