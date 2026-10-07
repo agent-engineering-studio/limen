@@ -369,13 +369,13 @@ describe("ComuniBoard", () => {
     );
   });
 
-  it("dice quando arriva la prossima previsione, e che è una al giorno", async () => {
+  it("dice quando arriva la prossima previsione, e che si rifà ogni 6 ore", async () => {
     // Due calcoli, due timer: un solo conto alla rovescia da sei ore farebbe
     // credere che la curva di un comune si aggiorni quattro volte al giorno.
     // La previsione ha ora una sezione sua nella colonna (#155).
     const { container } = render(<PrevisioneTesta />);
     await waitFor(() => expect(container.textContent).toContain("prossima tra"));
-    expect(container.textContent).toContain("una volta al giorno");
+    expect(container.textContent).toContain("ogni 6 ore");
     expect(container.textContent).toContain("ogni 6 ore");
     expect(container.textContent).toContain("Disponibile per: frane");
   });

@@ -29,7 +29,6 @@ from limen.api.dependencies import AppDependencies
 from limen.api.jobs._tracking import tracked
 from limen.api.jobs.cache_cleanup import run_cache_cleanup_job
 from limen.api.jobs.drift_monitor import run_drift_monitor_job
-from limen.api.jobs.forecast_history import run_forecast_history_job
 from limen.api.jobs.ids import JOB_NIGHTLY
 from limen.api.jobs.partitions import run_partitions_job
 from limen.config.settings import SchedulerBackend, ScoringMode
@@ -40,13 +39,14 @@ from limen.data.db import acquire
 
 log = get_logger(__name__)
 
-#: I sei passi, nell'ordine in cui girano. Elencati qui e non solo nel codice
-#: perché è la lista che i test e `limen jobs` si aspettano di trovare.
+#: I passi, nell'ordine in cui girano. Elencati qui e non solo nel codice
+#: perché è la lista che i test e `limen jobs` si aspettano di trovare. La
+#: previsione per cella non c'è più: gira quattro volte al giorno con il suo
+#: schedule (`JOB_FORECAST_HISTORY`).
 STEPS = (
     "shadow_ml",
     "drift_monitor",
     "retrain",
-    "forecast_history",
     "partitions_maintain",
     "retention",
     "storage",
@@ -191,7 +191,7 @@ async def _retrain(deps: AppDependencies, *, triggered: bool) -> dict[str, Any]:
 
 
 async def run_nightly_pipeline(deps: AppDependencies) -> dict[str, Any]:
-    """I sei passi notturni, in ordine. Ritorna il riepilogo per passo."""
+    """I passi notturni, in ordine. Ritorna il riepilogo per passo."""
     out: dict[str, Any] = {}
 
     out["shadow_ml"] = await _step("shadow_ml", lambda: _shadow_ml(deps))
@@ -203,7 +203,6 @@ async def run_nightly_pipeline(deps: AppDependencies) -> dict[str, Any]:
         "retrain",
         lambda: _retrain(deps, triggered=bool((drift or {}).get("triggered"))),
     )
-    out["forecast_history"] = await _step("forecast_history", lambda: _forecast(deps))
     out["partitions_maintain"] = await _step("partitions_maintain", lambda: _partitions(deps))
     out["retention"] = await _step("retention", lambda: _retention(deps))
     out["storage"] = await _step("storage", lambda: _storage(deps))
@@ -214,10 +213,6 @@ async def run_nightly_pipeline(deps: AppDependencies) -> dict[str, Any]:
 
 async def _drift(deps: AppDependencies) -> dict[str, Any]:
     return {"triggered": bool(await run_drift_monitor_job(deps))}
-
-
-async def _forecast(deps: AppDependencies) -> dict[str, Any]:
-    return {"rows": await run_forecast_history_job(deps)}
 
 
 async def _partitions(deps: AppDependencies) -> dict[str, Any]:

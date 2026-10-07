@@ -143,7 +143,7 @@ export default function PrevisioneTesta(): JSX.Element {
             {schedule?.cells.next_run_at
               ? `, prossima ${oraLocale(schedule.cells.next_run_at)}`
               : ""}
-            . Gira una volta al giorno, di notte.
+            . Si ricalcola ogni 6 ore con le ultime corse dei modelli meteo.
           </>
         ) : (
           "Per comune: nessuna previsione calcolata finora."

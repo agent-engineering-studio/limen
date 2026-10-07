@@ -139,13 +139,13 @@ async def list_alerts(
 @router.get("/forecast/schedule")
 async def forecast_schedule(deps: DepsDep, response: Response) -> dict[str, object]:
     """Quando gira il prossimo calcolo previsionale, e com'è andato l'ultimo."""
-    from limen.api.jobs.ids import JOB_FORECAST_MONITORING, JOB_NIGHTLY
+    from limen.api.jobs.ids import JOB_FORECAST_HISTORY, JOB_FORECAST_MONITORING
     from limen.data.repos.forecast_schedule import forecast_schedule as leggi
 
     response.headers["Cache-Control"] = "public, max-age=30"
     return await leggi(
         JOB_FORECAST_MONITORING,
-        cells_job_id=JOB_NIGHTLY,
+        cells_job_id=JOB_FORECAST_HISTORY,
         interval_hours=deps.settings.forecast.interval_hours,
         horizon_hours=deps.settings.forecast.horizon_hours,
     )

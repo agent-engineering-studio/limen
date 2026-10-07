@@ -350,6 +350,15 @@ class SchedulerSettings(BaseSettings):
     # forecast history, partizioni, retention. Le due del mattino perché è
     # dopo l'ultimo sweep della notte e prima del report delle sei.
     nightly_hour_utc: int = Field(default=2, ge=0, le=23)
+    # La previsione per cella (+24/+48/+72), quattro volte al giorno e non
+    # una: calcolata una volta a notte restava in mappa per 24 ore. Il 7
+    # ottobre 2026 dava la Basilicata «molto alto» per l'incendio di sabato
+    # con il meteo delle 2 di notte, mentre i modelli del mattino portavano
+    # pioggia e umidità all'84 % — rifatta con quelli, sabato valeva zero.
+    # Venti minuti dopo le ore sinottiche: le corse dei modelli arrivano
+    # qualche ora dopo, e la corsa precedente è comunque la più recente.
+    forecast_cells_hours_utc: list[int] = Field(default=[2, 8, 14, 20])
+    forecast_cells_minute: int = Field(default=20, ge=0, le=59)
     enable_hourly_monitoring: bool = True
     enable_weekly_idrogeo: bool = True
 

@@ -57,7 +57,7 @@ solo di Limen.
 |---|---|
 | Che cosa misura | Il **pericolo** di frana, allagamento e incendio, cella per cella, adesso e fino a 72 ore |
 | Su cosa | **312.550 celle** da 1 km² in tutte le **20 regioni**, raggruppate nei **7.901 comuni** ISTAT |
-| Ogni quanto | Ogni **ora** l'adesso; ogni **notte** la previsione a +24, +48, +72 ore |
+| Ogni quanto | Ogni **ora** l'adesso; ogni **6 ore** la previsione a +24, +48, +72 ore |
 | Con quali dati | Solo **open data** pubblici: ISPRA, Protezione Civile, INGV, Copernicus, ECMWF, NASA, ISTAT, OpenStreetMap |
 | Chi decide il numero | Una **formula deterministica** per ogni pericolo, scritta in file di configurazione leggibili |
 | Che ruolo ha l'AI | **Spiega** i numeri a parole e li controlla; **non li cambia mai** |
@@ -378,7 +378,8 @@ giorni più secchi del mese», non come una cifra esatta.
 |---|---|---|
 | **Ogni ora** | Calcola l'adesso di tutti e tre i pericoli su tutta Italia, salva le celle cambiate, manda gli avvisi | Deve stare dentro l'ora: niente modelli linguistici, niente sfidanti |
 | **Ogni 10 minuti** (asincrono) | Scrive le spiegazioni a parole delle regioni che sono cambiate | Nessuno le aspetta: la mappa mostra il testo deterministico finché non arrivano |
-| **Ogni notte** (02:00 UTC) | Previsione per cella a +24, +48, +72 ore; misure del machine learning; manutenzione | La notte misura, il giorno opera |
+| **Ogni 6 ore** (02:20, 08:20, 14:20, 20:20 UTC) | Previsione per cella a +24, +48, +72 ore | Segue le nuove corse dei modelli meteo: una previsione fatta di notte e lasciata in mappa 24 ore invecchia proprio quando il tempo cambia |
+| **Ogni notte** (02:00 UTC) | Misure del machine learning; manutenzione | La notte misura, il giorno opera |
 
 ### Come nasce un numero previsto
 
@@ -389,7 +390,7 @@ comune tutte. Due conseguenze:
 
 - una cella senza riga prevista, per un pericolo la cui previsione è girata,
   è **prevista sotto Moderato**: una risposta, non un vuoto;
-- se la corsa notturna salta (un riavvio, un guasto), la timeline segna le
+- se una corsa salta (un riavvio, un guasto), la timeline segna le
   scadenze **passate** invece di presentarle come futuro.
 
 Una seconda previsione, **per regione**, gira ogni 6 ore su 48 ore e manda
