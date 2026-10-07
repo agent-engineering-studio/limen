@@ -119,7 +119,7 @@ async def test_the_digest_text_joins_hazards_of_the_same_comune() -> None:
     _, coda = await fetch_queued(max_age=timedelta(hours=6))
     testo = summarise_digest_it(coda)
     assert "Matera" in testo
-    assert "frana" in testo and "alluvione" in testo
+    assert "frana" in testo and "allagamento" in testo
     assert "più pericoli insieme" in testo
 
 
