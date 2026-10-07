@@ -69,8 +69,13 @@ _DEFAULT_END = datetime(2009, 3, 10, 0, 0, tzinfo=UTC)
 # CERRA's 5.5 km resolution; ERA5 (~28 km) would warrant a coarser 0.25°.
 _RAIN_NODE_DEG = 0.1
 # Archive reanalysis for the antecedent rainfall. CERRA (5.5 km) resolves the
-# localized triggering rain far better than ERA5 (~28 km) — see get_rainfall_grid.
-_DEFAULT_RAIN_MODEL = "cerra"
+# localized triggering rain better than ERA5 (~28 km), but the self-hosted
+# Open-Meteo instance (#142) does not serve it: it answers with every value
+# null, which the parser reads as 0 mm. On 7 October 2026 that silently
+# measured the landslide engine on a dry November 2019 in Liguria — the month
+# of the 23-24 November floods. The default is the archive's own model;
+# `LIMEN_BACKTEST_RAIN_MODEL=cerra` stays available where CERRA is served.
+_DEFAULT_RAIN_MODEL = ""
 # Warning horizon: an alert this many hours (or fewer) before the event counts
 # as a hit. Generous by design — antecedent-driven landslides warn days ahead.
 _DEFAULT_LEAD_MAX_HOURS = 120.0
@@ -361,6 +366,16 @@ def _write_report(
 # ---------------------------------------------------------------------------
 # Open-Meteo historical fetch (one ERA5 series per sampling node)
 # ---------------------------------------------------------------------------
+def rain_was_measured(node_rainfall: list[list[RainfallSample]]) -> bool:
+    """False when no node received a single drop over the whole window.
+
+    The archive answers an unavailable model with nulls, and the parser reads
+    a null as 0 mm: indistinguishable, per sample, from a dry hour. Over a
+    whole region and a whole window, though, all-zero is not a climate.
+    """
+    return any(s.precipitation_mm > 0 for series in node_rainfall for s in series)
+
+
 async def _fetch_rainfall_grid(
     *,
     nodes: list[tuple[float, float]],
@@ -445,6 +460,18 @@ async def run() -> int:
                 node_rainfall = await _fetch_rainfall_grid(
                     nodes=nodes, start=start, end=end, model=rain_model
                 )
+                if not rain_was_measured(node_rainfall):
+                    # Zero millimetres on every node for the whole window is
+                    # not weather, it is a model the archive does not serve.
+                    # Scoring on it measures the static half of the engine
+                    # and reports it as the whole.
+                    log.error(
+                        "backtest.rainfall.empty",
+                        aoi_id=aoi_id,
+                        rain_model=rain_model or "default",
+                        nodes=len(nodes),
+                    )
+                    return 1
                 log.info(
                     "backtest.aoi.loaded",
                     aoi_id=aoi_id,
