@@ -25,6 +25,7 @@ import type {
   LatestAssessmentResponse,
   ProvenienzaResponse,
   RainModelsResponse,
+  RegioniResponse,
   SpiegazioneResponse,
   ReliabilityResponse,
   ShadowSummaryResponse,
@@ -172,6 +173,11 @@ export class ApiClient {
       {},
       signal,
     );
+  }
+
+  /** Le regioni dalla più da guardare, con allerta e spiegazione dell'AI. */
+  getRegioni(signal?: AbortSignal): Promise<RegioniResponse> {
+    return this.request<RegioniResponse>("/api/regioni", {}, signal);
   }
 
   /** Chi calcola i numeri, con quale meteo, e cosa fanno oggi ML e AI. */

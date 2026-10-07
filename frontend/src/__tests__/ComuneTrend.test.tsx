@@ -36,7 +36,7 @@ describe("ComuneTrend", () => {
     // sempre l'etichetta accanto.
     expect(container.textContent).toContain("frane");
     expect(container.textContent).toContain("incendio");
-    expect(container.textContent).toContain("alluvione");
+    expect(container.textContent).toContain("allagamento");
   });
 
   it("un pericolo con un solo punto non diventa una linea", async () => {

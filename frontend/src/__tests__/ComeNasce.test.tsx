@@ -1,12 +1,13 @@
-// «Come nasce questo numero»: l'ispettore deve dire chi ha fatto cosa —
-// formula, meteo, ML, AI — e non attribuire all'AI quello che non ha scritto.
+// «Come nasce questo numero»: l'ispettore dice chi ha fatto cosa — formula,
+// meteo, ML, AI — senza ripetere la spiegazione della regione, che vive in
+// «Regioni da monitorare».
 
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import ComeNasce, { modelloLeggibile, RigaProvenienza } from "../components/ComeNasce";
 import { defaultApiClient } from "../lib/api-client";
-import type { ProvenienzaResponse, RainModelsResponse, SpiegazioneResponse } from "../types";
+import type { ProvenienzaResponse, RainModelsResponse } from "../types";
 
 const PROVENIENZA: ProvenienzaResponse = {
   motore: "deterministic",
@@ -26,23 +27,6 @@ const MODELLI: RainModelsResponse = {
   ],
 };
 
-const SCRITTA: SpiegazioneResponse = {
-  aoi_id: "it-friuli-venezia-giulia",
-  hazard_type: "flood",
-  spiegazione: {
-    testo: "In Friuli la pioggia prevista spinge l'alluvione.",
-    modello: "quality-cloud",
-    scritta: "2026-10-06T14:05:00Z",
-    livello: "High",
-    analisi: {
-      driver: "pluvial_rain",
-      anomalies: [],
-      attention_window_hours: 48,
-      confidence: 0.7,
-    },
-  },
-};
-
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.spyOn(defaultApiClient, "getProvenienza").mockResolvedValue(PROVENIENZA);
@@ -56,46 +40,35 @@ describe("modelloLeggibile", () => {
 });
 
 describe("ComeNasce", () => {
-  it("mostra la forbice dei modelli e la spiegazione firmata", async () => {
+  it("mostra la forbice dei modelli senza parlare di modelli in addestramento", async () => {
     vi.spyOn(defaultApiClient, "getCellRainModels").mockResolvedValue(MODELLI);
-    vi.spyOn(defaultApiClient, "getAoiSpiegazione").mockResolvedValue(SCRITTA);
 
-    render(<ComeNasce cellId="it-friuli-venezia-giulia|1|1" hazard="flood" />);
+    const { container } = render(<ComeNasce cellId="it-friuli-venezia-giulia|1|1" hazard="flood" />);
 
-    expect(await screen.findByText(/I modelli non sono d'accordo: da 29 a 93 mm/)).toBeTruthy();
-    expect(screen.getByText(/scritta da Claude \(Anthropic\)/)).toBeTruthy();
-    expect(screen.getByText("la pioggia prevista")).toBeTruthy();
-    await waitFor(() => expect(screen.getByText(/32\/150 punti/)).toBeTruthy());
-    expect(screen.getByText(/non ancora nel numero/)).toBeTruthy();
+    expect(await screen.findByText(/I modelli meteo non concordano: da 29 a 93 mm/)).toBeTruthy();
+    await waitFor(() => expect(screen.getByText(/non entra nel numero/)).toBeTruthy());
+    expect(container.textContent).not.toContain("addestramento");
+    expect(container.textContent).not.toContain("raccolta dati");
   });
 
-  it("senza spiegazione non attribuisce niente all'AI", async () => {
+  it("la spiegazione della regione è un link, non un testo ripetuto per ogni cella", async () => {
     vi.spyOn(defaultApiClient, "getCellRainModels").mockResolvedValue(MODELLI);
-    vi.spyOn(defaultApiClient, "getAoiSpiegazione").mockResolvedValue({
-      ...SCRITTA,
-      spiegazione: null,
-    });
-
-    render(<ComeNasce cellId="it-friuli-venezia-giulia|1|1" hazard="flood" />);
-
-    expect(await screen.findByText(/Non ancora scritta per questo pericolo/)).toBeTruthy();
-    expect(screen.queryByText(/scritta da/)).toBeNull();
+    render(<ComeNasce cellId="it-piemonte|3|4" hazard="flood" />);
+    const link = await screen.findByRole("link", { name: /Regioni da monitorare/ });
+    expect(link.getAttribute("href")).toBe("#/regioni/it-piemonte");
   });
 
   it("per l'incendio non chiede la pioggia dei modelli", async () => {
     const pioggia = vi.spyOn(defaultApiClient, "getCellRainModels").mockResolvedValue(MODELLI);
-    vi.spyOn(defaultApiClient, "getAoiSpiegazione").mockResolvedValue(SCRITTA);
-
     render(<ComeNasce cellId="it-basilicata|1|1" hazard="wildfire" />);
-
-    await screen.findByText(/Spiegazione dell'AI/);
+    await screen.findByText(/Come nasce questo numero/);
     expect(pioggia).not.toHaveBeenCalled();
   });
 });
 
 describe("RigaProvenienza", () => {
-  it("dice che il ML non è ancora nel numero", async () => {
+  it("dice che il ML non entra nel numero", async () => {
     render(<RigaProvenienza />);
-    expect(await screen.findByText(/non ancora attivo/)).toBeTruthy();
+    expect(await screen.findByText(/non entra nel numero/)).toBeTruthy();
   });
 });

@@ -586,3 +586,42 @@ export interface ProvenienzaResponse {
   correttore_pioggia: { stato: string; nodi_raccolti: number; nodi_obiettivo: number };
   spiegazioni_modello: string | null;
 }
+
+/** `GET /api/regioni`: una regione nella pagina «Regioni da monitorare».
+ *  L'ordine lo decidono i numeri; `spiegazioni` è il testo dell'AI. */
+export interface RegioneMonitorata {
+  aoi_id: string;
+  nome: string;
+  lon: number;
+  lat: number;
+  geom: GeoJSON.Geometry;
+  peggiore: {
+    hazard: HazardType;
+    classe: RiskLevel;
+    score: number;
+    previsto: boolean;
+    rango: number;
+  } | null;
+  pericoli: Partial<
+    Record<HazardType, { alte: number; moderate: number; max_score: number; classe: RiskLevel }>
+  >;
+  previsto: Partial<Record<HazardType, { score: number; classe: RiskLevel; target_at: string }>>;
+  comuni: { istat_code: string; nome: string; hazard: HazardType; score: number; celle_alte: number }[];
+  allerta: { oggi: number | null; domani: number | null } | null;
+  spiegazioni: Partial<
+    Record<
+      HazardType,
+      {
+        testo: string;
+        modello: string;
+        scritta: string;
+        livello: string;
+        analisi: RiskAnalysisDTO | null;
+      }
+    >
+  >;
+}
+
+export interface RegioniResponse {
+  regioni: RegioneMonitorata[];
+}

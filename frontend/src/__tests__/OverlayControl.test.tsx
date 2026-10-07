@@ -14,7 +14,7 @@ describe("livelli di contesto", () => {
   it("ci sono per tutti e tre i pericoli, non solo per le frane", () => {
     render(<OverlayControl attivi={new Set()} onToggle={() => undefined} />);
     expect(screen.getByText("Frane")).toBeInTheDocument();
-    expect(screen.getByText("Alluvioni")).toBeInTheDocument();
+    expect(screen.getByText("Allagamenti")).toBeInTheDocument();
     expect(screen.getByText("Incendi")).toBeInTheDocument();
     expect(screen.getByText(/Pericolosità idraulica/)).toBeInTheDocument();
     expect(screen.getByText(/Aree bruciate/)).toBeInTheDocument();

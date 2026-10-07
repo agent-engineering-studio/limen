@@ -241,7 +241,7 @@ def test_digest_marks_the_comuni_with_more_than_one_hazard() -> None:
     )
     assert "Matera" in testo and "Potenza" in testo
     assert "frana alto (4)" in testo
-    assert "alluvione alto (2)" in testo
+    assert "allagamento alto (2)" in testo
     # La marca esiste solo dove i pericoli sono più di uno.
     matera = next(r for r in testo.splitlines() if r.startswith("· Matera"))
     potenza = next(r for r in testo.splitlines() if r.startswith("· Potenza"))

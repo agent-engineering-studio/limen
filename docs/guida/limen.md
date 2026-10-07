@@ -2,7 +2,7 @@
 
 **Limen guarda il territorio italiano un chilometro quadrato alla volta e,
 per ciascuno, stima ogni ora quanto è esposto a tre pericoli: frane,
-alluvioni e incendi.** Lo fa con dati pubblici, con formule scritte e
+allagamenti e incendi.** Lo fa con dati pubblici, con formule scritte e
 leggibili, e con una previsione fino a 72 ore. Questa pagina spiega tutto il
 motore — i dati, i calcoli, la previsione, l'apprendimento automatico,
 l'intelligenza artificiale, la geografia — perché solo chi sa come nasce un
@@ -31,12 +31,12 @@ flowchart LR
 |---|---|---|
 | **Dove** | Una zona di allerta: decine di comuni insieme (187 in Italia) | Ogni chilometro quadrato: quale versante, quale tratto di pianura |
 | **Quando** | Oggi e domani, emesso una volta al giorno entro le 16 | Ogni ora, e la previsione fino a 72 ore |
-| **Cosa** | Rischio idrogeologico, idraulico, temporali | Frane, alluvioni **e incendi** |
+| **Cosa** | Rischio idrogeologico, idraulico, temporali | Frane, allagamenti **e incendi** |
 | **Perché** | Un colore | I numeri che lo producono: pioggia contro soglia, portata del fiume, siccità, pendenza, frane del passato |
 | **Valore legale** | Sì: è l'allerta | No: è un'anticipazione da verificare |
 
 Il confronto nella lista dei comuni è per tipo di rischio — frane contro
-idrogeologico, alluvione contro idraulico — e ha tre esiti:
+idrogeologico, allagamenti contro idraulico — e ha tre esiti:
 
 - **Limen vede prima**: un pericolo alto, o previsto alto, dove la zona non ha
   allerta. La riga dice su quante celle, con che pioggia e quando arriva il
@@ -55,7 +55,7 @@ solo di Limen.
 
 | Domanda | Risposta |
 |---|---|
-| Che cosa misura | Il **pericolo** di frana, alluvione e incendio, cella per cella, adesso e fino a 72 ore |
+| Che cosa misura | Il **pericolo** di frana, allagamento e incendio, cella per cella, adesso e fino a 72 ore |
 | Su cosa | **312.550 celle** da 1 km² in tutte le **20 regioni**, raggruppate nei **7.901 comuni** ISTAT |
 | Ogni quanto | Ogni **ora** l'adesso; ogni **notte** la previsione a +24, +48, +72 ore |
 | Con quali dati | Solo **open data** pubblici: ISPRA, Protezione Civile, INGV, Copernicus, ECMWF, NASA, ISTAT, OpenStreetMap |
@@ -74,7 +74,7 @@ Civile, che chi legge conosce già. La scala è scelta perché **ogni coppia di
 classi resti distinguibile anche per chi non vede i colori** (deuteranopia,
 protanopia, tritanopia): un test automatico lo verifica a ogni modifica.
 
-Il colore dice **quanto**; il pericolo lo dicono le lettere **A** (alluvione),
+Il colore dice **quanto**; il pericolo lo dicono le lettere **A** (allagamento),
 **F** (frana), **I** (incendio) dentro le celle in classe alta (da zoom 10),
 il bordo colorato delle stesse celle e l'intestazione «Livello attivo» in
 alto a sinistra. Nella vista «Tutti i pericoli» ogni cella mostra il peggiore
@@ -100,7 +100,7 @@ stesso significato: sono nella sezione dei motori.
 ### Grigio non vuol dire tranquillo
 
 Una cella **grigia** non è stata misurata: il dato che serviva (il meteo per
-l'incendio, la pioggia o la portata per l'alluvione) non è arrivato. Per un
+l'incendio, la pioggia o la portata per gli allagamenti) non è arrivato. Per un
 motore che moltiplica, l'assenza di dato darebbe zero — indistinguibile da
 una cella davvero calma. È l'unico modo in cui un sistema di allerta
 sbaglierebbe **in direzione rassicurante**, e Limen lo impedisce: il grigio è
@@ -117,6 +117,7 @@ conteggio.
 | **Timeline** Ora / +24 / +48 / +72 h | Scorre la previsione per cella; sotto ogni scadenza c'è il momento vero, e una scadenza già passata lo dice |
 | **Ispettore** (clic su una cella) | Il punteggio di ogni pericolo, le sue componenti, la pioggia prevista; sul futuro mostra il valore previsto e dichiara che il resto è di adesso. In fondo, **«Come nasce questo numero»**: chi ha fatto cosa (formula, meteo, ML, AI), la pioggia secondo cinque modelli meteo e la spiegazione della regione scritta dall'AI, con il nome del modello e l'ora |
 | **Ricerca** (⌘K) | Porta la mappa sul comune e ne evidenzia il confine |
+| **Regioni da monitorare** (menu) | Le venti regioni in ordine di pericolo stimato, con l'allerta ufficiale, i comuni da guardare e il racconto dell'AI di ciascuna |
 
 ### La lista dei comuni
 
@@ -127,7 +128,7 @@ esposto. Per ognuno:
   il suo nome. Non è una media: un incendio alto non diventa basso perché oggi
   non piove;
 - i chip **F / A / I** danno i tre valori affiancati, sempre tutti. Accanto
-  all'alluvione, la pioggia prevista contro la soglia; accanto all'incendio,
+  agli allagamenti, la pioggia prevista contro la soglia; accanto all'incendio,
   l'FWI e **quanto è insolito per il mese** in quel punto («insolito per
   ottobre (96°)», «nella norma per ottobre»);
 - la **freccia** dice il verso verso le 72 ore, confrontando solo i pericoli
@@ -160,7 +161,7 @@ darebbe l'apparenza di un dettaglio che il dato sotto non ha.
 | **Comune** (7.901) | Confini ISTAT; ogni cella appartiene ai comuni che interseca | La lista, la ricerca, il confine evidenziato |
 | **Regione** (20) | Unità di calcolo e di previsione | Il quadro a piccola scala |
 | **Zona di allerta** DPC (187) | Poligoni del bollettino nazionale | Il confronto con l'allerta ufficiale: un comune prende la zona del suo punto interno |
-| **Nodo meteo** | Reticolo regolare: 0,1° per la pioggia dell'alluvione, 0,25° per l'indice incendi | Ogni cella legge il nodo più vicino: un numero per regione copiato su tutte le celle sbaglierebbe di decine di millimetri |
+| **Nodo meteo** | Reticolo regolare: 0,1° per la pioggia degli allagamenti, 0,25° per l'indice incendi | Ogni cella legge il nodo più vicino: un numero per regione copiato su tutte le celle sbaglierebbe di decine di millimetri |
 
 Le geometrie sono conservate in coordinate geografiche (EPSG:4326); distanze
 e aree si calcolano nella proiezione equivalente europea (EPSG:3035), dove un
@@ -170,7 +171,7 @@ chilometro è un chilometro in tutta Italia.
 
 A scala nazionale una cella è più piccola di un pixel: la mappa mostra le
 **regioni** finché non compaiono le celle, i **comuni** fra gli zoom 7 e 11,
-le **celle** da zoom 8 (da 7 per alluvione, incendio e previsione). La previsione per cella
+le **celle** da zoom 8 (da 7 per allagamenti, incendio e previsione). La previsione per cella
 compare da zoom 7: più lontano, una sola richiesta peserebbe megabyte.
 
 ## Il layer dati: gli open data
@@ -189,7 +190,7 @@ chiave a pagamento necessaria.
 | Forma del terreno | Modello digitale TINITALY (INGV) | Pendenza media della cella | 99,7% |
 | Tipo di roccia | Carta geologica ISPRA | Peso litologico (argille e flysch franano più dei calcari) | 99,8% |
 | Uso del suolo | CORINE Land Cover (Copernicus) | Combustibile per l'incendio, tessuto urbano per l'esposizione | tutte |
-| Suolo impermeabile | Copernicus Imperviousness | Amplifica la pioggia dell'alluvione in città | tutte |
+| Suolo impermeabile | Copernicus Imperviousness | Amplifica la pioggia degli allagamenti in città | tutte |
 | Strade, ferrovie | OpenStreetMap | Esposizione: quanto conta allertare una cella | tutte |
 | Confini | ISTAT | Comuni e regioni | 7.901 comuni |
 
@@ -197,8 +198,8 @@ chiave a pagamento necessaria.
 
 | Dato | Fonte | Cadenza | Uso |
 |---|---|---|---|
-| Pioggia, umidità del suolo, temperatura, vento | Open-Meteo (modelli ECMWF e ICON), **istanza ospitata su questo server** | ogni ora | Innesco delle frane, pioggia dell'alluvione, indice incendi |
-| Portata dei fiumi | GloFAS (Copernicus), via Open-Meteo pubblico | ogni 6 ore | Ramo fluviale dell'alluvione |
+| Pioggia, umidità del suolo, temperatura, vento | Open-Meteo (modelli ECMWF e ICON), **istanza ospitata su questo server** | ogni ora | Innesco delle frane, pioggia degli allagamenti, indice incendi |
+| Portata dei fiumi | GloFAS (Copernicus), via Open-Meteo pubblico | ogni 6 ore | Ramo fluviale degli allagamenti |
 | Onde e mareggiate | Open-Meteo Marine | ogni ora | Componente idrologica delle frane costiere |
 | Terremoti | INGV (catalogo e ShakeMap) | ogni ora | Componente sismica delle frane |
 | Fuochi attivi | NASA FIRMS | ogni 45 minuti | Apre la finestra post-incendio in poche ore |
@@ -208,7 +209,7 @@ chiave a pagamento necessaria.
 
 Perché un'istanza meteo propria: l'interfaccia pubblica di Open-Meteo ha un
 tetto di 10.000 richieste al giorno, e il calcolo orario di tutta Italia ne
-chiede diecimila a ogni giro. Quando il tetto è saltato, alluvione e
+chiede diecimila a ogni giro. Quando il tetto è saltato, allagamenti e
 incendio hanno dato zero su tutta l'Italia per **mancanza di dato**, non per
 quiete. Oggi previsioni e archivio vengono da un'istanza sul server; solo la
 portata dei fiumi (GloFAS) resta pubblica, perché non si può ospitare.
@@ -218,7 +219,7 @@ portata dei fiumi (GloFAS) resta pubblica, perché non si può ospitare.
 | Dato | Fonte | Uso |
 |---|---|---|
 | Frane innescate da pioggia, datate | Catalogo e-ITALICA, CNR-IRPI (6.312 frane, 1996-2021) | Tarare le soglie di pioggia e verificare il motore frane |
-| Alluvioni osservate da satellite | Copernicus Emergency Management Service | Verificare il motore alluvione |
+| Alluvioni osservate da satellite | Copernicus Emergency Management Service | Verificare il motore degli allagamenti |
 | Perimetri degli incendi | Copernicus EFFIS | Verificare il motore incendio |
 | Rianalisi meteo | ERA5 e CERRA (Copernicus) | Rigiocare il passato, costruire le climatologie |
 
@@ -260,7 +261,12 @@ fino a 0,75, molto alto oltre.
 
 <!-- componente: simulatore -->
 
-### Alluvione: il posto per la spinta più forte
+### Allagamenti: il posto per la spinta più forte
+
+Il pericolo si chiama **allagamento** e non alluvione: il motore stima acqua
+che si accumula dove la zona è allagabile — pioggia forte su suolo che non
+la beve, o un fiume sopra la sua piena ordinaria — non un'alluvione in
+corso.
 
 ```
 punteggio = suscettibilità idraulica × max(pioggia, fiume)
@@ -284,7 +290,7 @@ punteggio = suscettibilità idraulica × max(pioggia, fiume)
   con picco a 4 mesi e nulla oltre 18, **solo nelle celle davvero toccate**
   da un perimetro EFFIS o da fuochi FIRMS.
 
-> Il numero dell'alluvione **guarda avanti**: può essere alto sotto un cielo
+> Il numero degli allagamenti **guarda avanti**: può essere alto sotto un cielo
 > sereno, se il peggioramento è atteso nei prossimi tre giorni. Per questo la
 > mappa scrive «prossime 72 h» e non «adesso».
 
@@ -440,15 +446,17 @@ del modello cambia un solo valore. Gli avvisi non contengono testo generato.
 ### Le spiegazioni per pericolo
 
 Ogni pericolo ha il suo prompt, scritto per la sua fisica: quello
-dell'alluvione dice che il numero guarda avanti e che un fiume «n.d.» non è
+degli allagamenti dice che il numero guarda avanti e che un fiume «n.d.» non è
 un fiume basso; quello dell'incendio che è un pericolo potenziale, non la
 probabilità di un fuoco. Un pericolo senza prompt resta senza spiegazione:
 una voce che racconta le frane parlando di un incendio è peggio del
 silenzio. Una regione si rispiega solo quando la sua classe dominante cambia,
-o dopo 12 ore. La spiegazione si legge nell'ispettore di qualunque cella della
-regione, firmata con il modello che l'ha scritta; se il modello non ha
-risposto, la pagina mostra il testo deterministico e non lo attribuisce
-all'AI.
+o dopo 12 ore. La spiegazione si legge nella pagina **Regioni da monitorare**, una
+volta per regione e accanto ai numeri da cui nasce, firmata con il modello
+che l'ha scritta. L'ordine delle regioni lo decidono i numeri — la classe più
+alta, adesso o prevista, poi le aree in classe alta —: l'AI racconta una
+regione, non la sceglie. Se il modello non ha risposto, il testo non viene
+attribuito all'AI.
 
 ### I modelli e dove girano
 

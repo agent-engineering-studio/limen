@@ -52,7 +52,7 @@ _LEVEL_LABEL_IT: dict[RiskLevel, str] = {
 
 _HAZARD_LABEL_IT: dict[HazardType, str] = {
     HazardType.LANDSLIDE: "frana",
-    HazardType.FLOOD: "alluvione",
+    HazardType.FLOOD: "allagamento",
     HazardType.WILDFIRE: "incendio",
 }
 

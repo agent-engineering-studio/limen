@@ -98,6 +98,6 @@ export const OVERLAYS: readonly Overlay[] = [
 export const NOME_GRUPPO: Record<GruppoOverlay, string> = {
   ufficiale: "Allertamento ufficiale",
   landslide: "Frane",
-  flood: "Alluvioni",
+  flood: "Allagamenti",
   wildfire: "Incendi",
 };

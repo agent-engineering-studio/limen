@@ -105,7 +105,7 @@ def deterministic_briefing(
     )
     if hazard is HazardType.FLOOD:
         corpo = (
-            "Per l'alluvione il punteggio guarda avanti: combina la suscettibilità "
+            "Per gli allagamenti il punteggio guarda avanti: combina la suscettibilità "
             "idraulica del luogo con il più forte fra la pioggia prevista nelle prossime "
             "72 ore e la portata prevista dei fiumi rispetto alla loro piena ordinaria. "
             "Un luogo in alto non si allaga anche se piove a valle, e un fiume di cui non "

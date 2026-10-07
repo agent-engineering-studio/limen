@@ -45,6 +45,7 @@ vi.mock("maplibre-gl", () => {
     }
     setLayoutProperty() {}
     setPaintProperty() {}
+    setFilter() {}
   }
   return {
     default: { Map: FakeMap, NavigationControl: class {}, Popup: class {} },

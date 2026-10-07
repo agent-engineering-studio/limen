@@ -61,7 +61,7 @@ const PERICOLI = [
   {
     lettera: "A",
     classe: "hz-flood",
-    titolo: "Alluvioni",
+    titolo: "Allagamenti",
     testo:
       "La suscettibilità idraulica del posto moltiplicata per il peggiore fra " +
       "la pioggia attesa e la piena dei fiumi. Un crinale non si allaga, " +
@@ -141,11 +141,11 @@ export function HomePage(): JSX.Element {
         <GrigliaCelle />
         <div className="hero-velo" aria-hidden />
         <div className="hero-inner">
-          <p className="hero-eyebrow">Frane · alluvioni · incendi — Italia</p>
+          <p className="hero-eyebrow">Frane · allagamenti · incendi — Italia</p>
           <h1>Il rischio del territorio, cella per cella.</h1>
           <p className="hero-sub">
             Limen unisce dati geologici, meteo, sismici e di pericolosità
-            idraulica in un punteggio di rischio per frane, alluvioni e incendi,
+            idraulica in un punteggio di rischio per frane, allagamenti e incendi,
             aggiornato ogni ora su una griglia di 1 km² che copre tutto il
             territorio nazionale. Deterministico e spiegabile: ogni numero si
             scompone fino alla fonte che lo ha prodotto.
