@@ -61,6 +61,7 @@ from limen.cli.mcp_serve import run as _run_mcp_serve
 from limen.cli.migrate import run as _run_migrate
 from limen.cli.monitor_once import run as _run_monitor_once
 from limen.cli.partitions import run as _run_partitions
+from limen.cli.rain_climatology import run as _run_rain_climatology
 from limen.cli.rain_ensemble import run_fetch as _run_rain_ens_fetch
 from limen.cli.rain_ensemble import run_train as _run_rain_ens_train
 from limen.cli.report import run as _run_report_build
@@ -161,6 +162,13 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "rain-ensemble-train",
         help="train and evaluate the multi-model rain corrector with spatial-block CV",
+    )
+    sub.add_parser(
+        "rain-climatology",
+        help=(
+            "72-hour rainfall distribution per flood node from the ERA5 archive "
+            "(env: LIMEN_RAIN_CLIM_YEARS / LIMEN_RAIN_CLIM_AOI)"
+        ),
     )
     sub.add_parser(
         "fwi-climatology",
@@ -312,6 +320,7 @@ def main(argv: list[str] | None = None) -> int:
         "backtest-wildfire": _run_backtest_wildfire,
         "fwi-backfill": _run_fwi_backfill,
         "fwi-climatology": _run_fwi_climatology,
+        "rain-climatology": _run_rain_climatology,
         "dpc-bollettini": _run_dpc_bollettini,
         "rain-ensemble-fetch": _run_rain_ens_fetch,
         "rain-ensemble-train": _run_rain_ens_train,
