@@ -42,7 +42,7 @@ const PAD_B = 16;
 const ORDINE: HazardType[] = ["landslide", "flood", "wildfire"];
 const NOME: Record<string, string> = {
   landslide: "frane",
-  flood: "alluvione",
+  flood: "allagamento",
   wildfire: "incendio",
 };
 

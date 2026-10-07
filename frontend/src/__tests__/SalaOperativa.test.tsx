@@ -225,7 +225,7 @@ describe("l'allerta ufficiale accanto al nostro numero", () => {
       />,
     );
     const testo = container.textContent ?? "";
-    expect(testo).toContain("Limen vede prima: alluvione in classe alta su 18 celle (105 mm previsti in 72 h)");
+    expect(testo).toContain("Limen vede prima: allagamento in classe alta su 18 celle (105 mm previsti in 72 h)");
     expect(testo).toContain("oltre i due giorni del bollettino");
     expect(testo).not.toContain("vale il bollettino");
   });

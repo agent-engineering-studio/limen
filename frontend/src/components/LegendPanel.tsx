@@ -155,7 +155,7 @@ export function LegendPanel(): JSX.Element {
         <p className="legend-note">
           Il colore dice <strong>quanto</strong>: è la classe del pericolo
           peggiore in quel punto. <strong>Quale</strong> pericolo lo dicono la
-          lettera dentro la cella (<strong>A</strong> alluvione,{" "}
+          lettera dentro la cella (<strong>A</strong> allagamento,{" "}
           <strong>F</strong> frana, <strong>I</strong> incendio, da vicino) e il
           bordo, sulle sole celle in classe Alta o superiore.
         </p>

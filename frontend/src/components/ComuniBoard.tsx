@@ -77,7 +77,7 @@ const ABBREVIAZIONE: Record<RiskLevel, string> = {
 
 const NOME_PERICOLO: Record<string, string> = {
   landslide: "frana",
-  flood: "alluvione",
+  flood: "allagamento",
   wildfire: "incendio",
 };
 
@@ -242,7 +242,7 @@ function Indicatore({
   const spiegaAlluvione =
     pioggia === null
       ? ""
-      : ` Il numero dell'alluvione guarda avanti: è calcolato sulla pioggia prevista nelle prossime 72 ore (${pioggia} mm), non su quella che cade adesso — sotto la soglia il ramo pluviale vale zero.` +
+      : ` Il numero degli allagamenti guarda avanti: è calcolato sulla pioggia prevista nelle prossime 72 ore (${pioggia} mm), non su quella che cade adesso — sotto la soglia il ramo pluviale vale zero.` +
         (senzaFiumi
           ? " La portata dei fiumi oggi non è disponibile (GloFAS), quindi conta solo la pioggia."
           : "");
@@ -628,7 +628,7 @@ const TIPO_BOLLETTINO: Record<string, "idrogeologico" | "idraulico"> = {
 
 const NOME_HAZ: Record<string, string> = {
   landslide: "frana",
-  flood: "alluvione",
+  flood: "allagamento",
   wildfire: "incendio",
 };
 

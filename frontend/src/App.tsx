@@ -6,6 +6,7 @@ import { Popover, Switch, UnstyledButton } from "@mantine/core";
 import CellPopup from "./components/CellPopup";
 import ComuniBoard from "./components/ComuniBoard";
 import GuidaPage from "./components/GuidaPage";
+import RegioniPage from "./components/RegioniPage";
 import { defaultApiClient } from "./lib/api-client";
 import { RISK_LABEL_IT_BY_LEVEL, RISK_TEXT_BY_LEVEL } from "./lib/risk-colors";
 import type {
@@ -36,6 +37,7 @@ type Page =
   | "home"
   | "dashboard"
   | "guida"
+  | "regioni"
   | "science"
   | "shadow"
   | "integrations";
@@ -47,6 +49,9 @@ function pageFromHash(): Page {
   const hash = window.location.hash;
   if (hash.startsWith("#/come-funziona") || hash.startsWith("#/documentazione")) {
     return "guida";
+  }
+  if (hash.startsWith("#/regioni")) {
+    return "regioni";
   }
   switch (window.location.hash) {
     case "#/dashboard":
@@ -99,7 +104,7 @@ function LivelloAttivo({ orizzonte }: { orizzonte: number }): JSX.Element {
       ) : multi ? (
         <span className="map-testa-nota">
           pericolo stimato, non allerta · il peggiore in ogni cella, la lettera dice quale (A
-          alluvione, F frana, I incendio) · l&apos;alluvione guarda la pioggia delle prossime 72 h
+          allagamento, F frana, I incendio) · gli allagamenti guardano la pioggia delle prossime 72 h
         </span>
       ) : selected === "flood" ? (
         // L'alluvione si calcola sulla pioggia attesa, non su quella che
@@ -408,6 +413,9 @@ export function App(): JSX.Element {
           <a href="#/dashboard" className={page === "dashboard" ? "on" : ""}>
             Dashboard
           </a>
+          <a href="#/regioni" className={page === "regioni" ? "on" : ""}>
+            Regioni da monitorare
+          </a>
           <a
             href="#/come-funziona"
             className={page === "guida" || page === "science" || page === "shadow" ? "on" : ""}
@@ -433,6 +441,10 @@ export function App(): JSX.Element {
 
       {page === "home" ? (
         <HomePage />
+      ) : page === "regioni" ? (
+        <div className="explainer-area">
+          <RegioniPage />
+        </div>
       ) : page === "guida" ? (
         <div className="explainer-area">
           <GuidaPage />

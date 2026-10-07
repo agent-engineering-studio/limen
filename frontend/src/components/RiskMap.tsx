@@ -4,6 +4,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Protocol } from "pmtiles";
 
+import { BASEMAP_LAYER, BASEMAP_SOURCE } from "../lib/basemap";
 import { config } from "../lib/env";
 import { useHazard } from "../lib/hazard";
 import { COLORE_ALLERTA, OVERLAYS } from "../lib/overlays";
@@ -342,12 +343,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         // cambia il pericolo, e il confine non deve sparire per questo.
         data: maschera(evidenziatoRef.current),
       },
-      osm: {
-        type: "raster",
-        tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-        tileSize: 256,
-        attribution: "© OpenStreetMap contributors",
-      },
+      osm: BASEMAP_SOURCE,
       [SOURCE_ID]: {
         type: "vector",
         tiles: [tilesUrl],
@@ -411,24 +407,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       },
     };
     const layers: maplibregl.StyleSpecification["layers"] = [
-      {
-        // La sala operativa è scura (#155) e le tile OSM sono chiare: le si
-        // inverte qui, in pittura. Con `brightness-min` sopra `max` il bianco
-        // della carta va al fondo e le strade escono chiare; desaturate,
-        // perché il colore della mappa deve restare quello del rischio.
-        id: "osm",
-        type: "raster",
-        source: "osm",
-        paint: {
-          "raster-brightness-min": 0.5,
-          "raster-brightness-max": 0.05,
-          "raster-saturation": -0.85,
-          // L'inversione porta l'azzurro del mare al marrone: mezzo giro di
-          // tinta lo riporta freddo.
-          "raster-hue-rotate": 180,
-          "raster-contrast": 0.1,
-        },
-      },
+      BASEMAP_LAYER,
       {
         id: "wms-pai-layer",
         type: "raster",

@@ -26,7 +26,7 @@ import { RigaProvenienza } from "./ComeNasce";
 
 const NOME: Record<string, string> = {
   landslide: "frane",
-  flood: "alluvione",
+  flood: "allagamento",
   wildfire: "incendio",
 };
 

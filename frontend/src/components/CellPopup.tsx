@@ -28,7 +28,7 @@ export interface CellPopupProps {
 
 const NOME_SCHEDA: Record<HazardType, string> = {
   landslide: "Frana",
-  flood: "Alluvione",
+  flood: "Allagamento",
   wildfire: "Incendio",
 };
 

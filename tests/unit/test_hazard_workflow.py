@@ -221,7 +221,7 @@ def test_alert_summary_names_the_hazard() -> None:
         dispatched_at=datetime(2026, 6, 1, tzinfo=UTC),
     )
     assert payload.hazard_type is HazardType.FLOOD
-    assert "alluvione" in payload.summary_it
+    assert "allagamento" in payload.summary_it
 
 
 def test_the_llm_narrative_runs_only_where_a_prompt_exists() -> None:
