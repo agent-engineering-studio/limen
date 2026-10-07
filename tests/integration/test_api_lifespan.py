@@ -49,12 +49,16 @@ async def test_register_jobs_schedules_enabled_jobs(reset_db: None, pg_pool: obj
         JOB_PARTITIONS,
         JOB_BRIEFING_ENRICHMENT,
         JOB_NIGHTLY,
+        # La previsione per cella ha di nuovo uno schedule suo, ogni 6 ore
+        # (#181): calcolata solo di notte restava in mappa 24 ore. Non gira
+        # più dentro `limen-nightly`, quindi non gira due volte.
+        JOB_FORECAST_HISTORY,
     }.issubset(registered_set)
-    # I tre schedule autonomi assorbiti dalla pipeline notturna (#78). Restano
+    # Gli schedule autonomi assorbiti dalla pipeline notturna (#78). Restano
     # dei job — girano dentro `limen-nightly` — ma non hanno più un tick loro,
     # ed è quello che questa asserzione protegge: reintrodurne uno li farebbe
     # girare due volte, e il retrain due volte è due volte Optuna.
-    assert registered_set.isdisjoint({JOB_CACHE_CLEANUP, JOB_DRIFT_MONITOR, JOB_FORECAST_HISTORY})
+    assert registered_set.isdisjoint({JOB_CACHE_CLEANUP, JOB_DRIFT_MONITOR})
     assert len(registered) == len(registered_set)  # no duplicate ids
     assert registered == registered_again  # idempotent re-registration
 
