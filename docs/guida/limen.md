@@ -525,8 +525,6 @@ Una sequenza che usa tutto quello che Limen sa fare:
 - **Un chilometro è grande** per una frana larga trenta metri; la scarpata
   scalzata dallo scavo del mese scorso, il fosso ostruito, la frana mai
   censita non stanno in nessun dato.
-- **Cinque comuni minuscoli** non contengono il centro di nessuna cella
-  (issue #152) e non hanno numeri propri.
 
 ## La tecnologia
 

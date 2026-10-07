@@ -156,7 +156,7 @@ SELECT cc.istat_code,
        (array_agg(lf.class ORDER BY lf.score DESC))[1]   AS class,
        max(lf.target_at)                                 AS target_at,
        max(lf.score * (1.0 + COALESCE(f.exposure_norm, 0.0))) AS priority
-FROM cell_comune cc
+FROM cell_comune_tutte cc
 JOIN latest_forecast lf ON lf.cell_id = cc.cell_id
 LEFT JOIN cell_static_factors f ON f.cell_id = cc.cell_id
 WHERE cc.istat_code = ANY($1::text[])
@@ -171,7 +171,7 @@ _PRIORITA_PREVISTA = """
 SELECT cc.istat_code,
        max(lf.score * (1.0 + COALESCE(f.exposure_norm, 0.0))) AS fc_priority
 FROM latest_forecast lf
-JOIN cell_comune cc ON cc.cell_id = lf.cell_id
+JOIN cell_comune_tutte cc ON cc.cell_id = lf.cell_id
 LEFT JOIN cell_static_factors f ON f.cell_id = lf.cell_id
 WHERE lf.target_at > now()
 GROUP BY 1
@@ -200,7 +200,7 @@ SELECT cc.istat_code,
        -- dice quanto è rara lì.
        (array_agg(ST_PointOnSurface(g.geom)
                   ORDER BY (lr.factors->>'rain_mm')::float8 DESC NULLS LAST))[1] AS punto
-FROM cell_comune cc
+FROM cell_comune_tutte cc
 JOIN latest_risk lr ON lr.cell_id = cc.cell_id AND lr.hazard_type = 'flood'
 JOIN grid_cells g ON g.id = cc.cell_id
 WHERE cc.istat_code = ANY($1::text[])
@@ -255,7 +255,7 @@ WITH peggiore AS (
            (lr.factors->'fire_weather'->>'day')::date   AS giorno,
            ST_X(ST_Centroid(g.geom))                     AS lon,
            ST_Y(ST_Centroid(g.geom))                     AS lat
-    FROM cell_comune cc
+    FROM cell_comune_tutte cc
     JOIN latest_risk lr ON lr.cell_id = cc.cell_id AND lr.hazard_type = 'wildfire'
     JOIN grid_cells g ON g.id = cc.cell_id
     WHERE cc.istat_code = ANY($1::text[])
@@ -488,7 +488,7 @@ async def comune_detail(istat_code: str) -> dict[str, Any] | None:
                    m.computed_at,
                    ST_X(ST_Centroid(g.geom)) AS lon,
                    ST_Y(ST_Centroid(g.geom)) AS lat
-            FROM cell_comune cc
+            FROM cell_comune_tutte cc
             JOIN latest_risk m ON m.cell_id = cc.cell_id
             JOIN grid_cells g ON g.id = cc.cell_id
             WHERE cc.istat_code = $1 AND m.score IS NOT NULL
@@ -546,7 +546,7 @@ async def comune_detail(istat_code: str) -> dict[str, Any] | None:
 #: aggregato accanto a quel numero sarebbe peggio che uno più stretto.
 _CELLE_PEGGIORI = """
     SELECT DISTINCT ON (lr.hazard_type) lr.cell_id, lr.hazard_type
-    FROM cell_comune cc
+    FROM cell_comune_tutte cc
     JOIN latest_risk lr ON lr.cell_id = cc.cell_id
     WHERE cc.istat_code = $1
       -- Un pericolo non misurato non ha una cella peggiore da seguire
