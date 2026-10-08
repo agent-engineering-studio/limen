@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from limen.core.logging import get_logger
@@ -53,6 +53,7 @@ from limen.data.migrate import run_migrations
 from limen.data.repos.aoi_repo import get_aoi, list_aoi_ids
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.openmeteo.client import OpenMeteoHttpClient
+from limen.integrations.openmeteo.dtos import WeatherSample
 from limen.integrations.openmeteo.grid import build_rain_nodes, nearest_node
 
 log = get_logger(__name__)
@@ -196,6 +197,47 @@ def _synthesise_rainfall(
     return RainfallSeries(samples=sliced)
 
 
+@dataclass(frozen=True, slots=True)
+class Antecedenti:
+    """Pioggia dei giorni prima e umidità del suolo, da una serie oraria.
+
+    Le stesse due grandezze che lo sweep operativo passa al motore
+    (`MeteoFetchExecutor`): la somma della pioggia giornaliera sugli ultimi
+    ``api_days`` giorni fino al giorno di valutazione compreso, e la media
+    dell'umidità 0-7 cm sulle ``soil_hours`` ore prima. Senza, il backtest le
+    lasciava al valore neutro 0,5 — il 55 % della componente pioggia fermo
+    proprio dove la produzione lo muove (#122).
+    """
+
+    pioggia_giorno: dict[date, float]
+    umidita: list[tuple[datetime, float]]
+    api_days: int = 30
+    soil_hours: int = 48
+
+    @classmethod
+    def da_serie(cls, campioni: list[WeatherSample], **kw: int) -> Antecedenti:
+        giorni: dict[date, float] = {}
+        for c in campioni:
+            giorni[c.timestamp.date()] = giorni.get(c.timestamp.date(), 0.0) + c.precipitation_mm
+        umidita = sorted(
+            (c.timestamp, c.soil_moisture_0_7_cm)
+            for c in campioni
+            if c.soil_moisture_0_7_cm is not None
+        )
+        return cls(pioggia_giorno=giorni, umidita=umidita, **kw)
+
+    def api(self, t: datetime) -> float | None:
+        giorni = [t.date() - timedelta(days=d) for d in range(self.api_days)]
+        if not any(g in self.pioggia_giorno for g in giorni):
+            return None
+        return sum(self.pioggia_giorno.get(g, 0.0) for g in giorni)
+
+    def suolo(self, t: datetime) -> float | None:
+        da = t - timedelta(hours=self.soil_hours)
+        valori = [v for ts, v in self.umidita if da <= ts <= t]
+        return sum(valori) / len(valori) if valori else None
+
+
 def _match_truth(
     alert_times: dict[str, list[datetime]],
     truth: dict[str, datetime],
@@ -243,7 +285,11 @@ def _evaluate(
     end: datetime,
     alert_level: RiskLevel,
     lead_max_hours: float,
+    antecedenti: list[Antecedenti | None] | None = None,
 ) -> _BacktestMetrics:
+    """``antecedenti`` è allineato ai nodi (modalità `nodo`) o lungo 1 (modalità
+    `regione`, un valore per tutta l'area come in produzione); ``None`` lascia
+    pioggia antecedente e umidità al valore neutro, come prima."""
     thresholds = load_regional_thresholds()
     engine = MultiFactorScoringEngine(thresholds)
     hours = _hourly_window(start, end)
@@ -263,12 +309,23 @@ def _evaluate(
         node_slice = [
             _synthesise_rainfall(samples=node_rainfall[n], as_of=t) for n in range(len(nodes))
         ]
+        stato = [
+            (a.api(t), a.suolo(t)) if a is not None else (None, None) for a in antecedenti or []
+        ]
         for i, (sf, _lon, _lat) in enumerate(cells):
+            api_mm, suolo = (
+                stato[cell_node[i] if len(stato) == len(nodes) else 0] if stato else (None, None)
+            )
             bundle = CellFeatureBundle(
                 aoi_id=aoi_id,
                 cell_id=sf.cell_id,
                 static=sf,
-                dynamic=DynamicInputs(valuation_time=t, rainfall=node_slice[cell_node[i]]),
+                dynamic=DynamicInputs(
+                    valuation_time=t,
+                    rainfall=node_slice[cell_node[i]],
+                    api_30_mm=api_mm,
+                    soil_moisture_0_7=suolo,
+                ),
             )
             scored = engine.score(bundle)
             if _level_at_least(scored.level, alert_level):
@@ -366,6 +423,20 @@ def _write_report(
 # ---------------------------------------------------------------------------
 # Open-Meteo historical fetch (one ERA5 series per sampling node)
 # ---------------------------------------------------------------------------
+async def _antecedenti_regione(
+    aoi_id: str, bbox: tuple[float, ...], start: datetime, end: datetime
+) -> Antecedenti | None:
+    """Gli antecedenti al centro dell'area, come li legge lo sweep operativo."""
+    snapshot = await OpenMeteoHttpClient().get_meteo_snapshot(
+        aoi_id=aoi_id,
+        bbox=(bbox[0], bbox[1], bbox[2], bbox[3]),
+        window_start=start - timedelta(days=31),
+        window_end=end,
+        use_archive=True,
+    )
+    return Antecedenti.da_serie(list(snapshot.samples)) if snapshot is not None else None
+
+
 def rain_was_measured(node_rainfall: list[list[RainfallSample]]) -> bool:
     """False when no node received a single drop over the whole window.
 
@@ -437,6 +508,12 @@ async def run() -> int:
     rain_model = os.getenv("LIMEN_BACKTEST_RAIN_MODEL", _DEFAULT_RAIN_MODEL).strip() or None
     node_deg = float(os.getenv("LIMEN_BACKTEST_RAIN_NODE_DEG", str(_RAIN_NODE_DEG)))
     lead_max = float(os.getenv("LIMEN_BACKTEST_LEAD_MAX_HOURS", str(_DEFAULT_LEAD_MAX_HOURS)))
+    # Come la produzione (`regione`), per nodo (la variante da misurare), o al
+    # valore neutro di prima (`neutro`).
+    modo = os.getenv("LIMEN_BACKTEST_ANTECEDENT", "regione").strip() or "regione"
+    if modo not in ("regione", "nodo", "neutro"):
+        log.error("backtest.bad_antecedent", value=modo)
+        return 1
 
     try:
         async with lifespan_pool():
@@ -457,9 +534,41 @@ async def run() -> int:
                 cells = await _fetch_static_factors(aoi_id)
                 truth = await _fetch_truth_events(aoi_id, start=start, end=end)
                 nodes = build_rain_nodes(bbox, spacing=node_deg)
-                node_rainfall = await _fetch_rainfall_grid(
-                    nodes=nodes, start=start, end=end, model=rain_model
-                )
+                antecedenti: list[Antecedenti | None] | None = None
+                if modo == "neutro":
+                    node_rainfall = await _fetch_rainfall_grid(
+                        nodes=nodes, start=start, end=end, model=rain_model
+                    )
+                else:
+                    # Trenta giorni prima della finestra: la pioggia antecedente
+                    # del primo istante deve già esistere.
+                    grezzo = await OpenMeteoHttpClient().get_rainfall_grid(
+                        nodes=nodes,
+                        window_start=start - timedelta(days=31),
+                        window_end=end,
+                        model=rain_model,
+                        with_soil=True,
+                    )
+                    if len(grezzo) != len(nodes):
+                        # Come in `_fetch_rainfall_grid`: un lotto disallineato
+                        # non deve spostare la pioggia sui nodi sbagliati.
+                        log.warning(
+                            "backtest.rainfall.node_count", expected=len(nodes), got=len(grezzo)
+                        )
+                        grezzo = (grezzo + [[] for _ in nodes])[: len(nodes)]
+                    node_rainfall = [
+                        [
+                            RainfallSample(
+                                timestamp=c.timestamp, precipitation_mm=c.precipitation_mm
+                            )
+                            for c in serie
+                        ]
+                        for serie in grezzo
+                    ]
+                    if modo == "nodo":
+                        antecedenti = [Antecedenti.da_serie(serie) for serie in grezzo]
+                    else:
+                        antecedenti = [await _antecedenti_regione(aoi_id, bbox, start, end)]
                 if not rain_was_measured(node_rainfall):
                     # Zero millimetres on every node for the whole window is
                     # not weather, it is a model the archive does not serve.
@@ -478,6 +587,7 @@ async def run() -> int:
                     cells=len(cells),
                     truth_events=len(truth),
                     rain_model=rain_model or "era5",
+                    antecedent=modo,
                     rain_nodes=len(nodes),
                     rain_samples=sum(len(s) for s in node_rainfall),
                 )
@@ -492,6 +602,7 @@ async def run() -> int:
                     end=end,
                     alert_level=alert_level,
                     lead_max_hours=lead_max,
+                    antecedenti=antecedenti,
                 )
                 log.info(
                     "backtest.aoi.done",
