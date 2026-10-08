@@ -549,6 +549,13 @@ async def run() -> int:
                         model=rain_model,
                         with_soil=True,
                     )
+                    if len(grezzo) != len(nodes):
+                        # Come in `_fetch_rainfall_grid`: un lotto disallineato
+                        # non deve spostare la pioggia sui nodi sbagliati.
+                        log.warning(
+                            "backtest.rainfall.node_count", expected=len(nodes), got=len(grezzo)
+                        )
+                        grezzo = (grezzo + [[] for _ in nodes])[: len(nodes)]
                     node_rainfall = [
                         [
                             RainfallSample(
