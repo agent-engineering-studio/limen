@@ -267,8 +267,13 @@ class OpenMeteoHttpClient:
         batch_size: int = 100,
         model: str | None = None,
         use_archive: bool = True,
+        with_soil: bool = False,
     ) -> list[list[WeatherSample]]:
         """Hourly precipitation for many ``(lon, lat)`` nodes in one batch.
+
+        ``with_soil`` adds the 0-7 cm soil moisture to each sample: the
+        landslide backtest needs it per node to replay the antecedent
+        wetness the operational sweep reads (#122).
 
         ``use_archive=True`` (default — the backtest) reads the reanalysis
         archive; ``model`` selects it (``"cerra"`` = 5.5 km Copernicus regional
@@ -283,7 +288,9 @@ class OpenMeteoHttpClient:
         """
         return await self._hourly_grid(
             nodes=nodes,
-            variables=("precipitation",),
+            variables=("precipitation", "soil_moisture_0_to_7cm")
+            if with_soil
+            else ("precipitation",),
             window_start=window_start,
             window_end=window_end,
             batch_size=batch_size,
