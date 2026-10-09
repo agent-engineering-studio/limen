@@ -84,9 +84,11 @@ describe("RegioniPage", () => {
     expect(testo).toContain("Allagamenti 35 aree in classe alta adesso");
     expect(testo).toContain("oggi nessuna · domani non ancora emessa");
     expect(testo).toContain("Limone Piemonte");
-    // Il modello non si nomina nei racconti: basta il logo in testata.
-    expect(testo).not.toContain("Claude");
-    expect(screen.getByAltText("Anthropic")).toBeTruthy();
+    // Il modello non si nomina nei racconti: lo dice una volta la testata.
+    for (const racconto of container.querySelectorAll(".reg-ai")) {
+      expect(racconto.textContent).not.toContain("Claude");
+    }
+    expect(testo).toContain("Racconti scritti con Claude, il modello di Anthropic");
     expect(testo).toContain("la pioggia prevista");
     expect(testo).toContain("non l'allerta");
     expect(testo).not.toMatch(/alluvion/i);

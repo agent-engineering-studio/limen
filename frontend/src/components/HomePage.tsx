@@ -271,15 +271,10 @@ export function HomePage(): JSX.Element {
           FIRMS · CORINE Land Cover · © OpenStreetMap contributors (ODbL).
           Codice Apache-2.0.
         </p>
-        <p className="reg-ai-marchio home-ai-marchio">
-          I racconti dell&apos;AI sono scritti con
-          <img
-            className="marchio-claude"
-            src={`${import.meta.env.BASE_URL}brand/claude-logo-ivory.svg`}
-            alt="Claude"
-          />
-          <span aria-hidden="true">·</span>
-          <img src={`${import.meta.env.BASE_URL}brand/anthropic-logo-ivory.svg`} alt="Anthropic" />
+        <p>
+          Limen è sviluppato con Claude Code fin dal primo commit, e i racconti
+          delle regioni sono scritti con Claude. Progetto indipendente, non
+          affiliato ad Anthropic.
         </p>
         <p className="footer-disclaimer">
           Limen è uno strumento di supporto al monitoraggio: non sostituisce le
