@@ -42,9 +42,22 @@ export const bool = (raw: string | undefined, fallback: boolean): boolean => {
   return ["1", "true", "yes", "on"].includes(raw.toLowerCase());
 };
 
+/** Un percorso (`/`, `/tiles`) diventa un URL sull'origine della pagina.
+ *
+ *  Così la stessa build serve più domini — office-gdc.w3pro.it e
+ *  limen.agentengineering.it — senza chiamare l'API dell'altro, che vorrebbe
+ *  dire CORS e un dominio che non risponde quando l'altro cade. Assoluto
+ *  comunque, e non relativo: MapLibre carica le tile in un worker, dove un
+ *  URL relativo non si risolve. */
+export const sullOrigine = (raw: string, origine?: string): string => {
+  if (!raw.startsWith("/")) return raw;
+  const base = origine ?? (typeof window !== "undefined" ? window.location.origin : "");
+  return `${base}${raw}`.replace(/\/+$/, "");
+};
+
 export const config = {
-  apiUrl: env.VITE_API_URL ?? "http://localhost:8080",
-  tileservUrl: env.VITE_TILESERV_URL ?? "http://localhost:7800",
+  apiUrl: sullOrigine(env.VITE_API_URL ?? "http://localhost:8080"),
+  tileservUrl: sullOrigine(env.VITE_TILESERV_URL ?? "http://localhost:7800"),
   enableGraph: bool(env.VITE_ENABLE_GRAPH, false),
   defaultLon: num(env.VITE_DEFAULT_LON, 16.6),
   defaultLat: num(env.VITE_DEFAULT_LAT, 40.5),
