@@ -56,8 +56,22 @@ from limen.api.jobs.ids import (  # noqa: E402
     JOB_WEEKLY_IDROGEO,
 )
 
+# Lo sweep orario non aspetta un intervallo intero dopo l'avvio: ogni deploy o
+# riavvio del worker lasciava la mappa ferma fino a un'ora in più (il 9 ottobre
+# 2026, tra due riavvii e un deploy, quasi tre ore senza sweep). Il rinvio
+# lungo serviva quando i job giravano nell'API e lo sweep al boot affamava
+# `/ready`; dal #77 girano nel worker, che non serve richieste. Due minuti
+# lasciano finire l'avvio del pool e la registrazione degli altri job.
+_SWEEP_AFTER_BOOT = timedelta(minutes=2)
 
-def _deferred_interval(*, minutes: int = 0, hours: int = 0, seconds: int = 0) -> IntervalTrigger:
+
+def _deferred_interval(
+    *,
+    minutes: int = 0,
+    hours: int = 0,
+    seconds: int = 0,
+    first_after: timedelta | None = None,
+) -> IntervalTrigger:
     """Interval trigger whose FIRST fire is one interval out, not at boot.
 
     APScheduler fires an ``IntervalTrigger`` immediately when the schedule is
@@ -68,13 +82,15 @@ def _deferred_interval(*, minutes: int = 0, hours: int = 0, seconds: int = 0) ->
     jobs still run on their normal cadence in the background. Boot-time output
     where genuinely wanted comes from explicit paths (the report startup
     kickoff, ``limen monitor-once``), not from the scheduler.
+
+    ``first_after`` shortens the first wait without changing the cadence.
     """
     delta = timedelta(minutes=minutes, hours=hours, seconds=seconds)
     return IntervalTrigger(
         minutes=minutes,
         hours=hours,
         seconds=seconds,
-        start_time=datetime.now(UTC) + delta,
+        start_time=datetime.now(UTC) + (first_after if first_after is not None else delta),
     )
 
 
@@ -87,7 +103,9 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
         await scheduler.add_schedule(
             track_job(JOB_HOURLY_MONITORING)(run_hourly_monitoring),
             args=(deps,),
-            trigger=_deferred_interval(minutes=cfg.hourly_monitoring_minutes),
+            trigger=_deferred_interval(
+                minutes=cfg.hourly_monitoring_minutes, first_after=_SWEEP_AFTER_BOOT
+            ),
             id=JOB_HOURLY_MONITORING,
             conflict_policy=ConflictPolicy.replace,
         )
