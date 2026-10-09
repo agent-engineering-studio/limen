@@ -112,26 +112,6 @@ def test_il_pericolo_scelto_arriva_al_repo(monkeypatch: pytest.MonkeyPatch) -> N
     assert c.get("/api/comuni?hazard=vulcano").status_code == 422
 
 
-def test_l_ordine_sul_pericolo_scelto() -> None:
-    """Il comune dove brucia sta sopra quello dove frana, se si guarda
-    l'incendio; un pericolo non misurato non ha un numero e va in coda."""
-    from limen.data.repos.comune_risk import _numero_ordine
-
-    riga = {
-        **_ROW,
-        "forecast_attention": 0.9,
-        "forecast": {"wildfire": {"class": "High", "score": 0.6, "priority": 0.7}},
-    }
-    riga["hazards"] = {**_ROW["hazards"], "flood": {**_ROW["hazards"]["flood"], "measured": False}}
-    riga["hazards"]["wildfire"] = {**_ROW["hazards"]["wildfire"], "measured": True}
-    assert _numero_ordine(riga, order="now", hazard=None) == 1.52
-    assert _numero_ordine(riga, order="now", hazard="wildfire") == 1.52
-    assert _numero_ordine(riga, order="now", hazard="flood") is None
-    assert _numero_ordine(riga, order="forecast", hazard="wildfire") == 0.7
-    assert _numero_ordine(riga, order="forecast", hazard="landslide") is None
-    assert _numero_ordine(riga, order="forecast", hazard=None) == 0.9
-
-
 def test_comune_detail_and_404(client: TestClient) -> None:
     assert client.get("/api/comune/C001").json()["comune"]["name"] == "Testville"
     assert client.get("/api/comune/NOPE").status_code == 404

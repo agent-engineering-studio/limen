@@ -452,21 +452,28 @@ async def top_comuni(
                 hazard,
             )
         else:
+            filtro = ""
+            if hazard is not None:
+                # Il solo pericolo scelto: la sua classe per la soglia, la sua
+                # priorità per l'ordine. Non misurato vale «sotto soglia» e
+                # va in coda, come nella classifica su tutti.
+                filtro = f"JOIN ({_PER_PERICOLO}) s ON s.istat_code = pc.istat_code"
+            rango = "s.h_rank" if hazard is not None else "pc.worst_rank"
+            priorita = (
+                "CASE WHEN s.h_measured THEN s.h_priority END"
+                if hazard is not None
+                else "pc.max_priority"
+            )
+            misurato = "s.h_measured AND " if hazard is not None else ""
             rows = await conn.fetch(
                 f"""
-                WITH per_comune AS ({_PER_COMUNE}), scelto AS ({_PER_PERICOLO})
+                WITH per_comune AS ({_PER_COMUNE})
                 SELECT pc.* FROM per_comune pc
-                LEFT JOIN scelto s ON s.istat_code = pc.istat_code
+                {filtro}
                 WHERE ($1::text IS NULL OR pc.aoi_id = $1)
                   AND ($3::text IS NULL OR pc.name ILIKE '%' || $3 || '%')
-                  AND ($4::text IS NOT NULL OR (
-                      CASE WHEN $6::text IS NULL THEN pc.worst_rank
-                           WHEN s.h_measured THEN s.h_rank ELSE 0 END) >= $5)
-                ORDER BY
-                    CASE WHEN $6::text IS NULL THEN pc.max_priority
-                         WHEN s.h_measured THEN s.h_priority END DESC NULLS LAST,
-                    CASE WHEN $6::text IS NULL THEN pc.worst_rank ELSE s.h_rank END DESC,
-                    pc.n_alert DESC, pc.name
+                  AND ($4::text IS NOT NULL OR ({misurato}{rango} >= $5))
+                ORDER BY {priorita} DESC NULLS LAST, {rango} DESC, pc.n_alert DESC, pc.name
                 LIMIT $2
                 """,
                 aoi_id,
@@ -474,7 +481,7 @@ async def top_comuni(
                 query,
                 query,
                 min_rank,
-                hazard,
+                *([hazard] if hazard is not None else []),
             )
         codici = [str(r["istat_code"]) for r in rows]
         previsioni = await _previsioni(conn, codici)
@@ -492,31 +499,15 @@ async def top_comuni(
         }
         for r in rows
     ]
-    # I comuni senza un numero vanno in coda: non sono tranquilli, ma nemmeno
-    # ordinabili, e metterli in cima sarebbe un allarme inventato.
-    comuni.sort(
-        key=lambda c: (
-            (n := _numero_ordine(c, order=order, hazard=hazard)) is None,
-            -(n or 0.0),
-            c["name"],
-        )
-    )
-    return comuni[:limit]
-
-
-def _numero_ordine(c: dict[str, Any], *, order: str, hazard: str | None) -> float | None:
-    """Il numero su cui si ordina la classifica: l'attenzione su tutti i
-    pericoli, o la priorità del solo pericolo scelto."""
     if hazard is None:
-        valore = c["forecast_attention"] if order == "forecast" else c["attention"]
-        return None if valore is None else float(valore)
-    if order == "forecast":
-        previsto = c["forecast"].get(hazard)
-        return None if previsto is None else float(previsto["priority"])
-    adesso = c["hazards"].get(hazard)
-    if adesso is None or not adesso["measured"]:
-        return None
-    return float(adesso["priority"])
+        # Su tutti i pericoli conta l'incremento per i pericoli concomitanti,
+        # che sta in Python. Su uno solo non c'è: l'ordine della query è già
+        # quello giusto, e riordinare qui vorrebbe dire una seconda copia della
+        # regola. I comuni senza un numero vanno in coda: non sono tranquilli,
+        # ma nemmeno ordinabili, e metterli in cima sarebbe un allarme inventato.
+        chiave = "forecast_attention" if order == "forecast" else "attention"
+        comuni.sort(key=lambda c: (c[chiave] is None, -(c[chiave] or 0.0), c["name"]))
+    return comuni[:limit]
 
 
 async def comune_detail(istat_code: str) -> dict[str, Any] | None:

@@ -85,10 +85,13 @@ export default function ComuneTrend({
 }): JSX.Element {
   const [serie, setSerie] = useState<ComuneHistory | null>(null);
   const [errore, setErrore] = useState(false);
-  const [soglie, setSoglie] = useState(SOGLIE);
+  // Con un pericolo solo le soglie sono le sue, o nessuna finché non arriva
+  // la legenda: quelle delle frane sotto una linea d'incendio sarebbero
+  // classi sbagliate presentate come sue.
+  const [soglie, setSoglie] = useState<typeof SOGLIE>(hazard ? [] : SOGLIE);
 
   useEffect(() => {
-    setSoglie(SOGLIE);
+    setSoglie(hazard ? [] : SOGLIE);
     if (!hazard) return;
     const ctrl = new AbortController();
     defaultApiClient
@@ -105,8 +108,7 @@ export default function ComuneTrend({
           ]);
         }
       })
-      // Senza legenda restano le soglie delle frane: righe un po' spostate
-      // valgono più di un grafico che non si disegna.
+      // Senza legenda il grafico si disegna senza soglie.
       .catch(() => undefined);
     return () => ctrl.abort();
   }, [hazard]);

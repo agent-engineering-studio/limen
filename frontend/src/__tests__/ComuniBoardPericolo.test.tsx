@@ -114,6 +114,17 @@ describe("ComuniBoard e il pericolo scelto", () => {
     // La testata (prima degli indicatori F/A/I) è la frana, non l'incendio.
     expect(testa).toMatch(/^01Calitri\w+frana0,42moderato/);
     expect(testa).toContain("In cima per: frana");
+    // L'ordine è sulla sola frana: la concomitanza non è un motivo.
+    expect(testa).not.toContain("pericoli oltre soglia");
+  });
+
+  it("senza la legenda del pericolo non disegna le soglie delle frane", async () => {
+    stato.view = "wildfire";
+    getLegend.mockRejectedValue(new Error("503"));
+    const { container } = render(<ComuniBoard />);
+    fireEvent.click(await screen.findByText("Calitri"));
+    await waitFor(() => expect(container.querySelectorAll("svg path").length).toBe(1));
+    expect(container.querySelector("svg")?.textContent).not.toContain("alto");
   });
 
   it("senza comuni sopra soglia dice per quale pericolo", async () => {

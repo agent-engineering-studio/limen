@@ -573,12 +573,16 @@ function PercheInCima({
   prevista,
   etichette,
   celle,
+  scelto = false,
 }: {
   c: ComuneRisk;
   picco: Picco | null;
   prevista: boolean;
   etichette: Record<string, string>;
   celle: number;
+  /** Ordinata su un pericolo solo: la concomitanza non pesa sull'ordine, e
+   *  dirla come motivo sarebbe falso. */
+  scelto?: boolean;
 }): JSX.Element | null {
   const quante = `${celle.toLocaleString("it-IT")} celle`;
   if (picco === null) {
@@ -611,7 +615,7 @@ function PercheInCima({
       </Tooltip>,
     );
   }
-  if (oltre >= 2) motivi.push(<span key="n">{oltre} pericoli oltre soglia</span>);
+  if (oltre >= 2 && !scelto) motivi.push(<span key="n">{oltre} pericoli oltre soglia</span>);
   return (
     <Text size="xs" c="dimmed" mt={3} className="cb-perche">
       {quante} · In {prevista ? "cima fra 72 h" : "cima"} per:{" "}
@@ -787,21 +791,27 @@ function regione(aoi: string): string {
 function Tendenza({
   comune,
   previsti,
+  pericolo,
 }: {
   comune: ComuneRisk;
   previsti: Set<string>;
+  /** Con un pericolo scelto la freccia parla di quello, come il numero accanto. */
+  pericolo?: string;
 }): JSX.Element | null {
-  if (previsti.size === 0) return null;
+  const guardati = pericolo
+    ? new Set([...previsti].filter((h) => h === pericolo))
+    : previsti;
+  if (guardati.size === 0) return null;
   // Solo i pericoli che hanno una previsione, da entrambe le parti: un
   // incendio a 0,8 senza futuro contro una frana prevista in salita darebbe
   // una freccia in calo che non dice niente di nessuno dei due.
   const ora = Object.entries(comune.hazards)
-    .filter(([h, v]) => previsti.has(h) && v.measured)
+    .filter(([h, v]) => guardati.has(h) && v.measured)
     .reduce<number | null>((m, [, v]) => (m === null || v.score > m ? v.score : m), null);
   if (ora === null) return null;
   // Senza riga previsionale un pericolo previsto sta sotto Moderato.
   const poi = Object.entries(comune.forecast ?? {})
-    .filter(([h]) => previsti.has(h))
+    .filter(([h]) => guardati.has(h))
     .reduce((m, [, f]) => Math.max(m, f.score), 0);
   const delta = poi - ora;
   // Senza righe previsionali il futuro è sotto Moderato: se oggi si è sopra,
@@ -843,6 +853,9 @@ export function ComuniBoard({
   // ordina su quello, e la testata di ogni riga mostra il suo numero. Con
   // meno di due pericoli il selettore non c'è, e non c'è niente da filtrare.
   const pericolo = view === "multi" || available.length < 2 ? undefined : view;
+  const nomePericolo = pericolo
+    ? (available.find((a) => a.hazard === pericolo)?.label_it ?? NOME_PERICOLO[pericolo] ?? pericolo).toLowerCase()
+    : "";
   const riprova = useCallback(() => setTentativo((n) => n + 1), []);
 
   // La ricerca aspetta che chi scrive si fermi: una richiesta per tasto
@@ -890,7 +903,7 @@ export function ComuniBoard({
         <Group gap={6} wrap="nowrap">
           <h2>
             {termine ? "Comuni trovati" : "Comuni più esposti"}
-            {pericolo ? ` · ${(etichette[pericolo] ?? NOME_PERICOLO[pericolo] ?? pericolo).toLowerCase()}` : ""}
+            {pericolo ? ` · ${nomePericolo}` : ""}
           </h2>
           <ComeSiLegge />
         </Group>
@@ -931,7 +944,7 @@ export function ComuniBoard({
             {termine
               ? "Controlla il nome: la ricerca è sul nome ufficiale del comune."
               : pericolo
-                ? `Nessun comune ha celle in classe Moderata o superiore per ${(etichette[pericolo] ?? NOME_PERICOLO[pericolo] ?? pericolo).toLowerCase()}${ordine === "forecast" ? " nelle prossime 72 ore" : ""}.`
+                ? `Nessun comune ha celle in classe Moderata o superiore per ${nomePericolo}${ordine === "forecast" ? " nelle prossime 72 ore" : ""}.`
                 : "Nessun comune ha celle in classe Moderata o superiore, per nessuno dei pericoli sorvegliati."}
           </Text>
         </Box>
@@ -969,7 +982,7 @@ export function ComuniBoard({
                         etichette={etichette}
                         scelto={pericolo !== undefined}
                       />
-                      <Tendenza comune={c} previsti={previsti} />
+                      <Tendenza comune={c} previsti={previsti} pericolo={pericolo} />
                     </Group>
                   </Group>
                   {((pk) =>
@@ -1007,6 +1020,7 @@ export function ComuniBoard({
                       prevista={ordine === "forecast"}
                       etichette={etichette}
                       celle={c.n_cells}
+                      scelto={pericolo !== undefined}
                     />
                   </Box>
                 </UnstyledButton>
