@@ -4,10 +4,13 @@
 
 # Limen
 
-> **Monitoraggio AI multi-fattore del rischio frana e inondazione per il
-> territorio italiano.**
+> **Monitoraggio AI del pericolo di frane, allagamenti e incendi per il
+> territorio italiano, cella per cella, adesso e nelle prossime 72 ore.**
 > **Copertura nazionale — tutte le 20 regioni ISTAT** su griglia 1 km²
-> (~312k celle); validato sul pilota Puglia + Basilicata.
+> (~312k celle), solo dati aperti, codice Apache-2.0.
+>
+> 🗺️ **Mappa live:** <https://office-gdc.w3pro.it/limen> ·
+> 💛 **[Sostieni Limen](#sostieni-limen)**
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green.svg)](./LICENSE)
@@ -354,6 +357,22 @@ quando la mappa / i briefing vengono pubblicati:
 * **OpenStreetMap** (basemap) — ODbL.
 
 ---
+
+## Sostieni Limen
+
+Limen è sviluppato e ospitato da [Agent Engineering Studio](https://www.agentengineering.it)
+su un server proprio, senza pubblicità e senza raccogliere dati
+personali. Con l'autunno arrivano le piogge, e con le piogge le frane e gli
+allagamenti: è il momento in cui una mappa aperta del pericolo serve di più.
+
+* ⭐ **Metti una stella** al repository: è il modo più semplice per farlo
+  trovare a chi lavora su protezione civile, geologia e open data.
+* 💛 **Sponsorizza** il progetto con il pulsante *Sponsor* in alto: copre
+  server, archivi meteo e il tempo per tarare il motore sui dati veri.
+* 🏛️ **Enti, comuni, università**: per sperimentazioni sul vostro
+  territorio, scriveteci da [agentengineering.it](https://www.agentengineering.it).
+* 🔁 **Condividi** la [mappa live](https://office-gdc.w3pro.it/limen) e
+  segnalaci, con una issue, dove il pericolo stimato non ti torna.
 
 ## Contributi e governance
 
