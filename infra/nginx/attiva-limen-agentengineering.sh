@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Attiva limen.agentengineering.it su questo server: certificato Let's Encrypt
 # e vhost nginx. Da lanciare con sudo, DOPO che il record DNS
-#   limen.agentengineering.it  A  <IP pubblico di questo server>
-# risolve. Rilanciabile: se il certificato c'e' gia' non lo richiede.
+#   limen.agentengineering.it  CNAME  office-gdc.w3pro.it.
+# risolve. CNAME e non A: l'IP della fibra e' dinamico, e office-gdc.w3pro.it
+# lo segue gia' con il DNS dinamico. Rilanciabile: se il certificato c'e'
+# gia' non lo richiede.
 set -euo pipefail
 
 DOMINIO=limen.agentengineering.it
@@ -11,7 +13,7 @@ VHOST=/etc/nginx/sites-available/$DOMINIO
 
 ip_dns=$(getent hosts "$DOMINIO" | awk '{print $1}' | head -1 || true)
 if [ -z "$ip_dns" ]; then
-  echo "Il DNS di $DOMINIO non risolve ancora: crea il record A e riprova." >&2
+  echo "Il DNS di $DOMINIO non risolve ancora: crea il CNAME verso office-gdc.w3pro.it e riprova." >&2
   exit 1
 fi
 echo "DNS: $DOMINIO -> $ip_dns"

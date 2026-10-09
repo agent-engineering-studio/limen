@@ -9,7 +9,7 @@
 # dominio da cui e' stato aperto, quindi la stessa build serve entrambi.
 #
 # Attivazione: lo script infra/nginx/attiva-limen-agentengineering.sh, dopo
-# che il record DNS punta a questo server. Il file in sites-enabled e' un
+# il CNAME limen.agentengineering.it -> office-gdc.w3pro.it (IP dinamico). Il file in sites-enabled e' un
 # symlink, non una copia, come per office-gdc.
 #
 # Richiede /etc/nginx/snippets/office-gdc-proxy.conf e la map
