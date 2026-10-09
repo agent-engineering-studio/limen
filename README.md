@@ -374,6 +374,14 @@ allagamenti: è il momento in cui una mappa aperta del pericolo serve di più.
 * 🔁 **Condividi** la [mappa live](https://office-gdc.w3pro.it/limen) e
   segnalaci, con una issue, dove il pericolo stimato non ti torna.
 
+## Come è nato
+
+Limen è sviluppato con [Claude Code](https://claude.com/claude-code) fin dal
+primo commit, il 3 giugno 2026: la maggior parte dei commit è scritta insieme
+a Claude, e lo dice la riga `Co-Authored-By` di ciascuno. I racconti delle
+regioni sono scritti con Claude, il modello di Anthropic, e non cambiano nessun
+numero. Limen è un progetto indipendente, non affiliato ad Anthropic.
+
 ## Contributi e governance
 
 * [`CONTRIBUTING.md`](./CONTRIBUTING.md) — setup dev, stile commit, gate.

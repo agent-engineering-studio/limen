@@ -388,16 +388,7 @@ export default function RegioniPage(): JSX.Element {
           >
             Scarica il rapporto (PDF)
           </a>
-          <span className="reg-ai-marchio">
-            Racconti scritti con
-            <img
-              className="marchio-claude"
-              src={`${import.meta.env.BASE_URL}brand/claude-logo-ivory.svg`}
-              alt="Claude"
-            />
-            <span aria-hidden="true">·</span>
-            <img src={`${import.meta.env.BASE_URL}brand/anthropic-logo-ivory.svg`} alt="Anthropic" />
-          </span>
+          <span className="reg-ai-marchio">Racconti scritti con Claude, il modello di Anthropic</span>
         </div>
         <p className="reg-sotto">
           Le regioni in ordine di pericolo stimato, adesso e nelle prossime 72 ore. L&apos;ordine
