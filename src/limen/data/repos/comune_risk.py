@@ -174,7 +174,18 @@ FROM latest_forecast lf
 JOIN cell_comune_tutte cc ON cc.cell_id = lf.cell_id
 LEFT JOIN cell_static_factors f ON f.cell_id = lf.cell_id
 WHERE lf.target_at > now()
+  AND ($4::text IS NULL OR lf.hazard_type::text = $4)
 GROUP BY 1
+"""
+
+#: La riga del solo pericolo scelto, per soglia e ordinamento della classifica.
+_PER_PERICOLO = f"""
+SELECT istat_code,
+       COALESCE(priority, 0) AS h_priority,
+       {_RANK}               AS h_rank,
+       COALESCE(measured, true) AS h_measured
+FROM mv_comune_risk
+WHERE hazard_type::text = $6
 """
 
 
@@ -396,8 +407,13 @@ async def top_comuni(
     min_rank: int = 2,
     query: str | None = None,
     order: str = "now",
+    hazard: str | None = None,
 ) -> list[dict[str, Any]]:
     """I comuni ordinati dal numero di attenzione, su tutti i pericoli.
+
+    Con `hazard` la soglia e l'ordine guardano solo quel pericolo: scelto
+    «Incendio» nel quadro nazionale, in cima vanno i comuni dove brucia, non
+    quelli dove frana. La riga porta comunque tutti e tre.
 
     `min_rank` è la soglia sotto cui un comune non entra in classifica: 2 è
     «Moderato», che è dove il sistema comincia a dire qualcosa. Con `query`
@@ -433,16 +449,24 @@ async def top_comuni(
                 aoi_id,
                 margine,
                 query,
+                hazard,
             )
         else:
             rows = await conn.fetch(
                 f"""
-                WITH per_comune AS ({_PER_COMUNE})
-                SELECT * FROM per_comune
-                WHERE ($1::text IS NULL OR aoi_id = $1)
-                  AND ($3::text IS NULL OR name ILIKE '%' || $3 || '%')
-                  AND ($4::text IS NOT NULL OR worst_rank >= $5)
-                ORDER BY max_priority DESC NULLS LAST, worst_rank DESC, n_alert DESC, name
+                WITH per_comune AS ({_PER_COMUNE}), scelto AS ({_PER_PERICOLO})
+                SELECT pc.* FROM per_comune pc
+                LEFT JOIN scelto s ON s.istat_code = pc.istat_code
+                WHERE ($1::text IS NULL OR pc.aoi_id = $1)
+                  AND ($3::text IS NULL OR pc.name ILIKE '%' || $3 || '%')
+                  AND ($4::text IS NOT NULL OR (
+                      CASE WHEN $6::text IS NULL THEN pc.worst_rank
+                           WHEN s.h_measured THEN s.h_rank ELSE 0 END) >= $5)
+                ORDER BY
+                    CASE WHEN $6::text IS NULL THEN pc.max_priority
+                         WHEN s.h_measured THEN s.h_priority END DESC NULLS LAST,
+                    CASE WHEN $6::text IS NULL THEN pc.worst_rank ELSE s.h_rank END DESC,
+                    pc.n_alert DESC, pc.name
                 LIMIT $2
                 """,
                 aoi_id,
@@ -450,6 +474,7 @@ async def top_comuni(
                 query,
                 query,
                 min_rank,
+                hazard,
             )
         codici = [str(r["istat_code"]) for r in rows]
         previsioni = await _previsioni(conn, codici)
@@ -467,11 +492,31 @@ async def top_comuni(
         }
         for r in rows
     ]
-    chiave = "forecast_attention" if order == "forecast" else "attention"
     # I comuni senza un numero vanno in coda: non sono tranquilli, ma nemmeno
     # ordinabili, e metterli in cima sarebbe un allarme inventato.
-    comuni.sort(key=lambda c: (c[chiave] is None, -(c[chiave] or 0.0), c["name"]))
+    comuni.sort(
+        key=lambda c: (
+            (n := _numero_ordine(c, order=order, hazard=hazard)) is None,
+            -(n or 0.0),
+            c["name"],
+        )
+    )
     return comuni[:limit]
+
+
+def _numero_ordine(c: dict[str, Any], *, order: str, hazard: str | None) -> float | None:
+    """Il numero su cui si ordina la classifica: l'attenzione su tutti i
+    pericoli, o la priorità del solo pericolo scelto."""
+    if hazard is None:
+        valore = c["forecast_attention"] if order == "forecast" else c["attention"]
+        return None if valore is None else float(valore)
+    if order == "forecast":
+        previsto = c["forecast"].get(hazard)
+        return None if previsto is None else float(previsto["priority"])
+    adesso = c["hazards"].get(hazard)
+    if adesso is None or not adesso["measured"]:
+        return None
+    return float(adesso["priority"])
 
 
 async def comune_detail(istat_code: str) -> dict[str, Any] | None:

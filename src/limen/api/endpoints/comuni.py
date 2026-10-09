@@ -7,9 +7,9 @@ d'altro, e la domanda che un tecnico comunale fa davvero — «il mio comune,
 per tutti i pericoli» — non aveva una superficie che la rispondesse.
 
 Dalla migrazione 051 ogni riga porta i tre pericoli affiancati. Il parametro
-`hazard` resta accettato e **ordina** la classifica su quel pericolo invece
-di filtrarla: la riga mostra comunque tutti e tre, perché un comune non
-smette di poter bruciare mentre si guardano le frane.
+`hazard` applica la soglia e **ordina** la classifica su quel pericolo: la
+riga mostra comunque tutti e tre, perché un comune non smette di poter
+bruciare mentre si guardano le frane.
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query, Response
 
 from limen.api.schemas import ComuneDetailResponse, ComuneListResponse, ComuneRisk
+from limen.core.models.hazard import HazardType
 from limen.data.repos import comune_risk
 
 router = APIRouter(tags=["comuni"])
@@ -39,8 +40,16 @@ async def list_comuni(
         description="`now` ordina sull'adesso, `forecast` sul picco previsto: il "
         "secondo trova il comune che oggi è sotto soglia e domani no.",
     ),
+    # Soglia e ordine su un solo pericolo; senza, su tutti.
+    hazard: HazardType | None = None,
 ) -> ComuneListResponse:
-    rows = await comune_risk.top_comuni(aoi_id=aoi, limit=limit, query=q, order=order)
+    rows = await comune_risk.top_comuni(
+        aoi_id=aoi,
+        limit=limit,
+        query=q,
+        order=order,
+        hazard=hazard.value if hazard is not None else None,
+    )
     return ComuneListResponse(comuni=[ComuneRisk(**r) for r in rows])
 
 

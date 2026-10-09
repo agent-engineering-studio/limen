@@ -295,6 +295,7 @@ describe("ComuniBoard", () => {
         expect.anything(),
         "Avezzano",
         "now",
+        undefined,
       ),
     );
     expect(await screen.findByText("Comuni trovati")).toBeInTheDocument();
@@ -365,6 +366,7 @@ describe("ComuniBoard", () => {
         expect.anything(),
         undefined,
         "forecast",
+        undefined,
       ),
     );
   });

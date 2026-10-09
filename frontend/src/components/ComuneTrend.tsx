@@ -47,8 +47,9 @@ const NOME: Record<string, string> = {
 };
 
 /** Le soglie di classe, come righe orizzontali: senza, una linea a 0,4 non si
- *  sa se è alta. Sono quelle delle frane — le altre differiscono, e il
- *  grafico lo dice a parole invece di disegnare tre griglie sovrapposte. */
+ *  sa se è alta. Con tutti i pericoli sono quelle delle frane — le altre
+ *  differiscono, e tre griglie sovrapposte non si leggerebbero; con un
+ *  pericolo solo sono le sue, dalla legenda. */
 const SOGLIE = [
   { y: 0.35, label: "mod." },
   { y: 0.55, label: "alto" },
@@ -75,12 +76,40 @@ function tracciato(pts: Punto[]): string {
 export default function ComuneTrend({
   istatCode,
   hours = 168,
+  hazard,
 }: {
   istatCode: string;
   hours?: number;
+  /** Solo la linea di questo pericolo, con le sue soglie; senza, tutte. */
+  hazard?: HazardType;
 }): JSX.Element {
   const [serie, setSerie] = useState<ComuneHistory | null>(null);
   const [errore, setErrore] = useState(false);
+  const [soglie, setSoglie] = useState(SOGLIE);
+
+  useEffect(() => {
+    setSoglie(SOGLIE);
+    if (!hazard) return;
+    const ctrl = new AbortController();
+    defaultApiClient
+      .getLegend(ctrl.signal, hazard)
+      .then((l) => {
+        const lo = (level: string): number | undefined =>
+          l.classes.find((c) => c.level === level)?.lo;
+        const mod = lo("Moderate");
+        const alto = lo("High");
+        if (mod !== undefined && alto !== undefined) {
+          setSoglie([
+            { y: mod, label: "mod." },
+            { y: alto, label: "alto" },
+          ]);
+        }
+      })
+      // Senza legenda restano le soglie delle frane: righe un po' spostate
+      // valgono più di un grafico che non si disegna.
+      .catch(() => undefined);
+    return () => ctrl.abort();
+  }, [hazard]);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -106,13 +135,14 @@ export default function ComuneTrend({
 
   const passato = serie.observed ?? {};
   const futuro = serie.forecast ?? {};
-  const presenti = ORDINE.filter(
+  const presenti = (hazard ? [hazard] : ORDINE).filter(
     (h) => (passato[h]?.length ?? 0) > 1 || (futuro[h]?.length ?? 0) > 0,
   );
   if (presenti.length === 0) {
     return (
       <Text size="xs" c="dimmed">
-        Non ci sono ancora abbastanza misure per un andamento. Lo storico
+        Non ci sono ancora abbastanza misure per un andamento
+        {hazard ? ` di ${NOME[hazard] ?? hazard}` : ""}. Lo storico
         registra una cella quando cambia, non a ogni giro.
       </Text>
     );
@@ -163,7 +193,7 @@ export default function ComuneTrend({
           })
           .join("; ")}`}
       >
-        {SOGLIE.map((s) => (
+        {soglie.map((s) => (
           <g key={s.label}>
             <line
               x1={PAD_L}

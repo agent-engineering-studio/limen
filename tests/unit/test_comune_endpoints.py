@@ -93,6 +93,45 @@ def test_la_ricerca_arriva_al_repo(monkeypatch: pytest.MonkeyPatch) -> None:
     assert visti["query"] == "Avezzano"
 
 
+def test_il_pericolo_scelto_arriva_al_repo(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Scelto un pericolo nel quadro nazionale, la classifica si ordina su
+    quello; senza, su tutti. Un nome fuori dall'enum è un 422."""
+    visti: list[Any] = []
+
+    async def _top(**kwargs: Any) -> list[dict[str, Any]]:
+        visti.append(kwargs["hazard"])
+        return []
+
+    monkeypatch.setattr(comune_risk_repo, "top_comuni", _top)
+    app = FastAPI()
+    app.include_router(comuni_ep.router)
+    c = TestClient(app)
+    c.get("/api/comuni?hazard=wildfire")
+    c.get("/api/comuni")
+    assert visti == ["wildfire", None]
+    assert c.get("/api/comuni?hazard=vulcano").status_code == 422
+
+
+def test_l_ordine_sul_pericolo_scelto() -> None:
+    """Il comune dove brucia sta sopra quello dove frana, se si guarda
+    l'incendio; un pericolo non misurato non ha un numero e va in coda."""
+    from limen.data.repos.comune_risk import _numero_ordine
+
+    riga = {
+        **_ROW,
+        "forecast_attention": 0.9,
+        "forecast": {"wildfire": {"class": "High", "score": 0.6, "priority": 0.7}},
+    }
+    riga["hazards"] = {**_ROW["hazards"], "flood": {**_ROW["hazards"]["flood"], "measured": False}}
+    riga["hazards"]["wildfire"] = {**_ROW["hazards"]["wildfire"], "measured": True}
+    assert _numero_ordine(riga, order="now", hazard=None) == 1.52
+    assert _numero_ordine(riga, order="now", hazard="wildfire") == 1.52
+    assert _numero_ordine(riga, order="now", hazard="flood") is None
+    assert _numero_ordine(riga, order="forecast", hazard="wildfire") == 0.7
+    assert _numero_ordine(riga, order="forecast", hazard="landslide") is None
+    assert _numero_ordine(riga, order="forecast", hazard=None) == 0.9
+
+
 def test_comune_detail_and_404(client: TestClient) -> None:
     assert client.get("/api/comune/C001").json()["comune"]["name"] == "Testville"
     assert client.get("/api/comune/NOPE").status_code == 404
