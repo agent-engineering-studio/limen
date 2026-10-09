@@ -230,6 +230,11 @@ def rapporto_pdf(regioni: list[dict[str, Any]], *, generato: datetime) -> bytes:
             resources.files("limen.report").joinpath("assets/anthropic-logo-slate.png").read_bytes()
         )
     )
+    claude = ImageReader(
+        io.BytesIO(
+            resources.files("limen.report").joinpath("assets/claude-logo-slate.png").read_bytes()
+        )
+    )
     limen = resources.files("limen.report").joinpath("assets/limen-logo.png").read_bytes()
 
     def pagina(canvas: Any, doc: Any) -> None:
@@ -246,7 +251,12 @@ def rapporto_pdf(regioni: list[dict[str, Any]], *, generato: datetime) -> bytes:
                 "&amp;", "&"
             ),
         )
-        canvas.drawRightString(larghezza - 18 * mm - 34 * mm, 11 * mm, "Racconti scritti con")
+        destra = larghezza - 18 * mm
+        canvas.drawRightString(destra - 61 * mm, 11 * mm, "Racconti scritti con")
+        canvas.drawImage(
+            claude, destra - 59 * mm, 9.6 * mm, width=22.9 * mm, height=5 * mm, mask="auto"
+        )
+        canvas.drawCentredString(destra - 34 * mm, 11 * mm, "·")
         canvas.drawImage(
             anthropic,
             larghezza - 18 * mm - 32 * mm,

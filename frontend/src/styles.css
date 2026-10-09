@@ -3315,6 +3315,10 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   white-space: nowrap;
 }
 .reg-ai-marchio img { height: 13px; width: auto; display: block; }
+/* Il logo Claude porta lo spark più alto della scritta: a pari altezza
+   la parola «Claude» risulterebbe più piccola di «Anthropic». */
+.reg-ai-marchio img.marchio-claude { height: 18px; }
+.home-ai-marchio { white-space: normal; flex-wrap: wrap; margin: 12px 0; }
 .reg-sotto { max-width: 80ch; color: var(--ink-soft); line-height: 1.6; font-size: 15px; }
 .reg-corpo {
   display: grid;

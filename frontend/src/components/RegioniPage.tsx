@@ -390,6 +390,12 @@ export default function RegioniPage(): JSX.Element {
           </a>
           <span className="reg-ai-marchio">
             Racconti scritti con
+            <img
+              className="marchio-claude"
+              src={`${import.meta.env.BASE_URL}brand/claude-logo-ivory.svg`}
+              alt="Claude"
+            />
+            <span aria-hidden="true">·</span>
             <img src={`${import.meta.env.BASE_URL}brand/anthropic-logo-ivory.svg`} alt="Anthropic" />
           </span>
         </div>
