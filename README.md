@@ -9,7 +9,7 @@
 > **Copertura nazionale — tutte le 20 regioni ISTAT** su griglia 1 km²
 > (~312k celle), solo dati aperti, codice Apache-2.0.
 >
-> 🗺️ **Mappa live:** <https://office-gdc.w3pro.it/limen> ·
+> 🗺️ **Mappa live:** <https://limen.agentengineering.it/> ·
 > ☕ **[Sostieni Limen](#sostieni-limen)** su [Buy Me a Coffee](https://www.buymeacoffee.com/f9t3zol)
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
@@ -20,11 +20,20 @@
 
 Limen ("soglia" in latino) unisce **morfologia, geologia, umidità del
 suolo, piogge, sismicità, incendi e archivi storici** in un punteggio di
-rischio **frana e inondazione** per ogni cella di un'area italiana. Il
-rischio idraulico parte dalla pericolosità geografica ISPRA (Mosaicatura
-Idraulica / PGRA — reticolo fluviale, aree costiere e lacustri) e la solleva
-quando è **prevista** un'inondazione: pioggia prevista (pluviale), portata dei
-fiumi da GloFAS (fluviale) e mareggiate (costiera). Stack: Python 3.12 +
+pericolo per **tre rischi** su ogni cella da 1 km² d'Italia, ogni ora e con
+la previsione a 72 ore:
+
+- **Frane**: suscettibilità del terreno (IFFI, PAI, pendenza, litologia)
+  per la pioggia contro le soglie intensità-durata di Caine, più terremoti e
+  incendi recenti.
+- **Allagamenti**: pericolosità idraulica ISPRA per il più forte fra il
+  ramo pluviale (pioggia prevista) e quello fluviale (portata GloFAS rispetto
+  alla piena ordinaria di quel corso d'acqua).
+- **Incendi**: l'indice canadese FWI (Van Wagner), calcolato per nodo
+  meteo, modulato da combustibile e pendenza.
+
+I numeri li calcola un motore deterministico e leggibile; l'AI scrive i
+racconti per regione e non cambia nessun numero. Stack: Python 3.12 +
 FastAPI + PostgreSQL 16 + PostGIS, frontend Vite + React + MapLibre,
 notifiche multi-canale. Il sistema è costruito attorno a un Multi-Agent
 Framework (MAF) che orchestra ingestione → scoring → spiegazione, con un
@@ -56,8 +65,12 @@ Su **Neon** (dev/test serverless): impostare `DB__CONNECTION_STRING` con
 job periodici. In **produzione** (host Docker self-hosted, nessun cloud
 provider): `docker compose -f infra/docker/docker-compose.demo.yml up -d
 --build`. Provider LLM risolto per precedenza `LLM__PROVIDER` >
-`ANTHROPIC_API_KEY` > `OPENAI_API_KEY` > credenziali Foundry > Ollama;
-in locale/produzione si usa **Ollama** (host, modello qwen).
+`ANTHROPIC_API_KEY` > `OPENAI_API_KEY` > credenziali Foundry > llama.cpp.
+In produzione tutto il traffico LLM passa dal gateway **LiteLLM**
+(`:8091`): i modelli locali girano su llama.cpp / llama-swap, i racconti
+delle regioni (`LLM__MODELS__BRIEFING=quality-cloud`) su **Claude Sonnet
+5.5**. Lo stack di inferenza è replicabile in container: vedi
+[`docs/inference.md`](./docs/inference.md).
 
 **Non sei uno sviluppatore?** La documentazione divulgativa in
 [`docs/divulgazione/`](./docs/divulgazione/README.md) spiega senza gergo come
@@ -151,16 +164,28 @@ Il ciclo di test formale ha tarato il motore sui dati reali:
   intensità-durata misurate da pluviometri), inviluppo inferiore T5 per
   macroregione. La soglia storica lasciava il 36% delle frane reali sotto
   soglia; ora ~95% sono sopra soglia.
-- **Sorgente pioggia**: **CERRA** (5.5 km) al posto di ERA5 (~28 km), che
-  non risolve la pioggia convettiva locale.
+- **Sorgente pioggia del backtest**: **ERA5** dall'archivio Open-Meteo
+  ospitato in proprio. CERRA (5.5 km) risolverebbe meglio la pioggia
+  convettiva, ma l'istanza locale non lo serve: i suoi valori arrivavano
+  nulli, letti come 0 mm, e il backtest misurava senza pioggia (#184). Ora
+  un archivio che non piove su nessun nodo ferma il comando con
+  `backtest.rainfall.empty`.
 - **Densità IFFI** contata entro 500 m dalla cella (non dal centroide).
 - **Saturazione densità** in YAML (`static.iffi_density_saturation`),
   bilanciata su ITALICA (recall vs precisione).
 
 Validazione su ground-truth (pioggia pluviometro reale): ~63–77% delle
-frane reali raggiungono ≥Moderate; backtest end-to-end su una finestra
-scatenante con hit-rate e lead-time entro i target §2.5. Il FAR resta
-limitato dall'incompletezza del catalogo eventi, non dal motore.
+frane reali raggiungono ≥Moderate.
+
+**Dove siamo, onestamente** (#122). Con la pioggia ERA5 e gli antecedenti
+come in produzione, la classe **«alto»** coglie ancora poche frane: in
+Liguria, novembre 2019, l'11% delle 131 frane con lo 0,17% delle celle-ore
+in allerta; nelle Marche, maggio 2014, nessuna su 172. Il punteggio ordina
+bene le celle dentro ogni regione, ma spostare la soglia non basta: una
+soglia nazionale tarata su sei regioni non regge sulle altre sei, e una
+soglia per regione fa peggio a parità di allerta. Il limite sta nel segnale
+della pioggia per come lo leggiamo oggi, ed è il prossimo lavoro. Il
+dettaglio dei numeri è nella issue.
 
 ---
 
@@ -248,6 +273,20 @@ integrazione usano automaticamente `imresamu/postgis-arm64`
 
 Completati di recente:
 
+- **Tre pericoli in produzione**: frane, allagamenti e incendi, con
+  previsione per cella a 72 ore ricalcolata quattro volte al giorno sulle
+  ultime corse meteo (non più una volta a notte).
+- **Pagina «Regioni da monitorare»** (`#/regioni`): le regioni in ordine di
+  pericolo stimato, adesso e nelle prossime 72 ore, con l'allerta ufficiale
+  accanto e un racconto discorsivo per pericolo scritto da Claude, senza
+  numeri inventati. Il rapporto si scarica in **PDF**
+  (`/api/regioni/rapporto.pdf`, anche per una regione sola).
+- **Quadro nazionale che guida la colonna**: scelto un pericolo, la lista
+  «Comuni più esposti» (`/api/comuni?hazard=`) e il grafico di ogni comune
+  parlano solo di quello, con le sue soglie di classe.
+- **Il primo sweep dopo un riavvio** del worker parte dopo due minuti, non
+  dopo un'ora: la mappa non resta più ferma a ogni deploy.
+
 - **Copertura nazionale** (20 regioni ISTAT) con soglia Caine ri-tarata su
   e-ITALICA e pioggia di backtest CERRA.
 - **Componente H (idraulica / inondazione)** attivo dal mosaico idraulica
@@ -278,8 +317,8 @@ Completati di recente:
 - **Area di diagnostica ML shadow** (issue #26): endpoint `/api/shadow/summary`
   (accordo/divergenza per regione + eventi reali) con aggregazione condivisa
   col CLI `limen shadow-report`; un **pannellino operatore** in linguaggio piano
-  nella dashboard; e una **rotta riservata** `#/diagnostica-ml` (ruolo
-  `ml-ops`) con recall sugli eventi reali, accordo per regione e **mappa della
+  nella dashboard; e una pagina `#/diagnostica-ml`, pubblica come il resto,
+  con recall sugli eventi reali, accordo per regione e **mappa della
   divergenza** per cella (palette neutra, non quella del rischio; vista tile
   `v_shadow_divergence_tiles` via pg_tileserv). Non autoritativa — il V1 guida
   sempre le allerte; il testo è pensato per operatori non tecnici.
@@ -315,16 +354,15 @@ Completati di recente:
 
 Prossimi passi:
 
-- **Verdetto shadow** challenger ML vs champion (issue #4). Tooling pronto:
-  `uv run limen shadow-report` legge `model_runs` sulla finestra post-fix
-  (`LIMEN_SHADOW_SINCE` default `2026-07-06T13:00Z`, `LIMEN_SHADOW_AOI`
-  opzionale) e scrive divergenza media/p95/max, correlazione, accordo classi e
-  gli eventi reali ITALICA in `reports/shadow_report_*.md`. Il giudizio va dato
-  entro la retention di 30 gg di `model_runs` — **finestra 2026-07-20 →
-  2026-08-03**. Se il challenger convince, promozione **manuale**
-  (`mlflow models transition-stage`, mai automatica). L'area di diagnostica ML
-  è già realizzata (vedi sopra); resta solo il **reliability plot**, gated su
-  abbastanza eventi reali (issue #30).
+- **Il segnale della pioggia per le frane** (#122): la scala non è la leva
+  (vedi «Dove siamo, onestamente»). Si guarda la componente pioggia nelle
+  celle mancate — intensità oraria contro cumulata, finestra delle 48 ore,
+  soglie di Caine per macroregione — sempre con taratura su un gruppo di
+  regioni e verifica sulle altre prima di toccare il motore in produzione.
+- **Verdetto shadow** del challenger ML contro il motore deterministico
+  (`uv run limen shadow-report`); promozione solo **manuale**.
+- **Reliability plot** della diagnostica ML, quando ci saranno abbastanza
+  eventi reali (#30).
 
 ---
 
@@ -374,7 +412,7 @@ allagamenti: è il momento in cui una mappa aperta del pericolo serve di più.
   <a href="https://www.buymeacoffee.com/f9t3zol"><img src="https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=&slug=f9t3zol&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" alt="Buy me a coffee" height="40"></a>
 * 🏛️ **Enti, comuni, università**: per sperimentazioni sul vostro
   territorio, scriveteci da [agentengineering.it](https://www.agentengineering.it).
-* 🔁 **Condividi** la [mappa live](https://office-gdc.w3pro.it/limen) e
+* 🔁 **Condividi** la [mappa live](https://limen.agentengineering.it/) e
   segnalaci, con una issue, dove il pericolo stimato non ti torna.
 
 ## Come è nato
