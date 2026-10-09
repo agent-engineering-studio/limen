@@ -494,8 +494,10 @@ interface Picco {
   level: RiskLevel;
 }
 
-function piccoDi(c: ComuneRisk, prevista: boolean): Picco | null {
-  const voci: Picco[] = prevista
+/** Con un pericolo scelto nel quadro nazionale il picco è il suo, anche se
+ *  un altro pericolo del comune è più alto: la lista è ordinata su quello. */
+function piccoDi(c: ComuneRisk, prevista: boolean, pericolo?: string): Picco | null {
+  const tutte: Picco[] = prevista
     ? Object.entries(c.forecast ?? {}).map(([h, f]) => ({
         hazard: h,
         score: f.score,
@@ -504,6 +506,7 @@ function piccoDi(c: ComuneRisk, prevista: boolean): Picco | null {
     : Object.entries(c.hazards)
         .filter(([, v]) => v.measured)
         .map(([h, v]) => ({ hazard: h, score: v.score, level: v.class }));
+  const voci = pericolo ? tutte.filter((v) => v.hazard === pericolo) : tutte;
   if (voci.length === 0) return null;
   return voci.reduce((a, b) => (b.score > a.score ? b : a));
 }
@@ -512,10 +515,13 @@ function Testata({
   picco,
   prevista,
   etichette,
+  scelto = false,
 }: {
   picco: Picco | null;
   prevista: boolean;
   etichette: Record<string, string>;
+  /** Il picco è del pericolo scelto, non per forza il peggiore del comune. */
+  scelto?: boolean;
 }): JSX.Element {
   if (picco === null) {
     return (
@@ -527,7 +533,7 @@ function Testata({
   const nome = (etichette[picco.hazard] ?? NOME_PERICOLO[picco.hazard] ?? picco.hazard).toLowerCase();
   return (
     <Tooltip
-      label={`${prevista ? "Picco previsto a 72 ore" : "Pericolo peggiore del comune"}: ${nome} ${numero(picco.score)} su 1, ${RISK_LABEL_IT_BY_LEVEL[picco.level]} (${banda(picco.level)}).`}
+      label={`${prevista ? "Picco previsto a 72 ore" : scelto ? "Pericolo scelto" : "Pericolo peggiore del comune"}: ${nome} ${numero(picco.score)} su 1, ${RISK_LABEL_IT_BY_LEVEL[picco.level]} (${banda(picco.level)}).`}
       withArrow
       multiline
       w={250}
@@ -567,12 +573,16 @@ function PercheInCima({
   prevista,
   etichette,
   celle,
+  scelto = false,
 }: {
   c: ComuneRisk;
   picco: Picco | null;
   prevista: boolean;
   etichette: Record<string, string>;
   celle: number;
+  /** Ordinata su un pericolo solo: la concomitanza non pesa sull'ordine, e
+   *  dirla come motivo sarebbe falso. */
+  scelto?: boolean;
 }): JSX.Element | null {
   const quante = `${celle.toLocaleString("it-IT")} celle`;
   if (picco === null) {
@@ -605,7 +615,7 @@ function PercheInCima({
       </Tooltip>,
     );
   }
-  if (oltre >= 2) motivi.push(<span key="n">{oltre} pericoli oltre soglia</span>);
+  if (oltre >= 2 && !scelto) motivi.push(<span key="n">{oltre} pericoli oltre soglia</span>);
   return (
     <Text size="xs" c="dimmed" mt={3} className="cb-perche">
       {quante} · In {prevista ? "cima fra 72 h" : "cima"} per:{" "}
@@ -781,21 +791,27 @@ function regione(aoi: string): string {
 function Tendenza({
   comune,
   previsti,
+  pericolo,
 }: {
   comune: ComuneRisk;
   previsti: Set<string>;
+  /** Con un pericolo scelto la freccia parla di quello, come il numero accanto. */
+  pericolo?: string;
 }): JSX.Element | null {
-  if (previsti.size === 0) return null;
+  const guardati = pericolo
+    ? new Set([...previsti].filter((h) => h === pericolo))
+    : previsti;
+  if (guardati.size === 0) return null;
   // Solo i pericoli che hanno una previsione, da entrambe le parti: un
   // incendio a 0,8 senza futuro contro una frana prevista in salita darebbe
   // una freccia in calo che non dice niente di nessuno dei due.
   const ora = Object.entries(comune.hazards)
-    .filter(([h, v]) => previsti.has(h) && v.measured)
+    .filter(([h, v]) => guardati.has(h) && v.measured)
     .reduce<number | null>((m, [, v]) => (m === null || v.score > m ? v.score : m), null);
   if (ora === null) return null;
   // Senza riga previsionale un pericolo previsto sta sotto Moderato.
   const poi = Object.entries(comune.forecast ?? {})
-    .filter(([h]) => previsti.has(h))
+    .filter(([h]) => guardati.has(h))
     .reduce((m, [, f]) => Math.max(m, f.score), 0);
   const delta = poi - ora;
   // Senza righe previsionali il futuro è sotto Moderato: se oggi si è sopra,
@@ -832,7 +848,14 @@ export function ComuniBoard({
   // previsione, e trova il comune che oggi è sotto soglia e domani no.
   const [ordine, setOrdine] = useState<"now" | "forecast">("now");
   const schedule = useForecastSchedule();
-  const { available } = useHazard();
+  const { available, view } = useHazard();
+  // «Tutti i pericoli» ordina sull'attenzione complessiva; un pericolo scelto
+  // ordina su quello, e la testata di ogni riga mostra il suo numero. Con
+  // meno di due pericoli il selettore non c'è, e non c'è niente da filtrare.
+  const pericolo = view === "multi" || available.length < 2 ? undefined : view;
+  const nomePericolo = pericolo
+    ? (available.find((a) => a.hazard === pericolo)?.label_it ?? NOME_PERICOLO[pericolo] ?? pericolo).toLowerCase()
+    : "";
   const riprova = useCallback(() => setTentativo((n) => n + 1), []);
 
   // La ricerca aspetta che chi scrive si fermi: una richiesta per tasto
@@ -844,7 +867,7 @@ export function ComuniBoard({
     setComuni(null);
     setFailure(null);
     defaultApiClient
-      .getTopComuni(undefined, 30, ctrl.signal, termine || undefined, ordine)
+      .getTopComuni(undefined, 30, ctrl.signal, termine || undefined, ordine, pericolo)
       .then((r) => setComuni(r.comuni))
       .catch((err: unknown) => {
         if (ctrl.signal.aborted) return;
@@ -852,7 +875,7 @@ export function ComuniBoard({
         setFailure(describeFailure(err));
       });
     return () => ctrl.abort();
-  }, [termine, tentativo, ordine]);
+  }, [termine, tentativo, ordine, pericolo]);
 
   const previsti = useMemo(
     () => new Set(Object.keys(schedule?.cells.last_run_by_hazard ?? {})),
@@ -878,7 +901,10 @@ export function ComuniBoard({
     <section className="comuni-board rail-sezione" aria-label="Rischio per comune">
       <div className="rail-testa">
         <Group gap={6} wrap="nowrap">
-          <h2>{termine ? "Comuni trovati" : "Comuni più esposti"}</h2>
+          <h2>
+            {termine ? "Comuni trovati" : "Comuni più esposti"}
+            {pericolo ? ` · ${nomePericolo}` : ""}
+          </h2>
           <ComeSiLegge />
         </Group>
         <SegmentedControl
@@ -917,14 +943,16 @@ export function ComuniBoard({
           <Text size="xs" c="dimmed">
             {termine
               ? "Controlla il nome: la ricerca è sul nome ufficiale del comune."
-              : "Nessun comune ha celle in classe Moderata o superiore, per nessuno dei pericoli sorvegliati."}
+              : pericolo
+                ? `Nessun comune ha celle in classe Moderata o superiore per ${nomePericolo}${ordine === "forecast" ? " nelle prossime 72 ore" : ""}.`
+                : "Nessun comune ha celle in classe Moderata o superiore, per nessuno dei pericoli sorvegliati."}
           </Text>
         </Box>
       ) : (
         <Stack gap={0}>
           {comuni.map((c, posizione) => {
             const apertoQui = aperto === c.istat_code;
-            const picco = piccoDi(c, ordine === "forecast");
+            const picco = piccoDi(c, ordine === "forecast", pericolo);
             return (
               <Box key={c.istat_code} className="cb-row">
                 <UnstyledButton
@@ -952,8 +980,9 @@ export function ComuniBoard({
                         picco={picco}
                         prevista={ordine === "forecast"}
                         etichette={etichette}
+                        scelto={pericolo !== undefined}
                       />
-                      <Tendenza comune={c} previsti={previsti} />
+                      <Tendenza comune={c} previsti={previsti} pericolo={pericolo} />
                     </Group>
                   </Group>
                   {((pk) =>
@@ -991,6 +1020,7 @@ export function ComuniBoard({
                       prevista={ordine === "forecast"}
                       etichette={etichette}
                       celle={c.n_cells}
+                      scelto={pericolo !== undefined}
                     />
                   </Box>
                 </UnstyledButton>
@@ -998,7 +1028,7 @@ export function ComuniBoard({
                   <Box pl="xs" pb="xs">
                     {apertoQui ? (
                       <Stack gap={10}>
-                        <ComuneTrend istatCode={c.istat_code} />
+                        <ComuneTrend istatCode={c.istat_code} hazard={pericolo} />
                         <DettaglioCelle istatCode={c.istat_code} onCella={onCella} />
                       </Stack>
                     ) : null}

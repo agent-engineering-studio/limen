@@ -303,12 +303,15 @@ export class ApiClient {
     /** `forecast` ordina sul picco previsto: trova il comune che oggi è
      *  sotto soglia e domani no. */
     order: "now" | "forecast" = "now",
+    /** Soglia e ordine su un solo pericolo; senza, su tutti. */
+    hazard?: HazardType,
   ): Promise<ComuneListResponse> {
     const qs = new URLSearchParams();
     if (aoi) qs.set("aoi", aoi);
     qs.set("limit", String(limit));
     if (q) qs.set("q", q);
     if (order !== "now") qs.set("order", order);
+    if (hazard) qs.set("hazard", hazard);
     return this.request<ComuneListResponse>(`/api/comuni?${qs.toString()}`, {}, signal);
   }
 

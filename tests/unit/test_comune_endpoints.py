@@ -93,6 +93,25 @@ def test_la_ricerca_arriva_al_repo(monkeypatch: pytest.MonkeyPatch) -> None:
     assert visti["query"] == "Avezzano"
 
 
+def test_il_pericolo_scelto_arriva_al_repo(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Scelto un pericolo nel quadro nazionale, la classifica si ordina su
+    quello; senza, su tutti. Un nome fuori dall'enum è un 422."""
+    visti: list[Any] = []
+
+    async def _top(**kwargs: Any) -> list[dict[str, Any]]:
+        visti.append(kwargs["hazard"])
+        return []
+
+    monkeypatch.setattr(comune_risk_repo, "top_comuni", _top)
+    app = FastAPI()
+    app.include_router(comuni_ep.router)
+    c = TestClient(app)
+    c.get("/api/comuni?hazard=wildfire")
+    c.get("/api/comuni")
+    assert visti == ["wildfire", None]
+    assert c.get("/api/comuni?hazard=vulcano").status_code == 422
+
+
 def test_comune_detail_and_404(client: TestClient) -> None:
     assert client.get("/api/comune/C001").json()["comune"]["name"] == "Testville"
     assert client.get("/api/comune/NOPE").status_code == 404
