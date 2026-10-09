@@ -2,6 +2,7 @@
 // AbortSignal-aware so callers (React effects) can cancel in-flight
 // requests on unmount.
 
+import { sullOrigine } from "./env";
 import type {
   ForecastAlertsResponse,
   ForecastSchedule,
@@ -53,10 +54,11 @@ export class ApiClient {
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: ApiClientOptions = {}) {
-    const fallback =
+    const fallback = sullOrigine(
       typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL
         ? (import.meta.env.VITE_API_URL as string)
-        : "http://localhost:8080";
+        : "http://localhost:8080",
+    );
     this.baseUrl = (options.baseUrl ?? fallback).replace(/\/+$/, "");
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
   }
