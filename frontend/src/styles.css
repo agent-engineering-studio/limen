@@ -3314,6 +3314,8 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   color: var(--muted);
   white-space: normal;
 }
+.home-sostieni { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 14px 0; }
+.home-sostieni img { display: block; height: 40px; width: auto; }
 .reg-sotto { max-width: 80ch; color: var(--ink-soft); line-height: 1.6; font-size: 15px; }
 .reg-corpo {
   display: grid;
