@@ -31,6 +31,7 @@ import SciencePage from "./components/SciencePage";
 import ShadowDiagnosticsPage from "./components/ShadowDiagnosticsPage";
 import ShadowPanel from "./components/ShadowPanel";
 import { useForecastSchedule } from "./lib/forecast-schedule";
+import { useBuyMeACoffee } from "./lib/buymeacoffee";
 import { useHazard } from "./lib/hazard";
 import { OVERLAYS } from "./lib/overlays";
 
@@ -202,6 +203,8 @@ export function App(): JSX.Element {
     top: number;
     maxHeight: number;
   } | null>(null);
+
+  useBuyMeACoffee(page !== "dashboard");
 
   useEffect(() => {
     const onHash = (): void => setPage(pageFromHash());

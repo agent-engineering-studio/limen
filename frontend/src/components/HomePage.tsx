@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
+import { BMC_PAGINA } from "../lib/buymeacoffee";
 import { RISK_CLASSES } from "../lib/risk-colors";
 import type { NationalReportResponse } from "../types";
 
@@ -275,6 +276,18 @@ export function HomePage(): JSX.Element {
           Limen è sviluppato con Claude Code fin dal primo commit, e i racconti
           delle regioni sono scritti con Claude. Progetto indipendente, non
           affiliato ad Anthropic.
+        </p>
+        <p className="home-sostieni">
+          Limen è gratuito e aperto a tutti. Se ti è utile, aiutaci a tenere
+          acceso il server.
+          <a href={BMC_PAGINA} target="_blank" rel="noopener noreferrer">
+            <img
+              src={`${import.meta.env.BASE_URL}brand/buymeacoffee.svg`}
+              alt="Buy me a coffee"
+              width={188}
+              height={40}
+            />
+          </a>
         </p>
         <p className="footer-disclaimer">
           Limen è uno strumento di supporto al monitoraggio: non sostituisce le
