@@ -30,3 +30,13 @@ def test_seconds_unit_defers_too() -> None:
     first = trigger.next()
     assert first is not None
     assert first >= before + timedelta(seconds=30)
+
+
+def test_first_after_shortens_only_the_first_wait() -> None:
+    before = datetime.now(UTC)
+    trigger = _deferred_interval(minutes=60, first_after=timedelta(minutes=2))
+    first = trigger.next()
+    second = trigger.next()
+    assert first is not None and second is not None
+    assert before + timedelta(minutes=2) <= first < before + timedelta(minutes=3)
+    assert second - first == timedelta(minutes=60)
