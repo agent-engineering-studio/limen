@@ -176,9 +176,9 @@ def componi_mail(
 ) -> tuple[str, str]:
     """Oggetto e testo della mail: tutto quello che serve per valutarlo senza aprire altro."""
     oggetto = f"[Limen] Contributo esperto · {TIPO_IT[dati.tipo]} · {dati.cell_id}"
-    link = (
-        f"{map_base_url.rstrip('/')}/?{urlencode({'aoi': stato['aoi_id'], 'cell': dati.cell_id})}"
-    )
+    # La SPA legge la rotta dall'hash: un link in query aprirebbe la home.
+    cella = {"cella": dati.cell_id, "lon": f"{stato['lon']:.5f}", "lat": f"{stato['lat']:.5f}"}
+    link = f"{map_base_url.rstrip('/')}/#/dashboard?{urlencode(cella)}"
     righe = [
         f"Contributo — {TIPO_IT[dati.tipo]}",
         "",

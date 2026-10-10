@@ -24,6 +24,11 @@ const MIN_TESTO = 20;
 // server rifiuterebbe con un messaggio generico.
 const EMAIL = "[^@\\s<>,;\"]+@[^@\\s<>,;\"]+\\.[^@\\s<>,;\"]{2,}";
 const LINK = "https?://.+";
+// Il server scarta come automatico un modulo compilato in meno di
+// CONTRIBUTI__SECONDI_MINIMI (5 s di default) e risponde comunque 201: chi
+// incolla un testo pronto e invia subito perderebbe il contributo credendolo
+// arrivato. Qui si aspetta un margine sopra quella soglia prima di spedire.
+const ATTESA_MINIMA_MS = 6000;
 
 type Stato = "chiuso" | "aperto" | "invio" | "inviato";
 
@@ -100,6 +105,8 @@ export default function ContributoEsperto({
     if (testo.trim().length < MIN_TESTO || !consenso || !chiScrive) return;
     setErrore(null);
     setStato("invio");
+    const attesa = ATTESA_MINIMA_MS - (Date.now() - apertoAlle.current);
+    if (attesa > 0) await new Promise((r) => setTimeout(r, attesa));
     try {
       await defaultApiClient.inviaContributo({
         cell_id: cellId,

@@ -214,7 +214,8 @@ def test_la_mail_porta_tutto_quello_che_serve() -> None:
     assert "Dipartimento o ente: Dipartimento di Scienze della Terra" in testo
     assert "Coordinate: 40.10533, 16.10512" in testo
     assert (
-        "Mappa: https://limen.example.org/?aoi=it-basilicata&cell=it-basilicata%7C12%7C34" in testo
+        "Mappa: https://limen.example.org/#/dashboard?cella=it-basilicata%7C12%7C34"
+        "&lon=16.10512&lat=40.10533" in testo
     )
     assert "S = 0.62" in testo
     # Solo i fattori numerici: un testo o un booleano non sono un numero da leggere.

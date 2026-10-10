@@ -32,6 +32,7 @@ import ShadowDiagnosticsPage from "./components/ShadowDiagnosticsPage";
 import ShadowPanel from "./components/ShadowPanel";
 import { useForecastSchedule } from "./lib/forecast-schedule";
 import { useBuyMeACoffee } from "./lib/buymeacoffee";
+import { cellaDaHash } from "./lib/link-cella";
 import { useHazard } from "./lib/hazard";
 import { OVERLAYS } from "./lib/overlays";
 
@@ -48,14 +49,15 @@ function pageFromHash(): Page {
   // La guida ha una sotto-rotta per sezione, quindi il confronto esatto non
   // basta. La vecchia documentazione in sei pagine è confluita nella guida:
   // i suoi link condivisi aprono quella.
-  const hash = window.location.hash;
+  // La query dopo la rotta (`#/dashboard?cella=…`) non cambia la pagina.
+  const hash = window.location.hash.split("?")[0] ?? "";
   if (hash.startsWith("#/come-funziona") || hash.startsWith("#/documentazione")) {
     return "guida";
   }
   if (hash.startsWith("#/regioni")) {
     return "regioni";
   }
-  switch (window.location.hash) {
+  switch (hash) {
     case "#/dashboard":
     case "#/italia": // vecchio deep-link: il quadro nazionale vive in dashboard
       return "dashboard";
@@ -206,8 +208,13 @@ export function App(): JSX.Element {
 
   useBuyMeACoffee(page !== "dashboard");
 
+  const [cellaLink, setCellaLink] = useState(() => cellaDaHash(window.location.hash));
+
   useEffect(() => {
-    const onHash = (): void => setPage(pageFromHash());
+    const onHash = (): void => {
+      setPage(pageFromHash());
+      setCellaLink(cellaDaHash(window.location.hash));
+    };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
@@ -307,6 +314,12 @@ export function App(): JSX.Element {
     mapRef.current?.flyTo({ center: [c.lon, c.lat], zoom: 13, duration: 700 });
     setSelected({ cellId: c.cell_id, lon: c.lon, lat: c.lat });
   }, []);
+
+  useEffect(() => {
+    if (page !== "dashboard" || !cellaLink) return;
+    mapRef.current?.flyTo({ center: [cellaLink.lon, cellaLink.lat], zoom: 13, duration: 700 });
+    setSelected({ cellId: cellaLink.cellId, lon: cellaLink.lon, lat: cellaLink.lat });
+  }, [page, cellaLink]);
 
   const attiviNomi = OVERLAYS.filter((o) => overlayAttivi.has(o.id)).map((o) => o.label);
 

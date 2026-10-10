@@ -9,8 +9,12 @@ import { ApiClientError, defaultApiClient } from "../lib/api-client";
 
 const CELLA = "it-basilicata|12|34";
 
+// Il modulo non spedisce prima di 6 s dall'apertura (il server scarterebbe
+// l'invio come automatico): qui il tempo «passa» dopo l'apertura.
 function compila(): void {
   fireEvent.click(screen.getByRole("button", { name: /Sei un esperto/ }));
+  const aperto = Date.now();
+  vi.spyOn(Date, "now").mockReturnValue(aperto + 10_000);
   fireEvent.change(screen.getByLabelText("Cosa vedi"), {
     target: { value: "Il versante è in argille e ha avuto un movimento nel 2019." },
   });
@@ -75,6 +79,35 @@ describe("ContributoEsperto", () => {
       target: { value: "https://www.linkedin.com/in/maria-rossi" },
     });
     expect(invia.disabled).toBe(false);
+  });
+
+  it("chi invia subito aspetta la soglia invece di essere scartato", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
+    try {
+      const invia = vi
+        .spyOn(defaultApiClient, "inviaContributo")
+        .mockResolvedValue({ ricevuto: true });
+      render(<ContributoEsperto cellId={CELLA} hazard="landslide" />);
+      fireEvent.click(screen.getByRole("button", { name: /Sei un esperto/ }));
+      fireEvent.change(screen.getByLabelText("Cosa vedi"), {
+        target: { value: "Testo incollato già pronto, lungo abbastanza." },
+      });
+      fireEvent.change(screen.getByLabelText("Nome e cognome"), {
+        target: { value: "Maria Rossi" },
+      });
+      fireEvent.change(screen.getByLabelText("Email"), {
+        target: { value: "maria@example.org" },
+      });
+      fireEvent.click(screen.getByLabelText(/acconsento al trattamento/));
+      fireEvent.click(screen.getByRole("button", { name: "Invia il contributo" }));
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(invia).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1_500);
+      expect(invia).toHaveBeenCalledTimes(1);
+      expect(invia.mock.calls[0]![0].compilato_in_ms).toBeGreaterThanOrEqual(6_000);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("al limite di invii lo dice a parole e tiene i campi", async () => {

@@ -9,7 +9,9 @@ cd "$(dirname "$0")/../.."
 ENV=.env
 [ -f "$ENV" ] || { echo "Manca $ENV nella radice del repository." >&2; exit 1; }
 
-valore() { grep -oP "^$1=\K.*" "$ENV" | tail -1; }
+# `|| true`: con pipefail una chiave assente farebbe uscire lo script prima
+# dei controlli che dicono quale manca.
+valore() { { grep -oP "^$1=\K.*" "$ENV" || true; } | tail -1; }
 HOST=$(valore NOTIFICATIONS__EMAIL__SMTP_HOST)
 PORTA=$(valore NOTIFICATIONS__EMAIL__SMTP_PORT)
 UTENTE=$(valore NOTIFICATIONS__EMAIL__USERNAME)

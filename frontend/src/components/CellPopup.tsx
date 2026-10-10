@@ -535,7 +535,7 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
           varrebbe zero per assenza di misura, non perché non ci sia pericolo:
           per questo la cella è grigia e non verde.
         </p>
-        <ContributoEsperto key={data.cell_id} cellId={data.cell_id} hazard={rowHazard} />
+        <ContributoEsperto key={`${data.cell_id}|${rowHazard}`} cellId={data.cell_id} hazard={rowHazard} />
       </aside>
     );
   }
@@ -613,7 +613,7 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
         </p>
       ) : null}
       <ComeNasce cellId={data.cell_id} hazard={rowHazard} />
-      <ContributoEsperto key={data.cell_id} cellId={data.cell_id} hazard={rowHazard} />
+      <ContributoEsperto key={`${data.cell_id}|${rowHazard}`} cellId={data.cell_id} hazard={rowHazard} />
 
       {onDismiss ? (
         <button type="button" onClick={onDismiss} style={{ marginTop: 8 }}>
