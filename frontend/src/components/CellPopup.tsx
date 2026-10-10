@@ -4,6 +4,7 @@ import type { JSX } from "react";
 import { defaultApiClient, ApiClientError } from "../lib/api-client";
 import { useHazard } from "../lib/hazard";
 import ComeNasce from "./ComeNasce";
+import ContributoEsperto from "./ContributoEsperto";
 import { RISK_COLOR_BY_LEVEL, RISK_LABEL_IT_BY_LEVEL, RISK_SCURE } from "../lib/risk-colors";
 import type {
   CellBreakdownResponse,
@@ -534,6 +535,7 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
           varrebbe zero per assenza di misura, non perché non ci sia pericolo:
           per questo la cella è grigia e non verde.
         </p>
+        <ContributoEsperto key={`${data.cell_id}|${rowHazard}`} cellId={data.cell_id} hazard={rowHazard} />
       </aside>
     );
   }
@@ -611,6 +613,7 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
         </p>
       ) : null}
       <ComeNasce cellId={data.cell_id} hazard={rowHazard} />
+      <ContributoEsperto key={`${data.cell_id}|${rowHazard}`} cellId={data.cell_id} hazard={rowHazard} />
 
       {onDismiss ? (
         <button type="button" onClick={onDismiss} style={{ marginTop: 8 }}>

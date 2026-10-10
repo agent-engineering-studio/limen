@@ -19,6 +19,8 @@ import type {
   ComuneGeometry,
   ComuneHistory,
   ComuneListResponse,
+  ContributoRichiesta,
+  ContributoRisposta,
   HazardType,
   HazardsResponse,
   JobStatusResponse,
@@ -180,6 +182,15 @@ export class ApiClient {
   /** Le regioni dalla più da guardare, con allerta e spiegazione dell'AI. */
   getRegioni(signal?: AbortSignal): Promise<RegioniResponse> {
     return this.request<RegioniResponse>("/api/regioni", {}, signal);
+  }
+
+  /** Il modulo «Sei un esperto?» sotto la cella: parte per mail, non si salva. */
+  inviaContributo(body: ContributoRichiesta): Promise<ContributoRisposta> {
+    return this.request<ContributoRisposta>("/api/contributi", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
   }
 
   /** Chi calcola i numeri, con quale meteo, e cosa fanno oggi ML e AI. */

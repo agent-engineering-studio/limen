@@ -916,6 +916,26 @@ class VerifySettings(BaseSettings):
     grace_hours: int = Field(default=24, ge=0)
 
 
+class ContributiSettings(BaseSettings):
+    """I contributi degli esperti dall'ispettore della cella.
+
+    Partono per mail con il server SMTP di ``NOTIFICATIONS__EMAIL`` ma verso
+    destinatari propri: chi cura il progetto non è il centro operativo che
+    riceve le allerte. Non si salvano: senza destinatari o senza SMTP il
+    modulo risponde che il contributo non è partito.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    destinatari: list[str] = Field(default_factory=list)
+    max_per_ip_ora: int = Field(default=3, ge=1)
+    # Un tetto complessivo, perché un indirizzo IP si cambia e la casella che
+    # riceve è di una persona.
+    max_totali_ora: int = Field(default=30, ge=1)
+    # Sotto questo tempo di compilazione il modulo l'ha riempito un programma.
+    secondi_minimi: float = Field(default=5.0, ge=0.0)
+
+
 class Settings(BaseSettings):
     """Top-level application settings."""
 
@@ -933,6 +953,7 @@ class Settings(BaseSettings):
     scheduler: SchedulerSettings = Field(default_factory=SchedulerSettings)
     api: ApiSettings = Field(default_factory=ApiSettings)
     notifications: NotificationsSettings = Field(default_factory=NotificationsSettings)
+    contributi: ContributiSettings = Field(default_factory=ContributiSettings)
     alert: AlertSettings = Field(default_factory=AlertSettings)
     forecast: ForecastSettings = Field(default_factory=ForecastSettings)
     report: ReportSettings = Field(default_factory=ReportSettings)

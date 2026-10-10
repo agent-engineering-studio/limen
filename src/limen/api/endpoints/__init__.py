@@ -13,6 +13,7 @@ from limen.api.endpoints import (
     alerts,
     aoi,
     comuni,
+    contributi,
     health,
     regioni,
     risk,
@@ -32,6 +33,7 @@ def all_routers() -> Iterable[APIRouter]:
         comuni.router,
         regioni.router,
         status.router,
+        contributi.router,
     )
 
 
