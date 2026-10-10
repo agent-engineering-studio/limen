@@ -153,3 +153,44 @@ def test_foundry_factory_without_any_pair_raises() -> None:
 
     with pytest.raises(LlmFactoryError, match=r"endpoint\+key"):
         factory.create("RiskAnalyst")
+
+
+@pytest.mark.asyncio
+async def test_llamacpp_client_logs_token_usage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ogni risposta registra i suoi token: è il solo modo di sapere quanto
+    costa davvero un modello a pagamento dietro il gateway."""
+    import httpx
+    from structlog.testing import capture_logs
+
+    from limen.agents.llm_factory import llamacpp_factory as mod
+    from limen.agents.llm_factory.base import ChatMessage
+
+    async def _fetch(method: str, url: str, **kw: object) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": "ciao"}}],
+                "usage": {
+                    "prompt_tokens": 1200,
+                    "completion_tokens": 640,
+                    "completion_tokens_details": {"reasoning_tokens": 90},
+                },
+            },
+        )
+
+    async def _client() -> object:
+        return object()
+
+    monkeypatch.setattr(mod, "fetch_with_retry", _fetch)
+    monkeypatch.setattr(mod.SharedHttpClient, "get", _client)
+    client = mod.LlamaCppChatClient(base_url="http://gw", model="fast-cloud")
+    with capture_logs() as logs:
+        testo = await client.chat([ChatMessage(role="user", content="?")])
+    assert testo == "ciao"
+    uso = next(e for e in logs if e["event"] == "llm.usage")
+    assert uso["model"] == "fast-cloud"
+    assert (uso["prompt_tokens"], uso["completion_tokens"], uso["reasoning_tokens"]) == (
+        1200,
+        640,
+        90,
+    )

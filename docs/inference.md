@@ -35,7 +35,8 @@ toccare Limen.
 | `extract` | profilo JSON (grammar-constrained) | output JSON stretto |
 | `embed` | embedding | sidecar KG |
 | `quality-local` | colibrì / GLM-5.2, **con** fallback su `quality-cloud` | solo `briefing` — vedi sotto |
-| `quality-cloud` | Claude via API, fallback di `quality-local` | — |
+| `quality-cloud` | Claude Sonnet 5.5 via API, fallback di `quality-local` | — |
+| `fast-cloud` | Claude Haiku 5.5 via API: 0,10 $ / 0,50 $ per milione di token, venti volte meno di Sonnet | `briefing` e `risk_analyst` in produzione |
 | `glm52` | colibrì per nome proprio, **senza** fallback | solo `briefing` — vedi sotto |
 
 La differenza fra `quality-local` e `glm52` non è il modello — è la semantica

@@ -51,6 +51,13 @@ model_list:
   - model_name: quality-cloud
     litellm_params:
       model: anthropic/claude-sonnet-5-5
+
+  # Claude Haiku 5.5: i racconti delle regioni e l'analisi. Venti volte meno
+  # di Sonnet (0,10 $ / 0,50 $ per milione di token) e più veloce; stessa
+  # chiave di quality-cloud.
+  - model_name: fast-cloud
+    litellm_params:
+      model: anthropic/claude-haiku-5-5
       api_key: os.environ/ANTHROPIC_API_KEY
 
 router_settings:
