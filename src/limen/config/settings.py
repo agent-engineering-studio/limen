@@ -249,8 +249,12 @@ class LLMSettings(BaseSettings):
     # Una regione si rispiega solo se la sua classe dominante è cambiata o
     # dopo queste ore (#155). Senza, ogni sweep orario è uno sweep nuovo e,
     # con tre pericoli e un modello a pagamento, sarebbero fino a 1.440
-    # spiegazioni al giorno per dire spesso la stessa cosa.
-    briefing_min_hours: int = Field(default=12, ge=1)
+    # spiegazioni al giorno per dire spesso la stessa cosa. 24 e non 12: il
+    # 10 ottobre 2026, 14 riscritture su 18 venivano dal timer e non da un
+    # cambio di classe — si pagava due volte al giorno lo stesso racconto.
+    # Non oltre: il testo parla di giorni («domenica», «72 ore»), e a 48 ore
+    # parlerebbe di giorni già passati.
+    briefing_min_hours: int = Field(default=24, ge=1)
 
     # Le ore UTC in cui un modello lento (colibrì/GLM-5.2) può girare:
     # [inizio, fine), a cavallo della mezzanotte se inizio > fine. Il server

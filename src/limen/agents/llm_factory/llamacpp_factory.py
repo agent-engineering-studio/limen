@@ -91,6 +91,17 @@ class LlamaCppChatClient:  # Implements the ChatClient Protocol structurally
                 f"(model={self.model!r}): {resp.text[:200]}"
             )
         data = resp.json()
+        # I token di ogni risposta, per misurare il costo vero dei modelli a
+        # pagamento invece di stimarlo: il gateway li riporta nella forma
+        # OpenAI anche quando dietro c'è Anthropic.
+        usage = data.get("usage") or {}
+        log.info(
+            "llm.usage",
+            model=self.model,
+            prompt_tokens=usage.get("prompt_tokens"),
+            completion_tokens=usage.get("completion_tokens"),
+            reasoning_tokens=(usage.get("completion_tokens_details") or {}).get("reasoning_tokens"),
+        )
         try:
             return str(data["choices"][0]["message"]["content"])
         except (KeyError, IndexError, TypeError) as exc:
