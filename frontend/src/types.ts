@@ -627,3 +627,30 @@ export interface RegioneMonitorata {
 export interface RegioniResponse {
   regioni: RegioneMonitorata[];
 }
+
+/** POST /api/contributi — il modulo dell'esperto sotto la cella: parte per mail, non si salva. */
+export type TipoContributo =
+  | "frana_non_censita"
+  | "valutazione"
+  | "pesi_soglie"
+  | "mitigazione"
+  | "altro";
+
+export interface ContributoRichiesta {
+  cell_id: string;
+  hazard: HazardType | null;
+  tipo: TipoContributo;
+  testo: string;
+  fonte_url: string | null;
+  nome: string | null;
+  email: string;
+  affiliazione: string | null;
+  linkedin_url: string | null;
+  consenso: true;
+  compilato_in_ms: number;
+  sito_web: string;
+}
+
+export interface ContributoRisposta {
+  ricevuto: boolean;
+}

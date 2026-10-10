@@ -26,6 +26,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+* **Contributi degli esperti dall'ispettore della cella.** Sotto «Come nasce
+  questo numero» c'è «Sei un esperto? Correggi questa valutazione»: un
+  geologo che non scrive codice dice cosa non torna e lascia la fonte come
+  link, senza passare da GitHub. Si firma con nome e cognome oppure con il
+  profilo LinkedIn, più l'email e, se vuole, il dipartimento o l'ente.
+  `POST /api/contributi` manda una mail di solo testo a
+  `CONTRIBUTI__DESTINATARI` con il server di `NOTIFICATIONS__EMAIL`, il
+  `Reply-To` di chi ha scritto e i numeri della cella in quel momento.
+  **Limen non salva niente**: per questo la mail parte prima della risposta,
+  e se non parte il modulo lo dice (503) invece di perdere il contributo in
+  silenzio. Difese senza servizi esterni: campo esca, tempo minimo di
+  compilazione, limite per indirizzo (da `X-Real-IP`, che `X-Forwarded-For`
+  si falsifica) e limite complessivo orario, in memoria e atomici. Nessun
+  contributo cambia i numeri.
 * Passo notturno **`storage`**: registra quanto pesa il database e quali
   tabelle pesano, e avvisa oltre `SCORING__DB_SIZE_WARN_GB`. Lo spazio libero
   del filesystem da SQL non si vede, ma la crescita sì — e il 28 settembre

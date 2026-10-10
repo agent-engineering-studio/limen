@@ -106,6 +106,18 @@ services:
       NOTIFICATIONS__MQTT__TOPIC: limen/alerts
       ALERT__MIN_LEVEL: High
       ALERT__DEDUP_WINDOW_MINUTES: "180"
+      ALERT__MAP_BASE_URL: ${ALERT__MAP_BASE_URL:-http://localhost:5173}
+      # Posta: la usano i contributi degli esperti (e il canale email delle
+      # allerte, se lo si abilita). Vuote ⇒ il modulo risponde che il
+      # contributo non è partito; niente si salva comunque.
+      NOTIFICATIONS__EMAIL__SMTP_HOST: ${NOTIFICATIONS__EMAIL__SMTP_HOST:-}
+      NOTIFICATIONS__EMAIL__SMTP_PORT: ${NOTIFICATIONS__EMAIL__SMTP_PORT:-587}
+      NOTIFICATIONS__EMAIL__USE_TLS: ${NOTIFICATIONS__EMAIL__USE_TLS:-false}
+      NOTIFICATIONS__EMAIL__USE_STARTTLS: ${NOTIFICATIONS__EMAIL__USE_STARTTLS:-true}
+      NOTIFICATIONS__EMAIL__USERNAME: ${NOTIFICATIONS__EMAIL__USERNAME:-}
+      NOTIFICATIONS__EMAIL__PASSWORD: ${NOTIFICATIONS__EMAIL__PASSWORD:-}
+      NOTIFICATIONS__EMAIL__FROM_ADDRESS: ${NOTIFICATIONS__EMAIL__FROM_ADDRESS:-}
+      CONTRIBUTI__DESTINATARI: ${CONTRIBUTI__DESTINATARI:-[]}
       API__PORT: "8080"
       LOG_JSON: "true"
       # Optional LLM credentials. The provider is pinned below

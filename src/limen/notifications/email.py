@@ -76,6 +76,56 @@ def _render_html(payload: AlertPayload) -> str:
     )
 
 
+async def _spedisci(settings: EmailChannelSettings, msg: EmailMessage) -> bool:
+    password = settings.password.get_secret_value() if settings.password is not None else None
+    try:
+        await aiosmtplib.send(
+            msg,
+            hostname=settings.smtp_host,
+            port=settings.smtp_port,
+            username=settings.username,
+            password=password,
+            start_tls=settings.use_starttls,
+            use_tls=settings.use_tls,
+            timeout=settings.timeout_seconds,
+        )
+    except _DEGRADATION_EXC as exc:
+        log.warning(
+            "email.send.degraded",
+            error=str(exc),
+            error_type=type(exc).__name__,
+            host=settings.smtp_host,
+        )
+        return False
+    return True
+
+
+async def invia_testo(
+    settings: EmailChannelSettings,
+    *,
+    destinatari: list[str],
+    oggetto: str,
+    testo: str,
+    rispondi_a: str | None = None,
+) -> bool:
+    """Una mail di solo testo, fuori dal percorso delle allerte.
+
+    Usa il server e il mittente delle allerte ma non i loro destinatari: chi la
+    chiama sa a chi scrivere.
+    """
+    if not (settings.smtp_host and settings.from_address and destinatari):
+        log.info("email.skip", reason="missing host / from / recipients")
+        return False
+    msg = EmailMessage()
+    msg["Subject"] = oggetto
+    msg["From"] = settings.from_address
+    msg["To"] = ", ".join(destinatari)
+    if rispondi_a:
+        msg["Reply-To"] = rispondi_a
+    msg.set_content(testo)
+    return await _spedisci(settings, msg)
+
+
 class EmailChannel(NotificationChannel):
     name = "email"
 
@@ -104,30 +154,7 @@ class EmailChannel(NotificationChannel):
         msg.set_content(_render_text(payload))
         msg.add_alternative(_render_html(payload), subtype="html")
 
-        password = (
-            self._settings.password.get_secret_value()
-            if self._settings.password is not None
-            else None
-        )
-
-        try:
-            await aiosmtplib.send(
-                msg,
-                hostname=self._settings.smtp_host,
-                port=self._settings.smtp_port,
-                username=self._settings.username,
-                password=password,
-                start_tls=self._settings.use_starttls,
-                use_tls=self._settings.use_tls,
-                timeout=self._settings.timeout_seconds,
-            )
-        except _DEGRADATION_EXC as exc:
-            log.warning(
-                "email.send.degraded",
-                error=str(exc),
-                error_type=type(exc).__name__,
-                host=self._settings.smtp_host,
-            )
+        if not await _spedisci(self._settings, msg):
             return False
 
         log.info(
@@ -138,4 +165,4 @@ class EmailChannel(NotificationChannel):
         return True
 
 
-__all__ = ["EmailChannel"]
+__all__ = ["EmailChannel", "invia_testo"]

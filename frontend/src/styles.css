@@ -3419,3 +3419,63 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
 }
 .reg-pdf:hover { background: var(--accent); color: var(--bg); }
 .reg-pdf-regione { display: inline-block; margin-top: 10px; font-size: 12.5px; color: var(--accent); }
+
+/* «Sei un esperto?» — il modulo del contributo sotto la cella. */
+.contributo {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.contributo .eyebrow { display: block; font-size: 10px; margin: 0 0 6px; }
+.contributo-apri {
+  width: 100%;
+  text-align: left;
+  border: 1px dashed var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--ink-soft);
+  padding: 6px 10px;
+}
+.contributo-nota,
+.contributo-privacy { margin: 0 0 8px; color: var(--ink-soft); }
+.contributo-privacy { color: var(--muted); font-size: 11.5px; }
+.contributo-form { display: grid; gap: 8px; }
+.contributo-form label { display: grid; gap: 3px; color: var(--muted); }
+.contributo-form input[type="text"],
+.contributo-form input[type="url"],
+.contributo-form input[type="email"],
+.contributo-form select,
+.contributo-form textarea {
+  font: inherit;
+  color: var(--ink-soft);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+.contributo-form textarea { resize: vertical; }
+.contributo-form .contributo-check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  color: var(--ink-soft);
+}
+.contributo-check input { margin-top: 3px; }
+.contributo-aiuto { font-size: 11px; color: var(--muted); }
+.contributo-errore { margin: 0; color: var(--warn); }
+.contributo-azioni { display: flex; gap: 8px; }
+.contributo-annulla {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line-strong);
+}
+/* Il campo esca: fuori dallo schermo, non `display: none`, che alcuni
+   programmi riconoscono e saltano. */
+.contributo-form .contributo-esca {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
