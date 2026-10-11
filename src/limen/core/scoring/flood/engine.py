@@ -88,14 +88,37 @@ class FloodScoringEngine(ScoringEngine[FloodBreakdown]):
 
         fluvial = fluvial_trigger(dyn.river_discharge_ratio, fluvial=t.fluvial)
 
-        dry_land = susceptibility < t.susceptibility.floor
-        score = 0.0 if dry_land else min(susceptibility * max(pluvial, fluvial), 1.0)
+        # La mappa ISPRA dice dove esce un fiume, non dove un nubifragio allaga
+        # una strada (#198): fuori dalla mappa il ramo pluviale ha una
+        # suscettibilità sua, che parte dal valore di ripiego e sale verso
+        # `max` quanto più la cella è costruita e piana. Dove la mappa c'è
+        # resta lei l'autorità: estendere il termine alle celle mappate
+        # prendeva 8 allagamenti EMS in più in Lombardia al prezzo di falsi
+        # allarmi dal 43 al 49%. Il ramo fluviale non cambia.
+        susc_pioggia = susceptibility
+        cfg = t.pluvial_susceptibility
+        if cfg is not None and static.flood_hazard_norm is None:
+            citta = min(1.0, (static.imperviousness_norm or 0.0) / cfg.impervious_full)
+            piano = (
+                max(0.0, 1.0 - static.slope_deg / cfg.flat_slope_deg)
+                if static.slope_deg is not None
+                else 0.0
+            )
+            susc_pioggia = max(
+                susceptibility, susceptibility + (cfg.max - susceptibility) * citta * piano
+            )
+
+        floor = t.susceptibility.floor
+        da_fiume = 0.0 if susceptibility < floor else susceptibility * fluvial
+        da_pioggia = 0.0 if susc_pioggia < floor else susc_pioggia * pluvial
+        score = min(max(da_fiume, da_pioggia), 1.0)
 
         return RiskScore[FloodBreakdown](
             score=score,
             level=classify_score(score, t.classes),
             breakdown=FloodBreakdown(
                 susceptibility=susceptibility,
+                pluvial_susceptibility=susc_pioggia,
                 pluvial=pluvial,
                 fluvial=fluvial,
                 mapped=static.flood_hazard_norm is not None,

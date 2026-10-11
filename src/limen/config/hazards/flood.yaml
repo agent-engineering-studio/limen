@@ -12,7 +12,7 @@
 # layer che il progetto ha in casa da più tempo, e qui smette di essere solo
 # il componente H del motore frane per diventare la base di un pericolo suo.
 
-model_version: "flood-v1.1.0"
+model_version: "flood-v1.2.0"
 
 susceptibility:
   # Una cella fuori dalle zone mappate. Non zero: il mosaico copre i bacini
@@ -172,6 +172,37 @@ fluvial:
   # racconta la stagione in cui è stato calcolato.
   reference_percentile:  0.90
   reference_window_days: 730
+
+pluvial_susceptibility:
+  # La suscettibilità del ramo **pluviale**, separata dalla mappa dei fiumi
+  # (#198). Il mosaico ISPRA dice dove esce un fiume; un nubifragio allaga
+  # strade e sottopassi anche lontano da un alveo. Moltiplicare la pioggia per
+  # la mappa dei fiumi spegneva proprio il flash flood urbano: Anzio, 9 ottobre
+  # 2026, 92 mm previsti, trigger pluviale 0,53, cella fuori mappa a 0,15,
+  # punteggio 0,08 («nessuno»).
+  #
+  # Solo per le celle **fuori mappa**: si parte dal valore di ripiego
+  # (`susceptibility.unmapped`) e si sale verso `max` quanto più la cella è
+  # costruita (`imperviousness_norm / impervious_full`, fino a 1) e piana
+  # (`1 − pendenza / flat_slope_deg`, fino a 0). Dove la mappa ISPRA c'è resta
+  # lei l'autorità; il ramo fluviale non cambia.
+  #
+  # Misurato in due modi:
+  #
+  # * truth set Copernicus EMS, Lombardia (17% delle celle allagate fuori
+  #   mappa), previsione come fu emessa: colpite 73% → 80% (244 → 266 su 333),
+  #   tasso di base 7% → 8%, falsi allarmi 41% → 43%, rapporto 10,9 → 10,5.
+  #   Estendere il termine anche alle celle mappate in città arrivava all'82%
+  #   ma con falsi allarmi al 49%: per questo resta fuori mappa;
+  # * punteggi reali del 7-10 ottobre 2026 contro i bollettini DPC (1,25
+  #   milioni di celle-giorno): celle almeno moderate in zona arancione
+  #   1,35% → 1,66%, in zona verde 0,90% → 0,99%; Anzio 0,08 → 0,34.
+  #
+  # Il truth set EMS non contiene nubifragi urbani: quando ce ne sarà uno,
+  # questi tre numeri vanno ritarati su quello.
+  max: 0.8
+  impervious_full: 0.3
+  flat_slope_deg: 15.0
 
 imperviousness:
   # Suolo impermeabilizzato: amplifica **solo** il ramo pluviale. Il cemento

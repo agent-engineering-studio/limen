@@ -695,6 +695,25 @@ class SusceptibilityBlock(_StrictModel):
     floor: float = Field(..., ge=0.0, le=1.0)
 
 
+class PluvialSusceptibilityBlock(_StrictModel):
+    """How exposed a cell is to *rain* flooding, apart from the river map (#198).
+
+    The ISPRA mosaic maps where rivers, lakes and coasts overflow. A cloudburst
+    floods streets and underpasses far from any river, so multiplying the
+    pluvial branch by the river map silenced exactly the urban flash flood --
+    Anzio, 9 October 2026: 92 mm forecast, pluvial trigger 0.53, unmapped cell
+    at 0.15, score 0.08. The pluvial susceptibility starts from the cell's own
+    and moves towards ``max`` as the cell is built-up and flat.
+    """
+
+    #: Ceiling reached by a fully sealed, flat cell.
+    max: float = Field(..., ge=0.0, le=1.0)
+    #: Sealed share at which a cell counts as entirely built-up.
+    impervious_full: float = Field(..., gt=0.0, le=1.0)
+    #: Above this slope water runs off instead of pooling; linear below it.
+    flat_slope_deg: float = Field(..., gt=0.0)
+
+
 class ImperviousnessBlock(_StrictModel):
     """Sealed-soil amplification of the *pluvial* branch only.
 
@@ -811,6 +830,8 @@ class FloodThresholds(HazardThresholds):
     pluvial: PluvialBlock
     fluvial: FluvialBlock
     imperviousness: ImperviousnessBlock
+    #: Absent ⇒ the pluvial branch uses the river-map susceptibility, as before #198.
+    pluvial_susceptibility: PluvialSusceptibilityBlock | None = None
     calibration: CalibrationBlock | None = None
 
     def model_card(self) -> dict[str, Any]:
@@ -829,6 +850,11 @@ class FloodThresholds(HazardThresholds):
                 "saturation_ratio": self.fluvial.saturation_ratio,
             },
             "imperviousness": {"max_multiplier": self.imperviousness.max_multiplier},
+            "pluvial_susceptibility": (
+                self.pluvial_susceptibility.model_dump()
+                if self.pluvial_susceptibility is not None
+                else None
+            ),
         }
 
 

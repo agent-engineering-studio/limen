@@ -424,6 +424,10 @@ class FloodBreakdown(HazardBreakdown):
     susceptibility: float = Field(..., ge=0.0, le=1.0)
     pluvial: float = Field(..., ge=0.0, le=1.0)
     fluvial: float = Field(..., ge=0.0, le=1.0)
+    #: La suscettibilità usata dal ramo pluviale (#198): quella ISPRA portata
+    #: verso l'alto da cemento e pianura. ``None`` nelle righe di prima, dove
+    #: era la stessa di `susceptibility`.
+    pluvial_susceptibility: float | None = Field(default=None, ge=0.0, le=1.0)
 
     #: Falso quando la cella è fuori dalle zone mappate e la suscettibilità
     #: è il valore di ripiego: il punteggio esiste ma poggia su meno.
@@ -455,6 +459,7 @@ class FloodBreakdown(HazardBreakdown):
     def factors_payload(self) -> dict[str, Any]:
         return {
             "susceptibility": self.susceptibility,
+            "pluvial_susceptibility": self.pluvial_susceptibility,
             "pluvial": self.pluvial,
             "fluvial": self.fluvial,
             "mapped": self.mapped,
