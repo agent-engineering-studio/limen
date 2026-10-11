@@ -53,6 +53,7 @@ from limen.cli.fwi_climatology import run as _run_fwi_climatology
 from limen.cli.geodata import build_subparser as _build_geodata_subparser
 from limen.cli.geodata import run as _run_geodata
 from limen.cli.geoserver_sync import run as _run_geoserver_sync
+from limen.cli.glofas_ewds import run as _run_glofas_ewds
 from limen.cli.glofas_riferimenti import run as _run_glofas_riferimenti
 from limen.cli.imperviousness_fetch import run as _run_imperviousness_fetch
 from limen.cli.ingest_events import run as _run_ingest_events
@@ -111,6 +112,10 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "glofas-riferimenti",
         help="calcola la portata ordinaria dei nodi GloFAS che ancora non ce l'hanno",
+    )
+    sub.add_parser(
+        "glofas-ewds",
+        help="la stessa portata ordinaria, da un download dello storico GloFAS su Copernicus EWDS",
     )
     sub.add_parser(
         "partitions",
@@ -321,6 +326,7 @@ def main(argv: list[str] | None = None) -> int:
         "imperviousness-fetch": _run_imperviousness_fetch,
         "review-alerts": _run_review_alerts,
         "glofas-riferimenti": _run_glofas_riferimenti,
+        "glofas-ewds": _run_glofas_ewds,
         "fedelta-racconti": _run_fedelta_racconti,
         "partitions": _run_partitions,
         "seed": _run_seed,

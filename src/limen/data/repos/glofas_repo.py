@@ -42,7 +42,11 @@ async def riferimenti(
 
 
 async def salva(
-    righe: list[tuple[Nodo, float | None]], *, percentile: float, window_days: int
+    righe: list[tuple[Nodo, float | None]],
+    *,
+    percentile: float,
+    window_days: int,
+    fonte: str = "open-meteo",
 ) -> int:
     """Scrive o aggiorna i riferimenti calcolati. Rilanciabile."""
     if not righe:
@@ -50,12 +54,13 @@ async def salva(
     async with acquire() as conn:
         await conn.executemany(
             """
-            INSERT INTO glofas_riferimento (node_lon, node_lat, percentile, window_days, portata)
-            VALUES (round($1::numeric, 4), round($2::numeric, 4), $3, $4, $5)
+            INSERT INTO glofas_riferimento
+                (node_lon, node_lat, percentile, window_days, portata, fonte)
+            VALUES (round($1::numeric, 4), round($2::numeric, 4), $3, $4, $5, $6)
             ON CONFLICT (node_lon, node_lat, percentile, window_days)
-            DO UPDATE SET portata = EXCLUDED.portata, calcolato = now()
+            DO UPDATE SET portata = EXCLUDED.portata, fonte = EXCLUDED.fonte, calcolato = now()
             """,
-            [(lon, lat, percentile, window_days, portata) for (lon, lat), portata in righe],
+            [(lon, lat, percentile, window_days, portata, fonte) for (lon, lat), portata in righe],
         )
     return len(righe)
 
