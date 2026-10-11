@@ -72,6 +72,10 @@ def stubbed(monkeypatch: pytest.MonkeyPatch) -> None:
         # database, e il punto del test è la catena dei passi.
         return {"db_size_gb": 1.2, "warn_at_gb": 0, "largest": {}}
 
+    async def glofas(_deps: object) -> dict[str, int]:
+        return {"richiesti": 0, "salvati": 0, "con_fiume": 0}
+
+    monkeypatch.setattr(nightly, "_glofas", glofas)
     monkeypatch.setattr(nightly, "_storage", storage)
     monkeypatch.setattr(nightly, "_shadow_ml", shadow)
     monkeypatch.setattr(nightly, "run_drift_monitor_job", drift)

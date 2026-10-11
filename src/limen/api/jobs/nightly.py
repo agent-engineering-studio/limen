@@ -44,6 +44,7 @@ log = get_logger(__name__)
 #: previsione per cella non c'è più: gira quattro volte al giorno con il suo
 #: schedule (`JOB_FORECAST_HISTORY`).
 STEPS = (
+    "glofas_riferimenti",
     "shadow_ml",
     "drift_monitor",
     "retrain",
@@ -194,6 +195,9 @@ async def run_nightly_pipeline(deps: AppDependencies) -> dict[str, Any]:
     """I passi notturni, in ordine. Ritorna il riepilogo per passo."""
     out: dict[str, Any] = {}
 
+    # Per primo: il tetto giornaliero di GloFAS riparte a mezzanotte UTC, e la
+    # portata ordinaria dei nodi è ciò che tiene acceso il ramo fluviale.
+    out["glofas_riferimenti"] = await _step("glofas_riferimenti", lambda: _glofas(deps))
     out["shadow_ml"] = await _step("shadow_ml", lambda: _shadow_ml(deps))
 
     drift = await _step("drift_monitor", lambda: _drift(deps))
@@ -213,6 +217,20 @@ async def run_nightly_pipeline(deps: AppDependencies) -> dict[str, Any]:
 
 async def _drift(deps: AppDependencies) -> dict[str, Any]:
     return {"triggered": bool(await run_drift_monitor_job(deps))}
+
+
+async def _glofas(deps: AppDependencies) -> dict[str, Any]:
+    """La portata ordinaria dei nodi GloFAS che ancora non ce l'hanno (#200)."""
+    from limen.core.scoring.regional_thresholds import FloodThresholds, load_hazard_thresholds
+    from limen.integrations.openmeteo.glofas_riferimenti import riempi
+
+    flood = load_hazard_thresholds(HazardType.FLOOD)
+    assert isinstance(flood, FloodThresholds)
+    return await riempi(
+        limite=deps.settings.scheduler.glofas_riferimenti_per_notte,
+        percentile=flood.fluvial.reference_percentile,
+        window_days=flood.fluvial.reference_window_days,
+    )
 
 
 async def _partitions(deps: AppDependencies) -> dict[str, Any]:

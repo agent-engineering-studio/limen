@@ -51,6 +51,7 @@ from limen.cli.fwi_climatology import run as _run_fwi_climatology
 from limen.cli.geodata import build_subparser as _build_geodata_subparser
 from limen.cli.geodata import run as _run_geodata
 from limen.cli.geoserver_sync import run as _run_geoserver_sync
+from limen.cli.glofas_riferimenti import run as _run_glofas_riferimenti
 from limen.cli.imperviousness_fetch import run as _run_imperviousness_fetch
 from limen.cli.ingest_events import run as _run_ingest_events
 from limen.cli.ingest_fire_history import run as _run_ingest_fire_history
@@ -100,6 +101,10 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "imperviousness-fetch",
         help="scarica il raster CLMS del suolo sigillato dal servizio pubblico EEA",
+    )
+    sub.add_parser(
+        "glofas-riferimenti",
+        help="calcola la portata ordinaria dei nodi GloFAS che ancora non ce l'hanno",
     )
     sub.add_parser(
         "partitions",
@@ -309,6 +314,7 @@ def main(argv: list[str] | None = None) -> int:
         "jobs": _run_jobs,
         "imperviousness-fetch": _run_imperviousness_fetch,
         "review-alerts": _run_review_alerts,
+        "glofas-riferimenti": _run_glofas_riferimenti,
         "partitions": _run_partitions,
         "seed": _run_seed,
         "seed-comuni": _run_seed_comuni,
