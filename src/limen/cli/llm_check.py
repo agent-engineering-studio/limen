@@ -19,8 +19,19 @@ import time
 import httpx
 
 from limen.agents.llm_factory.base import ChatMessage
-from limen.agents.llm_factory.resolver import AGENT_ROLES, resolve_llm_factory, role_models
-from limen.config.settings import SLOW_GENERATION_MODELS, LLMProvider, Settings, get_settings
+from limen.agents.llm_factory.resolver import (
+    AGENT_ROLES,
+    resolve_llm_factory,
+    role_field,
+    role_models,
+)
+from limen.config.settings import (
+    ASYNC_GENERATION_ROLES,
+    SLOW_GENERATION_MODELS,
+    LLMProvider,
+    Settings,
+    get_settings,
+)
 from limen.core.logging import get_logger
 from limen.integrations._http import SharedHttpClient
 
@@ -98,6 +109,12 @@ async def run() -> int:
         if catalogue is not None and model not in catalogue:
             notes.append("NOT IN GATEWAY CATALOGUE")
         if model in SLOW_GENERATION_MODELS:
+            if role_field(role) in ASYNC_GENERATION_ROLES:
+                # Una sonda su colibrì sono minuti a cache fredda: per un ruolo
+                # asincrono la lentezza è ammessa, e aspettarla qui farebbe
+                # sembrare appeso il comando.
+                print(f"skip  {role:14} model={model:16} (modello lento su ruolo asincrono)")
+                continue
             notes.append("SLOW MODEL ON A SYNCHRONOUS ROLE")
 
         started = time.monotonic()

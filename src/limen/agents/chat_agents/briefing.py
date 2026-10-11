@@ -224,7 +224,7 @@ class BriefingAgent:
         self._client = client
         self._grounding = grounding
 
-    def _user_message(
+    def user_message(
         self,
         assessment: AggregateAssessment,
         analysis: RiskAnalysis | None,
@@ -268,7 +268,7 @@ class BriefingAgent:
     ) -> str:
         messages: list[ChatMessage] = [
             ChatMessage(role="system", content=_load_system_prompt(assessment.hazard_type)),
-            ChatMessage(role="user", content=self._user_message(assessment, analysis)),
+            ChatMessage(role="user", content=self.user_message(assessment, analysis)),
         ]
 
         # Kick off the advisory KG lookup CONCURRENTLY so its latency

@@ -137,6 +137,9 @@ async def _enrich_one(
         ripiego=ripiego,
         testo=briefing,
         analisi=analysis.model_dump(),
+        # Quello che il modello ha letto: il controllo di fedeltà confronta il
+        # racconto con questo, non con lo stato di quando lo rilegge.
+        ingresso=briefer.user_message(assessment, analysis),
     )
     log.info(
         "job.briefing_enrichment.done",

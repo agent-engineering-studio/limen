@@ -217,6 +217,10 @@ services:
       LLM__MODELS__ORCHESTRATOR: ${LLM__MODELS__ORCHESTRATOR:-fast}
       LLM__MODELS__SCORER: ${LLM__MODELS__SCORER:-fast}
       LLM__MODELS__SUMMARIZER: ${LLM__MODELS__SUMMARIZER:-fast}
+      # The evening faithfulness reviewer (docs/inference.md): the one other
+      # role allowed on `glm52`, because nothing waits for it. Empty = off.
+      LLM__MODELS__FEDELTA: ${LLM__MODELS__FEDELTA:-}
+      LLM__FEDELTA_CAMPIONE: ${LLM__FEDELTA_CAMPIONE:-4}
       # Champion/challenger: shadow runs the ML model in parallel (writes
       # model_runs only; alerts stay with the deterministic champion).
       SCORING__MODE: ${SCORING__MODE:-champion_only}
@@ -348,7 +352,11 @@ services:
         condition: service_healthy
     command: ["limen", "mcp-serve"]
     environment:
-      DB__CONNECTION_STRING: postgresql://limen:limen@postgres:5432/limen
+      # The api's environment, not a hand-picked subset: `run_monitor` runs the
+      # same workflow as the sweep, and without LLM__* / OPENMETEO__* it looked
+      # for the gateway on the container's own loopback and for the public
+      # Open-Meteo API, degrading silently on both.
+      <<: *api-env
       LIMEN_MCP_TRANSPORT: http
       # Unset ⇒ the run_monitor admin tool is disabled (fail-closed).
       MCP_ADMIN_TOKEN: ${MCP_ADMIN_TOKEN:-}
@@ -546,8 +554,10 @@ services:
   #   1. avvia lo stack dal repo knowledge-graph:
   #        docker compose -f docker-compose.ghcr.yml up -d
   #   2. qui imposta KG__ENABLED=true e KG__BASE_URL verso il suo kg-api
-  #      (host.docker.internal:8000 se gira sullo stesso host, mai 127.0.0.1
-  #      che dentro il container e' il container stesso).
+  #      (host.docker.internal:<porta> se gira sullo stesso host, mai
+  #      127.0.0.1 che dentro il container e' il container stesso). Non la
+  #      8000 del default qui sopra: sull'host e' gia' della geoserver-webui
+  #      (docker-compose.geoserver.yml), che a /search risponde con HTML.
   #
   # Il motore del sidecar si configura NEL SUO repo, non qui: il suo default e'
   # gia' `llamacpp` (client OpenAI su /v1), quindi va puntato allo stesso
