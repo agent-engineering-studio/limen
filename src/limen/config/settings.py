@@ -651,18 +651,25 @@ class TrainingSettings(BaseSettings):
 
 
 class EgmsSettings(BaseSettings):
-    """Copernicus EGMS InSAR product fetch (V2.1)."""
+    """Copernicus EGMS, prodotto Ortho L3: la velocità media del terreno a 100 m.
+
+    Fail-closed: senza ``EGMS__TOKEN`` non si scarica niente. Il token si
+    legge dal parametro ``id`` di un link di download dell'EGMS Explorer
+    (accesso con EU Login) ed è **temporaneo**: va rinnovato a ogni release.
+    """
 
     model_config = SettingsConfigDict(extra="ignore")
 
-    # The public download portal is auth-gated; production deployments
-    # set this to an internal mirror or an authenticated proxy. With it
-    # empty the integration degrades gracefully (logs and returns 0).
-    base_url: str = "https://egms.land.copernicus.eu/api/v1"
-    product: Literal["L2a_calibrated", "L3_ortho"] = "L3_ortho"
-    # Cadence is yearly (EGMS releases ~ once per year); the rollover job
-    # only fetches when the registered dataset_version is older than this.
-    refresh_days: int = Field(default=180, ge=1)
+    token: SecretStr | None = None
+    download_url: str = "https://egms.land.copernicus.eu/insar-api/archive/download"
+    #: La finestra della release: cinque anni, una release all'anno.
+    release: str = "2020_2024"
+    #: Dove tenere i GeoTIFF delle tile (~4 MB l'uno, due per tile).
+    cartella: str = "/tmp/limen-egms"
+
+    @property
+    def attivo(self) -> bool:
+        return self.token is not None and bool(self.token.get_secret_value())
 
 
 class CopernicusSettings(BaseSettings):
