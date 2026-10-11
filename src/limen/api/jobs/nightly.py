@@ -227,7 +227,7 @@ async def _glofas(deps: AppDependencies) -> dict[str, Any]:
     flood = load_hazard_thresholds(HazardType.FLOOD)
     assert isinstance(flood, FloodThresholds)
     return await riempi(
-        limite=deps.settings.scheduler.glofas_riferimenti_per_notte,
+        chiamate=deps.settings.scheduler.glofas_chiamate_per_notte,
         percentile=flood.fluvial.reference_percentile,
         window_days=flood.fluvial.reference_window_days,
     )

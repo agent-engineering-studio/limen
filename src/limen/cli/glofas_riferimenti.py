@@ -1,11 +1,12 @@
 """``limen glofas-riferimenti`` — calcola la portata ordinaria dei nodi GloFAS (#200).
 
-La pipeline notturna lo fa da sola, al più `SCHEDULER__GLOFAS_RIFERIMENTI_PER_NOTTE`
-nodi per notte. Il comando serve a riempire la tabella prima, per esempio
-appena dopo il deploy: si ferma al primo 429, e rilanciarlo il giorno dopo
-riprende dai nodi che mancano.
+La pipeline notturna lo fa da sola, entro `SCHEDULER__GLOFAS_CHIAMATE_PER_NOTTE`
+chiamate. Il comando serve a riempire la tabella prima, per esempio appena
+dopo il deploy: si ferma al primo 429, e rilanciarlo il giorno dopo riprende
+dai nodi che mancano.
 
-Env: ``LIMEN_GLOFAS_LIMITE`` — nodi al più (default 1000).
+Env: ``LIMEN_GLOFAS_CHIAMATE`` — chiamate dell'API da spendere (default 3000;
+il tetto giornaliero è 10.000 e lo sweep ne ha bisogno).
 """
 
 from __future__ import annotations
@@ -23,13 +24,13 @@ log = get_logger(__name__)
 
 
 async def run() -> int:
-    limite = int(os.getenv("LIMEN_GLOFAS_LIMITE", "1000"))
+    chiamate = int(os.getenv("LIMEN_GLOFAS_CHIAMATE", "3000"))
     flood = load_hazard_thresholds(HazardType.FLOOD)
     assert isinstance(flood, FloodThresholds)
     try:
         async with lifespan_pool():
             esito = await riempi(
-                limite=limite,
+                chiamate=chiamate,
                 percentile=flood.fluvial.reference_percentile,
                 window_days=flood.fluvial.reference_window_days,
             )
