@@ -22,7 +22,7 @@ async def riferimenti(
             FROM glofas_riferimento r
             JOIN unnest($1::numeric[], $2::numeric[]) AS n(lon, lat)
               ON r.node_lon = round(n.lon, 4) AND r.node_lat = round(n.lat, 4)
-            WHERE r.percentile = $3 AND r.window_days = $4
+            WHERE r.percentile = $3::numeric(4,3) AND r.window_days = $4
             """,
             [lon for lon, _ in nodes],
             [lat for _, lat in nodes],
@@ -117,7 +117,7 @@ async def da_calcolare(
             FROM nodi n
             LEFT JOIN glofas_riferimento r
               ON r.node_lon = n.lon AND r.node_lat = n.lat
-             AND r.percentile = $2 AND r.window_days = $3
+             AND r.percentile = $2::numeric(4,3) AND r.window_days = $3
             WHERE r.node_lon IS NULL
             ORDER BY n.piove DESC, n.esposto DESC, n.peso DESC, n.lon, n.lat
             LIMIT $4
@@ -137,7 +137,7 @@ async def con_fiume(*, percentile: float, window_days: int) -> int:
         n = await conn.fetchval(
             """
             SELECT count(*) FROM glofas_riferimento
-            WHERE percentile = $1 AND window_days = $2 AND portata > 0
+            WHERE percentile = $1::numeric(4,3) AND window_days = $2 AND portata > 0
             """,
             percentile,
             window_days,
@@ -151,7 +151,7 @@ async def nodi_con_fiume(*, percentile: float, window_days: int) -> list[Nodo]:
         rows = await conn.fetch(
             """
             SELECT node_lon, node_lat FROM glofas_riferimento
-            WHERE percentile = $1 AND window_days = $2 AND portata > 0
+            WHERE percentile = $1::numeric(4,3) AND window_days = $2 AND portata > 0
             ORDER BY node_lon, node_lat
             """,
             percentile,
