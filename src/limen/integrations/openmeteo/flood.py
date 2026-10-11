@@ -25,6 +25,7 @@ from typing import Any, Protocol
 import httpx
 from tenacity import RetryError
 
+from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.integrations._http import SharedHttpClient, fetch_with_retry
 from limen.integrations.openmeteo.client import forecast_url, weather_model
@@ -37,6 +38,8 @@ log = get_logger(__name__)
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 #: Portata e onde restano sull'API pubblica. GloFAS non e' sul bucket AWS di
 #: Open-Meteo e non si puo' auto-ospitare; le onde sono venti chiamate l'ora.
+#: Con una chiave EWDS la previsione per nodo arriva da `glofas_previsione`, e
+#: di qui passano solo il ripiego e lo scalare per AOI delle frane.
 FLOOD_URL = "https://flood-api.open-meteo.com/v1/flood"
 MARINE_URL = "https://marine-api.open-meteo.com/v1/marine"
 
@@ -61,6 +64,14 @@ class _Cache(Protocol):
     async def get_json(self, key: str) -> Any | None: ...
 
     async def set_json(self, key: str, value: Any, *, ttl_seconds: int) -> None: ...
+
+
+class _Previsioni(Protocol):
+    """Chi legge il picco previsto per nodo dall'EWDS: il repo, o un finto."""
+
+    async def __call__(
+        self, nodes: list[tuple[float, float]], *, dal: date
+    ) -> dict[tuple[float, float], float] | None: ...
 
 
 class _Riferimenti(Protocol):
@@ -271,10 +282,12 @@ class OpenMeteoFloodClient:
         http_client: httpx.AsyncClient | None = None,
         cache: _Cache | None = None,
         riferimenti: _Riferimenti | None = None,
+        previsioni: _Previsioni | None = None,
     ) -> None:
         self._http = http_client
         self._cache = cache
         self._riferimenti = riferimenti
+        self._previsioni = previsioni
 
     async def _client(self) -> httpx.AsyncClient:
         return self._http if self._http is not None else await SharedHttpClient.get()
@@ -614,6 +627,13 @@ class OpenMeteoFloodClient:
         if not noti:
             return [None] * len(nodes)
         sotto = [nodes[i] for i in noti]
+        picchi = await self._previsione_ewds(sotto)
+        if picchi is not None:
+            rapporti: list[float | None] = []
+            for i, n in zip(noti, sotto, strict=True):
+                ref = reference[i]
+                rapporti.append(picchi[n] / ref if n in picchi and ref else None)
+            return _espandi(len(nodes), noti, rapporti)
         key = _fluvial_key(sotto)
         cache = self._cache
         if cache is None:
@@ -647,6 +667,37 @@ class OpenMeteoFloodClient:
                     error_type=type(exc).__name__,
                 )
         return _espandi(len(nodes), noti, ratios)
+
+    async def _previsione_ewds(
+        self, nodes: list[tuple[float, float]]
+    ) -> dict[tuple[float, float], float] | None:
+        """Il picco per nodo dall'ultima corsa EWDS salvata, se è recente.
+
+        ``None`` ⇒ nessuna corsa recente (o tabella irraggiungibile): si torna
+        a Open-Meteo. È la stessa corsa GloFAS 4 che Open-Meteo serve, letta
+        sulla stessa cella, quindi il rapporto non cambia significato.
+        """
+        cfg = get_settings().copernicus
+        if self._previsioni is None and not cfg.attivo:
+            return None
+        leggi: _Previsioni
+        if self._previsioni is not None:
+            leggi = self._previsioni
+        else:
+            from limen.data.repos.glofas_repo import picchi
+
+            leggi = picchi
+        dal = datetime.now(UTC).date() - timedelta(days=cfg.eta_massima_giorni)
+        try:
+            return await leggi(nodes, dal=dal)
+        except Exception as exc:
+            log.warning(
+                "integration.degraded",
+                label="ewds.glofas.previsione_tabella",
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            return None
 
     async def _fluvial_by_node(
         self,

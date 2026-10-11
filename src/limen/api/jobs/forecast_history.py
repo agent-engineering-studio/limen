@@ -11,6 +11,7 @@ from __future__ import annotations
 from limen.agents.workflows.forecast_history import run_forecast_history
 from limen.api.dependencies import AppDependencies
 from limen.core.logging import get_logger
+from limen.integrations.copernicus import glofas_previsione
 
 log = get_logger(__name__)
 
@@ -28,7 +29,12 @@ async def run_forecast_history_job(deps: AppDependencies) -> int:
 
     Un pericolo che fallisce non ferma gli altri: la previsione delle frane
     non deve saltare perché GloFAS ha risposto 429.
+
+    Prima dei pericoli, la previsione GloFAS dall'EWDS (se c'è la chiave):
+    l'alluvione di questo giro la legge già dalla tabella. Il passo non alza.
     """
+    esito = await glofas_previsione.aggiorna(deps.settings)
+    log.info("job.forecast_history.glofas", **esito)
     totale = 0
     for hazard in deps.settings.hazards.enabled:
         try:

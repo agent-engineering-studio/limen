@@ -665,6 +665,33 @@ class EgmsSettings(BaseSettings):
     refresh_days: int = Field(default=180, ge=1)
 
 
+class CopernicusSettings(BaseSettings):
+    """L'Early Warning Data Store di Copernicus (EWDS): GloFAS.
+
+    Fail-closed come FIRMS: senza ``COPERNICUS__EWDS_KEY`` la previsione di
+    portata resta sull'API pubblica di Open-Meteo, com'era. La chiave è
+    gratuita (account ECMWF) e la licenza CEMS-Floods va accettata una volta
+    sul sito.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    ewds_url: str = "https://ewds.climate.copernicus.eu/api"
+    ewds_key: SecretStr | None = None
+    #: Dove tenere i file delle corse scaricate (pochi centinaia di KB l'una).
+    cartella: str = "/tmp/limen-ewds"
+    #: Quanto aspettare la coda dell'EWDS prima di rinunciare per questo giro.
+    #: Il download non si interrompe: il file arriva e il giro dopo lo trova.
+    attesa_massima_secondi: int = Field(default=900, ge=60)
+    #: Oltre questa età la corsa salvata non vale più come previsione, e il
+    #: ramo fluviale torna a chiedere a Open-Meteo.
+    eta_massima_giorni: int = Field(default=2, ge=1)
+
+    @property
+    def attivo(self) -> bool:
+        return self.ewds_key is not None and bool(self.ewds_key.get_secret_value())
+
+
 class OpenMeteoSettings(BaseSettings):
     """Dove chiedere il meteo (#142).
 
@@ -981,6 +1008,7 @@ class Settings(BaseSettings):
     scoring: ScoringSettings = Field(default_factory=ScoringSettings)
     training: TrainingSettings = Field(default_factory=TrainingSettings)
     egms: EgmsSettings = Field(default_factory=EgmsSettings)
+    copernicus: CopernicusSettings = Field(default_factory=CopernicusSettings)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
     openmeteo: OpenMeteoSettings = Field(default_factory=OpenMeteoSettings)
     kg: KgSettings = Field(default_factory=KgSettings)
