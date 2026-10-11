@@ -51,8 +51,9 @@ async def run() -> int:
     assert isinstance(flood, FloodThresholds)
     percentile = flood.fluvial.reference_percentile
     window_days = flood.fluvial.reference_window_days
-    # La stessa finestra del riempimento da Open-Meteo: fino a ieri.
-    fine = datetime.now(UTC).date() - timedelta(days=1)
+    # La finestra del riempimento da Open-Meteo, ma chiusa dove l'EWDS ha già
+    # i dati: per un percentile su due anni, quattro giorni non contano.
+    fine = datetime.now(UTC).date() - timedelta(days=ewds_glofas.LATENZA_STORICO_GIORNI)
     inizio = fine - timedelta(days=window_days)
 
     async with lifespan_pool():
