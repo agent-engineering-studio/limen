@@ -101,11 +101,18 @@ def mesi(inizio: date, fine: date) -> list[tuple[int, int, list[str]]]:
     return out
 
 
-def richiesta(anno: int, mese: int, giorni: list[str]) -> dict[str, Any]:
+#: Quanti giorni indietro arriva lo storico dell'EWDS. Misurato l'11 ottobre
+#: 2026: il consolidato finisce a giugno, l'«intermediate» all'8 ottobre.
+LATENZA_STORICO_GIORNI = 4
+
+
+def richiesta(
+    anno: int, mese: int, giorni: list[str], *, prodotto: str = "consolidated"
+) -> dict[str, Any]:
     return {
         "system_version": [VERSIONE],
         "hydrological_model": ["lisflood"],
-        "product_type": ["consolidated"],
+        "product_type": [prodotto],
         "variable": ["average_river_discharge_in_the_last_24_hours"],
         "year": [str(anno)],
         "month": [f"{mese:02d}"],
@@ -139,7 +146,20 @@ def scarica(cartella: Path, inizio: date, fine: date, *, client: Any) -> list[Pa
         if not destinazione.exists():
             parziale = destinazione.with_suffix(".part")
             log.info("ewds.glofas.scarica", file=nome, giorni=len(giorni))
-            client.retrieve(DATASET, richiesta(anno, mese, giorni), str(parziale))
+            try:
+                client.retrieve(DATASET, richiesta(anno, mese, giorni), str(parziale))
+            except Exception as exc:
+                # I mesi recenti esistono solo come «intermediate»: il
+                # consolidato arriva con mesi di ritardo. Stessa versione,
+                # stesso modello; è la corsa che diventerà consolidata.
+                if "valid combination" not in str(exc):
+                    raise
+                log.info("ewds.glofas.intermedio", file=nome)
+                client.retrieve(
+                    DATASET,
+                    richiesta(anno, mese, giorni, prodotto="intermediate"),
+                    str(parziale),
+                )
             parziale.rename(destinazione)
         files.append(destinazione)
     return files

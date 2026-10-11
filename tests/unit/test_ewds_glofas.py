@@ -168,3 +168,27 @@ def test_scarica_previsione_non_riscarica_una_corsa(tmp_path: Path) -> None:
     assert a == b
     assert chiesti == ["10"]
     assert not list(tmp_path.glob("*.part"))
+
+
+def test_un_mese_senza_consolidato_si_prende_intermedio(tmp_path: Path) -> None:
+    chiesti: list[str] = []
+
+    class _Client:
+        def retrieve(self, _ds: str, req: dict[str, list[str]], dest: str) -> None:
+            chiesti.append(req["product_type"][0])
+            if req["product_type"] == ["consolidated"]:
+                raise RuntimeError("Request has not produced a valid combination of values")
+            Path(dest).write_bytes(b"x")
+
+    eg.scarica(tmp_path, date(2026, 7, 1), date(2026, 7, 3), client=_Client())
+    assert chiesti == ["consolidated", "intermediate"]
+    assert len(list(tmp_path.glob("*.nc"))) == 1
+
+
+def test_un_altro_errore_non_diventa_intermedio(tmp_path: Path) -> None:
+    class _Client:
+        def retrieve(self, _ds: str, _req: dict[str, list[str]], _dest: str) -> None:
+            raise RuntimeError("403 required licences not accepted")
+
+    with pytest.raises(RuntimeError, match="licences"):
+        eg.scarica(tmp_path, date(2026, 7, 1), date(2026, 7, 3), client=_Client())
