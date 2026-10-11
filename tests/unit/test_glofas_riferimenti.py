@@ -11,6 +11,13 @@ from limen.integrations.openmeteo import glofas_riferimenti as gr
 _ANNI = [float(k) for k in range(400)]
 
 
+def _nessun_fiume(monkeypatch: pytest.MonkeyPatch, n: int = 0) -> None:
+    async def _con_fiume(**_kw: Any) -> int:
+        return n
+
+    monkeypatch.setattr(gr.glofas_repo, "con_fiume", _con_fiume)
+
+
 def test_un_punto_di_un_lotto_fallito_non_e_una_risposta() -> None:
     """Un 429 non deve diventare «qui non c'è un fiume»."""
     assert gr.riferimento_del_punto({}, percentile=0.9) == (False, None)
@@ -46,17 +53,20 @@ async def test_salva_solo_cio_che_glofas_ha_risposto(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(gr.glofas_repo, "da_calcolare", _da_calcolare)
     monkeypatch.setattr(gr.glofas_repo, "salva", _salva)
     monkeypatch.setattr(gr, "_in_pausa", _mai_in_pausa)
+    _nessun_fiume(monkeypatch)
 
     attese: list[float] = []
 
     async def _attendi(s: float) -> None:
         attese.append(s)
 
-    esito = await gr.riempi(chiamate=160, client=_Client(), attendi=_attendi)  # type: ignore[arg-type]  # finto con la sola fetch_grid, #200
+    esito = await gr.riempi(
+        chiamate=160, soglia_pioggia_mm=40.0, client=_Client(), attendi=_attendi
+    )  # type: ignore[arg-type]  # finto con la sola fetch_grid, #200
 
     assert [n for n, _ in salvati] == [nodi[0], nodi[2]]
     assert salvati[1][1] is None
-    assert esito == {"richiesti": 3, "salvati": 2, "con_fiume": 1}
+    assert esito == {"richiesti": 3, "salvati": 2, "con_fiume": 1, "riserva": 0}
     assert attese == []  # tre nodi stanno in un lotto solo
 
 
@@ -65,7 +75,7 @@ def test_il_peso_e_una_chiamata_ogni_due_settimane() -> None:
     assert gr.peso_per_nodo(7) == 1.0
 
 
-async def test_lotti_sotto_il_limite_al_minuto(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_lotti_sotto_il_limite_al_minuto_e_orario(monkeypatch: pytest.MonkeyPatch) -> None:
     """Cento nodi in un lotto pesavano ~5.200 chiamate, sopra anche il limite
     orario: è il 429 delle 00:18 dell'11 ottobre (#200)."""
     nodi = [(10.0 + k / 10, 44.0) for k in range(20)]
@@ -92,12 +102,39 @@ async def test_lotti_sotto_il_limite_al_minuto(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(gr.glofas_repo, "da_calcolare", _da_calcolare)
     monkeypatch.setattr(gr.glofas_repo, "salva", _salva)
     monkeypatch.setattr(gr, "_in_pausa", _mai_in_pausa)
+    _nessun_fiume(monkeypatch)
 
-    await gr.riempi(chiamate=1000, client=_Client(), attendi=_attendi)  # type: ignore[arg-type]  # finto, #200
+    await gr.riempi(chiamate=1000, soglia_pioggia_mm=40.0, client=_Client(), attendi=_attendi)  # type: ignore[arg-type]  # finto, #200
 
     assert sum(lotti) == 19
     assert all(n * gr.peso_per_nodo(730) <= 600 for n in lotti)
-    assert attese == [60.0] * (len(lotti) - 1)
+    # Il limite orario: qualunque 429, anche orario, sospende GloFAS fino a
+    # mezzanotte. Lotti pieni distanziati così restano sotto le 4.000 l'ora.
+    assert attese == [pytest.approx(gr.pausa_dopo(9 * gr.peso_per_nodo(730)))] * (len(lotti) - 1)
+    assert all(
+        3600 / a * n * gr.peso_per_nodo(730) <= 4000.01 for a, n in zip(attese, lotti, strict=False)
+    )
+
+
+async def test_la_previsione_dei_fiumi_ha_la_precedenza(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Il budget è del giorno: prima la previsione dello sweep, poi il resto."""
+    limiti: list[int] = []
+
+    async def _da_calcolare(**kw: Any) -> list[tuple[float, float]]:
+        limiti.append(kw["limite"])
+        assert kw["soglia_pioggia_mm"] == 40.0
+        return []
+
+    monkeypatch.setattr(gr.glofas_repo, "da_calcolare", _da_calcolare)
+    _nessun_fiume(monkeypatch, n=1000)
+
+    esito = await gr.riempi(chiamate=8000, soglia_pioggia_mm=40.0)
+    assert esito["riserva"] == 1700
+    assert limiti == [int((8000 - 1700) // gr.peso_per_nodo(730))]
+
+    _nessun_fiume(monkeypatch, n=5000)
+    esito = await gr.riempi(chiamate=8000, soglia_pioggia_mm=40.0)
+    assert esito == {"richiesti": 0, "salvati": 0, "con_fiume": 0, "riserva": 8500}
 
 
 async def test_in_pausa_non_chiede_niente(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -113,6 +150,7 @@ async def test_in_pausa_non_chiede_niente(monkeypatch: pytest.MonkeyPatch) -> No
 
     monkeypatch.setattr(gr.glofas_repo, "da_calcolare", _da_calcolare)
     monkeypatch.setattr(gr, "_in_pausa", _in_pausa)
+    _nessun_fiume(monkeypatch)
 
-    esito = await gr.riempi(chiamate=3000, client=_Client())  # type: ignore[arg-type]  # finto, #200
+    esito = await gr.riempi(chiamate=3000, soglia_pioggia_mm=40.0, client=_Client())  # type: ignore[arg-type]  # finto, #200
     assert esito["salvati"] == 0

@@ -5,8 +5,9 @@ chiamate. Il comando serve a riempire la tabella prima, per esempio appena
 dopo il deploy: si ferma al primo 429, e rilanciarlo il giorno dopo riprende
 dai nodi che mancano.
 
-Env: ``LIMEN_GLOFAS_CHIAMATE`` — chiamate dell'API da spendere (default 3000;
-il tetto giornaliero è 10.000 e lo sweep ne ha bisogno).
+Env: ``LIMEN_GLOFAS_CHIAMATE`` — il tetto del giorno per GloFAS (default 8000,
+su 10.000): il comando ne toglie la previsione dei fiumi e spende il resto.
+Lanciato dopo la notte, il tetto è già in parte speso: abbassalo.
 """
 
 from __future__ import annotations
@@ -24,13 +25,14 @@ log = get_logger(__name__)
 
 
 async def run() -> int:
-    chiamate = int(os.getenv("LIMEN_GLOFAS_CHIAMATE", "3000"))
+    chiamate = int(os.getenv("LIMEN_GLOFAS_CHIAMATE", "8000"))
     flood = load_hazard_thresholds(HazardType.FLOOD)
     assert isinstance(flood, FloodThresholds)
     try:
         async with lifespan_pool():
             esito = await riempi(
                 chiamate=chiamate,
+                soglia_pioggia_mm=flood.pluvial.threshold_mm,
                 percentile=flood.fluvial.reference_percentile,
                 window_days=flood.fluvial.reference_window_days,
             )

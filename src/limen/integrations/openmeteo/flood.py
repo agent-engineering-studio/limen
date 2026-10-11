@@ -210,8 +210,11 @@ DEFAULT_REFERENCE_WINDOW_DAYS = 730
 #: esaurito il tetto giornaliero di Open-Meteo (#142). Sei ore lasciano vivo
 #: il ricambio giornaliero senza inseguirlo ventiquattro volte. Dodici e non
 #: sei dalla #200: anche ristretta ai nodi con un fiume, la previsione per
-#: 3.366 nodi quattro volte al giorno supererebbe da sola il tetto.
-_FLUVIAL_TTL_SECONDS = 12 * 3600
+#: 3.366 nodi quattro volte al giorno supererebbe da sola il tetto. Ventiquattro
+#: e non dodici: GloFAS pubblica una corsa al giorno, e a dodici la seconda
+#: lettura ricompra gli stessi numeri — ~5.500 chiamate a tabella piena, più
+#: di metà del tetto, tolte al riempimento dei riferimenti.
+_FLUVIAL_TTL_SECONDS = 24 * 3600
 
 
 def _with_model(params: dict[str, Any]) -> dict[str, Any]:
