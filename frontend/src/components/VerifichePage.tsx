@@ -7,6 +7,10 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
+import {
+  NON_E_UN_AVVISO_DI_PIENA,
+  copernicusModificato,
+} from "../lib/attribuzioni";
 import { VERIFICHE } from "../content/verifiche";
 import type { Esito, Verifica } from "../content/verifiche";
 import {
@@ -257,6 +261,13 @@ function Articolo({ v }: { v: Verifica }): JSX.Element {
             ))}
           </ul>
         </>
+      ) : null}
+
+      {v.pericolo === "flood" ? (
+        <p className="exp-note">
+          {copernicusModificato(new Date(v.evento.quando).getFullYear())}.{" "}
+          {NON_E_UN_AVVISO_DI_PIENA}
+        </p>
       ) : null}
 
       <h3>Fonti</h3>
