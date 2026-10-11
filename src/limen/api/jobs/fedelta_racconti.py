@@ -96,6 +96,11 @@ async def controlla_fedelta(settings: Settings, factory: LlmClientFactory) -> di
             metrics.update(
                 {"fedele": fedele, "scritto": scritto, "numeri_sconosciuti": numeri.unknown_numbers}
             )
+            if not scritto:
+                # Il briefing ha riscritto la spiegazione mentre il revisore la
+                # leggeva: il giudizio è su un testo che non esiste più, e un
+                # allarme di infedeltà senza verdetto salvato non si può seguire.
+                continue
             if fedele is False:
                 log.warning(
                     "racconto.infedele",

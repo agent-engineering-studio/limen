@@ -361,6 +361,11 @@ services:
       # Unset ⇒ the run_monitor admin tool is disabled (fail-closed).
       MCP_ADMIN_TOKEN: ${MCP_ADMIN_TOKEN:-}
       LOG_JSON: "true"
+    # Come api e worker: su Docker Engine per Linux host.docker.internal non
+    # esiste da solo, e senza questa riga il gateway LLM dell'ambiente
+    # ereditato non risolve — `run_monitor` degraderebbe in silenzio.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${LIMEN_MCP_BIND:-127.0.0.1}:8766:8766"
     # Senza questa riga il container eredita dall'immagine la sonda dell'API,

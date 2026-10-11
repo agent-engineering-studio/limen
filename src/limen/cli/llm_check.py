@@ -112,8 +112,13 @@ async def run() -> int:
             if role_field(role) in ASYNC_GENERATION_ROLES:
                 # Una sonda su colibrì sono minuti a cache fredda: per un ruolo
                 # asincrono la lentezza è ammessa, e aspettarla qui farebbe
-                # sembrare appeso il comando.
-                print(f"skip  {role:14} model={model:16} (modello lento su ruolo asincrono)")
+                # sembrare appeso il comando. Un modello che il gateway non
+                # conosce resta però un guasto: il ruolo non girerebbe mai.
+                if notes:
+                    failures += 1
+                    print(f"FAIL  {role:14} model={model:16} [{'; '.join(notes)}]")
+                else:
+                    print(f"skip  {role:14} model={model:16} (modello lento su ruolo asincrono)")
                 continue
             notes.append("SLOW MODEL ON A SYNCHRONOUS ROLE")
 
