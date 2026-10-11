@@ -140,3 +140,50 @@ async def test_un_token_scaduto_alza(tmp_path: Path, monkeypatch: pytest.MonkeyP
         await client.scarica_tile(
             tmp_path, (47, 19), "U", release="2020_2024", url="https://x", token="t"
         )
+
+
+def test_una_tile_con_l_etichetta_ignf_entra_nel_mosaico(tmp_path: Path) -> None:
+    """E42N26 dichiara IGNF:ETRS89LAEA: stessi parametri di EPSG:3035."""
+    rasterio = pytest.importorskip("rasterio")
+    from rasterio.crs import CRS
+    from rasterio.transform import from_origin
+
+    path = tmp_path / "ignf.tiff"
+    wkt = CRS.from_epsg(3035).to_wkt().replace("ETRS89-extended / LAEA Europe", "ETRS89 LAEA")
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=1,
+        width=2,
+        count=1,
+        dtype="float32",
+        crs=CRS.from_wkt(wkt),
+        transform=from_origin(100.0, 100.0, 100.0, 100.0),
+        nodata=-9999.0,
+    ) as dst:
+        dst.write(np.array([[4.0, 5.0]], dtype="float32"), 1)
+    m = mosaico([path], minx=0.0, miny=0.0, maxx=300.0, maxy=100.0)
+    assert np.isnan(m[0, 0])
+    assert m[0, 1:].tolist() == [4.0, 5.0]
+
+
+def test_una_tile_in_un_altra_proiezione_alza(tmp_path: Path) -> None:
+    _tiff_crs = pytest.importorskip("rasterio")
+    from rasterio.transform import from_origin
+
+    path = tmp_path / "utm.tiff"
+    with _tiff_crs.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=1,
+        width=1,
+        count=1,
+        dtype="float32",
+        crs="EPSG:32633",
+        transform=from_origin(0.0, 100.0, 100.0, 100.0),
+    ) as dst:
+        dst.write(np.array([[1.0]], dtype="float32"), 1)
+    with pytest.raises(ValueError, match="LAEA"):
+        mosaico([path], minx=0.0, miny=0.0, maxx=100.0, maxy=100.0)
