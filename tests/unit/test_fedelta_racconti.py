@@ -147,3 +147,46 @@ def test_fedelta_e_un_ruolo_asincrono() -> None:
     LLMSettings(models={"fedelta": "glm52"})
     with pytest.raises(ValueError, match="RISK_ANALYST"):
         LLMSettings(models={"risk_analyst": "glm52"})
+
+
+async def test_un_giudizio_su_un_testo_riscritto_non_conta(
+    monkeypatch: pytest.MonkeyPatch, capsys: Any
+) -> None:
+    """Il briefing ha riscritto la spiegazione durante la revisione: il
+    verdetto non si salva, quindi niente allarme e niente conteggio (#206)."""
+    settings = _settings(models={"fedelta": "fast"})
+    candidata = DaGiudicare(
+        aoi_id="it-basilicata",
+        hazard=HazardType.LANDSLIDE,
+        scritta=datetime(2026, 10, 11, 8, tzinfo=UTC),
+        modello="fast-cloud",
+        testo=f"Su 23.214 aree, 57 sono in classe alta. {_parole(160)}",
+        ingresso=INGRESSO,
+    )
+
+    async def _da_giudicare(**_kw: Any) -> list[DaGiudicare]:
+        return [candidata]
+
+    async def _scrivi(**_kw: Any) -> bool:
+        return False
+
+    class _Factory:
+        provider = "test"
+
+        def create(self, _role: str) -> _Client:
+            return _Client('{"fedele": true, "problemi": []}')
+
+    class _Tracked:
+        async def __aenter__(self) -> dict[str, Any]:
+            return {}
+
+        async def __aexit__(self, *_a: Any) -> None:
+            return None
+
+    monkeypatch.setattr(fr.spiegazioni_repo, "da_giudicare", _da_giudicare)
+    monkeypatch.setattr(fr.spiegazioni_repo, "scrivi_fedelta", _scrivi)
+    monkeypatch.setattr(fr, "tracked", lambda *_a, **_k: _Tracked())
+
+    out = await fr.controlla_fedelta(settings, _Factory())
+    assert out == {"giudicate": 0, "fedeli": 0, "infedeli": 0, "senza_giudizio": 0}
+    assert "racconto.infedele" not in capsys.readouterr().out
