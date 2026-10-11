@@ -42,6 +42,7 @@ def _bundle(
     discharge_ratio: float | None = None,
     soil: float | None = 0.35,
     imperviousness: float | None = None,
+    slope: float | None = None,
 ) -> CellFeatureBundle:
     return CellFeatureBundle(
         aoi_id="aoi",
@@ -50,6 +51,7 @@ def _bundle(
             cell_id="cell",
             flood_hazard_norm=susceptibility,
             imperviousness_norm=imperviousness,
+            slope_deg=slope,
         ),
         dynamic=DynamicInputs(
             valuation_time=dt.datetime(2026, 11, 3, 12, tzinfo=dt.UTC),
@@ -207,6 +209,56 @@ def test_sealed_ground_amplifies_only_the_pluvial_branch() -> None:
     river_sealed = engine.score(_bundle(discharge_ratio=10.0, imperviousness=0.9)).score
     river_porous = engine.score(_bundle(discharge_ratio=10.0, imperviousness=0.0)).score
     assert river_sealed == river_porous
+
+
+def test_a_flat_town_off_the_river_map_takes_the_cloudburst() -> None:
+    """Anzio, 9 ottobre 2026: 92 mm previsti, cella fuori dalla mappa ISPRA.
+
+    La mappa dei fiumi non dice dove un nubifragio allaga una strada (#198):
+    una cella costruita e piana deve prendere la pioggia anche se nessun fiume
+    la mappa, mentre la stessa cella in campagna o in pendio resta com'era.
+    """
+    engine = FloodScoringEngine(_thresholds())
+    citta = engine.score(_bundle(susceptibility=None, rain_mm=92.0, imperviousness=0.24, slope=3.4))
+    campagna = engine.score(
+        _bundle(susceptibility=None, rain_mm=92.0, imperviousness=0.0, slope=3.4)
+    )
+    pendio = engine.score(
+        _bundle(susceptibility=None, rain_mm=92.0, imperviousness=0.24, slope=25.0)
+    )
+    assert citta.score > 0.25 > campagna.score
+    # In pendio l'acqua scorre via: la suscettibilità della pioggia resta quella
+    # della cella (il cemento continua ad amplificare il trigger, come prima).
+    assert pendio.breakdown.pluvial_susceptibility == pendio.breakdown.susceptibility
+    assert pendio.score < 0.25
+    assert citta.breakdown.pluvial_susceptibility is not None
+    assert citta.breakdown.pluvial_susceptibility > citta.breakdown.susceptibility
+    assert citta.breakdown.factors_payload()["pluvial_susceptibility"] == (
+        citta.breakdown.pluvial_susceptibility
+    )
+
+
+def test_the_town_term_does_not_touch_the_river_branch() -> None:
+    """Il cemento non fa crescere un fiume: a parità di portata, città e campagna
+    fuori mappa hanno lo stesso punteggio fluviale."""
+    engine = FloodScoringEngine(_thresholds())
+    citta = engine.score(
+        _bundle(susceptibility=None, discharge_ratio=10.0, imperviousness=0.5, slope=1.0)
+    )
+    campagna = engine.score(
+        _bundle(susceptibility=None, discharge_ratio=10.0, imperviousness=0.0, slope=1.0)
+    )
+    assert citta.score == campagna.score
+
+
+def test_without_the_block_the_pluvial_branch_uses_the_river_map() -> None:
+    """Senza `pluvial_susceptibility` il motore è quello di prima della #198."""
+    t = _thresholds().model_copy(update={"pluvial_susceptibility": None})
+    engine = FloodScoringEngine(t)
+    b = _bundle(susceptibility=None, rain_mm=92.0, imperviousness=0.24, slope=3.4)
+    scored = engine.score(b)
+    assert scored.breakdown.pluvial_susceptibility == scored.breakdown.susceptibility
+    assert scored.score == pytest.approx(t.susceptibility.unmapped * scored.breakdown.pluvial)
 
 
 # ---------------------------------------------------------------------------
