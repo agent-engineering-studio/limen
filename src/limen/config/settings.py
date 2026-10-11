@@ -61,7 +61,9 @@ SLOW_GENERATION_MODELS: frozenset[str] = frozenset({"quality-local", "glm52"})
 # (deterministiche per invariante). Un briefing che impiega mezz'ora è quindi
 # lento, non rotto. `risk_analyst` resta fuori: lo stesso job lo invoca prima
 # del briefing, ma è anche il ruolo che MCP e i percorsi HTTP chiamano.
-ASYNC_GENERATION_ROLES: frozenset[str] = frozenset({"briefing"})
+# Il secondo è `fedelta`, il revisore serale: rilegge spiegazioni già scritte,
+# una alla volta, e nessuno aspetta il suo verdetto.
+ASYNC_GENERATION_ROLES: frozenset[str] = frozenset({"briefing", "fedelta"})
 
 
 class ScoringEngineKind(StrEnum):
@@ -147,6 +149,10 @@ class LLMModels(BaseSettings):
     summarizer: str = "claude-haiku-4-5"
     risk_analyst: str = "claude-haiku-4-5"
     briefing: str = "claude-sonnet-4-6"
+    # Il revisore di fedeltà. Opt-in: il job gira solo se LLM__MODELS__FEDELTA
+    # è dichiarato, e il valore utile su questo server è `glm52` — un modello
+    # di un'altra famiglia rispetto a chi scrive, senza fallback silenzioso.
+    fedelta: str = "claude-haiku-4-5"
 
 
 class LLMSettings(BaseSettings):
@@ -263,6 +269,9 @@ class LLMSettings(BaseSettings):
     # e agli sweep. Default 20→2 UTC (22-4 ora italiana d'estate): chiude
     # prima del lavoro notturno delle 02:00, che è il più pesante del giorno.
     slow_models_window_utc: tuple[int, int] = (20, 2)
+    # Quante spiegazioni il revisore rilegge per sera. Poche: sul modello
+    # lento una revisione sono minuti, e la finestra serale è di sei ore.
+    fedelta_campione: int = Field(default=4, ge=1)
 
     def slow_models_allowed(self, hour_utc: int) -> bool:
         """Se a quest'ora un modello di :data:`SLOW_GENERATION_MODELS` può girare."""

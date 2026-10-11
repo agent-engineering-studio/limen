@@ -32,4 +32,13 @@ def format_citations(result: GroundingResult, *, max_items: int = 3) -> str:
     return "\n".join(lines)
 
 
-__all__ = ["format_citations"]
+def senza_citazioni(testo: str) -> str:
+    """Il racconto senza il blocco di citazioni che `format_citations` accoda.
+
+    Le citazioni portano anni e pagine che non vengono dalla valutazione: un
+    controllo dei numeri che le leggesse le chiamerebbe inventate.
+    """
+    return testo.split(f"\n\n{_HEADER_IT}", 1)[0]
+
+
+__all__ = ["format_citations", "senza_citazioni"]

@@ -110,7 +110,7 @@ su `0.0.0.0` senza chiave: meglio un errore chiaro che un degrado silenzioso.
 ### L'eccezione: `briefing`
 
 `ASYNC_GENERATION_ROLES` elenca i ruoli **non** sincroni, e dalla #78 ne
-contiene uno: `briefing`. Il percorso batch che questa pagina descriveva come
+conteneva uno: `briefing`. Oggi sono due, con `fedelta` (sotto). Il percorso batch che questa pagina descriveva come
 proposta esiste:
 
 * `api/jobs/briefing_enrichment.py` passa ogni
@@ -134,6 +134,33 @@ dimenticare: il default globale di 120 s taglierebbe la generazione a metà.
 `risk_analyst` resta vietato anche se lo stesso job lo invoca subito prima del
 briefing — è lo stesso ruolo che MCP e i percorsi HTTP chiamano, e la
 configurazione è per ruolo, non per chiamante.
+
+### Il secondo ruolo asincrono: `fedelta`
+
+Il revisore serale (`api/jobs/fedelta_racconti.py`, CLI `limen
+fedelta-racconti`). Una volta per sera, un'ora dopo l'apertura di
+`LLM__SLOW_MODELS_WINDOW_UTC` (all'apertura gira la previsione per cella), rilegge un campione casuale delle spiegazioni
+dell'AI delle ultime 24 ore e ne giudica la fedeltà ai dati da cui sono nate
+(`spiegazioni_regione.ingresso`, migrazione 069):
+
+* **i numeri**, in modo deterministico (`briefing_eval`): ogni numero del testo
+  deve stare nel messaggio che il modello ha ricevuto;
+* **il resto**, con un secondo modello: cause attribuite male, luoghi
+  inventati, eventi futuri dati per certi.
+
+Il verdetto va in `spiegazioni_regione.fedelta` e, se negativo, in un warning
+`racconto.infedele`. Non corregge niente: segnala. Un revisore che non risponde
+lascia il giudizio a `null`, mai «fedele».
+
+```bash
+LLM__MODELS__FEDELTA=glm52
+LLM__LLAMACPP_ROLE_TIMEOUT_SECONDS='{"Fedelta": 3600}'
+```
+
+`glm52` e non `quality-local`: un revisore che in silenzio diventasse Claude
+rileggerebbe Claude con Claude, e il punto è avere un modello di un'altra
+famiglia, con punti ciechi diversi da chi scrive. Senza `LLM__MODELS__FEDELTA`
+il job non gira.
 
 ## Timeout
 

@@ -26,6 +26,7 @@ JOB_HTML_REPORT = "limen-html-report"
 JOB_BRIEFING_ENRICHMENT = "limen-briefing-enrichment"
 JOB_NIGHTLY = "limen-nightly"
 JOB_DPC_BOLLETTINI = "limen-dpc-bollettini"
+JOB_FEDELTA_RACCONTI = "limen-fedelta-racconti"
 
 
 __all__ = [
@@ -35,6 +36,7 @@ __all__ = [
     "JOB_DAILY_REPORT",
     "JOB_DPC_BOLLETTINI",
     "JOB_DRIFT_MONITOR",
+    "JOB_FEDELTA_RACCONTI",
     "JOB_FIRMS_MONITORING",
     "JOB_FORECAST_HISTORY",
     "JOB_FORECAST_MONITORING",
