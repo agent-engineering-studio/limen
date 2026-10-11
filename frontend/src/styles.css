@@ -3526,6 +3526,14 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
 .esito-contemporanea { color: var(--watch); }
 .esito-mancata { color: var(--warn); }
 .esito-non_verificabile { color: var(--muted); }
+.verifiche-inefficienza {
+  margin-top: 2rem;
+  padding: 1rem 1.25rem;
+  border-left: 3px solid var(--warn);
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+}
+.verifiche-inefficienza h3 { margin-top: 0; }
+.verifiche-inefficienza ul { padding-left: 1.1rem; }
 .verifica-foto {
   margin: 1.5em 0;
 }
