@@ -167,7 +167,7 @@ Schema (vedi `Verifica` in `frontend/src/content/verifiche.ts` — il tipo è la
 
 ### 9. Controllare e pubblicare
 
-1. JSON valido: `python3 -m json.tool frontend/src/content/verifiche/<slug>.json > /dev/null`.
+1. JSON valido e con l'a capo finale (il pre-commit della CI lo pretende): `python3 -m json.tool frontend/src/content/verifiche/<slug>.json > /dev/null && tail -c1 frontend/src/content/verifiche/<slug>.json | od -c`.
 2. Gate del frontend (Node non è sull'host — memoria `frontend-needs-docker-node`):
    ```bash
    cd frontend && docker run --rm --user $(id -u):$(id -g) -e HOME=/tmp -v "$PWD":/app -w /app node:22 \
