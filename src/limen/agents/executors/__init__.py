@@ -13,6 +13,7 @@ from limen.agents.executors.fire_check import FireCheckExecutor
 from limen.agents.executors.flood_forecast_fetch import FloodForecastFetchExecutor
 from limen.agents.executors.fwi_update import FwiUpdateExecutor
 from limen.agents.executors.meteo_fetch import MeteoFetchExecutor
+from limen.agents.executors.observed_rain import ObservedRainExecutor
 from limen.agents.executors.persist_result import PersistResultExecutor
 from limen.agents.executors.risk_scoring import RiskScoringExecutor
 from limen.agents.executors.seismic_check import SeismicCheckExecutor
@@ -28,6 +29,7 @@ __all__ = [
     "FloodForecastFetchExecutor",
     "FwiUpdateExecutor",
     "MeteoFetchExecutor",
+    "ObservedRainExecutor",
     "PersistResultExecutor",
     "RiskScoringExecutor",
     "SeismicCheckExecutor",

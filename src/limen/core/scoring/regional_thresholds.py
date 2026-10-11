@@ -747,6 +747,22 @@ class PluvialLocalBlock(_StrictModel):
     floor_mm: float = Field(..., gt=0.0)
 
 
+class PluvialObservedBlock(_StrictModel):
+    """La pioggia già caduta, misurata dal radar DPC (#199).
+
+    La cumulata «Merging» (radar corretto con i pluviometri) delle ultime
+    ``hours`` ore prende il posto della previsione sulla stessa parte della
+    finestra: la pioggia usata è il massimo fra la prevista sull'intera
+    finestra e l'osservata più la prevista sulle ore che restano.
+    """
+
+    #: Ore della cumulata DPC (prodotti CUM3/6/12/24).
+    hours: Literal[3, 6, 12, 24]
+    #: Più vecchia di così rispetto all'istante valutato, la cumulata non
+    #: descrive più la finestra e si ignora.
+    max_age_minutes: int = Field(..., gt=0)
+
+
 class PluvialBlock(_StrictModel):
     """Intensity-duration threshold for local (flash) flooding.
 
@@ -769,6 +785,8 @@ class PluvialBlock(_StrictModel):
     #: Soglie relative al clima del nodo. Assente ⇒ le soglie nazionali qui
     #: sopra valgono ovunque, come prima.
     local: PluvialLocalBlock | None = None
+    #: Pioggia osservata dal radar. Assente ⇒ solo la previsione, come prima.
+    observed: PluvialObservedBlock | None = None
 
     @model_validator(mode="after")
     def _saturation_above_threshold(self) -> PluvialBlock:

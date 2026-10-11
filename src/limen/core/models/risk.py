@@ -127,6 +127,11 @@ class DynamicInputs(_Frozen):
     #: (quantili ai livelli di `core/scoring/flood/climatologia.py`), per le
     #: soglie locali degli allagamenti. ``None`` ⇒ soglie nazionali.
     flood_rain_quantiles: tuple[float, ...] | None = None
+    #: Alluvione (#199): la pioggia già caduta sulla cella secondo il radar
+    #: DPC, e la prevista sulle sole ore della finestra che restano dopo
+    #: quelle osservate. Le frane non le leggono.
+    flood_rain_observed_mm: float | None = Field(default=None, ge=0.0)
+    flood_rain_head_mm: float | None = Field(default=None, ge=0.0)
     # coastal: normalised sea surge / wave signal in [0,1] (Open-Meteo Marine).
     coastal_surge_norm: float | None = Field(default=None, ge=0.0, le=1.0)
     seismic_history: tuple[SeismicHistoryEvent, ...] = ()
@@ -434,7 +439,12 @@ class FloodBreakdown(HazardBreakdown):
     mapped: bool = True
     #: I segnali grezzi, per verificabilità.
     discharge_ratio: float | None = None
+    #: La pioggia confrontata con la soglia: la prevista sull'intera finestra,
+    #: o l'osservata più la prevista sul resto quando è maggiore (#199).
     rain_mm: float | None = None
+    #: La cumulata misurata dal radar DPC sulla cella, mm. ``None`` = nessun
+    #: fotogramma utilizzabile, non «asciutto».
+    rain_observed_mm: float | None = None
     #: Le soglie della pioggia usate per questa cella, mm: locali quando il
     #: nodo ha una climatologia (migrazione 065), nazionali altrimenti. Nel
     #: breakdown perché «105 mm, soglia 92» e «105 mm, soglia 40» sono due
@@ -465,6 +475,7 @@ class FloodBreakdown(HazardBreakdown):
             "mapped": self.mapped,
             "discharge_ratio": self.discharge_ratio,
             "rain_mm": self.rain_mm,
+            "rain_observed_mm": self.rain_observed_mm,
             "rain_threshold_mm": self.rain_threshold_mm,
             "rain_saturation_mm": self.rain_saturation_mm,
             "post_fire_multiplier": self.post_fire_multiplier,

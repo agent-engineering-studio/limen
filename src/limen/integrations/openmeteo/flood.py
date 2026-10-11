@@ -84,6 +84,10 @@ class FloodSignals:
     #: 77 mm at the cells that actually failed).
     nodes: tuple[tuple[float, float], ...] = ()
     rain_by_node: tuple[float | None, ...] = ()
+    #: La stessa pioggia prevista, ma sulle sole ore della finestra che
+    #: restano dopo quelle che il radar ha già misurato (#199): sommata alla
+    #: cumulata osservata ricompone una finestra lunga quanto la soglia.
+    rain_head_by_node: tuple[float | None, ...] = ()
     #: Attenzione: questo rapporto **non** è lo stesso di
     #: ``river_discharge_ratio`` qui sopra. Quello, che alimenta il componente
     #: H delle frane, è il picco previsto sulla media dei 31 giorni
@@ -367,6 +371,7 @@ class OpenMeteoFloodClient:
         per_node: bool = False,
         reference_percentile: float = DEFAULT_REFERENCE_PERCENTILE,
         reference_window_days: int = DEFAULT_REFERENCE_WINDOW_DAYS,
+        observed_hours: int = 0,
     ) -> FloodSignals:
         """The three AOI-level signals, plus per-node ones when asked.
 
@@ -392,7 +397,9 @@ class OpenMeteoFloodClient:
         from limen.integrations.openmeteo.grid import build_snapped_nodes
 
         nodes = build_snapped_nodes(bbox, spacing=NODE_SPACING_DEG)
-        rain = await self._pluvial_by_node(nodes, valuation_time, horizon_hours)
+        rain, head = await self._pluvial_by_node(
+            nodes, valuation_time, horizon_hours, head_hours=horizon_hours - observed_hours
+        )
         reference = await self._cached_reference(
             nodes,
             percentile=reference_percentile,
@@ -403,6 +410,7 @@ class OpenMeteoFloodClient:
             signals,
             nodes=tuple(nodes),
             rain_by_node=tuple(rain),
+            rain_head_by_node=tuple(head),
             river_ratio_by_node=tuple(rivers),
         )
 
@@ -455,15 +463,22 @@ class OpenMeteoFloodClient:
         return max(future) / baseline
 
     async def _pluvial_by_node(
-        self, nodes: list[tuple[float, float]], t0: datetime, horizon_hours: int
-    ) -> list[float | None]:
-        """Forecast rain over ``horizon_hours`` at each node, in one request.
+        self,
+        nodes: list[tuple[float, float]],
+        t0: datetime,
+        horizon_hours: int,
+        *,
+        head_hours: int | None = None,
+    ) -> tuple[list[float | None], list[float | None]]:
+        """Forecast rain at each node over ``horizon_hours`` and over the first
+        ``head_hours`` of it (default: the whole window), in one request.
 
         Hour-bounded, not day-bounded: summing whole calendar days from
         ``t0.date()`` would stretch a 72 h window to as much as 96 h, and the
         thresholds it feeds are stated per window.
         """
         end = t0 + timedelta(hours=horizon_hours)
+        end_head = t0 + timedelta(hours=horizon_hours if head_hours is None else head_hours)
         results = await self.fetch_grid(
             forecast_url(),
             nodes,
@@ -478,16 +493,18 @@ class OpenMeteoFloodClient:
             "openmeteo.flood.pluvial_grid",
         )
         if len(results) != len(nodes):
-            return [None] * len(nodes)
+            return [None] * len(nodes), [None] * len(nodes)
         out: list[float | None] = []
+        heads: list[float | None] = []
         for point in results:
             hourly = point.get("hourly") or {}
             stamps = hourly.get("time") if isinstance(hourly.get("time"), list) else []
             values = _floats(hourly.get("precipitation"))
             if not stamps or len(values) != len(stamps):
                 out.append(sum(values) if values else None)
+                heads.append(None)
                 continue
-            total = 0.0
+            total = head = 0.0
             seen = False
             for stamp, mm in zip(stamps, values, strict=False):
                 when = datetime.fromisoformat(str(stamp))
@@ -496,8 +513,11 @@ class OpenMeteoFloodClient:
                 if t0 <= when <= end:
                     total += mm
                     seen = True
+                    if when <= end_head:
+                        head += mm
             out.append(total if seen else None)
-        return out
+            heads.append(head if seen else None)
+        return out, heads
 
     async def _cached_reference(
         self, nodes: list[tuple[float, float]], *, percentile: float, window_days: int

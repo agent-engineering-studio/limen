@@ -71,9 +71,18 @@ class FloodScoringEngine(ScoringEngine[FloodBreakdown]):
             else static.flood_hazard_norm
         )
 
+        # La finestra comincia adesso, quindi un nubifragio in corso esce dalla
+        # previsione mentre cade (#199): a Melito la previsione dava 20 mm, il
+        # radar ne aveva misurati 152. L'osservata più la prevista sulle ore
+        # che restano ricompone una finestra della stessa lunghezza; vale la
+        # maggiore delle due letture.
+        rain = dyn.flood_forecast_rain_72h_mm
+        if dyn.flood_rain_observed_mm is not None:
+            rain = max(rain or 0.0, dyn.flood_rain_observed_mm + (dyn.flood_rain_head_mm or 0.0))
+
         soglie = soglie_pioggia(t.pluvial, dyn.flood_rain_quantiles)
         pluvial = pluvial_trigger(
-            dyn.flood_forecast_rain_72h_mm,
+            rain,
             soil_moisture=dyn.soil_moisture_0_7,
             imperviousness=static.imperviousness_norm,
             pluvial=t.pluvial,
@@ -123,7 +132,8 @@ class FloodScoringEngine(ScoringEngine[FloodBreakdown]):
                 fluvial=fluvial,
                 mapped=static.flood_hazard_norm is not None,
                 discharge_ratio=dyn.river_discharge_ratio,
-                rain_mm=dyn.flood_forecast_rain_72h_mm,
+                rain_mm=rain,
+                rain_observed_mm=dyn.flood_rain_observed_mm,
                 rain_threshold_mm=soglie[0],
                 rain_saturation_mm=soglie[1],
                 post_fire_multiplier=post_fire,
