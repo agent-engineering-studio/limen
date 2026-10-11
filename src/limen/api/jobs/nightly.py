@@ -50,6 +50,7 @@ STEPS = (
     "partitions_maintain",
     "retention",
     "storage",
+    "egms_release",
     "glofas_riferimenti",
 )
 
@@ -207,6 +208,7 @@ async def run_nightly_pipeline(deps: AppDependencies) -> dict[str, Any]:
     out["partitions_maintain"] = await _step("partitions_maintain", lambda: _partitions(deps))
     out["retention"] = await _step("retention", lambda: _retention(deps))
     out["storage"] = await _step("storage", lambda: _storage(deps))
+    out["egms_release"] = await _step("egms_release", lambda: _egms_release(deps))
     # Per ultimo: il tetto di GloFAS riparte a mezzanotte UTC, quindi alle due
     # è intero comunque, e il riempimento ora dura un paio d'ore (i lotti si
     # distanziano sotto il limite orario): davanti, terrebbe ferma la retention.
@@ -233,6 +235,13 @@ async def _glofas(deps: AppDependencies) -> dict[str, Any]:
         percentile=flood.fluvial.reference_percentile,
         window_days=flood.fluvial.reference_window_days,
     )
+
+
+async def _egms_release(deps: AppDependencies) -> dict[str, Any]:
+    """Una richiesta: è uscita una release EGMS più nuova di `EGMS__RELEASE`?"""
+    from limen.integrations.egms.sync_job import controlla_release
+
+    return dict(await controlla_release(deps.settings))
 
 
 async def _partitions(deps: AppDependencies) -> dict[str, Any]:

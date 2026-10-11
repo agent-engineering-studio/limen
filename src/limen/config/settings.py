@@ -653,15 +653,20 @@ class TrainingSettings(BaseSettings):
 class EgmsSettings(BaseSettings):
     """Copernicus EGMS, prodotto Ortho L3: la velocità media del terreno a 100 m.
 
-    Fail-closed: senza ``EGMS__TOKEN`` non si scarica niente. Il token si
-    legge dal parametro ``id`` di un link di download dell'EGMS Explorer
-    (accesso con EU Login) ed è **temporaneo**: va rinnovato a ogni release.
+    Fail-closed. Due credenziali, la prima vince:
+
+    * ``EGMS__SERVICE_KEY`` — il JSON della chiave di servizio CLMS (profilo su
+      land.copernicus.eu → «API Tokens»). Non scade: ogni sync fa le sue
+      ricerche, e il passo notturno sa quando esce una release nuova;
+    * ``EGMS__TOKEN`` — l'``id`` copiato da un link dell'EGMS Explorer. È l'id
+      di una ricerca, e **scade**: va bene per un sync a mano.
     """
 
     model_config = SettingsConfigDict(extra="ignore")
 
+    service_key: SecretStr | None = None
     token: SecretStr | None = None
-    download_url: str = "https://egms.land.copernicus.eu/insar-api/archive/download"
+    archive_url: str = "https://egms.land.copernicus.eu/insar-api/archive"
     #: La finestra della release: cinque anni, una release all'anno.
     release: str = "2020_2024"
     #: Dove tenere i GeoTIFF delle tile (~4 MB l'uno, due per tile).
@@ -669,7 +674,10 @@ class EgmsSettings(BaseSettings):
 
     @property
     def attivo(self) -> bool:
-        return self.token is not None and bool(self.token.get_secret_value())
+        return any(
+            v is not None and bool(v.get_secret_value().strip())
+            for v in (self.service_key, self.token)
+        )
 
 
 class CopernicusSettings(BaseSettings):

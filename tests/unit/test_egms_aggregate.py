@@ -112,33 +112,50 @@ async def test_scarica_tiene_solo_il_tiff_e_ricorda_le_tile_assenti(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     chieste: list[str] = []
+    ricerche: list[str] = []
 
     async def _fetch(_m: str, url: str, **kw: Any) -> _Risposta:
         chieste.append(url)
-        assert kw["params"] == {"id": "t"}
-        return _Risposta(404) if "E40N15" in url else _Risposta(200, _zip(url.split("/")[-1][:-4]))
+        assert url.startswith("https://x/archive/download/")
+        assert kw["params"] == {"id": "q1"}
+        return _Risposta(200, _zip(url.split("/")[-1][:-4]))
+
+    def _ricerca(trovata: bool) -> Any:
+        async def _id() -> str | None:
+            ricerche.append("x")
+            return "q1" if trovata else None
+
+        return _id
 
     monkeypatch.setattr(client, "fetch_with_retry", _fetch)
-    args = {"release": "2020_2024", "url": "https://x/download", "token": "t"}
+    args: dict[str, Any] = {"release": "2020_2024", "archivio": "https://x/archive"}
 
-    p = await client.scarica_tile(tmp_path, (47, 19), "U", **args)
+    p = await client.scarica_tile(tmp_path, (47, 19), "U", id_ricerca=_ricerca(True), **args)
     assert p is not None and p.read_bytes() == b"TIFF"
-    assert await client.scarica_tile(tmp_path, (40, 15), "U", **args) is None
-    # Il secondo giro non richiede niente: tiff presente, mare ricordato.
-    await client.scarica_tile(tmp_path, (47, 19), "U", **args)
-    await client.scarica_tile(tmp_path, (40, 15), "U", **args)
-    assert len(chieste) == 2
+    # Il mare: la ricerca non trova niente, e non si scarica.
+    assert (
+        await client.scarica_tile(tmp_path, (40, 15), "U", id_ricerca=_ricerca(False), **args)
+        is None
+    )
+    # Il secondo giro non cerca e non scarica: tiff presente, mare ricordato.
+    await client.scarica_tile(tmp_path, (47, 19), "U", id_ricerca=_ricerca(True), **args)
+    await client.scarica_tile(tmp_path, (40, 15), "U", id_ricerca=_ricerca(True), **args)
+    assert len(chieste) == 1
+    assert len(ricerche) == 2
     assert sorted(f.suffix for f in tmp_path.iterdir()) == [".assente", ".tiff"]
 
 
-async def test_un_token_scaduto_alza(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_un_id_scaduto_alza(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     async def _fetch(_m: str, _url: str, **_kw: Any) -> _Risposta:
         return _Risposta(401)
+
+    async def _id() -> str:
+        return "vecchio"
 
     monkeypatch.setattr(client, "fetch_with_retry", _fetch)
     with pytest.raises(RuntimeError, match="401"):
         await client.scarica_tile(
-            tmp_path, (47, 19), "U", release="2020_2024", url="https://x", token="t"
+            tmp_path, (47, 19), "U", release="2020_2024", archivio="https://x", id_ricerca=_id
         )
 
 
