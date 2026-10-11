@@ -7,13 +7,13 @@
 > **Monitoraggio AI del pericolo di frane, allagamenti e incendi per il
 > territorio italiano, cella per cella, adesso e nelle prossime 72 ore.**
 > **Copertura nazionale — tutte le 20 regioni ISTAT** su griglia 1 km²
-> (~312k celle), solo dati aperti, codice Apache-2.0.
+> (~312k celle), solo dati aperti, codice EUPL-1.2.
 >
 > 🗺️ **Mappa live:** <https://limen.agentengineering.it/> ·
 > ☕ **[Sostieni Limen](#sostieni-limen)** su [Buy Me a Coffee](https://www.buymeacoffee.com/f9t3zol)
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green.svg)](./LICENSE)
+[![License: EUPL-1.2](https://img.shields.io/badge/license-EUPL--1.2-green.svg)](./LICENSE)
 [![uv](https://img.shields.io/badge/managed%20by-uv-261230)](https://github.com/astral-sh/uv)
 [![ruff](https://img.shields.io/badge/lint-ruff-261230)](https://github.com/astral-sh/ruff)
 [![mypy --strict](https://img.shields.io/badge/typed-mypy%20--strict-blue)](http://mypy-lang.org/)
@@ -437,4 +437,10 @@ numero. Limen è un progetto indipendente, non affiliato ad Anthropic.
 
 ## Licenza
 
-Apache-2.0 — vedi [LICENSE](./LICENSE).
+[EUPL-1.2](./LICENSE) — European Union Public Licence, copyleft anche
+sull'uso via rete: chi offre Limen come servizio deve pubblicarne le
+modifiche. Le versioni fino a `v0.6.0-impl-complete` restano Apache-2.0.
+
+Per usi incompatibili con il copyleft è disponibile una licenza commerciale:
+scrivere al maintainer. I contributi esterni richiedono il CLA descritto in
+[CONTRIBUTING.md](./CONTRIBUTING.md#contributor-license-agreement).

@@ -539,7 +539,7 @@ Una sequenza che usa tutto quello che Limen sa fare:
 | Inferenza | Gateway LiteLLM, llama.cpp/llama-swap su GPU, colibrì (GLM-5.2), Claude via API |
 | Esercizio | Docker Compose su un solo server, porte sul loopback dietro un reverse proxy; nessun cloud provider |
 
-Tutto è riproducibile: codice Apache-2.0, dati pubblici, configurazioni
+Tutto è riproducibile: codice EUPL-1.2, dati pubblici, configurazioni
 leggibili. Lo stack d'inferenza ha un suo Compose per replicarlo su un altro
 computer. Le API sono documentate nella pagina **Integrazioni**.
 

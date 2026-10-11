@@ -270,7 +270,7 @@ export function HomePage(): JSX.Element {
           Dati: ISPRA IdroGEO (CC-BY 4.0) · e-ITALICA CNR-IRPI (CC-BY 4.0) ·
           Copernicus / Open-Meteo · GloFAS · INGV (CC-BY 4.0) · EFFIS · NASA
           FIRMS · CORINE Land Cover · © OpenStreetMap contributors (ODbL).
-          Codice Apache-2.0.
+          Codice EUPL-1.2.
         </p>
         <p>
           Limen è sviluppato con Claude Code fin dal primo commit, e i racconti

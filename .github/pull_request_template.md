@@ -32,3 +32,9 @@ List the public datasets, standards or references used for verification.
 - [ ] I added tests or explained why tests are not applicable.
 - [ ] I did not commit secrets, private data or large generated files.
 - [ ] I used cautious language for risk and public-safety claims.
+
+## Contributor License Agreement
+
+First contribution? Keep the line below (see [CONTRIBUTING.md](../CONTRIBUTING.md#contributor-license-agreement)); otherwise delete it.
+
+I have read the Contributor License Agreement in CONTRIBUTING.md and I accept it.
