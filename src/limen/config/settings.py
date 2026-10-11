@@ -354,6 +354,11 @@ class SchedulerSettings(BaseSettings):
     # forecast history, partizioni, retention. Le due del mattino perché è
     # dopo l'ultimo sweep della notte e prima del report delle sei.
     nightly_hour_utc: int = Field(default=2, ge=0, le=23)
+    # Quanti nodi GloFAS al più riceve ogni notte la portata ordinaria (#200).
+    # Ognuno costa due anni d'archivio all'API pubblica, che pesa le richieste
+    # lunghe: tutti insieme esaurivano il tetto giornaliero in diciotto
+    # minuti. Il passo si ferma comunque al primo 429.
+    glofas_riferimenti_per_notte: int = Field(default=300, ge=0)
     # La previsione per cella (+24/+48/+72), quattro volte al giorno e non
     # una: calcolata una volta a notte restava in mappa per 24 ore. Il 7
     # ottobre 2026 dava la Basilicata «molto alto» per l'incendio di sabato

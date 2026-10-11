@@ -180,69 +180,64 @@ class _Cache:
         self.writes.append((key, value, ttl_seconds))
 
 
-async def test_a_cached_reference_is_not_fetched_again(monkeypatch: pytest.MonkeyPatch) -> None:
-    """La piena ordinaria di un fiume non cambia di settimana in settimana:
-    ricalcolarla a ogni sweep costerebbe due anni d'archivio per nodo ogni ora."""
-    seen = _grid(monkeypatch, {"openmeteo.flood.discharge_reference": []})
-    cache = _Cache(stored=[1.0, 2.0, None])
-
-    reference = await OpenMeteoFloodClient(cache=cache)._cached_reference(
-        _NODES, percentile=0.9, window_days=730
-    )
-
-    assert reference == [1.0, 2.0, None]
-    assert seen == []
-    assert cache.writes == []
-
-
-async def test_a_cold_cache_is_filled_once(monkeypatch: pytest.MonkeyPatch) -> None:
-    _grid(
-        monkeypatch,
-        {"openmeteo.flood.discharge_reference": [[float(k) for k in range(400)], None, None]},
-    )
-    cache = _Cache()
-
-    reference = await OpenMeteoFloodClient(cache=cache)._cached_reference(
-        _NODES, percentile=0.9, window_days=730
-    )
-
-    (key, value, ttl) = cache.writes[0]
-    assert key.startswith("flood:discharge_reference:")
-    assert value == reference
-    assert ttl == 30 * 24 * 3600
-
-
-async def test_an_unreachable_cache_does_not_stop_the_sweep(
+async def test_il_riferimento_si_legge_dalla_tabella_e_non_si_ricompra(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Cache giù: si ricalcola. Più lento, mai sbagliato — e soprattutto mai
-    un ramo fluviale spento per un problema di cache."""
-    _grid(
-        monkeypatch,
-        {"openmeteo.flood.discharge_reference": [[7.0] * 400, [7.0] * 400, [7.0] * 400]},
-    )
+    """Due anni d'archivio per nodo esaurivano il tetto giornaliero in diciotto
+    minuti (#200): lo sweep il riferimento lo legge e basta, e un nodo non
+    ancora calcolato vale «non so»."""
+    seen = _grid(monkeypatch, {"openmeteo.flood.discharge_reference": []})
 
-    class _Broken:
-        async def get_json(self, _key: str) -> Any:
-            raise ConnectionError("database giù")
+    async def _tabella(
+        nodes: list[tuple[float, float]], *, percentile: float, window_days: int
+    ) -> dict[tuple[float, float], float | None]:
+        assert (percentile, window_days) == (0.9, 730)
+        return {_NODES[0]: 12.5, _NODES[2]: None}
 
-        async def set_json(self, _key: str, _value: Any, *, ttl_seconds: int) -> None:
-            raise ConnectionError("database giù")
-
-    reference = await OpenMeteoFloodClient(cache=_Broken())._cached_reference(
+    reference = await OpenMeteoFloodClient(riferimenti=_tabella)._cached_reference(
         _NODES, percentile=0.9, window_days=730
     )
-    assert reference == [7.0, 7.0, 7.0]
+
+    assert reference == [12.5, None, None]
+    assert seen == []
 
 
-async def test_a_different_lattice_is_a_different_key() -> None:
-    from limen.integrations.openmeteo.flood import _reference_key
+async def test_una_tabella_irraggiungibile_non_ferma_lo_sweep(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen = _grid(monkeypatch, {"openmeteo.flood.discharge_reference": []})
 
-    base = _reference_key(_NODES, percentile=0.9, window_days=730)
-    assert base != _reference_key(_NODES[:2], percentile=0.9, window_days=730)
-    assert base != _reference_key(_NODES, percentile=0.95, window_days=730)
-    assert base != _reference_key(_NODES, percentile=0.9, window_days=1095)
-    assert base == _reference_key(_NODES, percentile=0.9, window_days=730)
+    async def _giu(
+        nodes: list[tuple[float, float]], *, percentile: float, window_days: int
+    ) -> dict[tuple[float, float], float | None]:
+        raise ConnectionError("database giù")
+
+    reference = await OpenMeteoFloodClient(riferimenti=_giu)._cached_reference(
+        _NODES, percentile=0.9, window_days=730
+    )
+    assert reference == [None, None, None]
+    assert seen == []
+
+
+async def test_la_previsione_si_chiede_solo_per_i_nodi_con_un_fiume(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Chiedere la portata di nodi in mare o senza riferimento bruciava quota
+    per un rapporto che sarebbe comunque «non so» (#200)."""
+    chiesti: list[list[Any]] = []
+
+    async def _fetch_grid(
+        _self: Any, _url: str, nodes: list[Any], _params: dict[str, Any], label: str
+    ) -> list[dict[str, Any]]:
+        chiesti.append(list(nodes))
+        return [{"daily": {"river_discharge": [20.0]}} for _ in nodes]
+
+    monkeypatch.setattr(OpenMeteoFloodClient, "fetch_grid", _fetch_grid)
+    ratios = await OpenMeteoFloodClient(cache=_Cache())._cached_fluvial_by_node(
+        _NODES, reference=[10.0, None, 0.0]
+    )
+    assert chiesti == [[_NODES[0]]]
+    assert ratios == [2.0, None, None]
 
 
 async def test_la_previsione_fluviale_in_cache_non_si_ricompra(
@@ -276,7 +271,7 @@ async def test_la_previsione_fluviale_riempie_la_cache_con_la_scadenza_giusta(
     (key, value, ttl) = cache.writes[0]
     assert key.startswith("flood:fluvial_forecast:")
     assert value == ratios
-    assert ttl == 6 * 3600
+    assert ttl == 12 * 3600
 
 
 async def test_un_degrado_non_finisce_in_cache(monkeypatch: pytest.MonkeyPatch) -> None:
