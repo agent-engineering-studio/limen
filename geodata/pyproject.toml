@@ -5,7 +5,7 @@ description = "Limen Geo-Data Service — ISPRA dataset ingestion + per-cell fea
 readme = "README.md"
 license = { text = "EUPL-1.2" }
 authors = [
-    { name = "Giuseppe Zileni", email = "giuseppe.zileni@hevolus.it" },
+    { name = "Giuseppe Zileni", email = "giuseppe.zileni@gmail.com" },
 ]
 requires-python = ">=3.12"
 dependencies = [

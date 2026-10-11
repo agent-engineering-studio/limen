@@ -437,6 +437,10 @@ numero. Limen è un progetto indipendente, non affiliato ad Anthropic.
 
 ## Licenza
 
+Copyright © 2026 Giuseppe Zileni. Limen è un progetto personale, sviluppato
+fuori da qualsiasi rapporto di lavoro e con mezzi propri: il titolare dei
+diritti è l'autore, che è anche il soggetto a cui il CLA concede le licenze.
+
 [EUPL-1.2](./LICENSE) — European Union Public Licence, copyleft anche
 sull'uso via rete: chi offre Limen come servizio deve pubblicarne le
 modifiche. Le versioni fino a `v0.6.0-impl-complete` restano Apache-2.0.
