@@ -363,13 +363,13 @@ class SchedulerSettings(BaseSettings):
     # forecast history, partizioni, retention. Le due del mattino perché è
     # dopo l'ultimo sweep della notte e prima del report delle sei.
     nightly_hour_utc: int = Field(default=2, ge=0, le=23)
-    # Quante chiamate dell'API pubblica GloFAS spende ogni notte la portata
-    # ordinaria dei nodi (#200). Due anni d'archivio pesano ~52 chiamate a
-    # nodo (una ogni due settimane di dati), e il tetto è 10.000 al giorno:
-    # il resto serve allo sweep, che a copertura piena chiede la previsione
-    # di ~3.400 nodi due volte al giorno. 3.000 sono ~57 nodi a notte, i più
-    # pericolosi per primi.
-    glofas_chiamate_per_notte: int = Field(default=3000, ge=0)
+    # Il tetto del giorno per l'API pubblica GloFAS (#200), su 10.000: la
+    # notte ne toglie la previsione dei fiumi dello sweep (un nodo con fiume
+    # = una chiamata al giorno, per ogni regione che lo vede) e spende il
+    # resto nella portata ordinaria dei nodi, ~52 chiamate a nodo. A tabella
+    # vuota sono ~150 nodi a notte, poi meno man mano che la previsione
+    # cresce. Il margine di 2.000 è per la previsione delle onde e i rilanci.
+    glofas_chiamate_per_notte: int = Field(default=8000, ge=0)
     # La previsione per cella (+24/+48/+72), quattro volte al giorno e non
     # una: calcolata una volta a notte restava in mappa per 24 ore. Il 7
     # ottobre 2026 dava la Basilicata «molto alto» per l'incendio di sabato

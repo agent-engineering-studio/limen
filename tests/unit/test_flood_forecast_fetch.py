@@ -271,7 +271,7 @@ async def test_la_previsione_fluviale_riempie_la_cache_con_la_scadenza_giusta(
     (key, value, ttl) = cache.writes[0]
     assert key.startswith("flood:fluvial_forecast:")
     assert value == ratios
-    assert ttl == 12 * 3600
+    assert ttl == 24 * 3600  # una corsa GloFAS al giorno
 
 
 async def test_un_degrado_non_finisce_in_cache(monkeypatch: pytest.MonkeyPatch) -> None:
