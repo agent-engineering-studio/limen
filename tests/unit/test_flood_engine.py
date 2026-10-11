@@ -238,6 +238,14 @@ def test_a_flat_town_off_the_river_map_takes_the_cloudburst() -> None:
     )
 
 
+def test_where_the_river_map_exists_it_stays_the_authority() -> None:
+    """Il termine città vale solo fuori mappa: una cella mappata in città ha la
+    suscettibilità della mappa anche per la pioggia (#198)."""
+    engine = FloodScoringEngine(_thresholds())
+    mappata = engine.score(_bundle(susceptibility=0.4, rain_mm=92.0, imperviousness=0.5, slope=1.0))
+    assert mappata.breakdown.pluvial_susceptibility == 0.4
+
+
 def test_the_town_term_does_not_touch_the_river_branch() -> None:
     """Il cemento non fa crescere un fiume: a parità di portata, città e campagna
     fuori mappa hanno lo stesso punteggio fluviale."""
