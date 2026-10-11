@@ -7,7 +7,7 @@ description: Verifica sui principali quotidiani online italiani le notizie di fr
 
 Per ogni evento reale riportato dalla stampa: **è successo davvero? Limen l'aveva previsto? Con quante ore di anticipo, su quali dati, perché?** Il risultato è un articolo nella pagina «Verifiche» della SPA.
 
-La regola che governa tutto: **si pubblica anche quando Limen non l'ha visto.** Un blog che racconta solo i successi misura la fortuna, non il modello (vedi la memoria `hit-rate-needs-base-rate`). L'esito `mancata` è un esito legittimo e va scritto con la stessa cura di `anticipata`.
+La regola che governa tutto: **diventa un articolo solo l'evento previsto in anticipo (`anticipata`); ogni altro evento verificato si registra lo stesso e finisce nel riquadro «Inefficienza»** della pagina, contato sul totale («Eventi non previsti in anticipo: 3 su 4 verificati»). Una pagina di soli successi senza il conteggio dei mancati misura la fortuna, non il modello (vedi la memoria `hit-rate-needs-base-rate`): il riquadro è il prezzo per mostrare solo gli anticipi, e non si salta mai.
 
 ## Dove vive la pagina
 
@@ -130,6 +130,8 @@ Se non trovi niente di pubblicabile, `foto: []`: l'articolo regge senza. Salva i
 
 **Prima cerca se esiste già**: stesso pericolo, uno dei comuni in comune, data entro ±1 giorno (`grep -l` su `frontend/src/content/verifiche/*.json`). Se esiste: aggiorna — mantieni `slug` e `pubblicato`, imposta `aggiornato` ad adesso, unisci `fonti` (senza duplicati per URL), ricalcola `previsione` se la nuova informazione cambia ora o comuni, riscrivi testo ed esito se cambiano. Altrimenti crealo.
 
+**Ogni evento verificato ha il suo file**, qualunque sia l'esito: la pagina ne fa un articolo solo se `esito` è `anticipata`, e conta gli altri nel riquadro d'inefficienza (data, pericolo, `evento.luogo`, esito). Per un evento non anticipato `corpo`, `perche` e `foto` non si vedono sulla pagina: scrivili brevi ma veri, perché se un aggiornamento lo porta ad `anticipata` diventano l'articolo.
+
 Schema (vedi `Verifica` in `frontend/src/content/verifiche.ts` — il tipo è la fonte di verità):
 
 ```json
@@ -174,7 +176,7 @@ Schema (vedi `Verifica` in `frontend/src/content/verifiche.ts` — il tipo è la
      sh -c "npx vitest run src/__tests__/VerifichePage.test.tsx && npm run lint && npm run build"
    ```
    Il `build` (`tsc -b`) controlla che ogni JSON rispetti il tipo `Verifica`.
-3. Riepiloga all'utente, per ogni evento: esito, anticipo, fonti, foto e licenza; e gli eventi **scartati** con il motivo.
+3. Riepiloga all'utente, per ogni evento: esito, anticipo, fonti, foto e licenza — distinguendo gli **articoli** (`anticipata`) da quelli che vanno solo nel riquadro d'inefficienza — e gli eventi **scartati** con il motivo.
 4. **Pubblicare richiede conferma esplicita** (è il sito pubblico): solo dopo il sì, ricostruisci il frontend statico
    ```bash
    docker compose --env-file .env -f infra/docker/docker-compose.demo.yml \
@@ -187,6 +189,6 @@ Schema (vedi `Verifica` in `frontend/src/content/verifiche.ts` — il tipo è la
 
 - Non pubblicare eventi con una sola fonte non istituzionale.
 - Non chiamare `mancata` un evento fuori retention o fuori copertura: è `non_verificabile`.
-- Non togliere dalla pagina una verifica `mancata` per migliorare il bilancio.
+- Non saltare il file JSON di un evento `mancata` o `contemporanea` per migliorare il bilancio: senza il file il riquadro d'inefficienza non lo conta.
 - Non modificare numeri di Limen nel testo per renderli più leggibili oltre l'arrotondamento (punteggi a due decimali, ore intere).
 - Non scrivere nel database: la skill legge soltanto.

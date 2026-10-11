@@ -1,15 +1,18 @@
 // «Verifiche»: gli eventi dei giornali messi accanto alla previsione di
-// Limen. Ogni verifica dice con quante ore d'anticipo il sistema l'aveva
-// vista, su quali dati e perché — e lo dice anche quando non l'ha vista: un
-// blog che pubblica solo i successi misura la propria fortuna, non il
-// modello.
+// Limen. Diventa un articolo solo l'evento previsto in anticipo — con quante
+// ore, su quali dati e perché. Gli altri non spariscono: finiscono nel
+// riquadro d'inefficienza, contati sul totale, perché una pagina che mostra
+// solo i successi senza dire quanti sono misura la fortuna, non il modello.
 
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
 import { VERIFICHE } from "../content/verifiche";
 import type { Esito, Verifica } from "../content/verifiche";
-import { RISK_COLOR_BY_LEVEL, RISK_LABEL_IT_BY_LEVEL } from "../lib/risk-colors";
+import {
+  RISK_COLOR_BY_LEVEL,
+  RISK_LABEL_IT_BY_LEVEL,
+} from "../lib/risk-colors";
 import type { HazardType } from "../types";
 
 const ROUTE = "#/verifiche";
@@ -62,34 +65,87 @@ function Etichette({ v }: { v: Verifica }): JSX.Element {
   );
 }
 
-function Indice({ verifiche }: { verifiche: readonly Verifica[] }): JSX.Element {
+/** Solo l'evento previsto in anticipo diventa un articolo. */
+export function pubblicabile(v: Verifica): boolean {
+  return v.esito === "anticipata";
+}
+
+function Inefficienza({
+  verifiche,
+}: {
+  verifiche: readonly Verifica[];
+}): JSX.Element | null {
+  const valutati = verifiche.filter((v) => v.esito !== "non_verificabile");
+  const sfuggiti = valutati.filter((v) => !pubblicabile(v));
+  const ignoti = verifiche.length - valutati.length;
+  if (sfuggiti.length === 0 && ignoti === 0) return null;
+  return (
+    <section className="verifiche-inefficienza" aria-label="Inefficienza">
+      <h3>Inefficienza: eventi che Limen non ha previsto</h3>
+      {sfuggiti.length > 0 ? (
+        <>
+          <p>
+            Eventi non previsti in anticipo: {sfuggiti.length} su{" "}
+            {valutati.length} verificati. Nessun articolo per questi: restano
+            qui, contati, perché sono il limite del sistema.
+          </p>
+          <ul>
+            {sfuggiti.map((v) => (
+              <li key={v.slug}>
+                {new Date(v.evento.quando).toLocaleDateString("it-IT")} ·{" "}
+                {PERICOLO[v.pericolo]} · {v.evento.luogo} —{" "}
+                <span className={`esito esito-${v.esito}`}>
+                  {ESITO[v.esito]}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      {ignoti > 0 ? (
+        <p className="exp-note">
+          {ignoti === 1
+            ? "Un evento non è verificabile"
+            : `${ignoti} eventi non sono verificabili`}
+          : fuori dalle regioni coperte o più vecchi dei 14 giorni di storico
+          delle previsioni.
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function Indice({
+  verifiche,
+}: {
+  verifiche: readonly Verifica[];
+}): JSX.Element {
+  const articoli = verifiche.filter(pubblicabile);
   return (
     <article className="explainer verifiche">
       <div className="exp-eyebrow">Verifiche</div>
       <h2>Quello che è successo, e quello che Limen aveva visto prima</h2>
       <p className="exp-lede">
-        Frane, alluvioni e incendi riportati dai quotidiani, confrontati con le previsioni che il
-        sistema aveva pubblicato nelle ore precedenti. Anche quando non le aveva viste.
+        Frane, alluvioni e incendi riportati dai quotidiani, confrontati con le
+        previsioni che il sistema aveva pubblicato nelle ore precedenti.
       </p>
-      {verifiche.length === 0 ? (
-        <p className="exp-note">Nessuna verifica pubblicata, per ora.</p>
+      {articoli.length === 0 ? (
+        <p className="exp-note">Nessun evento previsto in anticipo, per ora.</p>
       ) : (
         <ul className="verifiche-lista">
-          {verifiche.map((v) => (
+          {articoli.map((v) => (
             <li key={v.slug}>
               <a href={`${ROUTE}/${encodeURIComponent(v.slug)}`}>
-                {v.foto[0] ? <img src={v.foto[0].src} alt="" loading="lazy" /> : null}
+                {v.foto[0] ? (
+                  <img src={v.foto[0].src} alt="" loading="lazy" />
+                ) : null}
                 <div>
                   <Etichette v={v} />
                   <h3>{v.titolo}</h3>
                   <p>{v.sommario}</p>
                   <p className="exp-note">
-                    {data(v.evento.quando)}
-                    {/* Fuori da «anticipata» l'anticipo è lo sfondo, e in elenco
-                        senza il testo che lo spiega leggerebbe come un successo. */}
-                    {v.esito === "anticipata"
-                      ? ` · anticipo ${anticipo(v.previsione.anticipo_ore_moderato)}`
-                      : ""}
+                    {data(v.evento.quando)} · anticipo{" "}
+                    {anticipo(v.previsione.anticipo_ore_moderato)}
                   </p>
                 </div>
               </a>
@@ -97,6 +153,7 @@ function Indice({ verifiche }: { verifiche: readonly Verifica[] }): JSX.Element 
           ))}
         </ul>
       )}
+      <Inefficienza verifiche={verifiche} />
     </article>
   );
 }
@@ -113,7 +170,9 @@ function Articolo({ v }: { v: Verifica }): JSX.Element {
       <p className="exp-lede">{v.sommario}</p>
       <p className="exp-note">
         Evento: {data(v.evento.quando)} · Pubblicato {data(v.pubblicato)}
-        {v.aggiornato !== v.pubblicato ? ` · aggiornato ${data(v.aggiornato)}` : ""}
+        {v.aggiornato !== v.pubblicato
+          ? ` · aggiornato ${data(v.aggiornato)}`
+          : ""}
       </p>
 
       {v.foto.map((f) => (
@@ -139,7 +198,11 @@ function Articolo({ v }: { v: Verifica }): JSX.Element {
         </div>
         <div>
           <dt>Classe prevista massima</dt>
-          <dd>{p.classe_max ? RISK_LABEL_IT_BY_LEVEL[p.classe_max] : "sotto moderato"}</dd>
+          <dd>
+            {p.classe_max
+              ? RISK_LABEL_IT_BY_LEVEL[p.classe_max]
+              : "sotto moderato"}
+          </dd>
         </div>
         <div>
           <dt>Primo avviso inviato</dt>
@@ -217,7 +280,9 @@ export default function VerifichePage({
 }: {
   verifiche?: readonly Verifica[];
 }): JSX.Element {
-  const [slug, setSlug] = useState<string | null>(() => verificaDaHash(window.location.hash));
+  const [slug, setSlug] = useState<string | null>(() =>
+    verificaDaHash(window.location.hash),
+  );
 
   useEffect(() => {
     const onHash = (): void => setSlug(verificaDaHash(window.location.hash));
@@ -225,6 +290,10 @@ export default function VerifichePage({
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  const scelta = slug ? verifiche.find((v) => v.slug === slug) : undefined;
+  // Un link diretto a un evento non previsto porta all'indice, dove sta
+  // nel riquadro d'inefficienza: l'articolo esiste solo per gli anticipi.
+  const scelta = slug
+    ? verifiche.filter(pubblicabile).find((v) => v.slug === slug)
+    : undefined;
   return scelta ? <Articolo v={scelta} /> : <Indice verifiche={verifiche} />;
 }

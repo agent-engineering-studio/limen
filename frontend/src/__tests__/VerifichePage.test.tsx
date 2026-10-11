@@ -1,7 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import VerifichePage, { anticipo, verificaDaHash } from "../components/VerifichePage";
+import VerifichePage, {
+  anticipo,
+  verificaDaHash,
+} from "../components/VerifichePage";
 import { ordina } from "../content/verifiche";
 import type { Verifica } from "../content/verifiche";
 
@@ -45,7 +48,9 @@ function verifica(over: Partial<Verifica> = {}): Verifica {
         },
       ],
     },
-    perche: [{ nome: "FWI", valore: "48,3", spiegazione: "tempo secco e ventoso" }],
+    perche: [
+      { nome: "FWI", valore: "48,3", spiegazione: "tempo secco e ventoso" },
+    ],
     ...over,
   };
 }
@@ -79,20 +84,64 @@ describe("VerifichePage", () => {
     ]);
   });
 
-  it("l'indice elenca le verifiche, anche quelle mancate", () => {
+  it("l'indice pubblica solo gli anticipi e conta il resto come inefficienza", () => {
     render(
       <VerifichePage
-        verifiche={[verifica(), verifica({ slug: "m", titolo: "Frana a Pisticci", esito: "mancata" })]}
+        verifiche={[
+          verifica(),
+          verifica({ slug: "m", titolo: "Frana a Pisticci", esito: "mancata" }),
+          verifica({
+            slug: "c",
+            titolo: "Piena a Bari",
+            esito: "contemporanea",
+          }),
+          verifica({
+            slug: "n",
+            titolo: "Frana fuori copertura",
+            esito: "non_verificabile",
+          }),
+        ]}
       />,
     );
-    expect(screen.getByText("Incendio sulle colline di Matera")).toBeInTheDocument();
-    expect(screen.getByText("Frana a Pisticci")).toBeInTheDocument();
+    expect(
+      screen.getByText("Incendio sulle colline di Matera"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Frana a Pisticci")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/non previsti in anticipo: 2 su 3 verificati/),
+    ).toBeInTheDocument();
     expect(screen.getByText("Non prevista")).toBeInTheDocument();
+    expect(screen.getByText("Vista mentre accadeva")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Un evento non è verificabile/),
+    ).toBeInTheDocument();
   });
 
-  it("l'indice vuoto lo dice", () => {
+  it("senza anticipi lo dice, e l'inefficienza resta", () => {
+    render(<VerifichePage verifiche={[verifica({ esito: "mancata" })]} />);
+    expect(
+      screen.getByText(/Nessun evento previsto in anticipo/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/non previsti in anticipo: 1 su 1 verificati/),
+    ).toBeInTheDocument();
+  });
+
+  it("l'indice vuoto lo dice, senza riquadro", () => {
     render(<VerifichePage verifiche={[]} />);
-    expect(screen.getByText(/Nessuna verifica pubblicata/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Nessun evento previsto in anticipo/),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Inefficienza")).not.toBeInTheDocument();
+  });
+
+  it("un link a un evento non previsto apre l'indice, non un articolo", () => {
+    window.location.hash = "#/verifiche/m";
+    render(
+      <VerifichePage verifiche={[verifica({ slug: "m", esito: "mancata" })]} />,
+    );
+    expect(screen.getByLabelText("Inefficienza")).toBeInTheDocument();
+    expect(screen.queryByText("+72 h")).not.toBeInTheDocument();
   });
 
   it("l'articolo mostra anticipo, corse, perché e fonti", () => {
@@ -101,9 +150,8 @@ describe("VerifichePage", () => {
     expect(screen.getAllByText("3 giorni e 11 ore")).toHaveLength(2);
     expect(screen.getByText("+72 h")).toBeInTheDocument();
     expect(screen.getByText("FWI")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Incendio a Matera" })).toHaveAttribute(
-      "href",
-      "https://example.org/articolo",
-    );
+    expect(
+      screen.getByRole("link", { name: "Incendio a Matera" }),
+    ).toHaveAttribute("href", "https://example.org/articolo");
   });
 });
