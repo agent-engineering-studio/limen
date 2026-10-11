@@ -114,10 +114,14 @@ shadow branch is never allowed to abort the workflow.
 
 ## EGMS InSAR (V2.1)
 
-`limen sync-egms` populates `cell_insar_features` (median velocity +
-acceleration per cell, plus scatterer count + time envelope). Disabled
-when `EGMS__BASE_URL` is empty. Cadence is yearly — APScheduler doesn't
-own this; operators run it after each EGMS release.
+`limen sync-egms` populates `cell_insar_features` from the EGMS **Ortho L3**
+product: the 100 m mean-velocity GeoTIFFs of the vertical (`U`) and
+east-west (`E`) components, downloaded per 100 km tile and aggregated onto
+the 1 km cells (p90 of the magnitude, median of each component, valid-pixel
+count — migration 072). Disabled without `EGMS__TOKEN`, a temporary token
+copied from the `id=` parameter of an EGMS Explorer download link (EU
+Login). Cadence is yearly: operators run it after each EGMS release, with a
+fresh token.
 
 ## DL sub-model (V2.2)
 

@@ -1,9 +1,9 @@
 """Per-cell InSAR feature aggregates derived from Copernicus EGMS (V2.1).
 
-EGMS releases ~yearly, so this is a low-cadence table — the rollover
-job runs once per ``egms.refresh_days``. Reads feed the V2 ML
+EGMS releases yearly, so this is a low-cadence table filled by
+``limen sync-egms`` after each release. Reads feed the V2 ML
 :class:`MLScoringEngine` feature vector (strong predictor for
-slow/DSGSD-class landslides).
+slow/DSGSD-class landslides). Column meanings: migration 072.
 """
 
 from __future__ import annotations
@@ -27,6 +27,8 @@ class CellInsarFeatures:
     period_start: date | None = None
     period_end: date | None = None
     dataset_version_id: int | None = None
+    velocita_verticale_mmy: float | None = None
+    velocita_est_mmy: float | None = None
 
 
 async def upsert_many(items: Iterable[CellInsarFeatures]) -> int:
@@ -34,30 +36,39 @@ async def upsert_many(items: Iterable[CellInsarFeatures]) -> int:
     if not rows:
         return 0
     async with acquire() as conn, conn.transaction():
-        for it in rows:
-            await conn.execute(
-                """
-                INSERT INTO cell_insar_features (
-                    cell_id, insar_velocity_mmy, insar_accel_mmy2,
-                    scatterer_count, period_start, period_end, dataset_version_id
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-                ON CONFLICT (cell_id) DO UPDATE
-                SET insar_velocity_mmy = EXCLUDED.insar_velocity_mmy,
-                    insar_accel_mmy2   = EXCLUDED.insar_accel_mmy2,
-                    scatterer_count    = EXCLUDED.scatterer_count,
-                    period_start       = EXCLUDED.period_start,
-                    period_end         = EXCLUDED.period_end,
-                    dataset_version_id = EXCLUDED.dataset_version_id,
-                    updated_at         = now()
-                """,
-                it.cell_id,
-                it.insar_velocity_mmy,
-                it.insar_accel_mmy2,
-                it.scatterer_count,
-                it.period_start,
-                it.period_end,
-                it.dataset_version_id,
-            )
+        await conn.executemany(
+            """
+            INSERT INTO cell_insar_features (
+                cell_id, insar_velocity_mmy, insar_accel_mmy2,
+                scatterer_count, period_start, period_end, dataset_version_id,
+                velocita_verticale_mmy, velocita_est_mmy
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (cell_id) DO UPDATE
+            SET insar_velocity_mmy     = EXCLUDED.insar_velocity_mmy,
+                insar_accel_mmy2       = EXCLUDED.insar_accel_mmy2,
+                scatterer_count        = EXCLUDED.scatterer_count,
+                period_start           = EXCLUDED.period_start,
+                period_end             = EXCLUDED.period_end,
+                dataset_version_id     = EXCLUDED.dataset_version_id,
+                velocita_verticale_mmy = EXCLUDED.velocita_verticale_mmy,
+                velocita_est_mmy       = EXCLUDED.velocita_est_mmy,
+                updated_at             = now()
+            """,
+            [
+                (
+                    it.cell_id,
+                    it.insar_velocity_mmy,
+                    it.insar_accel_mmy2,
+                    it.scatterer_count,
+                    it.period_start,
+                    it.period_end,
+                    it.dataset_version_id,
+                    it.velocita_verticale_mmy,
+                    it.velocita_est_mmy,
+                )
+                for it in rows
+            ],
+        )
     log.info("cell_insar_features.upsert_many", count=len(rows))
     return len(rows)
 
@@ -67,7 +78,8 @@ async def get_for_cell(cell_id: str) -> CellInsarFeatures | None:
         row = await conn.fetchrow(
             """
             SELECT cell_id, insar_velocity_mmy, insar_accel_mmy2,
-                   scatterer_count, period_start, period_end, dataset_version_id
+                   scatterer_count, period_start, period_end, dataset_version_id,
+                   velocita_verticale_mmy, velocita_est_mmy
             FROM cell_insar_features
             WHERE cell_id = $1
             """,
@@ -83,6 +95,8 @@ async def get_for_cell(cell_id: str) -> CellInsarFeatures | None:
         period_start=row["period_start"],
         period_end=row["period_end"],
         dataset_version_id=row["dataset_version_id"],
+        velocita_verticale_mmy=row["velocita_verticale_mmy"],
+        velocita_est_mmy=row["velocita_est_mmy"],
     )
 
 
