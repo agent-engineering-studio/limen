@@ -51,9 +51,11 @@ def verdetto(*, numeri_sconosciuti: list[str], giudizio: dict[str, Any] | None) 
 
 async def controlla_fedelta(settings: Settings, factory: LlmClientFactory) -> dict[str, Any]:
     llm = settings.llm
-    if "fedelta" not in llm.models.model_fields_set:
-        return {"status": "skipped", "reason": "LLM__MODELS__FEDELTA non dichiarato"}
     modello = llm.models.fedelta.strip()
+    # Vuota conta come assente: il compose passa `${LLM__MODELS__FEDELTA:-}`,
+    # e una variabile vuota è comunque «dichiarata» per pydantic.
+    if "fedelta" not in llm.models.model_fields_set or not modello:
+        return {"status": "skipped", "reason": "LLM__MODELS__FEDELTA non dichiarato"}
     lento = modello in SLOW_GENERATION_MODELS
     if lento and not llm.slow_models_allowed(datetime.now(UTC).hour):
         return {"status": "skipped", "reason": "modello lento fuori finestra", "model": modello}

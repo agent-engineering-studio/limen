@@ -84,6 +84,11 @@ async def test_senza_ruolo_dichiarato_non_gira() -> None:
     assert out["status"] == "skipped"
 
 
+async def test_una_variabile_vuota_non_accende_il_revisore() -> None:
+    out = await fr.controlla_fedelta(_settings(models={"fedelta": ""}), StubLlmClientFactory())
+    assert out["status"] == "skipped"
+
+
 async def test_il_modello_lento_aspetta_la_sera() -> None:
     # Una finestra che comincia fra un'ora: adesso è fuori, qualunque ora sia.
     ora = datetime.now(UTC).hour

@@ -91,7 +91,7 @@ def _declared_role_models(settings: Settings) -> dict[str, str]:
     return {
         role: model
         for role, model in role_models(settings).items()
-        if _ROLE_FIELDS[role] in declared
+        if _ROLE_FIELDS[role] in declared and model.strip()
     }
 
 
