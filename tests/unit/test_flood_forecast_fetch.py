@@ -306,3 +306,58 @@ async def test_la_previsione_restante_esclude_le_ore_gia_osservate(
     )
     assert totale == [73.0]
     assert resto == [49.0]
+
+
+async def test_con_una_corsa_ewds_la_previsione_non_si_chiede_a_open_meteo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """La corsa salvata in `glofas_previsione` è la stessa GloFAS 4 che
+    Open-Meteo serve: letta dalla tabella, il tetto giornaliero non conta."""
+    seen = _grid(monkeypatch, {"openmeteo.flood.fluvial_grid": []})
+    chiesti: list[Any] = []
+
+    async def _corsa(
+        nodes: list[tuple[float, float]], *, dal: Any
+    ) -> dict[tuple[float, float], float] | None:
+        chiesti.append((list(nodes), dal))
+        return {_NODES[0]: 30.0}
+
+    ratios = await OpenMeteoFloodClient(cache=_Cache(), previsioni=_corsa)._cached_fluvial_by_node(
+        _NODES, reference=[10.0, 10.0, None]
+    )
+
+    assert ratios == [3.0, None, None]
+    assert seen == []
+    assert chiesti[0][0] == [_NODES[0], _NODES[1]]
+
+
+async def test_senza_una_corsa_recente_si_torna_a_open_meteo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _grid(monkeypatch, {"openmeteo.flood.fluvial_grid": [[30.0], [5.0], None]})
+
+    async def _nessuna(
+        nodes: list[tuple[float, float]], *, dal: Any
+    ) -> dict[tuple[float, float], float] | None:
+        return None
+
+    ratios = await OpenMeteoFloodClient(
+        cache=_Cache(), previsioni=_nessuna
+    )._cached_fluvial_by_node(_NODES, reference=[10.0, 10.0, 10.0])
+    assert ratios == [3.0, 0.5, None]
+
+
+async def test_una_tabella_previsioni_irraggiungibile_torna_a_open_meteo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _grid(monkeypatch, {"openmeteo.flood.fluvial_grid": [[30.0], [5.0], None]})
+
+    async def _giu(
+        nodes: list[tuple[float, float]], *, dal: Any
+    ) -> dict[tuple[float, float], float] | None:
+        raise ConnectionError("database giù")
+
+    ratios = await OpenMeteoFloodClient(cache=_Cache(), previsioni=_giu)._cached_fluvial_by_node(
+        _NODES, reference=[10.0, 10.0, 10.0]
+    )
+    assert ratios == [3.0, 0.5, None]

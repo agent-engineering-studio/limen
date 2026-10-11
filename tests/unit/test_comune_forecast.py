@@ -158,7 +158,7 @@ async def test_la_previsione_notturna_gira_per_ogni_pericolo(
     from limen.api.jobs import forecast_history as job
     from limen.core.models.hazard import HazardType
 
-    visti: list[HazardType] = []
+    visti: list[Any] = []
 
     async def _corsa(*, settings: Any, hazard: HazardType) -> int:
         visti.append(hazard)
@@ -166,7 +166,12 @@ async def test_la_previsione_notturna_gira_per_ogni_pericolo(
             raise RuntimeError("429 Too Many Requests")
         return 10
 
+    async def _glofas(_settings: Any) -> dict[str, Any]:
+        visti.append("glofas")
+        return {"status": "skipped"}
+
     monkeypatch.setattr(job, "run_forecast_history", _corsa)
+    monkeypatch.setattr(job.glofas_previsione, "aggiorna", _glofas)
     deps = SimpleNamespace(
         settings=SimpleNamespace(
             hazards=SimpleNamespace(
@@ -177,7 +182,8 @@ async def test_la_previsione_notturna_gira_per_ogni_pericolo(
 
     totale = await job.run_forecast_history_job(cast("AppDependencies", deps))
 
-    assert visti == [HazardType.LANDSLIDE, HazardType.FLOOD, HazardType.WILDFIRE]
+    # La previsione GloFAS prima: l'alluvione di questo giro la legge già.
+    assert visti == ["glofas", HazardType.LANDSLIDE, HazardType.FLOOD, HazardType.WILDFIRE]
     assert totale == 20
 
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 from limen.data.db import acquire
 
 Nodo = tuple[float, float]
@@ -141,3 +143,85 @@ async def con_fiume(*, percentile: float, window_days: int) -> int:
             window_days,
         )
     return int(n or 0)
+
+
+async def nodi_con_fiume(*, percentile: float, window_days: int) -> list[Nodo]:
+    """I nodi con un fiume: quelli di cui serve la previsione di portata."""
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT node_lon, node_lat FROM glofas_riferimento
+            WHERE percentile = $1 AND window_days = $2 AND portata > 0
+            ORDER BY node_lon, node_lat
+            """,
+            percentile,
+            window_days,
+        )
+    return [(float(r["node_lon"]), float(r["node_lat"])) for r in rows]
+
+
+async def ultima_corsa() -> date | None:
+    """La corsa di previsione più recente salvata, se ce n'è una."""
+    async with acquire() as conn:
+        corsa = await conn.fetchval("SELECT max(corsa) FROM glofas_previsione")
+    return corsa if isinstance(corsa, date) else None
+
+
+#: Le corse più vecchie si cancellano a ogni salvataggio: lo sweep legge solo
+#: l'ultima, e una settimana basta a ricostruire un caso dopo il fatto.
+_CORSE_TENUTE_GIORNI = 7
+
+
+async def salva_previsione(corsa: date, picchi: dict[Nodo, float], *, fonte: str) -> int:
+    """Scrive i picchi di una corsa. Rilanciabile."""
+    if not picchi:
+        return 0
+    async with acquire() as conn, conn.transaction():
+        await conn.executemany(
+            """
+            INSERT INTO glofas_previsione (node_lon, node_lat, corsa, picco, fonte)
+            VALUES (round($1::numeric, 4), round($2::numeric, 4), $3, $4, $5)
+            ON CONFLICT (node_lon, node_lat, corsa)
+            DO UPDATE SET picco = EXCLUDED.picco, fonte = EXCLUDED.fonte, scaricato = now()
+            """,
+            [(lon, lat, corsa, picco, fonte) for (lon, lat), picco in picchi.items()],
+        )
+        await conn.execute(
+            "DELETE FROM glofas_previsione WHERE corsa < $1",
+            corsa - timedelta(days=_CORSE_TENUTE_GIORNI),
+        )
+    return len(picchi)
+
+
+async def picchi(nodes: list[Nodo], *, dal: date) -> dict[Nodo, float] | None:
+    """Il picco previsto per ``nodes`` dall'ultima corsa non più vecchia di ``dal``.
+
+    ``None`` se non c'è una corsa abbastanza recente: chi chiama torna alla
+    fonte di prima. Un dizionario, anche vuoto, vuol dire che la corsa c'è, e
+    un nodo che manca non ha previsione.
+    """
+    async with acquire() as conn:
+        corsa = await conn.fetchval(
+            "SELECT max(corsa) FROM glofas_previsione WHERE corsa >= $1", dal
+        )
+        if corsa is None or not nodes:
+            return None if corsa is None else {}
+        rows = await conn.fetch(
+            """
+            SELECT p.node_lon, p.node_lat, p.picco
+            FROM glofas_previsione p
+            JOIN unnest($1::numeric[], $2::numeric[]) AS n(lon, lat)
+              ON p.node_lon = round(n.lon, 4) AND p.node_lat = round(n.lat, 4)
+            WHERE p.corsa = $3
+            """,
+            [lon for lon, _ in nodes],
+            [lat for _, lat in nodes],
+            corsa,
+        )
+    letti = {(float(r["node_lon"]), float(r["node_lat"])): float(r["picco"]) for r in rows}
+    out: dict[Nodo, float] = {}
+    for n in nodes:
+        chiave = (round(n[0], 4), round(n[1], 4))
+        if chiave in letti:
+            out[n] = letti[chiave]
+    return out

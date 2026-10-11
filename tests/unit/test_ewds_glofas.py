@@ -13,13 +13,14 @@ from limen.integrations.copernicus import ewds_glofas as eg
 @pytest.mark.parametrize(
     ("nodo", "cella"),
     [
-        # Risposte di Open-Meteo, 11 ottobre 2026: sul bordo fra due celle va
-        # a volte in su e a volte in giù, ed è l'arrotondamento in float32.
-        ((11.9, 44.3), (11.875, 44.275)),
-        ((12.0, 44.2), (11.975, 44.225)),
-        ((16.6, 40.7), (16.625, 40.725)),
-        ((7.7, 45.1), (7.675, 45.125)),
-        ((15.6, 38.1), (15.625, 38.075)),
+        # Coordinate dichiarate da Open-Meteo l'11 ottobre 2026 (sul bordo fra
+        # due celle va a volte in su e a volte in giù: float32), più il passo
+        # verso est fra la cella dichiarata e quella i cui valori restituisce.
+        ((11.9, 44.3), (11.925, 44.275)),
+        ((12.0, 44.2), (12.025, 44.225)),
+        ((16.6, 40.7), (16.675, 40.725)),
+        ((7.7, 45.1), (7.725, 45.125)),
+        ((15.6, 38.1), (15.675, 38.075)),
     ],
 )
 def test_la_cella_e_quella_di_open_meteo(
@@ -76,8 +77,8 @@ def test_serie_legge_la_cella_giusta_e_scarta_il_mare(tmp_path: Path) -> None:
             [[1.0, 9.0], [8.9, -9999.0]],
         ],
     )
-    faenza = (11.9, 44.3)  # → cella (11.875, 44.275)
-    mare = (11.95, 44.27)  # → cella (11.925, 44.275): mascherata
+    faenza = (11.82, 44.3)  # → cella (11.875, 44.275)
+    mare = (11.87, 44.27)  # → cella (11.925, 44.275): mascherata
     fuori = (13.0, 44.3)  # fuori dal riquadro
     serie = eg.serie_per_nodo(
         [path], [faenza, mare, fuori], inizio=date(2024, 5, 11), fine=date(2024, 5, 12)
@@ -105,4 +106,65 @@ def test_scarica_non_richiede_un_mese_gia_scaricato(tmp_path: Path) -> None:
     eg.scarica(tmp_path, date(2024, 4, 29), date(2024, 5, 2), client=_Client())
     eg.scarica(tmp_path, date(2024, 4, 29), date(2024, 5, 2), client=_Client())
     assert chiesti == ["04", "05"]
+    assert not list(tmp_path.glob("*.part"))
+
+
+def test_la_previsione_e_la_corsa_di_controllo_a_sette_giorni() -> None:
+    r = eg.richiesta_previsione(date(2026, 10, 10))
+    assert r["product_type"] == ["control_forecast"]
+    assert r["day"] == ["10"]
+    assert r["leadtime_hour"] == ["24", "48", "72", "96", "120", "144", "168"]
+    assert r["area"] == list(eg.AREA_ITALIA)
+
+
+def _previsione(path: Path, valori: list[list[list[float]]]) -> None:
+    nc = pytest.importorskip("netCDF4")
+    import numpy as np
+
+    with nc.Dataset(path, "w") as ds:
+        ds.createDimension("forecast_period", len(valori))
+        ds.createDimension("forecast_reference_time", 1)
+        ds.createDimension("latitude", 2)
+        ds.createDimension("longitude", 2)
+        ds.createVariable("latitude", "f8", ("latitude",))[:] = [44.325, 44.275]
+        ds.createVariable("longitude", "f8", ("longitude",))[:] = [11.875, 11.925]
+        v = ds.createVariable(
+            "dis24",
+            "f4",
+            ("forecast_period", "forecast_reference_time", "latitude", "longitude"),
+            fill_value=-9999.0,
+        )
+        dati = np.array(valori, dtype="f4")[:, None, :, :]
+        v[:] = np.ma.masked_equal(dati, -9999.0)
+
+
+def test_il_picco_e_il_massimo_della_cella_del_nodo(tmp_path: Path) -> None:
+    path = tmp_path / "p.nc"
+    _previsione(
+        path,
+        [
+            [[1.0, 9.0], [7.0, -9999.0]],
+            [[1.0, 9.0], [12.5, -9999.0]],
+            [[1.0, 9.0], [8.0, -9999.0]],
+        ],
+    )
+    fiume = (11.82, 44.3)  # → cella (11.875, 44.275)
+    mare = (11.87, 44.27)  # → cella (11.925, 44.275): mascherata
+    fuori = (13.0, 44.3)
+    picchi = eg.picchi_per_nodo(path, [fiume, mare, fuori])
+    assert picchi == {fiume: pytest.approx(12.5)}
+
+
+def test_scarica_previsione_non_riscarica_una_corsa(tmp_path: Path) -> None:
+    chiesti: list[str] = []
+
+    class _Client:
+        def retrieve(self, _ds: str, req: dict[str, list[str]], dest: str) -> None:
+            chiesti.append(req["day"][0])
+            Path(dest).write_bytes(b"x")
+
+    a = eg.scarica_previsione(tmp_path, date(2026, 10, 10), client=_Client())
+    b = eg.scarica_previsione(tmp_path, date(2026, 10, 10), client=_Client())
+    assert a == b
+    assert chiesti == ["10"]
     assert not list(tmp_path.glob("*.part"))
