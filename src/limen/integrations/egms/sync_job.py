@@ -9,15 +9,17 @@ from __future__ import annotations
 
 import asyncio
 import math
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import date
+from functools import partial
 from pathlib import Path
 
-from limen.config.settings import Settings, get_settings
+from limen.config.settings import EgmsSettings, Settings, get_settings
 from limen.core.logging import get_logger
 from limen.data.db import acquire
 from limen.data.repos import cell_insar_features_repo, dataset_versions_repo
-from limen.integrations.egms import client
+from limen.integrations.egms import client, clms
 from limen.integrations.egms.aggregate import PASSO_M, Cella, Griglia, mosaico, per_cella
 
 log = get_logger(__name__)
@@ -50,6 +52,25 @@ async def _celle(aoi_id: str) -> list[Cella]:
     ]
 
 
+IdRicerca = Callable[[client.Tile, str, str], Awaitable[str | None]]
+
+
+def _ricerche(s: EgmsSettings) -> IdRicerca | None:
+    """Chi dà l'id di ricerca per una tile: la chiave CLMS, o il token fisso."""
+    if s.service_key is not None:
+        chiave = clms.leggi_chiave(s.service_key.get_secret_value())
+        if chiave is not None:
+            return clms.Sessione(chiave, archivio=s.archive_url).cerca
+    if s.token is not None and s.token.get_secret_value().strip():
+        fisso = s.token.get_secret_value().strip()
+
+        async def _token(_tile: client.Tile, _componente: str, _release: str) -> str:
+            return fisso
+
+        return _token
+    return None
+
+
 def _periodo(release: str) -> tuple[date, date]:
     inizio, fine = release.split("_")
     return date(int(inizio), 1, 1), date(int(fine), 12, 31)
@@ -58,8 +79,9 @@ def _periodo(release: str) -> tuple[date, date]:
 async def sync_egms(*, aoi_id: str, settings: Settings | None = None) -> int:
     """Aggiorna `cell_insar_features` per un'AOI. Restituisce le righe scritte."""
     s = (settings or get_settings()).egms
-    if not s.attivo or s.token is None:
-        log.info("egms.sync.skip", aoi_id=aoi_id, reason="EGMS__TOKEN non impostato")
+    id_ricerca = _ricerche(s)
+    if id_ricerca is None:
+        log.info("egms.sync.skip", aoi_id=aoi_id, reason="né EGMS__SERVICE_KEY né EGMS__TOKEN")
         return 0
     celle = await _celle(aoi_id)
     if not celle:
@@ -71,13 +93,17 @@ async def sync_egms(*, aoi_id: str, settings: Settings | None = None) -> int:
     maxy = max(c.maxy for c in celle)
 
     cartella = Path(s.cartella)
-    token = s.token.get_secret_value()
     tiff: dict[str, list[Path]] = {}
     for componente in client.COMPONENTI:
         tiff[componente] = []
         for tile in client.tile_per_limiti(minx, miny, maxx, maxy):
             path = await client.scarica_tile(
-                cartella, tile, componente, release=s.release, url=s.download_url, token=token
+                cartella,
+                tile,
+                componente,
+                release=s.release,
+                archivio=s.archive_url,
+                id_ricerca=partial(id_ricerca, tile, componente, s.release),
             )
             if path is not None:
                 tiff[componente].append(path)
@@ -126,4 +152,29 @@ async def sync_egms(*, aoi_id: str, settings: Settings | None = None) -> int:
     return scritte
 
 
-__all__ = ["sync_egms"]
+__all__ = ["controlla_release", "sync_egms"]
+
+
+async def controlla_release(settings: Settings | None = None) -> dict[str, object]:
+    """C'è una release EGMS più nuova di quella configurata?
+
+    Per il passo notturno: una sola richiesta, e solo con la chiave CLMS
+    (senza login l'archivio non dice niente). Una release nuova si segnala,
+    non si scarica: sono ~7 GB e un'ora, e la si sceglie in `EGMS__RELEASE`.
+    """
+    s = (settings or get_settings()).egms
+    chiave = clms.leggi_chiave(s.service_key.get_secret_value()) if s.service_key else None
+    if chiave is None:
+        return {"status": "skipped", "reason": "EGMS__SERVICE_KEY non impostata"}
+    disponibili = await clms.Sessione(chiave, archivio=s.archive_url).release()
+    configurata = clms.release_archivio(s.release)
+    ultima = max(disponibili) if disponibili else None
+    if ultima is not None and ultima > configurata:
+        log.warning(
+            "egms.release.nuova",
+            configurata=configurata,
+            disponibile=ultima,
+            azione=f"EGMS__RELEASE={ultima.replace('-', '_')} e poi `limen sync-egms`",
+        )
+        return {"status": "nuova_release", "configurata": configurata, "disponibile": ultima}
+    return {"status": "ok", "configurata": configurata, "disponibile": ultima}

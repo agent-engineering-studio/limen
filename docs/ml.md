@@ -118,10 +118,13 @@ shadow branch is never allowed to abort the workflow.
 product: the 100 m mean-velocity GeoTIFFs of the vertical (`U`) and
 east-west (`E`) components, downloaded per 100 km tile and aggregated onto
 the 1 km cells (p90 of the magnitude, median of each component, valid-pixel
-count — migration 072). Disabled without `EGMS__TOKEN`, a temporary token
-copied from the `id=` parameter of an EGMS Explorer download link (EU
-Login). Cadence is yearly: operators run it after each EGMS release, with a
-fresh token.
+count — migration 072). Credentials: `EGMS__SERVICE_KEY`, the CLMS service
+key JSON (land.copernicus.eu → profile → «API Tokens»; it does not expire,
+and each sync runs its own archive searches), or as a fallback
+`EGMS__TOKEN`, the `id=` of an Explorer download link (a search id that
+expires). Cadence is yearly: the nightly `egms_release` step logs
+`egms.release.nuova` when the archive lists a release newer than
+`EGMS__RELEASE`; the operator bumps it and runs `limen sync-egms`.
 
 ## DL sub-model (V2.2)
 

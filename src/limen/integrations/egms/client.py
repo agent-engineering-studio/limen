@@ -8,9 +8,10 @@ sinistra in centinaia di km: E47N19 copre 4.700.000-4.800.000 m est e
 temporali (~245 MB) e un GeoTIFF con la velocità media a 100 m (~4 MB): a
 Limen serve solo il secondo, e solo quello si tiene.
 
-Una tile che non esiste (mare, fuori copertura) risponde 404: si lascia un
-segnaposto ``.assente`` perché il giro dopo non la richieda. Il token sta
-nella query string e non finisce mai in un log.
+Il download vuole l'``id`` di una ricerca nell'archivio (`clms.Sessione`, o
+quello copiato dall'Explorer). Una tile che non esiste (mare, fuori
+copertura) non ha ricerca o risponde 404: si lascia un segnaposto
+``.assente`` perché il giro dopo non la richieda.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from __future__ import annotations
 import io
 import math
 import zipfile
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from limen.core.logging import get_logger
@@ -45,12 +47,20 @@ def nome(tile: Tile, componente: str, release: str) -> str:
 
 
 async def scarica_tile(
-    cartella: Path, tile: Tile, componente: str, *, release: str, url: str, token: str
+    cartella: Path,
+    tile: Tile,
+    componente: str,
+    *,
+    release: str,
+    archivio: str,
+    id_ricerca: Callable[[], Awaitable[str | None]],
 ) -> Path | None:
     """Il GeoTIFF della tile, scaricato se manca. ``None`` se la tile non esiste.
 
-    Gli errori di rete e un token scaduto (401/403) alzano: un sync annuale
-    a metà va rifatto, non scritto per metà dell'Italia.
+    ``id_ricerca`` si chiama solo se il file manca: una ricerca per ogni tile
+    già scaricata sarebbe traffico per niente. Gli errori di rete e un id
+    scaduto (401/403) alzano: un sync annuale a metà va rifatto, non scritto
+    per metà dell'Italia.
     """
     base = nome(tile, componente, release)
     tiff = cartella / f"{base}.tiff"
@@ -60,17 +70,21 @@ async def scarica_tile(
     if assente.exists():
         return None
     cartella.mkdir(parents=True, exist_ok=True)
+    id_ = await id_ricerca()
+    if id_ is None:
+        assente.touch()
+        return None
     resp = await fetch_with_retry(
         "GET",
-        f"{url.rstrip('/')}/{base}.zip",
+        f"{archivio.rstrip('/')}/download/{base}.zip",
         client=await SharedHttpClient.get(),
-        params={"id": token},
+        params={"id": id_},
     )
     if resp.status_code == 404:
         assente.touch()
         return None
     if resp.status_code != 200:
-        raise RuntimeError(f"EGMS {base}: HTTP {resp.status_code} (token scaduto?)")
+        raise RuntimeError(f"EGMS {base}: HTTP {resp.status_code} (id di ricerca scaduto?)")
     with zipfile.ZipFile(io.BytesIO(resp.content)) as z:
         dati = z.read(f"{base}.tiff")
     parziale = tiff.with_suffix(".part")

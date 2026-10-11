@@ -392,8 +392,9 @@ quando la mappa / i briefing vengono pubblicati:
   L3: velocità media del terreno a 100 m da Sentinel-1, componenti verticale
   ed est-ovest) — licenza aperta Copernicus Land (Reg. UE 2021/696): uso
   libero citando «Generated using European Union's Copernicus Land Monitoring
-  Service information» e dichiarando le modifiche. Il download richiede EU
-  Login e un token temporaneo (`EGMS__TOKEN`). Oggi alimenta solo le feature
+  Service information» e dichiarando le modifiche. Il download richiede la
+  chiave di servizio CLMS (`EGMS__SERVICE_KEY`, profilo su land.copernicus.eu
+  → «API Tokens»). Oggi alimenta solo le feature
   dell'ML, non la mappa. https://egms.land.copernicus.eu
 * **INGV** (servizio eventi FDSN, ShakeMap) — CC-BY 4.0.
   https://terremoti.ingv.it

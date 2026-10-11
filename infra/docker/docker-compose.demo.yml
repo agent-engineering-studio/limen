@@ -103,6 +103,10 @@ services:
       OPENMETEO__MODELS: ${OPENMETEO__MODELS:-}
       # Previsione GloFAS dall'EWDS di Copernicus. Vuota ⇒ resta Open-Meteo.
       COPERNICUS__EWDS_KEY: ${COPERNICUS__EWDS_KEY:-}
+      # Chiave di servizio CLMS (JSON su una riga): il passo notturno sa
+      # quando esce una release EGMS. Vuota ⇒ il passo si salta.
+      EGMS__SERVICE_KEY: ${EGMS__SERVICE_KEY:-}
+      EGMS__RELEASE: ${EGMS__RELEASE:-2020_2024}
       NOTIFICATIONS__MQTT__BROKER_HOST: mosquitto
       NOTIFICATIONS__MQTT__BROKER_PORT: "1883"
       NOTIFICATIONS__MQTT__TOPIC: limen/alerts
