@@ -1,0 +1,146 @@
+{
+  "slug": "2026-10-10-frana-melito-di-porto-salvo",
+  "titolo": "La frana sulla statale 106 a Melito: per Limen un giorno come gli altri",
+  "pericolo": "landslide",
+  "esito": "mancata",
+  "evento": {
+    "quando": "2026-10-10T03:00:00+02:00",
+    "luogo": "Melito di Porto Salvo (RC), SS106 km 31,3–31,9",
+    "regione": "Calabria",
+    "comuni": [
+      {
+        "istat": "080050",
+        "nome": "Melito di Porto Salvo"
+      }
+    ]
+  },
+  "pubblicato": "2026-10-11T11:00:29+02:00",
+  "aggiornato": "2026-10-11T11:00:29+02:00",
+  "sommario": "Nella notte del 10 ottobre una frana ha portato fango e detriti sulla statale 106 a Melito di Porto Salvo. Limen dava il comune in classe moderata già da giorni, ma non è mai salito ad alta.",
+  "corpo": [
+    "Secondo il Corriere di Lamezia, che riprende la comunicazione di Anas, una frana ha portato fango e detriti sulla statale 106 «Jonica» fra il km 31,3 e il km 31,9, nel territorio di Melito di Porto Salvo; la strada è stata chiusa e poi riaperta a senso unico alternato. È successo durante il nubifragio della notte fra il 9 e il 10 ottobre; l'ora esatta non è riportata, qui è fissata alle 3 con dodici ore di tolleranza.",
+    "Sulla carta Limen l'aveva vista con 71 ore di anticipo: dalla corsa del 7 ottobre alle 4, ogni previsione per quella notte metteva fra 3 e 11 celle del comune in classe moderata. Ma è un anticipo che non vale: Melito aveva celle in classe moderata ogni giorno dal 29 settembre, compresi i sei giorni fra il 30 settembre e il 6 ottobre su cui si misura lo sfondo. La previsione non è mai salita ad alta e nessun avviso è partito. Una classe che c'è sempre non dice niente in più la notte in cui la frana arriva: per questo l'esito è «non prevista».",
+    "L'unico segno di movimento è nell'ultima corsa, del 9 ottobre alle 10: le celle in moderato passano da 3 a 11 e la componente meteo sale da 0,13 a 0,19, perché la pioggia prevista tocca per la prima volta la soglia intensità-durata di Caine. Troppo poco per cambiare classe. Il punteggio è tenuto su dal terreno (suscettibilità 0,83: area PAI, densità di frane IFFI al massimo) e dalla componente idrologica (0,85), non dalla pioggia: la stessa pioggia prevista che per l'alluvione era 33 mm in tre giorni.",
+    "I limiti, detti una volta per tutte: Limen ragiona su celle da 1 km² e su previsioni meteo che arrivano da nodi distanti circa 9 km; una classe «moderata» non è un'allerta, e le allerte ufficiali sono quelle della Protezione Civile."
+  ],
+  "fonti": [
+    {
+      "testata": "Corriere di Lamezia",
+      "titolo": "Maltempo, frana sulla 106 a Melito di Porto Salvo",
+      "url": "https://www.corrieredilamezia.it/cronaca/2026_10_10/maltempo-frana-sulla-106-a-melito-di-porto-salvo_67374/",
+      "data": "2026-10-10"
+    },
+    {
+      "testata": "Telemia",
+      "titolo": "Maltempo, frana sulla statale 106 a Melito di Porto Salvo: strada chiusa in entrambe le direzioni",
+      "url": "https://www.telemia.it/maltempo-frana-sulla-statale-106-a-melito-di-porto-salvo-strada-chiusa-in-entrambe-le-direzioni/",
+      "data": "2026-10-10"
+    },
+    {
+      "testata": "StrettoWeb",
+      "titolo": "Maltempo devastante a Melito Porto Salvo, auto trascinate dalle fiumare e strade distrutte. Chiusa la SS106",
+      "url": "https://www.strettoweb.com/2026/10/maltempo-devastante-a-melito-porto-salvo-auto-trascinate-dalle-fiumare-e-strade-distrutte-chiusa-la-ss106-foto/2158015/",
+      "data": "2026-10-10"
+    },
+    {
+      "testata": "Quotidiano Nazionale",
+      "titolo": "Sud flagellato dal maltempo: colate di fango a Lipari, frane ed evacuazioni a Napoli. Statale Jonica chiusa per crolli in Calabria",
+      "url": "https://www.quotidiano.net/cronaca/maltempo-oggi-gcgbcrk5",
+      "data": "2026-10-10"
+    }
+  ],
+  "foto": [],
+  "previsione": {
+    "anticipo_ore_moderato": 71,
+    "anticipo_ore_alto": null,
+    "classe_max": "Moderate",
+    "allerta_prima": null,
+    "corse": [
+      {
+        "run_at": "2026-10-07T02:00:40.055243+00:00",
+        "horizon_h": 72,
+        "target_at": "2026-10-10T02:00:40.055243+00:00",
+        "classe": "Moderate",
+        "score": 0.37
+      },
+      {
+        "run_at": "2026-10-07T14:20:23.979153+00:00",
+        "horizon_h": 48,
+        "target_at": "2026-10-09T14:20:23.979153+00:00",
+        "classe": "Moderate",
+        "score": 0.372
+      },
+      {
+        "run_at": "2026-10-07T20:20:32.408152+00:00",
+        "horizon_h": 48,
+        "target_at": "2026-10-09T20:20:32.408152+00:00",
+        "classe": "Moderate",
+        "score": 0.372
+      },
+      {
+        "run_at": "2026-10-08T02:20:29.298524+00:00",
+        "horizon_h": 48,
+        "target_at": "2026-10-10T02:20:29.298524+00:00",
+        "classe": "Moderate",
+        "score": 0.372
+      },
+      {
+        "run_at": "2026-10-08T08:20:26.298459+00:00",
+        "horizon_h": 48,
+        "target_at": "2026-10-10T08:20:26.298459+00:00",
+        "classe": "Moderate",
+        "score": 0.373
+      },
+      {
+        "run_at": "2026-10-08T14:20:24.2454+00:00",
+        "horizon_h": 24,
+        "target_at": "2026-10-09T14:20:24.2454+00:00",
+        "classe": "Moderate",
+        "score": 0.371
+      },
+      {
+        "run_at": "2026-10-08T20:20:26.978272+00:00",
+        "horizon_h": 24,
+        "target_at": "2026-10-09T20:20:26.978272+00:00",
+        "classe": "Moderate",
+        "score": 0.37
+      },
+      {
+        "run_at": "2026-10-09T02:20:21.033859+00:00",
+        "horizon_h": 24,
+        "target_at": "2026-10-10T02:20:21.033859+00:00",
+        "classe": "Moderate",
+        "score": 0.369
+      },
+      {
+        "run_at": "2026-10-09T08:20:22.193065+00:00",
+        "horizon_h": 24,
+        "target_at": "2026-10-10T08:20:22.193065+00:00",
+        "classe": "Moderate",
+        "score": 0.394
+      }
+    ]
+  },
+  "perche": [
+    {
+      "nome": "Suscettibilità statica (S)",
+      "valore": "0,83",
+      "spiegazione": "area PAI, densità di frane IFFI al massimo, pendenza 0,62: il terreno è fragile ogni giorno, ed è il motivo della classe moderata di fondo."
+    },
+    {
+      "nome": "Innesco meteo (M)",
+      "valore": "0,13 → 0,19",
+      "spiegazione": "la pioggia prevista non è mai stata abbastanza; solo l'ultima corsa ha toccato la soglia di Caine (0,14)."
+    },
+    {
+      "nome": "Idrologia (H)",
+      "valore": "0,85",
+      "spiegazione": "il segnale idrologico era alto, ma da solo non porta la cella oltre il moderato."
+    },
+    {
+      "nome": "Classe di fondo",
+      "valore": "moderato, 6 giorni su 6",
+      "spiegazione": "la stessa classe prevista per la notte della frana: nessun segnale in più rispetto ai giorni tranquilli."
+    }
+  ]
+}

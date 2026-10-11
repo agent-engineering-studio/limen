@@ -30,6 +30,7 @@ import Timeline from "./components/Timeline";
 import SciencePage from "./components/SciencePage";
 import ShadowDiagnosticsPage from "./components/ShadowDiagnosticsPage";
 import ShadowPanel from "./components/ShadowPanel";
+import VerifichePage from "./components/VerifichePage";
 import { useForecastSchedule } from "./lib/forecast-schedule";
 import { useBuyMeACoffee } from "./lib/buymeacoffee";
 import { cellaDaHash } from "./lib/link-cella";
@@ -43,7 +44,8 @@ type Page =
   | "regioni"
   | "science"
   | "shadow"
-  | "integrations";
+  | "integrations"
+  | "verifiche";
 
 function pageFromHash(): Page {
   // La guida ha una sotto-rotta per sezione, quindi il confronto esatto non
@@ -56,6 +58,9 @@ function pageFromHash(): Page {
   }
   if (hash.startsWith("#/regioni")) {
     return "regioni";
+  }
+  if (hash.startsWith("#/verifiche")) {
+    return "verifiche";
   }
   switch (hash) {
     case "#/dashboard":
@@ -433,6 +438,9 @@ export function App(): JSX.Element {
           <a href="#/regioni" className={page === "regioni" ? "on" : ""}>
             Regioni da monitorare
           </a>
+          <a href="#/verifiche" className={page === "verifiche" ? "on" : ""}>
+            Verifiche
+          </a>
           <a
             href="#/come-funziona"
             className={page === "guida" || page === "science" || page === "shadow" ? "on" : ""}
@@ -462,6 +470,10 @@ export function App(): JSX.Element {
         ) : page === "regioni" ? (
           <div className="explainer-area">
             <RegioniPage />
+          </div>
+        ) : page === "verifiche" ? (
+          <div className="explainer-area">
+            <VerifichePage />
           </div>
         ) : page === "guida" ? (
           <div className="explainer-area">
