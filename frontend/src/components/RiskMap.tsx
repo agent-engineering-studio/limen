@@ -4,6 +4,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Protocol } from "pmtiles";
 
+import { copernicusModificato } from "../lib/attribuzioni";
 import { BASEMAP_LAYER, BASEMAP_SOURCE } from "../lib/basemap";
 import { config } from "../lib/env";
 import { useHazard } from "../lib/hazard";
@@ -347,6 +348,9 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       [SOURCE_ID]: {
         type: "vector",
         tiles: [tilesUrl],
+        // L'alluvione (anche nella vista d'insieme) è calcolata dalla portata
+        // GloFAS: la licenza CEMS-Floods chiede di dirlo sulla mappa.
+        ...(multi || hazard === "flood" ? { attribution: copernicusModificato() } : {}),
         // La sorgente parte dallo stesso zoom del livello che la disegna.
         // Prima partiva da 5: il browser scaricava tile da 1,85 MB che poi
         // non mostrava a nessuno, e intanto il tile server andava in timeout.

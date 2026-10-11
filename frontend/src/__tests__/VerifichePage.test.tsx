@@ -144,6 +144,22 @@ describe("VerifichePage", () => {
     expect(screen.queryByText("+72 h")).not.toBeInTheDocument();
   });
 
+  it("l'articolo su un'alluvione cita Copernicus e dice che non è un avviso", () => {
+    window.location.hash = "#/verifiche/2026-10-10-incendio-matera";
+    render(<VerifichePage verifiche={[verifica({ pericolo: "flood" })]} />);
+    expect(
+      screen.getByText(
+        /Copernicus Emergency Management Service, 2026.*non sono un avviso di piena/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("l'articolo su un incendio non porta la clausola GloFAS", () => {
+    window.location.hash = "#/verifiche/2026-10-10-incendio-matera";
+    render(<VerifichePage verifiche={[verifica()]} />);
+    expect(screen.queryByText(/avviso di piena/)).not.toBeInTheDocument();
+  });
+
   it("l'articolo mostra anticipo, corse, perché e fonti", () => {
     window.location.hash = "#/verifiche/2026-10-10-incendio-matera";
     render(<VerifichePage verifiche={[verifica()]} />);
