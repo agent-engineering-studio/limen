@@ -60,7 +60,7 @@ _CAUSA = {
     "seismic_event": "le scosse recenti",
     "post_fire_destabilization": "gli incendi recenti",
     "human_activity": "l'attività umana",
-    "pluvial_rain": "la pioggia prevista",
+    "pluvial_rain": "la pioggia, prevista e già caduta",
     "river_discharge": "la portata dei fiumi",
     "hydraulic_susceptibility": "quanto la zona è allagabile",
     "fire_weather": "il tempo secco e ventoso",

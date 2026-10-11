@@ -128,6 +128,12 @@ class MonitoringContext(BaseModel):
     # nodo, che per il fiume significa "nessun corso d'acqua qui".
     flood_nodes: Sequence[tuple[float, float]] = Field(default_factory=tuple)
     flood_rain_by_node: Sequence[float | None] = Field(default_factory=tuple)
+    #: La pioggia prevista sulle ore della finestra dopo quelle osservate dal
+    #: radar (#199), allineata a ``flood_nodes``.
+    flood_rain_head_by_node: Sequence[float | None] = Field(default_factory=tuple)
+    #: La cumulata radar DPC per cella (#199). Una cella assente non ha un
+    #: fotogramma utilizzabile: il motore resta sulla sola previsione.
+    flood_rain_observed_by_cell: dict[str, float] = Field(default_factory=dict)
     flood_river_ratio_by_node: Sequence[float | None] = Field(default_factory=tuple)
     #: Quantili della pioggia a 72 ore per nodo (migrazione 065), allineati
     #: a ``flood_nodes``; ``None`` dove il nodo non ha climatologia.

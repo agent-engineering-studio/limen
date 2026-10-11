@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -286,3 +286,23 @@ async def test_un_degrado_non_finisce_in_cache(monkeypatch: pytest.MonkeyPatch) 
 
     assert ratios == [None, None, None]
     assert cache.writes == []
+
+
+async def test_la_previsione_restante_esclude_le_ore_gia_osservate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Con 24 ore misurate dal radar, della finestra di 72 restano 48 (#199):
+    sommare la prevista intera alla misurata farebbe una finestra di 96."""
+    stamps = [(_T0 + timedelta(hours=h)).strftime("%Y-%m-%dT%H:%M") for h in range(80)]
+
+    async def _fetch_grid(
+        _self: Any, _url: str, nodes: list[Any], _params: dict[str, Any], label: str
+    ) -> list[dict[str, Any]]:
+        return [{"hourly": {"time": stamps, "precipitation": [1.0] * 80}} for _ in nodes]
+
+    monkeypatch.setattr(OpenMeteoFloodClient, "fetch_grid", _fetch_grid)
+    totale, resto = await OpenMeteoFloodClient()._pluvial_by_node(
+        [(16.0, 40.0)], _T0, 72, head_hours=48
+    )
+    assert totale == [73.0]
+    assert resto == [49.0]

@@ -33,6 +33,7 @@ from limen.agents.executors import (
     FloodForecastFetchExecutor,
     FwiUpdateExecutor,
     MeteoFetchExecutor,
+    ObservedRainExecutor,
     PersistResultExecutor,
     RiskScoringExecutor,
     SeismicCheckExecutor,
@@ -290,6 +291,11 @@ def build_hazard_workflow(
     # aveva con la catena FWI mancante nello sweep previsionale.
     if settings.enable_flood_forecast or hazard is HazardType.FLOOD:
         builder = builder.add(_flood_signals_step(hazard))
+    # La pioggia già caduta (#199), solo qui e non nella previsione per
+    # cella: a +24 h la finestra non contiene più le ore che il radar ha
+    # misurato.
+    if hazard is HazardType.FLOOD and (observed := _observed_rain_step()) is not None:
+        builder = builder.add(observed)
 
     # Hazard-specific input step (#62): the recursive FWI codes have to be
     # advanced and persisted before anything can score a fire. Only in the
@@ -380,11 +386,29 @@ def _flood_signals_step(hazard: HazardType) -> FloodForecastFetchExecutor:
     loaded = load_hazard_thresholds(HazardType.FLOOD)
     if not isinstance(loaded, FloodThresholds):
         return FloodForecastFetchExecutor(per_node=True)
+    observed = loaded.pluvial.observed
     return FloodForecastFetchExecutor(
         horizon_hours=loaded.pluvial.window_hours,
         per_node=True,
         reference_percentile=loaded.fluvial.reference_percentile,
         reference_window_days=loaded.fluvial.reference_window_days,
+        observed_hours=observed.hours if observed is not None else 0,
+    )
+
+
+def _observed_rain_step() -> ObservedRainExecutor | None:
+    """Lo step del radar, se `flood.yaml` lo chiede."""
+    from limen.core.scoring.regional_thresholds import (
+        FloodThresholds,
+        load_hazard_thresholds,
+    )
+
+    loaded = load_hazard_thresholds(HazardType.FLOOD)
+    if not isinstance(loaded, FloodThresholds) or loaded.pluvial.observed is None:
+        return None
+    return ObservedRainExecutor(
+        hours=loaded.pluvial.observed.hours,
+        max_age_minutes=loaded.pluvial.observed.max_age_minutes,
     )
 
 
