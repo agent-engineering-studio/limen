@@ -75,6 +75,13 @@ class LatestAssessmentResponse(BaseModel):
     briefing_model: str | None = None
     briefing_written_at: datetime | None = None
     analysis: RiskAnalysisDTO | None = None
+    #: La spiegazione in inglese (migrazione 073): la traduzione di
+    #: ``briefing_it``, controllata sui numeri, oppure il testo deterministico
+    #: inglese con ``briefing_en_is_fallback``. ``analysis_en`` ha le anomalie
+    #: tradotte; il resto dell'analisi è identico.
+    briefing_en: str | None = None
+    briefing_en_is_fallback: bool = False
+    analysis_en: RiskAnalysisDTO | None = None
 
 
 class CellBreakdownResponse(BaseModel):

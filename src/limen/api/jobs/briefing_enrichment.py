@@ -24,9 +24,14 @@ import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
-from limen.agents.chat_agents.briefing import BriefingAgent, briefing_di_ripiego
+from limen.agents.chat_agents.briefing import (
+    BriefingAgent,
+    briefing_di_ripiego,
+    deterministic_briefing,
+)
 from limen.agents.chat_agents.prompts_registry import has_narrative
 from limen.agents.chat_agents.risk_analyst import RiskAnalystAgent
+from limen.agents.chat_agents.traduttore import TraduttoreRacconti
 from limen.agents.workflows.main_workflow import level_reached
 from limen.api.dependencies import AppDependencies
 from limen.api.jobs._tracking import tracked
@@ -206,6 +211,7 @@ async def _run(deps: AppDependencies) -> dict[str, int]:
         ]
     if not pending:
         log.info("job.briefing_enrichment.nothing", considered=len(runs))
+        await _traduci(deps, modello or "predefinito")
         return {}
 
     analyst = RiskAnalystAgent(deps.llm_factory.create("RiskAnalyst"))
@@ -245,4 +251,58 @@ async def _run(deps: AppDependencies) -> dict[str, int]:
                 metrics["status"] = "skipped"
             out[aoi_id] = out.get(aoi_id, 0) + rows
     log.info("job.briefing_enrichment.summary", aois=len(out), per_aoi=out)
+    await _traduci(deps, modello or "predefinito")
     return out
+
+
+#: Quante traduzioni per tick: tre pericoli per venti regioni sono sessanta
+#: testi, e dopo il primo passaggio ne cambiano pochi per volta.
+_TRADUZIONI_PER_TICK = 20
+
+
+async def _traduci(deps: AppDependencies, modello: str) -> int:
+    """La versione inglese delle spiegazioni italiane che non ce l'hanno.
+
+    Dopo i racconti italiani e non dentro di loro: così si traducono anche
+    quelli scritti prima che il sito avesse l'inglese, e una traduzione
+    fallita non tocca l'italiano. Al posto di una traduzione infedele si
+    salva il testo deterministico inglese, marcato come ripiego: la SPA mostra
+    allora l'italiano dell'AI, e non riprova finché l'italiano non cambia.
+    """
+    candidate = await spiegazioni_repo.da_tradurre("en", limite=_TRADUZIONI_PER_TICK)
+    if not candidate:
+        return 0
+    traduttore = TraduttoreRacconti(deps.llm_factory.create("Briefing"))
+    fatte = 0
+    for s in candidate:
+        anomalie = [str(a) for a in (s.analisi or {}).get("anomalies", [])]
+        tradotta = await traduttore.traduci(s.testo, anomalie)
+        if tradotta is not None:
+            analisi = {**s.analisi, "anomalies": tradotta.anomalies} if s.analisi else None
+            testo, ripiego = tradotta.testo, False
+            fatte += 1
+        else:
+            stato = await assessment_repo.summary_for_region(s.aoi_id, s.hazard)
+            top = stato.top_cells[0] if stato and stato.top_cells else None
+            testo = deterministic_briefing(
+                aoi_id=s.aoi_id,
+                n_cells=stato.n_cells if stato else 0,
+                cells_by_level=stato.cells_by_level if stato else {},
+                dominant_level=top.level.value if top else s.livello,
+                hazard=s.hazard,
+                lingua="en",
+            )
+            analisi, ripiego = None, True
+        await spiegazioni_repo.scrivi(
+            aoi_id=s.aoi_id,
+            hazard=s.hazard,
+            run_id=s.run_id,
+            livello=s.livello,
+            modello=modello,
+            ripiego=ripiego,
+            testo=testo,
+            analisi=analisi,
+            lingua="en",
+        )
+    log.info("job.briefing_enrichment.traduzioni", candidate=len(candidate), fedeli=fatte)
+    return fatte

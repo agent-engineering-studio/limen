@@ -110,3 +110,21 @@ async def test_solo_le_spiegazioni_dell_ai_non_i_ripieghi(seeded: None) -> None:
     regioni = {r["aoi_id"]: r for r in await regioni_repo.monitoraggio()}
     assert regioni["it-esposta"]["spiegazioni"]["flood"]["testo"] == "Pioggia forte attesa."
     assert regioni["it-calma"]["spiegazioni"] == {}
+
+
+async def test_la_traduzione_sta_accanto_alla_spiegazione_italiana(seeded: None) -> None:
+    await spiegazioni_repo.scrivi(
+        aoi_id="it-esposta",
+        hazard=HazardType.FLOOD,
+        run_id=1,
+        livello="VeryHigh",
+        modello="fast-cloud",
+        ripiego=False,
+        testo="Heavy rain expected.",
+        analisi=None,
+        lingua="en",
+    )
+    regioni = {r["aoi_id"]: r for r in await regioni_repo.monitoraggio()}
+    flood = regioni["it-esposta"]["spiegazioni"]["flood"]
+    assert flood["testo"] == "Pioggia forte attesa."
+    assert flood["traduzioni"]["en"]["testo"] == "Heavy rain expected."
