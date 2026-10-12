@@ -58,7 +58,11 @@ reports/
 site/
 
 # Claude Code session config (local)
-.claude/
+.claude/*
+# La skill di progetto si versiona; il resto di .claude/ resta locale.
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/limen-fact-check/
 
 # MLflow local tracking store
 mlflow.db

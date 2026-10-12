@@ -12,7 +12,7 @@
 # layer che il progetto ha in casa da più tempo, e qui smette di essere solo
 # il componente H del motore frane per diventare la base di un pericolo suo.
 
-model_version: "flood-v1.1.0"
+model_version: "flood-v1.3.0"
 
 susceptibility:
   # Una cella fuori dalle zone mappate. Non zero: il mosaico copre i bacini
@@ -110,6 +110,32 @@ pluvial:
   #     saturation_ratio: 3.0
   #     floor_mm:         40.0
 
+  # **La pioggia già caduta conta (#199).** La finestra comincia adesso, quindi
+  # un nubifragio in corso esce dalla previsione mentre cade: a Melito di Porto
+  # Salvo, la mattina del 10 ottobre 2026, la previsione dava 20 mm e il radar
+  # ne aveva misurati 152 nelle 24 ore. La cumulata «Merging» del DPC (radar
+  # corretto con i pluviometri, 1 km) delle ultime `hours` ore sostituisce la
+  # previsione su quella parte della finestra, e vale il massimo fra le due
+  # letture: pioggia = max(prevista 72 h, osservata 24 h + prevista 48 h).
+  #
+  # Replica sul motore, celle intere d'Italia, fra il caso «osservata + 0» e
+  # «osservata + 2/3 della prevista» (la prevista a 48 h non era salvata):
+  #
+  #                          prevista  radar   oggi   con il radar
+  #   Melito P.S., 10/10 06Z    20 mm  152 mm  0,00   0,79 (100% ≥ moderato)
+  #   Bagaladi, 10/10 06Z       20 mm  112 mm  0,00   0,80
+  #   Anzio, 9/10 12Z           50 mm   59 mm  0,11   0,39-0,64
+  #   Napoli, 9/10 12Z          42 mm   76 mm  0,23   0,69-0,80
+  #   Lipari, 10/10 06Z         48 mm   24 mm  0,05   invariato
+  #
+  # Nei giorni calmi (1, 4, 6 ottobre) la quota d'Italia ≥ moderato non si
+  # muove (+0,01 punti al massimo); nei due istanti dell'evento passa da 0 a
+  # 0,2-0,9%. Lipari resta mancata: il radar non ha visto il nubifragio. Un
+  # pixel spurio (7.348 mm in 24 h, l'11 ottobre) si scarta con la mediana 3×3.
+  observed:
+    hours: 24
+    max_age_minutes: 90
+
   # Suolo già saturo ⇒ la stessa pioggia scorre invece di infiltrarsi.
   wet_soil: 0.35
   # Suolo completamente asciutto: la prima pioggia se la beve il terreno.
@@ -172,6 +198,37 @@ fluvial:
   # racconta la stagione in cui è stato calcolato.
   reference_percentile:  0.90
   reference_window_days: 730
+
+pluvial_susceptibility:
+  # La suscettibilità del ramo **pluviale**, separata dalla mappa dei fiumi
+  # (#198). Il mosaico ISPRA dice dove esce un fiume; un nubifragio allaga
+  # strade e sottopassi anche lontano da un alveo. Moltiplicare la pioggia per
+  # la mappa dei fiumi spegneva proprio il flash flood urbano: Anzio, 9 ottobre
+  # 2026, 92 mm previsti, trigger pluviale 0,53, cella fuori mappa a 0,15,
+  # punteggio 0,08 («nessuno»).
+  #
+  # Solo per le celle **fuori mappa**: si parte dal valore di ripiego
+  # (`susceptibility.unmapped`) e si sale verso `max` quanto più la cella è
+  # costruita (`imperviousness_norm / impervious_full`, fino a 1) e piana
+  # (`1 − pendenza / flat_slope_deg`, fino a 0). Dove la mappa ISPRA c'è resta
+  # lei l'autorità; il ramo fluviale non cambia.
+  #
+  # Misurato in due modi:
+  #
+  # * truth set Copernicus EMS, Lombardia (17% delle celle allagate fuori
+  #   mappa), previsione come fu emessa: colpite 73% → 80% (244 → 266 su 333),
+  #   tasso di base 7% → 8%, falsi allarmi 41% → 43%, rapporto 10,9 → 10,5.
+  #   Estendere il termine anche alle celle mappate in città arrivava all'82%
+  #   ma con falsi allarmi al 49%: per questo resta fuori mappa;
+  # * punteggi reali del 7-10 ottobre 2026 contro i bollettini DPC (1,25
+  #   milioni di celle-giorno): celle almeno moderate in zona arancione
+  #   1,35% → 1,66%, in zona verde 0,90% → 0,99%; Anzio 0,08 → 0,34.
+  #
+  # Il truth set EMS non contiene nubifragi urbani: quando ce ne sarà uno,
+  # questi tre numeri vanno ritarati su quello.
+  max: 0.8
+  impervious_full: 0.3
+  flat_slope_deg: 15.0
 
 imperviousness:
   # Suolo impermeabilizzato: amplifica **solo** il ramo pluviale. Il cemento

@@ -377,6 +377,25 @@ quando la mappa / i briefing vengono pubblicati:
   CC-BY 4.0, Zenodo DOI 10.5281/zenodo.14204473.
 * **Copernicus** (Open-Meteo, ERA5, **CERRA** reanalisi regionale) —
   licenza Copernicus, uso libero con attribuzione. https://open-meteo.com
+* **Copernicus EMS — GloFAS** (portata dei fiumi, via Open-Meteo e dall'Early
+  Warning Data Store) — licenza CEMS-Floods: uso libero, ma chi pubblica dati
+  derivati deve scrivere «Contiene informazioni modificate del Copernicus
+  Emergency Management Service [anno]» e non presentarli come avviso di piena.
+  Limen lo fa sulla mappa (alluvione e vista d'insieme), nel piè di pagina
+  della home, negli articoli delle Verifiche sulle alluvioni e nel PDF delle
+  regioni (`frontend/src/lib/attribuzioni.ts`, `report/regioni_pdf.py`).
+  I dati riservati dall'art. 12 del Reg. (UE) 1159/2013 (EFAS in tempo reale)
+  non vanno ripubblicati. https://ewds.climate.copernicus.eu
+* **Copernicus EMS — CEMS Fire** (indici di pericolo incendio su ERA5,
+  `cems-fire-historical-v1`) — CC-BY 4.0. https://ewds.climate.copernicus.eu
+* **Copernicus Land — EGMS** (European Ground Motion Service, prodotto Ortho
+  L3: velocità media del terreno a 100 m da Sentinel-1, componenti verticale
+  ed est-ovest) — licenza aperta Copernicus Land (Reg. UE 2021/696): uso
+  libero citando «Generated using European Union's Copernicus Land Monitoring
+  Service information» e dichiarando le modifiche. Il download richiede la
+  chiave di servizio CLMS (`EGMS__SERVICE_KEY`, profilo su land.copernicus.eu
+  → «API Tokens»). Oggi alimenta solo le feature
+  dell'ML, non la mappa. https://egms.land.copernicus.eu
 * **INGV** (servizio eventi FDSN, ShakeMap) — CC-BY 4.0.
   https://terremoti.ingv.it
 * **EFFIS** (perimetri aree bruciate) — termini Copernicus EFFIS.

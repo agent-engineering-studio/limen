@@ -209,7 +209,7 @@ async def _fetch_cells(
     async with acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT c.cell_id, c.flood_hazard_norm, c.imperviousness_norm,
+            SELECT c.cell_id, c.flood_hazard_norm, c.imperviousness_norm, c.slope_deg,
                    ST_X(ST_Centroid(g.geom)) AS lon,
                    ST_Y(ST_Centroid(g.geom)) AS lat
             FROM cell_static_factors c
@@ -232,6 +232,9 @@ async def _fetch_cells(
             imperviousness_norm=(
                 float(r["imperviousness_norm"]) if r["imperviousness_norm"] is not None else None
             ),
+            # La pendenza serve alla suscettibilità pluviale (#198): senza, il
+            # backtest misurerebbe un motore diverso da quello in produzione.
+            slope_deg=float(r["slope_deg"]) if r["slope_deg"] is not None else None,
         )
         out.append((static, float(r["lon"]), float(r["lat"])))
     return out

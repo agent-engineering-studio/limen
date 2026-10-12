@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
+import { NON_E_UN_AVVISO_DI_PIENA, copernicusModificato } from "../lib/attribuzioni";
 import { defaultApiClient } from "../lib/api-client";
 import { BMC_PAGINA } from "../lib/buymeacoffee";
 import { RISK_CLASSES } from "../lib/risk-colors";
@@ -268,9 +269,12 @@ export function HomePage(): JSX.Element {
       <footer className="home-footer">
         <p>
           Dati: ISPRA IdroGEO (CC-BY 4.0) · e-ITALICA CNR-IRPI (CC-BY 4.0) ·
-          Copernicus / Open-Meteo · GloFAS · INGV (CC-BY 4.0) · EFFIS · NASA
-          FIRMS · CORINE Land Cover · © OpenStreetMap contributors (ODbL).
-          Codice EUPL-1.2.
+          Open-Meteo (CC-BY 4.0) · GloFAS e CEMS Fire · INGV (CC-BY 4.0) ·
+          EFFIS · NASA FIRMS · CORINE Land Cover · © OpenStreetMap contributors
+          (ODbL). Codice EUPL-1.2.
+        </p>
+        <p>
+          {copernicusModificato()}. {NON_E_UN_AVVISO_DI_PIENA}
         </p>
         <p>
           Limen è sviluppato con Claude Code fin dal primo commit, e i racconti

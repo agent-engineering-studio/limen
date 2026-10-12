@@ -1,0 +1,71 @@
+{
+  "slug": "2026-10-10-alluvione-melito-di-porto-salvo",
+  "titolo": "Melito di Porto Salvo, 195 mm in dodici ore: Limen ne aspettava 33 in tre giorni",
+  "pericolo": "flood",
+  "esito": "mancata",
+  "evento": {
+    "quando": "2026-10-10T03:00:00+02:00",
+    "luogo": "Melito di Porto Salvo (RC)",
+    "regione": "Calabria",
+    "comuni": [
+      {
+        "istat": "080050",
+        "nome": "Melito di Porto Salvo"
+      }
+    ]
+  },
+  "pubblicato": "2026-10-11T11:00:29+02:00",
+  "aggiornato": "2026-10-11T11:00:29+02:00",
+  "sommario": "Nella notte fra il 9 e il 10 ottobre le fiumare di Melito di Porto Salvo hanno trascinato via le auto e il sindaco ha chiesto lo stato di calamità. Per Limen il comune era in classe «nessuno».",
+  "corpo": [
+    "Secondo StrettoWeb, a Melito di Porto Salvo sono caduti 195 mm di pioggia in dodici ore nella notte fra venerdì 9 e sabato 10 ottobre (Quotidiano Nazionale ne riporta circa 170 dalla mezzanotte). Le fiumare hanno trascinato le auto, le strade sono state danneggiate e la statale 106 è stata chiusa per una frana. Il sindaco Tito Nastasi ha chiesto lo stato di calamità naturale. L'ora esatta del picco non è riportata: qui è fissata alle 3 di notte, con una tolleranza di dodici ore.",
+    "Limen non l'ha prevista. Nessuna corsa previsionale ha messo le 35 celle del comune in classe moderata o superiore, lo sweep orario le ha tenute in classe «nessuno» per tutta la notte e nessun avviso è partito.",
+    "Il dato che spiega tutto è la pioggia attesa: la previsione meteo usata dal motore dava per Melito 33 mm sulle 72 ore, sotto la soglia di 40 mm da cui l'innesco pluviale comincia a contare. Con un innesco nullo il punteggio è zero, qualunque sia la suscettibilità del terreno (qui 0,8, alta). Ne sono caduti sei volte tanti in un quarto del tempo. La portata delle fiumare non era disponibile: GloFAS non segue corsi d'acqua torrentizi di questa scala.",
+    "È lo stesso schema di Lipari, la stessa notte: un temporale stazionario sulla costa che il modello meteo non ha collocato lì. Quando l'errore sta nella pioggia prevista, il motore non ha niente da cui ripartire. I limiti, detti una volta per tutte: Limen ragiona su celle da 1 km² e su previsioni meteo che arrivano da nodi distanti circa 9 km; una classe «moderata» non è un'allerta, e le allerte ufficiali sono quelle della Protezione Civile."
+  ],
+  "fonti": [
+    {
+      "testata": "StrettoWeb",
+      "titolo": "Maltempo devastante a Melito Porto Salvo, auto trascinate dalle fiumare e strade distrutte. Chiusa la SS106",
+      "url": "https://www.strettoweb.com/2026/10/maltempo-devastante-a-melito-porto-salvo-auto-trascinate-dalle-fiumare-e-strade-distrutte-chiusa-la-ss106-foto/2158015/",
+      "data": "2026-10-10"
+    },
+    {
+      "testata": "ANSA",
+      "titolo": "Nubifragi, allagamenti e frane, il maltempo sferza il Sud",
+      "url": "https://www.ansa.it/sito/notizie/cronaca/2026/10/10/nubifragi-allagamenti-e-frane-il-maltempo-sferza-il-sud_9c85a05b-b554-4cf2-9592-d9c514ee9113.html",
+      "data": "2026-10-10"
+    },
+    {
+      "testata": "Quotidiano Nazionale",
+      "titolo": "Sud flagellato dal maltempo: colate di fango a Lipari, frane ed evacuazioni a Napoli. Statale Jonica chiusa per crolli in Calabria",
+      "url": "https://www.quotidiano.net/cronaca/maltempo-oggi-gcgbcrk5",
+      "data": "2026-10-10"
+    }
+  ],
+  "foto": [],
+  "previsione": {
+    "anticipo_ore_moderato": null,
+    "anticipo_ore_alto": null,
+    "classe_max": null,
+    "allerta_prima": null,
+    "corse": []
+  },
+  "perche": [
+    {
+      "nome": "Pioggia prevista (72 ore)",
+      "valore": "33 mm",
+      "spiegazione": "sotto la soglia di 40 mm: l'innesco pluviale è rimasto a zero, e con lui il punteggio. Ne sono caduti 195 in dodici ore, secondo StrettoWeb."
+    },
+    {
+      "nome": "Suscettibilità idraulica",
+      "valore": "0,80",
+      "spiegazione": "la zona è allagabile secondo il mosaico ISPRA, ma la suscettibilità moltiplica l'innesco e non lo sostituisce."
+    },
+    {
+      "nome": "Portata delle fiumare",
+      "valore": "non disponibile",
+      "spiegazione": "GloFAS non risolve le fiumare calabresi, quindi il segnale fluviale mancava."
+    }
+  ]
+}

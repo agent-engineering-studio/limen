@@ -27,6 +27,8 @@ dependencies = [
     "pydantic-settings>=2.5",
     "structlog>=24.4",
     "httpx>=0.27",
+    # Firma RS256 del JWT della chiave di servizio CLMS (EGMS).
+    "cryptography>=43",
     "tenacity>=9.0",
     "apscheduler>=4.0.0a5",
     "pyyaml>=6.0",
@@ -102,6 +104,12 @@ dl = [
 report = [
     "jinja2>=3.1",
     "reportlab>=5.0.1",
+]
+# `limen glofas-ewds`: lo storico GloFAS dall'Early Warning Data Store di
+# Copernicus. Gira sull'host, una volta: l'immagine del worker non lo installa.
+copernicus = [
+    "cdsapi>=0.7.7",
+    "netCDF4>=1.7",
 ]
 
 [build-system]
@@ -199,6 +207,7 @@ module = [
     "pandas.*",
     "pyogrio.*",
     "fastmcp.*",
+    "cdsapi.*",
 ]
 ignore_missing_imports = true
 

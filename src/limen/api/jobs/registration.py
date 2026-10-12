@@ -19,6 +19,7 @@ from limen.api.jobs.alert_digest import run_alert_digest
 from limen.api.jobs.briefing_enrichment import run_briefing_enrichment
 from limen.api.jobs.daily_report import run_daily_report
 from limen.api.jobs.dpc_bollettini import run_dpc_bollettini
+from limen.api.jobs.fedelta_racconti import run_fedelta_racconti
 from limen.api.jobs.firms_monitoring import run_firms_monitoring
 from limen.api.jobs.forecast_history import run_forecast_history_job
 from limen.api.jobs.forecast_monitoring import run_forecast_monitoring
@@ -42,6 +43,7 @@ from limen.api.jobs.ids import (  # noqa: E402
     JOB_BRIEFING_ENRICHMENT,
     JOB_DAILY_REPORT,
     JOB_DPC_BOLLETTINI,
+    JOB_FEDELTA_RACCONTI,
     JOB_FIRMS_MONITORING,
     JOB_FORECAST_HISTORY,
     JOB_FORECAST_MONITORING,
@@ -308,6 +310,22 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
         job=JOB_BRIEFING_ENRICHMENT,
         interval_minutes=deps.settings.llm.briefing_interval_minutes,
     )
+
+    # Il revisore di fedeltà, una volta per sera, un'ora dopo l'apertura della
+    # finestra dei modelli lenti: all'apertura (20:20 UTC) gira la previsione
+    # per cella, venti minuti di CPU che colibrì non deve contendere.
+    # Registrato sempre, come il briefing: se LLM__MODELS__FEDELTA non è
+    # dichiarato il job lo dice e finisce.
+    ora_revisore = (deps.settings.llm.slow_models_window_utc[0] + 1) % 24
+    await scheduler.add_schedule(
+        track_job(JOB_FEDELTA_RACCONTI)(run_fedelta_racconti),
+        args=(deps,),
+        trigger=CronTrigger(hour=ora_revisore, minute=0),
+        id=JOB_FEDELTA_RACCONTI,
+        conflict_policy=ConflictPolicy.replace,
+    )
+    registered.append(JOB_FEDELTA_RACCONTI)
+    log.info("scheduler.registered", job=JOB_FEDELTA_RACCONTI, hour_utc=ora_revisore)
 
     # La notte in un job solo: shadow, drift, retrain, forecast history,
     # partizioni, retention. Gli schedule autonomi dei primi quattro non

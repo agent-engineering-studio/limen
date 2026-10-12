@@ -25,6 +25,7 @@ from typing import Any, Protocol
 import httpx
 from tenacity import RetryError
 
+from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.integrations._http import SharedHttpClient, fetch_with_retry
 from limen.integrations.openmeteo.client import forecast_url, weather_model
@@ -37,6 +38,8 @@ log = get_logger(__name__)
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 #: Portata e onde restano sull'API pubblica. GloFAS non e' sul bucket AWS di
 #: Open-Meteo e non si puo' auto-ospitare; le onde sono venti chiamate l'ora.
+#: Con una chiave EWDS la previsione per nodo arriva da `glofas_previsione`, e
+#: di qui passano solo il ripiego e lo scalare per AOI delle frane.
 FLOOD_URL = "https://flood-api.open-meteo.com/v1/flood"
 MARINE_URL = "https://marine-api.open-meteo.com/v1/marine"
 
@@ -63,6 +66,22 @@ class _Cache(Protocol):
     async def set_json(self, key: str, value: Any, *, ttl_seconds: int) -> None: ...
 
 
+class _Previsioni(Protocol):
+    """Chi legge il picco previsto per nodo dall'EWDS: il repo, o un finto."""
+
+    async def __call__(
+        self, nodes: list[tuple[float, float]], *, dal: date
+    ) -> dict[tuple[float, float], float] | None: ...
+
+
+class _Riferimenti(Protocol):
+    """Chi legge la portata ordinaria per nodo: il repo, o un finto nei test."""
+
+    async def __call__(
+        self, nodes: list[tuple[float, float]], *, percentile: float, window_days: int
+    ) -> dict[tuple[float, float], float | None]: ...
+
+
 @dataclass(frozen=True, slots=True)
 class FloodSignals:
     rain_72h_mm: float | None = None
@@ -76,6 +95,10 @@ class FloodSignals:
     #: 77 mm at the cells that actually failed).
     nodes: tuple[tuple[float, float], ...] = ()
     rain_by_node: tuple[float | None, ...] = ()
+    #: La stessa pioggia prevista, ma sulle sole ore della finestra che
+    #: restano dopo quelle che il radar ha già misurato (#199): sommata alla
+    #: cumulata osservata ricompone una finestra lunga quanto la soglia.
+    rain_head_by_node: tuple[float | None, ...] = ()
     #: Attenzione: questo rapporto **non** è lo stesso di
     #: ``river_discharge_ratio`` qui sopra. Quello, che alimenta il componente
     #: H delle frane, è il picco previsto sulla media dei 31 giorni
@@ -192,18 +215,17 @@ MIN_REFERENCE_DAYS = 365
 DEFAULT_REFERENCE_PERCENTILE = 0.90
 DEFAULT_REFERENCE_WINDOW_DAYS = 730
 
-#: Per quanto il riferimento resta valido in cache. La piena ordinaria di un
-#: fiume è una proprietà del bacino, non del meteo di questa settimana: un
-#: mese è già frequente, e ricalcolarlo a ogni sweep costerebbe due anni di
-#: archivio per ogni nodo ogni ora.
-_REFERENCE_TTL_SECONDS = 30 * 24 * 3600
-
 #: Per quanto vale la previsione di portata. GloFAS gira **una volta al
 #: giorno**: richiederla a ogni tick orario restituisce gli stessi numeri e
 #: costa 8538 località per ventiquattro volte, che è la metà di ciò che ha
 #: esaurito il tetto giornaliero di Open-Meteo (#142). Sei ore lasciano vivo
-#: il ricambio giornaliero senza inseguirlo ventiquattro volte.
-_FLUVIAL_TTL_SECONDS = 6 * 3600
+#: il ricambio giornaliero senza inseguirlo ventiquattro volte. Dodici e non
+#: sei dalla #200: anche ristretta ai nodi con un fiume, la previsione per
+#: 3.366 nodi quattro volte al giorno supererebbe da sola il tetto. Ventiquattro
+#: e non dodici: GloFAS pubblica una corsa al giorno, e a dodici la seconda
+#: lettura ricompra gli stessi numeri — ~5.500 chiamate a tabella piena, più
+#: di metà del tetto, tolte al riempimento dei riferimenti.
+_FLUVIAL_TTL_SECONDS = 24 * 3600
 
 
 def _with_model(params: dict[str, Any]) -> dict[str, Any]:
@@ -227,15 +249,17 @@ def _floats(values: Any) -> list[float]:
     return [float(v) for v in values if v is not None]
 
 
-def _reference_key(nodes: list[tuple[float, float]], *, percentile: float, window_days: int) -> str:
-    fingerprint = ";".join(f"{lon:.4f},{lat:.4f}" for lon, lat in nodes)
-    digest = sha256(f"{percentile}:{window_days}:{fingerprint}".encode()).hexdigest()[:32]
-    return f"flood:discharge_reference:{digest}"
-
-
 def _fluvial_key(nodes: list[tuple[float, float]]) -> str:
     fingerprint = ";".join(f"{lon:.4f},{lat:.4f}" for lon, lat in nodes)
     return f"flood:fluvial_forecast:{sha256(fingerprint.encode()).hexdigest()[:32]}"
+
+
+def _espandi(n: int, indici: list[int], valori: list[float | None]) -> list[float | None]:
+    """I valori di un sottoinsieme di nodi, rimessi al loro posto fra ``n``."""
+    out: list[float | None] = [None] * n
+    for i, v in zip(indici, valori, strict=True):
+        out[i] = v
+    return out
 
 
 def percentile_of(values: list[float], p: float) -> float | None:
@@ -257,9 +281,13 @@ class OpenMeteoFloodClient:
         *,
         http_client: httpx.AsyncClient | None = None,
         cache: _Cache | None = None,
+        riferimenti: _Riferimenti | None = None,
+        previsioni: _Previsioni | None = None,
     ) -> None:
         self._http = http_client
         self._cache = cache
+        self._riferimenti = riferimenti
+        self._previsioni = previsioni
 
     async def _client(self) -> httpx.AsyncClient:
         return self._http if self._http is not None else await SharedHttpClient.get()
@@ -359,6 +387,7 @@ class OpenMeteoFloodClient:
         per_node: bool = False,
         reference_percentile: float = DEFAULT_REFERENCE_PERCENTILE,
         reference_window_days: int = DEFAULT_REFERENCE_WINDOW_DAYS,
+        observed_hours: int = 0,
     ) -> FloodSignals:
         """The three AOI-level signals, plus per-node ones when asked.
 
@@ -384,7 +413,9 @@ class OpenMeteoFloodClient:
         from limen.integrations.openmeteo.grid import build_snapped_nodes
 
         nodes = build_snapped_nodes(bbox, spacing=NODE_SPACING_DEG)
-        rain = await self._pluvial_by_node(nodes, valuation_time, horizon_hours)
+        rain, head = await self._pluvial_by_node(
+            nodes, valuation_time, horizon_hours, head_hours=horizon_hours - observed_hours
+        )
         reference = await self._cached_reference(
             nodes,
             percentile=reference_percentile,
@@ -395,6 +426,7 @@ class OpenMeteoFloodClient:
             signals,
             nodes=tuple(nodes),
             rain_by_node=tuple(rain),
+            rain_head_by_node=tuple(head),
             river_ratio_by_node=tuple(rivers),
         )
 
@@ -447,15 +479,22 @@ class OpenMeteoFloodClient:
         return max(future) / baseline
 
     async def _pluvial_by_node(
-        self, nodes: list[tuple[float, float]], t0: datetime, horizon_hours: int
-    ) -> list[float | None]:
-        """Forecast rain over ``horizon_hours`` at each node, in one request.
+        self,
+        nodes: list[tuple[float, float]],
+        t0: datetime,
+        horizon_hours: int,
+        *,
+        head_hours: int | None = None,
+    ) -> tuple[list[float | None], list[float | None]]:
+        """Forecast rain at each node over ``horizon_hours`` and over the first
+        ``head_hours`` of it (default: the whole window), in one request.
 
         Hour-bounded, not day-bounded: summing whole calendar days from
         ``t0.date()`` would stretch a 72 h window to as much as 96 h, and the
         thresholds it feeds are stated per window.
         """
         end = t0 + timedelta(hours=horizon_hours)
+        end_head = t0 + timedelta(hours=horizon_hours if head_hours is None else head_hours)
         results = await self.fetch_grid(
             forecast_url(),
             nodes,
@@ -470,16 +509,18 @@ class OpenMeteoFloodClient:
             "openmeteo.flood.pluvial_grid",
         )
         if len(results) != len(nodes):
-            return [None] * len(nodes)
+            return [None] * len(nodes), [None] * len(nodes)
         out: list[float | None] = []
+        heads: list[float | None] = []
         for point in results:
             hourly = point.get("hourly") or {}
             stamps = hourly.get("time") if isinstance(hourly.get("time"), list) else []
             values = _floats(hourly.get("precipitation"))
             if not stamps or len(values) != len(stamps):
                 out.append(sum(values) if values else None)
+                heads.append(None)
                 continue
-            total = 0.0
+            total = head = 0.0
             seen = False
             for stamp, mm in zip(stamps, values, strict=False):
                 when = datetime.fromisoformat(str(stamp))
@@ -488,62 +529,44 @@ class OpenMeteoFloodClient:
                 if t0 <= when <= end:
                     total += mm
                     seen = True
+                    if when <= end_head:
+                        head += mm
             out.append(total if seen else None)
-        return out
+            heads.append(head if seen else None)
+        return out, heads
 
     async def _cached_reference(
         self, nodes: list[tuple[float, float]], *, percentile: float, window_days: int
     ) -> list[float | None]:
-        """Il riferimento per nodo, letto dalla cache o ricalcolato.
+        """Il riferimento per nodo, letto da `glofas_riferimento` (#200).
 
-        Una chiave sola per reticolo e non una per nodo: i nodi si leggono
-        tutti insieme a ogni sweep, e 675 SELECT per un dato che cambia una
-        volta al mese sarebbero 675 andate e ritorni sprecati. Un reticolo
-        diverso (altro AOI, altro passo) è un'altra chiave.
+        Lo sweep non lo calcola più: due anni di archivio per nodo esaurivano
+        il tetto giornaliero dell'API pubblica in diciotto minuti, e da lì il
+        ramo fluviale restava spento ovunque. Lo calcola un passo notturno un
+        po' alla volta (`glofas_riferimenti.riempi`); un nodo non ancora
+        calcolato vale ``None``, «non so quanto è grande questo fiume».
 
-        Cache irraggiungibile ⇒ si ricalcola: più lento, mai sbagliato.
+        Tabella irraggiungibile ⇒ tutti ``None``: il ramo fluviale tace per
+        un giro, lo sweep continua.
         """
-        key = _reference_key(nodes, percentile=percentile, window_days=window_days)
-        cache = self._cache
-        if cache is None:
-            from limen.data.caching.postgres_cache import PostgresCache
+        leggi: _Riferimenti
+        if self._riferimenti is not None:
+            leggi = self._riferimenti
+        else:
+            from limen.data.repos.glofas_repo import riferimenti
 
-            cache = PostgresCache()
+            leggi = riferimenti
         try:
-            cached = await cache.get_json(key)
+            noti = await leggi(nodes, percentile=percentile, window_days=window_days)
         except Exception as exc:
             log.warning(
                 "integration.degraded",
-                label="openmeteo.flood.reference_cache",
+                label="openmeteo.flood.reference_table",
                 error=str(exc),
                 error_type=type(exc).__name__,
             )
-            cached = None
-        if isinstance(cached, list) and len(cached) == len(nodes):
-            return [float(v) if v is not None else None for v in cached]
-
-        reference = await self.discharge_reference(
-            nodes, percentile=percentile, window_days=window_days
-        )
-        known = sum(1 for r in reference if r is not None)
-        log.info(
-            "openmeteo.flood.reference_computed",
-            nodes=len(nodes),
-            with_reference=known,
-            percentile=percentile,
-            window_days=window_days,
-        )
-        if known:
-            try:
-                await cache.set_json(key, reference, ttl_seconds=_REFERENCE_TTL_SECONDS)
-            except Exception as exc:
-                log.warning(
-                    "integration.degraded",
-                    label="openmeteo.flood.reference_cache",
-                    error=str(exc),
-                    error_type=type(exc).__name__,
-                )
-        return reference
+            return [None] * len(nodes)
+        return [noti.get(n) for n in nodes]
 
     async def discharge_reference(
         self,
@@ -597,7 +620,21 @@ class OpenMeteoFloodClient:
 
         Cache irraggiungibile ⇒ si richiede: più lento, mai sbagliato.
         """
-        key = _fluvial_key(nodes)
+        # Solo i nodi di cui si conosce la piena ordinaria (#200): per gli altri
+        # il rapporto sarebbe comunque «non so», e chiederne la previsione
+        # bruciava quota per migliaia di nodi in mare o senza fiume.
+        noti = [i for i, r in enumerate(reference) if r is not None and r > 0.0]
+        if not noti:
+            return [None] * len(nodes)
+        sotto = [nodes[i] for i in noti]
+        picchi = await self._previsione_ewds(sotto)
+        if picchi is not None:
+            rapporti: list[float | None] = []
+            for i, n in zip(noti, sotto, strict=True):
+                ref = reference[i]
+                rapporti.append(picchi[n] / ref if n in picchi and ref else None)
+            return _espandi(len(nodes), noti, rapporti)
+        key = _fluvial_key(sotto)
         cache = self._cache
         if cache is None:
             from limen.data.caching.postgres_cache import PostgresCache
@@ -613,10 +650,10 @@ class OpenMeteoFloodClient:
                 error_type=type(exc).__name__,
             )
             cached = None
-        if isinstance(cached, list) and len(cached) == len(nodes):
-            return [float(v) if v is not None else None for v in cached]
+        if isinstance(cached, list) and len(cached) == len(noti):
+            return _espandi(len(nodes), noti, [float(v) if v is not None else None for v in cached])
 
-        ratios = await self._fluvial_by_node(nodes, reference=reference)
+        ratios = await self._fluvial_by_node(sotto, reference=[reference[i] for i in noti])
         # Una risposta tutta vuota è un degrado, non un dato: metterla in
         # cache terrebbe l'AOI a secco per sei ore dopo un singolo 429.
         if any(r is not None for r in ratios):
@@ -629,7 +666,38 @@ class OpenMeteoFloodClient:
                     error=str(exc),
                     error_type=type(exc).__name__,
                 )
-        return ratios
+        return _espandi(len(nodes), noti, ratios)
+
+    async def _previsione_ewds(
+        self, nodes: list[tuple[float, float]]
+    ) -> dict[tuple[float, float], float] | None:
+        """Il picco per nodo dall'ultima corsa EWDS salvata, se è recente.
+
+        ``None`` ⇒ nessuna corsa recente (o tabella irraggiungibile): si torna
+        a Open-Meteo. È la stessa corsa GloFAS 4 che Open-Meteo serve, letta
+        sulla stessa cella, quindi il rapporto non cambia significato.
+        """
+        cfg = get_settings().copernicus
+        if self._previsioni is None and not cfg.attivo:
+            return None
+        leggi: _Previsioni
+        if self._previsioni is not None:
+            leggi = self._previsioni
+        else:
+            from limen.data.repos.glofas_repo import picchi
+
+            leggi = picchi
+        dal = datetime.now(UTC).date() - timedelta(days=cfg.eta_massima_giorni)
+        try:
+            return await leggi(nodes, dal=dal)
+        except Exception as exc:
+            log.warning(
+                "integration.degraded",
+                label="ewds.glofas.previsione_tabella",
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            return None
 
     async def _fluvial_by_node(
         self,

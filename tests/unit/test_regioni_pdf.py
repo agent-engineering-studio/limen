@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from limen.report.regioni_pdf import _t, rapporto_pdf
+from limen.report.regioni_pdf import _t, attribuzione_copernicus, rapporto_pdf
 
 
 def _regione(**kw: Any) -> dict[str, Any]:
@@ -74,3 +74,9 @@ def test_un_pdf_vero_con_tutte_le_regioni() -> None:
 def test_i_caratteri_fuori_tabella_si_sostituiscono_e_l_xml_si_protegge() -> None:
     assert _t("≥ 40 → <b>") == "&gt;= 40 -&gt; &lt;b&gt;"
     assert _t("è · «»") == "è · «»"
+
+
+def test_la_notizia_copernicus_ha_l_anno_e_dice_che_non_e_un_allerta() -> None:
+    testo = attribuzione_copernicus(2026)
+    assert "Copernicus Emergency Management Service, 2026" in testo
+    assert "Non è un avviso di piena" in testo

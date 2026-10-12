@@ -50,6 +50,8 @@ STEPS = (
     "partitions_maintain",
     "retention",
     "storage",
+    "egms_release",
+    "glofas_riferimenti",
 )
 
 
@@ -206,6 +208,11 @@ async def run_nightly_pipeline(deps: AppDependencies) -> dict[str, Any]:
     out["partitions_maintain"] = await _step("partitions_maintain", lambda: _partitions(deps))
     out["retention"] = await _step("retention", lambda: _retention(deps))
     out["storage"] = await _step("storage", lambda: _storage(deps))
+    out["egms_release"] = await _step("egms_release", lambda: _egms_release(deps))
+    # Per ultimo: il tetto di GloFAS riparte a mezzanotte UTC, quindi alle due
+    # è intero comunque, e il riempimento ora dura un paio d'ore (i lotti si
+    # distanziano sotto il limite orario): davanti, terrebbe ferma la retention.
+    out["glofas_riferimenti"] = await _step("glofas_riferimenti", lambda: _glofas(deps))
 
     log.info("job.nightly.done", steps={k: v is not None for k, v in out.items()})
     return out
@@ -213,6 +220,28 @@ async def run_nightly_pipeline(deps: AppDependencies) -> dict[str, Any]:
 
 async def _drift(deps: AppDependencies) -> dict[str, Any]:
     return {"triggered": bool(await run_drift_monitor_job(deps))}
+
+
+async def _glofas(deps: AppDependencies) -> dict[str, Any]:
+    """La portata ordinaria dei nodi GloFAS che ancora non ce l'hanno (#200)."""
+    from limen.core.scoring.regional_thresholds import FloodThresholds, load_hazard_thresholds
+    from limen.integrations.openmeteo.glofas_riferimenti import riempi
+
+    flood = load_hazard_thresholds(HazardType.FLOOD)
+    assert isinstance(flood, FloodThresholds)
+    return await riempi(
+        chiamate=deps.settings.scheduler.glofas_chiamate_per_notte,
+        soglia_pioggia_mm=flood.pluvial.threshold_mm,
+        percentile=flood.fluvial.reference_percentile,
+        window_days=flood.fluvial.reference_window_days,
+    )
+
+
+async def _egms_release(deps: AppDependencies) -> dict[str, Any]:
+    """Una richiesta: è uscita una release EGMS più nuova di `EGMS__RELEASE`?"""
+    from limen.integrations.egms.sync_job import controlla_release
+
+    return dict(await controlla_release(deps.settings))
 
 
 async def _partitions(deps: AppDependencies) -> dict[str, Any]:

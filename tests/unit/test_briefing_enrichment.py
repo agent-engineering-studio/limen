@@ -123,6 +123,9 @@ class _Briefer:
     async def brief(self, _assessment: Any, *, analysis: Any) -> str:
         return self.testo
 
+    def user_message(self, _assessment: Any, _analysis: Any) -> str:
+        return "Celle: 10; high+: 2"
+
 
 def _esistente(run_id: int, *, ripiego: bool) -> spiegazioni_repo.Spiegazione:
     return spiegazioni_repo.Spiegazione(
@@ -180,6 +183,8 @@ async def test_la_spiegazione_va_nella_tabella_della_regione(monkeypatch: Any) -
     assert scritto["modello"] == "quality-cloud"
     assert scritto["ripiego"] is False
     assert scritto["analisi"]["driver"] == "rain"
+    # Quello che il modello ha letto: senza, la fedeltà non si può giudicare.
+    assert scritto["ingresso"] == "Celle: 10; high+: 2"
 
 
 async def test_un_ripiego_si_salva_ma_non_conta_come_spiegata(monkeypatch: Any) -> None:

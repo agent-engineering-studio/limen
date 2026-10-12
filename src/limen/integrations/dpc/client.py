@@ -6,6 +6,11 @@ a national 1 km GeoTIFF in mm/h refreshed every 5 minutes — the trigger
 signal for the nowcast job: radar decides *when* to run, the existing
 scoring pipeline decides *what* to alert.
 
+The CUM products (``CUM3``/``6``/``12``/``24``) are the rain already fallen:
+the «Merging» of radar and rain gauges, 0.01° in EPSG:4326, refreshed every
+30 minutes. The flood engine reads them as the observed part of its pluvial
+window (#199).
+
 Read-only integration: every failure degrades to ``None`` and logs
 ``integration.degraded`` — it never raises.
 """
@@ -20,7 +25,8 @@ import httpx
 import numpy as np
 import rasterio
 from rasterio.io import MemoryFile
-from rasterio.warp import transform_bounds
+from rasterio.transform import rowcol
+from rasterio.warp import transform, transform_bounds
 from rasterio.windows import from_bounds
 from tenacity import RetryError
 
@@ -46,7 +52,7 @@ _DEGRADATION_EXC: tuple[type[BaseException], ...] = (
 
 @dataclass(frozen=True, slots=True)
 class SriGrid:
-    """One national SRI frame: mm/h on a 1 km grid."""
+    """One national radar frame: SRI in mm/h, or a CUM accumulation in mm."""
 
     data: np.ndarray
     transform: rasterio.Affine
@@ -74,27 +80,55 @@ class SriGrid:
             return 0.0, 0
         return float(valid.max()), int((valid >= threshold_mmh).sum())
 
+    def sample(self, points4326: list[tuple[float, float]]) -> list[float | None]:
+        """The value at each lon/lat point, as the median of its 3x3 window.
 
-async def get_latest_sri() -> SriGrid | None:
-    """Fetch + parse the most recent national SRI frame (None on failure)."""
+        The median and not the pixel: the Merging product carries isolated
+        spikes (7,348 mm in 24 h on one pixel, 11 October 2026) that a single
+        read would turn into a flood on one cell. Outside the coverage or on
+        an all-nodata window the answer is ``None`` — not measured, not dry.
+        """
+        if not points4326:
+            return []
+        xs, ys = transform(
+            "EPSG:4326", self.crs, [p[0] for p in points4326], [p[1] for p in points4326]
+        )
+        rows, cols = rowcol(self.transform, xs, ys)
+        h, w = self.data.shape
+        out: list[float | None] = []
+        for r, c in zip(rows, cols, strict=True):
+            if not (0 <= r < h and 0 <= c < w):
+                out.append(None)
+                continue
+            tile = self.data[max(0, r - 1) : r + 2, max(0, c - 1) : c + 2]
+            valid = tile[tile > _NODATA]
+            out.append(float(np.median(valid)) if valid.size else None)
+        return out
+
+
+async def _download(product_type: str, cached: SriGrid | None = None) -> SriGrid | None:
+    """The most recent frame of ``product_type``; ``cached`` if it is still that one."""
     client = await SharedHttpClient.get()
     try:
         resp = await fetch_with_retry(
             "GET",
             f"{RADAR_API}/findLastProductByType",
             client=client,
-            params={"type": "SRI"},
+            params={"type": product_type},
             headers=_HEADERS,
         )
         payload: dict[str, Any] = resp.json()
         product = payload["lastProducts"][0]
         product_time = int(product["time"])
+        observed_at = datetime.fromtimestamp(product_time / 1000, tz=UTC)
+        if cached is not None and cached.observed_at == observed_at:
+            return cached
 
         resp = await fetch_with_retry(
             "POST",
             f"{RADAR_API}/downloadProduct",
             client=client,
-            json={"productType": "SRI", "productDate": product_time},
+            json={"productType": product_type, "productDate": product_time},
             headers=_HEADERS,
         )
         url = str(resp.json()["url"])
@@ -103,13 +137,17 @@ async def get_latest_sri() -> SriGrid | None:
     except _DEGRADATION_EXC as exc:
         log.warning(
             "integration.degraded",
-            label="dpc.sri",
+            label=f"dpc.{product_type.lower()}",
             error=str(exc),
             error_type=type(exc).__name__,
         )
         return None
     except IndexError:
-        log.warning("integration.degraded", label="dpc.sri", error="no products available")
+        log.warning(
+            "integration.degraded",
+            label=f"dpc.{product_type.lower()}",
+            error="no products available",
+        )
         return None
 
     with MemoryFile(raw) as mem, mem.open() as ds:
@@ -117,14 +155,34 @@ async def get_latest_sri() -> SriGrid | None:
             data=ds.read(1),
             transform=ds.transform,
             crs=ds.crs,
-            observed_at=datetime.fromtimestamp(product_time / 1000, tz=UTC),
+            observed_at=observed_at,
         )
     log.info(
-        "dpc.sri.fetched",
+        "dpc.radar.fetched",
+        product=product_type,
         observed_at=grid.observed_at.isoformat(),
         shape=grid.data.shape,
     )
     return grid
 
 
-__all__ = ["SriGrid", "get_latest_sri"]
+async def get_latest_sri() -> SriGrid | None:
+    """Fetch + parse the most recent national SRI frame (None on failure)."""
+    return await _download("SRI")
+
+
+#: L'ultimo fotogramma CUM per durata. Una regione dopo l'altra chiede lo
+#: stesso file nazionale (~2 MB, nuovo ogni 30 minuti): si riscarica solo
+#: quando il DPC ne pubblica uno nuovo.
+_cum_cache: dict[int, SriGrid] = {}
+
+
+async def get_latest_cum(hours: int) -> SriGrid | None:
+    """The most recent national rain accumulation over ``hours`` (None on failure)."""
+    grid = await _download(f"CUM{hours}", _cum_cache.get(hours))
+    if grid is not None:
+        _cum_cache[hours] = grid
+    return grid
+
+
+__all__ = ["SriGrid", "get_latest_cum", "get_latest_sri"]

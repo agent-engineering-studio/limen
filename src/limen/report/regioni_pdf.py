@@ -35,6 +35,15 @@ from reportlab.platypus import (
 
 _ROMA = ZoneInfo("Europe/Rome")
 
+
+def attribuzione_copernicus(anno: int) -> str:
+    """La notizia che la licenza CEMS-Floods chiede su ogni dato GloFAS pubblicato."""
+    return (
+        f"Contiene informazioni modificate del Copernicus Emergency Management Service, {anno}. "
+        "Non è un avviso di piena né un'allerta."
+    )
+
+
 NOME_PERICOLO = {"landslide": "Frane", "flood": "Allagamenti", "wildfire": "Incendi"}
 _CLASSE = {
     "None": "nessuno",
@@ -60,7 +69,7 @@ _CAUSA = {
     "seismic_event": "le scosse recenti",
     "post_fire_destabilization": "gli incendi recenti",
     "human_activity": "l'attività umana",
-    "pluvial_rain": "la pioggia prevista",
+    "pluvial_rain": "la pioggia, prevista e già caduta",
     "river_discharge": "la portata dei fiumi",
     "hydraulic_susceptibility": "quanto la zona è allagabile",
     "fire_weather": "il tempo secco e ventoso",
@@ -225,6 +234,7 @@ def rapporto_pdf(regioni: list[dict[str, Any]], *, generato: datetime) -> bytes:
     stili = _stili()
     buffer = io.BytesIO()
     quando = generato.astimezone(_ROMA).strftime("%d/%m/%Y alle %H:%M")
+    anno = generato.astimezone(_ROMA).year
     limen = resources.files("limen.report").joinpath("assets/limen-logo.png").read_bytes()
 
     def pagina(canvas: Any, doc: Any) -> None:
@@ -244,6 +254,8 @@ def rapporto_pdf(regioni: list[dict[str, Any]], *, generato: datetime) -> bytes:
         canvas.drawRightString(
             larghezza - 18 * mm, 11 * mm, "Racconti scritti con Claude, il modello di Anthropic"
         )
+        # Licenza CEMS-Floods: l'alluvione è calcolata dalla portata GloFAS.
+        canvas.drawString(18 * mm, 7 * mm, attribuzione_copernicus(anno))
         canvas.restoreState()
 
     doc = SimpleDocTemplate(

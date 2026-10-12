@@ -67,6 +67,14 @@ def allowed_numbers_from_payload(payload: Any) -> set[str]:
     return out
 
 
+def allowed_numbers_from_text(text: str) -> set[str]:
+    """Come :func:`allowed_numbers_from_payload`, ma dal messaggio che il modello
+    ha ricevuto: è quello che `spiegazioni_regione.ingresso` conserva."""
+    return allowed_numbers_from_payload(
+        [float(n.replace(",", ".")) for n in _NUMBER_RE.findall(text)]
+    )
+
+
 # Numeri COMPOSTI scritti in lettere ("settantadue", "ventiquattromila-
 # quattrocentosessantaquattro"): vietati — illeggibili, non verificabili
 # contro il payload, e l'LLM li sbaglia ("ventiquillemila..."). I numeri
@@ -96,6 +104,17 @@ def _garbled_spelled_numbers(text: str) -> list[str]:
         if len(hits) >= 2:
             out.append(word)
     return out
+
+
+# «23.214 aree»: il punto delle migliaia all'italiana. Il numero è 23214, non
+# ventitré virgola due.
+_MIGLIAIA_RE = re.compile(r"^\d{1,3}(?:\.\d{3})+$")
+
+
+def _ammesso(n: str, allowed: set[str]) -> bool:
+    if n in allowed or n.replace(",", ".") in allowed:
+        return True
+    return bool(_MIGLIAIA_RE.match(n)) and n.replace(".", "") in allowed
 
 
 def evaluate_briefing(
@@ -129,13 +148,7 @@ def evaluate_briefing(
         if term in lower:
             violations.append(f"imperativo agli operatori vietato: {term!r}")
 
-    unknown = sorted(
-        {
-            n
-            for n in _NUMBER_RE.findall(text)
-            if n not in allowed_numbers and n.replace(",", ".") not in allowed_numbers
-        }
-    )
+    unknown = sorted({n for n in _NUMBER_RE.findall(text) if not _ammesso(n, allowed_numbers)})
     if unknown:
         violations.append(f"numeri non presenti nell'assessment: {unknown}")
 

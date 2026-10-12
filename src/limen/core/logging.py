@@ -25,6 +25,14 @@ def configure_logging(level: str = "INFO", json_output: bool = False) -> None:
         stream=sys.stdout,
         level=level.upper(),
     )
+    # httpx scrive a INFO ogni richiesta con l'URL intero, query compresa: il
+    # token di EGMS (`?id=`), la chiave FIRMS nel percorso, le firme degli URL
+    # S3 del radar DPC finivano nei log del worker. Gli errori restano: li
+    # riportano le integrazioni, con un'etichetta e senza l'URL.
+    for rumoroso in ("httpx", "httpcore"):
+        logging.getLogger(rumoroso).setLevel(
+            max(logging.WARNING, logging.getLevelName(level.upper()))
+        )
 
     shared: list[Processor] = [
         structlog.contextvars.merge_contextvars,

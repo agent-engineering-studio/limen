@@ -5,8 +5,10 @@ frame (national 1 km rain intensity, 5-minute refresh). AOIs where the
 radar sees rain at/above ``NOWCAST__MIN_INTENSITY_MMH`` on at least
 ``NOWCAST__MIN_PIXELS`` km² get their monitoring workflow run
 immediately instead of waiting for the hourly tick. Alerts flow through
-the normal operational path (escalation, per-cell dedup, channels) —
-the radar only decides *when* to run, never *what* to score.
+the normal operational path (escalation, per-cell dedup, channels).
+The trigger only decides *when* to run; what the flood engine reads from
+the radar is the CUM accumulation of the ObservedRain step (#199), which
+runs in every flood sweep, triggered or hourly.
 
 A cooldown skips AOIs whose latest assessment is fresher than
 ``NOWCAST__COOLDOWN_MINUTES``, so radar triggers and the hourly job

@@ -71,9 +71,18 @@ class FloodScoringEngine(ScoringEngine[FloodBreakdown]):
             else static.flood_hazard_norm
         )
 
+        # La finestra comincia adesso, quindi un nubifragio in corso esce dalla
+        # previsione mentre cade (#199): a Melito la previsione dava 20 mm, il
+        # radar ne aveva misurati 152. L'osservata più la prevista sulle ore
+        # che restano ricompone una finestra della stessa lunghezza; vale la
+        # maggiore delle due letture.
+        rain = dyn.flood_forecast_rain_72h_mm
+        if dyn.flood_rain_observed_mm is not None:
+            rain = max(rain or 0.0, dyn.flood_rain_observed_mm + (dyn.flood_rain_head_mm or 0.0))
+
         soglie = soglie_pioggia(t.pluvial, dyn.flood_rain_quantiles)
         pluvial = pluvial_trigger(
-            dyn.flood_forecast_rain_72h_mm,
+            rain,
             soil_moisture=dyn.soil_moisture_0_7,
             imperviousness=static.imperviousness_norm,
             pluvial=t.pluvial,
@@ -88,19 +97,43 @@ class FloodScoringEngine(ScoringEngine[FloodBreakdown]):
 
         fluvial = fluvial_trigger(dyn.river_discharge_ratio, fluvial=t.fluvial)
 
-        dry_land = susceptibility < t.susceptibility.floor
-        score = 0.0 if dry_land else min(susceptibility * max(pluvial, fluvial), 1.0)
+        # La mappa ISPRA dice dove esce un fiume, non dove un nubifragio allaga
+        # una strada (#198): fuori dalla mappa il ramo pluviale ha una
+        # suscettibilità sua, che parte dal valore di ripiego e sale verso
+        # `max` quanto più la cella è costruita e piana. Dove la mappa c'è
+        # resta lei l'autorità: estendere il termine alle celle mappate
+        # prendeva 8 allagamenti EMS in più in Lombardia al prezzo di falsi
+        # allarmi dal 43 al 49%. Il ramo fluviale non cambia.
+        susc_pioggia = susceptibility
+        cfg = t.pluvial_susceptibility
+        if cfg is not None and static.flood_hazard_norm is None:
+            citta = min(1.0, (static.imperviousness_norm or 0.0) / cfg.impervious_full)
+            piano = (
+                max(0.0, 1.0 - static.slope_deg / cfg.flat_slope_deg)
+                if static.slope_deg is not None
+                else 0.0
+            )
+            susc_pioggia = max(
+                susceptibility, susceptibility + (cfg.max - susceptibility) * citta * piano
+            )
+
+        floor = t.susceptibility.floor
+        da_fiume = 0.0 if susceptibility < floor else susceptibility * fluvial
+        da_pioggia = 0.0 if susc_pioggia < floor else susc_pioggia * pluvial
+        score = min(max(da_fiume, da_pioggia), 1.0)
 
         return RiskScore[FloodBreakdown](
             score=score,
             level=classify_score(score, t.classes),
             breakdown=FloodBreakdown(
                 susceptibility=susceptibility,
+                pluvial_susceptibility=susc_pioggia,
                 pluvial=pluvial,
                 fluvial=fluvial,
                 mapped=static.flood_hazard_norm is not None,
                 discharge_ratio=dyn.river_discharge_ratio,
-                rain_mm=dyn.flood_forecast_rain_72h_mm,
+                rain_mm=rain,
+                rain_observed_mm=dyn.flood_rain_observed_mm,
                 rain_threshold_mm=soglie[0],
                 rain_saturation_mm=soglie[1],
                 post_fire_multiplier=post_fire,

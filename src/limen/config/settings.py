@@ -61,7 +61,9 @@ SLOW_GENERATION_MODELS: frozenset[str] = frozenset({"quality-local", "glm52"})
 # (deterministiche per invariante). Un briefing che impiega mezz'ora è quindi
 # lento, non rotto. `risk_analyst` resta fuori: lo stesso job lo invoca prima
 # del briefing, ma è anche il ruolo che MCP e i percorsi HTTP chiamano.
-ASYNC_GENERATION_ROLES: frozenset[str] = frozenset({"briefing"})
+# Il secondo è `fedelta`, il revisore serale: rilegge spiegazioni già scritte,
+# una alla volta, e nessuno aspetta il suo verdetto.
+ASYNC_GENERATION_ROLES: frozenset[str] = frozenset({"briefing", "fedelta"})
 
 
 class ScoringEngineKind(StrEnum):
@@ -147,6 +149,10 @@ class LLMModels(BaseSettings):
     summarizer: str = "claude-haiku-4-5"
     risk_analyst: str = "claude-haiku-4-5"
     briefing: str = "claude-sonnet-4-6"
+    # Il revisore di fedeltà. Opt-in: il job gira solo se LLM__MODELS__FEDELTA
+    # è dichiarato, e il valore utile su questo server è `glm52` — un modello
+    # di un'altra famiglia rispetto a chi scrive, senza fallback silenzioso.
+    fedelta: str = "claude-haiku-4-5"
 
 
 class LLMSettings(BaseSettings):
@@ -263,6 +269,9 @@ class LLMSettings(BaseSettings):
     # e agli sweep. Default 20→2 UTC (22-4 ora italiana d'estate): chiude
     # prima del lavoro notturno delle 02:00, che è il più pesante del giorno.
     slow_models_window_utc: tuple[int, int] = (20, 2)
+    # Quante spiegazioni il revisore rilegge per sera. Poche: sul modello
+    # lento una revisione sono minuti, e la finestra serale è di sei ore.
+    fedelta_campione: int = Field(default=4, ge=1)
 
     def slow_models_allowed(self, hour_utc: int) -> bool:
         """Se a quest'ora un modello di :data:`SLOW_GENERATION_MODELS` può girare."""
@@ -354,6 +363,13 @@ class SchedulerSettings(BaseSettings):
     # forecast history, partizioni, retention. Le due del mattino perché è
     # dopo l'ultimo sweep della notte e prima del report delle sei.
     nightly_hour_utc: int = Field(default=2, ge=0, le=23)
+    # Il tetto del giorno per l'API pubblica GloFAS (#200), su 10.000: la
+    # notte ne toglie la previsione dei fiumi dello sweep (un nodo con fiume
+    # = una chiamata al giorno, per ogni regione che lo vede) e spende il
+    # resto nella portata ordinaria dei nodi, ~52 chiamate a nodo. A tabella
+    # vuota sono ~150 nodi a notte, poi meno man mano che la previsione
+    # cresce. Il margine di 2.000 è per la previsione delle onde e i rilanci.
+    glofas_chiamate_per_notte: int = Field(default=8000, ge=0)
     # La previsione per cella (+24/+48/+72), quattro volte al giorno e non
     # una: calcolata una volta a notte restava in mappa per 24 ore. Il 7
     # ottobre 2026 dava la Basilicata «molto alto» per l'incendio di sabato
@@ -635,18 +651,60 @@ class TrainingSettings(BaseSettings):
 
 
 class EgmsSettings(BaseSettings):
-    """Copernicus EGMS InSAR product fetch (V2.1)."""
+    """Copernicus EGMS, prodotto Ortho L3: la velocità media del terreno a 100 m.
+
+    Fail-closed. Due credenziali, la prima vince:
+
+    * ``EGMS__SERVICE_KEY`` — il JSON della chiave di servizio CLMS (profilo su
+      land.copernicus.eu → «API Tokens»). Non scade: ogni sync fa le sue
+      ricerche, e il passo notturno sa quando esce una release nuova;
+    * ``EGMS__TOKEN`` — l'``id`` copiato da un link dell'EGMS Explorer. È l'id
+      di una ricerca, e **scade**: va bene per un sync a mano.
+    """
 
     model_config = SettingsConfigDict(extra="ignore")
 
-    # The public download portal is auth-gated; production deployments
-    # set this to an internal mirror or an authenticated proxy. With it
-    # empty the integration degrades gracefully (logs and returns 0).
-    base_url: str = "https://egms.land.copernicus.eu/api/v1"
-    product: Literal["L2a_calibrated", "L3_ortho"] = "L3_ortho"
-    # Cadence is yearly (EGMS releases ~ once per year); the rollover job
-    # only fetches when the registered dataset_version is older than this.
-    refresh_days: int = Field(default=180, ge=1)
+    service_key: SecretStr | None = None
+    token: SecretStr | None = None
+    archive_url: str = "https://egms.land.copernicus.eu/insar-api/archive"
+    #: La finestra della release: cinque anni, una release all'anno.
+    release: str = "2020_2024"
+    #: Dove tenere i GeoTIFF delle tile (~4 MB l'uno, due per tile).
+    cartella: str = "/tmp/limen-egms"
+
+    @property
+    def attivo(self) -> bool:
+        return any(
+            v is not None and bool(v.get_secret_value().strip())
+            for v in (self.service_key, self.token)
+        )
+
+
+class CopernicusSettings(BaseSettings):
+    """L'Early Warning Data Store di Copernicus (EWDS): GloFAS.
+
+    Fail-closed come FIRMS: senza ``COPERNICUS__EWDS_KEY`` la previsione di
+    portata resta sull'API pubblica di Open-Meteo, com'era. La chiave è
+    gratuita (account ECMWF) e la licenza CEMS-Floods va accettata una volta
+    sul sito.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    ewds_url: str = "https://ewds.climate.copernicus.eu/api"
+    ewds_key: SecretStr | None = None
+    #: Dove tenere i file delle corse scaricate (pochi centinaia di KB l'una).
+    cartella: str = "/tmp/limen-ewds"
+    #: Quanto aspettare la coda dell'EWDS prima di rinunciare per questo giro.
+    #: Il download non si interrompe: il file arriva e il giro dopo lo trova.
+    attesa_massima_secondi: int = Field(default=900, ge=60)
+    #: Oltre questa età la corsa salvata non vale più come previsione, e il
+    #: ramo fluviale torna a chiedere a Open-Meteo.
+    eta_massima_giorni: int = Field(default=2, ge=1)
+
+    @property
+    def attivo(self) -> bool:
+        return self.ewds_key is not None and bool(self.ewds_key.get_secret_value())
 
 
 class OpenMeteoSettings(BaseSettings):
@@ -965,6 +1023,7 @@ class Settings(BaseSettings):
     scoring: ScoringSettings = Field(default_factory=ScoringSettings)
     training: TrainingSettings = Field(default_factory=TrainingSettings)
     egms: EgmsSettings = Field(default_factory=EgmsSettings)
+    copernicus: CopernicusSettings = Field(default_factory=CopernicusSettings)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
     openmeteo: OpenMeteoSettings = Field(default_factory=OpenMeteoSettings)
     kg: KgSettings = Field(default_factory=KgSettings)

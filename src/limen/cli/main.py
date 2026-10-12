@@ -15,6 +15,7 @@ Usage:
     limen firms-sync         Ingest NASA FIRMS active-fire hotspots (FIRMS__MAP_KEY).
     limen imperviousness-fetch  Download the CLMS sealed-soil raster (public EEA service).
     limen review-alerts      Sampled manual-review checklist for the alert FAR protocol.
+    limen fedelta-racconti   Revisore serale: le spiegazioni dell'AI sono fedeli ai dati?
     limen serve              Start the FastAPI HTTP server (uvicorn on :8080).
     limen worker             Batch process: scheduler + IoT, no HTTP.
     limen llm-check          Probe the inference engine: model + latency per agent role.
@@ -43,6 +44,7 @@ from limen.cli.calibrate import run as _run_calibrate
 from limen.cli.data_status import run as _run_data_status
 from limen.cli.dpc_bollettini import run as _run_dpc_bollettini
 from limen.cli.effis_sync import run as _run_effis_sync
+from limen.cli.fedelta_racconti import run as _run_fedelta_racconti
 from limen.cli.firms_sync import run as _run_firms_sync
 from limen.cli.forecast import run as _run_forecast
 from limen.cli.forecast_history import run as _run_forecast_history
@@ -51,6 +53,8 @@ from limen.cli.fwi_climatology import run as _run_fwi_climatology
 from limen.cli.geodata import build_subparser as _build_geodata_subparser
 from limen.cli.geodata import run as _run_geodata
 from limen.cli.geoserver_sync import run as _run_geoserver_sync
+from limen.cli.glofas_ewds import run as _run_glofas_ewds
+from limen.cli.glofas_riferimenti import run as _run_glofas_riferimenti
 from limen.cli.imperviousness_fetch import run as _run_imperviousness_fetch
 from limen.cli.ingest_events import run as _run_ingest_events
 from limen.cli.ingest_fire_history import run as _run_ingest_fire_history
@@ -98,8 +102,20 @@ def _build_parser() -> argparse.ArgumentParser:
         help="checklist markdown per la verifica manuale di un campione di alert (#59)",
     )
     sub.add_parser(
+        "fedelta-racconti",
+        help="rilegge un campione di spiegazioni dell'AI e controlla che siano fedeli ai dati",
+    )
+    sub.add_parser(
         "imperviousness-fetch",
         help="scarica il raster CLMS del suolo sigillato dal servizio pubblico EEA",
+    )
+    sub.add_parser(
+        "glofas-riferimenti",
+        help="calcola la portata ordinaria dei nodi GloFAS che ancora non ce l'hanno",
+    )
+    sub.add_parser(
+        "glofas-ewds",
+        help="la stessa portata ordinaria, da un download dello storico GloFAS su Copernicus EWDS",
     )
     sub.add_parser(
         "partitions",
@@ -309,6 +325,9 @@ def main(argv: list[str] | None = None) -> int:
         "jobs": _run_jobs,
         "imperviousness-fetch": _run_imperviousness_fetch,
         "review-alerts": _run_review_alerts,
+        "glofas-riferimenti": _run_glofas_riferimenti,
+        "glofas-ewds": _run_glofas_ewds,
+        "fedelta-racconti": _run_fedelta_racconti,
         "partitions": _run_partitions,
         "seed": _run_seed,
         "seed-comuni": _run_seed_comuni,

@@ -34,6 +34,7 @@ class _FloodClient(Protocol):
         per_node: bool = False,
         reference_percentile: float = ...,
         reference_window_days: int = ...,
+        observed_hours: int = ...,
     ) -> FloodSignals: ...
 
 
@@ -48,6 +49,7 @@ class FloodForecastFetchExecutor(Executor):
         per_node: bool = False,
         reference_percentile: float = DEFAULT_REFERENCE_PERCENTILE,
         reference_window_days: int = DEFAULT_REFERENCE_WINDOW_DAYS,
+        observed_hours: int = 0,
     ) -> None:
         super().__init__(name="FloodForecastFetch")
         self._client: _FloodClient = client if client is not None else OpenMeteoFloodClient()
@@ -61,6 +63,9 @@ class FloodForecastFetchExecutor(Executor):
         # frane, dove il centroide alimenta un bonus opzionale al componente H
         # e cambiarlo sposterebbe i numeri del campione V1 senza un backtest.
         self._per_node = per_node
+        # Le ore della finestra che il radar misura (#199): la previsione per
+        # nodo si somma anche sulle sole ore che restano dopo di esse.
+        self._observed_hours = observed_hours
 
     @handler
     async def run(self, ctx: MonitoringContext) -> MonitoringContext:
@@ -74,6 +79,7 @@ class FloodForecastFetchExecutor(Executor):
             per_node=self._per_node,
             reference_percentile=self._reference_percentile,
             reference_window_days=self._reference_window_days,
+            observed_hours=self._observed_hours,
         )
         log.info(
             "executor.flood_forecast.done",
@@ -93,6 +99,7 @@ class FloodForecastFetchExecutor(Executor):
             coastal_surge_norm=sig.coastal_surge_norm,
             flood_nodes=sig.nodes,
             flood_rain_by_node=sig.rain_by_node,
+            flood_rain_head_by_node=sig.rain_head_by_node,
             flood_river_ratio_by_node=sig.river_ratio_by_node,
         )
 
