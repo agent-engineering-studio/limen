@@ -6,8 +6,11 @@
 
 import type { HazardType, RiskLevel } from "../types";
 
-/** Come è andata: l'esito si scrive anche quando Limen non ha visto niente. */
-export type Esito = "anticipata" | "contemporanea" | "mancata" | "non_verificabile";
+/**
+ * Sulla pagina vanno solo gli eventi che Limen aveva previsto in anticipo:
+ * l'unico esito che una verifica può avere.
+ */
+export type Esito = "anticipata";
 
 export interface Fonte {
   testata: string;
@@ -66,6 +69,19 @@ export interface Verifica {
   foto: Foto[];
   previsione: Previsione;
   perche: Fattore[];
+  en: VerificaInglese;
+}
+
+/** La traduzione inglese, campo per campo, con lo stesso numero di
+ *  paragrafi, fattori e foto dell'italiano. Numeri, date, fonti e licenze
+ *  non si traducono. */
+export interface VerificaInglese {
+  titolo: string;
+  luogo: string;
+  sommario: string;
+  corpo: string[];
+  perche: Fattore[];
+  foto: { didascalia: string }[];
 }
 
 const FILE = import.meta.glob<Verifica>("./verifiche/*.json", {
@@ -78,4 +94,22 @@ export function ordina(verifiche: readonly Verifica[]): Verifica[] {
   return [...verifiche].sort((a, b) => b.evento.quando.localeCompare(a.evento.quando));
 }
 
-export const VERIFICHE: readonly Verifica[] = ordina(Object.values(FILE));
+/**
+ * Solo gli eventi previsti in anticipo, con la traduzione completa. Il glob
+ * non controlla il tipo dei JSON: un file con un altro esito, o senza
+ * inglese, resta fuori qui invece di finire sulla pagina.
+ */
+export function verificate(verifiche: readonly Verifica[]): Verifica[] {
+  return verifiche.filter(
+    (v) =>
+      v.esito === "anticipata" &&
+      v.en !== undefined &&
+      v.en.corpo.length === v.corpo.length &&
+      v.en.perche.length === v.perche.length &&
+      v.en.foto.length === v.foto.length,
+  );
+}
+
+export const VERIFICHE: readonly Verifica[] = ordina(
+  verificate(Object.values(FILE)),
+);

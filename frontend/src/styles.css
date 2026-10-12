@@ -3559,17 +3559,6 @@ html[lang="en"] .app-nav a { white-space: nowrap; }
 .verifica-tag .hz-flood { color: var(--hz-flood); }
 .verifica-tag .hz-wildfire { color: var(--hz-wildfire); }
 .esito-anticipata { color: var(--ok); }
-.esito-contemporanea { color: var(--watch); }
-.esito-mancata { color: var(--warn); }
-.esito-non_verificabile { color: var(--muted); }
-.verifiche-inefficienza {
-  margin-top: 2rem;
-  padding: 1rem 1.25rem;
-  border-left: 3px solid var(--warn);
-  background: color-mix(in srgb, var(--warn) 8%, transparent);
-}
-.verifiche-inefficienza h3 { margin-top: 0; }
-.verifiche-inefficienza ul { padding-left: 1.1rem; }
 .verifica-foto {
   margin: 1.5em 0;
 }

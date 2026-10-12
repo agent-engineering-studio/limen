@@ -1,38 +1,78 @@
-// «Verifiche»: gli eventi dei giornali messi accanto alla previsione di
-// Limen. Diventa un articolo solo l'evento previsto in anticipo — con quante
-// ore, su quali dati e perché. Gli altri non spariscono: finiscono nel
-// riquadro d'inefficienza, contati sul totale, perché una pagina che mostra
-// solo i successi senza dire quanti sono misura la fortuna, non il modello.
+// «Verifiche»: gli eventi dei giornali che Limen aveva previsto in anticipo,
+// con quante ore, su quali dati e perché. Solo quelli: un evento non
+// previsto non ha articolo e non compare sulla pagina. Italiano e inglese:
+// il testo dell'articolo viene dal JSON (`en`), le etichette da qui.
 
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
-import {
-  NON_E_UN_AVVISO_DI_PIENA,
-  copernicusModificato,
-} from "../lib/attribuzioni";
+import { AVVISO_DI_PIENA, copernicusModificato } from "../lib/attribuzioni";
+import { NOMI_PERICOLO } from "../lib/hazard";
+import type { Lingua } from "../lib/i18n";
+import { testi, useLingua, useLocale, useTesti } from "../lib/i18n";
 import { VERIFICHE } from "../content/verifiche";
-import type { Esito, Verifica } from "../content/verifiche";
-import {
-  RISK_COLOR_BY_LEVEL,
-  RISK_LABEL_IT_BY_LEVEL,
-} from "../lib/risk-colors";
-import type { HazardType } from "../types";
+import type { Fattore, Verifica } from "../content/verifiche";
+import { RISK_COLOR_BY_LEVEL, useEtichetteRischio } from "../lib/risk-colors";
 
 const ROUTE = "#/verifiche";
 
-const PERICOLO: Record<HazardType, string> = {
-  landslide: "Frana",
-  flood: "Alluvione",
-  wildfire: "Incendio",
-};
-
-export const ESITO: Record<Esito, string> = {
-  anticipata: "Prevista in anticipo",
-  contemporanea: "Vista mentre accadeva",
-  mancata: "Non prevista",
-  non_verificabile: "Non verificabile",
-};
+const T = testi(
+  {
+    occhiello: "Verifiche",
+    titolo: "Quello che è successo, e quanto prima Limen l'aveva visto",
+    lede: "Frane, alluvioni e incendi riportati dai quotidiani che il sistema aveva previsto nelle ore precedenti.",
+    vuoto: "Nessun evento previsto in anticipo, per ora.",
+    anticipo: "anticipo",
+    tutte: "← Tutte le verifiche",
+    evento: "Evento",
+    pubblicato: "Pubblicato",
+    aggiornato: "aggiornato",
+    anticipoModerato: "Anticipo (≥ moderato)",
+    anticipoAlto: "Anticipo (≥ alto)",
+    classeMax: "Classe prevista massima",
+    sottoModerato: "sotto moderato",
+    primoAvviso: "Primo avviso inviato",
+    nessuno: "nessuno",
+    corse: "Le previsioni che puntavano all'evento",
+    calcolata: "Calcolata il",
+    orizzonte: "Orizzonte",
+    classe: "Classe",
+    punteggio: "Punteggio",
+    perche: "Perché",
+    fonti: "Fonti",
+    prevista: "Prevista in anticipo",
+    ore: (n: number) => `${n} ore`,
+    giorni: (g: number, h: number) =>
+      h === 0 ? `${g} giorni` : `${g} giorni e ${h} ore`,
+  },
+  {
+    occhiello: "Checks",
+    titolo: "What happened, and how early Limen saw it",
+    lede: "Landslides, floods and wildfires reported by Italian newspapers that the system had forecast in the hours before.",
+    vuoto: "No event forecast in advance, for now.",
+    anticipo: "lead time",
+    tutte: "← All checks",
+    evento: "Event",
+    pubblicato: "Published",
+    aggiornato: "updated",
+    anticipoModerato: "Lead time (≥ moderate)",
+    anticipoAlto: "Lead time (≥ high)",
+    classeMax: "Highest forecast class",
+    sottoModerato: "below moderate",
+    primoAvviso: "First alert sent",
+    nessuno: "none",
+    corse: "The forecasts aimed at the event",
+    calcolata: "Computed on",
+    orizzonte: "Horizon",
+    classe: "Class",
+    punteggio: "Score",
+    perche: "Why",
+    fonti: "Sources",
+    prevista: "Forecast in advance",
+    ore: (n: number) => `${n} hours`,
+    giorni: (g: number, h: number) => (h === 0 ? `${g} days` : `${g} days and ${h} hours`),
+  },
+);
 
 /** La verifica chiesta dall'hash: `#/verifiche/<slug>`, o nessuna. */
 export function verificaDaHash(hash: string): string | null {
@@ -41,193 +81,161 @@ export function verificaDaHash(hash: string): string | null {
   return decodeURIComponent(rotta.slice(ROUTE.length + 1)) || null;
 }
 
-function data(iso: string): string {
-  return new Date(iso).toLocaleString("it-IT", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+export function anticipo(ore: number | null, lingua: Lingua = "it"): string {
+  if (ore === null) return "—";
+  const t = T[lingua];
+  if (ore < 48) return t.ore(ore);
+  return t.giorni(Math.floor(ore / 24), ore % 24);
 }
 
-export function anticipo(ore: number | null): string {
-  if (ore === null) return "—";
-  if (ore < 48) return `${ore} ore`;
-  const giorni = Math.floor(ore / 24);
-  const resto = ore % 24;
-  return resto === 0 ? `${giorni} giorni` : `${giorni} giorni e ${resto} ore`;
+/** I testi dell'articolo nella lingua attiva: l'italiano sta alla radice
+ *  del JSON, l'inglese nel blocco `en`. */
+function testo(
+  v: Verifica,
+  lingua: Lingua,
+): { titolo: string; luogo: string; sommario: string; corpo: string[]; perche: Fattore[] } {
+  return lingua === "en"
+    ? v.en
+    : {
+        titolo: v.titolo,
+        luogo: v.evento.luogo,
+        sommario: v.sommario,
+        corpo: v.corpo,
+        perche: v.perche,
+      };
+}
+
+function useData(): (iso: string) => string {
+  const loc = useLocale();
+  return (iso) =>
+    new Date(iso).toLocaleString(loc, {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
 }
 
 function Etichette({ v }: { v: Verifica }): JSX.Element {
+  const { lingua } = useLingua();
+  const t = useTesti(T);
   return (
     <p className="verifica-tag">
-      <span className={`hz-${v.pericolo}`}>{PERICOLO[v.pericolo]}</span>
-      <span className={`esito esito-${v.esito}`}>{ESITO[v.esito]}</span>
-      <span>{v.evento.luogo}</span>
+      <span className={`hz-${v.pericolo}`}>{NOMI_PERICOLO[lingua][v.pericolo]}</span>
+      <span className={`esito esito-${v.esito}`}>{t.prevista}</span>
+      <span>{testo(v, lingua).luogo}</span>
     </p>
   );
 }
 
-/** Solo l'evento previsto in anticipo diventa un articolo. */
-export function pubblicabile(v: Verifica): boolean {
-  return v.esito === "anticipata";
-}
-
-function Inefficienza({
-  verifiche,
-}: {
-  verifiche: readonly Verifica[];
-}): JSX.Element | null {
-  const valutati = verifiche.filter((v) => v.esito !== "non_verificabile");
-  const sfuggiti = valutati.filter((v) => !pubblicabile(v));
-  const ignoti = verifiche.length - valutati.length;
-  if (sfuggiti.length === 0 && ignoti === 0) return null;
-  return (
-    <section className="verifiche-inefficienza" aria-label="Inefficienza">
-      <h3>Inefficienza: eventi che Limen non ha previsto</h3>
-      {sfuggiti.length > 0 ? (
-        <>
-          <p>
-            Eventi non previsti in anticipo: {sfuggiti.length} su{" "}
-            {valutati.length} verificati. Nessun articolo per questi: restano
-            qui, contati, perché sono il limite del sistema.
-          </p>
-          <ul>
-            {sfuggiti.map((v) => (
-              <li key={v.slug}>
-                {new Date(v.evento.quando).toLocaleDateString("it-IT")} ·{" "}
-                {PERICOLO[v.pericolo]} · {v.evento.luogo} —{" "}
-                <span className={`esito esito-${v.esito}`}>
-                  {ESITO[v.esito]}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
-      {ignoti > 0 ? (
-        <p className="exp-note">
-          {ignoti === 1
-            ? "Un evento non è verificabile"
-            : `${ignoti} eventi non sono verificabili`}
-          : fuori dalle regioni coperte o più vecchi dei 14 giorni di storico
-          delle previsioni.
-        </p>
-      ) : null}
-    </section>
-  );
-}
-
-function Indice({
-  verifiche,
-}: {
-  verifiche: readonly Verifica[];
-}): JSX.Element {
-  const articoli = verifiche.filter(pubblicabile);
+function Indice({ verifiche }: { verifiche: readonly Verifica[] }): JSX.Element {
+  const { lingua } = useLingua();
+  const t = useTesti(T);
+  const data = useData();
   return (
     <article className="explainer verifiche">
-      <div className="exp-eyebrow">Verifiche</div>
-      <h2>Quello che è successo, e quello che Limen aveva visto prima</h2>
-      <p className="exp-lede">
-        Frane, alluvioni e incendi riportati dai quotidiani, confrontati con le
-        previsioni che il sistema aveva pubblicato nelle ore precedenti.
-      </p>
-      {articoli.length === 0 ? (
-        <p className="exp-note">Nessun evento previsto in anticipo, per ora.</p>
+      <div className="exp-eyebrow">{t.occhiello}</div>
+      <h2>{t.titolo}</h2>
+      <p className="exp-lede">{t.lede}</p>
+      {verifiche.length === 0 ? (
+        <p className="exp-note">{t.vuoto}</p>
       ) : (
         <ul className="verifiche-lista">
-          {articoli.map((v) => (
-            <li key={v.slug}>
-              <a href={`${ROUTE}/${encodeURIComponent(v.slug)}`}>
-                {v.foto[0] ? (
-                  <img src={v.foto[0].src} alt="" loading="lazy" />
-                ) : null}
-                <div>
-                  <Etichette v={v} />
-                  <h3>{v.titolo}</h3>
-                  <p>{v.sommario}</p>
-                  <p className="exp-note">
-                    {data(v.evento.quando)} · anticipo{" "}
-                    {anticipo(v.previsione.anticipo_ore_moderato)}
-                  </p>
-                </div>
-              </a>
-            </li>
-          ))}
+          {verifiche.map((v) => {
+            const x = testo(v, lingua);
+            return (
+              <li key={v.slug}>
+                <a href={`${ROUTE}/${encodeURIComponent(v.slug)}`}>
+                  {v.foto[0] ? <img src={v.foto[0].src} alt="" loading="lazy" /> : null}
+                  <div>
+                    <Etichette v={v} />
+                    <h3>{x.titolo}</h3>
+                    <p>{x.sommario}</p>
+                    <p className="exp-note">
+                      {data(v.evento.quando)} · {t.anticipo}{" "}
+                      {anticipo(v.previsione.anticipo_ore_moderato, lingua)}
+                    </p>
+                  </div>
+                </a>
+              </li>
+            );
+          })}
         </ul>
       )}
-      <Inefficienza verifiche={verifiche} />
     </article>
   );
 }
 
 function Articolo({ v }: { v: Verifica }): JSX.Element {
+  const { lingua } = useLingua();
+  const t = useTesti(T);
+  const data = useData();
+  const etichetta = useEtichetteRischio();
+  const loc = useLocale();
+  const x = testo(v, lingua);
   const p = v.previsione;
   return (
     <article className="explainer verifiche">
       <p className="exp-note">
-        <a href={ROUTE}>← Tutte le verifiche</a>
+        <a href={ROUTE}>{t.tutte}</a>
       </p>
       <Etichette v={v} />
-      <h2>{v.titolo}</h2>
-      <p className="exp-lede">{v.sommario}</p>
+      <h2>{x.titolo}</h2>
+      <p className="exp-lede">{x.sommario}</p>
       <p className="exp-note">
-        Evento: {data(v.evento.quando)} · Pubblicato {data(v.pubblicato)}
-        {v.aggiornato !== v.pubblicato
-          ? ` · aggiornato ${data(v.aggiornato)}`
-          : ""}
+        {t.evento}: {data(v.evento.quando)} · {t.pubblicato} {data(v.pubblicato)}
+        {v.aggiornato !== v.pubblicato ? ` · ${t.aggiornato} ${data(v.aggiornato)}` : ""}
       </p>
 
-      {v.foto.map((f) => (
-        <figure key={f.src} className="verifica-foto">
-          <img src={f.src} alt={f.didascalia} />
-          <figcaption>
-            {f.didascalia} — {f.autore},{" "}
-            <a href={f.fonte_url} rel="noopener noreferrer" target="_blank">
-              {f.licenza}
-            </a>
-          </figcaption>
-        </figure>
-      ))}
+      {v.foto.map((f, i) => {
+        const didascalia = lingua === "en" ? (v.en.foto[i]?.didascalia ?? f.didascalia) : f.didascalia;
+        return (
+          <figure key={f.src} className="verifica-foto">
+            <img src={f.src} alt={didascalia} />
+            <figcaption>
+              {didascalia} — {f.autore},{" "}
+              <a href={f.fonte_url} rel="noopener noreferrer" target="_blank">
+                {f.licenza}
+              </a>
+            </figcaption>
+          </figure>
+        );
+      })}
 
       <dl className="verifica-numeri">
         <div>
-          <dt>Anticipo (≥ moderato)</dt>
-          <dd>{anticipo(p.anticipo_ore_moderato)}</dd>
+          <dt>{t.anticipoModerato}</dt>
+          <dd>{anticipo(p.anticipo_ore_moderato, lingua)}</dd>
         </div>
         <div>
-          <dt>Anticipo (≥ alto)</dt>
-          <dd>{anticipo(p.anticipo_ore_alto)}</dd>
+          <dt>{t.anticipoAlto}</dt>
+          <dd>{anticipo(p.anticipo_ore_alto, lingua)}</dd>
         </div>
         <div>
-          <dt>Classe prevista massima</dt>
-          <dd>
-            {p.classe_max
-              ? RISK_LABEL_IT_BY_LEVEL[p.classe_max]
-              : "sotto moderato"}
-          </dd>
+          <dt>{t.classeMax}</dt>
+          <dd>{p.classe_max ? etichetta[p.classe_max] : t.sottoModerato}</dd>
         </div>
         <div>
-          <dt>Primo avviso inviato</dt>
-          <dd>{p.allerta_prima ? data(p.allerta_prima) : "nessuno"}</dd>
+          <dt>{t.primoAvviso}</dt>
+          <dd>{p.allerta_prima ? data(p.allerta_prima) : t.nessuno}</dd>
         </div>
       </dl>
 
-      {v.corpo.map((par, i) => (
+      {x.corpo.map((par, i) => (
         <p key={i}>{par}</p>
       ))}
 
       {p.corse.length > 0 ? (
         <>
-          <h3>Le previsioni che puntavano all&apos;evento</h3>
+          <h3>{t.corse}</h3>
           <table className="int-table">
             <thead>
               <tr>
-                <th>Calcolata il</th>
-                <th>Orizzonte</th>
-                <th>Classe</th>
-                <th>Punteggio</th>
+                <th>{t.calcolata}</th>
+                <th>{t.orizzonte}</th>
+                <th>{t.classe}</th>
+                <th>{t.punteggio}</th>
               </tr>
             </thead>
             <tbody>
@@ -240,7 +248,7 @@ function Articolo({ v }: { v: Verifica }): JSX.Element {
                       className="verifica-pallino"
                       style={{ background: RISK_COLOR_BY_LEVEL[c.classe] }}
                     />
-                    {RISK_LABEL_IT_BY_LEVEL[c.classe]}
+                    {etichetta[c.classe]}
                   </td>
                   <td>{c.score.toFixed(2)}</td>
                 </tr>
@@ -250,11 +258,11 @@ function Articolo({ v }: { v: Verifica }): JSX.Element {
         </>
       ) : null}
 
-      {v.perche.length > 0 ? (
+      {x.perche.length > 0 ? (
         <>
-          <h3>Perché</h3>
+          <h3>{t.perche}</h3>
           <ul>
-            {v.perche.map((f) => (
+            {x.perche.map((f) => (
               <li key={f.nome}>
                 <strong>{f.nome}</strong> ({f.valore}): {f.spiegazione}
               </li>
@@ -265,20 +273,20 @@ function Articolo({ v }: { v: Verifica }): JSX.Element {
 
       {v.pericolo === "flood" ? (
         <p className="exp-note">
-          {copernicusModificato(new Date(v.evento.quando).getFullYear())}.{" "}
-          {NON_E_UN_AVVISO_DI_PIENA}
+          {copernicusModificato(new Date(v.evento.quando).getFullYear(), lingua)}.{" "}
+          {AVVISO_DI_PIENA[lingua]}
         </p>
       ) : null}
 
-      <h3>Fonti</h3>
+      <h3>{t.fonti}</h3>
       <ul>
         {v.fonti.map((f) => (
           <li key={f.url}>
             {f.testata},{" "}
-            <a href={f.url} rel="noopener noreferrer" target="_blank">
+            <a href={f.url} rel="noopener noreferrer" target="_blank" lang="it">
               {f.titolo}
             </a>{" "}
-            ({new Date(f.data).toLocaleDateString("it-IT")})
+            ({new Date(f.data).toLocaleDateString(loc)})
           </li>
         ))}
       </ul>
@@ -291,9 +299,7 @@ export default function VerifichePage({
 }: {
   verifiche?: readonly Verifica[];
 }): JSX.Element {
-  const [slug, setSlug] = useState<string | null>(() =>
-    verificaDaHash(window.location.hash),
-  );
+  const [slug, setSlug] = useState<string | null>(() => verificaDaHash(window.location.hash));
 
   useEffect(() => {
     const onHash = (): void => setSlug(verificaDaHash(window.location.hash));
@@ -301,10 +307,6 @@ export default function VerifichePage({
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  // Un link diretto a un evento non previsto porta all'indice, dove sta
-  // nel riquadro d'inefficienza: l'articolo esiste solo per gli anticipi.
-  const scelta = slug
-    ? verifiche.filter(pubblicabile).find((v) => v.slug === slug)
-    : undefined;
+  const scelta = slug ? verifiche.find((v) => v.slug === slug) : undefined;
   return scelta ? <Articolo v={scelta} /> : <Indice verifiche={verifiche} />;
 }

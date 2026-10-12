@@ -1,12 +1,9 @@
-import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import VerifichePage, {
-  anticipo,
-  verificaDaHash,
-} from "../components/VerifichePage";
-import { ordina } from "../content/verifiche";
+import VerifichePage, { anticipo, verificaDaHash } from "../components/VerifichePage";
+import { ordina, verificate } from "../content/verifiche";
 import type { Verifica } from "../content/verifiche";
+import { render, screen } from "../test-utils";
 
 function verifica(over: Partial<Verifica> = {}): Verifica {
   return {
@@ -48,9 +45,15 @@ function verifica(over: Partial<Verifica> = {}): Verifica {
         },
       ],
     },
-    perche: [
-      { nome: "FWI", valore: "48,3", spiegazione: "tempo secco e ventoso" },
-    ],
+    perche: [{ nome: "FWI", valore: "48,3", spiegazione: "tempo secco e ventoso" }],
+    en: {
+      titolo: "Wildfire on the hills of Matera",
+      luogo: "Matera (MT)",
+      sommario: "The fire started in the early afternoon.",
+      corpo: ["Limen had it in the very high class for three days."],
+      perche: [{ nome: "FWI", valore: "48.3", spiegazione: "dry and windy weather" }],
+      foto: [],
+    },
     ...over,
   };
 }
@@ -66,11 +69,13 @@ describe("VerifichePage", () => {
     expect(verificaDaHash("#/regioni/abc")).toBeNull();
   });
 
-  it("scrive l'anticipo in ore, poi in giorni", () => {
+  it("scrive l'anticipo in ore, poi in giorni, nelle due lingue", () => {
     expect(anticipo(null)).toBe("—");
     expect(anticipo(30)).toBe("30 ore");
     expect(anticipo(48)).toBe("2 giorni");
     expect(anticipo(83)).toBe("3 giorni e 11 ore");
+    expect(anticipo(30, "en")).toBe("30 hours");
+    expect(anticipo(83, "en")).toBe("3 days and 11 hours");
   });
 
   it("ordina dalla più recente", () => {
@@ -84,73 +89,42 @@ describe("VerifichePage", () => {
     ]);
   });
 
-  it("l'indice pubblica solo gli anticipi e conta il resto come inefficienza", () => {
-    render(
-      <VerifichePage
-        verifiche={[
-          verifica(),
-          verifica({ slug: "m", titolo: "Frana a Pisticci", esito: "mancata" }),
-          verifica({
-            slug: "c",
-            titolo: "Piena a Bari",
-            esito: "contemporanea",
-          }),
-          verifica({
-            slug: "n",
-            titolo: "Frana fuori copertura",
-            esito: "non_verificabile",
-          }),
-        ]}
-      />,
+  it("tiene solo gli eventi anticipati con l'inglese completo", () => {
+    const mancata = { ...verifica({ slug: "m" }), esito: "mancata" } as unknown as Verifica;
+    const senzaInglese = { ...verifica({ slug: "s" }), en: undefined } as unknown as Verifica;
+    const disallineata = verifica({
+      slug: "d",
+      en: { ...verifica().en, corpo: [] },
+    });
+    expect(verificate([verifica(), mancata, senzaInglese, disallineata]).map((v) => v.slug)).toEqual(
+      ["2026-10-10-incendio-matera"],
     );
-    expect(
-      screen.getByText("Incendio sulle colline di Matera"),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("Frana a Pisticci")).not.toBeInTheDocument();
-    expect(
-      screen.getByText(/non previsti in anticipo: 2 su 3 verificati/),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Non prevista")).toBeInTheDocument();
-    expect(screen.getByText("Vista mentre accadeva")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Un evento non è verificabile/),
-    ).toBeInTheDocument();
   });
 
-  it("senza anticipi lo dice, e l'inefficienza resta", () => {
-    render(<VerifichePage verifiche={[verifica({ esito: "mancata" })]} />);
-    expect(
-      screen.getByText(/Nessun evento previsto in anticipo/),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/non previsti in anticipo: 1 su 1 verificati/),
-    ).toBeInTheDocument();
-  });
-
-  it("l'indice vuoto lo dice, senza riquadro", () => {
-    render(<VerifichePage verifiche={[]} />);
-    expect(
-      screen.getByText(/Nessun evento previsto in anticipo/),
-    ).toBeInTheDocument();
+  it("l'indice mostra gli articoli con l'anticipo, e nient'altro", () => {
+    render(<VerifichePage verifiche={[verifica()]} />);
+    expect(screen.getByText("Incendio sulle colline di Matera")).toBeInTheDocument();
+    expect(screen.getByText(/anticipo 3 giorni e 11 ore/)).toBeInTheDocument();
     expect(screen.queryByLabelText("Inefficienza")).not.toBeInTheDocument();
   });
 
-  it("un link a un evento non previsto apre l'indice, non un articolo", () => {
-    window.location.hash = "#/verifiche/m";
-    render(
-      <VerifichePage verifiche={[verifica({ slug: "m", esito: "mancata" })]} />,
-    );
-    expect(screen.getByLabelText("Inefficienza")).toBeInTheDocument();
-    expect(screen.queryByText("+72 h")).not.toBeInTheDocument();
+  it("l'indice vuoto lo dice", () => {
+    render(<VerifichePage verifiche={[]} />);
+    expect(screen.getByText(/Nessun evento previsto in anticipo/)).toBeInTheDocument();
+  });
+
+  it("in inglese l'indice usa il blocco en", () => {
+    render(<VerifichePage verifiche={[verifica()]} />, { lingua: "en" });
+    expect(screen.getByText("Wildfire on the hills of Matera")).toBeInTheDocument();
+    expect(screen.getByText(/lead time 3 days and 11 hours/)).toBeInTheDocument();
+    expect(screen.queryByText("Incendio sulle colline di Matera")).not.toBeInTheDocument();
   });
 
   it("l'articolo su un'alluvione cita Copernicus e dice che non è un avviso", () => {
     window.location.hash = "#/verifiche/2026-10-10-incendio-matera";
     render(<VerifichePage verifiche={[verifica({ pericolo: "flood" })]} />);
     expect(
-      screen.getByText(
-        /Copernicus Emergency Management Service, 2026.*non sono un avviso di piena/,
-      ),
+      screen.getByText(/Copernicus Emergency Management Service, 2026.*non sono un avviso di piena/),
     ).toBeInTheDocument();
   });
 
@@ -166,8 +140,19 @@ describe("VerifichePage", () => {
     expect(screen.getAllByText("3 giorni e 11 ore")).toHaveLength(2);
     expect(screen.getByText("+72 h")).toBeInTheDocument();
     expect(screen.getByText("FWI")).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Incendio a Matera" }),
-    ).toHaveAttribute("href", "https://example.org/articolo");
+    expect(screen.getByRole("link", { name: "Incendio a Matera" })).toHaveAttribute(
+      "href",
+      "https://example.org/articolo",
+    );
+  });
+
+  it("l'articolo in inglese traduce testo ed etichette, non le fonti", () => {
+    window.location.hash = "#/verifiche/2026-10-10-incendio-matera";
+    render(<VerifichePage verifiche={[verifica()]} />, { lingua: "en" });
+    expect(screen.getByRole("heading", { name: "Wildfire on the hills of Matera" })).toBeInTheDocument();
+    expect(screen.getByText("Lead time (≥ moderate)")).toBeInTheDocument();
+    expect(screen.getAllByText("3 days and 11 hours")).toHaveLength(2);
+    expect(screen.getByText(/dry and windy weather/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Incendio a Matera" })).toBeInTheDocument();
   });
 });

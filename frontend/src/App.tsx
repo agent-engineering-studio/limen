@@ -583,7 +583,6 @@ export function App(): JSX.Element {
           </div>
         ) : page === "verifiche" ? (
           <div className="explainer-area">
-            <SoloItaliano />
             <VerifichePage />
           </div>
         ) : page === "guida" ? (
