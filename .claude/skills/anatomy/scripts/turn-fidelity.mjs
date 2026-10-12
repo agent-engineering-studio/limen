@@ -67,8 +67,8 @@ const subpaths = (d) => {
     }
     return u;
   };
-  
-  
+
+
 const results = { outline: 0, top: 0, faces: 0, compared: 0, skipped: 0, missing: 0, crease: 0 };
 const worstAt = {};
 for (const theta of angles) {
@@ -212,7 +212,7 @@ const subpaths = (d) => {
     }
     return { out, w, h };
   }
-  
+
 const stats = { outline: 0, outlineFine: 0, bands: 0, cells: 0, mismatched: 0, parts: 0 };
 const worst = [];
 for (const theta of angles) {
@@ -359,7 +359,7 @@ const subpaths = (d) => [...(d ?? "").matchAll(/M([^M]*)/g)].map(([, body]) => {
     }
     return { error: worst };
   };
-  
+
 const stats = { body: 0, shine: 0, shade: 0, edges: 0, rings: 0, chunks: 0 };
 const bad = [];
 for (const theta of angles) {

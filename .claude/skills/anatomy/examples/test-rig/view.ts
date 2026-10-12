@@ -96,4 +96,3 @@ export const EZ = minus(at([0, 0, 1]), ORIGIN);
 const fine = (value: number) => Math.round(value * 100) / 100;
 
 export const shift = (x: number, z = 0) => `translate(${fine(EX[0] * x + EZ[0] * z)} ${fine(EX[1] * x + EZ[1] * z)})`;
-

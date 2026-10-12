@@ -330,7 +330,7 @@ In dark, more light only adds. On paper, more light means more ink, and a carele
   - Blend the hues by each part's share of the energy.
   - Tie alpha to energy: `cap·(1 − exp(−1.6·e/cap))`.
   - At low cover, warm the hue toward `EMBER` and scale alpha by `inkOf(hue)/inkOf(ember)`, so the ink stays the same.
-  
+
   With that, the window's ink fell monotonically from 1894 to 155 on the cut.
 - **Hand-offs are plain premultiplied mixes.** The afterburner's jet has two copies, dry blue and lit warm, crossfaded with `mix(blue, warm, lift)`. A `max(alpha)` cover there doubled the dry jet's ink. Also gate each copy so it can't pick up the other's terms: the dry shock disc leaked into the warm copy as a cream patch.
 - **Envelopes that multiply can rise during a fade.** If a first-light envelope is still rising while the effect's own edge falls, the fade-out brightens: the tokamak did this when Home was pressed in its first half second. Freeze first-light growth while the effect is falling.
@@ -344,7 +344,7 @@ A glow on white with nothing around it reads as a stain. Give it the ground it r
   - the foundry's sooted bore tones (`--fd-bore-*-sooted`, a `color-mix` of `--anatomy-shade-0` with `--fd-soot-ink: #2f2a25`);
   - the glory hole's `--gf-void` and `--gf-bore`;
   - the reactor's water-column gradient (`--rx-water-top`, `-mid`, `-deep`, from `#edf2f4` to `#c9d7e0`).
-  
+
   In dark the same tokens are set to `inherit`. All four shade tones stay, so the inside still has form and reads as refractory, soot or deep water rather than a hole.
 - **The ground takes the light's tint, live.** The same tokens `color-mix` toward the light's hue by a variable the loop writes: `--ab-flame` at 30% on faces and 55% on lines and back plates, `--tk-cold-mix` for the violet of breakdown. The SVG ground then warms with the flame even without WebGL.
 - **The shader's ground equals the SVG's.** Where the shader paints an opaque cavity (the glory hole's `holeOf = overInk(emberInk(t,1.), vec4(SOOT,1.))`), read the token rather than retyping it. The foundry adds a probe path, sets its fill to each `var(--fd-…)`, reads `getComputedStyle(probe).fill` and passes the result as a `fixed` uniform (`paintOf` in its `mount.ts`).
