@@ -168,6 +168,23 @@ async def test_finished_since_and_its_degradation(monkeypatch: pytest.MonkeyPatc
 
 
 # ---------------------------------------------------------------------------
+# Corse interrotte
+# ---------------------------------------------------------------------------
+async def test_chiudi_interrotte_conta_le_righe_chiuse(monkeypatch: pytest.MonkeyPatch) -> None:
+    conn = _Conn(status="UPDATE 3")
+    _use(monkeypatch, conn)
+    assert await repo.chiudi_interrotte(heartbeat_job="limen-worker-heartbeat") == 3
+    _sql, args = conn.executed[0]
+    # L'host di chi chiama è escluso: le sue corse non sono interrotte.
+    assert args == (repo._hostname(), "limen-worker-heartbeat")
+
+
+async def test_chiudi_interrotte_degrada_a_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    _broken(monkeypatch)
+    assert await repo.chiudi_interrotte(heartbeat_job="limen-worker-heartbeat") == 0
+
+
+# ---------------------------------------------------------------------------
 # Retention
 # ---------------------------------------------------------------------------
 async def test_purge_counts_the_deleted_rows(monkeypatch: pytest.MonkeyPatch) -> None:
