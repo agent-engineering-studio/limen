@@ -1,5 +1,7 @@
 import { useEffect } from "react";
 
+import { testi, useLingua } from "./i18n";
+
 // Buy Me a Coffee: il pulsante galleggiante in basso a destra.
 //
 // Lo script ufficiale aspetta `DOMContentLoaded` su `window` e legge i suoi
@@ -14,20 +16,33 @@ import { useEffect } from "react";
 export const BMC_SLUG = "f9t3zol";
 export const BMC_PAGINA = `https://www.buymeacoffee.com/${BMC_SLUG}`;
 
+const TESTI = testi(
+  {
+    description: "Sostieni Limen su Buy Me a Coffee",
+    message:
+      "Limen è gratuito e aperto a tutti. Se ti è utile, offrici un caffè: tiene acceso il server.",
+  },
+  {
+    description: "Support Limen on Buy Me a Coffee",
+    message:
+      "Limen is free and open to everyone. If you find it useful, buy us a coffee: it keeps the server running.",
+  },
+);
+
 const ATTRIBUTI: Record<string, string> = {
   name: "BMC-Widget",
   cfasync: "false",
   id: BMC_SLUG,
-  description: "Sostieni Limen su Buy Me a Coffee",
-  message:
-    "Limen è gratuito e aperto a tutti. Se ti è utile, offrici un caffè: tiene acceso il server.",
   color: "#FF813F",
   position: "Right",
   x_margin: "18",
   y_margin: "18",
 };
 
+// Il widget legge il messaggio una volta, al caricamento: cambiare lingua
+// dopo non lo riscrive, ed è un fumetto che compare per pochi secondi.
 export function useBuyMeACoffee(attivo: boolean): void {
+  const { lingua } = useLingua();
   useEffect(() => {
     const pulsante = document.getElementById("bmc-wbtn");
     if (pulsante) {
@@ -38,8 +53,8 @@ export function useBuyMeACoffee(attivo: boolean): void {
     const script = document.createElement("script");
     script.src = "https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js";
     script.async = true;
-    for (const [k, v] of Object.entries(ATTRIBUTI)) script.dataset[k] = v;
+    for (const [k, v] of Object.entries({ ...ATTRIBUTI, ...TESTI[lingua] })) script.dataset[k] = v;
     script.onload = () => window.dispatchEvent(new Event("DOMContentLoaded"));
     document.body.appendChild(script);
-  }, [attivo]);
+  }, [attivo, lingua]);
 }

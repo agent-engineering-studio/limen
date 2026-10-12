@@ -5,12 +5,22 @@
 // nazionali e regionali. Limen pubblica punteggi calcolati dalla portata
 // GloFAS (alluvione) e, da CEMS Fire, il confronto con l'FWI ufficiale.
 
-/** L'anno della notizia è quello in cui la pagina mostra i dati. */
+import type { Lingua } from "./i18n";
+
+/** L'anno della notizia è quello in cui la pagina mostra i dati. In inglese
+ *  la formula è quella che la licenza scrive. */
 export function copernicusModificato(
   anno: number = new Date().getFullYear(),
+  lingua: Lingua = "it",
 ): string {
-  return `Contiene informazioni modificate del Copernicus Emergency Management Service, ${anno}`;
+  return lingua === "it"
+    ? `Contiene informazioni modificate del Copernicus Emergency Management Service, ${anno}`
+    : `Contains modified Copernicus Emergency Management Service information, ${anno}`;
 }
 
-export const NON_E_UN_AVVISO_DI_PIENA =
-  "I dati GloFAS non sono un avviso di piena: l'allertamento spetta alle autorità nazionali e regionali.";
+export const AVVISO_DI_PIENA: Record<Lingua, string> = {
+  it: "I dati GloFAS non sono un avviso di piena: l'allertamento spetta alle autorità nazionali e regionali.",
+  en: "GloFAS data are not a flood warning: issuing warnings is the responsibility of national and regional authorities.",
+};
+
+export const NON_E_UN_AVVISO_DI_PIENA = AVVISO_DI_PIENA.it;

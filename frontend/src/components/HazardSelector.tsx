@@ -8,7 +8,8 @@ import type { JSX } from "react";
 // scelta non esiste: né fra i pericoli, né fra un pericolo e la vista
 // d'insieme, che di un solo pericolo sarebbe quel pericolo.
 
-import { useHazard } from "../lib/hazard";
+import { useHazard, useNomePericolo } from "../lib/hazard";
+import { testi, useLingua, useTesti, type Lingua } from "../lib/i18n";
 import type { HazardType } from "../types";
 
 /** Il tono della riga: lo stesso del verdetto, che decide se agire. */
@@ -25,18 +26,31 @@ export interface RigaPericolo {
   vecchio?: boolean;
 }
 
-/** F/A/I: le stesse lettere dei chip nella lista dei comuni. */
-export const LETTERA: Record<HazardType, string> = {
-  landslide: "F",
-  flood: "A",
-  wildfire: "I",
+/** F/A/I: le stesse lettere dei chip nella lista dei comuni. In inglese
+ *  L/F/W, le iniziali di Landslide, Flood, Wildfire. */
+export const LETTERE: Record<Lingua, Record<HazardType, string>> = {
+  it: { landslide: "F", flood: "A", wildfire: "I" },
+  en: { landslide: "L", flood: "F", wildfire: "W" },
 };
 
-const BADGE: Record<TonoPericolo, string> = {
-  alert: "alta+",
-  watch: "moderata",
-  quiet: "nessuna",
-};
+export const LETTERA: Record<HazardType, string> = LETTERE.it;
+
+const T = testi(
+  {
+    gruppo: "Tipo di pericolo",
+    tutti: "Tutti i pericoli",
+    tuttiTitolo: "Classe peggiore fra tutti i pericoli, in ogni cella",
+    tuttiDettaglio: "il peggiore in ogni cella",
+    badge: { alert: "alta+", watch: "moderata", quiet: "nessuna" } as Record<TonoPericolo, string>,
+  },
+  {
+    gruppo: "Hazard type",
+    tutti: "All hazards",
+    tuttiTitolo: "Worst class across all hazards, in each cell",
+    tuttiDettaglio: "the worst in each cell",
+    badge: { alert: "high+", watch: "moderate", quiet: "none" },
+  },
+);
 
 /** Ordine fisso: una riga che cambia posto a ogni aggiornamento non si
  *  ritrova, e la gravità la dice già il badge. */
@@ -48,6 +62,9 @@ export function HazardSelector({
   righe?: Partial<Record<HazardType, RigaPericolo>>;
 } = {}): JSX.Element | null {
   const { available, view, select } = useHazard();
+  const { lingua } = useLingua();
+  const t = useTesti(T);
+  const nome = useNomePericolo();
 
   if (available.length < 2) {
     return null;
@@ -57,39 +74,40 @@ export function HazardSelector({
   );
 
   return (
-    <div className="hazard-selector" role="group" aria-label="Tipo di pericolo">
+    <div className="hazard-selector" role="group" aria-label={t.gruppo}>
       <button
         type="button"
         className={`hz-riga ${view === "multi" ? "on" : ""}`}
         aria-pressed={view === "multi"}
-        aria-label="Tutti i pericoli"
+        aria-label={t.tutti}
         onClick={() => select("multi")}
-        title="Classe peggiore fra tutti i pericoli, in ogni cella"
+        title={t.tuttiTitolo}
       >
         <span className="hz-lettera is-tutti" aria-hidden>
           ∑
         </span>
         <span className="hz-testo">
-          <span className="hz-nome">Tutti i pericoli</span>
-          <span className="hz-dettaglio">il peggiore in ogni cella</span>
+          <span className="hz-nome">{t.tutti}</span>
+          <span className="hz-dettaglio">{t.tuttiDettaglio}</span>
         </span>
       </button>
       {pericoli.map((h) => {
         const r = righe[h.hazard];
+        const etichetta = nome(h.hazard);
         return (
           <button
             key={h.hazard}
             type="button"
             className={`hz-riga ${h.hazard === view ? "on" : ""}`}
             aria-pressed={h.hazard === view}
-            aria-label={h.label_it}
+            aria-label={etichetta}
             onClick={() => select(h.hazard)}
           >
             <span className={`hz-lettera hz-${h.hazard}`} aria-hidden>
-              {LETTERA[h.hazard] ?? h.label_it.charAt(0)}
+              {LETTERE[lingua][h.hazard] ?? etichetta.charAt(0)}
             </span>
             <span className="hz-testo">
-              <span className="hz-nome">{h.label_it}</span>
+              <span className="hz-nome">{etichetta}</span>
               {r ? (
                 <span className="hz-dettaglio">
                   {r.dettaglio}
@@ -107,7 +125,7 @@ export function HazardSelector({
                 <span className={`hz-cifra mono ${r.tono === "quiet" ? "is-quiet" : ""}`}>
                   {r.cifra}
                 </span>
-                <span className={`hz-badge tone-${r.tono}`}>{BADGE[r.tono]}</span>
+                <span className={`hz-badge tone-${r.tono}`}>{t.badge[r.tono]}</span>
               </span>
             ) : null}
           </button>

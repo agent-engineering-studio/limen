@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import RegioniPage, { attacco, regioneDaHash } from "../components/RegioniPage";
 import { defaultApiClient } from "../lib/api-client";
+import { render as renderConLingua } from "../test-utils";
 import type { RegioneMonitorata } from "../types";
 
 const geom = { type: "Polygon" as const, coordinates: [[[7, 44], [8, 44], [8, 45], [7, 44]]] };
@@ -105,6 +106,27 @@ describe("RegioniPage", () => {
     vi.spyOn(defaultApiClient, "getRegioni").mockRejectedValue(new Error("giù"));
     render(<RegioniPage />);
     expect(await screen.findByRole("alert")).toBeTruthy();
+  });
+});
+
+describe("RegioniPage in inglese", () => {
+  it("traduce tutto intorno al racconto, che resta quello del backend", async () => {
+    vi.spyOn(defaultApiClient, "getRegioni").mockResolvedValue({ regioni: [PIEMONTE, MOLISE] });
+    const { container } = renderConLingua(<RegioniPage />, { lingua: "en" });
+
+    expect(await screen.findByText("Piemonte")).toBeTruthy();
+    const testo = container.textContent ?? "";
+    expect(screen.getByRole("heading", { name: "Regions to watch" })).toBeTruthy();
+    expect(testo).toContain("Floods · very high");
+    expect(testo).toContain("Floods 35 areas in the high class now");
+    expect(testo).toContain("today none · tomorrow not issued yet");
+    expect(testo).toContain("Main driver: forecast rainfall");
+    expect(testo).toContain("not the warning");
+    expect(testo).toContain("no signal");
+    expect(screen.getByRole("link", { name: "Download the report (PDF)" })).toBeTruthy();
+    // Il racconto dell'AI arriva in italiano dal backend e non si traduce qui.
+    expect(testo).toContain("In Piemonte è attesa pioggia molto forte.");
+    expect(testo).not.toContain("Allerta ufficiale");
   });
 });
 

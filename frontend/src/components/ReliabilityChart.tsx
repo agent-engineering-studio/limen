@@ -3,23 +3,68 @@ import type { JSX } from "react";
 // Gated sui dati: finché non ci sono abbastanza eventi reali mostra uno stato
 // esplicito "dati insufficienti". Non autoritativo — solo diagnostica.
 
+import { testi, useTesti } from "../lib/i18n";
 import type { ReliabilityResponse } from "../types";
 
 const P = { w: 240, h: 240, m: 34 };
+
+const T = testi(
+  {
+    insufficienti: (min: number, n: number) => (
+      <>
+        Dati insufficienti per la curva di calibrazione: servono almeno <strong>{min}</strong>{" "}
+        frane reali nella finestra, finora <strong>{n}</strong>. Il grafico comparirà quando se ne
+        accumuleranno — è ciò che dice se «quando l&apos;IA stima 30%, franano davvero ~30 casi su
+        100».
+      </>
+    ),
+    titolo: "Curva di calibrazione del modello IA",
+    desc:
+      "Probabilità prevista (asse X) contro frequenza reale osservata (asse Y). La diagonale " +
+      "tratteggiata è la calibrazione perfetta: più i punti le stanno vicino, meglio l'IA è " +
+      "calibrata.",
+    punto: (previsto: string, osservato: string, n: number) =>
+      `previsto ${previsto}% → osservato ${osservato}% (${n} celle)`,
+    asseX: "probabilità prevista",
+    asseY: "frequenza osservata",
+    didascalia: (n: number) =>
+      `Diagonale = calibrazione perfetta. Punti sopra la diagonale: l'IA sottostima; sotto: ` +
+      `sovrastima. (${n} frane reali nella finestra.)`,
+  },
+  {
+    insufficienti: (min: number, n: number) => (
+      <>
+        Not enough data for the calibration curve: at least <strong>{min}</strong> real landslides
+        are needed in the window, so far <strong>{n}</strong>. The chart will appear once enough
+        accumulate — it is what tells whether «when the AI estimates 30%, about 30 cases in 100
+        actually fail».
+      </>
+    ),
+    titolo: "Calibration curve of the AI model",
+    desc:
+      "Predicted probability (X axis) against observed real frequency (Y axis). The dashed " +
+      "diagonal is perfect calibration: the closer the points are to it, the better calibrated " +
+      "the AI is.",
+    punto: (previsto: string, osservato: string, n: number) =>
+      `predicted ${previsto}% → observed ${osservato}% (${n} cells)`,
+    asseX: "predicted probability",
+    asseY: "observed frequency",
+    didascalia: (n: number) =>
+      `Diagonal = perfect calibration. Points above the diagonal: the AI underestimates; below: ` +
+      `it overestimates. (${n} real landslides in the window.)`,
+  },
+);
 
 export default function ReliabilityChart({
   data,
 }: {
   data: ReliabilityResponse;
 }): JSX.Element {
+  const t = useTesti(T);
   if (!data.sufficient) {
     return (
       <p className="shadow-muted" role="note">
-        Dati insufficienti per la curva di calibrazione: servono almeno{" "}
-        <strong>{data.min_positives}</strong> frane reali nella finestra, finora{" "}
-        <strong>{data.n_positives}</strong>. Il grafico comparirà quando se ne
-        accumuleranno — è ciò che dice se «quando l&apos;IA stima 30%, franano
-        davvero ~30 casi su 100».
+        {t.insufficienti(data.min_positives, data.n_positives)}
       </p>
     );
   }
@@ -32,12 +77,8 @@ export default function ReliabilityChart({
   return (
     <figure className="sci-chart">
       <svg viewBox={`0 0 ${P.w} ${P.h}`} role="img" aria-labelledby="rel-t rel-d">
-        <title id="rel-t">Curva di calibrazione del modello IA</title>
-        <desc id="rel-d">
-          Probabilità prevista (asse X) contro frequenza reale osservata (asse
-          Y). La diagonale tratteggiata è la calibrazione perfetta: più i punti
-          le stanno vicino, meglio l&apos;IA è calibrata.
-        </desc>
+        <title id="rel-t">{t.titolo}</title>
+        <desc id="rel-d">{t.desc}</desc>
         {/* assi */}
         <line x1={P.m} y1={P.m} x2={P.m} y2={P.m + ih} stroke="#3a4655" />
         <line x1={P.m} y1={P.m + ih} x2={P.m + iw} y2={P.m + ih} stroke="#3a4655" />
@@ -59,11 +100,17 @@ export default function ReliabilityChart({
             r={4}
             fill="#7fa7e8"
           >
-            <title>{`previsto ${(b.predicted_mean * 100).toFixed(0)}% → osservato ${(b.observed_freq * 100).toFixed(0)}% (${b.count} celle)`}</title>
+            <title>
+              {t.punto(
+                (b.predicted_mean * 100).toFixed(0),
+                (b.observed_freq * 100).toFixed(0),
+                b.count,
+              )}
+            </title>
           </circle>
         ))}
         <text x={P.m + iw / 2} y={P.h - 6} fontSize={11} textAnchor="middle" fill="#94a3b4">
-          probabilità prevista
+          {t.asseX}
         </text>
         <text
           x={12}
@@ -73,14 +120,10 @@ export default function ReliabilityChart({
           fill="#94a3b4"
           transform={`rotate(-90 12 ${P.m + ih / 2})`}
         >
-          frequenza osservata
+          {t.asseY}
         </text>
       </svg>
-      <figcaption className="exp-note">
-        Diagonale = calibrazione perfetta. Punti sopra la diagonale: l&apos;IA
-        sottostima; sotto: sovrastima. ({data.n_positives} frane reali nella
-        finestra.)
-      </figcaption>
+      <figcaption className="exp-note">{t.didascalia(data.n_positives)}</figcaption>
     </figure>
   );
 }

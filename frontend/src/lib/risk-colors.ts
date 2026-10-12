@@ -17,6 +17,7 @@
 // readable without colour vision.
 
 import type { HazardType, RiskLevel } from "../types";
+import { useLingua, type Lingua } from "./i18n";
 
 export interface RiskClass {
   level: RiskLevel;
@@ -92,6 +93,17 @@ export const RISK_LABEL_IT_BY_LEVEL: Record<RiskLevel, string> =
     RiskLevel,
     string
   >;
+
+/** I nomi delle cinque classi nelle due lingue. */
+export const RISK_LABEL_BY_LEVEL: Record<Lingua, Record<RiskLevel, string>> = {
+  it: RISK_LABEL_IT_BY_LEVEL,
+  en: { None: "None", Low: "Low", Moderate: "Moderate", High: "High", VeryHigh: "Very high" },
+};
+
+/** I nomi delle classi nella lingua attiva. */
+export function useEtichetteRischio(): Record<RiskLevel, string> {
+  return RISK_LABEL_BY_LEVEL[useLingua().lingua];
+}
 
 /**
  * MapLibre `match` expression for paint-fill-color binding against a
