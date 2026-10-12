@@ -129,3 +129,39 @@ describe("ContributoEsperto", () => {
     );
   });
 });
+
+describe("ContributoEsperto in inglese", () => {
+  it("modulo, consenso ed errori in inglese; il payload non cambia", async () => {
+    const invia = vi
+      .spyOn(defaultApiClient, "inviaContributo")
+      .mockRejectedValueOnce(new ApiClientError("x", 422, null))
+      .mockResolvedValueOnce({ ricevuto: true });
+    render(<ContributoEsperto cellId={CELLA} hazard="wildfire" />, { lingua: "en" });
+
+    fireEvent.click(screen.getByRole("button", { name: /Are you an expert\?/ }));
+    const aperto = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(aperto + 10_000);
+    expect(screen.getByRole("option", { name: "There is a landslide missing from the data" })).toBeTruthy();
+    const testo = screen.getByLabelText("What you see");
+    fireEvent.change(testo, { target: { value: "short" } });
+    expect(screen.getByText("15 more characters")).toBeTruthy();
+    fireEvent.change(testo, {
+      target: { value: "The slope is in clay and moved in 2019." },
+    });
+    fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Mary Red" } });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "mary@example.org" } });
+    fireEvent.click(screen.getByLabelText(/consent to the processing of my data/));
+    expect(screen.getByText(/Limen does not store or publish them/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Send the contribution" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/^Check the fields/);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send the contribution" }));
+    expect(await screen.findByText(/your contribution has been emailed/)).toBeTruthy();
+    const body = invia.mock.calls[1]![0];
+    expect(body.tipo).toBe("valutazione");
+    expect(body.hazard).toBe("wildfire");
+    expect(body.nome).toBe("Mary Red");
+    expect(body.consenso).toBe(true);
+  });
+});

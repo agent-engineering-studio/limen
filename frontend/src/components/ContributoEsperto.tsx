@@ -9,15 +9,121 @@ import { useRef, useState } from "react";
 import type { FormEvent, JSX } from "react";
 
 import { ApiClientError, defaultApiClient } from "../lib/api-client";
+import { testi, useTesti } from "../lib/i18n";
 import type { HazardType, TipoContributo } from "../types";
 
-const TIPI: ReadonlyArray<readonly [TipoContributo, string]> = [
-  ["valutazione", "La valutazione di questa cella non torna"],
-  ["frana_non_censita", "C'è una frana che non è nei dati"],
-  ["pesi_soglie", "Un peso o una soglia da rivedere"],
-  ["mitigazione", "C'è un'opera di mitigazione"],
-  ["altro", "Altro"],
+const ORDINE_TIPI: readonly TipoContributo[] = [
+  "valutazione",
+  "frana_non_censita",
+  "pesi_soglie",
+  "mitigazione",
+  "altro",
 ];
+
+const T = testi(
+  {
+    tipi: {
+      valutazione: "La valutazione di questa cella non torna",
+      frana_non_censita: "C'è una frana che non è nei dati",
+      pesi_soglie: "Un peso o una soglia da rivedere",
+      mitigazione: "C'è un'opera di mitigazione",
+      altro: "Altro",
+    } as Record<TipoContributo, string>,
+    errori: {
+      e429: "Troppi invii in poco tempo: riprova fra un'ora.",
+      e422: "Controlla i campi: il testo deve avere almeno 20 caratteri, l'email deve essere valida, i link devono iniziare con http:// o https://, e serve il nome o il profilo LinkedIn.",
+      e404: "Questa cella non risulta più sulla mappa: ricarica la pagina.",
+      generico: "Il contributo non è partito. Riprova fra qualche minuto.",
+    },
+    sezione: "Contributo di un esperto",
+    apri: "Sei un esperto? Correggi questa valutazione",
+    grazie:
+      "Grazie: il contributo è arrivato per mail a chi cura Limen, insieme ai " +
+      "numeri di questa cella. Se serve un chiarimento ti scriverà all'indirizzo " +
+      "che hai lasciato.",
+    titolo: "Il tuo contributo su questa cella",
+    nota:
+      "Conosci questo territorio? Dicci cosa non torna e da dove lo sai. Non " +
+      "serve saper programmare: il contributo arriva per mail a chi cura Limen " +
+      "insieme ai numeri che stai guardando, e lo legge una persona prima che " +
+      "cambi qualcosa.",
+    tipo: "Di cosa si tratta",
+    testo: "Cosa vedi",
+    testoEsempio:
+      "Per esempio: il versante è in argille e ha avuto un movimento nel 2019, la classe bassa mi sembra sottostimata.",
+    mancano: (n: number) => `ancora ${n} caratteri`,
+    fonte: "Fonte (facoltativa)",
+    fonteEsempio: "https:// link a pubblicazione, relazione o carta",
+    nome: "Nome e cognome",
+    linkedin: "Profilo LinkedIn (in alternativa al nome)",
+    email: "Email",
+    affiliazione: "Dipartimento o ente (facoltativo)",
+    affiliazioneEsempio: "es. dipartimento universitario, ufficio tecnico comunale, studio",
+    sitoWeb: "Sito web",
+    consenso:
+      "Ho letto la nota qui sotto e acconsento al trattamento dei dati per " +
+      "questo contributo",
+    privacy:
+      "Nome, profilo, dipartimento ed email viaggiano solo nella mail a chi " +
+      "cura Limen, per ricontattarti su questo contributo: Limen non li salva " +
+      "e non li pubblica. Nessun allegato: la fonte è un link.",
+    invio: "invio…",
+    invia: "Invia il contributo",
+    annulla: "annulla",
+  },
+  {
+    tipi: {
+      valutazione: "The assessment of this cell is wrong",
+      frana_non_censita: "There is a landslide missing from the data",
+      pesi_soglie: "A weight or threshold to review",
+      mitigazione: "There is a mitigation work",
+      altro: "Other",
+    },
+    errori: {
+      e429: "Too many submissions in a short time: try again in an hour.",
+      e422: "Check the fields: the text needs at least 20 characters, the email must be valid, links must start with http:// or https://, and a name or LinkedIn profile is required.",
+      e404: "This cell is no longer on the map: reload the page.",
+      generico: "The contribution was not sent. Try again in a few minutes.",
+    },
+    sezione: "Expert contribution",
+    apri: "Are you an expert? Correct this assessment",
+    grazie:
+      "Thank you: your contribution has been emailed to the Limen maintainers, " +
+      "together with this cell's figures. If they need clarification they will " +
+      "write to the address you left.",
+    titolo: "Your contribution on this cell",
+    nota:
+      "Do you know this area? Tell us what is wrong and how you know. No " +
+      "coding needed: the contribution is emailed to the Limen maintainers " +
+      "together with the figures you are looking at, and a person reads it " +
+      "before anything changes.",
+    tipo: "What is it about",
+    testo: "What you see",
+    testoEsempio:
+      "For example: the slope is in clay and moved in 2019, the low class looks underestimated to me.",
+    mancano: (n: number) => `${n} more ${n === 1 ? "character" : "characters"}`,
+    fonte: "Source (optional)",
+    fonteEsempio: "https:// link to a publication, report or map",
+    nome: "Full name",
+    linkedin: "LinkedIn profile (instead of the name)",
+    email: "Email",
+    affiliazione: "Department or organisation (optional)",
+    affiliazioneEsempio: "e.g. university department, municipal technical office, firm",
+    sitoWeb: "Website",
+    consenso:
+      "I have read the note below and consent to the processing of my data for " +
+      "this contribution",
+    privacy:
+      "Name, profile, department and email travel only in the email to the " +
+      "Limen maintainers, so they can contact you about this contribution: " +
+      "Limen does not store or publish them. No attachments: the source is a link.",
+    invio: "sending…",
+    invia: "Send the contribution",
+    annulla: "cancel",
+  },
+);
+
+type Testi = (typeof T)["it"];
 
 const MIN_TESTO = 20;
 // Gli stessi vincoli del server, così il browser ferma prima quello che il
@@ -32,14 +138,13 @@ const ATTESA_MINIMA_MS = 6000;
 
 type Stato = "chiuso" | "aperto" | "invio" | "inviato";
 
-function messaggioErrore(e: unknown): string {
+function messaggioErrore(e: unknown, t: Testi): string {
   if (e instanceof ApiClientError) {
-    if (e.status === 429) return "Troppi invii in poco tempo: riprova fra un'ora.";
-    if (e.status === 422)
-      return "Controlla i campi: il testo deve avere almeno 20 caratteri, l'email deve essere valida, i link devono iniziare con http:// o https://, e serve il nome o il profilo LinkedIn.";
-    if (e.status === 404) return "Questa cella non risulta più sulla mappa: ricarica la pagina.";
+    if (e.status === 429) return t.errori.e429;
+    if (e.status === 422) return t.errori.e422;
+    if (e.status === 404) return t.errori.e404;
   }
-  return "Il contributo non è partito. Riprova fra qualche minuto.";
+  return t.errori.generico;
 }
 
 function vuotoANull(v: string): string | null {
@@ -55,7 +160,9 @@ export default function ContributoEsperto({
   hazard: HazardType | null;
 }): JSX.Element {
   const [stato, setStato] = useState<Stato>("chiuso");
-  const [errore, setErrore] = useState<string | null>(null);
+  // L'errore e non il messaggio: il messaggio segue la lingua scelta.
+  const [errore, setErrore] = useState<{ e: unknown } | null>(null);
+  const t = useTesti(T);
   const apertoAlle = useRef(0);
 
   const [tipo, setTipo] = useState<TipoContributo>("valutazione");
@@ -70,7 +177,7 @@ export default function ContributoEsperto({
 
   if (stato === "chiuso") {
     return (
-      <section className="contributo" aria-label="Contributo di un esperto">
+      <section className="contributo" aria-label={t.sezione}>
         <button
           type="button"
           className="contributo-apri"
@@ -79,7 +186,7 @@ export default function ContributoEsperto({
             setStato("aperto");
           }}
         >
-          Sei un esperto? Correggi questa valutazione
+          {t.apri}
         </button>
       </section>
     );
@@ -87,11 +194,9 @@ export default function ContributoEsperto({
 
   if (stato === "inviato") {
     return (
-      <section className="contributo" aria-label="Contributo di un esperto">
+      <section className="contributo" aria-label={t.sezione}>
         <p className="verdict verdict-ok" role="status">
-          Grazie: il contributo è arrivato per mail a chi cura Limen, insieme ai
-          numeri di questa cella. Se serve un chiarimento ti scriverà all'indirizzo
-          che hai lasciato.
+          {t.grazie}
         </p>
       </section>
     );
@@ -124,58 +229,53 @@ export default function ContributoEsperto({
       });
       setStato("inviato");
     } catch (e) {
-      setErrore(messaggioErrore(e));
+      setErrore({ e });
       setStato("aperto");
     }
   };
 
 
   return (
-    <section className="contributo" aria-label="Contributo di un esperto">
-      <span className="eyebrow">Il tuo contributo su questa cella</span>
-      <p className="contributo-nota">
-        Conosci questo territorio? Dicci cosa non torna e da dove lo sai. Non
-        serve saper programmare: il contributo arriva per mail a chi cura Limen
-        insieme ai numeri che stai guardando, e lo legge una persona prima che
-        cambi qualcosa.
-      </p>
+    <section className="contributo" aria-label={t.sezione}>
+      <span className="eyebrow">{t.titolo}</span>
+      <p className="contributo-nota">{t.nota}</p>
       <form className="contributo-form" onSubmit={(ev) => void invia(ev)}>
         <label>
-          Di cosa si tratta
+          {t.tipo}
           <select value={tipo} onChange={(e) => setTipo(e.target.value as TipoContributo)}>
-            {TIPI.map(([v, etichetta]) => (
+            {ORDINE_TIPI.map((v) => (
               <option key={v} value={v}>
-                {etichetta}
+                {t.tipi[v]}
               </option>
             ))}
           </select>
         </label>
         <label>
-          Cosa vedi
+          {t.testo}
           <textarea
             value={testo}
             onChange={(e) => setTesto(e.target.value)}
             rows={4}
             maxLength={4000}
             required
-            placeholder="Per esempio: il versante è in argille e ha avuto un movimento nel 2019, la classe bassa mi sembra sottostimata."
+            placeholder={t.testoEsempio}
           />
           {mancanoCaratteri > 0 && testo.length > 0 ? (
-            <span className="contributo-aiuto">ancora {mancanoCaratteri} caratteri</span>
+            <span className="contributo-aiuto">{t.mancano(mancanoCaratteri)}</span>
           ) : null}
         </label>
         <label>
-          Fonte (facoltativa)
+          {t.fonte}
           <input
             type="url"
             value={fonte}
             onChange={(e) => setFonte(e.target.value)}
             pattern={LINK}
-            placeholder="https:// link a pubblicazione, relazione o carta"
+            placeholder={t.fonteEsempio}
           />
         </label>
         <label>
-          Nome e cognome
+          {t.nome}
           <input
             type="text"
             value={nome}
@@ -185,7 +285,7 @@ export default function ContributoEsperto({
           />
         </label>
         <label>
-          Profilo LinkedIn (in alternativa al nome)
+          {t.linkedin}
           <input
             type="url"
             value={linkedin}
@@ -195,7 +295,7 @@ export default function ContributoEsperto({
           />
         </label>
         <label>
-          Email
+          {t.email}
           <input
             type="email"
             value={email}
@@ -206,17 +306,17 @@ export default function ContributoEsperto({
           />
         </label>
         <label>
-          Dipartimento o ente (facoltativo)
+          {t.affiliazione}
           <input
             type="text"
             value={affiliazione}
             onChange={(e) => setAffiliazione(e.target.value)}
             maxLength={160}
-            placeholder="es. dipartimento universitario, ufficio tecnico comunale, studio"
+            placeholder={t.affiliazioneEsempio}
           />
         </label>
         <label className="contributo-esca" aria-hidden="true">
-          Sito web
+          {t.sitoWeb}
           <input
             type="text"
             tabIndex={-1}
@@ -232,17 +332,12 @@ export default function ContributoEsperto({
             onChange={(e) => setConsenso(e.target.checked)}
             required
           />
-          Ho letto la nota qui sotto e acconsento al trattamento dei dati per
-          questo contributo
+          {t.consenso}
         </label>
-        <p className="contributo-privacy">
-          Nome, profilo, dipartimento ed email viaggiano solo nella mail a chi
-          cura Limen, per ricontattarti su questo contributo: Limen non li salva
-          e non li pubblica. Nessun allegato: la fonte è un link.
-        </p>
+        <p className="contributo-privacy">{t.privacy}</p>
         {errore ? (
           <p className="contributo-errore" role="alert">
-            {errore}
+            {messaggioErrore(errore.e, t)}
           </p>
         ) : null}
         <div className="contributo-azioni">
@@ -250,10 +345,10 @@ export default function ContributoEsperto({
             type="submit"
             disabled={stato === "invio" || !consenso || mancanoCaratteri > 0 || !chiScrive}
           >
-            {stato === "invio" ? "invio…" : "Invia il contributo"}
+            {stato === "invio" ? t.invio : t.invia}
           </button>
           <button type="button" className="contributo-annulla" onClick={() => setStato("chiuso")}>
-            annulla
+            {t.annulla}
           </button>
         </div>
       </form>

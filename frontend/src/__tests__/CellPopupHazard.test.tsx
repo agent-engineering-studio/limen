@@ -7,6 +7,7 @@
 // visibile al primo click.
 
 import { render, screen, waitFor } from "@testing-library/react";
+import { render as renderLingua } from "../test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import CellPopup from "../components/CellPopup";
@@ -240,5 +241,29 @@ describe("schede dei pericoli", () => {
     await waitFor(() =>
       expect(breakdown).toHaveBeenLastCalledWith("it-basilicata|1|1", expect.anything(), "landslide"),
     );
+  });
+});
+
+describe("CellPopup in inglese", () => {
+  it("traduce componenti, classe e lettura dell'incendio, con il punto decimale", async () => {
+    vi.spyOn(defaultApiClient, "getHazards").mockResolvedValue(HAZARDS);
+    vi.spyOn(defaultApiClient, "getCellBreakdown").mockResolvedValue(WILDFIRE_ROW);
+
+    renderLingua(
+      <HazardProvider>
+        <CellPopup cellId="it-basilicata|1|1" exposure="abitato" />
+      </HazardProvider>,
+      { lingua: "en" },
+    );
+
+    await waitFor(() => expect(screen.getByText("FWI (weather)")).toBeInTheDocument());
+    expect(screen.getByText("Fuel")).toBeInTheDocument();
+    expect(screen.getByText("High")).toBeInTheDocument();
+    expect(screen.getByText(/Needs attention now/)).toBeInTheDocument();
+    expect(screen.getByText(/Nearby: a built-up area\./)).toBeInTheDocument();
+    // 47,9 in italiano, 47.9 in inglese.
+    expect(screen.getByText(/FWI weather index 47\.9: Very High \(38–50\) class/)).toBeInTheDocument();
+    expect(screen.queryByText("Combustibile")).toBeNull();
+    expect(screen.getByRole("button", { name: /Are you an expert/ })).toBeInTheDocument();
   });
 });

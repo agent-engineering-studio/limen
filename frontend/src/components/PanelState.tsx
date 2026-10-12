@@ -1,5 +1,8 @@
 import type { JSX } from "react";
+import { testi, useTesti } from "../lib/i18n";
 import type { PanelFailure } from "../lib/panel-state";
+
+const T = testi({ riprova: "Riprova" }, { riprova: "Retry" });
 
 // I tre stati che un pannello può avere quando non ha numeri da mostrare, e
 // che devono *sembrare* diversi: sta arrivando, non c'è niente da dire,
@@ -46,13 +49,14 @@ export function PanelDegraded({
   failure: PanelFailure;
   onRetry?: () => void;
 }): JSX.Element {
+  const t = useTesti(T);
   return (
     <div className="panel-state is-degraded" role="alert">
       <p className="panel-state-title">{failure.title}</p>
       <p className="panel-state-detail">{failure.detail}</p>
       {failure.retryable && onRetry ? (
         <button type="button" className="panel-retry" onClick={onRetry}>
-          Riprova
+          {t.riprova}
         </button>
       ) : null}
     </div>
