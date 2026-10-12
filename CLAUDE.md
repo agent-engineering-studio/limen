@@ -150,6 +150,8 @@ before reaching for raw bash:
 | `simplify` | Quick post-edit cleanup pass (same engine as `code-review --fix`). |
 | `run` | When you need to actually run `limen seed` / `limen migrate` to see output. |
 | `claude-api` | When (later phases) we add Anthropic SDK calls for the MAF scorer/explainer. Apps built with this skill include prompt caching by default. |
+| `limen-wiki` | Update `#/come-funziona` and `#/integrazioni` (sources `docs/guida/*.md`) from docs, YAML and code; proposes/builds anatomy figures. |
+| `anatomy` | Isometric interactive figures (vendored, MIT); `limen-wiki` says where they live in the SPA. |
 | `loop` | For poll-style monitoring of long-running ingestion jobs (Phase 2+). |
 | `update-config` | Permissions / hooks / env vars in `settings.json`. |
 | `fewer-permission-prompts` | If we keep seeing the same approval prompt, add it to project `settings.json`. |
