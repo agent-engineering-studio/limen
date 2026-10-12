@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import GuidaPage, { sezioneDaHash } from "../components/GuidaPage";
+import { render as renderLingua } from "../test-utils";
 import { ALPINE, PLAIN, simulate } from "../components/Simulatore";
 
 afterEach(() => {
@@ -71,6 +72,28 @@ describe("GuidaPage", () => {
     for (const slug of ["limiti-dichiarati", "i-tre-motori"]) {
       expect(container.querySelector(`#guida-${slug}`)).not.toBeNull();
     }
+  });
+});
+
+describe("GuidaPage in inglese", () => {
+  it("le voci d'indice portano le ancore italiane, e ogni ancora esiste", () => {
+    const { container: it } = renderLingua(<GuidaPage />, { lingua: "it" });
+    const hrefIt = [...it.querySelectorAll(".guida-indice a")].map((a) => a.getAttribute("href"));
+    it.remove();
+    const { container: en } = renderLingua(<GuidaPage />, { lingua: "en" });
+    const hrefEn = [...en.querySelectorAll(".guida-indice a")].map((a) => a.getAttribute("href"));
+    expect(hrefEn).toEqual(hrefIt);
+    for (const href of hrefEn) {
+      expect(en.querySelector(`#guida-${sezioneDaHash(href ?? "") ?? ""}`)).not.toBeNull();
+    }
+    expect(en.querySelector("#guida-i-tre-motori")).not.toBeNull();
+  });
+
+  it("parla inglese: titolo, indice e link alla fonte", () => {
+    const { container } = renderLingua(<GuidaPage />, { lingua: "en" });
+    expect(container.querySelector("h1")?.textContent).not.toMatch(/Come funziona/);
+    expect(screen.getByText("On this page")).toBeInTheDocument();
+    expect(screen.getByText("docs/guida/limen.en.md")).toBeInTheDocument();
   });
 });
 

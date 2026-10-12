@@ -466,7 +466,7 @@ un fiume basso; quello dell'incendio che è un pericolo potenziale, non la
 probabilità di un fuoco. Un pericolo senza prompt resta senza spiegazione:
 una voce che racconta le frane parlando di un incendio è peggio del
 silenzio. Una regione si rispiega solo quando la sua classe dominante cambia,
-o dopo 12 ore. La spiegazione si legge nella pagina **Regioni da monitorare**, una
+o dopo 24 ore. La spiegazione si legge nella pagina **Regioni da monitorare**, una
 volta per regione e accanto ai numeri da cui nasce, con l'ora in cui è stata
 scritta; il marchio di chi fornisce il modello sta in testata. L'ordine delle regioni lo decidono i numeri — la classe più
 alta, adesso o prevista, poi le aree in classe alta —: l'AI racconta una

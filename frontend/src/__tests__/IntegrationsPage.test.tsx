@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { IntegrationsPage } from "../components/IntegrationsPage";
+import { render as renderLingua } from "../test-utils";
 
 describe("IntegrationsPage", () => {
   it("documents both MCP servers with their tools", () => {
@@ -22,5 +23,13 @@ describe("IntegrationsPage", () => {
     // JSON-RPC methods mentioned in the examples
     expect(screen.getAllByText(/message\/send/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/message\/stream/).length).toBeGreaterThan(0);
+  });
+
+  it("in inglese tiene gli stessi strumenti e le stesse ancore", () => {
+    const { container } = renderLingua(<IntegrationsPage />, { lingua: "en" });
+    expect(screen.getByText("Integrations: MCP & A2A")).toBeInTheDocument();
+    expect(screen.getByText("tool_national_report()")).toBeInTheDocument();
+    const hrefs = [...container.querySelectorAll(".guida-indice a")].map((a) => a.getAttribute("href"));
+    expect(hrefs).toContain("#/integrazioni/a2a-interoperabilita-tra-agent");
   });
 });

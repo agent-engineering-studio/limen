@@ -63,6 +63,9 @@ function pageFromHash(): Page {
   if (hash.startsWith("#/verifiche")) {
     return "verifiche";
   }
+  if (hash.startsWith("#/integrazioni")) {
+    return "integrations";
+  }
   switch (hash) {
     case "#/dashboard":
     case "#/italia": // vecchio deep-link: il quadro nazionale vive in dashboard
@@ -71,8 +74,6 @@ function pageFromHash(): Page {
       return "science";
     case "#/diagnostica-ml":
       return "shadow";
-    case "#/integrazioni":
-      return "integrations";
     // Un hash sconosciuto — compresi i vecchi #/accedi, #/registrati,
     // #/verifica e #/admin — va sulla home: la mappa è pubblica e non c'è
     // più niente dietro cui mettere una porta.
