@@ -21,6 +21,7 @@ import Simulatore from "./Simulatore";
 // Le figure pesano: si scaricano solo quando la pagina le incontra.
 const FiguraAlluvione = lazy(() => import("./figure/alluvione"));
 const FiguraFrane = lazy(() => import("./figure/frane"));
+const FiguraNonMisurato = lazy(() => import("./figure/non-misurato"));
 
 const pigra = (Figura: ComponentType) => () => (
   <Suspense fallback={null}>
@@ -72,6 +73,7 @@ const COMPONENTI: Record<string, () => JSX.Element> = {
   simulatore: Simulatore,
   "figura-alluvione": pigra(FiguraAlluvione),
   "figura-frane": pigra(FiguraFrane),
+  "figura-non-misurato": pigra(FiguraNonMisurato),
 };
 
 function renderBlock(block: Block, index: number, ancora: string): JSX.Element | null {

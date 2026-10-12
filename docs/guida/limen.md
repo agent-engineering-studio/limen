@@ -107,6 +107,8 @@ sbaglierebbe **in direzione rassicurante**, e Limen lo impedisce: il grigio è
 lo stesso delle celle mai valutate, e queste celle non entrano in nessun
 conteggio.
 
+<!-- componente: figura-non-misurato -->
+
 ### Gli strumenti sopra la mappa
 
 | Strumento | A cosa serve |

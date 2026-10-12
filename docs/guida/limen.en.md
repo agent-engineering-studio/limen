@@ -111,6 +111,8 @@ wrong **in the reassuring direction**, and Limen prevents it: the grey is
 the same as for cells never assessed, and these cells are left out of every
 count.
 
+<!-- componente: figura-non-misurato -->
+
 ### The tools above the map
 
 | Tool | What it is for |

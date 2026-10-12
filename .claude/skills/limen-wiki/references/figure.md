@@ -65,7 +65,7 @@ frontend/src/components/figure/<nome>/
 frontend/src/__tests__/figura-<nome>.test.tsx   il modello e il rendering
 ```
 
-**Prima figura** (il kit non c'è ancora):
+**Il kit c'è già** (dalla prima figura, `figura-alluvione`); ricopialo solo per aggiornarlo:
 
 1. Copia `iso-kit.ts`, `iso.css`, `react/draw.tsx`, `react/live.tsx` e
    `LICENSE` da `.claude/skills/anatomy/kit/` in
@@ -121,25 +121,38 @@ Sull'host non ci sono né Node né Chrome (memoria `frontend-needs-docker-node`)
   SPA servita da Vite dentro lo stesso container:
 
 ```bash
-docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
-  -v /srv/appdata/git/limen:/repo -w /repo/frontend \
-  mcr.microsoft.com/playwright:v1.49.1-noble sh -c '
-    export CHROME_PATH=$(ls -d /ms-playwright/chromium-*/chrome-linux/chrome | head -1)
-    ./node_modules/.bin/vite --port 5173 --strictPort >/tmp/vite.log 2>&1 &
-    sleep 6
-    S=/repo/.claude/skills/anatomy/scripts
-    U="http://localhost:5173/#/come-funziona/i-tre-motori"
+# Chrome dentro il container gira solo senza sandbox: un wrapper lo aggiunge
+# senza toccare gli script vendorizzati di anatomy.
+printf '#!/bin/sh\nexec $(ls -d /ms-playwright/chromium-*/chrome-linux/chrome | head -1) --no-sandbox "$@"\n' > "$SCRATCH/chrome.sh"
+chmod +x "$SCRATCH/chrome.sh"
+docker run --rm --user "$(id -u):$(id -g)" --ipc=host -e HOME=/tmp \
+  -v "$SCRATCH/fe":/fe -v "$SCRATCH/shots":/shots -v "$SCRATCH/chrome.sh":/chrome.sh \
+  -v /srv/appdata/git/limen/.claude/skills/anatomy:/anatomy:ro \
+  mcr.microsoft.com/playwright:v1.55.0-noble sh -c '
+    export CHROME_PATH=/chrome.sh
+    cd /fe && ./node_modules/.bin/vite --port 5173 --strictPort --host 127.0.0.1 >/tmp/vite.log 2>&1 &
+    sleep 4
+    S=/anatomy/scripts
+    U="http://127.0.0.1:5173/#/come-funziona/i-tre-motori"
     SEL=".fig-alluvione .iso-plate"
-    node $S/capture.mjs "$U" --select "$SEL" --out /repo/.wiki-shots/desk.png
-    node $S/capture.mjs "$U" --select "$SEL" --out /repo/.wiki-shots/phone.png --width 390
-    node $S/capture.mjs "$U" --select "$SEL" --out /repo/.wiki-shots/hover.png --hover 0.7,0.5
-    node $S/capture.mjs "$U" --select "$SEL" --out /repo/.wiki-shots/still.png --reduced
-    node $S/lines.mjs "$U" --select "$SEL" --out /repo/.wiki-shots/lines.png'
+    node $S/capture.mjs "$U" --select "$SEL" --out /shots/desk.png --wait 3500 --times 3000,6000
+    node $S/capture.mjs "$U" --select "$SEL" --zoom 250,250,120,90 --out /shots/zoom.png
+    node $S/capture.mjs "$U" --select "$SEL" --out /shots/still.png --reduced
+    node $S/lines.mjs "$U" --select "$SEL" --wait 4000 --out /shots/lines.png'
 ```
 
-  Le catture vanno in `.wiki-shots/` (non committare: aggiungilo a
-  `.git/info/exclude`) e si **leggono tutte** con Read, più i close-up a
-  4× di ogni giunto (`--zoom`), come chiede `references/verify.md` di
-  anatomy. Se il container non trova `CHROME_PATH`, controlla la versione
-  dell'immagine; se Vite non parte per dipendenze mancanti in
-  `node_modules`, dillo all'utente invece di lanciare `npm install`.
+`$SCRATCH/fe` è una copia di `frontend/` con `npm ci` fatto (il
+`node_modules` del repository non ha `@mantine/*`): `rsync -a --exclude
+node_modules --exclude dist frontend/ $SCRATCH/fe/` prima di ogni giro. Le
+figure sono `React.lazy`: dai a `lines.mjs` almeno `--wait 4000`, o non trova
+la tavola. Per il telefono, la guida oggi esce dallo schermo a 390 px anche
+senza figure (la colonna del testo è più larga del viewport): verifica la
+figura restringendo `.guida-testo` a 342 px con un `["eval", …]` di
+`drive.mjs`, finché quel layout non è corretto.
+
+Le catture vanno nello scratchpad (`$SCRATCH/shots`), mai nel repository, e
+si **leggono tutte** con Read, più i close-up a 4× di ogni giunto (`--zoom`),
+come chiede `references/verify.md` di anatomy. Se Chrome esce con SIGABRT,
+manca il wrapper `--no-sandbox` o `--ipc=host`; se l'immagine Playwright non
+c'è, `docker image ls | grep playwright` dice quale versione è già sulla
+macchina.
