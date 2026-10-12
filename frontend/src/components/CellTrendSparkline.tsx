@@ -7,6 +7,7 @@ import type { JSX } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
 import { useHazard } from "../lib/hazard";
+import { testi, useTesti } from "../lib/i18n";
 import type { CellHistoryPoint, CellHistoryResponse } from "../types";
 
 // Cache per (cella, pericolo): riaprire un comune non rifà la fetch. La
@@ -15,6 +16,29 @@ import type { CellHistoryPoint, CellHistoryResponse } from "../types";
 // dell'altro.
 const _cache = new Map<string, CellHistoryResponse>();
 const cacheKey = (cellId: string, hazard: string): string => `${cellId}|${hazard}`;
+
+const T = testi(
+  {
+    nonDisponibile: "andamento non disponibile",
+    carico: "andamento…",
+    senzaStorico: "storico non ancora disponibile",
+    alt: (osservati: number, ultimo: string | null, previsti: number, a72: string | null) =>
+      `Andamento rischio: ${osservati} punti osservati` +
+      (ultimo !== null ? ` (ultimo ${ultimo})` : "") +
+      `, ${previsti} previsti` +
+      (a72 !== null ? ` (a +72h ${a72})` : ""),
+  },
+  {
+    nonDisponibile: "trend not available",
+    carico: "trend…",
+    senzaStorico: "history not available yet",
+    alt: (osservati: number, ultimo: string | null, previsti: number, a72: string | null) =>
+      `Risk trend: ${osservati} observed points` +
+      (ultimo !== null ? ` (latest ${ultimo})` : "") +
+      `, ${previsti} forecast` +
+      (a72 !== null ? ` (at +72h ${a72})` : ""),
+  },
+);
 
 const W = 200;
 const H = 40;
@@ -45,6 +69,7 @@ export default function CellTrendSparkline({ cellId }: { cellId: string }): JSX.
   const cached = _cache.get(cacheKey(cellId, hazard)) ?? null;
   const [data, setData] = useState<CellHistoryResponse | null>(cached);
   const [failed, setFailed] = useState(false);
+  const t = useTesti(T);
 
   useEffect(() => {
     const hit = _cache.get(cacheKey(cellId, hazard)) ?? null;
@@ -65,12 +90,12 @@ export default function CellTrendSparkline({ cellId }: { cellId: string }): JSX.
     return () => ctrl.abort();
   }, [cellId, hazard]);
 
-  if (failed) return <span className="trend-note">andamento non disponibile</span>;
-  if (!data) return <span className="trend-note">andamento…</span>;
+  if (failed) return <span className="trend-note">{t.nonDisponibile}</span>;
+  if (!data) return <span className="trend-note">{t.carico}</span>;
 
   const all = [...data.observed, ...data.forecast];
   if (all.length === 0) {
-    return <span className="trend-note">storico non ancora disponibile</span>;
+    return <span className="trend-note">{t.senzaStorico}</span>;
   }
   const times = all.map((p) => new Date(p.t).getTime());
   const t0 = Math.min(...times);
@@ -83,11 +108,12 @@ export default function CellTrendSparkline({ cellId }: { cellId: string }): JSX.
 
   const lastObs = data.observed[data.observed.length - 1];
   const lastFc = data.forecast[data.forecast.length - 1];
-  const alt =
-    `Andamento rischio: ${data.observed.length} punti osservati` +
-    (lastObs ? ` (ultimo ${lastObs.score.toFixed(2)})` : "") +
-    `, ${data.forecast.length} previsti` +
-    (lastFc ? ` (a +72h ${lastFc.score.toFixed(2)})` : "");
+  const alt = t.alt(
+    data.observed.length,
+    lastObs ? lastObs.score.toFixed(2) : null,
+    data.forecast.length,
+    lastFc ? lastFc.score.toFixed(2) : null,
+  );
 
   return (
     <svg className="cell-trend" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={alt}>

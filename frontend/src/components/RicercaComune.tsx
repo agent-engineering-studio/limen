@@ -3,6 +3,13 @@ import type { JSX } from "react";
 import { Kbd, TextInput } from "@mantine/core";
 import { useHotkeys } from "@mantine/hooks";
 
+import { testi, useTesti } from "../lib/i18n";
+
+const T = testi(
+  { placeholder: "Cerca un comune…", aria: "Cerca un comune" },
+  { placeholder: "Search a municipality…", aria: "Search a municipality" },
+);
+
 /** La ricerca del comune, nella barra in alto (#155).
  *
  *  Controllata: il testo filtra la lista dei comuni nella colonna, che è
@@ -18,14 +25,15 @@ export function RicercaComune({
   onInvio: (v: string) => void;
 }): JSX.Element {
   const campo = useRef<HTMLInputElement | null>(null);
+  const t = useTesti(T);
   useHotkeys([["mod+K", () => campo.current?.focus()]], []);
   return (
     <TextInput
       ref={campo}
       className="header-cerca"
       type="search"
-      placeholder="Cerca un comune…"
-      aria-label="Cerca un comune"
+      placeholder={t.placeholder}
+      aria-label={t.aria}
       value={valore}
       onChange={(e) => onCambia(e.currentTarget.value)}
       onKeyDown={(e) => {

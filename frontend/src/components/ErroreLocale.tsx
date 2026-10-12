@@ -8,6 +8,23 @@
 import { Component } from "react";
 import type { ErrorInfo, JSX, ReactNode } from "react";
 
+import { testi, useTesti } from "../lib/i18n";
+
+const T = testi(
+  {
+    titolo: "Questa pagina non si è caricata",
+    prima: "Le altre sezioni funzionano: torna alla ",
+    mappa: "mappa",
+    dopo: " o ricarica la pagina tra poco.",
+  },
+  {
+    titolo: "This page failed to load",
+    prima: "The other sections still work: go back to the ",
+    mappa: "map",
+    dopo: " or reload the page in a moment.",
+  },
+);
+
 interface Props {
   children: ReactNode;
   /** Cambiando chiave il confine si azzera: serve quando si cambia pagina. */
@@ -41,12 +58,14 @@ export default class ErroreLocale extends Component<Props, Stato> {
 }
 
 function Avviso(): JSX.Element {
+  const t = useTesti(T);
   return (
     <div className="explainer" role="alert">
-      <h2>Questa pagina non si è caricata</h2>
+      <h2>{t.titolo}</h2>
       <p>
-        Le altre sezioni funzionano: torna alla <a href="#/dashboard">mappa</a> o ricarica la
-        pagina tra poco.
+        {t.prima}
+        <a href="#/dashboard">{t.mappa}</a>
+        {t.dopo}
       </p>
     </div>
   );

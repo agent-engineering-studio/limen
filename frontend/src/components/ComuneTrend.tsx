@@ -3,6 +3,7 @@ import type { JSX } from "react";
 import { Box, Group, Skeleton, Text } from "@mantine/core";
 
 import { defaultApiClient } from "../lib/api-client";
+import { testi, useLocale, useTesti } from "../lib/i18n";
 import { HAZARD_HUE } from "../lib/risk-colors";
 import type { ComuneHistory, HazardType, SeriePunto } from "../types";
 
@@ -40,19 +41,55 @@ const PAD_T = 6;
 const PAD_B = 16;
 
 const ORDINE: HazardType[] = ["landslide", "flood", "wildfire"];
-const NOME: Record<string, string> = {
-  landslide: "frane",
-  flood: "allagamento",
-  wildfire: "incendio",
-};
+const T = testi(
+  {
+    nome: { landslide: "frane", flood: "allagamento", wildfire: "incendio" } as Record<
+      string,
+      string
+    >,
+    soglia: { mod: "mod.", alto: "alto" },
+    nonDisponibile: "Andamento non disponibile.",
+    pocheMisure: (nome: string | null) =>
+      `Non ci sono ancora abbastanza misure per un andamento${nome ? ` di ${nome}` : ""}. ` +
+      "Lo storico registra una cella quando cambia, non a ogni giro.",
+    testa: (giorni: number, futuro: boolean) =>
+      `Andamento della cella peggiore · ${giorni} ${giorni === 1 ? "giorno" : "giorni"} indietro` +
+      `${futuro ? " e previsione" : ""} · punteggio da 0 a 1`,
+    aria: (righe: string) => `Andamento del rischio: ${righe}`,
+    nonMisurato: "non misurato",
+    previsto: (v: string) => `, previsto ${v}`,
+    ora: "ora",
+    previstiMm: (mm: number) => ` · previsti ${mm} mm`,
+    tratteggio:
+      "Tratteggio: previsione a +24/48/72 ore sulla pioggia attesa. È un calcolo, non un fatto.",
+  },
+  {
+    nome: { landslide: "landslide", flood: "flood", wildfire: "wildfire" },
+    soglia: { mod: "mod.", alto: "high" },
+    nonDisponibile: "Trend not available.",
+    pocheMisure: (nome: string | null) =>
+      `Not enough measurements yet for a${nome ? ` ${nome}` : ""} trend. ` +
+      "The history records a cell when it changes, not on every run.",
+    testa: (giorni: number, futuro: boolean) =>
+      `Trend of the worst cell · ${giorni} ${giorni === 1 ? "day" : "days"} back` +
+      `${futuro ? " and forecast" : ""} · score from 0 to 1`,
+    aria: (righe: string) => `Risk trend: ${righe}`,
+    nonMisurato: "not measured",
+    previsto: (v: string) => `, forecast ${v}`,
+    ora: "now",
+    previstiMm: (mm: number) => ` · ${mm} mm forecast`,
+    tratteggio:
+      "Dashed: forecast at +24/48/72 hours on expected rain. It is a computation, not a fact.",
+  },
+);
 
 /** Le soglie di classe, come righe orizzontali: senza, una linea a 0,4 non si
  *  sa se è alta. Con tutti i pericoli sono quelle delle frane — le altre
  *  differiscono, e tre griglie sovrapposte non si leggerebbero; con un
  *  pericolo solo sono le sue, dalla legenda. */
-const SOGLIE = [
-  { y: 0.35, label: "mod." },
-  { y: 0.55, label: "alto" },
+const SOGLIE: { y: number; livello: "mod" | "alto" }[] = [
+  { y: 0.35, livello: "mod" },
+  { y: 0.55, livello: "alto" },
 ];
 
 interface Punto {
@@ -60,8 +97,8 @@ interface Punto {
   y: number;
 }
 
-function numero(n: number): string {
-  return n.toLocaleString("it-IT", {
+function numero(n: number, loc: string): string {
+  return n.toLocaleString(loc, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -85,6 +122,8 @@ export default function ComuneTrend({
 }): JSX.Element {
   const [serie, setSerie] = useState<ComuneHistory | null>(null);
   const [errore, setErrore] = useState(false);
+  const t = useTesti(T);
+  const loc = useLocale();
   // Con un pericolo solo le soglie sono le sue, o nessuna finché non arriva
   // la legenda: quelle delle frane sotto una linea d'incendio sarebbero
   // classi sbagliate presentate come sue.
@@ -103,8 +142,8 @@ export default function ComuneTrend({
         const alto = lo("High");
         if (mod !== undefined && alto !== undefined) {
           setSoglie([
-            { y: mod, label: "mod." },
-            { y: alto, label: "alto" },
+            { y: mod, livello: "mod" },
+            { y: alto, livello: "alto" },
           ]);
         }
       })
@@ -129,7 +168,7 @@ export default function ComuneTrend({
   if (errore) {
     return (
       <Text size="xs" c="dimmed">
-        Andamento non disponibile.
+        {t.nonDisponibile}
       </Text>
     );
   }
@@ -143,9 +182,7 @@ export default function ComuneTrend({
   if (presenti.length === 0) {
     return (
       <Text size="xs" c="dimmed">
-        Non ci sono ancora abbastanza misure per un andamento
-        {hazard ? ` di ${NOME[hazard] ?? hazard}` : ""}. Lo storico
-        registra una cella quando cambia, non a ogni giro.
+        {t.pocheMisure(hazard ? (t.nome[hazard] ?? hazard) : null)}
       </Text>
     );
   }
@@ -174,29 +211,29 @@ export default function ComuneTrend({
   return (
     <Box>
       <Text size="xs" c="dimmed" mb={2}>
-        Andamento della cella peggiore · {giorni}{" "}
-        {giorni === 1 ? "giorno" : "giorni"} indietro
-        {haFuturo ? " e previsione" : ""} · punteggio da 0 a 1
+        {t.testa(giorni, haFuturo)}
       </Text>
       <svg
         width="100%"
         viewBox={`0 0 ${W} ${H}`}
         role="img"
-        aria-label={`Andamento del rischio: ${presenti
-          .map((h) => {
-            const o = passato[h] ?? [];
-            const f = futuro[h] ?? [];
-            const ora = o[o.length - 1]?.score;
-            const poi = f[f.length - 1]?.score;
-            return (
-              `${NOME[h]} ${ora === undefined ? "non misurato" : ora.toFixed(2)}` +
-              (poi === undefined ? "" : `, previsto ${poi.toFixed(2)}`)
-            );
-          })
-          .join("; ")}`}
+        aria-label={t.aria(
+          presenti
+            .map((h) => {
+              const o = passato[h] ?? [];
+              const f = futuro[h] ?? [];
+              const ora = o[o.length - 1]?.score;
+              const poi = f[f.length - 1]?.score;
+              return (
+                `${t.nome[h]} ${ora === undefined ? t.nonMisurato : ora.toFixed(2)}` +
+                (poi === undefined ? "" : t.previsto(poi.toFixed(2)))
+              );
+            })
+            .join("; "),
+        )}
       >
         {soglie.map((s) => (
-          <g key={s.label}>
+          <g key={s.livello}>
             <line
               x1={PAD_L}
               x2={W - PAD_R}
@@ -207,7 +244,7 @@ export default function ComuneTrend({
               strokeDasharray="2 3"
             />
             <text x={0} y={y(s.y) + 3} fontSize={7} fill="#94a3b4">
-              {s.label}
+              {t.soglia[s.livello]}
             </text>
           </g>
         ))}
@@ -224,7 +261,7 @@ export default function ComuneTrend({
               strokeWidth={1}
             />
             <text x={xAdesso + 2} y={H - PAD_B + 9} fontSize={7} fill="#94a3b4">
-              ora
+              {t.ora}
             </text>
           </g>
         ) : null}
@@ -298,15 +335,15 @@ export default function ComuneTrend({
                 aria-hidden
               />
               <Text span size="xs" c="dimmed">
-                {NOME[h]}
-                {ora === undefined ? "" : ` ${numero(ora)}`}
+                {t.nome[h]}
+                {ora === undefined ? "" : ` ${numero(ora, loc)}`}
                 {delta === undefined || Math.abs(delta) < 0.005
                   ? ""
-                  : ` → ${numero(poi as number)}`}
+                  : ` → ${numero(poi as number, loc)}`}
                 {/* Il tratteggio dell'alluvione sta quasi sempre a zero: sotto
                     i 40 mm in 72 ore il ramo pluviale non si accende. La pioggia
                     prevista è il numero che dice quanto manca. */}
-                {((piu) => (piu === undefined ? "" : ` · previsti ${Math.round(piu)} mm`))(
+                {((piu) => (piu === undefined ? "" : t.previstiMm(Math.round(piu))))(
                   f.reduce<number | undefined>(
                     (m, x) => (x.rain_mm === undefined ? m : Math.max(m ?? 0, x.rain_mm)),
                     undefined,
@@ -319,8 +356,7 @@ export default function ComuneTrend({
       </Group>
       {haFuturo ? (
         <Text size="xs" c="dimmed" mt={2}>
-          Tratteggio: previsione a +24/48/72 ore sulla pioggia attesa. È un
-          calcolo, non un fatto.
+          {t.tratteggio}
         </Text>
       ) : null}
     </Box>
