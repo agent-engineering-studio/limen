@@ -300,6 +300,8 @@ score = hydraulic susceptibility × max(rain, river)
   at 4 months and zero beyond 18, **only in cells actually touched** by an
   EFFIS perimeter or by FIRMS fires.
 
+<!-- componente: figura-alluvione -->
+
 **How rare that rain is there.** The rain thresholds are the same across
 Italy, and the climate is not: 105 mm in three days happens about once a
 year in Trieste, and never in Bari in the decade 2016-2025. For each node,
@@ -321,6 +323,10 @@ next to the number.
 
 Classes: none below 0.10, low up to 0.25, moderate up to 0.45, high up to
 0.70, very high above.
+
+> The river branch uses GloFAS: contains modified Copernicus Emergency
+> Management Service information, 2026. The score is not a flood warning:
+> issuing warnings is the responsibility of national and regional authorities.
 
 ### Wildfire: the weather, modulated by the terrain
 

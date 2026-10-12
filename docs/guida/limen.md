@@ -290,6 +290,8 @@ punteggio = suscettibilità idraulica × max(pioggia, fiume)
   con picco a 4 mesi e nulla oltre 18, **solo nelle celle davvero toccate**
   da un perimetro EFFIS o da fuochi FIRMS.
 
+<!-- componente: figura-alluvione -->
+
 **Quanto è rara quella pioggia lì.** Le soglie della pioggia sono le stesse
 in tutta Italia, e il clima no: 105 mm in tre giorni a Trieste capitano circa
 una volta l'anno, a Bari mai nel decennio 2016-2025. Limen tiene per ogni nodo
@@ -310,6 +312,10 @@ rarità resta un'informazione accanto al numero.
 
 Classi: nessuno sotto 0,10, basso fino a 0,25, moderato fino a 0,45, alto
 fino a 0,70, molto alto oltre.
+
+> Il ramo fluviale usa GloFAS: contiene informazioni modificate del
+> Copernicus Emergency Management Service, 2026. Il punteggio non è un avviso
+> di piena: l'allertamento spetta alle autorità nazionali e regionali.
 
 ### Incendio: il tempo, modulato dal terreno
 

@@ -8,8 +8,8 @@
 // `#/come-funziona/i-tre-motori` deve aprire la stessa sezione in entrambe
 // le lingue. Un test Python tiene uguale la struttura dei due file.
 
-import { useEffect, useMemo, useState } from "react";
-import type { JSX, ReactNode } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import type { ComponentType, JSX, ReactNode } from "react";
 
 import type { Lingua } from "../lib/i18n";
 import { testi, useLingua, useTesti } from "../lib/i18n";
@@ -17,6 +17,15 @@ import type { Block, Inline } from "../lib/markdown";
 import { parseInline, parseMarkdown, slugify } from "../lib/markdown";
 import RiskFlowDiagram from "./RiskFlowDiagram";
 import Simulatore from "./Simulatore";
+
+// Le figure pesano: si scaricano solo quando la pagina le incontra.
+const FiguraAlluvione = lazy(() => import("./figure/alluvione"));
+
+const pigra = (Figura: ComponentType) => () => (
+  <Suspense fallback={null}>
+    <Figura />
+  </Suspense>
+);
 
 /** La sezione chiesta dall'hash: `<route>/<sezione>`, o nessuna. */
 export function sezioneDa(route: string, hash: string): string | null {
@@ -60,6 +69,7 @@ function inline(text: string, key: string): JSX.Element[] {
 // su GitHub il commento non si vede, nella SPA diventa il componente.
 const COMPONENTI: Record<string, () => JSX.Element> = {
   simulatore: Simulatore,
+  "figura-alluvione": pigra(FiguraAlluvione),
 };
 
 function renderBlock(block: Block, index: number, ancora: string): JSX.Element | null {
