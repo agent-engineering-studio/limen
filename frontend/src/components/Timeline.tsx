@@ -4,15 +4,39 @@ import { UnstyledButton } from "@mantine/core";
 import { useInterval } from "@mantine/hooks";
 
 import { useForecastSchedule } from "../lib/forecast-schedule";
-import { useHazard } from "../lib/hazard";
+import { useHazard, useNomePericolo } from "../lib/hazard";
+import { testi, useLingua, useLocale, useTesti } from "../lib/i18n";
 
 /** Gli orizzonti della timeline: quelli che la corsa notturna scrive. */
 export const ORIZZONTI = [0, 24, 48, 72] as const;
 
 /** «sab 02:00»: il momento a cui si riferisce un orizzonte. */
-function quando(ms: number): string {
-  return new Date(ms).toLocaleString("it-IT", { weekday: "short", hour: "2-digit", minute: "2-digit" });
+function quando(ms: number, loc: string): string {
+  return new Date(ms).toLocaleString(loc, { weekday: "short", hour: "2-digit", minute: "2-digit" });
 }
+
+const T = testi(
+  {
+    gruppo: "Momento mostrato sulla mappa",
+    ferma: "Ferma",
+    scorri: "Fai scorrere le scadenze",
+    senzaCorsa: (nome: string) => `Per ${nome} non c'è ancora una corsa previsionale`,
+    adesso: "adesso",
+    nonCalcolata: "non calcolata",
+    passato: (q: string) => `${q} · passato`,
+    ora: "Ora",
+  },
+  {
+    gruppo: "Time shown on the map",
+    ferma: "Stop",
+    scorri: "Play through the forecast times",
+    senzaCorsa: (nome: string) => `No forecast run yet for ${nome}`,
+    adesso: "now",
+    nonCalcolata: "not computed",
+    passato: (q: string) => `${q} · past`,
+    ora: "Now",
+  },
+);
 
 /** La timeline sulla mappa (#155, fase 3): adesso e le tre scadenze della
  *  previsione per cella, con un pulsante che le fa scorrere.
@@ -30,16 +54,23 @@ export function Timeline({
 }): JSX.Element {
   const schedule = useForecastSchedule();
   const { multi, selected, available } = useHazard();
+  const t = useTesti(T);
+  const loc = useLocale();
+  const nomePericolo = useNomePericolo();
+  const { lingua } = useLingua();
   const [gira, setGira] = useState(false);
   const corse = schedule?.cells.last_run_by_hazard ?? {};
   // Il pericolo scelto ha una corsa previsionale? Se c'è stata, una cella
   // senza riga è prevista sotto Moderato; se non c'è stata, non si sa —
   // e allora il futuro non si sceglie.
   const previsto = multi ? Object.keys(corse).length > 0 : selected in corse;
-  const nome = available.find((h) => h.hazard === selected)?.label_it ?? selected;
+  const nome =
+    lingua === "it"
+      ? (available.find((h) => h.hazard === selected)?.label_it ?? selected)
+      : nomePericolo(selected);
   const ultima = Object.entries(corse)
     .filter(([h]) => multi || h === selected)
-    .map(([, t]) => new Date(t).getTime())
+    .map(([, iso]) => new Date(iso).getTime())
     .reduce((a, b) => Math.max(a, b), 0);
 
   const scorre = useInterval(
@@ -72,13 +103,13 @@ export function Timeline({
   };
 
   return (
-    <div className="timeline" role="group" aria-label="Momento mostrato sulla mappa">
+    <div className="timeline" role="group" aria-label={t.gruppo}>
       <UnstyledButton
         className="timeline-play"
         onClick={avvia}
         disabled={!previsto}
-        aria-label={gira ? "Ferma" : "Fai scorrere le scadenze"}
-        title={previsto ? undefined : `Per ${nome.toLowerCase()} non c'è ancora una corsa previsionale`}
+        aria-label={gira ? t.ferma : t.scorri}
+        title={previsto ? undefined : t.senzaCorsa(nome.toLowerCase())}
       >
         {gira ? (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
@@ -95,14 +126,14 @@ export function Timeline({
         const passato = h > 0 && bersaglio !== null && bersaglio < Date.now();
         const sotto =
           h === 0
-            ? "adesso"
+            ? t.adesso
             : !previsto
-              ? "non calcolata"
+              ? t.nonCalcolata
               : bersaglio === null
                 ? "—"
                 : passato
-                  ? `${quando(bersaglio)} · passato`
-                  : quando(bersaglio);
+                  ? t.passato(quando(bersaglio, loc))
+                  : quando(bersaglio, loc);
         return (
           <UnstyledButton
             key={h}
@@ -115,7 +146,7 @@ export function Timeline({
               onCambia(h);
             }}
           >
-            <span className="timeline-etichetta mono">{h === 0 ? "Ora" : `+${h} h`}</span>
+            <span className="timeline-etichetta mono">{h === 0 ? t.ora : `+${h} h`}</span>
             <span className="timeline-sotto">{sotto}</span>
           </UnstyledButton>
         );

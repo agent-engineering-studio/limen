@@ -7,13 +7,15 @@ import { Protocol } from "pmtiles";
 import { copernicusModificato } from "../lib/attribuzioni";
 import { BASEMAP_LAYER, BASEMAP_SOURCE } from "../lib/basemap";
 import { config } from "../lib/env";
-import { useHazard } from "../lib/hazard";
+import { NOMI_PERICOLO, useHazard } from "../lib/hazard";
+import { testi, useLingua, useTesti } from "../lib/i18n";
 import { COLORE_ALLERTA, OVERLAYS } from "../lib/overlays";
 import {
   maplibreColorMatch,
   maplibreMultiHazardColorMatch,
   maplibreWorstHazardLine,
 } from "../lib/risk-colors";
+import { LETTERE } from "./HazardSelector";
 
 const SOURCE_ID = "limen-risk";
 const LAYER_ID = "limen-risk-fill";
@@ -156,6 +158,31 @@ const PAI_FILL_COLOR: maplibregl.ExpressionSpecification = [
   "#cccccc",
 ];
 
+const T = testi(
+  {
+    mappa: (cosa: string) => `Mappa interattiva del rischio: ${cosa}`,
+    tutti: "tutti i pericoli",
+    frane: "frane",
+    previsione: (h: number) => `, previsione a ${h} ore`,
+    assente: "Il livello del rischio non è disponibile.",
+    assenteSpiega:
+      " Questa è solo la cartografia di base: le celle colorate mancano, non sono assenti perché il rischio è nullo.",
+    fonteIdraulica: "ISPRA pericolosità idraulica (CC-BY-4.0)",
+    fonteDpc: "Protezione Civile, bollettino di criticità (CC-BY 4.0)",
+  },
+  {
+    mappa: (cosa: string) => `Interactive risk map: ${cosa}`,
+    tutti: "all hazards",
+    frane: "landslides",
+    previsione: (h: number) => `, ${h}-hour forecast`,
+    assente: "The risk layer is unavailable.",
+    assenteSpiega:
+      " This is only the base map: the coloured cells are missing, not absent because the risk is zero.",
+    fonteIdraulica: "ISPRA hydraulic hazard (CC-BY-4.0)",
+    fonteDpc: "Civil Protection, criticality bulletin (CC-BY 4.0)",
+  },
+);
+
 export interface RiskMapProps {
   /** Override the pg_tileserv base URL; useful in tests. */
   readonly tileservUrl?: string;
@@ -235,6 +262,8 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       : "none";
   const tileserv = (props.tileservUrl ?? config.tileservUrl).replace(/\/+$/, "");
   const { selected: hazard, view, multi, available } = useHazard();
+  const { lingua } = useLingua();
+  const t = useTesti(T);
   // Due sorgenti, non una. `v_risk_tiles` è fissata sul pericolo di default
   // in SQL (migrazione 028) perché una sorgente di tile deve dare una
   // geometria per cella e la vista ne ha una per (cella, pericolo): resta la
@@ -299,11 +328,14 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     : maplibreColorMatch("risk_level", hazard);
   // Il nome lo dà il backend (`/api/hazards`); il ripiego serve al primo
   // render e a un backend irraggiungibile.
+  // In inglese il database non ha il nome: lo dà la tabella condivisa.
+  const nomeInLingua =
+    lingua === "it"
+      ? available.find((h) => h.hazard === hazard)?.label_it
+      : NOMI_PERICOLO.en[hazard];
   const hazardLabel =
-    (multi
-      ? "tutti i pericoli"
-      : (available.find((h) => h.hazard === hazard)?.label_it ??
-        (isDefaultHazard ? "frane" : hazard))) + (futuro ? `, previsione a ${orizzonte} ore` : "");
+    (multi ? t.tutti : (nomeInLingua ?? (isDefaultHazard ? t.frane : hazard))) +
+    (futuro ? t.previsione(orizzonte) : "");
   // Un ref e non il valore: la mappa non si ricostruisce fra una scadenza e
   // l'altra, e il gestore registrato alla creazione leggerebbe la callback
   // di allora — con l'orizzonte di allora.
@@ -350,7 +382,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         tiles: [tilesUrl],
         // L'alluvione (anche nella vista d'insieme) è calcolata dalla portata
         // GloFAS: la licenza CEMS-Floods chiede di dirlo sulla mappa.
-        ...(multi || hazard === "flood" ? { attribution: copernicusModificato() } : {}),
+        ...(multi || hazard === "flood" ? { attribution: copernicusModificato(undefined, lingua) } : {}),
         // La sorgente parte dallo stesso zoom del livello che la disegna.
         // Prima partiva da 5: il browser scaricava tile da 1,85 MB che poi
         // non mostrava a nessuno, e intanto il tile server andava in timeout.
@@ -377,7 +409,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         // La versione suddivisa: quella intera va in timeout a zoom 8.
         tiles: [`${tileserv}/public.flood_hazard_subdiv/{z}/{x}/{y}.pbf?properties=hazard_class`],
         minzoom: 10,
-        attribution: "ISPRA pericolosità idraulica (CC-BY-4.0)",
+        attribution: t.fonteIdraulica,
       },
       "ovl-alluvioni": {
         type: "vector",
@@ -389,7 +421,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       "ovl-dpc": {
         type: "vector",
         tiles: [`${tileserv}/public.v_dpc_allerte_oggi/{z}/{x}/{y}.pbf?properties=zona,livello`],
-        attribution: "Protezione Civile, bollettino di criticità (CC-BY 4.0)",
+        attribution: t.fonteDpc,
       },
       "ovl-bruciate": {
         type: "vector",
@@ -524,7 +556,8 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
               // La lettera del pericolo dentro la cella, da vicino. Il bordo
               // da solo non bastava: un operatore davanti a una cella rossa
               // chiedeva «allerta di che cosa?», e un bordo ciano su rosso a
-              // 1,6 px non risponde. A, F, I come nella lista dei comuni.
+              // 1,6 px non risponde. A, F, I come nella lista dei comuni;
+              // in inglese F, L, W, e la mappa si ricostruisce al cambio.
               id: WORST_HAZARD_LETTER_ID,
               type: "symbol" as const,
               source: SOURCE_ID,
@@ -535,11 +568,11 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
                   "match",
                   ["get", "worst_hazard"],
                   "flood",
-                  "A",
+                  LETTERE[lingua].flood,
                   "landslide",
-                  "F",
+                  LETTERE[lingua].landslide,
                   "wildfire",
-                  "I",
+                  LETTERE[lingua].wildfire,
                   "",
                 ] as never,
                 "text-font": ["Open Sans Regular"],
@@ -826,7 +859,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tileserv, tileLayer, sourceLayer, chiaveSorgente, hazard, view]);
+  }, [tileserv, tileLayer, sourceLayer, chiaveSorgente, hazard, view, lingua]);
 
   // Fra una scadenza e l'altra cambia solo il parametro della tile: si
   // sostituiscono le tile della sorgente invece di ricostruire la mappa, che
@@ -907,13 +940,12 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         data-testid="risk-map"
         data-tile-url={`${tileserv}/${tileLayer}/{z}/{x}/{y}.pbf${tileQuery}`}
         style={{ width: "100%", height: "100%" }}
-        aria-label={`Mappa interattiva del rischio: ${hazardLabel}`}
+        aria-label={t.mappa(hazardLabel)}
       />
       {livelloAssente ? (
         <div className="map-banner" role="alert">
-          <strong>Il livello del rischio non è disponibile.</strong> Questa è
-          solo la cartografia di base: le celle colorate mancano, non sono
-          assenti perché il rischio è nullo.
+          <strong>{t.assente}</strong>
+          {t.assenteSpiega}
         </div>
       ) : null}
     </div>
