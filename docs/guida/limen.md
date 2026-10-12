@@ -107,6 +107,8 @@ sbaglierebbe **in direzione rassicurante**, e Limen lo impedisce: il grigio è
 lo stesso delle celle mai valutate, e queste celle non entrano in nessun
 conteggio.
 
+<!-- componente: figura-non-misurato -->
+
 ### Gli strumenti sopra la mappa
 
 | Strumento | A cosa serve |
@@ -250,6 +252,8 @@ punteggio = 0,35 × il posto (S)
 | **F** — il fuoco (7%) | Una campana con picco a 6 mesi da un incendio che ha toccato la cella, nulla oltre 24 mesi |
 | **H** — l'acqua (3%) | Pericolosità idraulica, spinta da pioggia prevista, piena dei fiumi e mareggiate |
 
+<!-- componente: figura-frane -->
+
 La **soglia di Caine** dice, per ogni durata, l'intensità oltre la quale le
 frane cominciano davvero ad accadere: 7,2 mm bastano se cadono in un'ora, ne
 servono 28,4 in un giorno. Le soglie sono state ricalcolate sul catalogo
@@ -290,6 +294,8 @@ punteggio = suscettibilità idraulica × max(pioggia, fiume)
   con picco a 4 mesi e nulla oltre 18, **solo nelle celle davvero toccate**
   da un perimetro EFFIS o da fuochi FIRMS.
 
+<!-- componente: figura-alluvione -->
+
 **Quanto è rara quella pioggia lì.** Le soglie della pioggia sono le stesse
 in tutta Italia, e il clima no: 105 mm in tre giorni a Trieste capitano circa
 una volta l'anno, a Bari mai nel decennio 2016-2025. Limen tiene per ogni nodo
@@ -310,6 +316,10 @@ rarità resta un'informazione accanto al numero.
 
 Classi: nessuno sotto 0,10, basso fino a 0,25, moderato fino a 0,45, alto
 fino a 0,70, molto alto oltre.
+
+> Il ramo fluviale usa GloFAS: contiene informazioni modificate del
+> Copernicus Emergency Management Service, 2026. Il punteggio non è un avviso
+> di piena: l'allertamento spetta alle autorità nazionali e regionali.
 
 ### Incendio: il tempo, modulato dal terreno
 

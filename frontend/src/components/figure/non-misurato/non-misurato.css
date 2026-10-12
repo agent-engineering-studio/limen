@@ -1,0 +1,11 @@
+.fig-nm .iso-figure{margin:24px 0 28px}
+.fig-nm-stage{outline:none;cursor:pointer}
+.fig-nm-stage:focus-visible{box-shadow:0 0 0 1px var(--anatomy-mid)}
+.fig-nm .nm-settore{stroke-width:2.2;stroke-linecap:butt;opacity:.9}
+.fig-nm .nm-ago{stroke-width:1.1}
+.fig-nm .nm-bandiera{stroke:none}
+.fig-nm .nm-bandiera-bordo{stroke-width:.8}
+.fig-nm .nm-presa{fill:var(--anatomy-shade-0);stroke:var(--anatomy-lo);stroke-width:var(--anatomy-weight)}
+.fig-nm .nm-led{fill:var(--anatomy-dot);opacity:.9;transition:opacity .4s}
+.fig-nm .nm-led[data-tone="faint"]{opacity:.12}
+.fig-nm .fig-detto{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}

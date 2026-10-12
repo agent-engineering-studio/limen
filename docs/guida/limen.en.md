@@ -111,6 +111,8 @@ wrong **in the reassuring direction**, and Limen prevents it: the grey is
 the same as for cells never assessed, and these cells are left out of every
 count.
 
+<!-- componente: figura-non-misurato -->
+
 ### The tools above the map
 
 | Tool | What it is for |
@@ -258,6 +260,8 @@ score = 0.35 × the place (S)
 | **F** — the fire (7%) | A bell curve peaking 6 months after a fire that touched the cell, zero beyond 24 months |
 | **H** — the water (3%) | Hydraulic hazard, pushed up by forecast rain, river floods and storm surges |
 
+<!-- componente: figura-frane -->
+
 **Caine's threshold** gives, for each duration, the intensity beyond which
 landslides really start to happen: 7.2 mm are enough if they fall in one
 hour, 28.4 are needed over a day. The thresholds have been recalculated on
@@ -300,6 +304,8 @@ score = hydraulic susceptibility × max(rain, river)
   at 4 months and zero beyond 18, **only in cells actually touched** by an
   EFFIS perimeter or by FIRMS fires.
 
+<!-- componente: figura-alluvione -->
+
 **How rare that rain is there.** The rain thresholds are the same across
 Italy, and the climate is not: 105 mm in three days happens about once a
 year in Trieste, and never in Bari in the decade 2016-2025. For each node,
@@ -321,6 +327,10 @@ next to the number.
 
 Classes: none below 0.10, low up to 0.25, moderate up to 0.45, high up to
 0.70, very high above.
+
+> The river branch uses GloFAS: contains modified Copernicus Emergency
+> Management Service information, 2026. The score is not a flood warning:
+> issuing warnings is the responsibility of national and regional authorities.
 
 ### Wildfire: the weather, modulated by the terrain
 

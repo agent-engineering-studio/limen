@@ -1,0 +1,7 @@
+.fig-alluvione .iso-figure{margin:24px 0 28px}
+.fig-alluvione-stage{outline:none;cursor:ns-resize;touch-action:pan-y}
+.fig-alluvione-stage:focus-visible{box-shadow:0 0 0 1px var(--anatomy-mid)}
+.fig-alluvione .valvola-fessura{fill:var(--anatomy-shade-0);stroke:none}
+.fig-alluvione .manometro-settore{stroke-width:2.4;stroke-linecap:butt;opacity:.9}
+.fig-alluvione .manometro-ago{stroke-width:1.1}
+.fig-alluvione-detto{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}

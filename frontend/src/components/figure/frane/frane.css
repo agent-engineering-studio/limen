@@ -1,0 +1,6 @@
+.fig-frane .iso-figure{margin:24px 0 28px}
+.fig-frane-stage{outline:none;cursor:ew-resize;touch-action:pan-y}
+.fig-frane-stage:focus-visible{box-shadow:0 0 0 1px var(--anatomy-mid)}
+.fig-frane .frane-fascia{stroke:none;opacity:.85}
+.fig-frane .frane-indice{stroke-width:1.1}
+.fig-frane .fig-detto{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
