@@ -5,9 +5,13 @@ description: Verifica sui principali quotidiani online italiani le notizie di fr
 
 # limen-fact-check
 
-Per ogni evento reale riportato dalla stampa: **è successo davvero? Limen l'aveva previsto? Con quante ore di anticipo, su quali dati, perché?** Il risultato è un articolo nella pagina «Verifiche» della SPA.
+Per ogni evento reale riportato dalla stampa: **è successo davvero? Limen l'aveva previsto? Con quante ore di anticipo, su quali dati, perché?** Il risultato, quando Limen l'aveva previsto, è un articolo in italiano e in inglese nella pagina «Verifiche» della SPA.
 
-La regola che governa tutto: **diventa un articolo solo l'evento previsto in anticipo (`anticipata`); ogni altro evento verificato si registra lo stesso e finisce nel riquadro «Inefficienza»** della pagina, contato sul totale («Eventi non previsti in anticipo: 3 su 4 verificati»). Una pagina di soli successi senza il conteggio dei mancati misura la fortuna, non il modello (vedi la memoria `hit-rate-needs-base-rate`): il riquadro è il prezzo per mostrare solo gli anticipi, e non si salta mai.
+Le regole che governano tutto:
+
+1. **Sulla pagina vanno solo gli eventi previsti in anticipo, con le ore di anticipo.** Diventa un file JSON — e quindi un articolo — **solo** l'evento con esito `anticipata` (§5). Tutto il resto non ha file e non compare in nessun punto della pagina, né come voce né come conteggio: gli eventi scartati al fact check (§2), i `non_verificabile`, le `contemporanea` e le `mancata`. Questi si riportano soltanto all'utente, nel riepilogo finale, con esito e motivo. La pagina non mostra riquadri d'inefficienza: è una scelta dell'utente, da non rimettere in discussione.
+2. **Ogni articolo dichiara le ore di anticipo** (`previsione.anticipo_ore_moderato` e, se c'è, `anticipo_ore_alto`) e le dice nel titolo o nel sommario. Un articolo senza ore di anticipo non esiste: se manca il numero, l'evento non è `anticipata`.
+3. **Ogni articolo è bilingue: italiano e inglese.** I campi in italiano restano dove sono; la traduzione inglese sta nel blocco `en` (§8). Un file senza `en` completo non è finito.
 
 ## Dove vive la pagina
 
@@ -16,14 +20,14 @@ La regola che governa tutto: **diventa un articolo solo l'evento previsto in ant
 | Una verifica = un file JSON | `frontend/src/content/verifiche/<slug>.json` |
 | Le foto della verifica | `frontend/public/verifiche/<slug>/<nome>.jpg` → `src: "/verifiche/<slug>/<nome>.jpg"` |
 | Tipi (lo schema del JSON) | `frontend/src/content/verifiche.ts` (`Verifica`) |
-| Pagina (indice + articolo) | `frontend/src/components/VerifichePage.tsx`, rotta `#/verifiche` e `#/verifiche/<slug>` |
+| Pagina (indice + articolo) | `frontend/src/components/VerifichePage.tsx`, rotta `#/verifiche` e `#/verifiche/<slug>`; la lingua è quella del selettore in testata (`lib/i18n`, anche `?lang=en`): l'italiano dalla radice del JSON, l'inglese dal blocco `en` |
 | Query dell'anticipo | `.claude/skills/limen-fact-check/scripts/anticipo.sql` |
 
 Il contenuto entra nel bundle a build time (`import.meta.glob`): **niente migrazioni, niente endpoint**. Se `VerifichePage.tsx` o `verifiche.ts` mancassero (repo vecchio), fermati e dillo: non ricrearli a memoria.
 
 ## Vincolo duro: la retention
 
-`risk_assessments` tiene **14 giorni** (`ASSESSMENTS_RETENTION_DAYS`), poi la partizione viene cancellata. Un evento più vecchio di ~13 giorni non è più verificabile: lo storico delle previsioni non esiste più. La query restituisce `storico_dal`; se l'evento è precedente, l'esito è `non_verificabile` — non `mancata`.
+`risk_assessments` tiene **14 giorni** (`ASSESSMENTS_RETENTION_DAYS`), poi la partizione viene cancellata. Un evento più vecchio di ~13 giorni non è più verificabile: lo storico delle previsioni non esiste più. La query restituisce `storico_dal`; se l'evento è precedente, l'esito è `non_verificabile` — non `mancata` — e in ogni caso l'evento **non si scrive** (resta nel riepilogo all'utente).
 
 ## Procedura
 
@@ -45,7 +49,7 @@ Un evento entra solo se:
 - il **luogo** è risolvibile a uno o più comuni;
 - l'**ora** è ricostruibile almeno alla mezza giornata (mattina/pomeriggio/notte). Se l'ora è ignota, usa il mezzogiorno locale e scrivilo nel testo.
 
-Scarta e non pubblicare:
+Un evento che non soddisfa tutte e tre le condizioni **non è verificato: nessun file**, solo una riga nel riepilogo all'utente. Scarta e non pubblicare:
 
 - un'**allerta meteo** (è una previsione, non un evento);
 - incendi di edifici, auto, rifiuti, capannoni: non sono incendi boschivi, e Limen non li modella;
@@ -61,7 +65,7 @@ docker exec limen-postgres psql -U limen -d limen -At -c \
   "SELECT istat_code, name, aoi_id FROM comuni WHERE name ILIKE 'Pisticci'"
 ```
 
-Gli omonimi esistono (es. *Castro*, *Peglio*, *Samone*): scegli per `aoi_id` (la regione). Un evento su più comuni → passa tutti i codici separati da virgola. Se il comune non è in `comuni` (regione non coperta), esito `non_verificabile`.
+Gli omonimi esistono (es. *Castro*, *Peglio*, *Samone*): scegli per `aoi_id` (la regione). Un evento su più comuni → passa tutti i codici separati da virgola. Se il comune non è in `comuni` (regione non coperta), esito `non_verificabile`: nessun file.
 
 ### 4. Calcolare l'anticipo
 
@@ -94,12 +98,14 @@ Lo storico previsionale tiene solo le celle ≥ Moderato: `corse` vuoto vuol dir
 
 Nell'ordine, il primo che vale:
 
-1. **`non_verificabile`** — evento prima di `storico_dal`; comune fuori copertura; oppure nessuna corsa di quel pericolo girata nei giorni prima; oppure `adesso_non_misurato` > 0 e nessun'altra riga misurata (il dato non c'era: «non misurato» non è «nessun pericolo»).
+1. **`non_verificabile`** (nessun file, solo nel riepilogo) — evento prima di `storico_dal`; comune fuori copertura; oppure nessuna corsa di quel pericolo girata nei giorni prima; oppure `adesso_non_misurato` > 0 e nessun'altra riga misurata (il dato non c'era: «non misurato» non è «nessun pericolo»).
 2. **`anticipata`** — `anticipo_ore_moderato` ≥ 6 **e** `classe_prevista_max` è sopra `fondo_classe_max`. Se la classe prevista è la stessa che il comune aveva tutti i giorni prima, l'anticipo è lo sfondo, non un segnale: in quel caso l'anticipo che conta è `anticipo_ore_alto` (se il fondo è Moderato) e, se è `null`, si passa alle regole sotto.
 3. **`contemporanea`** — nessuna previsione utile, ma lo sweep orario era salito sopra il fondo prima dell'evento (`adesso_classe_max` sopra `fondo_classe_max`, con `adesso_primo_moderato` prima dell'evento).
 4. **`mancata`** — tutto il resto.
 
-Esempio vero (frana di Melito di Porto Salvo, 10 ottobre 2026): 71 ore di «anticipo ≥ Moderato», ma Melito aveva celle in Moderato ogni giorno dal 29 settembre e la previsione non è mai salita ad Alto → `mancata`, con l'anticipo riportato e spiegato nel testo.
+Esempio vero (frana di Melito di Porto Salvo, 10 ottobre 2026): 71 ore di «anticipo ≥ Moderato», ma Melito aveva celle in Moderato ogni giorno dal 29 settembre e la previsione non è mai salita ad Alto → `mancata`: niente file, solo il riepilogo all'utente con l'anticipo apparente e perché non conta.
+
+Solo `anticipata` arriva al §6; per gli altri esiti ci si ferma qui e si passa al riepilogo (§9.3).
 
 Non arrotondare a favore di Limen: un anticipo «≥ Moderato» non è un allarme; se è arrivato solo Moderato e mai Alto, scrivilo.
 
@@ -111,7 +117,7 @@ Prendi i `fattori` della corsa che ha dato l'anticipo (o di `adesso_picco`) e tr
 - **frana**: componenti `s` (suscettibilità statica: PAI, IFFI, pendenza, litologia in `static_terms`), `m` (innesco meteo: `meteo_terms.api_factor` pioggia antecedente, `caine_norm`/`caine_excess` soglia intensità-durata di Caine, `soil_factor` umidità del suolo, `snow_factor`), `e` (sisma), `f` (post-incendio), `h` (idrologia: pioggia prevista/portata).
 - **alluvione** (`susceptibility × max(pluvial, fluvial)`): `rain_mm` contro `rain_threshold_mm`/`rain_saturation_mm`, `pluvial`, `fluvial`/`discharge_ratio` (portata GloFAS rispetto alla piena ordinaria del nodo), `susceptibility` (mosaico ISPRA; `mapped: false` = area non studiata).
 
-Una spiegazione per mancata è altrettanto importante: quale fattore era basso (es. pioggia locale sottostimata dal nodo meteo a 9 km, temporale convettivo non risolto, `fuel` nullo per CORINE mancante, `susc_ispra` 0 in area non mappata).
+Per gli eventi non anticipati il «perché» va nel riepilogo all'utente, non sulla pagina: quale fattore era basso (es. pioggia locale sottostimata dal nodo meteo a 9 km, temporale convettivo non risolto, `fuel` nullo per CORINE mancante, `susc_ispra` 0 in area non mappata).
 
 ### 7. Foto: solo con licenza
 
@@ -130,7 +136,7 @@ Se non trovi niente di pubblicabile, `foto: []`: l'articolo regge senza. Salva i
 
 **Prima cerca se esiste già**: stesso pericolo, uno dei comuni in comune, data entro ±1 giorno (`grep -l` su `frontend/src/content/verifiche/*.json`). Se esiste: aggiorna — mantieni `slug` e `pubblicato`, imposta `aggiornato` ad adesso, unisci `fonti` (senza duplicati per URL), ricalcola `previsione` se la nuova informazione cambia ora o comuni, riscrivi testo ed esito se cambiano. Altrimenti crealo.
 
-**Ogni evento verificato ha il suo file**, qualunque sia l'esito: la pagina ne fa un articolo solo se `esito` è `anticipata`, e conta gli altri nel riquadro d'inefficienza (data, pericolo, `evento.luogo`, esito). Per un evento non anticipato `corpo`, `perche` e `foto` non si vedono sulla pagina: scrivili brevi ma veri, perché se un aggiornamento lo porta ad `anticipata` diventano l'articolo.
+**Solo l'evento `anticipata` ha il suo file.** Nessun file per `contemporanea`, `mancata`, `non_verificabile` o per un evento scartato al fact check; se ne esiste uno da una passata precedente, cancellalo. Se un aggiornamento porta un evento già pubblicato fuori da `anticipata` (nuove fonti spostano ora o comune), il file si cancella e lo si dice all'utente.
 
 Schema (vedi `Verifica` in `frontend/src/content/verifiche.ts` — il tipo è la fonte di verità):
 
@@ -159,13 +165,23 @@ Schema (vedi `Verifica` in `frontend/src/content/verifiche.ts` — il tipo è la
     "allerta_prima": "2026-10-07T17:57:33+02:00",
     "corse": [{ "run_at": "…", "horizon_h": 72, "target_at": "…", "classe": "VeryHigh", "score": 0.855 }]
   },
-  "perche": [{ "nome": "Indice meteo incendi (FWI)", "valore": "48,3", "spiegazione": "…" }]
+  "perche": [{ "nome": "Indice meteo incendi (FWI)", "valore": "48,3", "spiegazione": "…" }],
+  "en": {
+    "titolo": "Wildfire on the hills of Matera: Limen saw it three days ahead",
+    "luogo": "Matera (MT)",
+    "sommario": "One or two sentences: what happened and what Limen said.",
+    "corpo": ["Paragraph 1: the event according to the sources.", "Paragraph 2: the forecast.", "Paragraph 3: limits and what does not add up."],
+    "perche": [{ "nome": "Fire Weather Index (FWI)", "valore": "48.3", "spiegazione": "…" }],
+    "foto": [{ "didascalia": "…" }]
+  }
 }
 ```
 
+`en` è la traduzione inglese, campo per campo, di `titolo`, `evento.luogo`, `sommario`, `corpo` (stesso numero di paragrafi, stesso ordine), `perche` (stesso numero di voci, stesso ordine) e delle didascalie di `foto` (stesso ordine). Non si traducono: numeri della `previsione`, date, `fonti` (titoli degli articoli restano in italiano, sono citazioni), `licenza`, `autore`, nomi di comuni. Nei valori di `perche` l'inglese usa il punto decimale («48.3»), l'italiano la virgola.
+
 `previsione.corse` riporta le righe di `corse` senza `fattori`/`cella`/`celle_sopra_soglia` (se sono molte, tieni la prima per ogni orizzonte più quelle in cui la classe cambia). `allerta_prima` = `allerte.prima` o `null`.
 
-**Come scrivere**: italiano, registro giornalistico sobrio, stile dei testi di Limen (frasi concrete, numeri esatti, niente enfasi). Ogni cifra di Limen viene dalla query; ogni cifra sull'evento è attribuita alla testata («secondo ANSA, 40 ettari»). Niente citazioni lunghe degli articoli: parafrasi breve + link. Dichiara sempre i limiti: celle da 1 km², nodo meteo a ~9 km, classe ≥ Moderato non è un'allerta ufficiale (quella è della Protezione Civile). Mai suggerire che Limen sostituisca il bollettino ufficiale.
+**Come scrivere**: prima l'italiano, poi l'inglese tradotto da quello — stessi fatti, stesse cifre, nessuna frase in più o in meno. Registro giornalistico sobrio, stile dei testi di Limen (frasi concrete, numeri esatti, niente enfasi). Ogni cifra di Limen viene dalla query; ogni cifra sull'evento è attribuita alla testata («secondo ANSA, 40 ettari»). Niente citazioni lunghe degli articoli: parafrasi breve + link. Dichiara sempre i limiti: celle da 1 km², nodo meteo a ~9 km, classe ≥ Moderato non è un'allerta ufficiale (quella è della Protezione Civile). Mai suggerire che Limen sostituisca il bollettino ufficiale. In inglese: classi «Low / Moderate / High / Very high», «Civil Protection» per la Protezione Civile, «1 km² cells», «weather node ~9 km away»; un «≥ Moderate» non è «an alert».
 
 ### 9. Controllare e pubblicare
 
@@ -175,8 +191,25 @@ Schema (vedi `Verifica` in `frontend/src/content/verifiche.ts` — il tipo è la
    cd frontend && docker run --rm --user $(id -u):$(id -g) -e HOME=/tmp -v "$PWD":/app -w /app node:22 \
      sh -c "npx vitest run src/__tests__/VerifichePage.test.tsx && npm run lint && npm run build"
    ```
-   Il `build` (`tsc -b`) controlla che ogni JSON rispetti il tipo `Verifica`.
-3. Riepiloga all'utente, per ogni evento: esito, anticipo, fonti, foto e licenza — distinguendo gli **articoli** (`anticipata`) da quelli che vanno solo nel riquadro d'inefficienza — e gli eventi **scartati** con il motivo.
+   Il `build` (`tsc -b`) **non** controlla i JSON (`import.meta.glob` li tipizza senza verificarli): controlla tu che ogni file sia `anticipata`, abbia l'anticipo e il blocco `en` completo:
+   ```bash
+   for f in frontend/src/content/verifiche/*.json; do python3 - "$f" <<'PY'
+   import json, sys
+   v = json.load(open(sys.argv[1])); en = v.get("en") or {}
+   errori = [m for m, ok in [
+       ("esito non anticipata", v["esito"] == "anticipata"),
+       ("anticipo mancante", isinstance(v["previsione"]["anticipo_ore_moderato"], int)),
+       ("en incompleto", all(en.get(k) for k in ("titolo", "luogo", "sommario", "corpo"))),
+       ("en.corpo disallineato", len(en.get("corpo", [])) == len(v["corpo"])),
+       ("en.perche disallineato", len(en.get("perche", [])) == len(v["perche"])),
+       ("en.foto disallineato", len(en.get("foto", [])) == len(v["foto"])),
+   ] if not ok]
+   print(sys.argv[1], "OK" if not errori else errori)
+   PY
+   done
+   ```
+   `verificate()` in `verifiche.ts` scarta comunque un file non conforme, ma in silenzio: l'articolo semplicemente non appare. Il controllo qui sopra è quello che te lo dice.
+3. Riepiloga all'utente, per ogni evento trovato: esito, anticipo (≥ Moderato e ≥ Alto), fonti, foto e licenza. In due gruppi: gli **articoli** (`anticipata`, con file) e gli **esclusi** (`contemporanea`, `mancata`, `non_verificabile`, scartati al fact check) con il motivo e, per i non anticipati, il fattore che è mancato. Gli esclusi stanno solo nel riepilogo.
 4. **Pubblicare richiede conferma esplicita** (è il sito pubblico): solo dopo il sì, ricostruisci il frontend statico
    ```bash
    docker compose --env-file .env -f infra/docker/docker-compose.demo.yml \
@@ -188,7 +221,8 @@ Schema (vedi `Verifica` in `frontend/src/content/verifiche.ts` — il tipo è la
 ## Cosa non fare
 
 - Non pubblicare eventi con una sola fonte non istituzionale.
+- Non scrivere un file per un evento che non sia `anticipata`, e non mostrarne il conteggio sulla pagina: sulla pagina vanno solo gli eventi previsti, con le ore di anticipo.
+- Non pubblicare un articolo senza il blocco `en` completo.
 - Non chiamare `mancata` un evento fuori retention o fuori copertura: è `non_verificabile`.
-- Non saltare il file JSON di un evento `mancata` o `contemporanea` per migliorare il bilancio: senza il file il riquadro d'inefficienza non lo conta.
 - Non modificare numeri di Limen nel testo per renderli più leggibili oltre l'arrotondamento (punteggi a due decimali, ore intere).
 - Non scrivere nel database: la skill legge soltanto.
