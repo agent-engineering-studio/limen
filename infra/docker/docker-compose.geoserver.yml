@@ -185,7 +185,7 @@ services:
       # See geoserver-mcp below for why `openai` and not a rewritten OLLAMA_HOST.
       OPENAI_BASE_URL: ${GEO_OPENAI_BASE_URL:-http://host.docker.internal:8091/v1}
       OPENAI_LLM_MODEL: ${GEO_OPENAI_MODEL:-fast}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_API_KEY: ${GEO_OPENAI_API_KEY:-${OPENAI_API_KEY:-}}
       OLLAMA_HOST: ${GEO_OLLAMA_HOST:-http://host.docker.internal:11434}
       OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5}
       OLLAMA_CLOUD_HOST: ${OLLAMA_CLOUD_HOST:-https://ollama.com}
@@ -222,8 +222,9 @@ services:
       # selection and short GeoServer answers. NEVER `quality-local`/`glm52`:
       # the MCP tool call and the chat UI are both synchronous.
       OPENAI_LLM_MODEL: ${GEO_OPENAI_MODEL:-fast}
-      # Optional — the provider sends a placeholder for a keyless gateway.
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # The gateway master key (GEO_OPENAI_API_KEY). Not OPENAI_API_KEY in .env:
+      # that one makes Limen itself switch provider to OpenAI.
+      OPENAI_API_KEY: ${GEO_OPENAI_API_KEY:-${OPENAI_API_KEY:-}}
       # Alternative backends, inert unless GEO_LLM_PROVIDER selects them.
       OLLAMA_HOST: ${GEO_OLLAMA_HOST:-http://host.docker.internal:11434}
       OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5}

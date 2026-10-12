@@ -6,6 +6,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+* **I container GeoServer passano la chiave al gateway LiteLLM.** Il gateway
+  `:8091` ora richiede una master key; `geoserver-mcp` e `geoserver-webui` la
+  leggono da `GEO_OPENAI_API_KEY` (con ripiego su `OPENAI_API_KEY`). Non si usa
+  `OPENAI_API_KEY` nel `.env` dello stack perché farebbe passare Limen stesso
+  al provider OpenAI; api e worker usano già `LLM__LLAMACPP_API_KEY`.
+
 ### Changed
 
 * **Lo storico registra i cambiamenti, non i fotogrammi** (#135). Lo sweep
