@@ -1,0 +1,471 @@
+<p align="center">
+  <img src="docs/images/banner.png" alt="Limen — Landslide Monitoring Framework" width="100%">
+</p>
+
+# Limen
+
+🇬🇧 [English](./README.md) · 🇮🇹 **Italiano**
+
+> **Monitoraggio AI del pericolo di frane, allagamenti e incendi per il
+> territorio italiano, cella per cella, adesso e nelle prossime 72 ore.**
+> **Copertura nazionale — tutte le 20 regioni ISTAT** su griglia 1 km²
+> (~312k celle), solo dati aperti, codice EUPL-1.2.
+>
+> 🗺️ **Mappa live:** <https://limen.agentengineering.it/> ·
+> ☕ **[Sostieni Limen](#sostieni-limen)** su [Buy Me a Coffee](https://www.buymeacoffee.com/f9t3zol)
+
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![License: EUPL-1.2](https://img.shields.io/badge/license-EUPL--1.2-green.svg)](./LICENSE)
+[![uv](https://img.shields.io/badge/managed%20by-uv-261230)](https://github.com/astral-sh/uv)
+[![ruff](https://img.shields.io/badge/lint-ruff-261230)](https://github.com/astral-sh/ruff)
+[![mypy --strict](https://img.shields.io/badge/typed-mypy%20--strict-blue)](http://mypy-lang.org/)
+
+Limen ("soglia" in latino) unisce **morfologia, geologia, umidità del
+suolo, piogge, sismicità, incendi e archivi storici** in un punteggio di
+pericolo per **tre rischi** su ogni cella da 1 km² d'Italia, ogni ora e con
+la previsione a 72 ore:
+
+- **Frane**: suscettibilità del terreno (IFFI, PAI, pendenza, litologia)
+  per la pioggia contro le soglie intensità-durata di Caine, più terremoti e
+  incendi recenti.
+- **Allagamenti**: pericolosità idraulica ISPRA per il più forte fra il
+  ramo pluviale (pioggia prevista) e quello fluviale (portata GloFAS rispetto
+  alla piena ordinaria di quel corso d'acqua).
+- **Incendi**: l'indice canadese FWI (Van Wagner), calcolato per nodo
+  meteo, modulato da combustibile e pendenza.
+
+I numeri li calcola un motore deterministico e leggibile; l'AI scrive i
+racconti per regione e non cambia nessun numero. Stack: Python 3.12 +
+FastAPI + PostgreSQL 16 + PostGIS, frontend Vite + React + MapLibre,
+notifiche multi-canale. Il sistema è costruito attorno a un Multi-Agent
+Framework (MAF) che orchestra ingestione → scoring → spiegazione, con un
+data layer portabile tra Docker locale, Neon (serverless) e qualsiasi
+PostgreSQL gestito.
+
+## Avvio rapido
+
+```bash
+git clone https://github.com/agent-engineering-studio/limen.git
+cd limen
+uv sync --all-groups
+make up                     # Postgres+PostGIS + GeoServer (mcp-geoserver) + frontend
+make init                   # migrate → seed 20 regioni → ITALICA → bootstrap → calibrate
+uv run limen serve          # FastAPI su http://localhost:8080/docs
+uv run limen report build   # report HTML statico zone a rischio → site/index.html
+( cd frontend && npm ci && npm run dev )   # mappa su http://localhost:5173
+```
+
+`make init` è idempotente e ricostruisce tutti i dati su una macchina
+nuova: applica le migrazioni, semina le 20 regioni ISTAT (griglia 1 km²),
+scarica il catalogo eventi frana **e-ITALICA** da Zenodo (truth set del
+backtest §2.5), popola i fattori statici per cella (IFFI + PAI dal
+PostGIS di GeoServer + slope da DTM) e calibra `s_static`.
+
+Su **Neon** (dev/test serverless): impostare `DB__CONNECTION_STRING` con
+`?sslmode=require` e `SCHEDULER__CACHE_CLEANUP=apscheduler`, nient'altro
+— `pg_cron` viene saltato e l'APScheduler in-process prende in carico i
+job periodici. In **produzione** (host Docker self-hosted, nessun cloud
+provider): `docker compose -f infra/docker/docker-compose.demo.yml up -d
+--build`. Provider LLM risolto per precedenza `LLM__PROVIDER` >
+`ANTHROPIC_API_KEY` > `OPENAI_API_KEY` > credenziali Foundry > llama.cpp.
+In produzione tutto il traffico LLM passa dal gateway **LiteLLM**
+(`:8091`): i modelli locali girano su llama.cpp / llama-swap, i racconti
+delle regioni (`LLM__MODELS__BRIEFING=quality-cloud`) su **Claude Sonnet
+5.5**. Lo stack di inferenza è replicabile in container: vedi
+[`docs/inference.md`](./docs/inference.md).
+
+**Non sei uno sviluppatore?** La documentazione divulgativa in
+[`docs/divulgazione/`](./docs/divulgazione/README.md) spiega senza gergo come
+viene calcolato il rischio di ogni cella, cosa fanno (e cosa non fanno) il
+modello ML e gli agenti AI, da quali fonti aperte arrivano i dati e perché
+l'LLM gira su un server proprio. Nella SPA, alla voce **Come funziona**
+(`#/come-funziona`), una pagina unica raccoglie tutto il motore — dati,
+formule, previsione, ML, AI, geografia: è
+[`docs/guida/limen.md`](./docs/guida/limen.md).
+
+Approfondimenti: [`docs/demo.md`](./docs/demo.md) (demo locale su un AOI piccolo),
+[`docs/architecture.md`](./docs/architecture.md),
+[`docs/openclaw.md`](./docs/openclaw.md),
+[`docs/api.md`](./docs/api.md),
+[`docs/deployment.md`](./docs/deployment.md),
+[`docs/scoring-model.md`](./docs/scoring-model.md),
+[`docs/runbook.md`](./docs/runbook.md),
+[`docs/divulgazione/`](./docs/divulgazione/README.md) (per un pubblico non tecnico).
+
+Il motore V1 è una combinazione lineare pesata **pura** e interpretabile
+(§2.4 del project doc) che legge ogni peso, soglia e cutoff di classe da
+[`src/limen/config/hazards/landslide.yaml`](./src/limen/config/hazards/landslide.yaml)
+— un file per pericolo, nominato come il valore dell'enum.
+Nessuna costante cablata nel codice di scoring. Nessun LLM. Nessun I/O.
+La stessa interfaccia `CellFeatureBundle` accetta anche il motore ML V2.
+
+L'architettura è **multi-rischio**: `hazard_type` attraversa tabelle, viste,
+API, MCP e A2A, e ogni pericolo porta il proprio file di soglie, il proprio
+schema e il proprio motore. Frana, alluvione (#63) e incendio (#61) sono tutti
+e tre abilitati in produzione; aggiungerne un quarto è uno YAML più una
+registrazione, senza toccare workflow, API o persistenza.
+
+---
+
+## Componenti e sorgenti
+
+| Sorgente | Cosa ingeriamo | Cadenza | Implementazione |
+|---|---|---|---|
+| **Open-Meteo** | precip oraria, umidità del suolo 0–7 / 7–28 cm, neve (forecast); precip cumulata (archivio) | live, cache 30 min | `integrations/openmeteo/` + `CachedOpenMeteoClient` |
+| **ISPRA (PostGIS di GeoServer)** | inventario IFFI (frane/aree/dgpv, tutte le regioni), mosaico PAI frana; il mosaico idraulica alimenta il componente `H` | all'init / settimanale | `integrations/geoserver_source/` legge il PostGIS di mcp-geoserver |
+| **INGV** | eventi FDSN (mag ≥ 3.5, ultimi 7 g, bbox AOI); griglia ShakeMap | poll event-driven | `integrations/ingv/` + `seismic_repo` + `ObjectStore` |
+| **EFFIS** | perimetri aree bruciate; fallback bulk Shapefile | batch settimanale | `integrations/effis/` |
+| **Bootstrap statico** | per cella: `iffi_density_500` (entro 500 m dalla cella), `distance_to_iffi_m`, `pai_class_norm`, `slope_deg` (DTM) — SQL PostGIS set-based | one-shot CLI | `integrations/static_bootstrap/` + `limen bootstrap-static` |
+| **Motore di scoring (V1)** | soglia Caine I/D (ri-tarata su ITALICA), API sigmoide, finestra post-incendio **modulata dalla severità del bruciato** (densità di FRP FIRMS: la somma correla con l'area a 0,63 e la densità a 0,26, quindi la somma misura la dimensione del rogo e non la sua intensità), decadimento sismico, aggregatore pesato + 5 classi | puro (no I/O) | `core/scoring/` + `MultiFactorScoringEngine` |
+| **Dimensione pericolo** | `hazard_type` su ogni riga di rischio e su entrambi i ledger di dedup; motori registrati per coppia *(pericolo, implementazione)*; un file di soglie per pericolo. Abilitati tutti e tre: `landslide`, `flood`, `wildfire` | trasversale | `core/models/hazard.py`, `core/scoring/registry.py`, `config/hazards/` |
+| **Calibrate** | stat di normalizzazione per-AOI; precompute `s_static` | one-shot | `limen calibrate` + `reports/calibrate_<aoi>.md` |
+| **Ingest eventi** | catalogo **e-ITALICA** (frane innescate da pioggia, datate, tutta Italia) — truth set del backtest | one-shot, auto-download Zenodo | `limen ingest-events` |
+| **Storia del fuoco** | archivio **FIRMS per paese** (MODIS dal 2000, VIIRS S-NPP dal 2012): 391.987 detection italiane → 224.156 eventi cella-giorno e `fire_density` su 65.771 celle. Pubblico, nessuna credenziale — il portale di download chiede Earthdata e consegna via email, gli archivi per paese sono CSV in chiaro. Solo `type = 0`: senza quel filtro la cella più "incendiata" d'Italia era l'ILVA di Taranto con 3.308 giorni-incendio, perché un'acciaieria è una detection ad alta confidenza. Sanità: 16 perimetri EFFIS su 16 confermati da un hotspot entro 1 km / ±2 g | one-shot, cache | `integrations/firms/archive.py` + `limen ingest-fire-history` |
+| **Challenger ML incendio** | schema di feature **per pericolo** (FWI/ISI/DC dalla catena ricostruita, combustibile CLC, prossimità WUI, memoria del fuoco, pendenza, pioggia 30 g), pseudo-assenze caso-controllo, CV spaziale a blocchi, SHA della matrice per la riproducibilità. Misurato su una stagione (30.066 campioni, 222 blocchi): AUC-PR **0,352** contro **0,237** della baseline FWI-only; Random Forest 0,367, logistica 0,284. La V1 resta champion, promozione manuale | one-shot | `ml/fire_features.py` + `LIMEN_TRAIN_HAZARD=wildfire limen train` |
+| **Truth set alluvione** | perimetri **allagati osservati** di Copernicus EMS Rapid Mapping (13 attivazioni italiane, 9.463 poligoni, 480 km², 2.354 celle su 9 regioni) più le **maschere di osservazione**, che dicono dove il satellite ha guardato: dentro, l'assenza di poligono è un "non allagato" osservato; fuori, un'allerta è *non verificabile* e non falsa. Pubblico, nessuna credenziale — FloodCat richiede un'utenza DPC e Polaris pubblica PDF | one-shot, cache dei vettori | `integrations/copernicus_ems/` + `limen ingest-events --hazard flood` |
+| **Backtest alluvione** | replay a passo giornaliero con la previsione **come fu emessa** (`issued`, la skill operativa) accanto alla pioggia poi caduta (`observed`, il tetto con una previsione perfetta) → hit rate, **tasso di base**, FAR sui soli giorni-cella osservati, preavviso | one-shot | `limen backtest-flood` + `reports/backtest_flood_*.md` |
+| **Backtest** | replay di una finestra storica con pioggia antecedente **CERRA** (5.5 km) + truth set e-ITALICA → hit rate / FAR / lead time vs target §2.5 | one-shot | `limen backtest` + `reports/backtest_*.md` |
+| **Workflow MAF (V1)** | AreaResolver → StaticFactors → MeteoFetch → SeismicCheck → FireCheck → \[SensorFetch?\] → RiskScoring → EscalationGate → RiskAnalyst → Briefing → PersistResult → AlertDispatch | one-shot CLI | `agents/` + `limen monitor-once` |
+| **Provider LLM** | precedenza `LLM__PROVIDER` > Anthropic > OpenAI > Foundry > **llama.cpp**; il resolver salta i provider cloud senza SDK e cade su llama.cpp (solo httpx). Ollama resta selezionabile con `LLM__PROVIDER=ollama`. Briefing in italiano; RiskAnalyst restituisce JSON tipizzato. | risolto all'avvio | `agents/llm_factory/resolve_llm_factory` |
+| **API HTTP** | `/health` + `/ready`, `GET /api/aoi/{id}/risk/latest`, `GET /api/cell/{id}/breakdown`, `GET /api/aoi`, `GET /api/alerts`, `/api/tiles/...`, OpenAPI su `/docs` e `/redoc` | FastAPI / uvicorn | `api/` + `limen serve` |
+| **Job periodici** | workflow MAF orario (con shadow ML), **sweep previsionale** ogni 6 h, **nowcast radar DPC** ogni 15 min, **hotspot NASA FIRMS** ogni 45 min, report nazionale giornaliero, sync ISPRA settimanale, **drift monitor ML** (PSI/KS training-vs-live sulle feature canoniche che lo shadow persiste), cache cleanup + retention di `model_runs` (default 30 gg) | APScheduler in-process | `api/jobs/` |
+| **Radar DPC (nowcast)** | SRI nazionale 1 km / 5 min (piattaforma radar DPC, CC-BY-SA): pioggia ≥ `NOWCAST__MIN_INTENSITY_MMH` su una regione ⇒ il workflow di quella AOI parte subito invece di aspettare il tick orario (cooldown 45 min; alert dal percorso operativo normale) | poll ogni `NOWCAST__INTERVAL_MINUTES` | `integrations/dpc/` + `api/jobs/nowcast_monitoring.py` |
+| **Hotspot NASA FIRMS** | detection attive VIIRS 375 m (S-NPP / NOAA-20 / NOAA-21) e MODIS 1 km con latenza NRT ~3 h: `FIRMS__MIN_HOTSPOTS` hotspot dentro una AOI ⇒ workflow immediato (cooldown `FIRMS__COOLDOWN_MINUTES`), e `months_since_fire` — quindi il fattore F post-incendio — si attiva in ore invece di attendere il perimetro EFFIS. Fail-closed: senza `FIRMS__MAP_KEY` il feed è inerte e il job non viene registrato | poll ogni `FIRMS__INTERVAL_MINUTES` (1 transazione per sorgente sul bbox nazionale) | `integrations/firms/` + `api/jobs/firms_monitoring.py` + `limen firms-sync` |
+| **Forecast previsionale** | scoring a `now+H` ore con pioggia prevista Open-Meteo (osservata+prevista nella stessa finestra); champion + challenger ML sulle stesse celle; report on-demand o alert "PREVISIONE" schedulato con dedup (AOI, orizzonte) | `limen forecast` / job ogni `FORECAST__INTERVAL_HOURS` | `agents/workflows/forecast.py` + `api/jobs/forecast_monitoring.py` |
+| **MCP `limen-ops`** | `tool_risk_summary`, `tool_top_risk_cells`, `tool_cell_breakdown`, `tool_recent_alerts`, `tool_national_report` + admin (`tool_run_monitor`, `tool_build_report`, `tool_forecast_history`, fail-closed su `MCP_ADMIN_TOKEN`) per gateway agentici (OpenClaw, Claude Desktop) | servizio compose `mcp`, HTTP `127.0.0.1:8766/mcp` | `mcp/` + `limen mcp-serve` |
+| **A2A (Agent2Agent)** | interoperabilità JSON-RPC 2.0 con altri agent: Agent Card su `/.well-known/agent-card.json`, endpoint `/a2a` con `message/send`, `message/stream` (SSE), `tasks/get`/`cancel`, push notifications; skill = le query di sola lettura di `limen-ops`; task persistiti (`a2a_tasks`) | montato sull'API, read-only | `a2a/` + `api/endpoints/a2a.py` + pagina UI `#/integrazioni` |
+| **Report nazionale giornaliero** | quadro aggregato 20 regioni (riepilogo per regione, top celle nazionali, top ML shadow, conteggi alert 24h) reso in italiano deterministico e spedito ogni mattina sui canali di notifica | cron `REPORT__HOUR_UTC` (default 06 UTC) | `api/jobs/daily_report.py` + `tool_national_report` |
+| **Report HTML statico** | pagina delle *zone a maggior rischio*: cluster di celle contigue (PostGIS `ST_ClusterDBSCAN`), **mini-mappa interattiva Leaflet per zona** (zoom/pan reali su basemap OSM/Carto, celle in GeoJSON, **coordinate geografiche** in evidenza), motivo deterministico S/M/E/F/H + verdetto, palette YlOrRd. Nessun LLM, nessuna immagine raster. Prova la soglia di allerta (`High`) e, se **nessuna** zona la supera, scende (`Moderate`→`Low`) mostrando comunque le aree relativamente più a rischio con un banner informativo (nessun allarme) — il report non è mai vuoto. **Archivio immutabile versionato** (`site/archive/<ts>/` + `manifest.json`) per fact-checking futuro; idempotente (salta il rebuild se l'assessment non cambia); pubblicabile via GitHub Pages (`REPORT__HTML_PUBLISH`) | al boot + ogni `REPORT__HTML_INTERVAL_HOURS` (default 1h) o on-demand | `site/` + `limen report build` + `api/jobs/html_report.py` |
+| **Vector tiles** | matview `mv_latest_risk` (grid_cells ⨝ ultimo risk_assessment per cella), rinfrescata da `refresh_mv_latest_risk()`; servita da **pg_tileserv** | per ciclo di monitoraggio | migrazione `007_map_views.sql` |
+| **Rollup per comune** | aggregazione amministrativa `mv_comune_risk` (regione già coperta da `v_region_tiles`): classe della **peggior cella** + profilo (conteggi per classe, esposti) + classifica per esposizione. Superfici: mappa (choropleth comune + badge celle-in-allerta sui High+, drill-down), sidebar, classifica, REST `/api/comuni` + `/api/comune/{istat}`, tool MCP/A2A `top_comuni`/`comune_risk`, sezione report, comune negli alert. Confini ISTAT importati con `limen seed-comuni`; refresh agganciato a `refresh_mv_latest_risk()` | one-shot `seed-comuni` + per ciclo | migrazione `026_comuni.sql` + `data/repos/comune_risk.py` |
+| **Frontend** | SPA Vite + TS + React + **MapLibre GL JS**: `RiskMap` (vector tiles, palette 5 classi ColorBrewer YlOrRd), `LegendPanel` (etichette + range, non solo colore), `AlertList`, `CellPopup`, `TimelineSlider`; overlay PMTiles PAI/IFFI opt-in | pubblico, read-only | `frontend/` |
+| **Notifiche** | Protocol `NotificationChannel` + Telegram / MQTT / Email / **Webhook** (POST JSON a gateway agentici, es. OpenClaw `/hooks` con bearer token); dispatcher in parallelo con isolamento eccezioni per canale; dedup su `alert_dispatches` | per tick del workflow | `notifications/` |
+
+---
+
+## Perché queste scelte
+
+| Decisione | Motivazione |
+|-----------|-------------|
+| **PostgreSQL 16 + PostGIS engine-agnostic** (no Supabase, no BaaS, no ORM) | Stesso SQL e stesso codice su Docker locale, Neon o self-hosted. Cambia solo `DB__CONNECTION_STRING`. |
+| **`asyncpg` + codec PostGIS custom** | Le geometrie viaggiano come oggetti Shapely, niente boilerplate WKB, niente lock-in di sessione ORM. |
+| **`pg_cron` opzionale** | Neon non lo supporta. L'**APScheduler** in-process esegue gli stessi job periodici quando l'estensione manca. |
+| **Object storage dietro Protocol** (`filesystem` / `s3`) | I byte raster non vanno mai nel DB. PostGIS memorizza solo riferimenti (path + bbox + CRS + checksum). Il backend `s3` punta a qualsiasi endpoint S3-compatibile (MinIO, R2, B2) via `OBJECT_STORE__ENDPOINT_URL` — mai SDK cloud. |
+| **Migrazioni SQL semplici** | Niente Alembic, niente ORM. Un runner con tabella `schema_migrations` + checksum. Comportamento identico su ogni Postgres. |
+| **Pydantic v2 + `structlog`** | Configurazione tipizzata e log strutturati senza reinventare. |
+| **`uv` + layout `src/`** | Gestione dipendenze lockfile-first; il pacchetto non può importare per errore il proprio codice di test. |
+| **GeoServer come sorgente dati generica** | mcp-geoserver pubblica gli opendata ISPRA nel suo PostGIS; la semantica ISPRA vive solo nel loader Limen, non nell'MCP (che resta generico). |
+
+---
+
+## Calibrazione e validazione (§2.5)
+
+Il ciclo di test formale ha tarato il motore sui dati reali:
+
+- **Soglia Caine I/D** ri-derivata dal catalogo **e-ITALICA** (5974 coppie
+  intensità-durata misurate da pluviometri), inviluppo inferiore T5 per
+  macroregione. La soglia storica lasciava il 36% delle frane reali sotto
+  soglia; ora ~95% sono sopra soglia.
+- **Sorgente pioggia del backtest**: **ERA5** dall'archivio Open-Meteo
+  ospitato in proprio. CERRA (5.5 km) risolverebbe meglio la pioggia
+  convettiva, ma l'istanza locale non lo serve: i suoi valori arrivavano
+  nulli, letti come 0 mm, e il backtest misurava senza pioggia (#184). Ora
+  un archivio che non piove su nessun nodo ferma il comando con
+  `backtest.rainfall.empty`.
+- **Densità IFFI** contata entro 500 m dalla cella (non dal centroide).
+- **Saturazione densità** in YAML (`static.iffi_density_saturation`),
+  bilanciata su ITALICA (recall vs precisione).
+
+Validazione su ground-truth (pioggia pluviometro reale): ~63–77% delle
+frane reali raggiungono ≥Moderate.
+
+**Dove siamo, onestamente** (#122). Con la pioggia ERA5 e gli antecedenti
+come in produzione, la classe **«alto»** coglie ancora poche frane: in
+Liguria, novembre 2019, l'11% delle 131 frane con lo 0,17% delle celle-ore
+in allerta; nelle Marche, maggio 2014, nessuna su 172. Il punteggio ordina
+bene le celle dentro ogni regione, ma spostare la soglia non basta: una
+soglia nazionale tarata su sei regioni non regge sulle altre sei, e una
+soglia per regione fa peggio a parità di allerta. Il limite sta nel segnale
+della pioggia per come lo leggiamo oggi, ed è il prossimo lavoro. Il
+dettaglio dei numeri è nella issue.
+
+---
+
+## Configurazione
+
+Caricata da variabili d'ambiente (e `.env` opzionale) via
+`limen.config.settings.Settings`. I campi annidati usano `__` come
+delimitatore.
+
+| Variabile | Default | Note |
+|-----------|---------|------|
+| `DB__CONNECTION_STRING` | `postgresql://limen:limen@localhost:5432/limen` | DSN PostgreSQL. Aggiungi `?sslmode=require` per Neon. |
+| `OBJECT_STORE__BACKEND` | `filesystem` | `filesystem` o `s3`. |
+| `OBJECT_STORE__ENDPOINT_URL` | _vuoto_ | Endpoint S3-compatibile (MinIO, R2, B2). |
+| `SCHEDULER__CACHE_CLEANUP` | `apscheduler` | `pg_cron` o `apscheduler`. **Usa APScheduler su Neon.** |
+| `LLM__PROVIDER` | _vuoto_ | Override: `anthropic` / `openai` / `foundry` / `ollama` / `llamacpp`. Vuoto ⇒ llama.cpp se non c'è una chiave cloud. |
+| `LLM__LLAMACPP_BASE_URL` | `http://127.0.0.1:8091` | Gateway di inferenza self-hosted (forma OpenAI). **Non** `:8081`, che è GeoServer. Da container: `host.docker.internal`. |
+| `LLM__MODELS__<RUOLO>` | id Claude | Mappa ruolo → modello. I motori locali onorano solo i ruoli dichiarati. Mai `quality-local`/`glm52`: il processo rifiuta di partire. Vedi [`docs/inference.md`](./docs/inference.md). |
+| `LLM__LLAMACPP_TIMEOUT_SECONDS` | `120` | Tetto per i ruoli senza override; `LLM__LLAMACPP_ROLE_TIMEOUT_SECONDS` (JSON) per-ruolo. |
+| `LLM__OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama host (da container: `host.docker.internal`). |
+| `LLM__OLLAMA_MODEL` | `qwen3.6:latest` | Modello Ollama unico per tutti i ruoli agente. |
+| `SCORING__MODE` | `champion_only` | `shadow` fa girare il challenger ML in parallelo (scrive solo `model_runs`). |
+| `FORECAST__ENABLED` | `true` | Sweep previsionale schedulato; `FORECAST__HORIZON_HOURS` (48), `__INTERVAL_HOURS` (6), `__MIN_LEVEL` (High). |
+| `REPORT__HTML_ENABLED` | `true` | Report HTML statico; `__HTML_INTERVAL_HOURS` (1), `__HTML_RUN_AT_STARTUP` (true), `__HTML_OUTPUT_DIR` (site), `__HTML_MIN_LEVEL` (High), `__HTML_MAX_CLUSTERS` (50), `__HTML_ARCHIVE_KEEP` (240), `__HTML_PUBLISH` (false). |
+| `NOTIFICATIONS__WEBHOOK__URL` | _vuoto_ | Gateway agentico (OpenClaw `/hooks`); `__TOKEN` per il bearer. |
+| `MCP_ADMIN_TOKEN` | _vuoto_ | Abilita `tool_run_monitor` sull'MCP; assente = disabilitato (fail-closed). |
+| `GEOSERVER_SOURCE__DB_DSN` | _vuoto_ | DSN del PostGIS di mcp-geoserver (IFFI + PAI). |
+| `LIMEN_DEM_RASTER` | _vuoto_ | GeoTIFF DTM per lo slope (opt-in). |
+| `LIMEN_ITALICA_CSV` | _vuoto_ | CSV e-ITALICA locale; se assente, auto-download da Zenodo. |
+| `LOG_LEVEL` / `LOG_JSON` | `INFO` / `false` | Livello + output JSON dei log structlog. |
+
+Vedi [`.env.example`](./.env.example) per l'elenco completo con esempi, e
+[`docs/inference.md`](./docs/inference.md) per il motore LLM (modelli del
+gateway, mappa ruolo → modello, vincoli sui percorsi sincroni).
+
+### Porte pubblicate: Docker scavalca ufw
+
+Docker pubblica le porte scrivendo nelle **proprie** catene iptables, che
+vengono consultate *prima* di quelle di ufw: il `default deny incoming`
+dell'host **non** protegge una porta pubblicata da un container. Per questo
+ogni `ports:` nei compose ha una variabile di bind con default `127.0.0.1`
+(`LIMEN_PG_BIND`, `LIMEN_API_BIND`, `LIMEN_MQTT_BIND`, `LIMEN_TILESERV_BIND`,
+`LIMEN_FRONTEND_BIND`, `LIMEN_MCP_BIND`,
+`LIMEN_GEOSERVER_*_BIND`, `LIMEN_GEODATA_*_BIND`).
+
+Le porte restano pubblicate — non rimosse — perché il workflow documentato
+`uv run limen migrate/seed/...` da host ci si collega. L'esposizione pubblica
+va fatta a monte con un reverse proxy su 443, non alzando un bind a `0.0.0.0`.
+
+---
+
+## Schema database (highlights)
+
+`aoi`, `grid_cells`, `cell_static_factors`, `iffi_landslides`,
+`pai_hazard`, `landslide_events` (catalogo eventi datati),
+`risk_assessments`, `model_runs` (predizioni del challenger in shadow),
+`training_samples` (feature store ML), `norm_stats`, `raster_refs`,
+`app_cache`, `alert_dispatches`, `forecast_dispatches` (dedup alert
+previsionali), `seismic_events`, `fire_perimeters`, tabelle sensori,
+`schema_migrations`. Tutte le geometrie in EPSG:4326; distanze/aree
+calcolate in EPSG:3035 (LAEA Europe). Migrazioni SQL immutabili in
+`src/limen/data/migrations/NNN_*.sql`.
+
+---
+
+## Testing e quality gates
+
+```bash
+make test                  # unit + integration (testcontainers)
+make test-unit             # veloce, senza Docker
+make check                 # lint + typecheck + test
+make lint                  # ruff check
+make format                # ruff format
+make typecheck             # mypy --strict su src/ (esegui dopo `uv sync --all-groups`)
+```
+
+Gate prima di ogni commit: `ruff check` + `ruff format` puliti,
+`mypy --strict` pulito, `pytest` verde. Su Apple Silicon i test di
+integrazione usano automaticamente `imresamu/postgis-arm64`
+(override con `LIMEN_TEST_POSTGIS_IMAGE`).
+
+---
+
+## Stato & roadmap
+
+Completati di recente:
+
+- **Tre pericoli in produzione**: frane, allagamenti e incendi, con
+  previsione per cella a 72 ore ricalcolata quattro volte al giorno sulle
+  ultime corse meteo (non più una volta a notte).
+- **Pagina «Regioni da monitorare»** (`#/regioni`): le regioni in ordine di
+  pericolo stimato, adesso e nelle prossime 72 ore, con l'allerta ufficiale
+  accanto e un racconto discorsivo per pericolo scritto da Claude, senza
+  numeri inventati. Il rapporto si scarica in **PDF**
+  (`/api/regioni/rapporto.pdf`, anche per una regione sola).
+- **Quadro nazionale che guida la colonna**: scelto un pericolo, la lista
+  «Comuni più esposti» (`/api/comuni?hazard=`) e il grafico di ogni comune
+  parlano solo di quello, con le sue soglie di classe.
+- **Il primo sweep dopo un riavvio** del worker parte dopo due minuti, non
+  dopo un'ora: la mappa non resta più ferma a ogni deploy.
+
+- **Copertura nazionale** (20 regioni ISTAT) con soglia Caine ri-tarata su
+  e-ITALICA.
+- **Componente H (idraulica / inondazione)** attivo dal mosaico idraulica
+  ISPRA via GeoServer (~132k celle in zona di pericolosità idraulica).
+- **Inondazione dinamica (issue #8, attiva di default)**: la componente H
+  riceve un *uplift* quando è **prevista** un'inondazione — pioggia prevista
+  (pluviale), portata dei fiumi via **Open-Meteo Flood/GloFAS** (fluviale) e
+  mareggiate via **Open-Meteo Marine** (costiera), il tutto scalato dalla
+  pericolosità geografica ISPRA. Deterministico, puro, degrada in modo neutro
+  (segnale non applicabile ⇒ 0); disattivabile con `ENABLE_FLOOD_FORECAST=false`.
+- **Nessuna autenticazione utente, per scelta** (epic #69). Limen è una
+  dashboard cartografica pubblica: mappa, quadro nazionale, allerte, comuni e
+  diagnostica del modello in ombra si aprono senza login. Il login che c'era
+  proteggeva la *pagina* e non i dati — tutte le API che alimentavano la
+  dashboard erano già pubbliche, quindi un `curl` otteneva tutto. Il lancio di
+  uno sweep, la sola operazione privilegiata, resta su CLI (`limen
+  monitor-once`) e su MCP con `MCP_ADMIN_TOKEN`, fail-closed. Il lavoro
+  dell'auth su database (#49) resta nella storia git e si recupera se nascerà
+  un'area per operatori di Regione o Protezione Civile.
+- **Sfidante ML addestrato** su 37k campioni (frane e-ITALICA + pioggia
+  antecedente CERRA per campione): **AUC-PR 0.60 vs 0.28 del motore
+  deterministico** sulla stessa partizione spaziale e la stessa pioggia
+  (`limen train`; registro MLflow; promozione solo manuale). Backup/ripristino
+  del dataset e del modello: `make dump-training` / `make restore-training`.
+- **Shadow mode attivo**: il challenger ML gira in parallelo al champion
+  a ogni ciclo orario (`SCORING__MODE=shadow`) e scrive le probabilità in
+  `model_runs`; il motore deterministico resta l'unico autoritativo.
+- **Area di diagnostica ML shadow** (issue #26): endpoint `/api/shadow/summary`
+  (accordo/divergenza per regione + eventi reali) con aggregazione condivisa
+  col CLI `limen shadow-report`; un **pannellino operatore** in linguaggio piano
+  nella dashboard; e una pagina `#/diagnostica-ml`, pubblica come il resto,
+  con recall sugli eventi reali, accordo per regione e **mappa della
+  divergenza** per cella (palette neutra, non quella del rischio; vista tile
+  `v_shadow_divergence_tiles` via pg_tileserv). Non autoritativa — il V1 guida
+  sempre le allerte; il testo è pensato per operatori non tecnici.
+- **`limen forecast`** — run *previsionale* a `now+H` ore: la finestra
+  Open-Meteo miscela pioggia osservata e prevista, champion e ML valutano
+  le stesse celle, report in `./reports/` senza toccare lo stato operativo
+  (`LIMEN_FORECAST_AOI` / `_HOURS` / `_CELL_LIMIT`).
+- **MCP `limen-ops`** (`limen mcp-serve`): rischio, allerte e run del
+  workflow esposti come tool per gateway agentici (OpenClaw, Claude Desktop).
+  Nel compose è il servizio `mcp` (immagine `limen/mcp:0.1`, HTTP su
+  `127.0.0.1:8766`; `LIMEN_MCP_BIND=0.0.0.0` solo dietro TLS quando il
+  gateway sta su un'altra macchina). Aggancio OpenClaw:
+  `openclaw mcp set limen-ops '{"url":"http://127.0.0.1:8766/mcp","transport":"streamable-http"}'`.
+- **Canale di notifica `webhook`**: gli alert POSTano il payload JSON al
+  gateway agentico (es. OpenClaw `/hooks`, bearer token) — pull via MCP per
+  le domande, push via webhook per gli eventi. Config:
+  `NOTIFICATIONS__ENABLED_CHANNELS=["webhook"]` + `NOTIFICATIONS__WEBHOOK__URL/TOKEN`.
+- **Guida unica** «Come funziona» nel frontend (`#/come-funziona`, una
+  sotto-rotta per sezione) con simulatore che usa la formula reale di
+  produzione.
+- **Cartella `llm-training/`**: dataset (assessment → briefing) in formato
+  Alpaca + guida passo-passo per l'eventuale fine-tuning con LLaMA-Factory.
+
+- **Pipeline event-driven** (attiva di default, opt-out `FORECAST__ENABLED=false`): sweep previsionale
+  schedulato a `now+48h` con pioggia prevista; celle a livello ≥
+  `FORECAST__MIN_LEVEL` fanno partire un alert **previsionale** sugli stessi
+  canali (webhook/OpenClaw, Telegram…), etichettato "PREVISIONE", riassunto
+  deterministico, dedup per (AOI, orizzonte) separata dagli alert operativi.
+
+- **Nowcast radar DPC** (attivo di default): l'SRI a 1 km della rete radar
+  nazionale fa da innesco a orizzonte breve — pioggia intensa vista dal
+  radar ⇒ scoring immediato della regione colpita.
+
+Prossimi passi:
+
+- **Il segnale della pioggia per le frane** (#122): la scala non è la leva
+  (vedi «Dove siamo, onestamente»). Si guarda la componente pioggia nelle
+  celle mancate — intensità oraria contro cumulata, finestra delle 48 ore,
+  soglie di Caine per macroregione — sempre con taratura su un gruppo di
+  regioni e verifica sulle altre prima di toccare il motore in produzione.
+- **Verdetto shadow** del challenger ML contro il motore deterministico
+  (`uv run limen shadow-report`); promozione solo **manuale**.
+- **Reliability plot** della diagnostica ML, quando ci saranno abbastanza
+  eventi reali (#30).
+
+---
+
+## Attribuzione & licenze open
+
+Limen usa i seguenti dataset aperti — l'attribuzione è obbligatoria
+quando la mappa / i briefing vengono pubblicati:
+
+* **ISPRA IdroGEO** (inventario IFFI, mosaici PAI frana e idraulica) —
+  © ISPRA / Autorità italiane, CC-BY 4.0. https://idrogeo.isprambiente.it
+* **e-ITALICA** (catalogo frane innescate da pioggia, CNR-IRPI) —
+  CC-BY 4.0, Zenodo DOI 10.5281/zenodo.14204473.
+* **Copernicus** (Open-Meteo, ERA5, **CERRA** reanalisi regionale) —
+  licenza Copernicus, uso libero con attribuzione. https://open-meteo.com
+* **Copernicus EMS — GloFAS** (portata dei fiumi, via Open-Meteo e dall'Early
+  Warning Data Store) — licenza CEMS-Floods: uso libero, ma chi pubblica dati
+  derivati deve scrivere «Contiene informazioni modificate del Copernicus
+  Emergency Management Service [anno]» e non presentarli come avviso di piena.
+  Limen lo fa sulla mappa (alluvione e vista d'insieme), nel piè di pagina
+  della home, negli articoli delle Verifiche sulle alluvioni e nel PDF delle
+  regioni (`frontend/src/lib/attribuzioni.ts`, `report/regioni_pdf.py`).
+  I dati riservati dall'art. 12 del Reg. (UE) 1159/2013 (EFAS in tempo reale)
+  non vanno ripubblicati. https://ewds.climate.copernicus.eu
+* **Copernicus EMS — CEMS Fire** (indici di pericolo incendio su ERA5,
+  `cems-fire-historical-v1`) — CC-BY 4.0. https://ewds.climate.copernicus.eu
+* **Copernicus Land — EGMS** (European Ground Motion Service, prodotto Ortho
+  L3: velocità media del terreno a 100 m da Sentinel-1, componenti verticale
+  ed est-ovest) — licenza aperta Copernicus Land (Reg. UE 2021/696): uso
+  libero citando «Generated using European Union's Copernicus Land Monitoring
+  Service information» e dichiarando le modifiche. Il download richiede la
+  chiave di servizio CLMS (`EGMS__SERVICE_KEY`, profilo su land.copernicus.eu
+  → «API Tokens»). Oggi alimenta solo le feature
+  dell'ML, non la mappa. https://egms.land.copernicus.eu
+* **INGV** (servizio eventi FDSN, ShakeMap) — CC-BY 4.0.
+  https://terremoti.ingv.it
+* **EFFIS** (perimetri aree bruciate) — termini Copernicus EFFIS.
+* **NASA FIRMS** (hotspot attivi VIIRS/MODIS, NRT + archivio per paese
+  dal 2000) — dati NASA, uso libero con attribuzione; l'archivio per
+  paese non richiede credenziali. https://firms.modaps.eosdis.nasa.gov
+* **Copernicus EMS Rapid Mapping** (perimetri allagati osservati, truth set
+  del backtest alluvione) — © European Union, Copernicus EMS: libero con
+  attribuzione, nessuna credenziale.
+  https://rapidmapping.emergency.copernicus.eu
+* **CORINE Land Cover 2018 Italia** (SINAnet/ISPRA) — CC-BY.
+  https://groupware.sinanet.isprambiente.it
+* **Carta Geolitologica d'Italia 1:500k** (Geoportale Nazionale
+  PCN/MASE, Servizio Geologico d'Italia) — CC-BY 4.0.
+* **ISTAT** (confini amministrativi 2023) — CC-BY 4.0.
+* **OpenStreetMap** (basemap) — ODbL.
+
+---
+
+## Sostieni Limen
+
+Limen è sviluppato e ospitato da [Agent Engineering Studio](https://www.agentengineering.it)
+su un server proprio, senza pubblicità e senza raccogliere dati
+personali. Con l'autunno arrivano le piogge, e con le piogge le frane e gli
+allagamenti: è il momento in cui una mappa aperta del pericolo serve di più.
+
+* ⭐ **Metti una stella** al repository: è il modo più semplice per farlo
+  trovare a chi lavora su protezione civile, geologia e open data.
+* ☕ **Offrici un caffè** su [Buy Me a Coffee](https://www.buymeacoffee.com/f9t3zol)
+  (o con il pulsante *Sponsor* in alto): copre server, archivi meteo e il
+  tempo per tarare il motore sui dati veri.
+
+  <a href="https://www.buymeacoffee.com/f9t3zol"><img src="https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=&slug=f9t3zol&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" alt="Buy me a coffee" height="40"></a>
+* 🏛️ **Enti, comuni, università**: per sperimentazioni sul vostro
+  territorio, scriveteci da [agentengineering.it](https://www.agentengineering.it).
+* 🔁 **Condividi** la [mappa live](https://limen.agentengineering.it/) e
+  segnalaci, con una issue, dove il pericolo stimato non ti torna.
+
+## Come è nato
+
+Limen è sviluppato con [Claude Code](https://claude.com/claude-code) fin dal
+primo commit, il 3 giugno 2026: la maggior parte dei commit è scritta insieme
+a Claude, e lo dice la riga `Co-Authored-By` di ciascuno. I racconti delle
+regioni sono scritti con Claude, il modello di Anthropic, e non cambiano nessun
+numero. Limen è un progetto indipendente, non affiliato ad Anthropic.
+
+## Contributi e governance
+
+* [`CONTRIBUTING.md`](./CONTRIBUTING.md) — setup dev, stile commit, gate.
+* [`SECURITY.md`](./SECURITY.md) — canale di disclosure privato.
+* [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md) — regole di comportamento della community.
+* [`ROADMAP.md`](./ROADMAP.md) — direzione e prossimi passi.
+* [`docs/OSS_IMPACT.md`](./docs/OSS_IMPACT.md) — impatto open-source e componenti riusabili.
+* [`CHANGELOG.md`](./CHANGELOG.md) — storico versionato (Keep a Changelog).
+
+> Limen è uno strumento di **supporto alle decisioni**: i suoi output sono
+> indicatori modellati, non allerte ufficiali di Protezione Civile.
+
+## Licenza
+
+Copyright © 2026 Giuseppe Zileni. Limen è un progetto personale, sviluppato
+fuori da qualsiasi rapporto di lavoro e con mezzi propri: il titolare dei
+diritti è l'autore, che è anche il soggetto a cui il CLA concede le licenze.
+
+[EUPL-1.2](./LICENSE) — European Union Public Licence, copyleft anche
+sull'uso via rete: chi offre Limen come servizio deve pubblicarne le
+modifiche. Le versioni fino a `v0.6.0-impl-complete` restano Apache-2.0.
+
+Per usi incompatibili con il copyleft è disponibile una licenza commerciale:
+scrivere al maintainer. I contributi esterni richiedono il CLA descritto in
+[CONTRIBUTING.md](./CONTRIBUTING.md#contributor-license-agreement).
