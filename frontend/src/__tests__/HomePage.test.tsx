@@ -19,6 +19,8 @@ vi.mock("../lib/api-client", () => ({
 }));
 
 import HomePage from "../components/HomePage";
+import { useLingua } from "../lib/i18n";
+import { fireEvent, render as renderConLingua } from "../test-utils";
 
 describe("HomePage", () => {
   it("renders the pitch, the dashboard CTA and live stats", async () => {
@@ -49,5 +51,39 @@ describe("HomePage", () => {
     expect(testo).not.toContain("S × M");
     expect(testo).not.toMatch(/AUC/);
     expect(testo).toContain("0,35 S + 0,40 M");
+  });
+
+  it("in inglese: titolo, formule con il punto decimale e crediti", async () => {
+    const { container } = renderConLingua(<HomePage />, { lingua: "en" });
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "Territorial risk, cell by cell.",
+    );
+    expect(screen.getByText("Open the dashboard")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("312,550")).toBeInTheDocument());
+    const testo = container.textContent ?? "";
+    expect(testo).toContain("0.35 S + 0.40 M");
+    expect(testo).toContain("not affiliated with Anthropic");
+    expect(testo).toContain("Contains modified Copernicus Emergency Management Service information");
+    expect(testo).toContain("CC-BY 4.0");
+    expect(testo).not.toContain("Apri la dashboard");
+  });
+
+  it("cambia lingua senza ricaricare", async () => {
+    function ConSelettore() {
+      const { imposta } = useLingua();
+      return (
+        <>
+          <button type="button" onClick={() => imposta("en")}>
+            EN
+          </button>
+          <HomePage />
+        </>
+      );
+    }
+    renderConLingua(<ConSelettore />);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/Il rischio del territorio/);
+    fireEvent.click(screen.getByText("EN"));
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/Territorial risk/);
+    await waitFor(() => expect(screen.getByText("312,550")).toBeInTheDocument());
   });
 });
