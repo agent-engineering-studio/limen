@@ -2,7 +2,7 @@
 #
 # Il contesto è la radice del repository. La rete c'è solo durante questa
 # build: dopo, lo scanner lavora offline, quindi qui si scarica tutto quello
-# che servirà ai test — l'ambiente Python di tutti i gruppi (come la CI), le
+# che servirà ai test — l'ambiente Python dei gruppi della CI tranne `dl`, le
 # dipendenze della SPA, e un PostgreSQL 15 + PostGIS locale al posto del
 # container che testcontainers avvierebbe (senza Docker né rete non partirebbe).
 #
@@ -35,7 +35,10 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 COPY . /src
 WORKDIR /src
 
-RUN uv sync --frozen --all-groups
+# Senza `dl` (torch, triton e le librerie CUDA: 4,5 GB che nessun test usa) e
+# senza cache: lasciata nell'immagine ne raddoppiava il peso, e lo scanner ha
+# 45 minuti dal clone all'immagine finita.
+RUN uv sync --frozen --all-groups --no-group dl --no-cache
 RUN cd frontend && npm ci --no-audit --no-fund && npm run build
 
 # Il database dei test, come l'immagine postgis/postgis che testcontainers
