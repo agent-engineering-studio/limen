@@ -120,7 +120,7 @@ Una spiegazione per mancata è altrettanto importante: quale fattore era basso (
 1. Wikimedia Commons (CC0, CC BY, CC BY-SA, PD) — con autore e licenza;
 2. Copernicus EMS (mappe di attivazione: «© European Union, Copernicus Emergency Management Service»), immagini Sentinel/Copernicus;
 3. foto di Vigili del Fuoco / Protezione Civile **solo** se la pagina dichiara una licenza di riuso;
-4. uno screenshot della mappa di Limen sulla zona (contenuto nostro: autore «Limen», licenza «Apache-2.0»).
+4. uno screenshot della mappa di Limen sulla zona: autore «Limen», licenza «EUPL-1.2; sfondo © OpenStreetMap contributors (ODbL)». Lo sfondo non è nostro, e l'attribuzione OSM è un obbligo di licenza, non una cortesia.
 
 Se non trovi niente di pubblicabile, `foto: []`: l'articolo regge senza. Salva in `frontend/public/verifiche/<slug>/`, JPEG ≤ 300 KB (ridimensiona con `python3 -c` + Pillow o `convert` se disponibile), `alt`/`didascalia` descrittivi.
 
