@@ -51,13 +51,20 @@ Limen never logs secret values:
 If a secret is leaked into a log, that *is* a security issue — please
 report it via the channel above.
 
+## Automated scanning
+
+Limen is set up for [Anthropic OSS Scanner](https://red.anthropic.com/oss-scanner/):
+`.oss-scanner/Dockerfile` builds an offline image with a local PostGIS,
+and `.oss-scanner/threat_model.md` describes where untrusted input enters
+and how we rate severity. The same document is the reference for human
+reporters.
+
 ## Threat model snapshot
 
-* The API is **unauthenticated by design in V1** (public map, §1.6
-  defers auth). Treat any deployment as anonymously accessible.
-* Clerk-based auth lands when the operator-protected area arrives; see
-  the `production-stack` memory for the planned shape (Vite +
-  `@clerk/clerk-react` on the frontend, JWT validation on the backend).
+* There is **no user authentication, by design** (epic #69): the map and
+  every read API are public. Treat any deployment as anonymously
+  accessible. Privileged actions live on the CLI and on the MCP tools
+  gated by `MCP_ADMIN_TOKEN` (disabled when unset).
 * Database access is via asyncpg with parameterised queries only — no
   string-interpolated SQL.
 * Notifications run server-side; alert payloads contain only

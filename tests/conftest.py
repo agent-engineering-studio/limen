@@ -78,7 +78,16 @@ POSTGIS_IMAGE = _default_postgis_image()
 
 @pytest.fixture(scope="session")
 def postgres_container() -> Iterator[str]:
-    """Spin up Postgres+PostGIS via testcontainers and yield the DSN."""
+    """Spin up Postgres+PostGIS via testcontainers and yield the DSN.
+
+    ``LIMEN_TEST_DATABASE_URL`` skips the container and uses that database
+    instead: the OSS Scanner image (`.oss-scanner/Dockerfile`) runs offline,
+    with no Docker, and ships its own PostGIS.
+    """
+    esterno = os.getenv("LIMEN_TEST_DATABASE_URL")
+    if esterno:
+        yield esterno
+        return
     pytest.importorskip("testcontainers.postgres")
     from testcontainers.postgres import PostgresContainer
 
@@ -225,6 +234,10 @@ _GEODATA_TABLES = (
 @pytest.fixture(scope="session")
 def geodata_postgres_container() -> Iterator[str]:
     """Second Postgres+PostGIS testcontainer dedicated to the geodata service."""
+    esterno = os.getenv("LIMEN_TEST_GEODATA_DATABASE_URL")
+    if esterno:
+        yield esterno
+        return
     pytest.importorskip("testcontainers.postgres")
     from testcontainers.postgres import PostgresContainer
 
