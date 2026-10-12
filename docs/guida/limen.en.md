@@ -258,6 +258,8 @@ score = 0.35 × the place (S)
 | **F** — the fire (7%) | A bell curve peaking 6 months after a fire that touched the cell, zero beyond 24 months |
 | **H** — the water (3%) | Hydraulic hazard, pushed up by forecast rain, river floods and storm surges |
 
+<!-- componente: figura-frane -->
+
 **Caine's threshold** gives, for each duration, the intensity beyond which
 landslides really start to happen: 7.2 mm are enough if they fall in one
 hour, 28.4 are needed over a day. The thresholds have been recalculated on

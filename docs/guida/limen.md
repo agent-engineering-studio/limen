@@ -250,6 +250,8 @@ punteggio = 0,35 × il posto (S)
 | **F** — il fuoco (7%) | Una campana con picco a 6 mesi da un incendio che ha toccato la cella, nulla oltre 24 mesi |
 | **H** — l'acqua (3%) | Pericolosità idraulica, spinta da pioggia prevista, piena dei fiumi e mareggiate |
 
+<!-- componente: figura-frane -->
+
 La **soglia di Caine** dice, per ogni durata, l'intensità oltre la quale le
 frane cominciano davvero ad accadere: 7,2 mm bastano se cadono in un'ora, ne
 servono 28,4 in un giorno. Le soglie sono state ricalcolate sul catalogo
