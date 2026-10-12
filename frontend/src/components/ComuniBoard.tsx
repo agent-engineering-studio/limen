@@ -29,7 +29,7 @@ import {
 } from "../lib/risk-colors";
 import ComuneTrend from "./ComuneTrend";
 import { COLORE_ALLERTA } from "../lib/overlays";
-import { LETTERA } from "./HazardSelector";
+import { LETTERE } from "./HazardSelector";
 import type {
   AllertaGiorno,
   AllertaUfficiale,
@@ -468,10 +468,11 @@ function ComeSiLegge(): JSX.Element {
 /** La lettera del pericolo nel chip, con il nome per intero a chi non vede
  *  la lettera: «F» è una sigla, «Frana» è un'informazione. */
 function Sigla({ hazard, etichetta }: { hazard: string; etichetta: string }): JSX.Element {
+  const { lingua } = useLingua();
   return (
     <>
       <span className={`cb-sigla hz-${hazard}`} aria-hidden>
-        {LETTERA[hazard as HazardType] ?? etichetta.charAt(0)}
+        {LETTERE[lingua][hazard as HazardType] ?? etichetta.charAt(0)}
       </span>
       <span className="sr-only">{etichetta}</span>
     </>

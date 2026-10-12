@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
-import { NON_E_UN_AVVISO_DI_PIENA, copernicusModificato } from "../lib/attribuzioni";
+import { AVVISO_DI_PIENA, copernicusModificato } from "../lib/attribuzioni";
 import { defaultApiClient } from "../lib/api-client";
 import { BMC_PAGINA } from "../lib/buymeacoffee";
 import { testi, useLocale, useTesti } from "../lib/i18n";
@@ -158,7 +158,7 @@ const T = testi(
       "EFFIS · NASA FIRMS · CORINE Land Cover · © OpenStreetMap contributors " +
       "(ODbL). Codice EUPL-1.2.",
     copernicus: (): string => copernicusModificato(),
-    nonAvviso: NON_E_UN_AVVISO_DI_PIENA,
+    nonAvviso: AVVISO_DI_PIENA.it,
     claude:
       "Limen è sviluppato con Claude Code fin dal primo commit, e i racconti " +
       "delle regioni sono scritti con Claude. Progetto indipendente, non " +
@@ -276,11 +276,8 @@ const T = testi(
       "Open-Meteo (CC-BY 4.0) · GloFAS and CEMS Fire · INGV (CC-BY 4.0) · " +
       "EFFIS · NASA FIRMS · CORINE Land Cover · © OpenStreetMap contributors " +
       "(ODbL). Code EUPL-1.2.",
-    // La formula inglese è quella che la licenza CEMS-Floods chiede alla lettera.
-    copernicus: (): string =>
-      `Contains modified Copernicus Emergency Management Service information, ${new Date().getFullYear()}`,
-    nonAvviso:
-      "GloFAS data are not a flood warning: warnings are the responsibility of national and regional authorities.",
+    copernicus: (): string => copernicusModificato(undefined, "en"),
+    nonAvviso: AVVISO_DI_PIENA.en,
     claude:
       "Limen has been built with Claude Code since the first commit, and the " +
       "regional summaries are written with Claude. An independent project, " +

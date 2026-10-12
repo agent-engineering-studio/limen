@@ -7,7 +7,7 @@ import { testi, useTesti } from "../lib/i18n";
 
 const T = testi(
   { placeholder: "Cerca un comune…", aria: "Cerca un comune" },
-  { placeholder: "Search a municipality…", aria: "Search a municipality" },
+  { placeholder: "Find a town…", aria: "Search a municipality" },
 );
 
 /** La ricerca del comune, nella barra in alto (#155).

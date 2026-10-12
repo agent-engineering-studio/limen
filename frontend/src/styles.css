@@ -2423,6 +2423,19 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   font-weight: 600;
 }
 .header-spazio { flex: 1; }
+/* Le voci inglesi sono più corte ma di più parole: senza, «How it works»
+   andava su due righe e alzava la testata. */
+html[lang="en"] .app-nav a { white-space: nowrap; }
+.nota-lingua {
+  max-width: 880px;
+  margin: 16px auto 0;
+  padding: 10px 14px;
+  border: 1px solid #263140;
+  border-radius: 8px;
+  background: var(--panel-raised);
+  color: var(--ink-soft);
+  font-size: 14px;
+}
 .lingua-switch {
   display: inline-flex;
   border: 1px solid #263140;

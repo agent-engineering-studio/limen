@@ -36,7 +36,7 @@ import { useForecastSchedule } from "./lib/forecast-schedule";
 import { useBuyMeACoffee } from "./lib/buymeacoffee";
 import { cellaDaHash } from "./lib/link-cella";
 import { useHazard, useNomePericolo } from "./lib/hazard";
-import { OVERLAYS } from "./lib/overlays";
+import { OVERLAYS, testoOverlay } from "./lib/overlays";
 
 type Page =
   | "home"
@@ -112,6 +112,7 @@ const T = testi(
     navIntegrazioni: "Integrazioni",
     lingua: "Lingua",
     nomeLingua: { it: "Italiano", en: "English" },
+    soloItaliano: "",
   },
   {
     livelloAttivo: "Active layer",
@@ -143,8 +144,21 @@ const T = testi(
     navIntegrazioni: "Integrations",
     lingua: "Language",
     nomeLingua: { it: "Italiano", en: "English" },
+    soloItaliano:
+      "This page is available in Italian only for now. The English version is on its way.",
   },
 );
+
+/** Le pagine lunghe non ancora tradotte: in inglese lo si dice in testa,
+ *  invece di lasciare il lettore davanti a un muro d'italiano senza ragione. */
+function SoloItaliano(): JSX.Element | null {
+  const t = useTesti(T);
+  return t.soloItaliano ? (
+    <p className="nota-lingua" role="note" lang="en">
+      {t.soloItaliano}
+    </p>
+  ) : null;
+}
 
 /** Il selettore della lingua in testata: due bottoni, la lingua attiva
  *  segnata. Due sole lingue non meritano un menu a tendina. */
@@ -275,6 +289,7 @@ function TestaPrevista({ p }: { p: CellaPrevista }): JSX.Element {
 export function App(): JSX.Element {
   const { view } = useHazard();
   const t = useTesti(T);
+  const { lingua } = useLingua();
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [selected, setSelected] = useState<(CellSelection & { previsto?: CellaPrevista }) | null>(
     null,
@@ -418,7 +433,9 @@ export function App(): JSX.Element {
     setSelected({ cellId: cellaLink.cellId, lon: cellaLink.lon, lat: cellaLink.lat });
   }, [page, cellaLink]);
 
-  const attiviNomi = OVERLAYS.filter((o) => overlayAttivi.has(o.id)).map((o) => o.label);
+  const attiviNomi = OVERLAYS.filter((o) => overlayAttivi.has(o.id)).map(
+    (o) => testoOverlay(o, lingua).label,
+  );
 
   const dashboard = (
     <>
@@ -566,14 +583,17 @@ export function App(): JSX.Element {
           </div>
         ) : page === "verifiche" ? (
           <div className="explainer-area">
+            <SoloItaliano />
             <VerifichePage />
           </div>
         ) : page === "guida" ? (
           <div className="explainer-area">
+            <SoloItaliano />
             <GuidaPage />
           </div>
         ) : page === "science" ? (
           <div className="explainer-area">
+            <SoloItaliano />
             <SciencePage />
           </div>
         ) : page === "shadow" ? (
@@ -582,6 +602,7 @@ export function App(): JSX.Element {
           </div>
         ) : page === "integrations" ? (
           <div className="explainer-area">
+            <SoloItaliano />
             <IntegrationsPage />
           </div>
         ) : (
