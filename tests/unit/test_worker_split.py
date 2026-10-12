@@ -211,7 +211,12 @@ async def test_run_with_health_flag_only_checks(monkeypatch: pytest.MonkeyPatch)
 
 
 def _patch_lifecycle(monkeypatch: pytest.MonkeyPatch, *, schema_ok: bool) -> dict[str, Any]:
-    events: dict[str, Any] = {"closed": 0, "registered": False, "scheduler_stopped": False}
+    events: dict[str, Any] = {
+        "closed": 0,
+        "registered": False,
+        "scheduler_stopped": False,
+        "interrotte": None,
+    }
 
     async def _init(*_a: Any, **_k: Any) -> None:
         return None
@@ -258,6 +263,12 @@ def _patch_lifecycle(monkeypatch: pytest.MonkeyPatch, *, schema_ok: bool) -> dic
     async def _aclose() -> None:
         events["http_closed"] = True
 
+    class _Repo:
+        @staticmethod
+        async def chiudi_interrotte(*, heartbeat_job: str) -> int:
+            events["interrotte"] = heartbeat_job
+            return 0
+
     import apscheduler
 
     import limen.integrations._http as http_mod
@@ -270,6 +281,7 @@ def _patch_lifecycle(monkeypatch: pytest.MonkeyPatch, *, schema_ok: bool) -> dic
     monkeypatch.setattr(worker_mod, "AppDependencies", _Deps)
     monkeypatch.setattr(worker_mod, "register_jobs", _register)
     monkeypatch.setattr(worker_mod, "_heartbeat_loop", _beat)
+    monkeypatch.setattr(worker_mod, "job_runs_repo", _Repo)
     monkeypatch.setattr(apscheduler, "AsyncScheduler", _Scheduler)
     monkeypatch.setattr(http_mod.SharedHttpClient, "aclose", staticmethod(_aclose))
     return events
@@ -283,6 +295,7 @@ async def test_run_refuses_to_start_without_the_schema(monkeypatch: pytest.Monke
     assert await worker_mod.run() == 1
     assert events["closed"] == 1
     assert events["registered"] is False
+    assert events["interrotte"] is None
 
 
 @pytest.mark.asyncio
@@ -290,6 +303,7 @@ async def test_run_registers_jobs_and_shuts_down_cleanly(monkeypatch: pytest.Mon
     events = _patch_lifecycle(monkeypatch, schema_ok=True)
     assert await asyncio.wait_for(worker_mod.run(), timeout=10) == 0
     assert events["registered"] is True
+    assert events["interrotte"] == worker_mod.HEARTBEAT_JOB
     assert events["scheduler_stopped"] is True
     assert events["http_closed"] is True
     assert events["closed"] == 1

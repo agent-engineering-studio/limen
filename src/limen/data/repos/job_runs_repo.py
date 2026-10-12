@@ -1,6 +1,6 @@
 """Tracciatura dei job periodici (#75).
 
-Quattro letture e due scritture. asyncpg puro, nessun ORM, come il resto del
+Quattro letture e tre scritture. asyncpg puro, nessun ORM, come il resto del
 layer dati.
 
 La regola che governa questo modulo: **la tracciatura non può far fallire il
@@ -218,6 +218,48 @@ async def finished_since(job_id: str, *, hours: int, limit: int = 500) -> list[J
     return [_to_run(r) for r in rows]
 
 
+async def chiudi_interrotte(*, heartbeat_job: str) -> int:
+    """Chiude come ``error`` le righe `running` lasciate da un worker che non c'è più.
+
+    Un worker riavviato durante un deploy muore con le corse in volo, e le loro
+    righe restavano `running` per sempre: 84 in un mese, quasi tutte sweep e
+    briefing. Il worker gira a una replica sola, quindi all'avvio un altro
+    worker non può essere vivo. «Worker» vuol dire **un host che ha scritto il
+    battito**: l'MCP e la CLI non lo scrivono, e una loro corsa in volo
+    durante il riavvio non si tocca. La fine registrata è l'ultima attività
+    nota di quell'host, non l'ora di adesso: la durata resta onesta.
+    """
+    try:
+        async with acquire() as conn:
+            status = await conn.execute(
+                """
+                WITH morti AS (
+                    SELECT host, max(coalesce(finished_at, started_at)) AS ultima
+                    FROM job_runs
+                    WHERE host <> $1
+                      AND host IN (SELECT host FROM job_runs WHERE job_id = $2)
+                    GROUP BY host
+                )
+                UPDATE job_runs j
+                SET status = 'error',
+                    finished_at = m.ultima,
+                    error = 'interrotto: il worker ' || j.host
+                         || ' si è fermato senza chiudere la corsa'
+                FROM morti m
+                WHERE j.host = m.host AND j.status = 'running'
+                """,
+                _hostname(),
+                heartbeat_job,
+            )
+    except Exception as exc:
+        log.warning("job_runs.degraded", phase="chiudi_interrotte", error=str(exc))
+        return 0
+    chiuse = int(status.split()[-1]) if status else 0
+    if chiuse:
+        log.info("job_runs.interrotte", rows=chiuse)
+    return chiuse
+
+
 async def purge_older_than(days: int) -> int:
     """Retention. Un DELETE e non un DROP PARTITION: `job_runs` cresce di
     poche migliaia di righe al giorno, non dei gigabyte delle tabelle calde."""
@@ -239,6 +281,7 @@ async def purge_older_than(days: int) -> int:
 __all__ = [
     "JobRun",
     "Status",
+    "chiudi_interrotte",
     "finish",
     "finished_since",
     "latest_global",

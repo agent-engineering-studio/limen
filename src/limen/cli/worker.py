@@ -150,6 +150,7 @@ async def run(*, check_health: bool = False) -> int:
         await close_pool()
         return 1
 
+    await job_runs_repo.chiudi_interrotte(heartbeat_job=HEARTBEAT_JOB)
     deps = await AppDependencies.build(pool=get_pool(), settings=settings)
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
