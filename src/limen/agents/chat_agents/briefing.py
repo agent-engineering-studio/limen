@@ -78,8 +78,9 @@ def deterministic_briefing(
     cells_by_level: Mapping[str, int],
     dominant_level: str,
     hazard: HazardType = DEFAULT_HAZARD,
+    lingua: str = "it",
 ) -> str:
-    """Il briefing italiano ricavato dai soli numeri, senza LLM.
+    """Il briefing ricavato dai soli numeri, senza LLM, in italiano o in inglese.
 
     Funzione **pura**: nessun log, nessuna rete, stessi argomenti ⇒ stesso
     testo. Ha due chiamanti (#78) e non più uno: la degradazione di
@@ -95,6 +96,8 @@ def deterministic_briefing(
     risposta valida": ora il caso normale è l'attesa, non il guasto.
     """
     counts = ", ".join(f"{k}: {v}" for k, v in sorted(cells_by_level.items()))
+    if lingua == "en":
+        return _deterministic_en(aoi_id, n_cells, counts, dominant_level, hazard)
     testa = (
         f"La valutazione automatica del modello deterministico Limen indica per l'area "
         f"{aoi_id} una classe dominante {dominant_level}. "
@@ -139,6 +142,53 @@ def deterministic_briefing(
         "meteorologiche e sismologiche disponibili. " + coda
     )
     return trim_to_max(base, MAX_WORDS)
+
+
+def _deterministic_en(
+    aoi_id: str, n_cells: int, counts: str, dominant_level: str, hazard: HazardType
+) -> str:
+    """Lo stesso riassunto deterministico, in inglese, frase per frase."""
+    head = (
+        f"The automatic assessment of Limen's deterministic model gives the area "
+        f"{aoi_id} a dominant class of {dominant_level}. "
+        f"{n_cells} cells were assessed; "
+        f"the distribution by class is {{{counts}}}. "
+    )
+    tail = (
+        "The numerical diagnosis remains authoritative; this text is a deterministic "
+        "summary, produced without the narrative model."
+    )
+    if hazard is HazardType.FLOOD:
+        body = (
+            "For floods the score looks ahead: it combines the hydraulic susceptibility "
+            "of the place with the stronger of the rain forecast over the next 72 hours "
+            "and the forecast river discharge compared with each river's ordinary high "
+            "flow. A place on high ground does not flood even if it rains downstream, and "
+            "a river whose discharge is unknown does not count as a low river. The "
+            "assessment is updated at every hourly cycle with the new forecasts; the "
+            "warning that applies is the one in the Civil Protection bulletin. "
+        )
+    elif hazard is HazardType.WILDFIRE:
+        body = (
+            "For wildfire the score is the potential weather-driven danger: how far a "
+            "fire would spread if it started, not the probability that it starts. It "
+            "comes from the FWI index, which measures how dry the fuels are after the "
+            "days of heat, wind and rain, and is modulated by vegetation type and slope. "
+            "The assessment is updated at every hourly cycle with the day's weather. "
+        )
+    else:
+        body = (
+            "The static contribution reflects historical susceptibility, IFFI density, "
+            "slope, PAI class and lithological index; the weather contribution reflects "
+            "the excess over the Caine threshold, the antecedent precipitation index and "
+            "soil moisture. The seismic component considers events of significant "
+            "magnitude in recent days; the post-fire component is active only within the "
+            "amplification window. The most exposed areas coincide with the sectors with "
+            "the highest density of historical landslides and significant slopes; in the "
+            "next cycles the diagnosis will be reassessed hourly using the new weather "
+            "and seismological observations available. "
+        )
+    return trim_to_max(head + body + tail, MAX_WORDS)
 
 
 def _fallback_briefing(assessment: AggregateAssessment, *, reason: str) -> str:

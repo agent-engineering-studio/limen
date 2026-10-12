@@ -418,6 +418,7 @@ async def national_report(hazard: str | None = None) -> dict[str, Any]:
         "cascades": cascades,
     }
     report["report_it"] = render_national_report_it(report)
+    report["report_en"] = render_national_report_en(report)
     return report
 
 
@@ -730,6 +731,103 @@ def _render_cascade_section_it(report: dict[str, Any]) -> list[str]:
         lines.append(riga + ".")
 
     return ["", *lines] if lines else []
+
+
+_NOMI_EN = {"landslide": "landslide", "flood": "flood", "wildfire": "wildfire"}
+
+
+def render_national_report_en(report: dict[str, Any]) -> str:
+    """Lo stesso rendering in inglese, per il sito nella seconda lingua.
+
+    Riga per riga quello italiano: stessi numeri, stesso ordine. I nomi dei
+    luoghi restano italiani.
+    """
+    t = report["totals"]
+    dt = datetime.fromisoformat(report["generated_at"])
+    lines = [f"Update of {dt:%d/%m/%Y} at {dt:%H:%M} UTC.", ""]
+
+    if t["high_or_above"] > 0:
+        hot = [r for r in report["regions"] if r["high_or_above"] > 0]
+        where = ", ".join(
+            f"{r['aoi_id'].removeprefix('it-').replace('-', ' ').title()} ({r['high_or_above']})"
+            for r in hot[:5]
+        )
+        lines.append(f"⚠ {t['high_or_above']} areas at HIGH or very high risk: {where}.")
+    else:
+        lines.append("No area of Italy is at high risk right now.")
+
+    regions = "1 region" if t["regions"] == 1 else f"{t['regions']} regions"
+    lines.append(
+        f"{t['moderate']:,} areas of 1 km² show a moderate risk, "
+        f"out of {t['cells']:,} monitored in {regions}."
+    )
+
+    if report["top_cells"]:
+        c = report["top_cells"][0]
+        where = c.get("place") or "an uninhabited area"
+        region = c["aoi_id"].removeprefix("it-").replace("-", " ").title()
+        lines.append(
+            f"The place to watch is {where}, in {region} (score {c['score']:.2f} out of 1)."
+        )
+
+    if report["ml_top_cells"]:
+        m = report["ml_top_cells"][0]
+        where = m.get("place") or "an uninhabited area"
+        lines.append(
+            f"The experimental machine-learning model — under observation, it issues no "
+            f"warnings — points to {where} as the highest probability ({m['probability']:.0%})."
+        )
+
+    blocks = report.get("hazards") or []
+    if len(blocks) >= 2:
+        lines.extend(["", "By hazard:"])
+        for b in blocks:
+            bt = b["totals"]
+            label = _NOMI_EN.get(str(b.get("hazard")), str(b["label_it"]).lower())
+            if bt["cells"] == 0:
+                lines.append(f"· {label}: no assessment available.")
+                continue
+            parts = []
+            if bt["high_or_above"]:
+                parts.append(f"{bt['high_or_above']} areas at high risk")
+            if bt["moderate"]:
+                parts.append(f"{bt['moderate']} moderate")
+            row = f"· {label}: {', '.join(parts) if parts else 'no area above the low level'}"
+            top = b["top_cells"][0] if b["top_cells"] else None
+            if top and top["level"] in ("High", "VeryHigh"):
+                where = top.get("place") or "an uninhabited area"
+                row += f" — the worst spot is {where} ({top['score']:.2f})"
+            lines.append(row + ".")
+
+    casc = report.get("cascades") or {}
+    extra: list[str] = []
+    pff = casc.get("post_fire_flood")
+    if pff and pff["cells"]:
+        extra.append(
+            f"Post-fire effect: {pff['cells']} areas burnt in the last "
+            f"{pff['window_months']:.0f} months have ground that absorbs less, so the "
+            f"flood risk is higher than normal (up to {pff['max_multiplier']:.1f} times)."
+        )
+    jr = casc.get("joint_rain")
+    if jr and jr["cells"]:
+        top = jr["top_cells"][0] if jr["top_cells"] else None
+        row = (
+            f"Combined risk: {jr['cells']} areas are above threshold "
+            f"for more than one hazard at once"
+        )
+        if top:
+            row += f" (the most critical: {' and '.join(top['hazards'])})"
+        extra.append(row + ".")
+    if extra:
+        lines.extend(["", *extra])
+
+    lines.append("")
+    prev = report["forecast_alerts_24h"]
+    prev_txt = (
+        "no issue forecast at 48 hours" if prev == 0 else f"{prev} forecast alerts at 48 hours"
+    )
+    lines.append(f"In the last 24 hours: {report['alerts_24h']} operational alerts, {prev_txt}.")
+    return "\n".join(lines)
 
 
 def render_national_report_it(report: dict[str, Any]) -> str:

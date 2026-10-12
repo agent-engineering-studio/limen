@@ -459,6 +459,8 @@ export interface NationalReportResponse {
   hazards: NationalHazardBlock[];
   cascades: NationalCascades;
   report_it: string;
+  /** Lo stesso quadro in inglese (assente su un backend precedente). */
+  report_en?: string;
 }
 
 export interface ForecastAlertItem {
@@ -613,15 +615,20 @@ export interface RegioneMonitorata {
   spiegazioni: Partial<
     Record<
       HazardType,
-      {
-        testo: string;
-        modello: string;
-        scritta: string;
-        livello: string;
-        analisi: RiskAnalysisDTO | null;
+      SpiegazioneRegione & {
+        /** La traduzione, controllata sui numeri, se c'è (migrazione 073). */
+        traduzioni?: Partial<Record<"en", SpiegazioneRegione>>;
       }
     >
   >;
+}
+
+export interface SpiegazioneRegione {
+  testo: string;
+  modello: string;
+  scritta: string;
+  livello: string;
+  analisi: RiskAnalysisDTO | null;
 }
 
 export interface RegioniResponse {

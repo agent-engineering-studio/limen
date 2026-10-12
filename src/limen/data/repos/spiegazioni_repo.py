@@ -1,4 +1,4 @@
-"""Le spiegazioni dell'AI per (regione, pericolo) — migrazione 064."""
+"""Le spiegazioni dell'AI per (regione, pericolo, lingua) — migrazioni 064 e 073."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ class Spiegazione:
     ripiego: bool
     testo: str
     analisi: dict[str, Any] | None
+    lingua: str = "it"
 
 
 async def scrivi(
@@ -35,15 +36,16 @@ async def scrivi(
     testo: str,
     analisi: dict[str, Any] | None,
     ingresso: str | None = None,
+    lingua: str = "it",
 ) -> None:
     async with acquire() as conn:
         await conn.execute(
             """
             INSERT INTO spiegazioni_regione
                 (aoi_id, hazard_type, run_id, livello, scritta, modello, ripiego, testo, analisi,
-                 ingresso)
-            VALUES ($1, $2, $3, $4, now(), $5, $6, $7, $8::jsonb, $9)
-            ON CONFLICT (aoi_id, hazard_type) DO UPDATE SET
+                 ingresso, lingua)
+            VALUES ($1, $2, $3, $4, now(), $5, $6, $7, $8::jsonb, $9, $10)
+            ON CONFLICT (aoi_id, hazard_type, lingua) DO UPDATE SET
                 run_id = EXCLUDED.run_id,
                 livello = EXCLUDED.livello,
                 scritta = EXCLUDED.scritta,
@@ -65,22 +67,54 @@ async def scrivi(
             testo,
             json.dumps(analisi, default=str) if analisi is not None else None,
             ingresso,
+            lingua,
         )
 
 
-async def leggi(aoi_id: str, hazard: HazardType) -> Spiegazione | None:
+_COLONNE = "aoi_id, hazard_type, run_id, livello, scritta, modello, ripiego, testo, analisi, lingua"
+
+
+async def leggi(aoi_id: str, hazard: HazardType, lingua: str = "it") -> Spiegazione | None:
     async with acquire() as conn:
         row = await conn.fetchrow(
-            """
-            SELECT aoi_id, hazard_type, run_id, livello, scritta, modello, ripiego, testo, analisi
+            f"""
+            SELECT {_COLONNE}
             FROM spiegazioni_regione
-            WHERE aoi_id = $1 AND hazard_type = $2
+            WHERE aoi_id = $1 AND hazard_type = $2 AND lingua = $3
             """,
             aoi_id,
             hazard.value,
+            lingua,
         )
-    if row is None:
-        return None
+    return _da_riga(row) if row is not None else None
+
+
+async def da_tradurre(lingua: str, *, limite: int) -> list[Spiegazione]:
+    """Le spiegazioni italiane dell'AI senza una traduzione in ``lingua``
+    scritta dopo di loro: le nuove, e quelle riscritte dall'ultima traduzione.
+
+    Una traduzione fallita lascia comunque una riga (il ripiego deterministico),
+    quindi non si riprova a ogni tick: si riprova quando l'italiano cambia.
+    """
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            SELECT {", ".join("it." + c.strip() for c in _COLONNE.split(","))}
+            FROM spiegazioni_regione it
+            LEFT JOIN spiegazioni_regione tr
+              ON tr.aoi_id = it.aoi_id AND tr.hazard_type = it.hazard_type AND tr.lingua = $1
+            WHERE it.lingua = 'it' AND NOT it.ripiego
+              AND (tr.scritta IS NULL OR tr.scritta < it.scritta)
+            ORDER BY it.scritta DESC
+            LIMIT $2
+            """,
+            lingua,
+            limite,
+        )
+    return [_da_riga(r) for r in rows]
+
+
+def _da_riga(row: Any) -> Spiegazione:
     analisi = row["analisi"]
     if isinstance(analisi, str):
         analisi = json.loads(analisi)
@@ -94,6 +128,7 @@ async def leggi(aoi_id: str, hazard: HazardType) -> Spiegazione | None:
         ripiego=bool(row["ripiego"]),
         testo=str(row["testo"]),
         analisi=analisi,
+        lingua=str(row["lingua"]),
     )
 
 
@@ -105,7 +140,7 @@ async def recenti(hours: int) -> dict[tuple[str, str], str]:
             """
             SELECT aoi_id, hazard_type, livello
             FROM spiegazioni_regione
-            WHERE NOT ripiego AND scritta > now() - make_interval(hours => $1)
+            WHERE lingua = 'it' AND NOT ripiego AND scritta > now() - make_interval(hours => $1)
             """,
             hours,
         )
@@ -136,7 +171,8 @@ async def da_giudicare(*, hours: int, limite: int) -> list[DaGiudicare]:
             """
             SELECT aoi_id, hazard_type, scritta, modello, testo, ingresso
             FROM spiegazioni_regione
-            WHERE NOT ripiego
+            WHERE lingua = 'it'
+              AND NOT ripiego
               AND ingresso IS NOT NULL
               AND fedelta IS NULL
               AND scritta > now() - make_interval(hours => $1)
@@ -173,7 +209,7 @@ async def scrivi_fedelta(
             """
             UPDATE spiegazioni_regione
             SET fedelta = $4::jsonb, fedelta_at = now()
-            WHERE aoi_id = $1 AND hazard_type = $2 AND scritta = $3
+            WHERE aoi_id = $1 AND hazard_type = $2 AND scritta = $3 AND lingua = 'it'
             """,
             aoi_id,
             hazard.value,

@@ -253,6 +253,11 @@ def _patch_tracking(monkeypatch: Any) -> list[dict[str, Any]]:
         return {}
 
     monkeypatch.setattr(be.spiegazioni_repo, "recenti", _nessuna)
+
+    async def _niente_da_tradurre(_lingua: str, *, limite: int) -> list[Any]:
+        return []
+
+    monkeypatch.setattr(be.spiegazioni_repo, "da_tradurre", _niente_da_tradurre)
     monkeypatch.setattr(be, "RiskAnalystAgent", lambda _c: _Analyst())
     monkeypatch.setattr(be, "BriefingAgent", lambda _c, grounding=None: _Briefer())
     return rows

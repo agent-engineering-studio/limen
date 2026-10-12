@@ -288,3 +288,68 @@ async def test_recenti_conta_solo_le_spiegazioni_vere(seeded: None) -> None:
     assert await spiegazioni_repo.recenti(12) == {(_AOI_ID, DEFAULT_HAZARD.value): "VeryHigh"}
     await _scrivi("Ripiego.", ripiego=True)
     assert await spiegazioni_repo.recenti(12) == {}
+
+
+async def _scrivi_en(testo: str, *, ripiego: bool = False) -> None:
+    await spiegazioni_repo.scrivi(
+        aoi_id=_AOI_ID,
+        hazard=DEFAULT_HAZARD,
+        run_id=_RUN_ID,
+        livello="VeryHigh",
+        modello="quality-cloud",
+        ripiego=ripiego,
+        testo=testo,
+        analisi=None
+        if ripiego
+        else {
+            "driver": "meteo_trigger",
+            "anomalies": [],
+            "attention_window_hours": 24,
+            "confidence": 0.7,
+        },
+        lingua="en",
+    )
+
+
+async def test_italiano_e_inglese_convivono_e_la_traduzione_segue_l_italiano(
+    seeded: None,
+) -> None:
+    """Migrazione 073: una riga per lingua. Si traduce ciò che non ha una
+    traduzione più recente dell'italiano, e un italiano riscritto torna in lista."""
+    await _scrivi("Scritta dal modello.")
+    assert [s.aoi_id for s in await spiegazioni_repo.da_tradurre("en", limite=10)] == [_AOI_ID]
+
+    await _scrivi_en("Written by the model.")
+    assert await spiegazioni_repo.da_tradurre("en", limite=10) == []
+    it = await spiegazioni_repo.leggi(_AOI_ID, DEFAULT_HAZARD)
+    en = await spiegazioni_repo.leggi(_AOI_ID, DEFAULT_HAZARD, "en")
+    assert it is not None and it.testo == "Scritta dal modello."
+    assert en is not None and (en.testo, en.lingua) == ("Written by the model.", "en")
+    # Il controllo di fedeltà e i «recenti» guardano solo l'italiano.
+    assert await spiegazioni_repo.recenti(12) == {(_AOI_ID, DEFAULT_HAZARD.value): "VeryHigh"}
+
+    await _scrivi("Riscritta dal modello.")
+    assert [s.testo for s in await spiegazioni_repo.da_tradurre("en", limite=10)] == [
+        "Riscritta dal modello."
+    ]
+
+
+async def test_l_api_da_l_inglese_solo_se_traduce_l_italiano_mostrato(
+    client: httpx.AsyncClient,
+) -> None:
+    await _scrivi("Narrativa vera del modello.")
+    body = (await client.get(f"/api/aoi/{_AOI_ID}/risk/latest")).json()
+    # Nessuna traduzione ancora: l'inglese deterministico, dichiarato tale.
+    assert body["briefing_en_is_fallback"] is True
+    assert "without the narrative model" in body["briefing_en"]
+
+    await _scrivi_en("The model's real narrative.")
+    body = (await client.get(f"/api/aoi/{_AOI_ID}/risk/latest")).json()
+    assert body["briefing_en_is_fallback"] is False
+    assert body["briefing_en"] == "The model's real narrative."
+    assert body["analysis_en"]["driver"] == "meteo_trigger"
+
+    # L'italiano riscritto dopo la traduzione: quella parla del testo di prima.
+    await _scrivi("Narrativa nuova del modello.")
+    body = (await client.get(f"/api/aoi/{_AOI_ID}/risk/latest")).json()
+    assert body["briefing_en_is_fallback"] is True

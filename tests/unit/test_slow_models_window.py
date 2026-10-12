@@ -41,6 +41,7 @@ async def test_il_briefing_con_colibri_aspetta_la_notte(
     deps: Any = SimpleNamespace(settings=SimpleNamespace(llm=llm))
     cercati = AsyncMock(return_value=[])
     monkeypatch.setattr(briefing_enrichment.job_runs_repo, "finished_since", cercati)
+    monkeypatch.setattr(briefing_enrichment.spiegazioni_repo, "da_tradurre", _niente)
 
     class _Ora(datetime):
         @classmethod
@@ -57,5 +58,10 @@ async def test_un_modello_veloce_non_aspetta(monkeypatch: pytest.MonkeyPatch) ->
     deps: Any = SimpleNamespace(settings=SimpleNamespace(llm=llm))
     cercati = AsyncMock(return_value=[])
     monkeypatch.setattr(briefing_enrichment.job_runs_repo, "finished_since", cercati)
+    monkeypatch.setattr(briefing_enrichment.spiegazioni_repo, "da_tradurre", _niente)
     await briefing_enrichment._run(deps)
     assert cercati.called
+
+
+async def _niente(_lingua: str, *, limite: int) -> list[object]:
+    return []

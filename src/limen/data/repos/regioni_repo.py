@@ -83,9 +83,11 @@ GROUP BY 1
 """
 
 _SPIEGAZIONI = """
-SELECT aoi_id, hazard_type::text AS hazard, testo, modello, scritta, livello, analisi
+SELECT aoi_id, hazard_type::text AS hazard, lingua, testo, modello, scritta, livello, analisi
 FROM spiegazioni_regione
 WHERE NOT ripiego
+-- L'italiano prima: la traduzione si appende alla spiegazione da cui viene.
+ORDER BY lingua = 'it' DESC
 """
 
 
@@ -148,14 +150,21 @@ async def monitoraggio() -> list[dict[str, Any]]:
         if (reg := out.get(str(r["aoi_id"]))) is not None:
             reg["allerta"] = {"oggi": r["oggi"], "domani": r["domani"]}
     for r in spiegazioni:
-        if (reg := out.get(str(r["aoi_id"]))) is not None:
-            reg["spiegazioni"][r["hazard"]] = {
-                "testo": str(r["testo"]),
-                "modello": str(r["modello"]),
-                "scritta": r["scritta"].isoformat(),
-                "livello": str(r["livello"]),
-                "analisi": _json(r["analisi"]),
-            }
+        if (reg := out.get(str(r["aoi_id"]))) is None:
+            continue
+        voce = {
+            "testo": str(r["testo"]),
+            "modello": str(r["modello"]),
+            "scritta": r["scritta"].isoformat(),
+            "livello": str(r["livello"]),
+            "analisi": _json(r["analisi"]),
+        }
+        if r["lingua"] == "it":
+            reg["spiegazioni"][r["hazard"]] = {**voce, "traduzioni": {}}
+        elif (it := reg["spiegazioni"].get(r["hazard"])) is not None:
+            # Senza l'italiano dell'AI (un ripiego, per esempio) la traduzione
+            # di un testo vecchio non si mostra.
+            it["traduzioni"][str(r["lingua"])] = voce
 
     for reg in out.values():
         reg["peggiore"] = _peggiore(reg)

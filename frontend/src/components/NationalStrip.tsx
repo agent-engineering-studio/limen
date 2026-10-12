@@ -214,7 +214,9 @@ export function NationalStrip(): JSX.Element {
             </p>
           ) : null;
         })(report.cascades)}
-        <p className="strip-report">{report.report_it}</p>
+        <p className="strip-report" lang={lingua === "en" && report.report_en ? "en" : "it"}>
+          {lingua === "en" && report.report_en ? report.report_en : report.report_it}
+        </p>
         {report.ml_top_cells.length > 0 ? (
           <>
             <p className="alert-meta" style={{ marginBottom: 4 }}>

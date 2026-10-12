@@ -168,3 +168,16 @@ def test_cascade_section_silent_when_nothing_is_firing() -> None:
 def test_render_tolerates_a_report_without_the_new_sections() -> None:
     """Il payload di un deployment che non ha ancora la #58 non deve rompere."""
     assert render_national_report_it(_REPORT)
+
+
+def test_il_quadro_nazionale_ha_la_sua_versione_inglese() -> None:
+    from limen.agents.chat_agents.traduttore import numeri_coincidono
+    from limen.mcp.tools import render_national_report_en
+
+    it = render_national_report_it(_REPORT)
+    en = render_national_report_en(_REPORT)
+    assert "out of 300 monitored in 2 regions" in en
+    assert "Campania (3)" in en
+    assert "4 operational alerts, 1 forecast alerts" in en
+    assert en.count("\n") == it.count("\n")
+    assert numeri_coincidono(it, en)

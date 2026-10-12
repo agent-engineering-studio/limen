@@ -111,6 +111,31 @@ async def latest_assessment(
             dominant_level=records[0].level.value,
             hazard=hazard,
         )
+    # L'inglese segue l'italiano: la traduzione vale solo se è dello stesso
+    # racconto che si mostra in italiano, altrimenti il testo deterministico.
+    tradotta = await spiegazioni_repo.leggi(aoi_id, hazard, "en") if dall_ai else None
+    traduzione_valida = (
+        tradotta is not None
+        and not tradotta.ripiego
+        and spiegazione is not None
+        and tradotta.scritta >= spiegazione.scritta
+    )
+    briefing_en: str | None = tradotta.testo if traduzione_valida and tradotta else None
+    briefing_en_is_fallback = briefing_en is None and has_narrative(hazard)
+    if briefing_en_is_fallback:
+        briefing_en = deterministic_briefing(
+            aoi_id=aoi_id,
+            n_cells=len(records),
+            cells_by_level=dict(by_level),
+            dominant_level=records[0].level.value,
+            hazard=hazard,
+            lingua="en",
+        )
+    analysis_en = (
+        RiskAnalysisDTO.model_validate(tradotta.analisi)
+        if traduzione_valida and tradotta is not None and tradotta.analisi
+        else None
+    )
 
     return LatestAssessmentResponse(
         aoi_id=aoi_id,
@@ -126,6 +151,9 @@ async def latest_assessment(
         briefing_model=spiegazione.modello if dall_ai and spiegazione else None,
         briefing_written_at=spiegazione.scritta if dall_ai and spiegazione else None,
         analysis=analysis,
+        briefing_en=briefing_en,
+        briefing_en_is_fallback=briefing_en_is_fallback,
+        analysis_en=analysis_en,
     )
 
 
