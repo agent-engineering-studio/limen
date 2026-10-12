@@ -30,6 +30,16 @@ def test_i_numeri_si_leggono_con_le_convenzioni_della_lingua() -> None:
     assert numeri(_EN, "en") == numeri(_IT, "it")
 
 
+def test_i_racconti_italiani_col_punto_decimale_coincidono() -> None:
+    """Visto in produzione il 12 ottobre 2026: 17 traduzioni su 20 scartate
+    perché l'AI scrive i punteggi italiani col punto (`0.374`) e «combustibile
+    1.000» per 1,0, e il primo controllo li leggeva come migliaia."""
+    it = "FWI costante a 0.374, pendenza 0.549-0.661, combustibile 1.000, 14.078 celle."
+    en = "FWI constant at 0.374, slope 0.549-0.661, fuel 1, 14,078 cells."
+    assert numeri_coincidono(it, en)
+    assert not numeri_coincidono(it, en.replace("0.374", "0.375"))
+
+
 def test_un_numero_cambiato_aggiunto_o_perso_non_coincide() -> None:
     assert numeri_coincidono(_IT, _EN)
     assert not numeri_coincidono(_IT, _EN.replace("57", "58"))
