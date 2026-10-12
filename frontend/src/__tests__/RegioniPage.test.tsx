@@ -9,7 +9,17 @@ import { defaultApiClient } from "../lib/api-client";
 import { render as renderConLingua } from "../test-utils";
 import type { RegioneMonitorata } from "../types";
 
-const geom = { type: "Polygon" as const, coordinates: [[[7, 44], [8, 44], [8, 45], [7, 44]]] };
+const geom = {
+  type: "Polygon" as const,
+  coordinates: [
+    [
+      [7, 44],
+      [8, 44],
+      [8, 45],
+      [7, 44],
+    ],
+  ],
+};
 
 const PIEMONTE: RegioneMonitorata = {
   aoi_id: "it-piemonte",
@@ -17,20 +27,42 @@ const PIEMONTE: RegioneMonitorata = {
   lon: 7.9,
   lat: 45.0,
   geom,
-  peggiore: { hazard: "flood", classe: "VeryHigh", score: 0.8, previsto: false, rango: 4 },
-  pericoli: { flood: { alte: 35, moderate: 76, max_score: 0.8, classe: "VeryHigh" } },
-  previsto: { flood: { score: 0.6, classe: "High", target_at: "2026-10-09T02:25:00Z" } },
+  peggiore: {
+    hazard: "flood",
+    classe: "VeryHigh",
+    score: 0.8,
+    previsto: false,
+    rango: 4,
+  },
+  pericoli: {
+    flood: { alte: 35, moderate: 76, max_score: 0.8, classe: "VeryHigh" },
+  },
+  previsto: {
+    flood: { score: 0.6, classe: "High", target_at: "2026-10-09T02:25:00Z" },
+  },
   comuni: [
-    { istat_code: "004110", nome: "Limone Piemonte", hazard: "flood", score: 0.8, celle_alte: 31 },
+    {
+      istat_code: "004110",
+      nome: "Limone Piemonte",
+      hazard: "flood",
+      score: 0.8,
+      celle_alte: 31,
+    },
   ],
   allerta: { oggi: 0, domani: null },
   spiegazioni: {
     flood: {
-      testo: "In Piemonte è attesa pioggia molto forte. Le zone più esposte sono nelle valli. Terza frase.",
+      testo:
+        "In Piemonte è attesa pioggia molto forte. Le zone più esposte sono nelle valli. Terza frase.",
       modello: "quality-cloud",
       scritta: "2026-10-07T07:19:00Z",
       livello: "VeryHigh",
-      analisi: { driver: "pluvial_rain", anomalies: [], attention_window_hours: 24, confidence: 0.7 },
+      analisi: {
+        driver: "pluvial_rain",
+        anomalies: [],
+        attention_window_hours: 24,
+        confidence: 0.7,
+      },
     },
   },
 };
@@ -68,15 +100,17 @@ describe("attacco", () => {
   });
 
   it("il punto delle migliaia non chiude la frase", () => {
-    expect(attacco("Su 23.214 aree nessuna è alta. Poche sono moderate. Fine.")).toBe(
-      "Su 23.214 aree nessuna è alta. Poche sono moderate.",
-    );
+    expect(
+      attacco("Su 23.214 aree nessuna è alta. Poche sono moderate. Fine."),
+    ).toBe("Su 23.214 aree nessuna è alta. Poche sono moderate.");
   });
 });
 
 describe("RegioniPage", () => {
   it("mostra le regioni nell'ordine dei numeri, con allerta, comuni e racconto firmato", async () => {
-    vi.spyOn(defaultApiClient, "getRegioni").mockResolvedValue({ regioni: [PIEMONTE, MOLISE] });
+    vi.spyOn(defaultApiClient, "getRegioni").mockResolvedValue({
+      regioni: [PIEMONTE, MOLISE],
+    });
     const { container } = render(<RegioniPage />);
 
     expect(await screen.findByText("Piemonte")).toBeTruthy();
@@ -89,21 +123,29 @@ describe("RegioniPage", () => {
     for (const racconto of container.querySelectorAll(".reg-ai")) {
       expect(racconto.textContent).not.toContain("Claude");
     }
-    expect(testo).toContain("Racconti scritti con Claude, il modello di Anthropic");
+    expect(testo).toContain(
+      "Racconti scritti con Claude, il modello di Anthropic",
+    );
     expect(testo).toContain("la pioggia prevista");
     expect(testo).toContain("non l'allerta");
     expect(testo).not.toMatch(/alluvion/i);
     expect(testo).toContain("nessun segnale");
     const pdf = screen.getByRole("link", { name: "Scarica il rapporto (PDF)" });
     expect(pdf.getAttribute("href")).toMatch(/\/api\/regioni\/rapporto\.pdf$/);
-    const una = screen.getAllByRole("link", { name: "PDF di questa regione" })[0];
+    const una = screen.getAllByRole("link", {
+      name: "PDF di questa regione",
+    })[0];
     expect(una?.getAttribute("href")).toContain("rapporto.pdf?aoi=it-piemonte");
-    const nomi = [...container.querySelectorAll(".reg-nome")].map((n) => n.textContent);
+    const nomi = [...container.querySelectorAll(".reg-nome")].map(
+      (n) => n.textContent,
+    );
     expect(nomi).toEqual(["Piemonte", "Molise"]);
   });
 
   it("un errore del servizio non lascia la pagina vuota", async () => {
-    vi.spyOn(defaultApiClient, "getRegioni").mockRejectedValue(new Error("giù"));
+    vi.spyOn(defaultApiClient, "getRegioni").mockRejectedValue(
+      new Error("giù"),
+    );
     render(<RegioniPage />);
     expect(await screen.findByRole("alert")).toBeTruthy();
   });
@@ -111,22 +153,56 @@ describe("RegioniPage", () => {
 
 describe("RegioniPage in inglese", () => {
   it("traduce tutto intorno al racconto, che resta quello del backend", async () => {
-    vi.spyOn(defaultApiClient, "getRegioni").mockResolvedValue({ regioni: [PIEMONTE, MOLISE] });
+    vi.spyOn(defaultApiClient, "getRegioni").mockResolvedValue({
+      regioni: [PIEMONTE, MOLISE],
+    });
     const { container } = renderConLingua(<RegioniPage />, { lingua: "en" });
 
     expect(await screen.findByText("Piemonte")).toBeTruthy();
     const testo = container.textContent ?? "";
-    expect(screen.getByRole("heading", { name: "Regions to watch" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Regions to watch" }),
+    ).toBeTruthy();
     expect(testo).toContain("Floods · very high");
     expect(testo).toContain("Floods 35 areas in the high class now");
     expect(testo).toContain("today none · tomorrow not issued yet");
     expect(testo).toContain("Main driver: forecast rainfall");
     expect(testo).toContain("not the warning");
     expect(testo).toContain("no signal");
-    expect(screen.getByRole("link", { name: "Download the report (PDF)" })).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Download the report (PDF)" }),
+    ).toBeTruthy();
     // Il racconto dell'AI arriva in italiano dal backend e non si traduce qui.
     expect(testo).toContain("In Piemonte è attesa pioggia molto forte.");
+    expect(testo).toContain(
+      "in Italian, the English translation is not ready yet",
+    );
     expect(testo).not.toContain("Allerta ufficiale");
+  });
+
+  it("con la traduzione del backend il racconto è in inglese", async () => {
+    const flood = PIEMONTE.spiegazioni.flood!;
+    const tradotto = {
+      ...PIEMONTE,
+      spiegazioni: {
+        flood: {
+          ...flood,
+          traduzioni: {
+            en: { ...flood, testo: "Very heavy rain is expected in Piemonte." },
+          },
+        },
+      },
+    };
+    vi.spyOn(defaultApiClient, "getRegioni").mockResolvedValue({
+      regioni: [tradotto, MOLISE],
+    });
+    const { container } = renderConLingua(<RegioniPage />, { lingua: "en" });
+
+    expect(await screen.findByText("Piemonte")).toBeTruthy();
+    const testo = container.textContent ?? "";
+    expect(testo).toContain("Very heavy rain is expected in Piemonte.");
+    expect(testo).not.toContain("In Piemonte è attesa pioggia molto forte.");
+    expect(testo).not.toContain("not ready yet");
   });
 });
 
@@ -141,7 +217,9 @@ describe("RegioniPage e la mappa", () => {
         throw new Error("Style is not done loading.");
       });
     window.location.hash = "#/regioni/it-piemonte";
-    vi.spyOn(defaultApiClient, "getRegioni").mockResolvedValue({ regioni: [PIEMONTE, MOLISE] });
+    vi.spyOn(defaultApiClient, "getRegioni").mockResolvedValue({
+      regioni: [PIEMONTE, MOLISE],
+    });
     render(<RegioniPage />);
     expect(await screen.findByText("Piemonte")).toBeTruthy();
     expect(spia).not.toHaveBeenCalled();

@@ -16,7 +16,7 @@ import { defaultApiClient } from "../lib/api-client";
 import { BASEMAP_LAYER, BASEMAP_SOURCE } from "../lib/basemap";
 import { config } from "../lib/env";
 import { COLORE_ALLERTA } from "../lib/overlays";
-import { testi, useLocale, useTesti } from "../lib/i18n";
+import { testi, useLingua, useLocale, useTesti } from "../lib/i18n";
 import { RISK_COLOR_BY_LEVEL, RISK_SCURE, useEtichetteRischio } from "../lib/risk-colors";
 import type { HazardType, RegioneMonitorata, RiskLevel } from "../types";
 
@@ -56,6 +56,7 @@ const T = testi(
     pdfRegione: "PDF di questa regione",
     comuniDaGuardare: "Comuni da guardare:",
     raccontoAi: "il racconto dell'AI",
+    soloItaliano: "",
     causaPrincipale: "Causa principale:",
     finestra: (ore: number) => `da tenere d'occhio per ${ore} ore`,
     mappa: "Mappa delle regioni colorate per pericolo stimato",
@@ -101,6 +102,7 @@ const T = testi(
     pdfRegione: "PDF for this region",
     comuniDaGuardare: "Municipalities to watch:",
     raccontoAi: "the AI summary",
+    soloItaliano: " · in Italian, the English translation is not ready yet",
     causaPrincipale: "Main driver:",
     finestra: (ore: number) => `worth watching for ${ore} hours`,
     mappa: "Map of the regions coloured by estimated hazard",
@@ -191,6 +193,7 @@ function Scheda({
   onScegli: () => void;
 }): JSX.Element {
   const t = useTesti(T);
+  const { lingua } = useLingua();
   const loc = useLocale();
   const etichette = useEtichetteRischio();
   const p = r.peggiore;
@@ -269,15 +272,21 @@ function Scheda({
       ) : null}
 
       {pericoliConTesto.map((h) => {
-        const s = r.spiegazioni[h];
-        if (!s) return null;
+        const originale = r.spiegazioni[h];
+        if (!originale) return null;
+        // In inglese la traduzione, se c'è; altrimenti l'italiano dell'AI, e
+        // lo si dice invece di farlo passare per inglese.
+        const tradotta = lingua === "en" ? originale.traduzioni?.en : undefined;
+        const s = tradotta ?? originale;
+        const inItaliano = lingua === "en" && !tradotta;
         return (
           <details key={h} className="reg-ai" open={scelta && h === p?.hazard}>
             <summary>
               <span className="reg-ai-titolo">
                 {t.pericolo[h]} · {t.raccontoAi} · {ora(s.scritta, loc)}
+                {inItaliano ? t.soloItaliano : ""}
               </span>
-              <span className="reg-ai-attacco">{attacco(s.testo)}</span>
+              <span className="reg-ai-attacco" lang={inItaliano ? "it" : undefined}>{attacco(s.testo)}</span>
             </summary>
             {s.analisi ? (
               <p className="reg-ai-analisi">
@@ -288,7 +297,9 @@ function Scheda({
               </p>
             ) : null}
             {s.testo.split(/\n{2,}/).map((par) => (
-              <p key={par.slice(0, 40)}>{par}</p>
+              <p key={par.slice(0, 40)} lang={inItaliano ? "it" : undefined}>
+                {par}
+              </p>
             ))}
           </details>
         );
