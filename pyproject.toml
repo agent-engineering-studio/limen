@@ -3,16 +3,16 @@ name = "limen"
 version = "0.1.0"
 description = "Limen — AI multi-factor landslide-risk monitoring (Italy pilot: Puglia + Basilicata)."
 readme = "README.md"
-license = { text = "Apache-2.0" }
+license = { text = "EUPL-1.2" }
 authors = [
-    { name = "Giuseppe Zileni", email = "giuseppe.zileni@hevolus.it" },
+    { name = "Giuseppe Zileni", email = "giuseppe.zileni@gmail.com" },
 ]
 requires-python = ">=3.12"
 keywords = ["landslide", "risk", "postgis", "geospatial", "italy"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: Apache Software License",
+    "License :: OSI Approved :: European Union Public Licence 1.2 (EUPL 1.2)",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: GIS",

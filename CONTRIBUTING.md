@@ -1,7 +1,9 @@
 # Contributing
 
-Limen is Apache-2.0 and open to contributions. Bug reports, feature
-PRs, documentation fixes — all welcome.
+Limen is licensed under the [EUPL-1.2](./LICENSE) and open to
+contributions. Bug reports, feature PRs, documentation fixes — all
+welcome. Code contributions require accepting the
+[Contributor License Agreement](#contributor-license-agreement) below.
 
 ## Dev setup
 
@@ -72,6 +74,52 @@ The "Locked invariants" table in CLAUDE.md is the binding contract.
 * Read [`docs/scoring-model.md`](./docs/scoring-model.md) to understand
   the V1 engine.
 * Try `make demo` to bring the whole stack up locally.
+
+## Contributor License Agreement
+
+Limen is distributed under the EUPL-1.2 and, for uses the copyleft does
+not fit, under a separate commercial licence. Offering both requires the
+maintainer to be able to license every line of the project, so each
+code contribution is accepted under the following terms.
+
+By submitting a contribution (code, documentation, configuration, data)
+to this repository, you agree that:
+
+1. **You keep the copyright.** This agreement grants a licence; it does
+   not transfer ownership of your contribution.
+2. **Copyright licence.** You grant Giuseppe Zileni, as maintainer of
+   Limen, and any successor to whom the rights in the Limen project are
+   transferred (the "Maintainer"), a perpetual, worldwide,
+   non-exclusive, no-charge, royalty-free, irrevocable licence to
+   reproduce, modify, prepare derivative works of, publicly display,
+   publicly perform, sublicense and distribute your contribution and
+   such derivative works, **under any licence terms, including the
+   EUPL-1.2 and proprietary or commercial terms**.
+3. **Patent licence.** You grant the Maintainer and recipients of the
+   software a perpetual, worldwide, non-exclusive, no-charge,
+   royalty-free, irrevocable patent licence to make, use, sell, offer
+   for sale, import and otherwise transfer your contribution, limited to
+   the patent claims you can license that are necessarily infringed by
+   your contribution alone or combined with the project.
+4. **You have the right to contribute.** The contribution is your
+   original work, or you have the right to submit it under these terms.
+   If your employer has rights to intellectual property you create, you
+   have received permission to contribute on its behalf, or your
+   employer has waived those rights for this contribution.
+5. **The project stays open.** Every contribution accepted into the
+   repository is also published under the EUPL-1.2.
+6. **No warranty.** Unless required by law, you provide your
+   contribution "as is", without warranties or conditions of any kind.
+
+To accept, include this line in the description of your first pull
+request:
+
+```
+I have read the Contributor License Agreement in CONTRIBUTING.md and I accept it.
+```
+
+The acceptance covers that pull request and every later contribution
+you make to Limen. Pull requests without it are not merged.
 
 ## Code of conduct
 

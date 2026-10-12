@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 If you find a security issue in Limen, **please do not open a public
-GitHub issue**. Instead, write to **security@hevolus.it** with:
+GitHub issue**. Instead, write to **giuseppe.zileni@gmail.com** with:
 
 * a description of the issue and its impact;
 * a minimal reproducer or PoC;

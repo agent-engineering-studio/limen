@@ -17,14 +17,21 @@ flowchart LR
 Anche qui, e per l'ultima volta: Limen affianca e non sostituisce
 l'allertamento ufficiale, e nessun suo avviso ha valore legale.
 
-## La licenza: Apache 2.0
+## La licenza: EUPL 1.2
 
-Tutto il codice di Limen è pubblicato con licenza **Apache 2.0**. In parole
-non giuridiche significa che chiunque può usarlo, studiarlo, modificarlo e
-ridistribuirlo — anche per attività commerciali — a condizione di mantenere
-l'attribuzione e di dichiarare le modifiche fatte. Non c'è una versione
+Tutto il codice di Limen è pubblicato con la **European Union Public
+Licence 1.2**, la licenza open source della Commissione europea, valida
+in italiano come in ogni altra lingua dell'Unione. In parole non
+giuridiche: chiunque può usarlo, studiarlo, modificarlo e ridistribuirlo,
+anche per attività commerciali, a condizione di mantenere l'attribuzione
+e di **pubblicare con la stessa licenza le modifiche** — anche quando
+Limen non viene distribuito ma offerto come servizio online. Chi migliora
+Limen restituisce il miglioramento a tutti. Non c'è una versione
 "professionale" a pagamento con dentro le parti buone: quello che vedi è
 tutto quello che c'è.
+
+Le versioni fino a `v0.6.0-impl-complete` erano pubblicate con licenza
+Apache 2.0, e per quelle versioni resta valida.
 
 La licenza sta in [LICENSE](../../LICENSE) nella radice del progetto.
 

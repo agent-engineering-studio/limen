@@ -38,7 +38,7 @@
 |-------|------|
 | Language | Python 3.12+, `uv` for everything (`uv sync`, `uv run`). |
 | Layout | `src/limen/...`, package = `limen`. Tests in `tests/`. |
-| License | Apache-2.0. |
+| License | **EUPL-1.2** dal 2026-10-11 (fino a `v0.6.0-impl-complete` il codice era Apache-2.0, e quelle versioni restano tali). Contributi esterni solo con il CLA di `CONTRIBUTING.md`: è ciò che tiene aperta la doppia licenza. |
 | DB access | `asyncpg` + the PostGIS hex-EWKB codec in `limen.data.db`. **No ORM.** |
 | Migrations | Plain SQL in `src/limen/data/migrations/NNN_*.sql`, applied by `limen.data.migrate`. Tracked with SHA-256 checksums. **NEVER edit an applied migration** — add a new file. Comments count: even a comment-only change breaks the checksum. |
 | Object store | Use the `ObjectStore` Protocol only. Never `import boto3` in app code. The factory in `limen.data.object_store.factory` is the only place that picks a backend. |

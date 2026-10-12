@@ -271,7 +271,7 @@ export function HomePage(): JSX.Element {
           Dati: ISPRA IdroGEO (CC-BY 4.0) · e-ITALICA CNR-IRPI (CC-BY 4.0) ·
           Open-Meteo (CC-BY 4.0) · GloFAS e CEMS Fire · INGV (CC-BY 4.0) ·
           EFFIS · NASA FIRMS · CORINE Land Cover · © OpenStreetMap contributors
-          (ODbL). Codice Apache-2.0.
+          (ODbL). Codice EUPL-1.2.
         </p>
         <p>
           {copernicusModificato()}. {NON_E_UN_AVVISO_DI_PIENA}

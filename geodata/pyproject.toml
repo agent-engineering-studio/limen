@@ -3,9 +3,9 @@ name = "limen-geodata"
 version = "0.1.0"
 description = "Limen Geo-Data Service — ISPRA dataset ingestion + per-cell features + PMTiles + MCP server."
 readme = "README.md"
-license = { text = "Apache-2.0" }
+license = { text = "EUPL-1.2" }
 authors = [
-    { name = "Giuseppe Zileni", email = "giuseppe.zileni@hevolus.it" },
+    { name = "Giuseppe Zileni", email = "giuseppe.zileni@gmail.com" },
 ]
 requires-python = ">=3.12"
 dependencies = [
