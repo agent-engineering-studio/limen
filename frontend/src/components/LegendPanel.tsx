@@ -2,15 +2,93 @@ import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
-import { useHazard } from "../lib/hazard";
+import { useHazard, useNomePericolo } from "../lib/hazard";
+import { testi, useTesti } from "../lib/i18n";
 import {
   HAZARD_HUE,
   COLORE_IGNOTO,
   RISK_CLASSES,
   riskClassesFor,
   riskColorsFor,
+  useEtichetteRischio,
 } from "../lib/risk-colors";
 import type { HazardType, LegendClass, RiskLevel } from "../types";
+
+const T = testi(
+  {
+    legenda: "Legenda classi di rischio",
+    sommarioTutti: "Pericolo stimato · tutti i pericoli · non è l'allerta",
+    sommario: "Pericolo stimato · non è l'allerta",
+    nonAllerta: (
+      <>
+        Questi colori sono il <strong>pericolo stimato</strong> da Limen, non un
+        livello di allerta: una cella rossa non è un&apos;allerta rossa.
+        L&apos;allerta ufficiale è nel livello «Allerte Protezione Civile» e nella
+        riga di ogni comune.
+      </>
+    ),
+    nonMisurato: "Non misurato",
+    nessunDato: "nessun dato",
+    notaNonMisurato: (
+      <>
+        <strong>Non misurato</strong> non vuol dire tranquillo: il dato che
+        quel pericolo richiede non è arrivato, e il punteggio varrebbe zero
+        per assenza di misura. Una cella grigia è una cella su cui il
+        sistema non si pronuncia.
+      </>
+    ),
+    notaColore: (
+      <>
+        Il colore dice <strong>quanto</strong>: è la classe del pericolo
+        peggiore in quel punto. <strong>Quale</strong> pericolo lo dicono la
+        lettera dentro la cella (<strong>A</strong> allagamento,{" "}
+        <strong>F</strong> frana, <strong>I</strong> incendio, da vicino) e il
+        bordo, sulle sole celle in classe Alta o superiore.
+      </>
+    ),
+    notaSoglie:
+      "Le soglie numeriche cambiano da un pericolo all'altro: quelle qui sopra sono delle frane. Scegli un pericolo per vedere le sue.",
+    notaListe:
+      "Le liste mettono prima le celle vicine a centri abitati e strade (🏠 🛣): stesso rischio, più conseguenze. Colori e numeri seguono sempre la scala qui sopra. ",
+    comeSiCalcola: "Come si calcola il rischio",
+  },
+  {
+    legenda: "Risk class legend",
+    sommarioTutti: "Estimated hazard · all hazards · not a warning",
+    sommario: "Estimated hazard · not a warning",
+    nonAllerta: (
+      <>
+        These colours are the <strong>estimated hazard</strong> from Limen, not
+        a warning level: a red cell is not a red warning. The official warning
+        is in the «Civil Protection warnings» layer and in each
+        municipality&apos;s row.
+      </>
+    ),
+    nonMisurato: "Not measured",
+    nessunDato: "no data",
+    notaNonMisurato: (
+      <>
+        <strong>Not measured</strong> does not mean calm: the data this hazard
+        needs has not arrived, and the score would be zero for lack of a
+        measurement. A grey cell is a cell on which the system makes no call.
+      </>
+    ),
+    notaColore: (
+      <>
+        The colour says <strong>how much</strong>: it is the class of the worst
+        hazard at that point. <strong>Which</strong> hazard is shown by the
+        letter inside the cell (<strong>F</strong> flood,{" "}
+        <strong>L</strong> landslide, <strong>W</strong> wildfire, close up) and
+        by the outline, only on cells in the High class or above.
+      </>
+    ),
+    notaSoglie:
+      "The numeric thresholds differ from one hazard to another: those above are for landslides. Pick a hazard to see its own.",
+    notaListe:
+      "Lists put first the cells near towns and roads (🏠 🛣): same risk, more consequences. Colours and numbers always follow the scale above. ",
+    comeSiCalcola: "How the risk is computed",
+  },
+);
 
 /** I cinque colori in una riga: resta visibile anche con la legenda chiusa. */
 /** La scala di riferimento della vista d'insieme: quella del pericolo di
@@ -48,19 +126,14 @@ function ScalaColori({
  *  Un operatore della Protezione civile legge quei colori come livelli di
  *  allerta, e davanti a «rosso» e a un bollettino verde non sa a chi credere. */
 function NonEAllerta(): JSX.Element {
-  return (
-    <p className="legend-note legend-non-allerta">
-      Questi colori sono il <strong>pericolo stimato</strong> da Limen, non un
-      livello di allerta: una cella rossa non è un&apos;allerta rossa.
-      L&apos;allerta ufficiale è nel livello «Allerte Protezione Civile» e nella
-      riga di ogni comune.
-    </p>
-  );
+  const t = useTesti(T);
+  return <p className="legend-note legend-non-allerta">{t.nonAllerta}</p>;
 }
 
 /** «Non misurato» sta in legenda perché sulla mappa è un colore come gli
  *  altri, e senza la riga resterebbe un grigio senza nome (#143). */
 function RigaNonMisurato(): JSX.Element {
+  const t = useTesti(T);
   return (
     <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
       <li className="legend-row">
@@ -71,9 +144,9 @@ function RigaNonMisurato(): JSX.Element {
           style={{ background: COLORE_IGNOTO }}
         />
         <span>
-          Non misurato <small style={{ color: "var(--muted)" }}>(—)</small>
+          {t.nonMisurato} <small style={{ color: "var(--muted)" }}>(—)</small>
         </span>
-        <span className="legend-range">nessun dato</span>
+        <span className="legend-range">{t.nessunDato}</span>
       </li>
     </ul>
   );
@@ -86,6 +159,9 @@ export function LegendPanel(): JSX.Element {
   // ripiego finché la prima risposta non arriva, o se l'API è irraggiungibile.
   const [ranges, setRanges] = useState<Record<string, [number, number]>>({});
   const { selected, multi, available } = useHazard();
+  const t = useTesti(T);
+  const etichette = useEtichetteRischio();
+  const nomePericolo = useNomePericolo();
 
   useEffect(() => {
     // I cutoff sono per pericolo: senza azzerarli, una legenda che fallisce
@@ -118,13 +194,13 @@ export function LegendPanel(): JSX.Element {
     // caselle per leggere una cella. Ora il colore dice quanto, e quale
     // pericolo lo dice il bordo delle celle in classe alta.
     return (
-      <details className="legend-panel" aria-label="Legenda classi di rischio">
+      <details className="legend-panel" aria-label={t.legenda}>
         <summary>
           <ScalaColori
             levels={RISK_CLASSES.map((c) => c.level)}
             hazard={SCALA_RIFERIMENTO}
           />
-          Pericolo stimato · tutti i pericoli · non è l&apos;allerta
+          {t.sommarioTutti}
         </summary>
         <NonEAllerta />
         <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
@@ -137,7 +213,7 @@ export function LegendPanel(): JSX.Element {
                 style={{ background: c.color }}
               />
               <span>
-                {c.label} <small style={{ color: "var(--muted)" }}>({c.short})</small>
+                {etichette[c.level]} <small style={{ color: "var(--muted)" }}>({c.short})</small>
               </span>
               <span className="legend-range">
                 {`${c.range[0].toFixed(2)}-${c.range[1].toFixed(2)}`}
@@ -146,19 +222,8 @@ export function LegendPanel(): JSX.Element {
           ))}
         </ul>
         <RigaNonMisurato />
-        <p className="legend-note">
-          <strong>Non misurato</strong> non vuol dire tranquillo: il dato che
-          quel pericolo richiede non è arrivato, e il punteggio varrebbe zero
-          per assenza di misura. Una cella grigia è una cella su cui il
-          sistema non si pronuncia.
-        </p>
-        <p className="legend-note">
-          Il colore dice <strong>quanto</strong>: è la classe del pericolo
-          peggiore in quel punto. <strong>Quale</strong> pericolo lo dicono la
-          lettera dentro la cella (<strong>A</strong> allagamento,{" "}
-          <strong>F</strong> frana, <strong>I</strong> incendio, da vicino) e il
-          bordo, sulle sole celle in classe Alta o superiore.
-        </p>
+        <p className="legend-note">{t.notaNonMisurato}</p>
+        <p className="legend-note">{t.notaColore}</p>
         <ul className="legend-hazards">
           {available.map((h) => (
             <li key={h.hazard}>
@@ -167,23 +232,20 @@ export function LegendPanel(): JSX.Element {
                 aria-hidden
                 style={{ borderColor: HAZARD_HUE[h.hazard] }}
               />
-              {h.label_it}
+              {nomePericolo(h.hazard)}
             </li>
           ))}
         </ul>
-        <p className="legend-note">
-          Le soglie numeriche cambiano da un pericolo all&apos;altro: quelle
-          qui sopra sono delle frane. Scegli un pericolo per vedere le sue.
-        </p>
+        <p className="legend-note">{t.notaSoglie}</p>
       </details>
     );
   }
 
   return (
-    <details className="legend-panel" aria-label="Legenda classi di rischio">
+    <details className="legend-panel" aria-label={t.legenda}>
       <summary>
         <ScalaColori levels={riskClassesFor(selected).map((c) => c.level)} hazard={selected} />
-        Pericolo stimato · non è l&apos;allerta
+        {t.sommario}
       </summary>
       <NonEAllerta />
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
@@ -196,7 +258,7 @@ export function LegendPanel(): JSX.Element {
               style={{ background: c.color }}
             />
             <span>
-              {c.label}{" "}
+              {etichette[c.level]}{" "}
               <small style={{ color: "var(--muted)" }}>({c.short})</small>
             </span>
             <span className="legend-range">
@@ -208,19 +270,10 @@ export function LegendPanel(): JSX.Element {
         ))}
       </ul>
       <RigaNonMisurato />
+      <p className="legend-note">{t.notaNonMisurato}</p>
       <p className="legend-note">
-        <strong>Non misurato</strong> non vuol dire tranquillo: il dato che
-        quel pericolo richiede non è arrivato, e il punteggio varrebbe zero
-        per assenza di misura. Una cella grigia è una cella su cui il
-        sistema non si pronuncia.
-      </p>
-      <p className="legend-note">
-        Le liste mettono prima le celle vicine a centri abitati e strade
-        (🏠 🛣): stesso rischio, più conseguenze. Colori e numeri seguono
-        sempre la scala qui sopra.{" "}
-        <a href="#/come-funziona/i-tre-motori">
-          Come si calcola il rischio
-        </a>
+        {t.notaListe}
+        <a href="#/come-funziona/i-tre-motori">{t.comeSiCalcola}</a>
       </p>
     </details>
   );

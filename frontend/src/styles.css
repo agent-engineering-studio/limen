@@ -2423,6 +2423,42 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   font-weight: 600;
 }
 .header-spazio { flex: 1; }
+/* Le voci inglesi sono più corte ma di più parole: senza, «How it works»
+   andava su due righe e alzava la testata. */
+html[lang="en"] .app-nav a { white-space: nowrap; }
+.nota-lingua {
+  max-width: 880px;
+  margin: 16px auto 0;
+  padding: 10px 14px;
+  border: 1px solid #263140;
+  border-radius: 8px;
+  background: var(--panel-raised);
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+.lingua-switch {
+  display: inline-flex;
+  border: 1px solid #263140;
+  border-radius: 6px;
+  overflow: hidden;
+  flex: none;
+}
+.lingua-switch button {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font: 600 11.5px var(--font-mono);
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.lingua-switch button.on {
+  background: var(--hover);
+  color: var(--ink);
+}
+.lingua-switch button:focus-visible {
+  outline: 2px solid var(--ink-soft);
+  outline-offset: -2px;
+}
 .header-cerca { width: 280px; }
 .header-cerca input {
   background: var(--panel-raised);

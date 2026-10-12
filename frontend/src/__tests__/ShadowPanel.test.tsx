@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import ShadowPanel, { nationalAgreement } from "../components/ShadowPanel";
 import { defaultApiClient } from "../lib/api-client";
+import { render as renderConLingua } from "../test-utils";
 import type { ShadowSummaryResponse } from "../types";
 
 const SUMMARY: ShadowSummaryResponse = {
@@ -47,5 +48,15 @@ describe("ShadowPanel", () => {
     vi.spyOn(defaultApiClient, "getShadowSummary").mockRejectedValue(new Error("boom"));
     const { container } = render(<ShadowPanel />);
     await waitFor(() => expect(container.querySelector(".shadow-panel")).toBeNull());
+  });
+
+  it("in inglese: avvertenza, accordo e classi tradotte", async () => {
+    vi.spyOn(defaultApiClient, "getShadowSummary").mockResolvedValue(SUMMARY);
+    renderConLingua(<ShadowPanel />, { lingua: "en" });
+    expect(screen.getByRole("heading", { name: "Experimental model (AI)" })).toBeInTheDocument();
+    expect(screen.getByText(/it does not decide warnings/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/same risk class/)).toBeInTheDocument());
+    expect(screen.getByText("1,200")).toBeInTheDocument();
+    expect(screen.getByText(/None \/ Low \/ Moderate \/ High \/ Very high/)).toBeInTheDocument();
   });
 });

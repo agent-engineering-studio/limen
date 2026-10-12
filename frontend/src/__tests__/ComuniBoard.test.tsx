@@ -382,3 +382,34 @@ describe("ComuniBoard", () => {
     expect(container.textContent).toContain("Disponibile per: frane");
   });
 });
+
+describe("ComuniBoard in inglese", () => {
+  it("traduce testata, classi e motivi, e scrive i numeri con il punto", async () => {
+    getTopComuni.mockResolvedValue({
+      comuni: [
+        comune("Ispani", {
+          landslide: { class: "Moderate", n_cells: 9, n_alert: 0, score: 0.37 },
+          flood: { class: "None", n_cells: 9, n_alert: 0, score: 0.0 },
+          wildfire: { class: "High", n_cells: 9, n_alert: 3, score: 0.56 },
+        }),
+      ],
+    });
+    const { container } = render(<ComuniBoard />, { lingua: "en" });
+    await waitFor(() => expect(screen.getByText("Ispani")).toBeInTheDocument());
+    expect(screen.getByText("Most exposed municipalities")).toBeInTheDocument();
+    const testa = container.querySelector(".cb-head")?.textContent ?? "";
+    expect(testa).toContain("0.56");
+    expect(testa).not.toContain("0,56");
+    expect(testa).toContain("high");
+    expect(testa).toContain("12 cells · Top because:");
+    expect(testa).toContain("homes or roads nearby");
+    expect(testa).toContain("2 hazards above threshold");
+    expect(screen.getByRole("radio", { name: "In 72 h" })).toBeInTheDocument();
+  });
+
+  it("dice in inglese che non c'è nessun comune sopra soglia", async () => {
+    getTopComuni.mockResolvedValue({ comuni: [] });
+    render(<ComuniBoard />, { lingua: "en" });
+    expect(await screen.findByText("No municipality above the threshold")).toBeInTheDocument();
+  });
+});

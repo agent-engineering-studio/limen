@@ -2,6 +2,7 @@ import type { ReactElement } from "react";
 import { MantineProvider } from "@mantine/core";
 import { render as renderBase, type RenderOptions } from "@testing-library/react";
 
+import { LinguaProvider, type Lingua } from "./lib/i18n";
 import { theme } from "./lib/theme";
 
 /**
@@ -12,14 +13,17 @@ import { theme } from "./lib/theme";
  * qui. Il tema è quello vero, non uno finto: un test che passa con colori
  * diversi da quelli in pagina non dice niente sulla pagina.
  */
-export function render(ui: ReactElement, options?: RenderOptions) {
+export function render(ui: ReactElement, options?: RenderOptions & { lingua?: Lingua }) {
+  const { lingua = "it", ...resto } = options ?? {};
   return renderBase(ui, {
     wrapper: ({ children }) => (
-      <MantineProvider theme={theme} defaultColorScheme="dark">
-        {children}
-      </MantineProvider>
+      <LinguaProvider iniziale={lingua}>
+        <MantineProvider theme={theme} defaultColorScheme="dark">
+          {children}
+        </MantineProvider>
+      </LinguaProvider>
     ),
-    ...options,
+    ...resto,
   });
 }
 

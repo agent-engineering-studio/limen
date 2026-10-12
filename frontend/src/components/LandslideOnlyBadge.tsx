@@ -11,18 +11,35 @@ import type { JSX } from "react";
 // Invisibile finché il pericolo scelto è quello su cui la vista è fissata —
 // cioè sempre, in Fase 1. La superficie multi-pericolo è #58.
 
-import { useHazard } from "../lib/hazard";
+import { NOMI_PERICOLO, useHazard } from "../lib/hazard";
+import { testi, useLingua, useTesti } from "../lib/i18n";
 
 const PINNED = "landslide";
 
+const T = testi(
+  {
+    titolo: (l: string) => `Questo pannello mostra solo: ${l}`,
+    marchio: (l: string) => `solo ${l.toLowerCase()}`,
+  },
+  {
+    titolo: (l: string) => `This panel shows only: ${l}`,
+    marchio: (l: string) => `${l.toLowerCase()} only`,
+  },
+);
+
 export function LandslideOnlyBadge(): JSX.Element | null {
   const { selected, available } = useHazard();
+  const { lingua } = useLingua();
+  const t = useTesti(T);
   if (selected === PINNED) return null;
 
-  const label = available.find((h) => h.hazard === PINNED)?.label_it ?? "frane";
+  const label =
+    lingua === "it"
+      ? (available.find((h) => h.hazard === PINNED)?.label_it ?? "frane")
+      : NOMI_PERICOLO.en[PINNED];
   return (
-    <span className="pinned-badge" title={`Questo pannello mostra solo: ${label}`}>
-      solo {label.toLowerCase()}
+    <span className="pinned-badge" title={t.titolo(label)}>
+      {t.marchio(label)}
     </span>
   );
 }

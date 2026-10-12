@@ -5,6 +5,7 @@ import { MantineProvider } from "@mantine/core";
 
 import App from "./App";
 import { HazardProvider } from "./lib/hazard";
+import { LinguaProvider } from "./lib/i18n";
 import { theme } from "./lib/theme";
 // L'ordine conta: gli stili di Mantine per primi, i nostri dopo, così una
 // regola del progetto vince su quella del componente e non viceversa.
@@ -18,10 +19,12 @@ if (!root) {
 
 ReactDOM.createRoot(root).render(
     <React.StrictMode>
-        <MantineProvider theme={theme} forceColorScheme="dark">
-            <HazardProvider>
-                <App />
-            </HazardProvider>
-        </MantineProvider>
+        <LinguaProvider>
+            <MantineProvider theme={theme} forceColorScheme="dark">
+                <HazardProvider>
+                    <App />
+                </HazardProvider>
+            </MantineProvider>
+        </LinguaProvider>
     </React.StrictMode>,
 );
