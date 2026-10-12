@@ -21,6 +21,33 @@ import {
 
 import type { Hazard, HazardType, HazardView } from "../types";
 import { defaultApiClient } from "./api-client";
+import { useLingua, type Lingua } from "./i18n";
+
+/**
+ * Il nome del pericolo nelle due lingue. In italiano vince l'etichetta del
+ * database (`label_it`), che è la fonte; questa tabella è il ripiego e
+ * l'inglese, che il database non ha.
+ */
+export const NOMI_PERICOLO: Record<Lingua, Record<HazardType, string>> = {
+  it: { landslide: "Frana", flood: "Allagamento", wildfire: "Incendio" },
+  en: { landslide: "Landslide", flood: "Flood", wildfire: "Wildfire" },
+};
+
+/** Il nome di un pericolo nella lingua attiva, con l'iniziale maiuscola. */
+export function useNomePericolo(): (hazard: string) => string {
+  const { lingua } = useLingua();
+  const { available } = useHazard();
+  return useCallback(
+    (hazard: string) => {
+      if (lingua === "it") {
+        const db = available.find((h) => h.hazard === hazard)?.label_it;
+        if (db) return db;
+      }
+      return NOMI_PERICOLO[lingua][hazard as HazardType] ?? hazard;
+    },
+    [lingua, available],
+  );
+}
 
 interface HazardContextValue {
   /** Pericoli disponibili. Vuoto finché la prima fetch non risponde. */
