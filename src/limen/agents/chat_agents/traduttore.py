@@ -66,9 +66,46 @@ def numeri(testo: str, lingua: str) -> list[Decimal]:
     return out
 
 
+def letture(token: str) -> frozenset[Decimal]:
+    """I valori che un numero scritto può avere, in qualunque delle due lingue.
+
+    I racconti dell'AI non seguono una convenzione: in italiano scrivono
+    spesso i punteggi col punto, copiati dai dati (`0.374`, «combustibile
+    1.000» per 1,0). Un separatore seguito da tre cifre può quindi essere
+    delle migliaia o un decimale, e le due letture valgono entrambe; uno `0`
+    iniziale non regge mai delle migliaia.
+    """
+    pezzi = re.split(r"[.,]", token)
+    out: set[Decimal] = set()
+    testa, gruppi = pezzi[0], pezzi[1:]
+    if not gruppi:
+        return frozenset({Decimal(testa).normalize()})
+    if testa != "0" and len(testa) <= 3 and all(len(g) == 3 for g in gruppi):
+        out.add(Decimal(testa + "".join(gruppi)).normalize())
+    if all(len(g) == 3 for g in gruppi[:-1]) and (len(gruppi) == 1 or testa != "0"):
+        out.add(Decimal(testa + "".join(gruppi[:-1]) + "." + gruppi[-1]).normalize())
+    return frozenset(out)
+
+
 def numeri_coincidono(italiano: str, inglese: str) -> bool:
-    """Gli stessi numeri, con le stesse ripetizioni, in un ordine qualunque."""
-    return sorted(numeri(italiano, "it")) == sorted(numeri(inglese, "en"))
+    """Gli stessi numeri, con le stesse ripetizioni, in un ordine qualunque.
+
+    Ogni numero della traduzione deve corrispondere a uno dell'originale con
+    almeno una lettura in comune, e nessuno dei due testi può averne di più.
+    """
+    originale = [letture(m.group(0)) for m in _NUMERO.finditer(italiano)]
+    resa = [letture(m.group(0)) for m in _NUMERO.finditer(inglese)]
+    if len(originale) != len(resa):
+        return False
+    liberi = list(originale)
+    # I più vincolati per primi: un numero con una sola lettura non deve
+    # perdere il suo corrispondente a vantaggio di uno che ne ha due.
+    for valori in sorted(resa, key=len):
+        k = next((k for k, cand in enumerate(liberi) if cand & valori), None)
+        if k is None:
+            return False
+        liberi.pop(k)
+    return True
 
 
 class TraduttoreRacconti:
