@@ -145,14 +145,15 @@ before reaching for raw bash:
 
 | Skill | When |
 |-------|------|
-| `verify` | After a change that affects behaviour (CLI, repo, migration). Confirms it works against a real Postgres+PostGIS, not just unit tests. |
 | `code-review` | Before pushing any non-trivial diff. Use `--fix` to apply findings. |
 | `simplify` | Quick post-edit cleanup pass (same engine as `code-review --fix`). |
-| `run` | When you need to actually run `limen seed` / `limen migrate` to see output. |
-| `claude-api` | When (later phases) we add Anthropic SDK calls for the MAF scorer/explainer. Apps built with this skill include prompt caching by default. |
-| `limen-wiki` | Update `#/come-funziona` and `#/integrazioni` (sources `docs/guida/*.md`) from docs, YAML and code; proposes/builds anatomy figures. |
+| `run` | When you need to actually run `limen seed` / `limen migrate` / `limen monitor-once` to see output. |
+| `claude-api` | Any change to the Anthropic factory in `agents/llm_factory/` or to the LiteLLM model roles. |
+| `limen-wiki` | Update `#/come-funziona` and `#/integrazioni` (sources `docs/guida/*.md`, IT + EN) from docs, YAML and code; proposes/builds anatomy figures. |
+| `limen-fact-check` | Check news of landslides/floods/fires against what Limen forecast beforehand and update `#/verifiche`. |
 | `anatomy` | Isometric interactive figures (vendored, MIT); `limen-wiki` says where they live in the SPA. |
-| `loop` | For poll-style monitoring of long-running ingestion jobs (Phase 2+). |
+| `mantine-*` | Custom Mantine components, Combobox, forms in the SPA. |
+| `loop` | Poll-style monitoring of long-running ingestion/bootstrap jobs. |
 | `update-config` | Permissions / hooks / env vars in `settings.json`. |
 | `fewer-permission-prompts` | If we keep seeing the same approval prompt, add it to project `settings.json`. |
 | `init` | Don't re-run — this file is the result. |
@@ -161,6 +162,43 @@ before reaching for raw bash:
 
 - All `clerk-*` skills — Limen has no user authentication at all.
 - `statusline-setup`, `keybindings-help` — user-environment, not project.
+
+---
+
+## Sub-agents (`.claude/agents/`, versioned)
+
+Project sub-agents follow <https://code.claude.com/docs/en/sub-agents>: one
+Markdown file each, YAML frontmatter (`name`, `description`, `model`,
+`effort`, `tools`/`disallowedTools`, `omitClaudeMd`, `color`) and the system
+prompt in the body. Delegate to them to keep verbose output (test logs, grep
+dumps, SQL results) out of the main context; invoke explicitly with
+`@agent-<name>`.
+
+**The model follows the kind of work, not the importance of the task:**
+
+| Sub-agent | Model | Why that model | Tools | Use it when |
+|-----------|-------|----------------|-------|-------------|
+| `code-searcher` | `haiku`, effort low | Mechanical: grep and list `file:riga`, no judgement | Read, Grep, Glob — no CLAUDE.md | Before renaming or changing a signature; any "where is X used" |
+| `gate-runner` | `haiku`, effort low | Runs commands and compresses output; never decides a fix | Bash, Read, Grep, Glob — no CLAUDE.md | After every change, before a commit (ruff, mypy, pytest unit, SPA in `node:22`) |
+| `migration-reviewer` | `sonnet`, effort high | Checklist review with SQL reasoning, narrow scope | read-only + git | Every new `NNN_*.sql` |
+| `db-inspector` | `sonnet`, effort medium | Writes correct SQL against a known schema; read-only transaction | Bash (psql via `docker exec`), read-only | When a number from the DB beats a guess. **Operational DB: needs user approval** |
+| `source-prober` | `sonnet`, effort medium | Reads the client, reproduces the call, compares formats | Bash (curl), WebFetch, read-only | An integration returns empty/zero — before blaming credentials or quota |
+| `invariant-reviewer` | `opus`, effort high | Cross-file judgement against the whole invariants table; a miss here ships a reassuring zero | read-only + git | Before every non-trivial commit/PR |
+| `scoring-analyst` | `opus`, effort high | Causal reasoning across YAML → bundle → engine → breakdown, and the cost of moving the V1 champion | read-only | A score looks wrong, an event was missed, or before touching `config/hazards/*.yaml` |
+
+Rules for adding or changing one:
+
+- `haiku` only for work with no judgement (search, run, summarise output);
+  `sonnet` for bounded analysis with a checklist; `opus` only where a wrong
+  verdict costs a release (invariants, scoring). Never `opus` for search or runs.
+- Mechanical agents set `omitClaudeMd: true`: this file is ~50 KB and a
+  grep does not need it. Reviewers and analysts keep it — it is their metro.
+- Reviewers and analysts are read-only (`disallowedTools: Edit, Write,
+  NotebookEdit`): they report, the main conversation fixes.
+- Descriptions are short and say *when* («Usalo in modo proattivo …»); the
+  detail goes in the body. Lessons already paid for (quotas, MapServer quirks,
+  `node:22` not alpine) belong in the body of the agent that needs them.
+- `.gitignore` keeps `.claude/*` local except `skills/` and `agents/`.
 
 ---
 
@@ -207,9 +245,12 @@ make typecheck              # mypy --strict on src/
 make check                  # lint + typecheck + test
 ```
 
-**Apple Silicon note**: integration tests auto-pick
-`imresamu/postgis-arm64:16-3.5` (the official `postgis/postgis` image has
-no arm64 manifest). Override with `LIMEN_TEST_POSTGIS_IMAGE`.
+**This host (x86, `/srv/appdata/git/limen`)**: there is no Node — the SPA
+gates run in `node:22` (not alpine) with `--user`, which is what
+`gate-runner` does. Integration tests use the official `postgis/postgis`
+image; on Apple Silicon override with `LIMEN_TEST_POSTGIS_IMAGE`
+(`imresamu/postgis-arm64:16-3.5`). If `docker run hello-world` times out,
+a red integration run is the disk, not the code.
 
 ---
 
@@ -217,63 +258,72 @@ no arm64 manifest). Override with `LIMEN_TEST_POSTGIS_IMAGE`.
 
 ```
 src/limen/
-├── cli/                 # `limen` entry point + subcommands (migrate, seed, bootstrap-static)
-├── config/              # pydantic-settings (DB, OBJECT_STORE, LLM, SCHEDULER, HAZARDS)
-│   └── hazards/         # one YAML per hazard — landslide.yaml today
+├── cli/                 # `limen` entry point + ~40 subcommands (migrate, seed, bootstrap-static,
+│                        # calibrate, backtest[-flood|-wildfire], fwi-backfill, monitor-once,
+│                        # serve, worker, train, registra-verifica, verifiche-report, …)
+├── config/
+│   ├── settings.py      # pydantic-settings, env_nested_delimiter="__"
+│   └── hazards/         # landslide.yaml, flood.yaml, wildfire.yaml, cascades.yaml
 ├── agents/
-│   ├── llm_factory/     # ChatClient Protocol + Anthropic/OpenAI/Foundry/Ollama + Stub + resolver
+│   ├── llm_factory/     # ChatClient Protocol + Anthropic/OpenAI/Foundry/llama.cpp/Ollama + Stub + resolver
 │   ├── workflow_runtime/# MAF-shaped shim: Executor, @handler, WorkflowBuilder
-│   ├── executors/       # area_resolver, static_factors, meteo_fetch, seismic_check,
-│   │                    # fire_check, sensor_fetch (stub), risk_scoring, escalation_gate,
-│   │                    # persist_result, alert_dispatch (logging stub)
-│   ├── chat_agents/     # RiskAnalyst + Briefing (+ Italian prompts in *.it.md)
-│   └── workflows/       # build_landslide_workflow + escalation_workflow placeholder
+│   ├── executors/       # area_resolver, static_factors, meteo_fetch, observed_rain,
+│   │                    # flood_forecast_fetch, fwi_update, seismic_check, fire_check,
+│   │                    # sensor_fetch, risk_scoring, escalation_gate, persist_result,
+│   │                    # alert_dispatch, shadow_challenger
+│   ├── chat_agents/     # RiskAnalyst, Briefing, Fedelta, Traduttore + prompts/<agent>.<hazard>.it.md
+│   ├── grounding/       # KG client + GroundingService (advisory citations)
+│   └── workflows/       # main_workflow, forecast, forecast_history, escalation_workflow
 ├── api/
 │   ├── main.py          # FastAPI app factory + lifespan
 │   ├── dependencies.py  # AppDependencies + typed Depends() providers
 │   ├── schemas.py       # Pydantic request/response DTOs
-│   ├── endpoints/       # health/ready, aoi, risk, alerts, tiles
-│   └── jobs/            # APScheduler: hourly_monitoring, weekly_idrogeo_sync,
-│                        # cache_cleanup, registration
-├── notifications/       # NotificationChannel Protocol + AlertPayload + Telegram/MQTT/Email + dispatcher
-├── observability/       # OTel tracing setup + custom metric instruments
-
-frontend/                # Vite + TypeScript + React + MapLibre SPA
-├── src/
-│   ├── App.tsx
-│   ├── components/      # RiskMap, LegendPanel, AlertList, CellPopup, TimelineSlider
-│   ├── lib/             # api-client, risk-colors, env
-│   ├── types.ts         # mirrors the FastAPI Pydantic DTOs
-│   └── __tests__/       # Vitest + Testing Library
-└── eslint.config.js | tsconfig.json | vite.config.ts | vitest.config.ts
+│   ├── endpoints/       # health, aoi, risk, alerts, comuni, regioni, contributi, status, tiles, a2a
+│   └── jobs/            # APScheduler jobs run by `limen worker`: hourly/nowcast/firms monitoring,
+│                        # briefing_enrichment, nightly, forecast_history, fedelta_racconti, …
+├── a2a/                 # Agent-to-agent card, skills, service
+├── mcp/                 # MCP server + tools (refresh behind MCP_ADMIN_TOKEN)
 ├── core/
-│   ├── abstractions/    # external-source Protocols (OpenMeteo, IdroGeo, Ingv, Effis)
+│   ├── abstractions/    # external-source Protocols
+│   ├── cascades/        # multi-hazard attention index + cascade rules
 │   ├── features/        # CellFeatureBundle assembler (single V1+V2 path)
-│   ├── models/          # risk DTOs + MonitoringContext + Assessment
-│   ├── scoring/         # deterministic V1 engine + Caine / API / seismic / post-fire
-│   │                    # registry.py (hazard×implementation) + resolver.py (policy)
+│   ├── models/          # risk DTOs, hazard.py (HazardType/DEFAULT_HAZARD), context, sensor
+│   ├── scoring/         # landslide V1 engine + caine/api/seismic/post-fire/kinematic/exposure,
+│   │   ├── flood/       #   flood engine + triggers + climatology
+│   │   ├── wildfire/    #   wildfire engine + Van Wagner FWI + climatology
+│   │   ├── ml_engine.py #   V2 ML engine (shadow challenger)
+│   │   └── registry.py / resolver.py  # (hazard × implementation) + operational policy
 │   ├── logging.py
 │   └── llm_resolver.py
-├── integrations/
-│   ├── _http.py             # shared httpx client + tenacity policy + degrade_gracefully
-│   ├── openmeteo/           # forecast + ERA5 archive + CachedOpenMeteoClient wrapper
-│   ├── idrogeo/             # ISPRA WFS client + parsers + idempotent sync_job
-│   ├── ingv/                # FDSN events + ShakeMap grid + sync_job
-│   ├── effis/               # Copernicus EFFIS fire perimeters + sync_job
-│   └── static_bootstrap/    # cell_static_factors orchestrator (PostGIS-only)
+├── integrations/        # _http.py (shared client + tenacity) + one package per source:
+│                        # openmeteo, copernicus (EWDS GloFAS), copernicus_ems, dpc, effis, firms,
+│                        # egms, idrogeo, ingv, corine, dem, geological, imperviousness, osm,
+│                        # geoserver_source, iot, static_bootstrap/
+├── ml/                  # feature store, train (promotion gate), shadow, dl/, monitoring/ (drift)
+├── knowledge/           # KG ontology + ingest
+├── notifications/       # NotificationChannel + Telegram/MQTT/Email/Webhook + dispatcher + governance
+├── observability/       # OTel tracing + metric instruments
+├── report/              # daily/regional PDF + HTML reports (Copernicus attribution in regioni_pdf.py)
 └── data/
     ├── db.py            # asyncpg pool + PostGIS codec
     ├── migrate.py       # idempotent SQL migrations runner
-    ├── migrations/      # NNN_*.sql, immutable once applied
+    ├── migrations/      # NNN_*.sql (001–074), immutable once applied
     ├── object_store/    # ObjectStore Protocol + filesystem | s3
     ├── caching/         # PostgresCache + CachedOpenMeteoClient
-    ├── repos/           # aoi, grid, iffi, pai, seismic, fire,
-    │                    # raster_refs, dataset_versions, cell_static_factors
-    └── seed/            # Puglia + Basilicata placeholder GeoJSON + loader
+    ├── repos/           # one repo per table family (assessment, grid, fwi_state, glofas, spiegazioni, …)
+    └── seed/            # italy_regions_aoi.geojson + loader
 
-infra/postgres/          # Dockerfile.db + pg_cron config + initdb SQL
-infra/docker/            # docker-compose.dev.yml
-tests/{unit,integration}
+frontend/                # Vite + TypeScript + React + Mantine + MapLibre SPA
+├── src/components/      # RiskMap, Timeline, HazardSelector, NationalStrip, ComuniBoard,
+│                        # VerifichePage, GuidaPage, IntegrationsPage, ShadowDiagnosticsPage, …
+├── src/lib/             # api-client, risk-colors, hazard, attribuzioni, i18n, overlays, …
+└── src/__tests__/       # Vitest + Testing Library (risk-colors contrast test lives here)
+geodata/                 # uv workspace member, self-contained (never imports limen.*)
+infra/docker/            # compose files: dev, demo, geodata, geoserver, inference, meteo, observability
+infra/{postgres,inference,nginx,observability,posta}/
+scripts/load_static_data.sh   # the one path for static data (make up / init / static-data)
+tests/{unit,integration,e2e}  # `slow` deselected by default
+.claude/{skills,agents}/      # project skills + sub-agents (versioned)
 ```
 
 ---
@@ -308,18 +358,18 @@ extension points already:
   accreditation was wrong, and the fix was in our own client. Measured on
   Basilicata against real perimeters: hit rate 79 % against a 43 % base rate
   in 2025, 100 % against 28 % in 2024.
-- Flood (#63-#64) still has no YAML and no engine.
-- V2 ML scoring engine (drop-in replacement of
-  `MultiFactorScoringEngine` consuming the same `CellFeatureBundle`).
-- Knowledge-graph grounding of the briefing — V2.x.
+- **V2 ML engine and KG grounding exist** (`core/scoring/ml_engine.py`,
+  `agents/grounding/`) but stay subordinate: ML runs as the nightly shadow
+  challenger, the KG only adds citations. Promotion is operator-driven.
 - **Authentication is gone** (epic #69, children #70-#73): no `limen.auth`,
   no `/api/auth/*` or `/api/admin/*`, no SPID seam, no `users`/`sessions`/
   `auth_codes` tables (dropped by migration 045). An operator web area is
   explicitly parked, not planned — see memory `auth-decision`.
-- ML/MLOps for V2 — out of scope for V1.5.
-- DEM derivatives (TINITALY → slope/aspect/curvature/TWI), CORINE, ISPRA Carta Geologica
-  vettoriale: `cell_static_factors` columns stay NULL until the raster/vector ingest
-  pipeline lands. The bootstrap pipeline already logs `static_bootstrap.skip` for each.
+- DEM, CORINE and the geological map have ingest pipelines
+  (`integrations/{dem,corine,geological}`), but each is opt-in on a local
+  raster/shapefile: where the source is not configured the
+  `cell_static_factors` columns stay NULL and the bootstrap logs
+  `static_bootstrap.skip`. `limen data-status` says which are loaded.
 
 If asked to "make it work end-to-end", clarify which phase the user wants
 to advance.
@@ -332,10 +382,11 @@ to advance.
   highlights, configuration reference.
 - **`.env.example`** — every env var with comments (Neon + MinIO
   examples).
-- **Memories** at `~/.claude/projects/-Users-gzileni-Git-limen/memory/`:
-  - `deploy-target` — self-hosted VPS + Docker, no cloud.
-  - `object-store-design` — Protocol, filesystem + s3-compatible, Azure
-    removed.
+- **`docs/`** — `architecture.md`, `scoring-model.md`, `warning-logic.md`,
+  `data-model.md`, `inference.md`, `runbook.md`, `deployment.md`, `ml.md`,
+  `grounding.md`, `geodata.md`; `docs/guida/` feeds the SPA wiki.
+- **Memories** at `~/.claude/projects/-srv-appdata-git-limen/memory/`
+  (local to this machine; `docs/HANDOFF.md` carries what must survive a move).
 - **Project doc**: `Limen_Project_Document.md` (when present at repo root)
   is the authoritative architectural reference for phases beyond the
   current scaffold.
