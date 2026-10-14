@@ -8,6 +8,7 @@ Usage:
     limen backtest           Replay a historical window and emit a §2.5 metrics report.
     limen backtest-flood     Replay Copernicus EMS flood perimeters (#64).
     limen ingest-events      Dated event catalogue: --hazard landslide|flood.
+    limen registra-verifica  Fact check: un evento verificato entra nel registro (074).
     limen ingest-fire-history  FIRMS country archive (2000+), fire_density + truth set.
     limen effis-sync         Perimetri di area bruciata EFFIS: truth set del backtest incendio.
     limen monitor-once       Run the MAF landslide workflow once for an AOI.
@@ -68,6 +69,7 @@ from limen.cli.partitions import run as _run_partitions
 from limen.cli.rain_climatology import run as _run_rain_climatology
 from limen.cli.rain_ensemble import run_fetch as _run_rain_ens_fetch
 from limen.cli.rain_ensemble import run_train as _run_rain_ens_train
+from limen.cli.registra_verifica import run as _run_registra_verifica
 from limen.cli.report import run as _run_report_build
 from limen.cli.review_alerts import run as _run_review_alerts
 from limen.cli.seed import run as _run_seed
@@ -253,6 +255,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default="landslide",
         help="landslide: ITALICA CSV (LIMEN_ITALICA_CSV); flood: Copernicus EMS perimeters",
     )
+    registra = sub.add_parser(
+        "registra-verifica",
+        help="salva gli eventi del fact check in verifiche_eventi (e le frane nel truth set)",
+    )
+    registra.add_argument("files", nargs="+", help="file JSON scritti dalla skill limen-fact-check")
     sub.add_parser(
         "ingest-fire-history",
         help=(
@@ -379,6 +386,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "ingest-events":
         try:
             return asyncio.run(_run_ingest_events(args.hazard))
+        except KeyboardInterrupt:  # pragma: no cover
+            return 130
+    if args.command == "registra-verifica":
+        try:
+            return asyncio.run(_run_registra_verifica(args.files))
         except KeyboardInterrupt:  # pragma: no cover
             return 130
     runner = runners[args.command]
