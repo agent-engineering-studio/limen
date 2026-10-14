@@ -20,6 +20,7 @@ misurata»: un buco dell'archivio non è un'ora asciutta.
 from __future__ import annotations
 
 import json
+import warnings
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -66,6 +67,24 @@ class SriArchive:
             out.append((r, c) if dentro else None)
         return out
 
+    def _finestre(self, pixel: list[tuple[int, int] | None]) -> tuple[np.ndarray, np.ndarray]:
+        """Indici dei 3x3 pixel attorno a ogni punto, per una lettura vettoriale.
+
+        Ai bordi l'indice si ripiega sul bordo; un punto fuori griglia legge il
+        pixel (0, 0), e il chiamante lo scarta con la maschera ``pixel is None``.
+        """
+        h, w = self._shape
+        righe = np.zeros((len(pixel), 9), dtype=np.intp)
+        colonne = np.zeros((len(pixel), 9), dtype=np.intp)
+        for k, rc in enumerate(pixel):
+            if rc is None:
+                continue
+            r, c = rc
+            dr, dc = np.meshgrid([-1, 0, 1], [-1, 0, 1], indexing="ij")
+            righe[k] = np.clip(r + dr.ravel(), 0, h - 1)
+            colonne[k] = np.clip(c + dc.ravel(), 0, w - 1)
+        return righe, colonne
+
     def _fotogramma(self, i: int) -> np.ndarray | None:
         file = self._path / "RR" / f"{i}.0.0"
         if not file.exists():
@@ -82,6 +101,8 @@ class SriArchive:
         attorno al pixel, come la produzione legge il «Merging».
         """
         pixel = self.pixel(points)
+        fuori = np.array([rc is None for rc in pixel])
+        righe, colonne = self._finestre(pixel)
         a = int((start - _EPOCA).total_seconds() // 60)
         b = int((end - _EPOCA).total_seconds() // 60)
         lo = int(np.searchsorted(self._minuti, a, side="right"))
@@ -98,15 +119,12 @@ class SriArchive:
                 mancanti += 1
                 continue
             letti += 1
-            valori = np.full(len(points), np.nan)
-            for k, rc in enumerate(pixel):
-                if rc is None:
-                    continue
-                r, c = rc
-                finestra = f[max(0, r - 1) : r + 2, max(0, c - 1) : c + 2]
-                validi = finestra[np.isfinite(finestra) & (finestra >= 0)]
-                if validi.size:
-                    valori[k] = float(np.median(validi))
+            finestre = f[righe, colonne].astype(np.float64)
+            finestre[~(finestre >= 0)] = np.nan
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)  # finestra tutta vuota
+                valori = np.nanmedian(finestre, axis=1)
+            valori[fuori] = np.nan
             # Il fotogramma vale da `m` al successivo: sta nell'ora che si chiude dopo.
             ora = m // 60 + 1
             ok = np.isfinite(valori)

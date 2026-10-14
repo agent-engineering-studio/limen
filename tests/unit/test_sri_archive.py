@@ -80,3 +80,14 @@ def test_il_radar_sostituisce_il_modello_solo_dove_ha_misurato() -> None:
     out = pioggia_dal_radar(grezzo, {t1: [12.0], t2: [None]})
     assert [c.precipitation_mm for c in out[0]] == [12.0, 2.0]
     assert out[0][0].soil_moisture_0_7_cm == 0.3, "l'umidità del suolo resta del modello"
+
+
+def test_un_punto_fuori_griglia_non_legge_il_bordo(tmp_path: Path) -> None:
+    minuti = [_min(0, m) for m in range(0, 60, 15)] + [_min(1)]
+    z = _archivio(tmp_path, minuti, [8.0, 8.0, 8.0, 8.0, 8.0])
+    ore = SriArchive(z).oraria(
+        [(12.5, 42.0), (30.0, 60.0)],
+        datetime(2009, 12, 31, 23, tzinfo=UTC),
+        datetime(2010, 1, 1, 1, tzinfo=UTC),
+    )
+    assert ore[datetime(2010, 1, 1, 1, tzinfo=UTC)] == [pytest.approx(8.0), None]
