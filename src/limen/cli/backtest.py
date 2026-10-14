@@ -41,7 +41,10 @@ Configuration knobs (env vars, kept off the dispatcher for parity with
   (IT-DPC-SRI, ``LIMEN_BACKTEST_RADAR_ZARR``) al posto di quella del modello,
   ora per ora dove il radar l'ha misurata. Con ``LIMEN_BACKTEST_ANTECEDENT=
   nodo`` anche la pioggia antecedente per nodo viene dal radar; l'umidità del
-  suolo resta del modello, perché il radar non la misura.
+  suolo resta del modello, perché il radar non la misura. ``merging`` fa lo
+  stesso con l'archivio locale del «Merging» DPC (radar più pluviometri,
+  ``limen radar-archivio``, cartella ``RADAR_ARCHIVE__CARTELLA``): esiste solo
+  da quando lo si archivia, ma è la pioggia che la produzione usa davvero.
 """
 
 from __future__ import annotations
@@ -50,6 +53,7 @@ import os
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from limen.core.logging import get_logger
 from limen.core.models.risk import (
@@ -69,6 +73,10 @@ from limen.integrations._http import SharedHttpClient
 from limen.integrations.openmeteo.client import OpenMeteoHttpClient
 from limen.integrations.openmeteo.dtos import WeatherSample
 from limen.integrations.openmeteo.grid import build_rain_nodes, nearest_node
+
+if TYPE_CHECKING:
+    from limen.integrations.dpc.merging_archive import MergingArchive
+    from limen.integrations.dpc.sri_archive import SriArchive
 
 log = get_logger(__name__)
 
@@ -585,14 +593,25 @@ async def run() -> int:
         x.strip() for x in os.getenv("LIMEN_BACKTEST_SORGENTI", "").split(",") if x.strip()
     ] or None
     pioggia = os.getenv("LIMEN_BACKTEST_PIOGGIA", "modello").strip() or "modello"
-    if pioggia not in ("modello", "radar") or (pioggia == "radar" and modo == "neutro"):
+    if pioggia not in ("modello", "radar", "merging") or (
+        pioggia != "modello" and modo == "neutro"
+    ):
         log.error("backtest.bad_pioggia", value=pioggia, antecedent=modo)
         return 1
-    archivio = None
+    archivio: SriArchive | MergingArchive | None = None
     if pioggia == "radar":
         from limen.integrations.dpc.sri_archive import SriArchive
 
         archivio = SriArchive(Path(os.getenv("LIMEN_BACKTEST_RADAR_ZARR", _RADAR_ZARR)))
+    elif pioggia == "merging":
+        from limen.config.settings import get_settings
+        from limen.integrations.dpc.merging_archive import MergingArchive
+
+        cfg = get_settings().radar_archive
+        if not cfg.attivo:
+            log.error("backtest.merging_non_configurato", hint="RADAR_ARCHIVE__CARTELLA")
+            return 1
+        archivio = MergingArchive(Path(cfg.cartella))
     configurazione = (
         f"verità {descrivi_verita(precisioni, sorgenti)}; pioggia {pioggia}; antecedenti {modo}"
     )

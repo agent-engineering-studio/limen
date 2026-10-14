@@ -1,4 +1,4 @@
-"""La pipeline notturna: sei passi in ordine, una volta per notte (#78).
+"""La pipeline notturna: i passi in ordine, una volta per notte (#78).
 
 Prima erano schedule indipendenti — drift ogni N ore, forecast history ogni 6,
 cache cleanup ogni 5 minuti, shadow dentro ogni sweep orario — che si
@@ -51,6 +51,7 @@ STEPS = (
     "retention",
     "storage",
     "egms_release",
+    "radar_archivio",
     "glofas_riferimenti",
 )
 
@@ -209,6 +210,7 @@ async def run_nightly_pipeline(deps: AppDependencies) -> dict[str, Any]:
     out["retention"] = await _step("retention", lambda: _retention(deps))
     out["storage"] = await _step("storage", lambda: _storage(deps))
     out["egms_release"] = await _step("egms_release", lambda: _egms_release(deps))
+    out["radar_archivio"] = await _step("radar_archivio", lambda: _radar_archivio(deps))
     # Per ultimo: il tetto di GloFAS riparte a mezzanotte UTC, quindi alle due
     # è intero comunque, e il riempimento ora dura un paio d'ore (i lotti si
     # distanziano sotto il limite orario): davanti, terrebbe ferma la retention.
@@ -242,6 +244,18 @@ async def _egms_release(deps: AppDependencies) -> dict[str, Any]:
     from limen.integrations.egms.sync_job import controlla_release
 
     return dict(await controlla_release(deps.settings))
+
+
+async def _radar_archivio(deps: AppDependencies) -> dict[str, Any]:
+    """Il radar DPC «Merging» della notte prima, prima che il DPC lo perda."""
+    from pathlib import Path
+
+    from limen.integrations.dpc.merging_archive import archivia
+
+    cfg = deps.settings.radar_archive
+    if not cfg.attivo:
+        return {"status": "skipped", "reason": "RADAR_ARCHIVE__CARTELLA non impostata"}
+    return dict(await archivia(Path(cfg.cartella), giorni=cfg.giorni, massimo=cfg.file_per_notte))
 
 
 async def _partitions(deps: AppDependencies) -> dict[str, Any]:

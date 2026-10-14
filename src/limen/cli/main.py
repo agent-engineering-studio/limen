@@ -10,6 +10,7 @@ Usage:
     limen ingest-events      Dated event catalogue: --hazard landslide|flood.
     limen registra-verifica  Fact check: un evento verificato entra nel registro (074).
     limen verifiche-report   Eventi verificati contro le previsioni, col tasso di base.
+    limen radar-archivio     Salva il radar DPC «Merging» prima che il DPC lo perda.
     limen ingest-fire-history  FIRMS country archive (2000+), fire_density + truth set.
     limen effis-sync         Perimetri di area bruciata EFFIS: truth set del backtest incendio.
     limen monitor-once       Run the MAF landslide workflow once for an AOI.
@@ -67,6 +68,7 @@ from limen.cli.mcp_serve import run as _run_mcp_serve
 from limen.cli.migrate import run as _run_migrate
 from limen.cli.monitor_once import run as _run_monitor_once
 from limen.cli.partitions import run as _run_partitions
+from limen.cli.radar_archivio import run as _run_radar_archivio
 from limen.cli.rain_climatology import run as _run_rain_climatology
 from limen.cli.rain_ensemble import run_fetch as _run_rain_ens_fetch
 from limen.cli.rain_ensemble import run_train as _run_rain_ens_train
@@ -225,6 +227,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="extract training samples and train the V2 ML model (LightGBM + MLflow)",
     )
     sub.add_parser(
+        "radar-archivio",
+        help="salva il radar DPC «Merging» (CUM3 + SRT1) prima che il DPC lo perda "
+        "(RADAR_ARCHIVE__CARTELLA, LIMEN_RADAR_MASSIMO)",
+    )
+    sub.add_parser(
         "verifiche-report",
         help="eventi verificati contro le previsioni, per pericolo e col tasso di base "
         "(env: LIMEN_VERIFICHE_DAL / _AL)",
@@ -364,6 +371,7 @@ def main(argv: list[str] | None = None) -> int:
         "train": _run_train,
         "shadow-report": _run_shadow_report,
         "verifiche-report": _run_verifiche_report,
+        "radar-archivio": _run_radar_archivio,
         # only action is `build`; inspect args.report_command before adding a second.
         "report": _run_report_build,
         "sync-egms": _run_sync_egms,
