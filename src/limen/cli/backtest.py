@@ -28,6 +28,14 @@ Configuration knobs (env vars, kept off the dispatcher for parity with
   Southern-Italy storm window.
 * ``LIMEN_BACKTEST_HIGH_LEVEL``  — minimum :class:`RiskLevel` to count as
   alert (default ``High``).
+* ``LIMEN_BACKTEST_PRECISIONE``  — la precisione di luogo più larga ammessa
+  nel truth set, sulla scala di ITALICA (``P0`` < ``P1`` < ``P10`` <
+  ``P100``). ``P1`` tiene solo gli eventi localizzati entro ~1 km: su celle
+  da 1 km² un evento noto al comune (``P10``) cade sulla cella del
+  centroide, che non è quella franata. Vuota = tutti, anche quelli senza
+  precisione dichiarata.
+* ``LIMEN_BACKTEST_SORGENTI``    — sorgenti ammesse, separate da virgola
+  (``IR,NR`` per ITALICA, ``stampa`` per il fact check). Vuota = tutte.
 """
 
 from __future__ import annotations
@@ -80,6 +88,8 @@ _DEFAULT_RAIN_MODEL = ""
 # Warning horizon: an alert this many hours (or fewer) before the event counts
 # as a hit. Generous by design — antecedent-driven landslides warn days ahead.
 _DEFAULT_LEAD_MAX_HOURS = 120.0
+#: Scala di precisione di luogo di ITALICA, dalla più stretta alla più larga.
+PRECISIONI_LUOGO = ("P0", "P1", "P10", "P100")
 _ALERT_LEVELS_ORDERED = (
     RiskLevel.None_,
     RiskLevel.Low,
@@ -111,10 +121,13 @@ async def _fetch_truth_events(
     *,
     start: datetime,
     end: datetime,
+    precisioni: list[str] | None = None,
+    sorgenti: list[str] | None = None,
 ) -> dict[str, datetime]:
     """Return ``{cell_id: first_event_time}`` from the dated landslide-event
-    catalogue (ITALICA / e-ITALICA) for events in ``[start, end]`` inside
-    ``aoi_id``. Times are UTC; the earliest event per cell is the anchor."""
+    catalogue (ITALICA / e-ITALICA, plus the fact check's ``stampa`` rows) for
+    events in ``[start, end]`` inside ``aoi_id``. Times are UTC; the earliest
+    event per cell is the anchor. ``None`` on a filter means no filter."""
     async with acquire() as conn:
         rows = await conn.fetch(
             """
@@ -125,11 +138,15 @@ async def _fetch_truth_events(
             WHERE g.aoi_id = $1
               AND e.event_time >= $2
               AND e.event_time <= $3
+              AND ($4::text[] IS NULL OR e.geographic_accuracy = ANY($4))
+              AND ($5::text[] IS NULL OR e.source = ANY($5))
             GROUP BY g.id
             """,
             aoi_id,
             start,
             end,
+            precisioni,
+            sorgenti,
         )
     return {str(r["cell_id"]): r["first_event"] for r in rows}
 
@@ -286,6 +303,7 @@ def _evaluate(
     alert_level: RiskLevel,
     lead_max_hours: float,
     antecedenti: list[Antecedenti | None] | None = None,
+    verita: str = "tutto il catalogo",
 ) -> _BacktestMetrics:
     """``antecedenti`` è allineato ai nodi (modalità `nodo`) o lungo 1 (modalità
     `regione`, un valore per tutta l'area come in produzione); ``None`` lascia
@@ -357,6 +375,7 @@ def _evaluate(
         thresholds_hit_min=thresholds.calibration.backtest.hit_rate_min,
         thresholds_far_max=thresholds.calibration.backtest.far_max,
         thresholds_lead_min=thresholds.calibration.backtest.lead_time_hours_min,
+        verita=verita,
     )
 
     return _BacktestMetrics(
@@ -390,6 +409,7 @@ def _write_report(
     thresholds_hit_min: float,
     thresholds_far_max: float,
     thresholds_lead_min: float,
+    verita: str = "tutto il catalogo",
 ) -> Path:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     out = REPORTS_DIR / f"backtest_{aoi_id}_{start.date()}_{end.date()}.md"
@@ -404,7 +424,7 @@ def _write_report(
         f"Generated: {datetime.now(UTC).isoformat()}",
         "",
         f"- Cells scored per hour: **{cells_scored}**",
-        f"- Truth events (IFFI in window): **{truth_events}**",
+        f"- Truth events (in window): **{truth_events}** — {verita}",
         f"- Alert-level cell-hours: **{alerts_total}**",
         f"- Hits: **{hits}**, false alarms: **{false_alarms}**, misses: **{misses}**",
         "",
@@ -488,6 +508,20 @@ def _parse_dt(env_name: str, default: datetime) -> datetime:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
+def precisioni_fino_a(massima: str) -> list[str]:
+    """Le precisioni ammesse con ``massima`` come la più larga: ``P10`` tiene
+    ``P0``, ``P1`` e ``P10``."""
+    return list(PRECISIONI_LUOGO[: PRECISIONI_LUOGO.index(massima) + 1])
+
+
+def descrivi_verita(precisioni: list[str] | None, sorgenti: list[str] | None) -> str:
+    parti = [
+        f"precisione {precisioni[-1]} o migliore" if precisioni else "ogni precisione",
+        f"sorgenti {', '.join(sorgenti)}" if sorgenti else "ogni sorgente",
+    ]
+    return "; ".join(parti)
+
+
 def _parse_level(env_name: str, default: RiskLevel) -> RiskLevel:
     raw = os.getenv(env_name)
     if not raw:
@@ -514,6 +548,15 @@ async def run() -> int:
     if modo not in ("regione", "nodo", "neutro"):
         log.error("backtest.bad_antecedent", value=modo)
         return 1
+    precisione = os.getenv("LIMEN_BACKTEST_PRECISIONE", "").strip().upper()
+    if precisione and precisione not in PRECISIONI_LUOGO:
+        log.error("backtest.bad_precisione", value=precisione, ammesse=PRECISIONI_LUOGO)
+        return 1
+    precisioni = precisioni_fino_a(precisione) if precisione else None
+    sorgenti = [
+        x.strip() for x in os.getenv("LIMEN_BACKTEST_SORGENTI", "").split(",") if x.strip()
+    ] or None
+    verita = descrivi_verita(precisioni, sorgenti)
 
     try:
         async with lifespan_pool():
@@ -532,7 +575,9 @@ async def run() -> int:
                 assert len(bbox) == 4
 
                 cells = await _fetch_static_factors(aoi_id)
-                truth = await _fetch_truth_events(aoi_id, start=start, end=end)
+                truth = await _fetch_truth_events(
+                    aoi_id, start=start, end=end, precisioni=precisioni, sorgenti=sorgenti
+                )
                 nodes = build_rain_nodes(bbox, spacing=node_deg)
                 antecedenti: list[Antecedenti | None] | None = None
                 if modo == "neutro":
@@ -586,6 +631,7 @@ async def run() -> int:
                     aoi_id=aoi_id,
                     cells=len(cells),
                     truth_events=len(truth),
+                    verita=verita,
                     rain_model=rain_model or "era5",
                     antecedent=modo,
                     rain_nodes=len(nodes),
@@ -603,6 +649,7 @@ async def run() -> int:
                     alert_level=alert_level,
                     lead_max_hours=lead_max,
                     antecedenti=antecedenti,
+                    verita=verita,
                 )
                 log.info(
                     "backtest.aoi.done",
