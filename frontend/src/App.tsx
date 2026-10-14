@@ -455,6 +455,7 @@ export function App(): JSX.Element {
           overlayAttivi={overlayAttivi}
           soloSopraSoglia={soloSoglia}
           orizzonte={orizzonte}
+          geolocalizza={!cellaLink}
         />
         <LivelloAttivo orizzonte={orizzonte} />
         <Timeline orizzonte={orizzonte} onCambia={setOrizzonte} />

@@ -10,6 +10,7 @@ import { config } from "../lib/env";
 import { NOMI_PERICOLO, useHazard } from "../lib/hazard";
 import { testi, useLingua, useTesti } from "../lib/i18n";
 import { COLORE_ALLERTA, OVERLAYS } from "../lib/overlays";
+import { posizioneInItalia, ZOOM_POSIZIONE } from "../lib/posizione";
 import {
   maplibreColorMatch,
   maplibreMultiHazardColorMatch,
@@ -207,6 +208,9 @@ export interface RiskMapProps {
   readonly soloSopraSoglia?: boolean;
   /** Ore nel futuro: 0 è adesso, 24/48/72 la previsione per cella (#155). */
   readonly orizzonte?: number;
+  /** Alla prima apertura porta la mappa sulla posizione del browser, se è in
+   *  Italia. Spento quando un link diretto ha già un posto da mostrare. */
+  readonly geolocalizza?: boolean;
 }
 
 /** Da questo zoom in su le celle previste: a 6 una tile pesava 2,4 MB e
@@ -253,6 +257,11 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   // o di sorgente): ripartire dal centro di default buttava via il comune
   // che si stava guardando.
   const cameraRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
+  // La vista della prima apertura, finché la posizione del browser non ha
+  // risposto: un ref e non la vista della mappa corrente perché la mappa si
+  // ricostruisce (e StrictMode la monta due volte) prima che la risposta arrivi.
+  const partenzaRef = useRef<{ lng: number; lat: number; zoom: number } | null>(null);
+  const posizioneFattaRef = useRef(false);
   // Visibilità di un livello di contesto, letta allo stato corrente: la mappa
   // si ricostruisce a ogni cambio di pericolo, e senza questo i livelli
   // tornerebbero spenti mentre la casella resta spuntata.
@@ -806,6 +815,29 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       props.mapRef.current = map;
     }
 
+    // La posizione arriva dopo, a mappa già disegnata: aspettarla voleva dire
+    // una pagina vuota per otto secondi a chi nega il permesso. Se intanto la
+    // vista si è mossa (un trascinamento, un link, un comune dalla colonna) la
+    // si lascia stare: strappare la mappa a chi la sta usando è peggio di Roma.
+    let annullaPosizione = (): void => {};
+    if (props.geolocalizza && !posizioneFattaRef.current) {
+      if (!partenzaRef.current) {
+        const c = map.getCenter();
+        partenzaRef.current = { lng: c.lng, lat: c.lat, zoom: map.getZoom() };
+      }
+      const p = partenzaRef.current;
+      annullaPosizione = posizioneInItalia(
+        (lon, lat) => {
+          const c = map.getCenter();
+          if (c.lng !== p.lng || c.lat !== p.lat || map.getZoom() !== p.zoom) return;
+          map.flyTo({ center: [lon, lat], zoom: ZOOM_POSIZIONE });
+        },
+        () => {
+          posizioneFattaRef.current = true;
+        },
+      );
+    }
+
     // In basso: in alto a destra stanno gli strumenti della mappa (#155).
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
 
@@ -851,6 +883,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     });
 
     return () => {
+      annullaPosizione();
       const c = map.getCenter();
       cameraRef.current = { center: [c.lng, c.lat], zoom: map.getZoom() };
       map.remove();
