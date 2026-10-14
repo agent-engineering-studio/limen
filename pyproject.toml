@@ -111,6 +111,11 @@ copernicus = [
     "cdsapi>=0.7.7",
     "netCDF4>=1.7",
 ]
+# `limen backtest` con la pioggia del radar DPC storico (IT-DPC-SRI, Zarr):
+# basta il codec Blosc per leggere un fotogramma. Gira sull'host.
+radar = [
+    "numcodecs>=0.13",
+]
 
 [build-system]
 requires = ["uv_build>=0.11.16,<0.12.0"]
@@ -208,6 +213,7 @@ module = [
     "pyogrio.*",
     "fastmcp.*",
     "cdsapi.*",
+    "numcodecs.*",
 ]
 ignore_missing_imports = true
 
