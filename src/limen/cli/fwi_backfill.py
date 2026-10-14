@@ -18,7 +18,9 @@ predecessor and upserts, so overlapping runs converge rather than compound.
 Env knobs, matching the other one-shot commands:
 
 * ``LIMEN_FWI_AOI``  — one AOI id; absent ⇒ every seeded AOI.
-* ``LIMEN_FWI_DAYS`` — days of history to rebuild (default 60, ≥ the DC memory).
+* ``LIMEN_FWI_DAYS`` — days of history to rebuild. Default: from
+  ``fwi.season_start`` (#201). Sixty days, the old default, left the nodes
+  started on 15 September with a spring drought code in October.
 
 The node spacing is **not** an env knob: it is the key of ``fwi_state``, so it
 lives in ``wildfire.yaml`` where changing it is a visible decision.
@@ -50,10 +52,6 @@ log = get_logger(__name__)
 
 _AOI_ENV = "LIMEN_FWI_AOI"
 _DAYS_ENV = "LIMEN_FWI_DAYS"
-
-#: Van Wagner's DC has a ~52-day time lag. Rebuilding less than that leaves
-#: the drought code still carrying its seed value into production.
-_DEFAULT_DAYS = 60
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,12 +267,19 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
+def giorni_dalla_stagione(thresholds: WildfireThresholds, oggi: date) -> int:
+    """I giorni da rifare per ripartire dall'inizio della stagione fino a ieri."""
+    ieri = oggi - timedelta(days=1)
+    return (ieri - thresholds.fwi.inizio_stagione(ieri)).days + 1
+
+
 async def run() -> int:
-    days_back = max(_int_env(_DAYS_ENV, _DEFAULT_DAYS), 1)
     loaded = load_hazard_thresholds(HazardType.WILDFIRE)
     if not isinstance(loaded, WildfireThresholds):
         log.error("fwi.backfill.bad_config", got=type(loaded).__name__)
         return 1
+    default = giorni_dalla_stagione(loaded, datetime.now(UTC).date())
+    days_back = max(_int_env(_DAYS_ENV, default), 1)
 
     client = OpenMeteoHttpClient()
     async with lifespan_pool():
@@ -289,4 +294,11 @@ async def run() -> int:
     return 0
 
 
-__all__ = ["BackfillResult", "advance_node", "backfill_aoi", "params_from", "run"]
+__all__ = [
+    "BackfillResult",
+    "advance_node",
+    "backfill_aoi",
+    "giorni_dalla_stagione",
+    "params_from",
+    "run",
+]

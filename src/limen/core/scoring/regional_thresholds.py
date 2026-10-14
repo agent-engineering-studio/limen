@@ -26,6 +26,7 @@ rather than reaching for blocks only one hazard has.
 
 from __future__ import annotations
 
+from datetime import date
 from functools import cache
 from importlib import resources
 from itertools import pairwise
@@ -396,8 +397,15 @@ class TargetDistribution(_StrictModel):
 
 class BacktestTargets(_StrictModel):
     hit_rate_min: float = Field(..., ge=0.0, le=1.0)
-    far_max: float = Field(..., ge=0.0, le=1.0)
+    #: ``None`` = il FAR si riporta ma non è un gate. A 1 km² con un segnale
+    #: di pioggia per nodo non lo passerebbe nemmeno un oracolo (#122).
+    far_max: float | None = Field(..., ge=0.0, le=1.0)
     lead_time_hours_min: float = Field(..., ge=0.0)
+    #: Hit rate diviso la quota di celle messe in allerta: quante volte più
+    #: del caso l'allerta cade dove poi succede qualcosa. Un motore che
+    #: allerta tutto ha hit rate pieno e discriminazione 1. ``None`` = non è
+    #: un gate.
+    discriminazione_min: float | None = Field(default=None, gt=0.0)
 
 
 class CalibrationBlock(_StrictModel):
@@ -581,6 +589,18 @@ class FwiBlock(_StrictModel):
     #: engine still scores, but flags the breakdown so nobody reads a
     #: three-day-old chain as a seasoned one.
     spinup_days: int = Field(..., ge=0)
+    #: Inizio della stagione, «MM-GG» (#201). Il backfill ricostruisce la
+    #: catena da qui, e una catena partita dopo non si dichiara assestata
+    #: qualunque sia ``chain_days``: il DC ha una memoria di ~52 giorni, e
+    #: partito dal seme a metà settembre è ancora quello di aprile.
+    season_start: str = Field(..., pattern=r"^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$")
+
+    def inizio_stagione(self, giorno: date) -> date:
+        """L'inizio della stagione a cui appartiene ``giorno``."""
+        mese, gg = (int(x) for x in self.season_start.split("-"))
+        inizio = date(giorno.year, mese, gg)
+        return inizio if giorno >= inizio else date(giorno.year - 1, mese, gg)
+
     #: Longest interruption a chain survives. Beyond it the stored state is a
     #: fiction -- carrying a code across three weeks of missing weather as if
     #: the days were consecutive is worse than restarting from the seed and

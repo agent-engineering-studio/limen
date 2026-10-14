@@ -937,7 +937,7 @@ def _write_report(
                     "FAR",
                     run.far,
                     gate.far_max,
-                    run.far <= gate.far_max if verifiable else None,
+                    run.far <= gate.far_max if verifiable and gate.far_max is not None else None,
                 ),
                 (
                     "preavviso",

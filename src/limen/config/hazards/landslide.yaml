@@ -335,7 +335,14 @@ target_distribution:
 # off; the §2.5 backtest below remains the acceptance criterion.
 calibration:
   s_vs_ispra_correlation_min: null
+  # Gate §2.5 riscritto (#122). Il FAR ≤ 30 % a 1 km² non è raggiungibile:
+  # la pioggia è un segnale per nodo, uguale su 80-120 celle, e anche un
+  # oracolo che accendesse solo i nodi dove c'è stata una frana avrebbe un FAR
+  # del 95-99 % (Liguria 95,0 %, Marche 96,8 %, Piemonte 98,4 %). Il FAR resta
+  # nel report; il gate diventa la discriminazione, come per alluvione e
+  # incendio: le frane colte rispetto alla quota di celle in allerta.
   backtest:
     hit_rate_min:            0.70
-    far_max:                 0.30
+    far_max:                 null
     lead_time_hours_min:     18.0
+    discriminazione_min:     2.0

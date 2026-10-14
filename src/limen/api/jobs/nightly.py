@@ -251,7 +251,8 @@ async def _egms_release(deps: AppDependencies) -> dict[str, Any]:
 
 
 async def _fwi_pioggia_osservata() -> dict[str, Any]:
-    """Gli ultimi giorni della catena FWI rifatti con la pioggia del DPC."""
+    """Gli ultimi giorni della catena FWI rifatti con la pioggia del DPC e il
+    meteo analizzato al posto della previsione con cui erano stati scritti."""
     from datetime import timedelta
 
     from limen.cli.fwi_backfill import params_from
@@ -259,7 +260,7 @@ async def _fwi_pioggia_osservata() -> dict[str, Any]:
         WildfireThresholds,
         load_hazard_thresholds,
     )
-    from limen.integrations.dpc.fwi_pioggia import correggi, fonte_dpc
+    from limen.integrations.dpc.fwi_pioggia import correggi, fonte_dpc, meteo_open_meteo
 
     t = load_hazard_thresholds(HazardType.WILDFIRE)
     assert isinstance(t, WildfireThresholds)
@@ -274,6 +275,7 @@ async def _fwi_pioggia_osservata() -> dict[str, Any]:
             params=params_from(t),
             max_gap_days=t.fwi.max_gap_days,
             fonte=fonte_dpc(cfg.max_step_mm),
+            meteo=meteo_open_meteo(),
         )
     )
 

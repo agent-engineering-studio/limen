@@ -390,6 +390,8 @@ def _evaluate(
         thresholds_hit_min=thresholds.calibration.backtest.hit_rate_min,
         thresholds_far_max=thresholds.calibration.backtest.far_max,
         thresholds_lead_min=thresholds.calibration.backtest.lead_time_hours_min,
+        thresholds_discriminazione_min=thresholds.calibration.backtest.discriminazione_min,
+        quota_allertate=len(alerted_cells) / len(cells) if cells else 0.0,
         configurazione=configurazione,
     )
 
@@ -422,14 +424,16 @@ def _write_report(
     far: float,
     mean_lead: float,
     thresholds_hit_min: float,
-    thresholds_far_max: float,
+    thresholds_far_max: float | None,
     thresholds_lead_min: float,
+    thresholds_discriminazione_min: float | None = None,
+    quota_allertate: float = 0.0,
     configurazione: str = "tutto il catalogo",
 ) -> Path:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     out = REPORTS_DIR / f"backtest_{aoi_id}_{start.date()}_{end.date()}.md"
     pass_hit = "PASS" if hit_rate >= thresholds_hit_min else "FAIL"
-    pass_far = "PASS" if far <= thresholds_far_max else "FAIL"
+    discriminazione = hit_rate / quota_allertate if quota_allertate else 0.0
     pass_lead = "PASS" if mean_lead >= thresholds_lead_min else "FAIL"
 
     lines = [
@@ -447,7 +451,13 @@ def _write_report(
         "## §2.5 metrics",
         "",
         f"- **Hit rate**: {hit_rate:.2%} (target ≥ {thresholds_hit_min:.0%}) — **{pass_hit}**",
-        f"- **FAR**: {far:.2%} (target ≤ {thresholds_far_max:.0%}) — **{pass_far}**",
+        *_righe_gate_far_e_discriminazione(
+            far=far,
+            far_max=thresholds_far_max,
+            quota_allertate=quota_allertate,
+            discriminazione=discriminazione,
+            discriminazione_min=thresholds_discriminazione_min,
+        ),
         f"- **Mean lead time**: {mean_lead:.1f} h "
         f"(target ≥ {thresholds_lead_min:.0f} h) — **{pass_lead}**",
         "",
@@ -528,6 +538,30 @@ def precisioni_fino_a(massima: str) -> list[str]:
     """Le precisioni ammesse con ``massima`` come la più larga: ``P10`` tiene
     ``P0``, ``P1`` e ``P10``."""
     return list(PRECISIONI_LUOGO[: PRECISIONI_LUOGO.index(massima) + 1])
+
+
+def _righe_gate_far_e_discriminazione(
+    *,
+    far: float,
+    far_max: float | None,
+    quota_allertate: float,
+    discriminazione: float,
+    discriminazione_min: float | None,
+) -> list[str]:
+    """Le righe del FAR e della discriminazione, gate o solo informazione."""
+    if far_max is None:
+        riga_far = f"- **FAR**: {far:.2%} (non è un gate a 1 km², vedi #122)"
+    else:
+        esito = "PASS" if far <= far_max else "FAIL"
+        riga_far = f"- **FAR**: {far:.2%} (target ≤ {far_max:.0%}) — **{esito}**"
+    riga_disc = (
+        f"- **Discriminazione**: {discriminazione:.2f} "
+        f"(hit rate su {quota_allertate:.2%} di celle in allerta)"
+    )
+    if discriminazione_min is not None:
+        esito = "PASS" if discriminazione >= discriminazione_min else "FAIL"
+        riga_disc += f" (target ≥ {discriminazione_min:.1f}) — **{esito}**"
+    return [riga_far, riga_disc]
 
 
 def pioggia_dal_radar(
