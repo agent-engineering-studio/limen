@@ -39,6 +39,7 @@ data/
 ├── geology/                       # slot pronto (carta geolitologica)
 ├── osm/                           # rete strade/ferrovie OSM (make osm-data)
 ├── radar/it_dpc_sri/              # radar DPC 2010-2025, Zarr (make radar-data) → backtest
+├── radar/dpc_merging/             # radar+pluviometri DPC da giugno 2026 (limen radar-archivio)
 └── backups/                       # dump training ML (make dump-training)
 ```
 
@@ -191,7 +192,15 @@ un fotogramma ogni 15 minuti fino al 2014, 10 fino al 2020, 5 dopo.
 `make radar-data` lo copia dall'object store di ECMWF (anonimo, qualche ora);
 Zenodo dà lo stesso archivio come un unico `.tar.zst` a ~0,1 MB/s.
 
-Due limiti da tenere accanto a ogni numero: fino al 2014-2015 la copertura è
+Il «Merging» (radar **più pluviometri**, quello che la produzione legge) non
+ha un archivio pubblico: l'API lo tiene circa cinque mesi. Il passo notturno
+`radar_archivio` (cartella `RADAR_ARCHIVE__CARTELLA`) salva `CUM3` alle 00, 03,
+…, 21 UTC e `SRT1` a ogni ora; il backtest (`LIMEN_BACKTEST_PIOGGIA=merging`)
+ne ricava la pioggia oraria riscalando SRT1 perché ogni blocco di tre ore
+sommi al CUM3. Verificato il 10 ottobre 2026: a Melito 175,4 mm ricostruiti
+contro 176,0 del CUM24 ufficiale (solo radar: 137). ~17 MB al giorno.
+
+Due limiti da tenere accanto a ogni numero di IT-DPC-SRI: fino al 2014-2015 la copertura è
 scarsa (su dodici eventi ITALICA del 2010-2011 il radar leggeva fra lo 0 e il
 30 % della pioggia dei pluviometri), e un mosaico senza pluviometri
 sottostima nelle valli schermate. Il controllo indipendente è CERRA-Land
@@ -215,6 +224,7 @@ Niente di questo è in git: si rigenera con il comando a destra.
 | `data/sealing/clms_imd_2018/` | suolo sigillato 100 m | 4,5 MB | Copernicus Land (EEA) | `make imperviousness-data` |
 | `data/osm/` | PBF Italia + GPKG strade e ferrovie | 2,3 GB | © OpenStreetMap, ODbL | `make osm-data` |
 | `data/radar/it_dpc_sri/` | radar DPC 2010-2025, Zarr | ~51 GB | FBK su dati DPC, CC BY-SA 4.0 | `make radar-data` |
+| `/srv/data/limen-datasets/radar/dpc_merging/` | radar DPC «Merging» (CUM3 + SRT1) da fine maggio 2026, cresce ogni notte | ~0,5 GB/mese | DPC, CC BY-SA 4.0 | passo notturno `radar_archivio` / `limen radar-archivio` |
 | `data/backups/` | dump del training ML e di MLflow (luglio 2026) | 15 MB | prodotti da Limen | `make dump-training` |
 | `/srv/appdata/git/mcp-geo-server/data/` | shapefile serviti da GeoServer (PAI, IFFI, confini) | 5,8 GB | come sopra | repo `mcp-geo-server` |
 | `/srv/data/limen-datasets/` | dataset montati nel worker (`/var/lib/limen/datasets`) | 1 MB | ITALICA | `limen ingest-events` |

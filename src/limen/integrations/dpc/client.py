@@ -205,6 +205,40 @@ async def get_latest_sri() -> SriGrid | None:
     return await _download("SRI")
 
 
+#: Un fotogramma che il DPC non tiene più: non si ritenta.
+ASSENTE = "assente"
+
+
+async def scarica_fotogramma(product_type: str, at: datetime) -> bytes | str | None:
+    """Il GeoTIFF di ``product_type`` emesso ``at``, così com'è.
+
+    :data:`ASSENTE` se il DPC non lo tiene più (l'API ne conserva circa
+    cinque mesi, e oltre risponde 500 con il 403 di S3 nel corpo); ``None``
+    se è fallito per altro, e allora si ritenta il giro dopo. La richiesta
+    del link non passa dalla politica di retry: quattro tentativi con backoff
+    su un fotogramma scaduto sono minuti persi per niente.
+    """
+    client = await SharedHttpClient.get()
+    try:
+        resp = await client.post(
+            f"{RADAR_API}/downloadProduct",
+            json={"productType": product_type, "productDate": int(at.timestamp() * 1000)},
+            headers=_HEADERS,
+        )
+        if resp.status_code >= 400:
+            return ASSENTE if "Forbidden" in resp.text or "403" in resp.text else None
+        url = str(resp.json()["url"])
+        return (await fetch_with_retry("GET", url, client=client)).content
+    except _DEGRADATION_EXC as exc:
+        log.warning(
+            "integration.degraded",
+            label=f"dpc.archivio.{product_type.lower()}",
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
+        return None
+
+
 #: L'ultimo fotogramma CUM per durata. Una regione dopo l'altra chiede lo
 #: stesso file nazionale (~2 MB, nuovo ogni 30 minuti): si riscarica solo
 #: quando il DPC ne pubblica uno nuovo.
@@ -236,4 +270,12 @@ async def get_cum_at(hours: int, observed_at: datetime) -> SriGrid | None:
     return grid
 
 
-__all__ = ["CUM_PERIOD", "SriGrid", "get_cum_at", "get_latest_cum", "get_latest_sri"]
+__all__ = [
+    "ASSENTE",
+    "CUM_PERIOD",
+    "SriGrid",
+    "get_cum_at",
+    "get_latest_cum",
+    "get_latest_sri",
+    "scarica_fotogramma",
+]

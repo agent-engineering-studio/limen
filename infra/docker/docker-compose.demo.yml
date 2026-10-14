@@ -107,6 +107,11 @@ services:
       # quando esce una release EGMS. Vuota ⇒ il passo si salta.
       EGMS__SERVICE_KEY: ${EGMS__SERVICE_KEY:-}
       EGMS__RELEASE: ${EGMS__RELEASE:-2020_2024}
+      # Archivio del radar DPC «Merging»: deve stare sul volume dei dataset
+      # (/var/lib/limen/datasets). Vuota ⇒ il passo notturno si salta.
+      RADAR_ARCHIVE__CARTELLA: ${RADAR_ARCHIVE__CARTELLA:-}
+      RADAR_ARCHIVE__GIORNI: ${RADAR_ARCHIVE__GIORNI:-160}
+      RADAR_ARCHIVE__FILE_PER_NOTTE: ${RADAR_ARCHIVE__FILE_PER_NOTTE:-1500}
       NOTIFICATIONS__MQTT__BROKER_HOST: mosquitto
       NOTIFICATIONS__MQTT__BROKER_PORT: "1883"
       NOTIFICATIONS__MQTT__TOPIC: limen/alerts

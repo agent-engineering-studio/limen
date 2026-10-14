@@ -707,6 +707,30 @@ class CopernicusSettings(BaseSettings):
         return self.ewds_key is not None and bool(self.ewds_key.get_secret_value())
 
 
+class RadarArchiveSettings(BaseSettings):
+    """L'archivio locale del radar DPC «Merging» (corretto con i pluviometri).
+
+    L'API pubblica del DPC tiene circa cinque mesi: quello che non si salva
+    in tempo si perde, e lo storico che serve al backtest e alle verifiche
+    sparisce un mese alla volta. Vuoto ``RADAR_ARCHIVE__CARTELLA`` = il passo
+    notturno non fa niente, come ogni sorgente non configurata.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    cartella: str = ""
+    #: Quanto indietro guarda il passo: oltre quello che il DPC tiene ancora
+    #: (~150 giorni) le richieste rispondono 403 e si contano come perse.
+    giorni: int = Field(default=160, ge=1)
+    #: File scaricati al massimo per notte: il primo giro recupera i mesi già
+    #: pubblicati in poche notti senza tenere ferma la pipeline.
+    file_per_notte: int = Field(default=1500, ge=1)
+
+    @property
+    def attivo(self) -> bool:
+        return bool(self.cartella)
+
+
 class OpenMeteoSettings(BaseSettings):
     """Dove chiedere il meteo (#142).
 
@@ -1024,6 +1048,7 @@ class Settings(BaseSettings):
     training: TrainingSettings = Field(default_factory=TrainingSettings)
     egms: EgmsSettings = Field(default_factory=EgmsSettings)
     copernicus: CopernicusSettings = Field(default_factory=CopernicusSettings)
+    radar_archive: RadarArchiveSettings = Field(default_factory=RadarArchiveSettings)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
     openmeteo: OpenMeteoSettings = Field(default_factory=OpenMeteoSettings)
     kg: KgSettings = Field(default_factory=KgSettings)
