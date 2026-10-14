@@ -75,7 +75,12 @@ def stubbed(monkeypatch: pytest.MonkeyPatch) -> None:
     async def glofas(_deps: object) -> dict[str, int]:
         return {"richiesti": 0, "salvati": 0, "con_fiume": 0}
 
+    async def fwi_pioggia() -> dict[str, int]:
+        # Acceso in wildfire.yaml: senza lo stub chiederebbe al DPC e al database.
+        return {"nodi": 0, "righe": 0}
+
     monkeypatch.setattr(nightly, "_glofas", glofas)
+    monkeypatch.setattr(nightly, "_fwi_pioggia_osservata", fwi_pioggia)
     monkeypatch.setattr(nightly, "_storage", storage)
     monkeypatch.setattr(nightly, "_shadow_ml", shadow)
     monkeypatch.setattr(nightly, "run_drift_monitor_job", drift)

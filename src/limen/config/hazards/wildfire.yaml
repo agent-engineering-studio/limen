@@ -67,6 +67,20 @@ fwi:
   # chiamate.
   node_spacing_deg: 0.25
 
+  # La pioggia misurata dal DPC («Merging», radar più pluviometri) al posto di
+  # quella del modello, per i giorni già passati. I codici di siccità scendono
+  # solo con la pioggia, e il modello a ~9 km non vede i temporali: a
+  # Montegiordano, fra il 14 settembre e il 14 ottobre 2026, 9 mm contro i
+  # 35-45 misurati, FWI 50 il 14 ottobre invece di 26. Ricalcolata sulla
+  # catena di produzione, nell'ottobre 2026 toglie un quinto delle
+  # giornate-nodo in fascia alta (7,6 % → 5,9 %); sulla stagione 2026 contro i
+  # perimetri EFFIS l'efficacia resta la stessa. Ogni notte (passo
+  # `fwi_pioggia_osservata`) si rifanno gli ultimi `days` giorni; un pixel che
+  # salta più di `max_step_mm` fra due fotogrammi vale «non misurato» (#235).
+  observed_rain:
+    days: 3
+    max_step_mm: 150
+
 # CORINE Land Cover 2018 → infiammabilità. Prefisso più lungo vince.
 # Ordine fisico: conifere > macchia/sclerofille > latifoglie/misti >
 # pascolo/incolto > agricolo > urbano > acqua.

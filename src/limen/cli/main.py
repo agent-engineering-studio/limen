@@ -11,6 +11,7 @@ Usage:
     limen registra-verifica  Fact check: un evento verificato entra nel registro (074).
     limen verifiche-report   Eventi verificati contro le previsioni, col tasso di base.
     limen radar-archivio     Salva il radar DPC «Merging» prima che il DPC lo perda.
+    limen fwi-pioggia        Rifà la catena FWI con la pioggia misurata dal DPC.
     limen ingest-fire-history  FIRMS country archive (2000+), fire_density + truth set.
     limen effis-sync         Perimetri di area bruciata EFFIS: truth set del backtest incendio.
     limen monitor-once       Run the MAF landslide workflow once for an AOI.
@@ -53,6 +54,7 @@ from limen.cli.forecast import run as _run_forecast
 from limen.cli.forecast_history import run as _run_forecast_history
 from limen.cli.fwi_backfill import run as _run_fwi_backfill
 from limen.cli.fwi_climatology import run as _run_fwi_climatology
+from limen.cli.fwi_pioggia import run as _run_fwi_pioggia
 from limen.cli.geodata import build_subparser as _build_geodata_subparser
 from limen.cli.geodata import run as _run_geodata
 from limen.cli.geoserver_sync import run as _run_geoserver_sync
@@ -227,6 +229,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="extract training samples and train the V2 ML model (LightGBM + MLflow)",
     )
     sub.add_parser(
+        "fwi-pioggia",
+        help="rifà la catena FWI con la pioggia misurata dal DPC "
+        "(env: LIMEN_FWI_PIOGGIA_DAL / _AL / _FONTE=dpc|archivio)",
+    )
+    sub.add_parser(
         "radar-archivio",
         help="salva il radar DPC «Merging» (CUM3 + SRT1) prima che il DPC lo perda "
         "(RADAR_ARCHIVE__CARTELLA, LIMEN_RADAR_MASSIMO)",
@@ -372,6 +379,7 @@ def main(argv: list[str] | None = None) -> int:
         "shadow-report": _run_shadow_report,
         "verifiche-report": _run_verifiche_report,
         "radar-archivio": _run_radar_archivio,
+        "fwi-pioggia": _run_fwi_pioggia,
         # only action is `build`; inspect args.report_command before adding a second.
         "report": _run_report_build,
         "sync-egms": _run_sync_egms,

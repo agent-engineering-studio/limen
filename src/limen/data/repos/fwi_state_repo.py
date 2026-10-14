@@ -130,6 +130,51 @@ async def read_day(nodes: list[tuple[float, float]], day: date) -> list[FireWeat
     return [by_key.get(k) for k in keys]
 
 
+async def read_between(dal: date, al: date) -> dict[tuple[float, float], list[NodeDay]]:
+    """Ogni riga salvata fra ``dal`` e ``al`` compresi, per nodo, in ordine di giorno.
+
+    Con gli ingressi del giorno (temperatura, umidità, vento, pioggia): è ciò
+    che serve a rifare la catena con un ingresso corretto senza richiedere il
+    meteo a nessuno.
+    """
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT node_lon, node_lat, day, ffmc, dmc, dc, isi, bui, fwi, chain_days,
+                   temperature_c, relative_humidity_pct, wind_speed_kmh, rain_24h_mm
+              FROM fwi_state
+             WHERE day BETWEEN $1 AND $2
+               AND temperature_c IS NOT NULL AND relative_humidity_pct IS NOT NULL
+               AND wind_speed_kmh IS NOT NULL AND rain_24h_mm IS NOT NULL
+             ORDER BY node_lon, node_lat, day
+            """,
+            dal,
+            al,
+        )
+    out: dict[tuple[float, float], list[NodeDay]] = {}
+    for r in rows:
+        key = (float(r["node_lon"]), float(r["node_lat"]))
+        out.setdefault(key, []).append(
+            NodeDay(
+                lon=key[0],
+                lat=key[1],
+                day=r["day"],
+                outputs=FwiOutputs(
+                    state=FwiState(ffmc=r["ffmc"], dmc=r["dmc"], dc=r["dc"]),
+                    isi=r["isi"],
+                    bui=r["bui"],
+                    fwi=r["fwi"],
+                ),
+                chain_days=int(r["chain_days"]),
+                temperature_c=r["temperature_c"],
+                relative_humidity_pct=r["relative_humidity_pct"],
+                wind_speed_kmh=r["wind_speed_kmh"],
+                rain_24h_mm=r["rain_24h_mm"],
+            )
+        )
+    return out
+
+
 async def upsert_many(days: list[NodeDay]) -> int:
     """Write many node-days in one round trip. Idempotent per (node, day)."""
     if not days:
