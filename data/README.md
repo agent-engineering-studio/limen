@@ -220,4 +220,3 @@ Niente di questo è in git: si rigenera con il comando a destra.
 | `/srv/data/limen-datasets/` | dataset montati nel worker (`/var/lib/limen/datasets`) | 1 MB | ITALICA | `limen ingest-events` |
 | volume Docker `limen-openmeteo-data` | cache dei modelli Open-Meteo (ECMWF IFS 0,25°, ICON-EU, ERA5-Land) | variabile | Open-Meteo, CC-BY 4.0 | `make meteo-sync` |
 | `/srv/pgfast/postgis/limen-pgdata` | il database PostGIS | — | — | `make seed` + ingest |
-
