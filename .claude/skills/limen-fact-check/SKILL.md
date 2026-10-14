@@ -218,7 +218,7 @@ DB__CONNECTION_STRING=$(docker exec limen-worker printenv DB__CONNECTION_STRING 
   uv run limen registra-verifica <scratchpad>/<slug>.registro.json [altri file…]
 ```
 
-Idempotente (la chiave è lo slug): rilanciarlo dopo un aggiornamento riscrive la riga e conserva `verificato_at`. Una frana va anche in `landslide_events` con id `stampa:<slug>`; un'alluvione o un incendio restano solo nel registro (`flood_events` vuole il perimetro osservato, non un comune). Un file non valido fa uscire il comando con codice 2 senza scrivere niente: correggi e rilancia.
+Idempotente (la chiave è lo slug): rilanciarlo dopo un aggiornamento riscrive la riga e conserva `verificato_at`. Per vedere il conto per pericolo — anticipate, quota con previsione ≥ Moderato e il suo tasso di base — `uv run limen verifiche-report` (stessa `DB__CONNECTION_STRING`; `LIMEN_VERIFICHE_DAL`/`_AL` per una finestra): è il metro delle alluvioni dalla stampa, che non hanno perimetro e non entrano in `flood_events`. Una frana va anche in `landslide_events` con id `stampa:<slug>`; un'alluvione o un incendio restano solo nel registro (`flood_events` vuole il perimetro osservato, non un comune). Un file non valido fa uscire il comando con codice 2 senza scrivere niente: correggi e rilancia.
 
 ### 9. Controllare e pubblicare
 

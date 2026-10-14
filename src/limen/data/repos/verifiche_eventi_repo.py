@@ -113,3 +113,51 @@ async def count_by_esito() -> dict[str, int]:
     async with acquire() as conn:
         rows = await conn.fetch("SELECT esito, count(*)::int AS n FROM verifiche_eventi GROUP BY 1")
     return {str(r["esito"]): int(r["n"]) for r in rows}
+
+
+@dataclass(frozen=True, slots=True)
+class RigaVerifica:
+    """Una verifica come la legge il report: le colonne, non la misura intera."""
+
+    slug: str
+    hazard: HazardType
+    esito: str
+    evento_at: datetime
+    luogo: str
+    anticipo_ore_moderato: int | None
+    anticipo_ore_alto: int | None
+    classe_prevista_max: str | None
+    fondo_classe_max: str | None
+    fondo_giorni_moderato: int | None
+
+
+async def elenca(*, dal: datetime | None = None, al: datetime | None = None) -> list[RigaVerifica]:
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT slug, hazard_type::text AS hazard, esito, evento_at, luogo,
+                   anticipo_ore_moderato, anticipo_ore_alto, classe_prevista_max,
+                   fondo_classe_max, (misura->>'fondo_giorni_moderato')::int AS fondo_giorni
+            FROM verifiche_eventi
+            WHERE ($1::timestamptz IS NULL OR evento_at >= $1)
+              AND ($2::timestamptz IS NULL OR evento_at <= $2)
+            ORDER BY hazard_type, evento_at
+            """,
+            dal,
+            al,
+        )
+    return [
+        RigaVerifica(
+            slug=str(r["slug"]),
+            hazard=HazardType(r["hazard"]),
+            esito=str(r["esito"]),
+            evento_at=r["evento_at"],
+            luogo=str(r["luogo"]),
+            anticipo_ore_moderato=r["anticipo_ore_moderato"],
+            anticipo_ore_alto=r["anticipo_ore_alto"],
+            classe_prevista_max=r["classe_prevista_max"],
+            fondo_classe_max=r["fondo_classe_max"],
+            fondo_giorni_moderato=r["fondo_giorni"],
+        )
+        for r in rows
+    ]

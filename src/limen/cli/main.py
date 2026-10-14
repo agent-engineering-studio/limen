@@ -9,6 +9,7 @@ Usage:
     limen backtest-flood     Replay Copernicus EMS flood perimeters (#64).
     limen ingest-events      Dated event catalogue: --hazard landslide|flood.
     limen registra-verifica  Fact check: un evento verificato entra nel registro (074).
+    limen verifiche-report   Eventi verificati contro le previsioni, col tasso di base.
     limen ingest-fire-history  FIRMS country archive (2000+), fire_density + truth set.
     limen effis-sync         Perimetri di area bruciata EFFIS: truth set del backtest incendio.
     limen monitor-once       Run the MAF landslide workflow once for an AOI.
@@ -78,6 +79,7 @@ from limen.cli.server import run as _run_server
 from limen.cli.shadow_report import run as _run_shadow_report
 from limen.cli.sync_egms import run as _run_sync_egms
 from limen.cli.train import run as _run_train
+from limen.cli.verifiche_report import run as _run_verifiche_report
 from limen.cli.worker import run as _run_worker
 from limen.config.settings import get_settings
 from limen.core.logging import configure_logging
@@ -223,6 +225,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="extract training samples and train the V2 ML model (LightGBM + MLflow)",
     )
     sub.add_parser(
+        "verifiche-report",
+        help="eventi verificati contro le previsioni, per pericolo e col tasso di base "
+        "(env: LIMEN_VERIFICHE_DAL / _AL)",
+    )
+    sub.add_parser(
         "shadow-report",
         help="champion vs ML-challenger comparison report (LIMEN_SHADOW_SINCE / _AOI)",
     )
@@ -356,6 +363,7 @@ def main(argv: list[str] | None = None) -> int:
         "llm-check": _run_llm_check,
         "train": _run_train,
         "shadow-report": _run_shadow_report,
+        "verifiche-report": _run_verifiche_report,
         # only action is `build`; inspect args.report_command before adding a second.
         "report": _run_report_build,
         "sync-egms": _run_sync_egms,

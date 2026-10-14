@@ -11,7 +11,12 @@ from shapely.geometry import Point
 
 from limen.core.models.hazard import HazardType
 from limen.data.db import acquire
-from limen.data.repos.verifiche_eventi_repo import VerificaEvento, count_by_esito, upsert
+from limen.data.repos.verifiche_eventi_repo import (
+    VerificaEvento,
+    count_by_esito,
+    elenca,
+    upsert,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -100,3 +105,24 @@ async def test_riscrivere_aggiorna_la_stessa_riga(reset_db: None, pg_pool: objec
     assert row is not None
     assert row["anticipo_ore_moderato"] == 3
     assert row["aggiornata"]
+
+
+async def test_elenca_legge_il_fondo_dalla_misura(reset_db: None, pg_pool: object) -> None:
+    await upsert(
+        _verifica(
+            hazard=HazardType.LANDSLIDE,
+            misura={
+                "anticipo_ore_moderato": 80,
+                "fondo_classe_max": "Moderate",
+                "fondo_giorni_moderato": 6,
+            },
+        )
+    )
+    (r,) = await elenca(dal=datetime(2026, 10, 1, tzinfo=UTC))
+    assert r.hazard is HazardType.LANDSLIDE
+    assert (r.anticipo_ore_moderato, r.fondo_classe_max, r.fondo_giorni_moderato) == (
+        80,
+        "Moderate",
+        6,
+    )
+    assert await elenca(al=datetime(2026, 10, 1, tzinfo=UTC)) == []

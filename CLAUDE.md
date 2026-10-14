@@ -182,6 +182,8 @@ uv run limen fwi-backfill       # rebuild the recursive FWI chain from the ERA5 
 uv run limen backtest-wildfire  # replay the FWI chain against EFFIS burnt-area perimeters
                                 # (env: LIMEN_BACKTEST_WILDFIRE_AOI / _START / _END / _LEVEL)
 uv run limen data-status        # which per-cell static layers are loaded, and what gates the rest
+uv run limen registra-verifica F # fact-check event → verifiche_eventi (+ landslide_events if a landslide)
+uv run limen verifiche-report   # verified events vs forecasts per hazard, with the base rate
 
 make data-status            # the same report
 make static-data            # load every configured layer, then report
