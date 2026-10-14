@@ -26,6 +26,7 @@ rather than reaching for blocks only one hazard has.
 
 from __future__ import annotations
 
+from datetime import date
 from functools import cache
 from importlib import resources
 from itertools import pairwise
@@ -581,6 +582,18 @@ class FwiBlock(_StrictModel):
     #: engine still scores, but flags the breakdown so nobody reads a
     #: three-day-old chain as a seasoned one.
     spinup_days: int = Field(..., ge=0)
+    #: Inizio della stagione, «MM-GG» (#201). Il backfill ricostruisce la
+    #: catena da qui, e una catena partita dopo non si dichiara assestata
+    #: qualunque sia ``chain_days``: il DC ha una memoria di ~52 giorni, e
+    #: partito dal seme a metà settembre è ancora quello di aprile.
+    season_start: str = Field(..., pattern=r"^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$")
+
+    def inizio_stagione(self, giorno: date) -> date:
+        """L'inizio della stagione a cui appartiene ``giorno``."""
+        mese, gg = (int(x) for x in self.season_start.split("-"))
+        inizio = date(giorno.year, mese, gg)
+        return inizio if giorno >= inizio else date(giorno.year - 1, mese, gg)
+
     #: Longest interruption a chain survives. Beyond it the stored state is a
     #: fiction -- carrying a code across three weeks of missing weather as if
     #: the days were consecutive is worse than restarting from the seed and

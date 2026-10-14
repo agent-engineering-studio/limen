@@ -15,6 +15,11 @@ walk, one difference: **future days are computed but never written**. A
 forecast row in ``fwi_state`` would become tomorrow's predecessor and the
 operational chain would end up recursing on a prediction.
 
+The day it writes for today is built on the *forecast* noon, because the
+first sweep after midnight runs before noon exists. The nightly step
+``fwi_pioggia_osservata`` rewrites the last days with the analysed weather and
+the rain the DPC measured (#201), and the chain carries on from those.
+
 Degrades, never raises. A node with no usable observation keeps yesterday's
 row and the cells around it score with a stale-but-real chain; a node with no
 chain at all yields no fire weather, and the engine reports the cell dark and

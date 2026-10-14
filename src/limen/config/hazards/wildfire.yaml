@@ -53,6 +53,12 @@ fwi:
   # scora comunque, ma lo dichiara nel breakdown.
   spinup_days: 30
 
+  # Inizio della stagione (#201). `limen fwi-backfill` ricostruisce la catena
+  # da qui: partendo da 60 giorni fa, i nodi avviati il 15 settembre avevano
+  # in ottobre un DC da primavera (131 contro 759 ricostruito dal 1° aprile).
+  # Una catena partita dopo questa data resta dichiarata «in assestamento».
+  season_start: "04-01"
+
   # Interruzione massima che una catena sopravvive. Oltre, lo stato salvato è
   # una finzione: portarsi un codice attraverso tre settimane di meteo
   # mancante come se i giorni fossero consecutivi è peggio che ripartire dal

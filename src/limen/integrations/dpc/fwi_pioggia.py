@@ -29,11 +29,18 @@ from limen.data.repos import fwi_state_repo
 from limen.data.repos.fwi_state_repo import NodeDay
 from limen.integrations.dpc.client import CUM_PERIOD, get_cum_at
 from limen.integrations.dpc.merging_archive import MergingArchive
+from limen.integrations.openmeteo.client import OpenMeteoHttpClient
+from limen.integrations.openmeteo.dtos import FireWeatherObservation, MeteoSnapshot
 
 log = get_logger(__name__)
 
 #: Pioggia delle 24 ore fino a mezzogiorno UTC di un giorno, per nodo (mm).
 Fonte = Callable[[list[tuple[float, float]], date], Awaitable[list[float | None]]]
+#: Il meteo analizzato di mezzogiorno di più giorni, per nodo.
+Meteo = Callable[
+    [list[tuple[float, float]], list[date]],
+    Awaitable[list[dict[date, FireWeatherObservation]]],
+]
 
 #: Ore misurate sotto le quali la somma dall'archivio non vale come giornata.
 _ORE_MINIME = 20
@@ -72,6 +79,51 @@ def fonte_archivio(archivio: MergingArchive) -> Fonte:
         return out
 
     return pioggia
+
+
+def meteo_open_meteo(client: OpenMeteoHttpClient | None = None) -> Meteo:
+    """Mezzogiorno dei giorni passati dall'API di previsione, che per il
+    passato dà le corse più recenti: meglio della previsione delle 00 UTC con
+    cui la riga di quel giorno era stata scritta (#201)."""
+    cli = client or OpenMeteoHttpClient()
+
+    async def meteo(
+        nodi: list[tuple[float, float]], giorni: list[date]
+    ) -> list[dict[date, FireWeatherObservation]]:
+        inizio = datetime.combine(giorni[0] - timedelta(days=1), time.min, UTC)
+        fine = datetime.combine(giorni[-1], time.max, UTC)
+        serie = await cli.get_fire_weather_grid(
+            nodes=nodi, window_start=inizio, window_end=fine, use_archive=False
+        )
+        out: list[dict[date, FireWeatherObservation]] = []
+        for (lon, lat), campioni in zip(nodi, serie, strict=True):
+            snap = MeteoSnapshot(
+                centroid_lon=lon,
+                centroid_lat=lat,
+                window_start=inizio,
+                window_end=fine,
+                samples=campioni,
+            )
+            out.append({g: o for g in giorni if (o := snap.noon_observation(g)) is not None})
+        return out
+
+    return meteo
+
+
+def _con_meteo(r: NodeDay, oss: FireWeatherObservation | None) -> NodeDay:
+    if oss is None:
+        return r
+    return NodeDay(
+        lon=r.lon,
+        lat=r.lat,
+        day=r.day,
+        outputs=r.outputs,
+        chain_days=r.chain_days,
+        temperature_c=oss.temperature_c,
+        relative_humidity_pct=oss.relative_humidity_pct,
+        wind_speed_kmh=oss.wind_speed_kmh,
+        rain_24h_mm=oss.rain_24h_mm,
+    )
 
 
 def ricalcola(
@@ -123,18 +175,29 @@ def ricalcola(
 
 
 async def correggi(
-    *, dal: date, al: date, params: FwiParams, max_gap_days: int, fonte: Fonte
+    *,
+    dal: date,
+    al: date,
+    params: FwiParams,
+    max_gap_days: int,
+    fonte: Fonte,
+    meteo: Meteo | None = None,
 ) -> dict[str, int | float]:
     """Rifà la catena di ogni nodo da ``dal`` ad ``al`` e riscrive le righe.
 
     Idempotente: rifatta due volte con la stessa pioggia dà le stesse righe.
     Si riparte dall'ultima riga prima di ``dal``; un nodo la cui catena è
-    nata dopo riparte dalla sua prima riga, che resta com'è.
+    nata dopo riparte dalla sua prima riga, che resta com'è. Con ``meteo``,
+    i giorni prima di ``al`` prendono anche temperatura, umidità e vento
+    analizzati al posto di quelli salvati; ``al``, che di solito è oggi,
+    resta quello della previsione.
     """
     righe = await fwi_state_repo.read_between(dal - timedelta(days=max_gap_days), al)
     nodi = list(righe)
     giorni = [dal + timedelta(days=i) for i in range((al - dal).days + 1)]
     osservata = {g: await fonte(nodi, g) for g in giorni}
+    passati = [g for g in giorni if g < al]
+    analizzato = await meteo(nodi, passati) if meteo is not None and passati else None
     scritte: list[NodeDay] = []
     con_osservata = 0
     delta_fwi: list[float] = []
@@ -143,10 +206,12 @@ async def correggi(
         precedenti = [r for r in serie if r.day < dal]
         partenza = precedenti[-1] if precedenti else serie[0]
         da_rifare = [r for r in serie if r.day > partenza.day]
+        if analizzato is not None:
+            da_rifare = [_con_meteo(r, analizzato[k].get(r.day)) for r in da_rifare]
         pioggia = {g: osservata[g][k] for g in giorni}
         con_osservata += sum(1 for v in pioggia.values() if v is not None)
         nuove = ricalcola(da_rifare, partenza, pioggia, params, max_gap_days)
-        vecchie = {r.day: r for r in da_rifare}
+        vecchie = {r.day: r for r in serie}
         delta_fwi.extend(n.outputs.fwi - vecchie[n.day].outputs.fwi for n in nuove)
         scritte.extend(nuove)
     await fwi_state_repo.upsert_many(scritte)

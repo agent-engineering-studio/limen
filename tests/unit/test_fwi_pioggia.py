@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 import pytest
 
@@ -135,3 +135,106 @@ def test_il_carico_meteo_conta_le_giornate_nodo_sopra_la_fascia_alta() -> None:
         {_G: _s(_G, soglia - 1), _G - timedelta(days=30): _s(_G, 60.0)},
     ]
     assert carico_meteo(catene, start=_G, end=_G + timedelta(days=1), thresholds=t) == 1 / 3
+
+
+def test_la_stagione_parte_ad_aprile_anche_per_l_inverno() -> None:
+    t = load_hazard_thresholds(HazardType.WILDFIRE)
+    assert isinstance(t, WildfireThresholds)
+    assert t.fwi.inizio_stagione(date(2026, 10, 14)) == date(2026, 4, 1)
+    assert t.fwi.inizio_stagione(date(2027, 2, 10)) == date(2026, 4, 1)
+
+
+def test_il_backfill_riparte_dall_inizio_della_stagione() -> None:
+    from limen.cli.fwi_backfill import giorni_dalla_stagione
+
+    t = load_hazard_thresholds(HazardType.WILDFIRE)
+    assert isinstance(t, WildfireThresholds)
+    # Da ieri (13 ottobre) al 1° aprile compreso.
+    assert giorni_dalla_stagione(t, date(2026, 10, 14)) == 196
+
+
+@pytest.mark.parametrize(
+    ("chain_days", "assestata"),
+    [(196, True), (29, False), (30, False)],
+    ids=["dal-primo-aprile", "corta", "partita-a-meta-settembre"],
+)
+def test_una_catena_partita_tardi_resta_in_assestamento(chain_days: int, assestata: bool) -> None:
+    from limen.core.models.risk import (
+        CellFeatureBundle,
+        DynamicInputs,
+        FireWeatherState,
+        StaticFactors,
+    )
+    from limen.core.scoring.wildfire import WildfireScoringEngine
+
+    t = load_hazard_thresholds(HazardType.WILDFIRE)
+    assert isinstance(t, WildfireThresholds)
+    giorno = date(2026, 10, 14)
+    fw = FireWeatherState(
+        day=giorno,
+        ffmc=88.0,
+        dmc=40.0,
+        dc=300.0,
+        isi=8.0,
+        bui=60.0,
+        fwi=25.0,
+        chain_days=chain_days,
+    )
+    bundle = CellFeatureBundle(
+        aoi_id="it-calabria",
+        cell_id="c",
+        static=StaticFactors(cell_id="c"),
+        dynamic=DynamicInputs(
+            valuation_time=datetime.combine(giorno, time(12), UTC), fire_weather=fw
+        ),
+    )
+    assert WildfireScoringEngine(t).score(bundle).breakdown.spinup is not assestata
+
+
+async def test_il_meteo_analizzato_sostituisce_la_previsione_solo_nei_giorni_passati(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from limen.integrations.openmeteo.dtos import FireWeatherObservation
+
+    serie = _serie(2)
+    scritte: list[NodeDay] = []
+
+    async def _leggi(dal: date, al: date) -> dict[tuple[float, float], list[NodeDay]]:
+        return {(16.5, 40.0): serie}
+
+    async def _scrivi(righe: list[NodeDay]) -> int:
+        scritte.extend(righe)
+        return len(righe)
+
+    async def _fonte(nodi: list[tuple[float, float]], giorno: date) -> list[float | None]:
+        return [None for _ in nodi]
+
+    async def _meteo(
+        nodi: list[tuple[float, float]], giorni: list[date]
+    ) -> list[dict[date, FireWeatherObservation]]:
+        assert giorni == [_G], "oggi resta quello della previsione"
+        return [
+            {
+                _G: FireWeatherObservation(
+                    day=_G,
+                    temperature_c=15.0,
+                    relative_humidity_pct=90.0,
+                    wind_speed_kmh=5.0,
+                    rain_24h_mm=0.0,
+                )
+            }
+        ]
+
+    monkeypatch.setattr(fwi_pioggia.fwi_state_repo, "read_between", _leggi)
+    monkeypatch.setattr(fwi_pioggia.fwi_state_repo, "upsert_many", _scrivi)
+    await correggi(
+        dal=_G,
+        al=_G + timedelta(days=1),
+        params=_params(),
+        max_gap_days=5,
+        fonte=_fonte,
+        meteo=_meteo,
+    )
+    oggi = {r.day: r for r in scritte}
+    assert oggi[_G].relative_humidity_pct == 90.0
+    assert oggi[_G + timedelta(days=1)].relative_humidity_pct == 45.0
