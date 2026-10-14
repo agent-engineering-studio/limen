@@ -9,7 +9,7 @@ scoring pipeline decides *what* to alert.
 The CUM products (``CUM3``/``6``/``12``/``24``) are the rain already fallen:
 the «Merging» of radar and rain gauges, 0.01° in EPSG:4326, refreshed every
 30 minutes. The flood engine reads them as the observed part of its pluvial
-window (#199).
+window (#199), after checking each frame against the one before it (#235).
 
 Read-only integration: every failure degrades to ``None`` and logs
 ``integration.degraded`` — it never raises.
@@ -17,8 +17,8 @@ Read-only integration: every failure degrades to ``None`` and logs
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import UTC, datetime
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -39,6 +39,8 @@ RADAR_API = "https://radar-api.protezionecivile.it"
 # The API rejects requests without an `origin` header.
 _HEADERS = {"origin": "https://radar.protezionecivile.gov.it"}
 _NODATA = -9999.0
+#: Un fotogramma CUM nuovo ogni 30 minuti (`period: PT30M` dell'API).
+CUM_PERIOD = timedelta(minutes=30)
 
 _DEGRADATION_EXC: tuple[type[BaseException], ...] = (
     httpx.HTTPError,
@@ -105,21 +107,53 @@ class SriGrid:
             out.append(float(np.median(valid)) if valid.size else None)
         return out
 
+    def discard_inconsistent(self, previous: SriGrid, *, max_step: float) -> tuple[SriGrid, int]:
+        """This frame without the pixels that moved more than ``max_step``
+        since ``previous``, and how many they were.
 
-async def _download(product_type: str, cached: SriGrid | None = None) -> SriGrid | None:
-    """The most recent frame of ``product_type``; ``cached`` if it is still that one."""
+        Two accumulations over the same duration, one period apart, differ by
+        the rain that entered the window minus the rain that left it: never
+        more than one period's worth of rain. A pixel that moves further is
+        wrong in at least one of the two frames, and which one cannot be told
+        from here — so it becomes nodata, «not measured», and the cell falls
+        back to the forecast. On 9-11 October 2026 the :30 CUM24 series
+        carried 10,047 mm where the :00 series read 28 (#235); the median in
+        :meth:`sample` cannot remove a 16 km bump. Frames on different grids
+        cannot be compared and come back unchanged.
+        """
+        if previous.data.shape != self.data.shape or previous.transform != self.transform:
+            return self, 0
+        a = self.data
+        b = previous.data
+        bad = (a > _NODATA) & (b > _NODATA) & (np.abs(a - b) > max_step)
+        n = int(bad.sum())
+        if n == 0:
+            return self, 0
+        data = a.copy()
+        data[bad] = _NODATA
+        return replace(self, data=data), n
+
+
+async def _download(
+    product_type: str, cached: SriGrid | None = None, *, at: datetime | None = None
+) -> SriGrid | None:
+    """The most recent frame of ``product_type`` (or the one issued ``at``);
+    ``cached`` if it is still that one."""
     client = await SharedHttpClient.get()
     try:
-        resp = await fetch_with_retry(
-            "GET",
-            f"{RADAR_API}/findLastProductByType",
-            client=client,
-            params={"type": product_type},
-            headers=_HEADERS,
-        )
-        payload: dict[str, Any] = resp.json()
-        product = payload["lastProducts"][0]
-        product_time = int(product["time"])
+        if at is None:
+            resp = await fetch_with_retry(
+                "GET",
+                f"{RADAR_API}/findLastProductByType",
+                client=client,
+                params={"type": product_type},
+                headers=_HEADERS,
+            )
+            payload: dict[str, Any] = resp.json()
+            product = payload["lastProducts"][0]
+            product_time = int(product["time"])
+        else:
+            product_time = int(at.timestamp() * 1000)
         observed_at = datetime.fromtimestamp(product_time / 1000, tz=UTC)
         if cached is not None and cached.observed_at == observed_at:
             return cached
@@ -175,14 +209,31 @@ async def get_latest_sri() -> SriGrid | None:
 #: stesso file nazionale (~2 MB, nuovo ogni 30 minuti): si riscarica solo
 #: quando il DPC ne pubblica uno nuovo.
 _cum_cache: dict[int, SriGrid] = {}
+#: Il fotogramma prima dell'ultimo: è quello contro cui si controlla il nuovo
+#: (#235), quindi a regime il controllo non scarica niente in più.
+_cum_previous: dict[int, SriGrid] = {}
 
 
 async def get_latest_cum(hours: int) -> SriGrid | None:
     """The most recent national rain accumulation over ``hours`` (None on failure)."""
-    grid = await _download(f"CUM{hours}", _cum_cache.get(hours))
+    old = _cum_cache.get(hours)
+    grid = await _download(f"CUM{hours}", old)
     if grid is not None:
+        if old is not None and old.observed_at != grid.observed_at:
+            _cum_previous[hours] = old
         _cum_cache[hours] = grid
     return grid
 
 
-__all__ = ["SriGrid", "get_latest_cum", "get_latest_sri"]
+async def get_cum_at(hours: int, observed_at: datetime) -> SriGrid | None:
+    """The accumulation over ``hours`` issued at ``observed_at`` (None on failure)."""
+    for g in (_cum_cache.get(hours), _cum_previous.get(hours)):
+        if g is not None and g.observed_at == observed_at:
+            return g
+    grid = await _download(f"CUM{hours}", at=observed_at)
+    if grid is not None:
+        _cum_previous[hours] = grid
+    return grid
+
+
+__all__ = ["CUM_PERIOD", "SriGrid", "get_cum_at", "get_latest_cum", "get_latest_sri"]
