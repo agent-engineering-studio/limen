@@ -55,7 +55,13 @@ async def run() -> int:
         return 1
     try:
         async with lifespan_pool():
-            await correggi(dal=dal, al=al, params=params_from(t), fonte=fonte)
+            await correggi(
+                dal=dal,
+                al=al,
+                params=params_from(t),
+                max_gap_days=t.fwi.max_gap_days,
+                fonte=fonte,
+            )
     finally:
         await SharedHttpClient.aclose()
     return 0

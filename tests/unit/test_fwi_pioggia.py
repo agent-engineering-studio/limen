@@ -57,7 +57,7 @@ def _serie(n: int) -> list[NodeDay]:
 
 def test_la_pioggia_vera_bagna_la_catena_e_si_porta_avanti() -> None:
     serie = _serie(3)
-    nuove = ricalcola(serie[1:], serie[0], {_G: 12.0}, _params())
+    nuove = ricalcola(serie[1:], serie[0], {_G: 12.0}, _params(), 5)
     assert [r.rain_24h_mm for r in nuove] == [12.0, 0.0, 0.0]
     assert nuove[0].outputs.state.dmc < serie[1].outputs.state.dmc
     assert nuove[2].outputs.fwi < serie[3].outputs.fwi, "il giorno dopo parte bagnato"
@@ -65,18 +65,25 @@ def test_la_pioggia_vera_bagna_la_catena_e_si_porta_avanti() -> None:
 
 def test_senza_pioggia_osservata_resta_quella_salvata() -> None:
     serie = _serie(2)
-    nuove = ricalcola(serie[1:], serie[0], {_G: None}, _params())
+    nuove = ricalcola(serie[1:], serie[0], {_G: None}, _params(), 5)
     assert [r.outputs.fwi for r in nuove] == pytest.approx([r.outputs.fwi for r in serie[1:]])
 
 
-def test_un_buco_fra_i_giorni_ferma_il_ricalcolo() -> None:
+def test_un_giorno_mancante_si_salta_come_nella_catena_operativa() -> None:
     serie = _serie(3)
     del serie[2]
-    nuove = ricalcola(serie[1:], serie[0], {}, _params())
+    nuove = ricalcola(serie[1:], serie[0], {}, _params(), 5)
+    assert [r.day for r in nuove] == [_G, _G + timedelta(days=2)]
+
+
+def test_un_buco_oltre_il_limite_ferma_il_ricalcolo() -> None:
+    serie = _serie(8)
+    del serie[2:8]
+    nuove = ricalcola(serie[1:], serie[0], {}, _params(), 5)
     assert [r.day for r in nuove] == [_G]
 
 
-async def test_correggi_riscrive_solo_i_nodi_con_il_giorno_prima(
+async def test_correggi_riparte_dall_ultima_riga_prima(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     serie = _serie(2)
@@ -97,9 +104,16 @@ async def test_correggi_riscrive_solo_i_nodi_con_il_giorno_prima(
 
     monkeypatch.setattr(fwi_pioggia.fwi_state_repo, "read_between", _leggi)
     monkeypatch.setattr(fwi_pioggia.fwi_state_repo, "upsert_many", _scrivi)
-    conti = await correggi(dal=_G, al=_G + timedelta(days=1), params=_params(), fonte=_fonte)
-    assert {(r.lon, r.day) for r in scritte} == {(16.5, _G), (16.5, _G + timedelta(days=1))}
-    assert conti["righe"] == 2
+    conti = await correggi(
+        dal=_G, al=_G + timedelta(days=1), params=_params(), max_gap_days=5, fonte=_fonte
+    )
+    # Il nodo nato dopo `dal` riparte dalla sua prima riga, che resta com'è.
+    assert {(r.lon, r.day) for r in scritte} == {
+        (16.5, _G),
+        (16.5, _G + timedelta(days=1)),
+        (9.0, _G + timedelta(days=1)),
+    }
+    assert conti["righe"] == 3
     assert conti["fwi_variazione_media"] < 0
 
 

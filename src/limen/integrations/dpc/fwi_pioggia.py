@@ -79,17 +79,19 @@ def ricalcola(
     prima: NodeDay,
     pioggia: dict[date, float | None],
     params: FwiParams,
+    max_gap_days: int,
 ) -> list[NodeDay]:
     """La catena di un nodo rifatta dal giorno ``prima`` con la pioggia data.
 
-    Pura. Si ferma al primo buco fra due giorni: oltre, la catena salvata
-    ripartiva da un altro stato, e saldarla qui ne inventerebbe la storia.
+    Pura. Un giorno mancante si salta come lo salta la catena operativa,
+    che prosegue dallo stato precedente; oltre ``max_gap_days`` quella
+    ripartiva dal seme, e saldarla qui ne inventerebbe la storia.
     """
     out: list[NodeDay] = []
     stato = prima.outputs.state
-    atteso = prima.day + timedelta(days=1)
+    ultimo = prima.day
     for r in righe:
-        if r.day != atteso:
+        if (r.day - ultimo).days > max_gap_days:
             break
         oss = pioggia.get(r.day)
         mm = r.rain_24h_mm if oss is None else oss
@@ -116,19 +118,20 @@ def ricalcola(
             )
         )
         stato = uscita.state
-        atteso += timedelta(days=1)
+        ultimo = r.day
     return out
 
 
 async def correggi(
-    *, dal: date, al: date, params: FwiParams, fonte: Fonte
+    *, dal: date, al: date, params: FwiParams, max_gap_days: int, fonte: Fonte
 ) -> dict[str, int | float]:
     """Rifà la catena di ogni nodo da ``dal`` ad ``al`` e riscrive le righe.
 
     Idempotente: rifatta due volte con la stessa pioggia dà le stesse righe.
-    Un nodo senza la riga del giorno prima di ``dal`` non si tocca.
+    Si riparte dall'ultima riga prima di ``dal``; un nodo la cui catena è
+    nata dopo riparte dalla sua prima riga, che resta com'è.
     """
-    righe = await fwi_state_repo.read_between(dal - timedelta(days=1), al)
+    righe = await fwi_state_repo.read_between(dal - timedelta(days=max_gap_days), al)
     nodi = list(righe)
     giorni = [dal + timedelta(days=i) for i in range((al - dal).days + 1)]
     osservata = {g: await fonte(nodi, g) for g in giorni}
@@ -137,12 +140,13 @@ async def correggi(
     delta_fwi: list[float] = []
     for k, nodo in enumerate(nodi):
         serie = righe[nodo]
-        if serie[0].day != dal - timedelta(days=1):
-            continue
+        precedenti = [r for r in serie if r.day < dal]
+        partenza = precedenti[-1] if precedenti else serie[0]
+        da_rifare = [r for r in serie if r.day > partenza.day]
         pioggia = {g: osservata[g][k] for g in giorni}
         con_osservata += sum(1 for v in pioggia.values() if v is not None)
-        nuove = ricalcola(serie[1:], serie[0], pioggia, params)
-        vecchie = {r.day: r for r in serie[1:]}
+        nuove = ricalcola(da_rifare, partenza, pioggia, params, max_gap_days)
+        vecchie = {r.day: r for r in da_rifare}
         delta_fwi.extend(n.outputs.fwi - vecchie[n.day].outputs.fwi for n in nuove)
         scritte.extend(nuove)
     await fwi_state_repo.upsert_many(scritte)

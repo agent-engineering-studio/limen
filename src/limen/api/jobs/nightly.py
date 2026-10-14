@@ -272,6 +272,7 @@ async def _fwi_pioggia_osservata() -> dict[str, Any]:
             dal=oggi - timedelta(days=cfg.days),
             al=oggi,
             params=params_from(t),
+            max_gap_days=t.fwi.max_gap_days,
             fonte=fonte_dpc(cfg.max_step_mm),
         )
     )
