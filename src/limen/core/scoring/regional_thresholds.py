@@ -538,6 +538,26 @@ class RegionalThresholds(HazardThresholds):
 # ---------------------------------------------------------------------------
 # Wildfire (#61)
 # ---------------------------------------------------------------------------
+class FwiObservedRainBlock(_StrictModel):
+    """La pioggia misurata dal DPC al posto di quella del modello, nella catena.
+
+    I codici di siccità (DMC, DC) scendono solo con la pioggia, e il modello a
+    ~9 km non vede i temporali: a Montegiordano, fra il 14 settembre e il 14
+    ottobre 2026, 9 mm contro i 35-45 del «Merging» DPC, e la catena era
+    rimasta d'estate (FWI 50 il 14 ottobre, 26 con la pioggia vera). Ogni
+    notte gli ultimi ``days`` giorni si rifanno con la cumulata osservata
+    delle 24 ore fino a mezzogiorno UTC; temperatura, umidità e vento restano
+    quelli già salvati.
+    """
+
+    #: Giorni rifatti ogni notte. Due bastano per la cumulata di ieri; uno in
+    #: più copre una notte in cui il DPC non ha risposto.
+    days: int = Field(..., ge=1, le=30)
+    #: Lo stesso controllo del ramo pluviale (#235): un pixel che si muove più
+    #: di così fra due fotogrammi a mezz'ora vale «non misurato».
+    max_step_mm: float = Field(..., gt=0.0)
+
+
 class FwiBlock(_StrictModel):
     """Everything the FWI chain needs that a deployment may legitimately set.
 
@@ -571,6 +591,8 @@ class FwiBlock(_StrictModel):
     #: changing it starts fresh chains and restarts the spin-up: a
     #: configuration decision, not a per-run knob.
     node_spacing_deg: float = Field(..., gt=0.0, le=5.0)
+    #: Assente = la catena usa solo la pioggia del modello, come prima.
+    observed_rain: FwiObservedRainBlock | None = None
 
     # YAML has no tuple, and the schema is in strict mode: coerce before
     # validation so the parsed table stays immutable like every other block.

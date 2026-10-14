@@ -28,6 +28,15 @@ Env knobs:
 * ``LIMEN_BACKTEST_WILDFIRE_START`` / ``_END`` — ISO dates bounding the replay.
 * ``LIMEN_BACKTEST_WILDFIRE_LEVEL`` — alert level counted as a warning
   (default ``High``, the EFFIS "high danger" band).
+* ``LIMEN_BACKTEST_WILDFIRE_PIOGGIA`` — ``modello`` (default) o ``osservata``:
+  la pioggia delle 24 ore fino a mezzogiorno dal «Merging» DPC archiviato
+  (``RADAR_ARCHIVE__CARTELLA``) al posto di quella del modello, dove il radar
+  l'ha misurata. È la correzione del passo notturno ``fwi_pioggia_osservata``.
+
+Accanto all'hit rate il report dà il **carico meteo**: la quota di
+giornate-nodo della stagione con FWI in fascia alta o oltre. Le celle bruciate
+dicono se l'allerta c'era; il carico dice quante allerte c'erano in tutto, e
+quindi quante sono rumore per chi le riceve.
 """
 
 from __future__ import annotations
@@ -38,6 +47,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
 from limen.cli.fwi_backfill import params_from
+from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
 from limen.core.models.risk import (
@@ -56,6 +66,8 @@ from limen.core.scoring.wildfire.fwi import FwiState, advance
 from limen.data.db import acquire, lifespan_pool
 from limen.data.repos.aoi_repo import list_aoi_ids
 from limen.integrations._http import SharedHttpClient
+from limen.integrations.dpc.fwi_pioggia import Fonte, fonte_archivio
+from limen.integrations.dpc.merging_archive import MergingArchive
 from limen.integrations.openmeteo.client import OpenMeteoHttpClient
 from limen.integrations.openmeteo.dtos import MeteoSnapshot
 from limen.integrations.openmeteo.grid import build_snapped_nodes, nearest_node
@@ -70,6 +82,7 @@ _AOI_ENV = "LIMEN_BACKTEST_WILDFIRE_AOI"
 _START_ENV = "LIMEN_BACKTEST_WILDFIRE_START"
 _END_ENV = "LIMEN_BACKTEST_WILDFIRE_END"
 _LEVEL_ENV = "LIMEN_BACKTEST_WILDFIRE_LEVEL"
+_PIOGGIA_ENV = "LIMEN_BACKTEST_WILDFIRE_PIOGGIA"
 
 #: The issue's question is about the three days before ignition. Fire danger
 #: is a daily index, so a warning further back than this is not early warning
@@ -103,6 +116,10 @@ class WildfireBacktestMetrics:
     #: presenterebbe come bravura.
     base_rate: float
     report_path: Path | None
+    #: Quota di giornate-nodo della stagione con FWI in fascia alta o oltre,
+    #: su tutta l'AOI: quante allerte meteo c'erano, bruciato o no.
+    carico_meteo: float = 0.0
+    pioggia: str = "modello"
 
 
 def _at_least(level: RiskLevel, threshold: RiskLevel) -> bool:
@@ -182,6 +199,7 @@ def replay_chain(
     snapshot: MeteoSnapshot,
     days: list[date],
     thresholds: WildfireThresholds,
+    pioggia: dict[date, float | None] | None = None,
 ) -> dict[date, FireWeatherState]:
     """Walk one node's chain across ``days``, from the seed.
 
@@ -204,7 +222,11 @@ def replay_chain(
             temperature_c=obs.temperature_c,
             relative_humidity_pct=obs.relative_humidity_pct,
             wind_speed_kmh=obs.wind_speed_kmh,
-            rain_24h_mm=obs.rain_24h_mm,
+            rain_24h_mm=(
+                oss
+                if pioggia is not None and (oss := pioggia.get(day)) is not None
+                else obs.rain_24h_mm
+            ),
             params=params,
         )
         chain_days += 1
@@ -337,6 +359,24 @@ def evaluate(
     )
 
 
+def carico_meteo(
+    chains: list[dict[date, FireWeatherState]],
+    *,
+    start: date,
+    end: date,
+    thresholds: WildfireThresholds,
+) -> float:
+    """Quota di giornate-nodo in ``[start, end]`` con FWI in fascia alta o oltre.
+
+    Il FWI normalizzato contro il cutoff «alto»: è il pericolo meteo che una
+    cella di conifere su pendio saturo riceverebbe pieno, quindi il tetto del
+    numero di allerte che il meteo da solo può accendere.
+    """
+    soglia = thresholds.classes.high.lo * thresholds.fwi.normalisation_max
+    giorni = [s for c in chains for d, s in c.items() if start <= d <= end]
+    return sum(1 for s in giorni if s.fwi >= soglia) / len(giorni) if giorni else 0.0
+
+
 def _lift(metrics: WildfireBacktestMetrics) -> float:
     """Quante volte l'hit rate supera il tasso di base. 0 se non misurabile."""
     return metrics.hit_rate / metrics.base_rate if metrics.base_rate > 0 else 0.0
@@ -352,6 +392,7 @@ def write_report(
         "",
         f"Finestra: **{start} → {end}**",
         f"Generato: {datetime.now(UTC).isoformat()}",
+        f"Pioggia della catena: **{metrics.pioggia}**",
         f"Soglia di allerta: **{alert_level.value}**, "
         f"orizzonte di preavviso **{_LEAD_MAX_HOURS:.0f} h**",
         "",
@@ -366,6 +407,8 @@ def write_report(
         f"- **Tasso di base**: {metrics.base_rate:.2%} "
         f"(quota di giornate in allerta a prescindere dagli incendi)",
         f"- **Discriminazione**: {_lift(metrics):.2f} volte il tasso di base",
+        f"- **Carico meteo**: {metrics.carico_meteo:.2%} delle giornate-nodo della "
+        "stagione con FWI in fascia alta o oltre",
         "- **FAR**: non misurato (vedi nota)",
         f"- **Preavviso medio**: {metrics.mean_lead_hours:.1f} h",
         "",
@@ -401,6 +444,7 @@ async def backtest_aoi(
     alert_level: RiskLevel,
     thresholds: WildfireThresholds,
     client: OpenMeteoHttpClient,
+    fonte: Fonte | None = None,
 ) -> WildfireBacktestMetrics:
     truth = await fetch_burnt_cells(aoi_id, start=start, end=end)
     if not truth:
@@ -436,6 +480,11 @@ async def backtest_aoi(
         window_end=datetime.combine(days[-1], time.max, UTC),
         use_archive=True,
     )
+    osservata: list[dict[date, float | None]] = [{} for _ in nodes]
+    if fonte is not None:
+        for day in days:
+            for k, mm in enumerate(await fonte(nodes, day)):
+                osservata[k][day] = mm
     chains = [
         replay_chain(
             snapshot=MeteoSnapshot(
@@ -447,8 +496,9 @@ async def backtest_aoi(
             ),
             days=days,
             thresholds=thresholds,
+            pioggia=osservata[k] if fonte is not None else None,
         )
-        for (lon, lat), samples in zip(nodes, series, strict=True)
+        for k, ((lon, lat), samples) in enumerate(zip(nodes, series, strict=True))
     ]
 
     static = await _static_by_cell(list(truth))
@@ -463,6 +513,11 @@ async def backtest_aoi(
         alert_level=alert_level,
         season=(start, end),
     )
+    metrics = replace(
+        metrics,
+        carico_meteo=carico_meteo(chains, start=start, end=end, thresholds=thresholds),
+        pioggia="osservata" if fonte is not None else "modello",
+    )
     path = write_report(metrics, start=start, end=end, alert_level=alert_level)
     log.info(
         "backtest_wildfire.aoi.done",
@@ -473,6 +528,8 @@ async def backtest_aoi(
         mean_lead_hours=round(metrics.mean_lead_hours, 1),
         base_rate=round(metrics.base_rate, 4),
         lift=round(_lift(metrics), 2),
+        carico_meteo=round(metrics.carico_meteo, 4),
+        pioggia=metrics.pioggia,
         report=str(path),
     )
     return replace(metrics, report_path=path)
@@ -505,6 +562,18 @@ async def run() -> int:
         log.warning("backtest_wildfire.bad_env", var=_LEVEL_ENV, value=level_raw, using="High")
         alert_level = RiskLevel.High
 
+    fonte: Fonte | None = None
+    pioggia = os.getenv(_PIOGGIA_ENV, "modello")
+    if pioggia == "osservata":
+        archivio = get_settings().radar_archive
+        if not archivio.attivo:
+            log.error("backtest_wildfire.archivio_non_configurato", hint="RADAR_ARCHIVE__CARTELLA")
+            return 1
+        fonte = fonte_archivio(MergingArchive(Path(archivio.cartella)))
+    elif pioggia != "modello":
+        log.error("backtest_wildfire.bad_env", var=_PIOGGIA_ENV, value=pioggia)
+        return 1
+
     client = OpenMeteoHttpClient()
     async with lifespan_pool():
         one = os.getenv(_AOI_ENV)
@@ -520,6 +589,7 @@ async def run() -> int:
                 alert_level=alert_level,
                 thresholds=loaded,
                 client=client,
+                fonte=fonte,
             )
     await SharedHttpClient.aclose()
     return 0

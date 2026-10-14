@@ -44,6 +44,7 @@ log = get_logger(__name__)
 #: previsione per cella non c'è più: gira quattro volte al giorno con il suo
 #: schedule (`JOB_FORECAST_HISTORY`).
 STEPS = (
+    "fwi_pioggia_osservata",
     "shadow_ml",
     "drift_monitor",
     "retrain",
@@ -197,6 +198,9 @@ async def run_nightly_pipeline(deps: AppDependencies) -> dict[str, Any]:
     """I passi notturni, in ordine. Ritorna il riepilogo per passo."""
     out: dict[str, Any] = {}
 
+    # Per primo: la previsione per cella delle 02:20 riparte dallo stato FWI
+    # salvato, e deve trovarlo già bagnato dalla pioggia di ieri.
+    out["fwi_pioggia_osservata"] = await _step("fwi_pioggia_osservata", _fwi_pioggia_osservata)
     out["shadow_ml"] = await _step("shadow_ml", lambda: _shadow_ml(deps))
 
     drift = await _step("drift_monitor", lambda: _drift(deps))
@@ -244,6 +248,33 @@ async def _egms_release(deps: AppDependencies) -> dict[str, Any]:
     from limen.integrations.egms.sync_job import controlla_release
 
     return dict(await controlla_release(deps.settings))
+
+
+async def _fwi_pioggia_osservata() -> dict[str, Any]:
+    """Gli ultimi giorni della catena FWI rifatti con la pioggia del DPC."""
+    from datetime import timedelta
+
+    from limen.cli.fwi_backfill import params_from
+    from limen.core.scoring.regional_thresholds import (
+        WildfireThresholds,
+        load_hazard_thresholds,
+    )
+    from limen.integrations.dpc.fwi_pioggia import correggi, fonte_dpc
+
+    t = load_hazard_thresholds(HazardType.WILDFIRE)
+    assert isinstance(t, WildfireThresholds)
+    cfg = t.fwi.observed_rain
+    if cfg is None:
+        return {"status": "skipped", "reason": "wildfire.yaml senza fwi.observed_rain"}
+    oggi = datetime.now(UTC).date()
+    return dict(
+        await correggi(
+            dal=oggi - timedelta(days=cfg.days),
+            al=oggi,
+            params=params_from(t),
+            fonte=fonte_dpc(cfg.max_step_mm),
+        )
+    )
 
 
 async def _radar_archivio(deps: AppDependencies) -> dict[str, Any]:
