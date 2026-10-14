@@ -1,6 +1,6 @@
 ---
 name: db-inspector
-description: Interroga in sola lettura il PostGIS di Limen per misurare prima di cambiare — distribuzione dei punteggi per pericolo, celle non misurate, freschezza di `latest_risk`, job_runs, partizioni, dataset_versions. Usalo quando serve un numero dal database invece di un'ipotesi. Richiede l'approvazione dell'utente: è il DB operativo.
+description: Interroga in sola lettura il PostGIS di Limen per misurare prima di cambiare — distribuzione dei punteggi per pericolo, celle non misurate, freschezza di `latest_risk`, job_runs, partizioni, dataset_versions. Usalo quando serve un numero dal database invece di un'ipotesi. Richiede l'approvazione dell'utente, perché è il DB operativo.
 model: sonnet
 effort: medium
 tools: Bash, Read, Grep, Glob
