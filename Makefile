@@ -60,7 +60,7 @@ BUILD_PROFILES ?= --profile geoserver --profile frontend --profile geodata
         logs-worker \
         demo demo-down demo-walkthrough \
         observability observability-down \
-        geoserver-up geoserver-down geoserver-init geoserver-logs geoserver-sync dtm-vrt osm-data \
+        geoserver-up geoserver-down geoserver-init geoserver-logs geoserver-sync dtm-vrt osm-data radar-data \
         meteo-up meteo-down meteo-sync meteo-check meteo-logs \
         test test-unit test-integration test-frontend \
         lint format typecheck check clean
@@ -427,6 +427,10 @@ dtm-vrt:                       # build a virtual mosaic over the 5 m DTM tiles (
 OSM_DIR     ?= ./data/osm
 OSM_PBF_URL ?= https://download.geofabrik.de/europe/italy-latest.osm.pbf
 OSM_PBF      = $(OSM_DIR)/$(notdir $(OSM_PBF_URL))
+
+radar-data:                    # IT-DPC-SRI 2010-2025 (~51 GB) dall'object store ECMWF, riprendibile; solo per il backtest
+	$(UV) run python scripts/mirror_it_dpc_sri.py data/radar/it_dpc_sri/italian-radar-dpc-sri.zarr 32 179087
+	$(UV) run python scripts/mirror_it_dpc_sri.py data/radar/it_dpc_sri/italian-radar-dpc-sri.zarr 32 0 179087
 
 osm-data:                      # download the Geofabrik PBF + extract road/rail GPKGs (needs host GDAL)
 	mkdir -p $(OSM_DIR)

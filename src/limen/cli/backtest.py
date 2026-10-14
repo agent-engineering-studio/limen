@@ -36,6 +36,12 @@ Configuration knobs (env vars, kept off the dispatcher for parity with
   precisione dichiarata.
 * ``LIMEN_BACKTEST_SORGENTI``    — sorgenti ammesse, separate da virgola
   (``IR,NR`` per ITALICA, ``stampa`` per il fact check). Vuota = tutte.
+* ``LIMEN_BACKTEST_PIOGGIA``     — ``modello`` (default, la rianalisi
+  Open-Meteo) o ``radar``: la pioggia oraria del radar DPC storico
+  (IT-DPC-SRI, ``LIMEN_BACKTEST_RADAR_ZARR``) al posto di quella del modello,
+  ora per ora dove il radar l'ha misurata. Con ``LIMEN_BACKTEST_ANTECEDENT=
+  nodo`` anche la pioggia antecedente per nodo viene dal radar; l'umidità del
+  suolo resta del modello, perché il radar non la misura.
 """
 
 from __future__ import annotations
@@ -69,6 +75,7 @@ log = get_logger(__name__)
 #: Dove finisce il report. Configurabile con `LIMEN_REPORTS_DIR` perche'
 #: dentro un container la directory di lavoro non e' scrivibile.
 REPORTS_DIR = Path(os.getenv("LIMEN_REPORTS_DIR", "reports"))
+_RADAR_ZARR = "./data/radar/it_dpc_sri/italian-radar-dpc-sri.zarr"
 # March 2009 Southern-Italy storm — 23 ITALICA events in Puglia/Basilicata
 # cluster on the 7th, so the default window has a real truth set.
 _DEFAULT_START = datetime(2009, 3, 4, 0, 0, tzinfo=UTC)
@@ -303,7 +310,7 @@ def _evaluate(
     alert_level: RiskLevel,
     lead_max_hours: float,
     antecedenti: list[Antecedenti | None] | None = None,
-    verita: str = "tutto il catalogo",
+    configurazione: str = "tutto il catalogo",
 ) -> _BacktestMetrics:
     """``antecedenti`` è allineato ai nodi (modalità `nodo`) o lungo 1 (modalità
     `regione`, un valore per tutta l'area come in produzione); ``None`` lascia
@@ -375,7 +382,7 @@ def _evaluate(
         thresholds_hit_min=thresholds.calibration.backtest.hit_rate_min,
         thresholds_far_max=thresholds.calibration.backtest.far_max,
         thresholds_lead_min=thresholds.calibration.backtest.lead_time_hours_min,
-        verita=verita,
+        configurazione=configurazione,
     )
 
     return _BacktestMetrics(
@@ -409,7 +416,7 @@ def _write_report(
     thresholds_hit_min: float,
     thresholds_far_max: float,
     thresholds_lead_min: float,
-    verita: str = "tutto il catalogo",
+    configurazione: str = "tutto il catalogo",
 ) -> Path:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     out = REPORTS_DIR / f"backtest_{aoi_id}_{start.date()}_{end.date()}.md"
@@ -424,7 +431,8 @@ def _write_report(
         f"Generated: {datetime.now(UTC).isoformat()}",
         "",
         f"- Cells scored per hour: **{cells_scored}**",
-        f"- Truth events (in window): **{truth_events}** — {verita}",
+        f"- Configurazione: {configurazione}",
+        f"- Truth events (in window): **{truth_events}**",
         f"- Alert-level cell-hours: **{alerts_total}**",
         f"- Hits: **{hits}**, false alarms: **{false_alarms}**, misses: **{misses}**",
         "",
@@ -514,6 +522,26 @@ def precisioni_fino_a(massima: str) -> list[str]:
     return list(PRECISIONI_LUOGO[: PRECISIONI_LUOGO.index(massima) + 1])
 
 
+def pioggia_dal_radar(
+    grezzo: list[list[WeatherSample]], radar: dict[datetime, list[float | None]]
+) -> list[list[WeatherSample]]:
+    """La serie oraria di ogni nodo con la pioggia del radar dove c'è.
+
+    Le ore che il radar non ha misurato tengono la pioggia del modello: un
+    buco dell'archivio non è un'ora asciutta, e azzerarla abbasserebbe il
+    punteggio proprio dove non si sa.
+    """
+    out: list[list[WeatherSample]] = []
+    for k, serie in enumerate(grezzo):
+        nuova = []
+        for c in serie:
+            ore = radar.get(c.timestamp)
+            mm = ore[k] if ore is not None else None
+            nuova.append(c if mm is None else c.model_copy(update={"precipitation_mm": mm}))
+        out.append(nuova)
+    return out
+
+
 def descrivi_verita(precisioni: list[str] | None, sorgenti: list[str] | None) -> str:
     parti = [
         f"precisione {precisioni[-1]} o migliore" if precisioni else "ogni precisione",
@@ -556,7 +584,18 @@ async def run() -> int:
     sorgenti = [
         x.strip() for x in os.getenv("LIMEN_BACKTEST_SORGENTI", "").split(",") if x.strip()
     ] or None
-    verita = descrivi_verita(precisioni, sorgenti)
+    pioggia = os.getenv("LIMEN_BACKTEST_PIOGGIA", "modello").strip() or "modello"
+    if pioggia not in ("modello", "radar") or (pioggia == "radar" and modo == "neutro"):
+        log.error("backtest.bad_pioggia", value=pioggia, antecedent=modo)
+        return 1
+    archivio = None
+    if pioggia == "radar":
+        from limen.integrations.dpc.sri_archive import SriArchive
+
+        archivio = SriArchive(Path(os.getenv("LIMEN_BACKTEST_RADAR_ZARR", _RADAR_ZARR)))
+    configurazione = (
+        f"verità {descrivi_verita(precisioni, sorgenti)}; pioggia {pioggia}; antecedenti {modo}"
+    )
 
     try:
         async with lifespan_pool():
@@ -601,6 +640,11 @@ async def run() -> int:
                             "backtest.rainfall.node_count", expected=len(nodes), got=len(grezzo)
                         )
                         grezzo = (grezzo + [[] for _ in nodes])[: len(nodes)]
+                    if archivio is not None:
+                        grezzo = pioggia_dal_radar(
+                            grezzo,
+                            archivio.oraria(nodes, start - timedelta(days=31), end),
+                        )
                     node_rainfall = [
                         [
                             RainfallSample(
@@ -631,7 +675,7 @@ async def run() -> int:
                     aoi_id=aoi_id,
                     cells=len(cells),
                     truth_events=len(truth),
-                    verita=verita,
+                    configurazione=configurazione,
                     rain_model=rain_model or "era5",
                     antecedent=modo,
                     rain_nodes=len(nodes),
@@ -649,7 +693,7 @@ async def run() -> int:
                     alert_level=alert_level,
                     lead_max_hours=lead_max,
                     antecedenti=antecedenti,
-                    verita=verita,
+                    configurazione=configurazione,
                 )
                 log.info(
                     "backtest.aoi.done",
