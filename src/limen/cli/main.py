@@ -8,6 +8,8 @@ Usage:
     limen backtest           Replay a historical window and emit a §2.5 metrics report.
     limen backtest-flood     Replay Copernicus EMS flood perimeters (#64).
     limen ingest-events      Dated event catalogue: --hazard landslide|flood.
+    limen registra-verifica  Fact check: un evento verificato entra nel registro (074).
+    limen verifiche-report   Eventi verificati contro le previsioni, col tasso di base.
     limen ingest-fire-history  FIRMS country archive (2000+), fire_density + truth set.
     limen effis-sync         Perimetri di area bruciata EFFIS: truth set del backtest incendio.
     limen monitor-once       Run the MAF landslide workflow once for an AOI.
@@ -68,6 +70,7 @@ from limen.cli.partitions import run as _run_partitions
 from limen.cli.rain_climatology import run as _run_rain_climatology
 from limen.cli.rain_ensemble import run_fetch as _run_rain_ens_fetch
 from limen.cli.rain_ensemble import run_train as _run_rain_ens_train
+from limen.cli.registra_verifica import run as _run_registra_verifica
 from limen.cli.report import run as _run_report_build
 from limen.cli.review_alerts import run as _run_review_alerts
 from limen.cli.seed import run as _run_seed
@@ -76,6 +79,7 @@ from limen.cli.server import run as _run_server
 from limen.cli.shadow_report import run as _run_shadow_report
 from limen.cli.sync_egms import run as _run_sync_egms
 from limen.cli.train import run as _run_train
+from limen.cli.verifiche_report import run as _run_verifiche_report
 from limen.cli.worker import run as _run_worker
 from limen.config.settings import get_settings
 from limen.core.logging import configure_logging
@@ -221,6 +225,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="extract training samples and train the V2 ML model (LightGBM + MLflow)",
     )
     sub.add_parser(
+        "verifiche-report",
+        help="eventi verificati contro le previsioni, per pericolo e col tasso di base "
+        "(env: LIMEN_VERIFICHE_DAL / _AL)",
+    )
+    sub.add_parser(
         "shadow-report",
         help="champion vs ML-challenger comparison report (LIMEN_SHADOW_SINCE / _AOI)",
     )
@@ -253,6 +262,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default="landslide",
         help="landslide: ITALICA CSV (LIMEN_ITALICA_CSV); flood: Copernicus EMS perimeters",
     )
+    registra = sub.add_parser(
+        "registra-verifica",
+        help="salva gli eventi del fact check in verifiche_eventi (e le frane nel truth set)",
+    )
+    registra.add_argument("files", nargs="+", help="file JSON scritti dalla skill limen-fact-check")
     sub.add_parser(
         "ingest-fire-history",
         help=(
@@ -349,6 +363,7 @@ def main(argv: list[str] | None = None) -> int:
         "llm-check": _run_llm_check,
         "train": _run_train,
         "shadow-report": _run_shadow_report,
+        "verifiche-report": _run_verifiche_report,
         # only action is `build`; inspect args.report_command before adding a second.
         "report": _run_report_build,
         "sync-egms": _run_sync_egms,
@@ -379,6 +394,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "ingest-events":
         try:
             return asyncio.run(_run_ingest_events(args.hazard))
+        except KeyboardInterrupt:  # pragma: no cover
+            return 130
+    if args.command == "registra-verifica":
+        try:
+            return asyncio.run(_run_registra_verifica(args.files))
         except KeyboardInterrupt:  # pragma: no cover
             return 130
     runner = runners[args.command]

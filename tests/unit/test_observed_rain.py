@@ -8,6 +8,7 @@ pluviale restava a zero mentre il paese si allagava.
 from __future__ import annotations
 
 import datetime as dt
+from collections.abc import Awaitable, Callable
 
 import numpy as np
 import rasterio
@@ -108,12 +109,26 @@ def _ctx() -> MonitoringContext:
     )
 
 
+async def _uguale(hours: int, at: dt.datetime) -> SriGrid:
+    """Il fotogramma precedente identico: il controllo di #235 non scarta niente."""
+    return _frame(at)
+
+
+def _step(
+    fetch: Callable[[int], Awaitable[SriGrid | None]],
+    fetch_at: Callable[[int, dt.datetime], Awaitable[SriGrid | None]] = _uguale,
+) -> ObservedRainExecutor:
+    return ObservedRainExecutor(
+        hours=24, max_age_minutes=90, max_step_mm=150.0, fetch=fetch, fetch_at=fetch_at
+    )
+
+
 async def test_lo_step_mette_la_cumulata_sulle_celle() -> None:
     async def _fetch(hours: int) -> SriGrid:
         assert hours == 24
         return _frame(_T - dt.timedelta(minutes=20))
 
-    out = await ObservedRainExecutor(hours=24, max_age_minutes=90, fetch=_fetch).run(_ctx())
+    out = await _step(_fetch).run(_ctx())
     assert out.flood_rain_observed_by_cell == {"nubifragio": 150.0}
 
 
@@ -123,7 +138,7 @@ async def test_un_fotogramma_lontano_dall_istante_non_vale() -> None:
     async def _fetch(hours: int) -> SriGrid:
         return _frame(_T - dt.timedelta(hours=3))
 
-    out = await ObservedRainExecutor(hours=24, max_age_minutes=90, fetch=_fetch).run(_ctx())
+    out = await _step(_fetch).run(_ctx())
     assert out.flood_rain_observed_by_cell == {}
 
 
@@ -131,5 +146,75 @@ async def test_senza_radar_lo_sweep_prosegue() -> None:
     async def _fetch(hours: int) -> None:
         return None
 
-    out = await ObservedRainExecutor(hours=24, max_age_minutes=90, fetch=_fetch).run(_ctx())
+    out = await _step(_fetch).run(_ctx())
     assert out.flood_rain_observed_by_cell == {}
+
+
+def _guasto(observed_at: dt.datetime) -> SriGrid:
+    """La serie delle :30 del 9-11 ottobre 2026 (#235): una campana fasulla
+    dove il fotogramma delle :00 leggeva 28 mm."""
+    g = _frame(observed_at)
+    data = g.data.copy()
+    data[4:7, 4:7] = 925.0
+    return SriGrid(data=data, transform=g.transform, crs=g.crs, observed_at=observed_at)
+
+
+async def test_un_fotogramma_che_salta_piu_di_mezz_ora_di_pioggia_non_vale() -> None:
+    async def _fetch(hours: int) -> SriGrid:
+        return _guasto(_T - dt.timedelta(minutes=20))
+
+    out = await _step(_fetch).run(_ctx())
+    assert out.flood_rain_observed_by_cell == {}
+
+
+async def test_anche_il_fotogramma_pulito_dopo_quello_guasto_non_vale_li() -> None:
+    """Quale dei due sbagli non si sa: il pixel resta «non misurato»."""
+
+    async def _fetch(hours: int) -> SriGrid:
+        return _frame(_T - dt.timedelta(minutes=20))
+
+    async def _prima(hours: int, at: dt.datetime) -> SriGrid:
+        return _guasto(at)
+
+    out = await _step(_fetch, _prima).run(_ctx())
+    assert out.flood_rain_observed_by_cell == {}
+
+
+async def test_un_nubifragio_vero_cresce_entro_il_tetto_e_passa() -> None:
+    async def _prima(hours: int, at: dt.datetime) -> SriGrid:
+        g = _frame(at)
+        data = g.data.copy()
+        data[4:7, 4:7] = 60.0
+        return SriGrid(data=data, transform=g.transform, crs=g.crs, observed_at=at)
+
+    async def _fetch(hours: int) -> SriGrid:
+        return _frame(_T - dt.timedelta(minutes=20))
+
+    out = await _step(_fetch, _prima).run(_ctx())
+    assert out.flood_rain_observed_by_cell == {"nubifragio": 150.0}
+
+
+async def test_senza_il_precedente_il_fotogramma_passa_com_e() -> None:
+    async def _fetch(hours: int) -> SriGrid:
+        return _frame(_T - dt.timedelta(minutes=20))
+
+    async def _manca(hours: int, at: dt.datetime) -> None:
+        return None
+
+    out = await _step(_fetch, _manca).run(_ctx())
+    assert out.flood_rain_observed_by_cell == {"nubifragio": 150.0}
+
+
+async def test_il_precedente_chiesto_e_mezz_ora_prima() -> None:
+    chiesti: list[dt.datetime] = []
+    emesso = _T - dt.timedelta(minutes=20)
+
+    async def _fetch(hours: int) -> SriGrid:
+        return _frame(emesso)
+
+    async def _prima(hours: int, at: dt.datetime) -> SriGrid:
+        chiesti.append(at)
+        return _frame(at)
+
+    await _step(_fetch, _prima).run(_ctx())
+    assert chiesti == [emesso - dt.timedelta(minutes=30)]

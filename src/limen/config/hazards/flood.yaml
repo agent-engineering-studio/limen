@@ -135,6 +135,13 @@ pluvial:
   observed:
     hours: 24
     max_age_minutes: 90
+    # Due cumulate a 24 ore emesse a 30 minuti di distanza differiscono della
+    # pioggia entrata meno quella uscita dalla finestra: mai più di una
+    # mezz'ora di pioggia. 150 mm sta sopra i massimi italiani su 30 minuti;
+    # il guasto del 9-11 ottobre 2026 muoveva i pixel di 900-20.000 mm fra
+    # un fotogramma e l'altro (#235). Oltre questo salto il pixel vale «non
+    # misurato» e la cella resta sulla previsione — mai «asciutta».
+    max_step_mm: 150
 
   # Suolo già saturo ⇒ la stessa pioggia scorre invece di infiltrarsi.
   wet_soil: 0.35

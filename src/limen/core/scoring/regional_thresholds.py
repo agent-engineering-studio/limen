@@ -761,6 +761,9 @@ class PluvialObservedBlock(_StrictModel):
     #: Più vecchia di così rispetto all'istante valutato, la cumulata non
     #: descrive più la finestra e si ignora.
     max_age_minutes: int = Field(..., gt=0)
+    #: Di quanto un pixel può muoversi fra due fotogrammi consecutivi (30
+    #: minuti): oltre, il dato è guasto e il pixel vale «non misurato» (#235).
+    max_step_mm: float = Field(..., gt=0.0)
 
 
 class PluvialBlock(_StrictModel):

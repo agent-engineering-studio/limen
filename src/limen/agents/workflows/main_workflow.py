@@ -409,6 +409,7 @@ def _observed_rain_step() -> ObservedRainExecutor | None:
     return ObservedRainExecutor(
         hours=loaded.pluvial.observed.hours,
         max_age_minutes=loaded.pluvial.observed.max_age_minutes,
+        max_step_mm=loaded.pluvial.observed.max_step_mm,
     )
 
 

@@ -175,12 +175,15 @@ uv run limen bootstrap-static   # fill cell_static_factors; skips steps whose so
                                 # (--force / LIMEN_BOOTSTRAP_FORCE=1 to recompute anyway)
 uv run limen calibrate          # precompute s_static + per-AOI norm stats; S vs ISPRA gate
 uv run limen backtest           # replay historical window; §2.5 hit rate / FAR / lead time
-                                # (env knobs: LIMEN_BACKTEST_AOI / START / END / HIGH_LEVEL)
+                                # (env knobs: LIMEN_BACKTEST_AOI / START / END / HIGH_LEVEL,
+                                #  PRECISIONE=P1 / SORGENTI=IR,NR|stampa for the truth set)
 uv run limen fwi-backfill       # rebuild the recursive FWI chain from the ERA5 archive
                                 # (env knobs: LIMEN_FWI_AOI / LIMEN_FWI_DAYS)
 uv run limen backtest-wildfire  # replay the FWI chain against EFFIS burnt-area perimeters
                                 # (env: LIMEN_BACKTEST_WILDFIRE_AOI / _START / _END / _LEVEL)
 uv run limen data-status        # which per-cell static layers are loaded, and what gates the rest
+uv run limen registra-verifica F # fact-check event → verifiche_eventi (+ landslide_events if a landslide)
+uv run limen verifiche-report   # verified events vs forecasts per hazard, with the base rate
 
 make data-status            # the same report
 make static-data            # load every configured layer, then report

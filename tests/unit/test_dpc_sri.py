@@ -83,3 +83,65 @@ async def test_a_cumulative_frame_is_downloaded_once_per_issue(monkeypatch: Any)
     secondo = await client.get_latest_cum(24)
     assert visti == [None, primo]
     assert secondo is primo
+
+
+def test_i_pixel_che_saltano_oltre_il_tetto_diventano_nodata() -> None:
+    prima = _grid()
+    dopo = _grid()
+    dopo.data[5, 5] = prima.data[5, 5] + 900.0
+    dopo.data[5, 6] = prima.data[5, 6] + 100.0
+    controllato, scartati = dopo.discard_inconsistent(prima, max_step=150.0)
+    assert scartati == 1
+    assert controllato.data[5, 5] == -9999.0
+    assert controllato.data[5, 6] == dopo.data[5, 6]
+    assert dopo.data[5, 5] != -9999.0, "il fotogramma in cache non si tocca"
+
+
+def test_un_fotogramma_coerente_torna_identico() -> None:
+    g = _grid()
+    controllato, scartati = g.discard_inconsistent(_grid(), max_step=150.0)
+    assert controllato is g
+    assert scartati == 0
+
+
+def test_griglie_diverse_non_si_confrontano() -> None:
+    g = _grid()
+    altra = SriGrid(
+        data=np.zeros((2, 2), dtype=np.float32),
+        transform=g.transform,
+        crs=g.crs,
+        observed_at=g.observed_at,
+    )
+    controllato, scartati = g.discard_inconsistent(altra, max_step=150.0)
+    assert controllato is g
+    assert scartati == 0
+
+
+async def test_il_precedente_arriva_dalla_cache_senza_scaricare(monkeypatch: Any) -> None:
+    from datetime import timedelta
+
+    from limen.integrations.dpc import client
+
+    scaricati: list[object] = []
+    vecchio = _grid()
+    nuovo = SriGrid(
+        data=vecchio.data,
+        transform=vecchio.transform,
+        crs=vecchio.crs,
+        observed_at=vecchio.observed_at + timedelta(minutes=30),
+    )
+    sequenza = iter([vecchio, nuovo])
+
+    async def _download(
+        tipo: str, cached: SriGrid | None = None, *, at: object = None
+    ) -> SriGrid | None:
+        scaricati.append(at)
+        return next(sequenza)
+
+    monkeypatch.setattr(client, "_download", _download)
+    monkeypatch.setattr(client, "_cum_cache", {})
+    monkeypatch.setattr(client, "_cum_previous", {})
+    await client.get_latest_cum(24)
+    await client.get_latest_cum(24)
+    assert await client.get_cum_at(24, vecchio.observed_at) is vecchio
+    assert scaricati == [None, None]

@@ -188,6 +188,9 @@ async def reset_db(pg_pool: asyncpg.Pool) -> AsyncIterator[None]:
         # Spiegazioni dell'AI per regione (064): la chiave è (regione,
         # pericolo), quindi un test erediterebbe il testo di quello prima.
         "spiegazioni_regione",
+        # Registro delle verifiche (074): la chiave è lo slug, e i test
+        # contano le righe per esito.
+        "verifiche_eventi",
     ]
     async with acquire() as conn:
         with contextlib.suppress(Exception):

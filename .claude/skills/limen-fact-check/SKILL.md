@@ -12,6 +12,7 @@ Le regole che governano tutto:
 1. **Sulla pagina vanno solo gli eventi previsti in anticipo, con le ore di anticipo.** Diventa un file JSON — e quindi un articolo — **solo** l'evento con esito `anticipata` (§5). Tutto il resto non ha file e non compare in nessun punto della pagina, né come voce né come conteggio: gli eventi scartati al fact check (§2), i `non_verificabile`, le `contemporanea` e le `mancata`. Questi si riportano soltanto all'utente, nel riepilogo finale, con esito e motivo. La pagina non mostra riquadri d'inefficienza: è una scelta dell'utente, da non rimettere in discussione.
 2. **Ogni articolo dichiara le ore di anticipo** (`previsione.anticipo_ore_moderato` e, se c'è, `anticipo_ore_alto`) e le dice nel titolo o nel sommario. Un articolo senza ore di anticipo non esiste: se manca il numero, l'evento non è `anticipata`.
 3. **Ogni articolo è bilingue: italiano e inglese.** I campi in italiano restano dove sono; la traduzione inglese sta nel blocco `en` (§8). Un file senza `en` completo non è finito.
+4. **Ogni evento verificato entra nel registro, qualunque sia l'esito** (§8b). La pagina mostra solo gli `anticipata`; il registro `verifiche_eventi` (migrazione 074) tiene anche `contemporanea`, `mancata` e `non_verificabile`, con la misura di Limen congelata prima che la retention la cancelli. Sono i mancati a dire dove il modello sbaglia. Le frane verificate vanno anche in `landslide_events` (`source = 'stampa'`), il truth set del backtest. Restano fuori solo gli eventi scartati al fact check (§2): non sono verità.
 
 ## Dove vive la pagina
 
@@ -22,12 +23,13 @@ Le regole che governano tutto:
 | Tipi (lo schema del JSON) | `frontend/src/content/verifiche.ts` (`Verifica`) |
 | Pagina (indice + articolo) | `frontend/src/components/VerifichePage.tsx`, rotta `#/verifiche` e `#/verifiche/<slug>`; la lingua è quella del selettore in testata (`lib/i18n`, anche `?lang=en`): l'italiano dalla radice del JSON, l'inglese dal blocco `en` |
 | Query dell'anticipo | `.claude/skills/limen-fact-check/scripts/anticipo.sql` |
+| Registro degli eventi verificati | tabella `verifiche_eventi` (migrazione 074), scritta da `limen registra-verifica` (`src/limen/cli/registra_verifica.py`) |
 
-Il contenuto entra nel bundle a build time (`import.meta.glob`): **niente migrazioni, niente endpoint**. Se `VerifichePage.tsx` o `verifiche.ts` mancassero (repo vecchio), fermati e dillo: non ricrearli a memoria.
+Il contenuto della pagina entra nel bundle a build time (`import.meta.glob`): per la pagina **niente migrazioni, niente endpoint**. Se `VerifichePage.tsx` o `verifiche.ts` mancassero (repo vecchio), fermati e dillo: non ricrearli a memoria.
 
 ## Vincolo duro: la retention
 
-`risk_assessments` tiene **14 giorni** (`ASSESSMENTS_RETENTION_DAYS`), poi la partizione viene cancellata. Un evento più vecchio di ~13 giorni non è più verificabile: lo storico delle previsioni non esiste più. La query restituisce `storico_dal`; se l'evento è precedente, l'esito è `non_verificabile` — non `mancata` — e in ogni caso l'evento **non si scrive** (resta nel riepilogo all'utente).
+`risk_assessments` tiene **14 giorni** (`ASSESSMENTS_RETENTION_DAYS`), poi la partizione viene cancellata. Un evento più vecchio di ~13 giorni non è più verificabile: lo storico delle previsioni non esiste più. La query restituisce `storico_dal`; se l'evento è precedente, l'esito è `non_verificabile` — non `mancata` — e l'evento **non ha articolo** (resta nel riepilogo all'utente e nel registro, §8b). Per la stessa ragione il registro va scritto **nella stessa passata** del fact check: due settimane dopo, la misura da congelare non esiste più.
 
 ## Procedura
 
@@ -105,7 +107,7 @@ Nell'ordine, il primo che vale:
 
 Esempio vero (frana di Melito di Porto Salvo, 10 ottobre 2026): 71 ore di «anticipo ≥ Moderato», ma Melito aveva celle in Moderato ogni giorno dal 29 settembre e la previsione non è mai salita ad Alto → `mancata`: niente file, solo il riepilogo all'utente con l'anticipo apparente e perché non conta.
 
-Solo `anticipata` arriva al §6; per gli altri esiti ci si ferma qui e si passa al riepilogo (§9.3).
+Solo `anticipata` arriva al §6; per gli altri esiti si passa al registro (§8b) e al riepilogo (§9.3).
 
 Non arrotondare a favore di Limen: un anticipo «≥ Moderato» non è un allarme; se è arrivato solo Moderato e mai Alto, scrivilo.
 
@@ -183,6 +185,41 @@ Schema (vedi `Verifica` in `frontend/src/content/verifiche.ts` — il tipo è la
 
 **Come scrivere**: prima l'italiano, poi l'inglese tradotto da quello — stessi fatti, stesse cifre, nessuna frase in più o in meno. Registro giornalistico sobrio, stile dei testi di Limen (frasi concrete, numeri esatti, niente enfasi). Ogni cifra di Limen viene dalla query; ogni cifra sull'evento è attribuita alla testata («secondo ANSA, 40 ettari»). Niente citazioni lunghe degli articoli: parafrasi breve + link. Dichiara sempre i limiti: celle da 1 km², nodo meteo a ~9 km, classe ≥ Moderato non è un'allerta ufficiale (quella è della Protezione Civile). Mai suggerire che Limen sostituisca il bollettino ufficiale. In inglese: classi «Low / Moderate / High / Very high», «Civil Protection» per la Protezione Civile, «1 km² cells», «weather node ~9 km away»; un «≥ Moderate» non è «an alert».
 
+### 8b. Registrare ogni evento verificato
+
+Per **ogni** evento che ha superato il §2 — `anticipata`, `contemporanea`, `mancata` o `non_verificabile` — scrivi un file nello scratchpad (non nel repo) e registralo. Gli eventi scartati al §2 non si registrano.
+
+```json
+{
+  "slug": "2026-10-10-frana-san-lorenzo",
+  "pericolo": "landslide",
+  "esito": "mancata",
+  "motivo": "Moderato in 6 giorni di fondo su 7; previsione mai sopra Moderato (0,42 contro 0,38 di fondo)",
+  "evento": {
+    "quando": "2026-10-10T12:00:00+02:00",
+    "precisione_ora": "T3",
+    "luogo": "San Lorenzo Marina (RC)",
+    "regione": "Calabria",
+    "comuni": ["080073"],
+    "lon": 15.835, "lat": 37.915, "precisione_luogo": "P1"
+  },
+  "fonti": [{ "testata": "DIRE", "titolo": "…", "url": "https://…", "data": "2026-10-13" }],
+  "misura": { "…": "l'uscita di anticipo.sql così com'è, corse e fattori compresi" }
+}
+```
+
+- `slug`: come al §8, anche per gli eventi che non avranno un articolo.
+- `precisione_ora` è la scala di ITALICA: `T1` ora nota, `T2` mezza giornata, `T3` solo il giorno (ora ignota, mezzogiorno convenzionale).
+- `lon`/`lat` solo se la notizia nomina una località precisa (frazione, strada, ponte) di cui conosci le coordinate da una fonte, con `precisione_luogo` `P1` (entro ~1 km). Altrimenti omettili: il comando usa il centroide dei comuni a `P10` (uno) o `P100` (più d'uno). Non inventare coordinate, e **non** usare la cella peggiore della query: renderebbe la verità figlia della previsione.
+- `misura` è l'oggetto JSON di anticipo.sql **intero**: è il motivo per cui il registro esiste.
+
+```bash
+DB__CONNECTION_STRING=$(docker exec limen-worker printenv DB__CONNECTION_STRING | sed 's/@postgres:/@127.0.0.1:/') \
+  uv run limen registra-verifica <scratchpad>/<slug>.registro.json [altri file…]
+```
+
+Idempotente (la chiave è lo slug): rilanciarlo dopo un aggiornamento riscrive la riga e conserva `verificato_at`. Per vedere il conto per pericolo — anticipate, quota con previsione ≥ Moderato e il suo tasso di base — `uv run limen verifiche-report` (stessa `DB__CONNECTION_STRING`; `LIMEN_VERIFICHE_DAL`/`_AL` per una finestra): è il metro delle alluvioni dalla stampa, che non hanno perimetro e non entrano in `flood_events`. Una frana va anche in `landslide_events` con id `stampa:<slug>`; un'alluvione o un incendio restano solo nel registro (`flood_events` vuole il perimetro osservato, non un comune). Un file non valido fa uscire il comando con codice 2 senza scrivere niente: correggi e rilancia.
+
 ### 9. Controllare e pubblicare
 
 1. JSON valido e con l'a capo finale (il pre-commit della CI lo pretende): `python3 -m json.tool frontend/src/content/verifiche/<slug>.json > /dev/null && tail -c1 frontend/src/content/verifiche/<slug>.json | od -c`.
@@ -209,7 +246,7 @@ Schema (vedi `Verifica` in `frontend/src/content/verifiche.ts` — il tipo è la
    done
    ```
    `verificate()` in `verifiche.ts` scarta comunque un file non conforme, ma in silenzio: l'articolo semplicemente non appare. Il controllo qui sopra è quello che te lo dice.
-3. Riepiloga all'utente, per ogni evento trovato: esito, anticipo (≥ Moderato e ≥ Alto), fonti, foto e licenza. In due gruppi: gli **articoli** (`anticipata`, con file) e gli **esclusi** (`contemporanea`, `mancata`, `non_verificabile`, scartati al fact check) con il motivo e, per i non anticipati, il fattore che è mancato. Gli esclusi stanno solo nel riepilogo.
+3. Riepiloga all'utente, per ogni evento trovato: esito, anticipo (≥ Moderato e ≥ Alto), fonti, foto e licenza. In due gruppi: gli **articoli** (`anticipata`, con file) e gli **esclusi** (`contemporanea`, `mancata`, `non_verificabile`, scartati al fact check) con il motivo e, per i non anticipati, il fattore che è mancato. Gli esclusi non stanno sulla pagina; quelli verificati (tutti tranne gli scartati al fact check) stanno nel registro: di' quanti ne hai registrati e quante frane sono entrate in `landslide_events`.
 4. **Pubblicare richiede conferma esplicita** (è il sito pubblico): solo dopo il sì, ricostruisci il frontend statico
    ```bash
    docker compose --env-file .env -f infra/docker/docker-compose.demo.yml \
@@ -225,4 +262,4 @@ Schema (vedi `Verifica` in `frontend/src/content/verifiche.ts` — il tipo è la
 - Non pubblicare un articolo senza il blocco `en` completo.
 - Non chiamare `mancata` un evento fuori retention o fuori copertura: è `non_verificabile`.
 - Non modificare numeri di Limen nel testo per renderli più leggibili oltre l'arrotondamento (punteggi a due decimali, ore intere).
-- Non scrivere nel database: la skill legge soltanto.
+- Non scrivere nel database se non con `limen registra-verifica` (§8b): mai `INSERT`/`UPDATE` a mano, mai su `risk_assessments` o sulle tabelle del modello.
