@@ -826,12 +826,16 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         partenzaRef.current = { lng: c.lng, lat: c.lat, zoom: map.getZoom() };
       }
       const p = partenzaRef.current;
-      annullaPosizione = posizioneInItalia((lon, lat) => {
-        posizioneFattaRef.current = true;
-        const c = map.getCenter();
-        if (c.lng !== p.lng || c.lat !== p.lat || map.getZoom() !== p.zoom) return;
-        map.flyTo({ center: [lon, lat], zoom: ZOOM_POSIZIONE });
-      });
+      annullaPosizione = posizioneInItalia(
+        (lon, lat) => {
+          const c = map.getCenter();
+          if (c.lng !== p.lng || c.lat !== p.lat || map.getZoom() !== p.zoom) return;
+          map.flyTo({ center: [lon, lat], zoom: ZOOM_POSIZIONE });
+        },
+        () => {
+          posizioneFattaRef.current = true;
+        },
+      );
     }
 
     // In basso: in alto a destra stanno gli strumenti della mappa (#155).
