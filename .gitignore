@@ -59,8 +59,9 @@ site/
 
 # Claude Code session config (local)
 .claude/*
-# Le skill di progetto si versionano; il resto di .claude/ resta locale.
+# Le skill e i sub-agent di progetto si versionano; il resto di .claude/ resta locale.
 !.claude/skills/
+!.claude/agents/
 .claude/skills/*
 !.claude/skills/limen-fact-check/
 !.claude/skills/limen-wiki/
