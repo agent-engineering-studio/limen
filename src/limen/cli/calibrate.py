@@ -17,6 +17,13 @@ Per §2.5 of the project doc:
 
 Idempotent: re-running on the same data yields the same ``s_static``
 and the same Markdown report (the timestamp is the only diff).
+
+What it does **not** do (#122): change a score. The engine recomputes S
+from the same per-cell factors on every call, so ``s_static`` is a copy of
+it for audit and for queries, and ``norm_stats`` records the ranges for the
+report. Re-running calibrate leaves every score byte for byte the same.
+What does reach production is the exposure refresh at the end, which feeds
+alert priority.
 """
 
 from __future__ import annotations

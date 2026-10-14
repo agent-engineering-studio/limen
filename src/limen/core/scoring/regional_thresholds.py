@@ -397,8 +397,15 @@ class TargetDistribution(_StrictModel):
 
 class BacktestTargets(_StrictModel):
     hit_rate_min: float = Field(..., ge=0.0, le=1.0)
-    far_max: float = Field(..., ge=0.0, le=1.0)
+    #: ``None`` = il FAR si riporta ma non è un gate. A 1 km² con un segnale
+    #: di pioggia per nodo non lo passerebbe nemmeno un oracolo (#122).
+    far_max: float | None = Field(..., ge=0.0, le=1.0)
     lead_time_hours_min: float = Field(..., ge=0.0)
+    #: Hit rate diviso la quota di celle messe in allerta: quante volte più
+    #: del caso l'allerta cade dove poi succede qualcosa. Un motore che
+    #: allerta tutto ha hit rate pieno e discriminazione 1. ``None`` = non è
+    #: un gate.
+    discriminazione_min: float | None = Field(default=None, gt=0.0)
 
 
 class CalibrationBlock(_StrictModel):
