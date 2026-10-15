@@ -539,6 +539,11 @@ class IotSettings(BaseSettings):
     flatline_window_minutes: int = Field(default=120, ge=5)
     flatline_min_samples: int = Field(default=12, ge=2)
     gap_threshold_minutes: int = Field(default=60, ge=1)
+    # Oltre quest'età l'ultimo aggregato di una cella non è più una misura e
+    # la cella torna al modello (#262): senza, un pluviometro guasto dopo
+    # uno zero terrebbe M bassa per sempre, e un estensimetro tacitato dopo
+    # un'ora in accelerazione terrebbe acceso `hard_escalation`.
+    max_age_minutes: int = Field(default=120, ge=10)
 
     # Rollup + partition rollover cadence.
     rollup_minutes: int = Field(default=10, ge=1)

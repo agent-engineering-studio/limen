@@ -202,8 +202,8 @@ is never published.
 
 | Step | Status |
 |---|---|
-| Sensor broker with mTLS, private CA and automatic check ([#260](https://github.com/agent-engineering-studio/limen/issues/260)) | in progress |
-| Trust levels in the engine ([#251](https://github.com/agent-engineering-studio/limen/issues/251)) | to do |
+| Sensor broker with mTLS, private CA and automatic check ([#260](https://github.com/agent-engineering-studio/limen/issues/260)) | done |
+| Trust levels in the engine ([#251](https://github.com/agent-engineering-studio/limen/issues/251)) | done |
 | v2 protocol and measurement intake ([#252](https://github.com/agent-engineering-studio/limen/issues/252)) | to do |
 | Registration without an account ([#253](https://github.com/agent-engineering-studio/limen/issues/253)) | to do |
 | Kit projects with example firmware ([#256](https://github.com/agent-engineering-studio/limen/issues/256)) | to do |

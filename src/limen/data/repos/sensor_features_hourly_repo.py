@@ -8,7 +8,7 @@ the :class:`CellFeatureBundle`. One row per (cell_id, bucket).
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from limen.core.logging import get_logger
 from limen.core.models.sensor import SensorFeatures
@@ -124,8 +124,15 @@ async def upsert(row: SensorFeaturesRow) -> None:
         )
 
 
-async def latest_for_cell(cell_id: str) -> SensorFeaturesRow | None:
-    """Most recent hourly bucket for one cell (used by the workflow)."""
+async def latest_for_cell(
+    cell_id: str, *, as_of: datetime, max_age: timedelta
+) -> SensorFeaturesRow | None:
+    """Most recent hourly bucket for one cell whose last observation falls in
+    ``(as_of - max_age, as_of]`` (used by the workflow).
+
+    An older row is not a measurement any more: returning it would let a
+    silent device keep overriding the model (#262).
+    """
     async with acquire() as conn:
         row = await conn.fetchrow(
             """
@@ -134,10 +141,14 @@ async def latest_for_cell(cell_id: str) -> SensorFeaturesRow | None:
                    sample_count, last_observation_at
             FROM sensor_features_hourly
             WHERE cell_id = $1
+              AND last_observation_at >  $2
+              AND last_observation_at <= $3
             ORDER BY bucket DESC
             LIMIT 1
             """,
             cell_id,
+            as_of - max_age,
+            as_of,
         )
     if row is None:
         return None

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Literal
 
 from limen.agents.chat_agents.briefing import BriefingAgent
@@ -280,7 +281,7 @@ def build_hazard_workflow(
     # use a closure over the *runtime* enable_insitu flag stored in the
     # context (the AreaResolver doesn't set it, so we project the
     # settings value through `with_update`).
-    sensor = SensorFetchExecutor()
+    sensor = SensorFetchExecutor(max_age=timedelta(minutes=settings.iot.max_age_minutes))
     builder = builder.add_if(lambda ctx: bool(getattr(ctx, "enable_insitu", False)), sensor)
 
     # Pioggia prevista + portata GloFAS + mareggiata. Per le frane sono un
