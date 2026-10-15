@@ -26,6 +26,7 @@ CONTENT = ROOT / "frontend" / "src" / "content"
 PAGES: tuple[tuple[str, str, str], ...] = (
     ("limen.md", "guida.ts", "GUIDA"),
     ("integrazioni.md", "integrazioni.ts", "INTEGRAZIONI"),
+    ("sensori.md", "sensori.ts", "SENSORI"),
 )
 
 

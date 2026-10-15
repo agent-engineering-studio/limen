@@ -252,3 +252,42 @@ make restore-training DUMP=data/backups/training_samples_YYYY-MM-DD.dump \
 La cartella `data/backups/` è gitignored: va trasportata a parte (chiavetta,
 MinIO, asset privato). La produzione NON dipende dal training: il champion
 deterministico gira completo con il solo `make init`.
+
+## Broker MQTT dei sensori (#260)
+
+Un Mosquitto dedicato (`limen-mosquitto-sensori`, profilo compose `sensori`),
+separato da `limen-mosquitto` delle allerte. Accetta solo dispositivi con un
+certificato firmato dalla CA dei sensori, che vive in `$LIMEN_SENSORI_DIR`,
+fuori dal repo.
+
+```bash
+make sensori-ca-init    # CA, server, ingestore, healthcheck, ACL (idempotente)
+make sensori-up         # avvia, sul loopback 127.0.0.1:18883
+make sensori-check      # anonimo, CA estranea, ACL, revoca: deve dire «tutti i controlli passati»
+```
+
+Per l'esposizione: `infra/nginx/mqtt-sensori.stream.conf` (passthrough TCP
+sulla 8883, da installare come root), `ufw allow 8883/tcp` e, con l'IP
+dinamico della fibra, l'inoltro della 8883 sul router.
+
+Operazioni ricorrenti:
+
+- **Ogni mese: `make sensori-crl`.** La CRL vale 90 giorni, e una CRL
+  scaduta fa rifiutare a Mosquitto *tutti* i dispositivi, non solo i
+  revocati. `make sensori-check` avvisa sotto i 30 giorni. Va in un cron.
+- **Revocare un dispositivo**: `./scripts/sensori_ca.sh revoca <id>`. Rigenera
+  la CRL e manda un SIGHUP al broker, che la rilegge senza staccare gli
+  altri. Una sessione **già aperta** del revocato resta in piedi fino alla
+  sua prossima riconnessione: se serve buttarlo fuori subito,
+  `docker restart limen-mosquitto-sensori` (i dispositivi buoni si
+  riconnettono da soli).
+- **Firmare un dispositivo**: `./scripts/sensori_ca.sh firma <csr> [giorni]`
+  (default 730). Il CN della CSR è l'id del dispositivo: minuscole, cifre e
+  trattini; `limen-ingestore` e `limen-salute` sono riservati.
+- **Cambiata l'ACL** in `infra/mosquitto-sensori/acl`: `make sensori-ca-init`
+  la ricopia con permessi 0600, poi `docker kill -s HUP limen-mosquitto-sensori`.
+- **Scadenze**: `./scripts/sensori_ca.sh stato`. Server e ingestore valgono
+  825 giorni e l'init li rinnova sotto i 30; la CA vale 10 anni.
+- **Backup**: `$LIMEN_SENSORI_DIR/ca` è insostituibile. Persa la chiave della
+  CA, ogni dispositivo va riprovisionato a mano. Va nel backup cifrato,
+  mai nel repo.

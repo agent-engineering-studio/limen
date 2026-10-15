@@ -21,6 +21,7 @@ import type {
 import FreshnessBadge from "./components/FreshnessBadge";
 import HomePage from "./components/HomePage";
 import IntegrationsPage from "./components/IntegrationsPage";
+import SensoriPage from "./components/SensoriPage";
 import LegendPanel from "./components/LegendPanel";
 import NationalStrip from "./components/NationalStrip";
 import OverlayControl from "./components/OverlayControl";
@@ -46,6 +47,7 @@ type Page =
   | "science"
   | "shadow"
   | "integrations"
+  | "sensori"
   | "verifiche";
 
 function pageFromHash(): Page {
@@ -65,6 +67,9 @@ function pageFromHash(): Page {
   }
   if (hash.startsWith("#/integrazioni")) {
     return "integrations";
+  }
+  if (hash.startsWith("#/sensori")) {
+    return "sensori";
   }
   switch (hash) {
     case "#/dashboard":
@@ -111,6 +116,7 @@ const T = testi(
     navVerifiche: "Verifiche",
     navGuida: "Come funziona",
     navIntegrazioni: "Integrazioni",
+    navSensori: "Sensori",
     lingua: "Lingua",
     nomeLingua: { it: "Italiano", en: "English" },
     soloItaliano: "",
@@ -143,6 +149,7 @@ const T = testi(
     navVerifiche: "Checks",
     navGuida: "How it works",
     navIntegrazioni: "Integrations",
+    navSensori: "Sensors",
     lingua: "Language",
     nomeLingua: { it: "Italiano", en: "English" },
     soloItaliano:
@@ -561,6 +568,9 @@ export function App(): JSX.Element {
           <a href="#/integrazioni" className={page === "integrations" ? "on" : ""}>
             {t.navIntegrazioni}
           </a>
+          <a href="#/sensori" className={page === "sensori" ? "on" : ""}>
+            {t.navSensori}
+          </a>
         </nav>
         <div className="header-spazio" />
         <RicercaComune
@@ -605,6 +615,10 @@ export function App(): JSX.Element {
           <div className="explainer-area">
             <SoloItaliano />
             <IntegrationsPage />
+          </div>
+        ) : page === "sensori" ? (
+          <div className="explainer-area">
+            <SensoriPage />
           </div>
         ) : (
           dashboard

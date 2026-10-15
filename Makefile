@@ -16,6 +16,7 @@ COMPOSE_OBS  := infra/docker/docker-compose.observability.yml
 COMPOSE_GEOSERVER := infra/docker/docker-compose.geoserver.yml
 COMPOSE_GEODATA := infra/docker/docker-compose.geodata.yml
 COMPOSE_METEO := infra/docker/docker-compose.meteo.yml
+COMPOSE_SENSORI := infra/docker/docker-compose.sensori.yml
 # Unified stack: operational services + GeoServer, one project, one network.
 # Repo-root .env feeds compose ${VAR} interpolation (e.g. SCORING__MODE);
 # without --env-file compose only reads infra/docker/.env, which doesn't exist.
@@ -33,6 +34,7 @@ COMPOSE_GS   := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_GEOSERVER) -
 # e i container la raggiungono su `host.docker.internal:8085`, come il
 # gateway LiteLLM. Con `-p limen` compose chiamerebbe orfani tutti gli altri.
 COMPOSE_MT   := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_METEO)
+COMPOSE_SN   := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_SENSORI)
 
 # Il bootstrap GeoServer legge una directory di dataset montata dall'host. Chi
 # l'ha clonata è di norma chi lancia `make`, quindi gli si passa il proprio
@@ -62,6 +64,7 @@ BUILD_PROFILES ?= --profile geoserver --profile frontend --profile geodata
         observability observability-down \
         geoserver-up geoserver-down geoserver-init geoserver-logs geoserver-sync dtm-vrt osm-data radar-data \
         meteo-up meteo-down meteo-sync meteo-check meteo-logs \
+        sensori-ca-init sensori-up sensori-down sensori-logs sensori-check sensori-crl \
         test test-unit test-integration test-frontend \
         lint format typecheck check clean
 
@@ -110,6 +113,10 @@ help:
 	@echo "  make meteo-up           istanza Open-Meteo propria (profilo meteo, opt-in)"
 	@echo "  make meteo-sync         scarica i modelli (primo avvio e cron giornaliero)"
 	@echo "  make meteo-check        quali variabili rispondono davvero"
+	@echo "  make sensori-ca-init    CA dei sensori + certificati di server e ingestore (#260)"
+	@echo "  make sensori-up         broker MQTT dei sensori (profilo sensori, opt-in)"
+	@echo "  make sensori-check      anonimo, CA estranea, ACL, revoca: tutto rifiutato?"
+	@echo "  make sensori-crl        rigenera la CRL (mensile: scaduta, rifiuta TUTTI)"
 	@echo "  make geoserver-up       GeoServer + PostGIS + web UI + MCP agent + bootstrap"
 	@echo "  make geoserver-init     (re)load shapefiles into PostGIS + publish + style"
 	@echo "  make geoserver-logs     tail the GeoServer stack logs"
@@ -399,6 +406,27 @@ meteo-sync:
 # risponde anche a volume vuoto.
 meteo-check:
 	./scripts/openmeteo_sync.sh --check
+
+# Broker MQTT dei sensori (#260). La CA e le chiavi stanno in
+# $LIMEN_SENSORI_DIR, fuori dal repo; il compose lo legge dal .env.
+sensori-ca-init:
+	./scripts/sensori_ca.sh init
+
+sensori-up:
+	docker compose $(COMPOSE_SN) --profile sensori up -d
+
+sensori-down:
+	docker compose $(COMPOSE_SN) --profile sensori down
+
+sensori-logs:
+	docker compose $(COMPOSE_SN) --profile sensori logs -f mosquitto-sensori
+
+sensori-check:
+	./scripts/sensori_broker_check.sh
+
+# Una CRL scaduta fa rifiutare TUTTI i dispositivi: rigenerala ogni mese.
+sensori-crl:
+	./scripts/sensori_ca.sh crl
 
 geoserver-up: gs-volumes
 	docker compose $(COMPOSE_GS) --profile geoserver up -d
