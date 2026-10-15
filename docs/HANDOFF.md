@@ -213,6 +213,40 @@ una volta applicate (checksum SHA-256) — mai editarle, aggiungerne di nuove.
 
 ## 2. Lavoro in sospeso / da riprendere
 
+### Rete dei sensori dei cittadini (epic #247, stato al 2026-10-15)
+
+Fatte: **#260** (broker MQTT con mTLS e pagina `#/sensori`, PR #261), **#251**
+(livelli di fiducia) e **#262** (scadenza delle misure), entrambe nella PR #263.
+Prossima: **#252**, l'ingestore del protocollo v2 (SenML su `limen/v2/{id}/obs`).
+
+**Il broker gira fuori dal repo, e un trasloco di server deve portarselo:**
+
+- CA e certificati stanno in `LIMEN_SENSORI_DIR=/srv/data/limen-sensori`. La
+  chiave della CA (`ca/ca.key`) **non è nel repo** e non ha altre copie oltre al
+  backup `/srv/backup/limen-sensori/ca`, che va rifatto a mano dopo ogni firma o
+  revoca. Se la perdi devi ricertificare tutti i dispositivi.
+- La CRL si rinnova con un cron mensile nel crontab dell'utente
+  (`make sensori-crl`). Se la CRL scade, il broker rifiuta tutti i dispositivi.
+- nginx: `/etc/nginx/mqtt-sensori.stream.conf` è incluso in fondo a
+  `nginx.conf`, fuori da `http {}`. La porta 8883 è aperta su ufw.
+  **L'inoltro sul router manca ancora.** Si può rimandare finché non esiste
+  l'ingestore v2.
+- Verifica: `make sensori-check`, 6 controlli dal lato dell'attaccante.
+  Procedure in `docs/runbook.md` § «Broker MQTT dei sensori».
+
+**Livelli di fiducia** (migrazione 075):
+
+- Nello scoring entra solo `livello = 2`, cioè i dispositivi istituzionali.
+  Il default della colonna è 0, e `upsert_many` non sovrascrive il livello.
+- Le misure contano solo se l'ultima osservazione è entro
+  `IOT__MAX_AGE_MINUTES` (120).
+- Dettagli in `docs/iot.md`.
+
+**Test rosso solo in locale:** `test_nightly_pipeline::test_every_step_gets_its_own_tracked_row`
+fallisce anche su `main`, perché lo step `radar_archivio` scrive in
+`/var/lib/limen`. In CI passa. Deselezionalo in locale.
+
+
 ### Difetti pre-esistenti corretti in #82 (da tenere a mente)
 
 1. **La retention di `risk_assessments` non era mai girata.**
