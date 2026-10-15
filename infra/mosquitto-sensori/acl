@@ -1,0 +1,18 @@
+# ACL del broker dei sensori (#260). `make sensori-ca-init` la copia in
+# $LIMEN_SENSORI_DIR/broker con permessi 0600: modificata qui, va ricopiata
+# (rilancia l'init) e il broker ricaricato. Con `use_identity_as_username` lo
+# username e' il CN del certificato.
+
+# L'ingestore legge tutto il protocollo v2 e non scrive niente.
+user limen-ingestore
+topic read limen/v2/#
+
+# L'healthcheck del container: legge un solo topic di sistema.
+user limen-salute
+topic read $SYS/broker/uptime
+
+# Ogni dispositivo scrive solo sotto il proprio id e non legge niente: un
+# sensore non ha motivo di vedere i dati degli altri. Mosquitto non sostituisce
+# %u se lo username contiene + # /, e la CA non firma comunque CN del genere.
+pattern write limen/v2/%u/obs
+pattern write limen/v2/%u/status

@@ -1,0 +1,87 @@
+# Limen — broker MQTT dei sensori (#260, epic #247).
+#
+# Opt-in: si attiva solo con il profilo `sensori`, quindi `make up` non lo
+# tocca. Va avviato DOPO lo stack operativo: si attacca alla rete
+# `limen_default`, da cui l'ingestore lo raggiunge come
+# `mosquitto-sensori:8883`.
+#
+#   make sensori-ca-init   CA, certificato del server, ingestore, healthcheck
+#   make sensori-up        avvia
+#   make sensori-check     anonimo, CA estranea, ACL e revoca: tutto rifiutato?
+#
+# Self-hosted e non su un cloud gestito (AWS IoT Core, Azure IoT Hub): costa
+# quasi zero, rispetta l'invariante "no cloud providers", e parla MQTT
+# standard, quindi migrare e' configurazione. Il certificato del server lo
+# firma la CA dei sensori e non Let's Encrypt: i dispositivi si fidano solo di
+# quella radice (pinning), e il broker non dipende da un rinnovo ogni 90
+# giorni che, mancato, staccherebbe tutta la rete.
+#
+# NON e' `limen-mosquitto`. Quello serve le allerte, accetta connessioni
+# anonime e non va mai esposto; questo e' esposto e non accetta nessuno senza
+# certificato. Unirli vorrebbe dire indebolire l'uno o rompere l'altro.
+
+name: limen-sensori
+
+services:
+
+  mosquitto-sensori:
+    image: eclipse-mosquitto:2.0
+    container_name: limen-mosquitto-sensori
+    restart: unless-stopped
+    profiles: ["sensori"]
+    # Gira con l'utente che possiede la directory dei sensori: la chiave del
+    # server resta 0600 sull'host invece di diventare leggibile da tutti per
+    # l'utente 1883 dell'immagine.
+    user: "${LIMEN_SENSORI_UID:-1000}:${LIMEN_SENSORI_GID:-1000}"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    volumes:
+      - ../mosquitto-sensori/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      # Fuori dal repo: chiavi e CRL non si versionano mai. Anche l'ACL
+      # arriva da qui, copiata da `sensori-ca-init` con permessi 0600:
+      # Mosquitto avvisa che rifiutera' un'ACL leggibile da tutti, e git non
+      # conserva i permessi.
+      - ${LIMEN_SENSORI_DIR:?imposta LIMEN_SENSORI_DIR (vedi .env.example)}/broker:/mosquitto/broker:ro
+      - ${LIMEN_SENSORI_DIR}/data:/mosquitto/data
+    networks:
+      - limen
+    ports:
+      # Solo loopback: da fuori si arriva da nginx `stream` sulla 8883
+      # (infra/nginx/mqtt-sensori.stream.conf). Docker scrive le sue catene
+      # iptables prima di ufw, quindi una porta pubblicata su 0.0.0.0 non la
+      # proteggerebbe il firewall dell'host.
+      - "${LIMEN_MQTT_SENSORI_BIND:-127.0.0.1}:${LIMEN_MQTT_SENSORI_PORT:-18883}:8883"
+    healthcheck:
+      # Un handshake mTLS vero: dice che certificato, CRL e ACL sono
+      # caricati, non solo che il processo ascolta.
+      test:
+        - CMD
+        - mosquitto_sub
+        - -h
+        - localhost
+        - -p
+        - "8883"
+        - --cafile
+        - /mosquitto/broker/ca.crt
+        - --cert
+        - /mosquitto/broker/salute.crt
+        - --key
+        - /mosquitto/broker/salute.key
+        - -t
+        - $$SYS/broker/uptime
+        - -C
+        - "1"
+        - -W
+        - "5"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  limen:
+    # Creata dallo stack operativo (`make up`): questo profilo ci si attacca.
+    name: limen_default
+    external: true
