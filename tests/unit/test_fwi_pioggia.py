@@ -238,3 +238,11 @@ async def test_il_meteo_analizzato_sostituisce_la_previsione_solo_nei_giorni_pas
     oggi = {r.day: r for r in scritte}
     assert oggi[_G].relative_humidity_pct == 90.0
     assert oggi[_G + timedelta(days=1)].relative_humidity_pct == 45.0
+
+
+def test_il_contatore_della_catena_prosegue_dalla_partenza() -> None:
+    """Le righe di coda di una catena corta prendono i giorni di quella lunga."""
+    serie = _serie(2)
+    lunga = NodeDay(**{**{f: getattr(serie[0], f) for f in NodeDay.__slots__}, "chain_days": 197})
+    nuove = ricalcola(serie[1:], lunga, {}, _params(), 5)
+    assert [r.chain_days for r in nuove] == [198, 199]

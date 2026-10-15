@@ -53,6 +53,7 @@ STEPS = (
     "storage",
     "egms_release",
     "radar_archivio",
+    "effis_perimetri",
     "glofas_riferimenti",
 )
 
@@ -215,6 +216,7 @@ async def run_nightly_pipeline(deps: AppDependencies) -> dict[str, Any]:
     out["storage"] = await _step("storage", lambda: _storage(deps))
     out["egms_release"] = await _step("egms_release", lambda: _egms_release(deps))
     out["radar_archivio"] = await _step("radar_archivio", lambda: _radar_archivio(deps))
+    out["effis_perimetri"] = await _step("effis_perimetri", _effis_perimetri)
     # Per ultimo: il tetto di GloFAS riparte a mezzanotte UTC, quindi alle due
     # è intero comunque, e il riempimento ora dura un paio d'ore (i lotti si
     # distanziano sotto il limite orario): davanti, terrebbe ferma la retention.
@@ -290,6 +292,14 @@ async def _radar_archivio(deps: AppDependencies) -> dict[str, Any]:
     if not cfg.attivo:
         return {"status": "skipped", "reason": "RADAR_ARCHIVE__CARTELLA non impostata"}
     return dict(await archivia(Path(cfg.cartella), giorni=cfg.giorni, massimo=cfg.file_per_notte))
+
+
+async def _effis_perimetri() -> dict[str, Any]:
+    """I perimetri EFFIS bruciati di recente: il truth set del backtest
+    incendio, fermo un mese quando dipendeva da un comando a mano (#245)."""
+    from limen.cli.effis_sync import sincronizza
+
+    return await sincronizza(forzato=True)
 
 
 async def _partitions(deps: AppDependencies) -> dict[str, Any]:

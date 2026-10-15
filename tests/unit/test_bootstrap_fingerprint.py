@@ -318,3 +318,61 @@ async def test_effis_sync_does_not_record_a_version_when_the_fetch_fails(
     aver ingerito: senza versione registrata il prossimo giro riprova."""
     calls = await _run_effis(monkeypatch, fails=True)
     assert calls[-1] is False
+
+
+async def test_il_passo_notturno_forza_il_gate_e_conta_i_perimetri(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """L'impronta è la tabella che il comando scrive: senza forzare, una notte
+    senza perimetri nuovi spegnerebbe tutte le successive (#245)."""
+    from shapely.geometry import Polygon
+
+    import limen.cli.effis_sync as mod
+    import limen.integrations.effis.sync_job as effis_mod
+    from limen.data.repos.aoi_repo import AOI
+
+    forzati: list[bool] = []
+
+    class _Gate:
+        def __init__(self, force: bool) -> None:
+            self.force = force
+
+        async def needs(self, step: str, fp: object) -> bool:
+            return self.force
+
+        async def done(self, step: str, **meta: object) -> None:
+            return None
+
+    async def _create(aoi_id: str, *, force: bool = False) -> _Gate:
+        forzati.append(force)
+        return _Gate(force)
+
+    async def _aois() -> list[str]:
+        return ["it-a", "it-b"]
+
+    async def _get(aoi_id: str) -> AOI:
+        return AOI(
+            id=aoi_id,
+            name=aoi_id,
+            kind="test",
+            geom=Polygon([(16.0, 41.0), (17.0, 41.0), (17.0, 42.0), (16.0, 42.0)]),
+            bbox=None,
+            metadata={},
+        )
+
+    async def _fp(*_a: object, **_k: object) -> object:
+        return mod.fingerprint.Fingerprint()
+
+    async def _sync(**_: object) -> dict[str, int]:
+        return {"perimeters": 4}
+
+    monkeypatch.setattr(mod, "list_aoi_ids", _aois)
+    monkeypatch.setattr(mod, "get_aoi", _get)
+    monkeypatch.setattr(mod.fingerprint.StepGate, "create", staticmethod(_create))
+    monkeypatch.setattr(mod.fingerprint, "of_tables", _fp)
+    monkeypatch.setattr(effis_mod, "run_effis_sync", _sync)
+
+    from limen.api.jobs.nightly import _effis_perimetri
+
+    assert await _effis_perimetri() == {"aoi": 2, "perimetri": 8, "falliti": 0}
+    assert forzati == [True, True]
