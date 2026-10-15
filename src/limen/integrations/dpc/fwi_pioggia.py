@@ -142,6 +142,10 @@ def ricalcola(
     out: list[NodeDay] = []
     stato = prima.outputs.state
     ultimo = prima.day
+    # Il contatore prosegue dalla partenza, non si copia dalla riga vecchia:
+    # dopo un backfill dalla stagione le righe di coda sono ancora della
+    # catena corta, e copiandolo resterebbero «in assestamento» per sempre.
+    giorni_catena = prima.chain_days
     for r in righe:
         if (r.day - ultimo).days > max_gap_days:
             break
@@ -162,7 +166,7 @@ def ricalcola(
                 lat=r.lat,
                 day=r.day,
                 outputs=uscita,
-                chain_days=r.chain_days,
+                chain_days=giorni_catena + 1,
                 temperature_c=r.temperature_c,
                 relative_humidity_pct=r.relative_humidity_pct,
                 wind_speed_kmh=r.wind_speed_kmh,
@@ -171,6 +175,7 @@ def ricalcola(
         )
         stato = uscita.state
         ultimo = r.day
+        giorni_catena += 1
     return out
 
 
