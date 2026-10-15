@@ -45,6 +45,37 @@ Six observed properties, one datastream each: `rainfall`,
    threshold for them (precursor signals are dispatched even below the
    aggregate alert level).
 
+## Trust levels (#251)
+
+Every device in `sensor_devices` carries a `livello` (migration 075):
+
+| Level | Who | Where its measurements go |
+|---|---|---|
+| 0 · observer | anyone, after registration | `sensor_observations` only: archive, verifications, comparison with the DPC radar |
+| 1 · verified | promoted after weeks of agreement with the radar | as level 0 for now; #258 will let it only *raise* the rainfall in M, with a quorum of distinct registrants and a cap |
+| 2 · institutional | public bodies, Civil Protection, universities | the hourly rollup, hence the M override, K and `hard_escalation` |
+
+Devices registered before the migration were backfilled with 2 and keep
+scoring exactly as before; from then on the column defaults to 0, so a
+registration that forgets the level leaves the device out of scoring.
+`upsert_many` writes the level on insert only: a registry re-sync can
+neither promote nor demote a device. The filter lives in one place, the rollup's
+device query: `sensor_features_hourly` is the only table the engine
+reads sensors from, and only level-2 devices reach it. A third-party
+rain gauge clogged at zero cannot lower M, and a bumped third-party
+extensometer cannot bypass `min_level`. A cell whose only devices are
+level 0 or 1 gets no row, so the engine runs the plain V1 path there.
+
+## Freshness (#262)
+
+`SensorFetchExecutor` reads a cell's latest rollup row only if its last
+observation falls in `(valuation_time - IOT__MAX_AGE_MINUTES,
+valuation_time]` (default 120 min). Older, the row is not a measurement
+any more and the cell goes back to the model: a gauge that read zero and
+then went silent cannot hold M down, and an extensometer that stopped
+after an accelerating hour cannot keep `hard_escalation` on. A replay
+never reads observations from after the time it values.
+
 ## Storage
 
 - `sensor_devices` — SensorThings `Thing` registry (cell binding +
@@ -74,7 +105,7 @@ observations contribute to the hourly rollup.
 
 ## Configuration
 
-All knobs live under the `LIMEN_IOT__*` env namespace (see
+All knobs live under the `IOT__*` env namespace (see
 `Settings.IotSettings`). The YAML adds a `kinematic:` block — leave it
 out to deactivate K entirely without touching code.
 

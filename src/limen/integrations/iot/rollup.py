@@ -23,6 +23,7 @@ from limen.data.repos import (
     sensor_features_hourly_repo,
     sensor_observations_repo,
 )
+from limen.data.repos.sensor_devices_repo import LIVELLO_SCORING
 from limen.data.repos.sensor_features_hourly_repo import SensorFeaturesRow
 from limen.integrations.iot.schemas import ObservedProperty
 
@@ -34,6 +35,8 @@ def _floor_to_hour(ts: datetime) -> datetime:
 
 
 async def _devices_with_cells() -> list[tuple[str, str]]:
+    # Solo il livello che entra nello scoring (#251): questa tabella è quella
+    # che l'engine legge, e qui una misura sostituisce il modello.
     async with acquire() as conn:
         rows = await conn.fetch(
             """
@@ -41,7 +44,9 @@ async def _devices_with_cells() -> list[tuple[str, str]]:
             FROM sensor_devices
             WHERE cell_id IS NOT NULL
               AND status = 'online'
+              AND livello = $1
             """,
+            LIVELLO_SCORING,
         )
     return [(r["id"], r["cell_id"]) for r in rows]
 

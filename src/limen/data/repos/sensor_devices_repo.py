@@ -24,6 +24,14 @@ log = get_logger(__name__)
 
 SensorStatus = Literal["online", "offline", "quarantined"]
 
+# 0 osservatore, 1 verificato, 2 istituzionale (migrazione 075, #251).
+SensorLivello = Literal[0, 1, 2]
+
+# L'unico livello che il rollup orario porta allo scoring e alle allerte: una
+# misura di un dispositivo di terzi non deve poter abbassare M né forzare
+# `hard_escalation`.
+LIVELLO_SCORING: SensorLivello = 2
+
 
 @dataclass(frozen=True, slots=True)
 class SensorDevice:
@@ -35,10 +43,17 @@ class SensorDevice:
     status: SensorStatus = "online"
     last_seen_at: datetime | None = None
     metadata: dict[str, Any] | None = None
+    # Fuori dallo scoring finché qualcuno non dice il contrario.
+    livello: SensorLivello = 0
 
 
 async def upsert_many(items: Iterable[SensorDevice]) -> int:
-    """Insert-or-update each device by id."""
+    """Insert-or-update each device by id.
+
+    ``livello`` is written on insert only: a registry re-sync that omits it
+    would otherwise promote an observer to institutional through the
+    dataclass default.
+    """
     items_list = list(items)
     if not items_list:
         return 0
@@ -50,10 +65,10 @@ async def upsert_many(items: Iterable[SensorDevice]) -> int:
                 """
                 INSERT INTO sensor_devices (
                     id, device_type, cell_id, location,
-                    calibration, status, last_seen_at, metadata
+                    calibration, status, last_seen_at, metadata, livello
                 ) VALUES (
                     $1, $2, $3, ST_SetSRID($4::geometry, 4326),
-                    $5::jsonb, $6, $7, $8::jsonb
+                    $5::jsonb, $6, $7, $8::jsonb, $9
                 )
                 ON CONFLICT (id) DO UPDATE
                 SET device_type = EXCLUDED.device_type,
@@ -74,6 +89,7 @@ async def upsert_many(items: Iterable[SensorDevice]) -> int:
                 it.status,
                 it.last_seen_at,
                 metadata_json,
+                it.livello,
             )
     log.info("sensor_devices.upsert_many", count=len(items_list))
     return len(items_list)
@@ -84,7 +100,7 @@ async def get_device(device_id: str) -> SensorDevice | None:
         row = await conn.fetchrow(
             """
             SELECT id, device_type, cell_id, location,
-                   calibration, status, last_seen_at, metadata
+                   calibration, status, last_seen_at, metadata, livello
             FROM sensor_devices
             WHERE id = $1
             """,
@@ -110,6 +126,7 @@ async def get_device(device_id: str) -> SensorDevice | None:
         status=row["status"],
         last_seen_at=row["last_seen_at"],
         metadata=metadata or {},
+        livello=row["livello"],
     )
 
 
@@ -138,7 +155,9 @@ async def set_status(device_id: str, status: SensorStatus) -> None:
 
 
 __all__ = [
+    "LIVELLO_SCORING",
     "SensorDevice",
+    "SensorLivello",
     "SensorStatus",
     "get_device",
     "set_status",

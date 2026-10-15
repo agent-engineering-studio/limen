@@ -1,7 +1,8 @@
 """IoT in-situ sensor fetch (V1.5).
 
 Reads the most recent ``sensor_features_hourly`` row for every cell in
-the AOI and stores the resulting :class:`SensorFeatures` aggregates on
+the AOI, no older than ``max_age`` at the valuation time, and stores the
+resulting :class:`SensorFeatures` aggregates on
 ``ctx.sensor_features_by_cell``. The :func:`assemble_bundles` glue
 forwards them into the engine, which activates the K component and
 applies the measured-over-modeled override.
@@ -12,6 +13,8 @@ runs the pure V1 path for every cell — see the invariance test
 """
 
 from __future__ import annotations
+
+from datetime import timedelta
 
 from limen.agents.workflow_runtime.executor import Executor, handler
 from limen.core.logging import get_logger
@@ -25,14 +28,17 @@ log = get_logger(__name__)
 class SensorFetchExecutor(Executor):
     """Populate per-cell :class:`SensorFeatures` from the rollup table."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, max_age: timedelta) -> None:
         super().__init__(name="SensorFetch")
+        self._max_age = max_age
 
     @handler
     async def run(self, ctx: MonitoringContext) -> MonitoringContext:
         features: dict[str, SensorFeatures] = {}
         for cell_id in ctx.cell_ids:
-            row = await sensor_features_hourly_repo.latest_for_cell(cell_id)
+            row = await sensor_features_hourly_repo.latest_for_cell(
+                cell_id, as_of=ctx.valuation_time, max_age=self._max_age
+            )
             if row is None:
                 continue
             features[cell_id] = row.to_dto()

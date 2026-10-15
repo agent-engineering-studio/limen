@@ -205,8 +205,8 @@ registra non è mai pubblicata.
 
 | Passo | Stato |
 |---|---|
-| Broker dei sensori con mTLS, CA privata e verifica automatica ([#260](https://github.com/agent-engineering-studio/limen/issues/260)) | in corso |
-| Livelli di fiducia nel motore ([#251](https://github.com/agent-engineering-studio/limen/issues/251)) | da fare |
+| Broker dei sensori con mTLS, CA privata e verifica automatica ([#260](https://github.com/agent-engineering-studio/limen/issues/260)) | fatto |
+| Livelli di fiducia nel motore ([#251](https://github.com/agent-engineering-studio/limen/issues/251)) | fatto |
 | Protocollo v2 e ingresso delle misure ([#252](https://github.com/agent-engineering-studio/limen/issues/252)) | da fare |
 | Registrazione senza account ([#253](https://github.com/agent-engineering-studio/limen/issues/253)) | da fare |
 | Progetti dei kit con firmware di esempio ([#256](https://github.com/agent-engineering-studio/limen/issues/256)) | da fare |
