@@ -104,6 +104,14 @@ class DBSettings(BaseSettings):
     pool_max_size: int = Field(default=20, ge=1, le=200)
     statement_cache_size: int = Field(default=1024, ge=0)
     command_timeout_seconds: float = Field(default=30.0, gt=0)
+    tiles_password: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Password del ruolo `limen_tiles` (migrazione 078) con cui si collega "
+            "pg_tileserv: l'API la imposta all'avvio. Solo esadecimale "
+            "(`openssl rand -hex 24`), perché finisce dentro un URL."
+        ),
+    )
 
     @model_validator(mode="after")
     def _validate_pool(self) -> DBSettings:
@@ -509,8 +517,9 @@ class SensoriRegistrazioneSettings(BaseSettings):
 
     Chiuso finché un operatore non lo apre: una richiesta non crea niente, ma
     promette una risposta. La mail va a ``CONTRIBUTI__DESTINATARI``, cioè a chi
-    cura il progetto, che approva dalla CLI. Non va aperto prima della #269:
-    pg_tileserv pubblica `sensor_devices` con la posizione esatta.
+    cura il progetto, che approva dalla CLI. Non va aperto finché pg_tileserv
+    si collega come `limen` invece che come `limen_tiles` (#269): pubblicherebbe
+    `sensor_devices` con la posizione esatta.
     """
 
     model_config = SettingsConfigDict(extra="ignore")

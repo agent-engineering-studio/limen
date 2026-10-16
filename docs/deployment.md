@@ -97,7 +97,7 @@ Servizi esposti:
 |---|---|---|
 | Postgres + PostGIS | 5432 | Volume persistente `limen-pgdata`. |
 | Limen API | 8080 | `/docs`, `/health`, `/api/*`. |
-| pg_tileserv | 7800 | Vector tiles per la matview. |
+| pg_tileserv | 7800 | Vector tile, come ruolo `limen_tiles` (#269): password in `DB__TILES_PASSWORD`, `make up` si ferma se manca. |
 | Mosquitto | 1883 | Broker MQTT locale. |
 | Frontend (`--profile frontend`) | 5173 | Vite dev server. |
 | Grafana | 3000 | Quando è attivo anche il compose di observability. |

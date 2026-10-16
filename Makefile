@@ -147,6 +147,9 @@ gs-volumes:
 	@docker volume create limen-geoserver-gsdata >/dev/null
 
 up: gs-volumes
+	@grep -qs '^DB__TILES_PASSWORD=[0-9a-f]\{32,\}$$' .env || { \
+	  echo "[up] manca DB__TILES_PASSWORD nel .env: senza, pg_tileserv non entra e la mappa resta senza tile (#269)."; \
+	  echo "     echo DB__TILES_PASSWORD=\$$(openssl rand -hex 24) >> .env"; exit 1; }
 	docker compose $(COMPOSE_ALL) $(UP_PROFILES) up -d --build
 	@echo "[up] waiting for the API to become ready…"
 	@for i in $$(seq 1 40); do \
