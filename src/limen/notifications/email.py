@@ -9,6 +9,7 @@ distribution group without modifying code.
 from __future__ import annotations
 
 import smtplib
+from collections.abc import Sequence
 from email.message import EmailMessage
 
 import aiosmtplib
@@ -107,11 +108,12 @@ async def invia_testo(
     oggetto: str,
     testo: str,
     rispondi_a: str | None = None,
+    allegati: Sequence[tuple[str, str, bytes]] = (),
 ) -> bool:
-    """Una mail di solo testo, fuori dal percorso delle allerte.
+    """Una mail di testo, fuori dal percorso delle allerte.
 
     Usa il server e il mittente delle allerte ma non i loro destinatari: chi la
-    chiama sa a chi scrivere.
+    chiama sa a chi scrivere. ``allegati`` sono ``(nome, tipo MIME, dati)``.
     """
     if not (settings.smtp_host and settings.from_address and destinatari):
         log.info("email.skip", reason="missing host / from / recipients")
@@ -123,6 +125,9 @@ async def invia_testo(
     if rispondi_a:
         msg["Reply-To"] = rispondi_a
     msg.set_content(testo)
+    for nome, tipo, dati in allegati:
+        principale, _, sotto = tipo.partition("/")
+        msg.add_attachment(dati, maintype=principale, subtype=sotto, filename=nome)
     return await _spedisci(settings, msg)
 
 

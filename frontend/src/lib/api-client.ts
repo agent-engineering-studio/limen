@@ -29,6 +29,9 @@ import type {
   ProvenienzaResponse,
   RainModelsResponse,
   RegioniResponse,
+  RegistrazioneSensoreRichiesta,
+  RegistrazioneSensoreRisposta,
+  RegistrazioneSensoriStato,
   SpiegazioneResponse,
   ReliabilityResponse,
   ShadowSummaryResponse,
@@ -187,6 +190,20 @@ export class ApiClient {
   /** Il modulo «Sei un esperto?» sotto la cella: parte per mail, non si salva. */
   inviaContributo(body: ContributoRichiesta): Promise<ContributoRisposta> {
     return this.request<ContributoRisposta>("/api/contributi", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  /** Se il modulo di registrazione dei sensori accetta richieste (#253). */
+  getRegistrazioneSensori(signal?: AbortSignal): Promise<RegistrazioneSensoriStato> {
+    return this.request<RegistrazioneSensoriStato>("/api/sensori/registrazione", {}, signal);
+  }
+
+  /** La richiesta di registrazione di un sensore: una mail, nessun dispositivo. */
+  registraSensore(body: RegistrazioneSensoreRichiesta): Promise<RegistrazioneSensoreRisposta> {
+    return this.request<RegistrazioneSensoreRisposta>("/api/sensori/registrazione", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

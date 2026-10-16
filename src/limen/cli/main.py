@@ -10,6 +10,7 @@ Usage:
     limen ingest-events      Dated event catalogue: --hazard landslide|flood.
     limen registra-verifica  Fact check: un evento verificato entra nel registro (074).
     limen verifiche-report   Eventi verificati contro le previsioni, col tasso di base.
+    limen sensore            Registro dei sensori dei cittadini: approva, revoca (#253).
     limen radar-archivio     Salva il radar DPC «Merging» prima che il DPC lo perda.
     limen fwi-pioggia        Rifà la catena FWI con la pioggia misurata dal DPC.
     limen ingest-fire-history  FIRMS country archive (2000+), fire_density + truth set.
@@ -79,6 +80,8 @@ from limen.cli.report import run as _run_report_build
 from limen.cli.review_alerts import run as _run_review_alerts
 from limen.cli.seed import run as _run_seed
 from limen.cli.seed_comuni import run as _run_seed_comuni
+from limen.cli.sensore import build_subparser as _build_sensore_subparser
+from limen.cli.sensore import run as _run_sensore
 from limen.cli.server import run as _run_server
 from limen.cli.shadow_report import run as _run_shadow_report
 from limen.cli.sync_egms import run as _run_sync_egms
@@ -322,6 +325,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # `geodata` workspace package; imports are lazy so the geodata
     # optional deps stay out of the main CLI's runtime.
     _build_geodata_subparser(sub)
+    _build_sensore_subparser(sub)
     return parser
 
 
@@ -391,6 +395,11 @@ def main(argv: list[str] | None = None) -> int:
         "verify": _run_verify,
         "forecast-history": _run_forecast_history,
     }
+    if args.command == "sensore":
+        try:
+            return asyncio.run(_run_sensore(args))
+        except KeyboardInterrupt:  # pragma: no cover
+            return 130
     if args.command == "geodata":
         try:
             return asyncio.run(_run_geodata(args))

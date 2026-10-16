@@ -504,6 +504,36 @@ class NotificationsSettings(BaseSettings):
     webhook: WebhookChannelSettings = Field(default_factory=WebhookChannelSettings)
 
 
+class SensoriRegistrazioneSettings(BaseSettings):
+    """Il modulo pubblico di registrazione dei sensori (#253, epic #247).
+
+    Chiuso finché un operatore non lo apre: una richiesta non crea niente, ma
+    promette una risposta. La mail va a ``CONTRIBUTI__DESTINATARI``, cioè a chi
+    cura il progetto, che approva dalla CLI. Non va aperto prima della #269:
+    pg_tileserv pubblica `sensor_devices` con la posizione esatta.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    aperta: bool = False
+    # Dispositivi per registrante, contando le richieste in attesa e i
+    # dispositivi revocati: revocare non libera un posto, o la quota si
+    # aggirerebbe facendosi revocare.
+    max_dispositivi_per_registrante: int = Field(default=3, ge=1)
+    max_per_ip_ora: int = Field(default=3, ge=1)
+    max_totali_ora: int = Field(default=20, ge=1)
+    # Il modulo ha una CSR da incollare: sotto questo tempo l'ha riempito un
+    # programma.
+    secondi_minimi: float = Field(default=20.0, ge=0.0)
+    max_foto_kb: int = Field(default=1024, ge=1)
+    # Lo script della CA, dalla radice del repo: la CLI gira sull'host, dove sta
+    # la chiave della CA, mai in un container.
+    ca_script: str = "scripts/sensori_ca.sh"
+    giorni_certificato: int = Field(default=730, ge=1)
+    # Dove si collega il dispositivo, scritto nella mail di approvazione.
+    broker_pubblico: str = "mqtts://limen.agentengineering.it:8883"
+
+
 class IotCittadiniSettings(BaseSettings):
     """Ingestore del protocollo v2 sul broker dei sensori (#252, epic #247).
 
@@ -543,6 +573,9 @@ class IotCittadiniSettings(BaseSettings):
     # Messaggi scartati per frequenza, nell'ultima ora, prima della quarantena:
     # un firmware in loop si ferma senza toccare gli altri dispositivi.
     scarti_per_quarantena: int = Field(default=60, ge=1)
+    registrazione: SensoriRegistrazioneSettings = Field(
+        default_factory=SensoriRegistrazioneSettings
+    )
 
 
 class IotSettings(BaseSettings):

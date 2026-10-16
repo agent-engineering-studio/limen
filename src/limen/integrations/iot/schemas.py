@@ -21,6 +21,7 @@ convert to the canonical unit before persistence.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
@@ -84,4 +85,13 @@ class Observation(BaseModel):
         return CANONICAL_UNITS[self.observed_property]
 
 
-__all__ = ["CANONICAL_UNITS", "Observation", "ObservedProperty"]
+# L'id di un dispositivo v2 (#252) è il CN del suo certificato e un segmento
+# del topic: minuscole, cifre e trattini, niente `+ # /` che spezzerebbero
+# l'ACL a pattern. Lo stesso controllo di `scripts/sensori_ca.sh`; `\Z` e non
+# `$`, che accetterebbe un a capo in coda.
+ID_DISPOSITIVO = re.compile(r"\A[a-z0-9][a-z0-9-]{2,62}\Z")
+# Le identità di Limen sul broker: nessun dispositivo può chiamarsi così.
+ID_RISERVATI = frozenset({"limen-ingestore", "limen-salute"})
+
+
+__all__ = ["CANONICAL_UNITS", "ID_DISPOSITIVO", "ID_RISERVATI", "Observation", "ObservedProperty"]

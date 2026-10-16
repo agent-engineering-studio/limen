@@ -283,7 +283,9 @@ Operazioni ricorrenti:
   riconnettono da soli).
 - **Firmare un dispositivo**: `./scripts/sensori_ca.sh firma <csr> [giorni]`
   (default 730). Il CN della CSR è l'id del dispositivo: minuscole, cifre e
-  trattini; `limen-ingestore` e `limen-salute` sono riservati.
+  trattini; `limen-ingestore` e `limen-salute` sono riservati. Un id che ha già
+  un certificato valido si rifiuta (due dispositivi parlerebbero come uno);
+  per un rinnovo voluto, `SENSORI_RINNOVO=1 ./scripts/sensori_ca.sh firma …`.
 - **Cambiata l'ACL** in `infra/mosquitto-sensori/acl`: `make sensori-ca-init`
   la ricopia con permessi 0600, poi `docker kill -s HUP limen-mosquitto-sensori`.
 - **Scadenze**: `./scripts/sensori_ca.sh stato`. Server e ingestore valgono
@@ -323,3 +325,39 @@ firmware riscritto) viene scartato con `esito=sequenza` a ogni messaggio,
 perché ricomincia da numeri già visti. Dopo aver controllato che sia davvero
 lui e non un replay: `UPDATE sensor_devices SET ultima_sequenza = NULL WHERE
 id = …`, e il primo messaggio successivo riparte da lì.
+
+### Registrazione dei sensori (#253)
+
+Il modulo in fondo a `#/sensori` è chiuso finché non si mette
+`IOT__CITTADINI__REGISTRAZIONE__APERTA=true` nel `.env` (e `make up`).
+**Non aprirlo prima della #269**: oggi pg_tileserv pubblica `sensor_devices`
+così com'è, con la posizione esatta, e un sensore approvato ci finisce. Una
+richiesta non crea un dispositivo: scrive una riga in `sensori_richieste` e
+manda una mail a `CONTRIBUTI__DESTINATARI`, con la foto in allegato e i comandi
+per decidere. Se la mail non parte, la richiesta non resta.
+
+Si decide **dall'host, dalla radice del repo**: firmare passa da
+`scripts/sensori_ca.sh`, e la chiave della CA non entra in nessun container.
+
+```sh
+uv run limen sensore richieste                     # le richieste in attesa
+uv run limen sensore approva 42                    # firma, crea al livello 0, manda il cert
+uv run limen sensore respingi 42
+uv run limen sensore revoca pluvio-matera-01       # CRL + quarantena
+uv run limen sensore quarantena pluvio-matera-01
+uv run limen sensore quarantena --registrante maker@example.org
+uv run limen sensore cancella-registrante maker@example.org   # GDPR
+```
+
+- `approva` su una richiesta già approvata **rimanda** la mail con lo stesso
+  certificato: è il rimedio se la mail non era partita (`sensore.mail_non_partita`).
+  Il certificato si salva appena firmato, quindi anche un `approva` fallito a
+  metà, rilanciato, non ne firma un secondo. Un dispositivo in quarantena non
+  riceve più niente.
+- Dopo ogni `approva` o `revoca` la CA è cambiata: rifare il backup
+  (`cp -a $LIMEN_SENSORI_DIR/ca /srv/backup/limen-sensori/`).
+- `cancella-registrante` revoca e mette in quarantena i dispositivi, poi
+  cancella la mail e le richieste: i dispositivi restano senza registrante,
+  le misure restano.
+- La quota (`MAX_DISPOSITIVI_PER_REGISTRANTE`) conta anche i dispositivi
+  revocati e le richieste in attesa.

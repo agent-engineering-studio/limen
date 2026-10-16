@@ -169,9 +169,52 @@ most robust way to hold the key is a secure element such as the ATECC608,
 which costs about one euro and does not let the key be extracted; the
 alternative is the ESP32's secure boot and encrypted flash.
 
-Registration will not need an account: a form, an email, and the approval
-of whoever runs Limen
-([#253](https://github.com/agent-engineering-studio/limen/issues/253)).
+## How to register a sensor
+
+**No account: a form, an email, a person who approves.** The form is at the
+bottom of this page and opens when the network accepts new devices
+([#253](https://github.com/agent-engineering-studio/limen/issues/253)). It
+asks for the sensor type, the position, the device CSR, an email address and
+three confirmations: the data licence, the safety rules and the notice
+below. The installation photo is optional.
+
+The CSR is generated on the device or, for a test, on a computer:
+
+```sh
+openssl ecparam -name prime256v1 -genkey -noout -out dispositivo.key
+openssl req -new -key dispositivo.key -subj "/CN=pluvio-matera-01" -out dispositivo.csr
+```
+
+The CN is the device id: lowercase letters, digits and hyphens, 3 to 63
+characters. The form takes the content of `dispositivo.csr`. **The `.key`
+file is never sent**, not even to Limen: if you paste it, the form stops.
+
+The request creates nothing by itself: it is emailed to the Limen
+maintainers, who read it and approve or reject it. If they approve it, you
+receive the device certificate and the CA certificate by email, and the
+sensor enters the registry as an observer. Each person can register at most
+three devices; a revoked device still counts.
+
+## Personal data
+
+Limen keeps two pieces of personal data about whoever registers a sensor:
+**the email address and the exact position of the sensor**. The address is
+used to reply to the request, to count how many devices the same person has
+registered and to delete everything on request. It is never published and
+no Limen interface exposes it: not the map, not the APIs, not the agent
+tools.
+
+- **Position.** The exact one is needed to bind the sensor to a grid cell,
+and it is not published. When stations appear on the map, the public
+position will be rounded to 0.01° (about one kilometre).
+- **Photo and notes.** They travel only in the email to the Limen
+maintainers and are not stored in the database.
+- **Measurements.** They are published under the CC BY 4.0 licence and
+contain no personal data.
+- **Deletion.** Just reply to Limen's email. The address is deleted, the
+devices are revoked and their position goes back to the centre of their
+one-kilometre cell: the measurements already collected stay, with nothing
+left linking them to you.
 
 ## What a sensor can do, and what it cannot
 
@@ -214,6 +257,6 @@ is never published.
 | Trust levels in the engine ([#251](https://github.com/agent-engineering-studio/limen/issues/251)) | done |
 | v2 protocol and measurement intake over MQTT ([#252](https://github.com/agent-engineering-studio/limen/issues/252)) | done |
 | Signed HTTP intake ([#265](https://github.com/agent-engineering-studio/limen/issues/265)) and LoRaWAN from The Things Network ([#266](https://github.com/agent-engineering-studio/limen/issues/266)) | to do |
-| Registration without an account ([#253](https://github.com/agent-engineering-studio/limen/issues/253)) | to do |
+| Registration without an account ([#253](https://github.com/agent-engineering-studio/limen/issues/253)) | done, the form opens with the network |
 | Kit projects with example firmware ([#256](https://github.com/agent-engineering-studio/limen/issues/256)) | to do |
 | Measuring the value of non-official rain gauges against the radar ([#250](https://github.com/agent-engineering-studio/limen/issues/250)) | to do |
