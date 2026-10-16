@@ -19,8 +19,8 @@ from limen.data.repos.sensor_devices_repo import SensorDevice
 from limen.data.repos.sensor_observations_repo import RecentSample, SensorObservation
 from limen.integrations.iot.mqtt_ingestor import (
     MqttIngestor,
-    _calibrate,
     _topic_thing_segment,
+    calibrate,
 )
 from limen.integrations.iot.qc import QcQuality
 from limen.integrations.iot.schemas import Observation, ObservedProperty
@@ -46,7 +46,7 @@ def test_calibrate_applies_scale_and_offset() -> None:
         result_unit="mm",
     )
     calib = {"displacement": {"scale": 1000.0, "offset": 0.0}}  # m → mm
-    assert _calibrate(obs, calib) == 2000.0
+    assert calibrate(obs, calib) == 2000.0
 
 
 def test_calibrate_defaults_to_identity() -> None:
@@ -57,7 +57,7 @@ def test_calibrate_defaults_to_identity() -> None:
         result_value=5.0,
         result_unit="mm",
     )
-    assert _calibrate(obs, {}) == 5.0
+    assert calibrate(obs, {}) == 5.0
 
 
 # ---------------------------------------------------------------------------

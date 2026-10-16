@@ -129,6 +129,9 @@ cmd_init() {
   emetti_locale "$HOST" server "$BROKER/server.key" "$BROKER/server.crt" 825
   emetti_locale limen-salute dispositivo "$BROKER/salute.key" "$BROKER/salute.crt" 825
   emetti_locale limen-ingestore dispositivo "$CLIENT/ingestore.key" "$CLIENT/ingestore.crt" 825
+  # Il worker la legge con l'uid suo e il gruppo di questa directory
+  # (docker-compose.sensori-worker.yml, `group_add`).
+  chmod 640 "$CLIENT/ingestore.key"
   cp "$CA/ca.crt" "$CLIENT/ca.crt"
   [ -s "$BROKER/crl.pem" ] || cmd_crl
 }

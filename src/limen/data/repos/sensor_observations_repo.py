@@ -32,54 +32,78 @@ class SensorObservation:
     raw_value: float | None
     quality: QcQuality
     metadata: dict[str, Any] | None = None
+    # Protocollo v2 (#252, migrazione 076): numero di sequenza del messaggio, e
+    # se la misura è arrivata in ritardo — salvata, ma fuori dal rollup.
+    sequenza: int | None = None
+    in_ritardo: bool = False
+
+
+_INSERT = """
+    INSERT INTO sensor_observations (
+        device_id, observed_property, phenomenon_time,
+        result_value, result_unit, raw_value, quality, metadata,
+        sequenza, in_ritardo
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10)
+"""
+
+
+def _args(obs: SensorObservation) -> tuple[Any, ...]:
+    return (
+        obs.device_id,
+        obs.observed_property.value,
+        obs.phenomenon_time,
+        obs.result_value,
+        obs.result_unit,
+        obs.raw_value,
+        obs.quality.value,
+        json.dumps(obs.metadata or {}, default=str),
+        obs.sequenza,
+        obs.in_ritardo,
+    )
 
 
 async def insert(observation: SensorObservation) -> None:
     """Insert one observation (single-row hot path used by the ingestor)."""
-    metadata_json = json.dumps(observation.metadata or {}, default=str)
     async with acquire() as conn:
-        await conn.execute(
-            """
-            INSERT INTO sensor_observations (
-                device_id, observed_property, phenomenon_time,
-                result_value, result_unit, raw_value, quality, metadata
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
-            """,
-            observation.device_id,
-            observation.observed_property.value,
-            observation.phenomenon_time,
-            observation.result_value,
-            observation.result_unit,
-            observation.raw_value,
-            observation.quality.value,
-            metadata_json,
-        )
+        await conn.execute(_INSERT, *_args(observation))
 
 
 async def insert_many(observations: Iterable[SensorObservation]) -> int:
+    """Insert all observations in one transaction: all of them, or none."""
     obs_list = list(observations)
     if not obs_list:
         return 0
     async with acquire() as conn, conn.transaction():
-        for obs in obs_list:
-            metadata_json = json.dumps(obs.metadata or {}, default=str)
-            await conn.execute(
-                """
-                INSERT INTO sensor_observations (
-                    device_id, observed_property, phenomenon_time,
-                    result_value, result_unit, raw_value, quality, metadata
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
-                """,
-                obs.device_id,
-                obs.observed_property.value,
-                obs.phenomenon_time,
-                obs.result_value,
-                obs.result_unit,
-                obs.raw_value,
-                obs.quality.value,
-                metadata_json,
-            )
+        await conn.executemany(_INSERT, [_args(obs) for obs in obs_list])
     return len(obs_list)
+
+
+async def salva_messaggio(device_id: str, sequenza: int, righe: list[SensorObservation]) -> bool:
+    """Salva le misure di un messaggio v2 se ``sequenza`` supera l'ultima del
+    dispositivo (#252); falso, senza scrivere niente, se non la supera.
+
+    Sequenza e righe nella stessa transazione: se l'INSERT fallisce la
+    sequenza non avanza, e il dispositivo può rimandare lo stesso messaggio
+    senza che sembri un replay. L'UPDATE condizionale tiene fuori anche due
+    copie concorrenti dello stesso messaggio.
+    """
+    async with acquire() as conn, conn.transaction():
+        avanzata = await conn.fetchval(
+            """
+            UPDATE sensor_devices
+               SET ultima_sequenza = $2, updated_at = now()
+             WHERE id = $1
+               AND (ultima_sequenza IS NULL OR ultima_sequenza < $2)
+            RETURNING true
+            """,
+            device_id,
+            sequenza,
+        )
+        if not avanzata:
+            return False
+        if righe:
+            await conn.executemany(_INSERT, [_args(r) for r in righe])
+    return True
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,13 +116,15 @@ async def latest_for_datastream(
     device_id: str,
     observed_property: ObservedProperty,
 ) -> RecentSample | None:
-    """Most recent observation (any quality) — used by QC step/gap checks."""
+    """Most recent real-time observation (any quality) — used by QC step/gap
+    checks. Late rows are excluded: a backlog is not the previous sample."""
     async with acquire() as conn:
         row = await conn.fetchrow(
             """
             SELECT phenomenon_time, result_value
             FROM sensor_observations
             WHERE device_id = $1 AND observed_property = $2
+              AND NOT in_ritardo
             ORDER BY phenomenon_time DESC
             LIMIT 1
             """,
@@ -130,6 +156,7 @@ async def recent_values(
                 SELECT phenomenon_time, result_value
                 FROM sensor_observations
                 WHERE device_id = $1 AND observed_property = $2
+                  AND NOT in_ritardo
                 ORDER BY phenomenon_time DESC
                 LIMIT $3
             ) AS t
@@ -154,7 +181,8 @@ async def displacement_window(
     since: datetime,
     until: datetime,
 ) -> list[DisplacementSample]:
-    """OK-quality displacement samples used by the rollup velocity estimator."""
+    """OK-quality, real-time displacement samples used by the rollup velocity
+    estimator."""
     async with acquire() as conn:
         rows = await conn.fetch(
             """
@@ -163,6 +191,7 @@ async def displacement_window(
             WHERE device_id = $1
               AND observed_property = $2
               AND quality = 'ok'
+              AND NOT in_ritardo
               AND phenomenon_time >= $3
               AND phenomenon_time <  $4
             ORDER BY phenomenon_time ASC
@@ -190,4 +219,5 @@ __all__ = [
     "insert_many",
     "latest_for_datastream",
     "recent_values",
+    "salva_messaggio",
 ]

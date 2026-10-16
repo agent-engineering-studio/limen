@@ -290,4 +290,36 @@ Operazioni ricorrenti:
   825 giorni e l'init li rinnova sotto i 30; la CA vale 10 anni.
 - **Backup**: `$LIMEN_SENSORI_DIR/ca` è insostituibile. Persa la chiave della
   CA, ogni dispositivo va riprovisionato a mano. Va nel backup cifrato,
-  mai nel repo.
+  mai nel repo. **Rifallo dopo ogni firma o revoca**, `make sensori-check`
+  compreso (firma dispositivi di prova): una copia vecchia non sa quali
+  seriali sono già stati emessi.
+- **Dopo un riavvio del server** controlla `docker ps --filter name=sensori`:
+  `unless-stopped` non riavvia un container fermato a mano, e il 15 ottobre
+  2026 il broker è rimasto giù una notte così. `make sensori-up` lo riporta su.
+
+### Ingestore v2 (#252)
+
+Il worker legge il broker dei sensori con il certificato `limen-ingestore` e
+salva le misure dei dispositivi registrati in `sensor_devices`. Per
+accenderlo:
+
+1. `make sensori-ca-init` (rende la chiave dell'ingestore leggibile al gruppo,
+   0640: il worker gira come `limen` e la legge tramite `group_add`);
+2. `IOT__CITTADINI__ENABLED=true` nel `.env`;
+3. `make up`: con `LIMEN_SENSORI_DIR` impostato, `docker-compose.sensori-worker.yml`
+   monta `$LIMEN_SENSORI_DIR/client` nel worker in `/run/limen-sensori`;
+4. nei log del worker, `iot.v2.connesso`.
+
+Spento (`IOT__CITTADINI__ENABLED=false`) nessun messaggio v2 entra: è il
+kill switch dei dispositivi di terzi. Ogni scarto è un `iot.v2.scartato` con
+l'`esito` (`frequenza`, `quarantena`, `sconosciuto`, `malformato`, `futuro`,
+`sequenza`, `troppo_grande`, `topic`). Un dispositivo messo in quarantena per
+frequenza ci resta finché non lo si rimette `online` a mano
+(`UPDATE sensor_devices SET status = 'online' WHERE id = …`): il suo LWT non
+basta, per scelta.
+
+Un dispositivo che ha perso il contatore di sequenza (flash cancellata,
+firmware riscritto) viene scartato con `esito=sequenza` a ogni messaggio,
+perché ricomincia da numeri già visti. Dopo aver controllato che sia davvero
+lui e non un replay: `UPDATE sensor_devices SET ultima_sequenza = NULL WHERE
+id = …`, e il primo messaggio successivo riparte da lì.

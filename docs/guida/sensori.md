@@ -106,15 +106,15 @@ broker rifiuti davvero quello che deve rifiutare:
 
 ## Il protocollo v2
 
-**Pochi campi, unità fisse, l'identità nel certificato.** Il protocollo è
-in definizione ([#252](https://github.com/agent-engineering-studio/limen/issues/252)):
-quello che segue è la direzione, non ancora un contratto.
+**Pochi campi, unità fisse, l'identità nel certificato.** Limen legge già
+messaggi in questo formato ([#252](https://github.com/agent-engineering-studio/limen/issues/252)),
+ma solo da dispositivi registrati, e la registrazione non è ancora aperta.
 
 Due topic per dispositivo:
 
 ```
 limen/v2/<id>/obs       le misure
-limen/v2/<id>/status    vivo o no (last will del client MQTT)
+limen/v2/<id>/status    online alla connessione, offline come last will
 ```
 
 Il dispositivo **non dichiara dove si trova**: la posizione, la regione e la
@@ -122,8 +122,8 @@ cella della griglia le registra Limen quando approva il dispositivo. Un dato
 in meno da verificare, e un sensore spostato si nota.
 
 Il messaggio segue SenML (RFC 8428), il formato standard per le misure dei
-sensori: JSON su Wi-Fi o rete mobile, CBOR dove ogni byte conta, come su
-LoRaWAN.
+sensori, in JSON. Il CBOR, dove ogni byte conta, arriverà con LoRaWAN
+([#266](https://github.com/agent-engineering-studio/limen/issues/266)).
 
 ```json
 [
@@ -134,15 +134,23 @@ LoRaWAN.
 
 Le grandezze e le loro unità:
 
-| Grandezza | Unità | Per quale pericolo |
+| Grandezza | Campo `u` | Per quale pericolo |
 |---|---|---|
-| `rainfall` | mm | frana, alluvione |
-| `soil_moisture` | m³/m³ | frana |
-| `water_level` | m | alluvione (in arrivo) |
+| `rainfall` | `mm` | frana, alluvione |
+| `soil_moisture` | `m3/m3` | frana |
+| `water_level` | `m` | alluvione (in arrivo) |
 | `air_temperature`, `relative_humidity`, `wind_speed` | °C, %, km/h | incendio (in arrivo) |
 
-Due regole valgono per ogni messaggio. Il tempo è sempre UTC, preso da NTP.
-Il numero di sequenza cresce sempre: un dispositivo che resta senza rete
+L'unità si scrive esattamente così: Limen non converte, e un messaggio con
+un'unità diversa si scarta. Una grandezza che Limen non conosce ancora si
+ignora senza scartare le altre.
+
+Tre regole valgono per ogni messaggio. Il tempo è sempre UTC, preso da NTP:
+un messaggio dal futuro si scarta. Al massimo una dozzina di messaggi al
+minuto: oltre si scartano, e un dispositivo che insiste va in quarantena
+finché qualcuno non lo controlla. Il numero di sequenza cresce sempre, anche
+dopo un riavvio, quindi va salvato nella memoria del dispositivo: un numero
+già visto è un messaggio ripetuto e si scarta. Un dispositivo che resta senza rete
 conserva le misure e le rimanda al ritorno, e Limen le accetta marcandole
 **in ritardo**. Non entrano nella previsione dell'ora, ma restano
 nell'archivio e nelle verifiche: sono spesso le ore del temporale, quelle
@@ -207,7 +215,8 @@ registra non è mai pubblicata.
 |---|---|
 | Broker dei sensori con mTLS, CA privata e verifica automatica ([#260](https://github.com/agent-engineering-studio/limen/issues/260)) | fatto |
 | Livelli di fiducia nel motore ([#251](https://github.com/agent-engineering-studio/limen/issues/251)) | fatto |
-| Protocollo v2 e ingresso delle misure ([#252](https://github.com/agent-engineering-studio/limen/issues/252)) | da fare |
+| Protocollo v2 e ingresso delle misure via MQTT ([#252](https://github.com/agent-engineering-studio/limen/issues/252)) | fatto |
+| Ingresso HTTP firmato ([#265](https://github.com/agent-engineering-studio/limen/issues/265)) e LoRaWAN da The Things Network ([#266](https://github.com/agent-engineering-studio/limen/issues/266)) | da fare |
 | Registrazione senza account ([#253](https://github.com/agent-engineering-studio/limen/issues/253)) | da fare |
 | Progetti dei kit con firmware di esempio ([#256](https://github.com/agent-engineering-studio/limen/issues/256)) | da fare |
 | Misura del valore dei pluviometri non ufficiali contro il radar ([#250](https://github.com/agent-engineering-studio/limen/issues/250)) | da fare |

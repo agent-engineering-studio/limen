@@ -145,6 +145,20 @@ async def touch_last_seen(device_id: str, *, at: datetime) -> None:
         )
 
 
+async def stato_dal_dispositivo(device_id: str, status: Literal["online", "offline"]) -> None:
+    """Lo stato che il dispositivo dichiara (LWT, #252): non toglie mai una
+    quarantena, che decide Limen e non il dispositivo."""
+    async with acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE sensor_devices SET status = $2, updated_at = now()
+             WHERE id = $1 AND status <> 'quarantined'
+            """,
+            device_id,
+            status,
+        )
+
+
 async def set_status(device_id: str, status: SensorStatus) -> None:
     async with acquire() as conn:
         await conn.execute(
@@ -161,6 +175,7 @@ __all__ = [
     "SensorStatus",
     "get_device",
     "set_status",
+    "stato_dal_dispositivo",
     "touch_last_seen",
     "upsert_many",
 ]

@@ -20,7 +20,10 @@ COMPOSE_SENSORI := infra/docker/docker-compose.sensori.yml
 # Unified stack: operational services + GeoServer, one project, one network.
 # Repo-root .env feeds compose ${VAR} interpolation (e.g. SCORING__MODE);
 # without --env-file compose only reads infra/docker/.env, which doesn't exist.
-COMPOSE_ALL  := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_DEMO) -f $(COMPOSE_GEOSERVER) -p limen
+# Con il broker dei sensori configurato, il worker monta il certificato
+# dell'ingestore v2 (#252); senza, l'overlay non c'è.
+COMPOSE_SENSORI_WORKER := $(if $(shell grep -s '^LIMEN_SENSORI_DIR=.' .env),-f infra/docker/docker-compose.sensori-worker.yml)
+COMPOSE_ALL  := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_DEMO) -f $(COMPOSE_GEOSERVER) $(COMPOSE_SENSORI_WORKER) -p limen
 # Il solo stack GeoServer, con lo stesso progetto e lo stesso .env dello stack
 # completo. Entrambi servono: `-p limen` perché i container hanno un
 # `container_name` fisso e senza progetto compose ne creerebbe di nuovi con lo

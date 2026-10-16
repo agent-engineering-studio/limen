@@ -1,7 +1,8 @@
-"""Hourly rollup — OK observations → ``sensor_features_hourly``.
+"""Hourly rollup — OK, real-time observations → ``sensor_features_hourly``.
 
 The job groups OK-quality observations into one-hour buckets and writes
-one row per (cell_id, bucket). For displacement, it derives velocity
+one row per (cell_id, bucket). Observations marked late (#252) never
+enter: they feed the archive, not the scoring. For displacement, it derives velocity
 (mm/d) by linear regression on the bucket's samples, acceleration by
 finite difference between consecutive hourly velocities, and the
 inverse-velocity = 1 / max(velocity, eps) (Fukuzono input).
@@ -69,6 +70,7 @@ async def _meteo_aggregates_for(
             WHERE device_id = $1
               AND observed_property = $2
               AND quality = 'ok'
+              AND NOT in_ritardo
               AND phenomenon_time >= $3
               AND phenomenon_time <  $4
             """,
@@ -99,6 +101,7 @@ async def _sum_rainfall_for(
             WHERE device_id = $1
               AND observed_property = $2
               AND quality = 'ok'
+              AND NOT in_ritardo
               AND phenomenon_time >= $3
               AND phenomenon_time <  $4
             """,
