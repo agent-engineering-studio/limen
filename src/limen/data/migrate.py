@@ -16,6 +16,7 @@ Design goals:
 from __future__ import annotations
 
 import hashlib
+import re
 from importlib import resources
 from typing import TYPE_CHECKING
 
@@ -26,6 +27,8 @@ from limen.data.db import acquire
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+
+    from pydantic import SecretStr
 
 log = get_logger(__name__)
 
@@ -119,3 +122,35 @@ async def run_migrations(only: Iterable[str] | None = None) -> list[str]:
 
     log.info("migrate.done", applied=len(applied_now), files=applied_now)
     return applied_now
+
+
+_PASSWORD_TILES = re.compile(r"[0-9a-f]{32,}")
+
+
+async def imposta_password_tiles(password: SecretStr | None) -> None:
+    """Dà a ``limen_tiles`` (migrazione 078) la password del ``.env``.
+
+    Il repo non la conosce, quindi non può stare nella migrazione. Senza,
+    pg_tileserv non entra e la mappa resta vuota: lo si dice, ma non si
+    rifiuta di servire l'API per questo.
+    """
+    if password is None or not password.get_secret_value():
+        log.warning("migrate.tiles_senza_password", variabile="DB__TILES_PASSWORD")
+        return
+    # Finisce nell'URL di pg_tileserv: un `@` o un `/` lo romperebbe, e
+    # l'unico segno sarebbe pg_tileserv che riparte in loop.
+    if not _PASSWORD_TILES.fullmatch(password.get_secret_value()):
+        log.warning("migrate.tiles_password_non_esadecimale", variabile="DB__TILES_PASSWORD")
+        return
+    try:
+        async with acquire() as conn, conn.transaction():
+            await conn.execute(
+                "SELECT set_config('limen.tiles_password', $1, true)",
+                password.get_secret_value(),
+            )
+            await conn.execute(
+                "DO $$ BEGIN EXECUTE format('ALTER ROLE limen_tiles LOGIN PASSWORD %L', "
+                "current_setting('limen.tiles_password')); END $$"
+            )
+    except asyncpg.PostgresError as exc:
+        log.warning("migrate.tiles_password_fallita", error_type=type(exc).__name__)

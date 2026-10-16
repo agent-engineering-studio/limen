@@ -90,6 +90,7 @@ services:
       SCHEDULER__ENABLED: "false"
       API__HOST: 0.0.0.0
       API__PG_TILESERV_URL: http://pg_tileserv:7800
+      DB__TILES_PASSWORD: ${DB__TILES_PASSWORD:-}
       # Notifications — listing a channel here enables it; channels
       # whose creds are missing degrade to a no-op rather than erroring.
       # NOTIFICATIONS__ENABLED_CHANNELS: '["mqtt"]'
@@ -436,9 +437,8 @@ services:
 
   pg_tileserv:
     # Phase 6 — vector tile server pointed at the same Postgres+PostGIS.
-    # The frontend talks to `${VITE_API_URL}/api/tiles/...`, the FastAPI
-    # /api/tiles endpoint 307-redirects here. To target Neon or any
-    # other PG, point CrunchyData/pg_tileserv at it via DATABASE_URL.
+    # La SPA lo chiama da nginx su `/tiles/` (VITE_TILESERV_URL); `/api/tiles`
+    # dell'API inoltra i byte allo stesso server.
     # Official community image (the GHCR CrunchyData ref is no longer public).
     image: docker.io/pramsey/pg_tileserv:latest
     container_name: limen-pg-tileserv
@@ -447,10 +447,11 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://limen:limen@postgres:5432/limen?sslmode=disable
-      # Read-only; pg_tileserv auto-discovers tables/functions allowed
-      # by the role's permissions. Restrict in production by creating
-      # a dedicated `tile_reader` role.
+      # pg_tileserv pubblica ogni tabella con geometria che il suo ruolo
+      # legge: `limen_tiles` (migrazione 078) vede solo i layer della mappa
+      # (#269). La password la imposta l'API all'avvio da DB__TILES_PASSWORD;
+      # finché manca pg_tileserv non entra e riparte da solo.
+      DATABASE_URL: postgres://limen_tiles:${DB__TILES_PASSWORD:-}@postgres:5432/limen?sslmode=disable
       TS_HTTPHOST: "0.0.0.0"
       TS_HTTPPORT: "7800"
     # scripts/demo_walkthrough.sh hits this from the host.

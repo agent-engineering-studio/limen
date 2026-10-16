@@ -140,6 +140,27 @@ vista o una funzione di tile non la rende visibile finché il container non
 riparte: `docker compose -p limen restart pg_tileserv`. Un 404 su una
 vista che esiste in Postgres è quasi sempre questo, non un errore di nome.
 
+L'altra causa è il ruolo. pg_tileserv si collega come `limen_tiles`
+(migrazione 078, #269), che legge solo i layer della mappa: una vista nuova
+va concessa in una migrazione (`GRANT SELECT ON … TO limen_tiles`, o
+`SECURITY DEFINER` per una funzione) e aggiunta a `PUBBLICATI` in
+`tests/integration/test_ruolo_tiles.py`. Una migrazione che ridefinisce
+`risk_at`, `multi_hazard_at` o `forecast_at` ripete `SECURITY DEFINER SET
+search_path = public, pg_temp` (`CREATE OR REPLACE` la riporta INVOKER), e una
+che ricrea una vista concessa ripete il `GRANT`. Mai collegarlo di nuovo come
+`limen`: pubblicherebbe ogni tabella con una geometria, `sensor_devices`
+compresa.
+
+### "pg_tileserv non parte" / la mappa è vuota dopo un aggiornamento
+
+La password di `limen_tiles` sta nel `.env` come `DB__TILES_PASSWORD`
+(esadecimale, `openssl rand -hex 24`: finisce dentro un URL) e la imposta
+l'API all'avvio, così come `uv run limen migrate`. Senza, l'API scrive
+`migrate.tiles_senza_password` e pg_tileserv riparte in loop perché non
+entra. Dopo averla messa: `make up`, poi
+`curl -s http://127.0.0.1:7800/index.json | jq 'keys'` deve elencare dodici
+layer e nessuna tabella grezza.
+
 ### "Gli alert non partono"
 
 1. Verificare che almeno una cella superi `ALERT__MIN_LEVEL`. La
@@ -330,8 +351,9 @@ id = …`, e il primo messaggio successivo riparte da lì.
 
 Il modulo in fondo a `#/sensori` è chiuso finché non si mette
 `IOT__CITTADINI__REGISTRAZIONE__APERTA=true` nel `.env` (e `make up`).
-**Non aprirlo prima della #269**: oggi pg_tileserv pubblica `sensor_devices`
-così com'è, con la posizione esatta, e un sensore approvato ci finisce. Una
+Prima di aprirlo, controllare che `/tiles/index.json` non elenchi
+`sensor_devices` (#269: pg_tileserv come `limen_tiles`, vedi sopra): finché
+lo elenca, la posizione esatta di un sensore approvato è pubblica. Una
 richiesta non crea un dispositivo: scrive una riga in `sensori_richieste` e
 manda una mail a `CONTRIBUTI__DESTINATARI`, con la foto in allegato e i comandi
 per decidere. Se la mail non parte, la richiesta non resta.

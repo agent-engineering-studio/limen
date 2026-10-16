@@ -56,7 +56,7 @@ curl -s "${API_URL}/api/cell/it-puglia%7C0%7C0/breakdown" | jq
 curl -s "${API_URL}/api/alerts?threshold=High&since_hours=72&limit=20" | jq
 
 # Tile preview — opens in the browser if you have a viewer for .pbf
-echo "Tile URL: ${API_URL}/api/tiles/public.mv_latest_risk/8/256/256.pbf"
+echo "Tile URL: ${API_URL}/api/tiles/public.v_risk_tiles/8/256/256.pbf"
 
 EOF
 
