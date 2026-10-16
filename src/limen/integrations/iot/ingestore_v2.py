@@ -11,7 +11,9 @@ Ogni messaggio passa, in quest'ordine, da:
 1. **dimensione** — oltre ``max_payload_bytes`` si scarta senza leggerlo;
 2. **frequenza** — oltre ``max_messaggi_al_minuto`` per dispositivo si
    scarta; troppi scarti in un'ora mettono il dispositivo in quarantena. Viene
-   prima del database, così un firmware in loop non lo tocca;
+   prima del database, così un firmware in loop non lo tocca. Non vale per
+   l'arretrato che il broker consegna dopo una riconnessione (#273): misure
+   tutte anteriori alla connessione, nei primi ``grazia_arretrato_minuti``;
 3. **registro** — un id sconosciuto o in quarantena si scarta;
 4. **SenML** — vedi :mod:`limen.integrations.iot.senml`;
 5. **tempo** — una misura nel futuro oltre la tolleranza, o più vecchia di
@@ -61,7 +63,7 @@ from limen.integrations.iot.schemas import (
     Observation,
     ObservedProperty,
 )
-from limen.integrations.iot.senml import SenmlError, analizza
+from limen.integrations.iot.senml import MessaggioV2, SenmlError, analizza
 
 _log: structlog.stdlib.BoundLogger = get_logger(__name__)
 
@@ -150,6 +152,7 @@ class IngestoreV2:
         )
         self._task: asyncio.Task[None] | None = None
         self._fermo = asyncio.Event()
+        self._connesso_alle: datetime | None = None
 
     async def start(self) -> None:
         if self._task is not None:
@@ -181,19 +184,37 @@ class IngestoreV2:
         )
         while not self._fermo.is_set():
             try:
-                async with aiomqtt.Client(
+                client = aiomqtt.Client(
                     hostname=self._c.broker_host,
                     port=self._c.broker_port,
                     identifier=self._c.client_id,
                     tls_params=tls,
-                ) as client:
+                    # Sessione persistente: mentre il worker è giù il broker
+                    # conserva per lui i QoS 1 dei dispositivi. Con una pulita
+                    # li confermerebbe al dispositivo e li butterebbe, e il
+                    # firmware, ricevuta la conferma, non li rimanda (#273).
+                    clean_session=False,
+                )
+                # paho conferma un messaggio appena aiomqtt lo mette in coda,
+                # prima che sia salvato: uno stop in quel momento lo perde.
+                # Confermato a mano dopo `gestisci`, un messaggio interrotto
+                # torna alla riconnessione e la sequenza scarta i doppioni.
+                # Prima della connessione: l'arretrato arriva subito dopo.
+                # aiomqtt non espone la conferma manuale (2.5).
+                paho = client._client
+                paho.manual_ack_set(True)
+                async with client:
                     await client.subscribe("limen/v2/+/obs", qos=1)
                     await client.subscribe("limen/v2/+/status", qos=1)
+                    self._connesso_alle = self._adesso()
                     _log.info("iot.v2.connesso", broker=self._c.broker_host)
                     async for message in client.messages:
                         await self.gestisci(
                             topic=str(message.topic), payload=bytes(message.payload)
                         )
+                        # Ogni esito, anche un errore: un messaggio non
+                        # confermato occupa uno dei venti posti in volo.
+                        paho.ack(message.mid, message.qos)
             except asyncio.CancelledError:
                 raise
             except (aiomqtt.MqttError, OSError, TimeoutError) as exc:
@@ -212,6 +233,15 @@ class IngestoreV2:
             _log.info("iot.v2.scartato", topic=topic, esito=esito.value)
         return esito
 
+    def _arretrato(self, messaggio: MessaggioV2 | None, ricevuto: datetime) -> bool:
+        """Un messaggio che il broker ha tenuto mentre l'ingestore era giù."""
+        if messaggio is None or not messaggio.misure or self._connesso_alle is None:
+            return False
+        grazia = timedelta(minutes=self._c.grazia_arretrato_minuti)
+        return ricevuto - self._connesso_alle <= grazia and all(
+            m.istante < self._connesso_alle for m in messaggio.misure
+        )
+
     async def _gestisci(self, *, topic: str, payload: bytes) -> Esito:
         ricevuto = self._adesso()
         if len(payload) > self._c.max_payload_bytes:
@@ -221,7 +251,20 @@ class IngestoreV2:
             return Esito.TOPIC
         device_id, tipo = parsed
 
-        limite = self._limite.valuta(device_id, ricevuto)
+        messaggio: MessaggioV2 | None = None
+        errore_senml: SenmlError | None = None
+        if tipo == "obs":
+            # Puro, senza database: serve qui solo a riconoscere l'arretrato.
+            try:
+                messaggio = analizza(payload, device_id=device_id, ricevuto=ricevuto)
+            except SenmlError as exc:
+                errore_senml = exc
+
+        limite = (
+            None
+            if self._arretrato(messaggio, ricevuto)
+            else self._limite.valuta(device_id, ricevuto)
+        )
         if limite is Esito.QUARANTENA:
             await sensor_devices_repo.set_status(device_id, "quarantined")
             _log.warning("iot.v2.quarantena_per_frequenza", device_id=device_id)
@@ -244,10 +287,8 @@ class IngestoreV2:
             )
             return Esito.STATO
 
-        try:
-            messaggio = analizza(payload, device_id=device_id, ricevuto=ricevuto)
-        except SenmlError as exc:
-            _log.info("iot.v2.senml", device_id=device_id, error=str(exc))
+        if messaggio is None:
+            _log.info("iot.v2.senml", device_id=device_id, error=str(errore_senml))
             return Esito.MALFORMATO
         if messaggio.ignorate:
             _log.info("iot.v2.grandezze_ignorate", device_id=device_id, nomi=messaggio.ignorate)
