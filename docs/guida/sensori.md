@@ -171,9 +171,52 @@ Uno non basta. Il modo più robusto di tenere la chiave è un secure element
 come l'ATECC608, che costa circa un euro e non permette di estrarla; in
 alternativa, secure boot e flash cifrata dell'ESP32.
 
-La registrazione avverrà senza account: un modulo, una mail, l'approvazione
-di chi cura Limen
-([#253](https://github.com/agent-engineering-studio/limen/issues/253)).
+## Come si registra un sensore
+
+**Senza account: un modulo, una mail, una persona che approva.** Il modulo è
+in fondo a questa pagina e si apre quando la rete accetta nuovi dispositivi
+([#253](https://github.com/agent-engineering-studio/limen/issues/253)). Chiede
+il tipo di sensore, la posizione, la CSR del dispositivo, una mail e tre
+conferme: la licenza dei dati, le regole di sicurezza e l'informativa qui
+sotto. La foto dell'installazione è facoltativa.
+
+La CSR si genera sul dispositivo o, per una prova, su un computer:
+
+```sh
+openssl ecparam -name prime256v1 -genkey -noout -out dispositivo.key
+openssl req -new -key dispositivo.key -subj "/CN=pluvio-matera-01" -out dispositivo.csr
+```
+
+Il CN è l'id del dispositivo: minuscole, cifre e trattini, da 3 a 63
+caratteri. Nel modulo va il contenuto di `dispositivo.csr`. **Il file
+`.key` non si manda mai**, nemmeno a Limen: se lo incolli, il modulo si
+blocca.
+
+La richiesta non crea niente da sola: arriva per mail a chi cura Limen, che la
+legge e la approva o la respinge. Se la approva, ricevi per mail il
+certificato del dispositivo e quello della CA, e il sensore entra nel
+registro come osservatore. Ogni persona può registrare al massimo tre
+dispositivi; un dispositivo revocato continua a contare.
+
+## Dati personali
+
+Limen conserva due dati personali di chi registra un sensore: **la mail e la
+posizione esatta del sensore**. La mail serve a rispondere alla richiesta, a
+contare quanti dispositivi ha registrato la stessa persona e a cancellare
+tutto quando lo chiede. Non è mai pubblicata e nessuna interfaccia di Limen
+la espone: non la mappa, non le API, non gli strumenti per agenti.
+
+- **Posizione.** Quella esatta serve a legare il sensore a una cella della
+griglia, e non è pubblicata. Quando le stazioni compariranno sulla mappa, la
+posizione pubblica sarà arrotondata a 0,01° (circa un chilometro).
+- **Foto e note.** Viaggiano solo nella mail a chi cura Limen e non sono
+salvate nel database.
+- **Misure.** Sono pubblicate con licenza CC BY 4.0 e non contengono dati
+personali.
+- **Cancellazione.** Basta rispondere alla mail di Limen. La mail viene
+cancellata, i dispositivi sono revocati e la loro posizione torna al centro
+della cella di un chilometro: le misure già raccolte restano, senza più
+nulla che le colleghi a te.
 
 ## Cosa può fare un sensore, e cosa no
 
@@ -217,6 +260,6 @@ registra non è mai pubblicata.
 | Livelli di fiducia nel motore ([#251](https://github.com/agent-engineering-studio/limen/issues/251)) | fatto |
 | Protocollo v2 e ingresso delle misure via MQTT ([#252](https://github.com/agent-engineering-studio/limen/issues/252)) | fatto |
 | Ingresso HTTP firmato ([#265](https://github.com/agent-engineering-studio/limen/issues/265)) e LoRaWAN da The Things Network ([#266](https://github.com/agent-engineering-studio/limen/issues/266)) | da fare |
-| Registrazione senza account ([#253](https://github.com/agent-engineering-studio/limen/issues/253)) | da fare |
+| Registrazione senza account ([#253](https://github.com/agent-engineering-studio/limen/issues/253)) | fatto, il modulo apre con la rete |
 | Progetti dei kit con firmware di esempio ([#256](https://github.com/agent-engineering-studio/limen/issues/256)) | da fare |
 | Misura del valore dei pluviometri non ufficiali contro il radar ([#250](https://github.com/agent-engineering-studio/limen/issues/250)) | da fare |

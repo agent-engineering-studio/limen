@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import re
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -56,13 +55,16 @@ from limen.integrations.iot.mqtt_ingestor import (
 )
 from limen.integrations.iot.partitions import ensure_partition_window
 from limen.integrations.iot.qc import QcQuality, check_range
-from limen.integrations.iot.schemas import CANONICAL_UNITS, Observation, ObservedProperty
+from limen.integrations.iot.schemas import (
+    CANONICAL_UNITS,
+    ID_DISPOSITIVO,
+    Observation,
+    ObservedProperty,
+)
 from limen.integrations.iot.senml import SenmlError, analizza
 
 _log: structlog.stdlib.BoundLogger = get_logger(__name__)
 
-# Lo stesso formato che la CA accetta come CN (scripts/sensori_ca.sh).
-_ID = re.compile(r"^[a-z0-9][a-z0-9-]{2,62}$")
 _MINUTO = timedelta(minutes=1)
 _ORA = timedelta(hours=1)
 
@@ -123,7 +125,7 @@ def _topic(topic: str) -> tuple[str, str] | None:
     if len(parti) != 4 or parti[0] != "limen" or parti[1] != "v2":
         return None
     device_id, tipo = parti[2], parti[3]
-    if not _ID.match(device_id) or tipo not in ("obs", "status"):
+    if not ID_DISPOSITIVO.match(device_id) or tipo not in ("obs", "status"):
         return None
     return device_id, tipo
 

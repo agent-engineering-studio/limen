@@ -163,6 +163,9 @@ async def reset_db(pg_pool: asyncpg.Pool) -> AsyncIterator[None]:
         "sensor_features_hourly",
         "sensor_observations",
         "sensor_devices",
+        # Registranti e richieste dei sensori (#253).
+        "sensori_registranti",
+        "sensori_richieste",
         "training_samples",
         "cell_insar_features",
         "model_runs",

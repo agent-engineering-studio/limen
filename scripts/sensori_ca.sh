@@ -3,9 +3,11 @@
 #
 #   sensori_ca.sh init                      CA, server, ingestore, healthcheck, ACL (idempotente)
 #   sensori_ca.sh firma <csr> [giorni]      firma la CSR di un dispositivo; il CN e' il suo id
+#                                           (rifiuta un id con un certificato valido)
 #   sensori_ca.sh revoca <id>               revoca i certificati validi di quell'id e rigenera la CRL
 #   sensori_ca.sh crl                       rigenera la CRL (prima che scada: vedi sotto)
 #   sensori_ca.sh stato                     scadenza di CA, server e CRL
+#   sensori_ca.sh ca                        il certificato della CA (pubblico)
 #
 # Tutto vive in $LIMEN_SENSORI_DIR, fuori dal repo:
 #   ca/       chiave della CA e database di openssl  — non esce mai da qui
@@ -144,6 +146,14 @@ cmd_firma() {
     [ "$cn" != "$r" ] || { log "'$cn' e' un id riservato a Limen"; exit 2; }
   done
   openssl req -in "$csr" -noout -verify 2>/dev/null || { log "firma della CSR non valida"; exit 2; }
+  # Due certificati validi per lo stesso id sono due dispositivi che parlano
+  # come uno: quello di un cittadino potrebbe ereditare il livello di uno
+  # istituzionale. Per un rinnovo voluto: SENSORI_RINNOVO=1.
+  if [ "${SENSORI_RINNOVO:-0}" != 1 ] &&
+    awk -F'\t' -v s="/CN=$cn" '$1 == "V" && $6 == s {f=1} END {exit !f}' "$CA/index.txt"; then
+    log "'$cn' ha gia' un certificato valido (rinnovo: SENSORI_RINNOVO=1)"
+    exit 2
+  fi
   openssl_ca -in "$csr" -extensions dispositivo -days "$giorni" -notext 2>/dev/null
 }
 
@@ -193,5 +203,6 @@ case "${1:-}" in
   revoca) shift; cmd_revoca "$@" ;;
   crl) cmd_crl ;;
   stato) cmd_stato ;;
-  *) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+  ca) cat "$CA/ca.crt" ;;
+  *) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
 esac

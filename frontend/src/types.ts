@@ -661,3 +661,30 @@ export interface ContributoRichiesta {
 export interface ContributoRisposta {
   ricevuto: boolean;
 }
+
+/** I tipi di sensore che un cittadino può registrare (#253). */
+export type TipoSensore = "pluviometro" | "umidita_suolo";
+
+export interface RegistrazioneSensoriStato {
+  aperta: boolean;
+}
+
+export interface RegistrazioneSensoreRichiesta {
+  tipo: TipoSensore;
+  lat: number;
+  lon: number;
+  csr: string;
+  email: string;
+  note: string | null;
+  /** Base64 di un JPEG o PNG, senza il prefisso `data:`. */
+  foto: string | null;
+  licenza: "CC-BY-4.0";
+  regole_sicurezza: true;
+  informativa: true;
+  compilato_in_ms: number;
+  sito_web: string;
+}
+
+export interface RegistrazioneSensoreRisposta {
+  ricevuta: boolean;
+}
