@@ -84,7 +84,17 @@ quarantined, SenML, no time in the future beyond the tolerance, then
 consume the sequence). A measurement older than `IOT__CITTADINI__RITARDO_MINUTI`
 is stored with `in_ritardo = true` (migration 076): kept for the archive,
 the verifications and the radar comparison, excluded from the rollup and
-from the QC baseline. Every threshold is an `IOT__CITTADINI__*` setting.
+from the QC baseline. An hour whose rain arrived partly late is *not
+measured* — the real-time part alone is less than what fell, and it would
+replace the model — so the cell stays on the model. A message older than
+`IOT__CITTADINI__MAX_RITARDO_GIORNI` is rejected like one from the future.
+Every threshold is an `IOT__CITTADINI__*` setting.
+
+The rollup recomputes and **replaces** the whole hour on every run (it used
+to COALESCE-merge with the previous run, which kept a partial sum or the
+reading of a device since demoted). While real-time samples can still land
+in the previous hour (`RITARDO_MINUTI + rollup_minutes` after the hour), the
+job redoes that hour too.
 
 Storing is not scoring: a v2 device reaches the engine only at level 2.
 

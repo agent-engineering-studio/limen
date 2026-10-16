@@ -313,7 +313,7 @@ accenderlo:
 Spento (`IOT__CITTADINI__ENABLED=false`) nessun messaggio v2 entra: è il
 kill switch dei dispositivi di terzi. Ogni scarto è un `iot.v2.scartato` con
 l'`esito` (`frequenza`, `quarantena`, `sconosciuto`, `malformato`, `futuro`,
-`sequenza`, `troppo_grande`, `topic`). Un dispositivo messo in quarantena per
+`troppo_vecchio`, `sequenza`, `troppo_grande`, `topic`, `errore`). Un dispositivo messo in quarantena per
 frequenza ci resta finché non lo si rimette `online` a mano
 (`UPDATE sensor_devices SET status = 'online' WHERE id = …`): il suo LWT non
 basta, per scelta.
