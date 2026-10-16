@@ -17,6 +17,22 @@ The citizen sensor network is **under construction** (epic
 page describes what already exists, what is coming and, above all, which
 rules apply to whoever installs a sensor.
 
+## Why one more sensor
+
+**On 10 October 2026, in the Reggio Calabria area, the weather model saw a
+third of the rain that was falling.** At Melito, San Lorenzo and Bagaladi the
+forecasts gave about 50 mm for the day; the Civil Protection radar, corrected
+with rain gauges, measured between 110 and 176. On the landslide cells
+Limen's weather component never went above 0.29, when reaching "High"
+needed 0.65. The ground was right: the real rain was missing.
+
+An autumn thunderstorm over Southern Italy unloads on a few square
+kilometres, and official rain gauges are often ten or fifteen kilometres
+apart. One more gauge does not decide anything alone, but it tells the radar
+where it is wrong, and together with others owned by different people it
+raises the rainfall estimate exactly where the official networks do not
+reach.
+
 ## Two brokers, two jobs
 
 | | Alert broker | Sensor broker |
@@ -146,7 +162,7 @@ yet is ignored without discarding the others.
 
 Three rules apply to every message. Time is always UTC, taken from NTP: a
 message from the future is discarded. At most about a dozen messages a
-minute: beyond that they are discarded, and a device that insists goes into
+minute, counting `status`, the last will and retransmissions too: beyond that they are discarded, and a device that insists goes into
 quarantine until someone checks it. The sequence number always grows, even
 after a reboot, so it must be kept in the device's memory: a number already
 seen is a repeated message and is discarded. A device that loses its network keeps its
@@ -168,6 +184,173 @@ Raspberry Pi Pico W or a Raspberry Pi. An Arduino Uno is not enough. The
 most robust way to hold the key is a secure element such as the ATECC608,
 which costs about one euro and does not let the key be extracted; the
 alternative is the ESP32's secure boot and encrypted flash.
+
+## Three sensors to build
+
+**An ESP32, the sensor, a weatherproof box and a power supply: between 35
+and 60 euros.** Prices are indicative, for single parts bought in Italy.
+Inclinometers are left out: they measure a moving slope, and that kind of
+data is only trusted from an institution (level 2).
+
+### Tipping-bucket rain gauge
+
+A bucket fills with a fixed amount of rain, empties by tipping over and
+briefly closes a reed switch: the ESP32 counts the tips and every five
+minutes sends the millimetres that fell.
+
+| Part | Cost |
+|---|---|
+| ESP32 DevKit (ESP32-WROOM-32) | €8 |
+| Spare tipping-bucket gauge for weather stations, reed output | €20 |
+| 5 V USB supply, or a 6 W panel with an 18650 battery and charger | €8-20 |
+| IP65 box with cable glands | €6 |
+| Pole or bracket, cable, terminals | €8 |
+| **Total** | **about €50-60** |
+
+| Rain gauge | ESP32 |
+|---|---|
+| reed wire | GPIO 27 |
+| other reed wire | GND |
+
+No resistor is needed: the firmware enables the internal one and ignores the
+contact bounce. Every bucket has its own volume: measure it by slowly pouring
+a known amount of water and counting the tips, then write `mm_scatto=` on
+the serial console. The starting value, 0.2794 mm, is the one of the most
+common models.
+
+**Where to put it**, following the World Meteorological Organization rules:
+horizontal orifice 1-1.5 m above the ground; away from any obstacle (walls,
+trees, fences) at least twice its height above the orifice, four times is
+better; not on a roof or next to a building, where the wind swirls and
+carries the rain away. Clean the filter once a month: leaves and insects
+clog it, and a clogged gauge reads zero.
+
+### Soil moisture
+
+A capacitive probe measures how much water the ground holds, which matters
+for a landslide as much as the rain: the same storm brings down an already
+saturated slope and not a dry one.
+
+| Part | Cost |
+|---|---|
+| ESP32 DevKit | €8 |
+| Capacitive probe v2.0 with TLC555 (not the NE555 ones, which do not work at 3.3 V) | €3 |
+| Three-core shielded cable, 3 m | €3 |
+| Power and IP65 box, as above | €15-25 |
+| **Total** | **about €35-40** |
+
+| Probe | ESP32 |
+|---|---|
+| VCC | 3V3 |
+| GND | GND |
+| AOUT | GPIO 34 |
+
+Push the probe in vertically up to the line, 5-10 cm deep, away from roots
+and stones, with the electronics above ground sealed with resin or
+heat-shrink. Calibrate it before burying it: `grezza` in air gives
+`secco=`, `grezza` with the probe in a glass of water up to the line gives
+`bagnato=`. A three-euro probe is off by a few percentage points even when
+well calibrated, which is one of the reasons it starts as an observer.
+
+### Water-level gauge
+
+A waterproof ultrasonic sensor mounted above a watercourse measures the
+distance to the surface: the level is its height minus that distance.
+**Only with the authorisation of the body that manages the watercourse or
+the bridge**, and Limen does not read water levels yet: the registration
+form will offer it when the flood engine can use it.
+
+| Part | Cost |
+|---|---|
+| ESP32 DevKit | €8 |
+| Waterproof JSN-SR04T (25 cm to 4.5 m) | €10 |
+| Two resistors, 1 kΩ and 2 kΩ | €0.5 |
+| Bracket, power and IP65 box | €25-35 |
+| **Total** | **about €45-55** |
+
+| JSN-SR04T | ESP32 |
+|---|---|
+| 5V | VIN (5 V) |
+| GND | GND |
+| TRIG | GPIO 26 |
+| ECHO | GPIO 25, through the divider: 1 kΩ to ECHO, 2 kΩ to GND |
+
+The divider is needed because ECHO outputs 5 V and the ESP32 takes 3.3. The
+height of the transducer above the gauge zero, in metres, goes in
+`quota=`. A millimetre-wave radar (€40-70) measures better in rain and foam,
+but the example firmware does not support it.
+
+## The example firmware
+
+**One program for the three sensors, in the Limen repository under
+[`firmware/limen-sensore`](https://github.com/agent-engineering-studio/limen/tree/main/firmware/limen-sensore),
+compiled on every change.** Flash it with
+[PlatformIO](https://platformio.org):
+
+```sh
+cd firmware/limen-sensore
+pio run -e pluviometro -t upload     # or umidita_suolo, idrometro
+pio device monitor                   # the serial console, at 115200
+```
+
+There is no secret in the program: network, id and certificates are given
+on the serial console and stay in the device memory. The commands are in
+Italian, like the rest of Limen:
+
+```
+ssid=MyNetwork
+password=…
+id=pluvio-matera-01
+riavvia
+csr
+```
+
+`csr` creates the device key the first time and prints the request to paste
+into the registration form. When the email with the two certificates
+arrives, type `cert` and paste the device one, then `ca` and paste the CA
+one, then `riavvia` (restart). The firmware refuses a certificate that does
+not match its key or that is for another id. Every setting, calibrations
+included, takes effect at the next restart. `stato` tells what is missing.
+
+What it does on its own:
+
+- takes UTC time from NTP and does not measure until it has it;
+- measures every five minutes, aligned to the clock (`intervallo=` to
+change it);
+- publishes in SenML with acknowledgement (QoS 1), and announces
+`online`/`offline`;
+- without network it keeps a day of measurements and sends them back in
+groups when it returns, without exceeding the per-minute message limit.
+The queue lives in volatile memory: a power drop loses it;
+- keeps the sequence number across restarts, and a group sent again keeps
+its own: if the first attempt had arrived, Limen discards the second instead
+of counting the same rain twice. The acknowledgement comes from the broker,
+not from Limen: a message Limen discards is lost, which is why the firmware
+sends at most six a minute.
+
+**The key in memory is in clear.** For a device left outdoors, where anyone
+can take it, enable the ESP32's flash encryption and secure boot, or keep the
+key in an ATECC608.
+
+## How to connect it
+
+| Link | When | Status |
+|---|---|---|
+| Wi-Fi with an ESP32 | there is a network in range, at home, at school | the example firmware |
+| Raspberry Pi Pico W | like the ESP32; TLS with mbedTLS or MicroPython | no example |
+| Raspberry Pi | already runs Linux: `mosquitto_pub` or Paho are enough | see below |
+| LoRaWAN with The Things Network | in the countryside, no Wi-Fi, kilometres of range | coming ([#266](https://github.com/agent-engineering-studio/limen/issues/266)) |
+| Arduino Uno | — | **no**: it cannot do TLS |
+
+From a Raspberry Pi, or from a computer for a test, a message is sent like
+this (the sequence must grow at every send):
+
+```sh
+mosquitto_pub -h limen.agentengineering.it -p 8883 -q 1 \
+  --cafile ca.crt --cert dispositivo.crt --key dispositivo.key \
+  -t limen/v2/pluvio-matera-01/obs \
+  -m "[{\"bn\":\"pluvio-matera-01/\",\"bt\":$(date +%s),\"n\":\"rainfall\",\"u\":\"mm\",\"v\":0.0},{\"n\":\"seq\",\"v\":1}]"
+```
 
 ## How to register a sensor
 
@@ -216,6 +399,16 @@ devices are revoked and their position goes back to the centre of their
 one-kilometre cell: the measurements already collected stay, with nothing
 left linking them to you.
 
+## Data licence
+
+**The measurements of a registered sensor are published under the
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) licence.** Anyone
+can reuse them, commercial uses included, crediting Limen and the station.
+The registration form asks for it explicitly: it is what lets a
+municipality, a university or another network use them. The measurements
+contain no personal data; the public position of the station is rounded
+(see above).
+
 ## What a sensor can do, and what it cannot
 
 **A sensor installed by a citizen does not trigger alerts and never lowers
@@ -258,5 +451,5 @@ is never published.
 | v2 protocol and measurement intake over MQTT ([#252](https://github.com/agent-engineering-studio/limen/issues/252)) | done |
 | Signed HTTP intake ([#265](https://github.com/agent-engineering-studio/limen/issues/265)) and LoRaWAN from The Things Network ([#266](https://github.com/agent-engineering-studio/limen/issues/266)) | to do |
 | Registration without an account ([#253](https://github.com/agent-engineering-studio/limen/issues/253)) | done, the form opens with the network |
-| Kit projects with example firmware ([#256](https://github.com/agent-engineering-studio/limen/issues/256)) | to do |
+| Kit projects with example firmware ([#256](https://github.com/agent-engineering-studio/limen/issues/256)) | done |
 | Measuring the value of non-official rain gauges against the radar ([#250](https://github.com/agent-engineering-studio/limen/issues/250)) | to do |

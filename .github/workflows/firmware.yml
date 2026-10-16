@@ -1,0 +1,38 @@
+name: firmware
+
+# Il firmware di esempio dei sensori (#256) compila in tutte e tre le
+# varianti. Gira solo quando cambia: la toolchain ESP32 pesa centinaia di MB.
+on:
+  pull_request:
+    paths: ["firmware/**", ".github/workflows/firmware.yml"]
+  push:
+    branches: [main]
+    paths: ["firmware/**", ".github/workflows/firmware.yml"]
+
+concurrency:
+  group: firmware-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  esp32:
+    name: firmware (pluviometro, umidita_suolo, idrometro)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ hashFiles('firmware/limen-sensore/platformio.ini') }}
+
+      - name: Install PlatformIO
+        run: pip install platformio==6.1.16
+
+      - name: Build
+        run: pio run -d firmware/limen-sensore -e pluviometro -e umidita_suolo -e idrometro

@@ -80,3 +80,6 @@ mlruns/
 # Segreti dello stack d'inferenza (chiavi Anthropic e colibrì)
 infra/inference/secrets.env
 .env.bak*
+
+# Build di PlatformIO del firmware dei sensori (#256)
+firmware/**/.pio/
