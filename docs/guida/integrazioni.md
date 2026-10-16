@@ -322,18 +322,9 @@ riepilogo per comune, eventuali cascate tra pericoli e link alla mappa.
 
 **Il codice di Limen è rilasciato sotto EUPL-1.2; i dati che usa restano
 sotto le licenze delle loro fonti, e chi ripubblica quello che Limen
-produce si porta dietro le stesse attribuzioni.** Le principali:
-
-| Fonte | Licenza |
-|---|---|
-| ISPRA IdroGEO (PAI, IFFI, pericolosità idraulica) | CC-BY 4.0 |
-| Open-Meteo (previsioni e archivio ERA5) | CC-BY 4.0 |
-| INGV (terremoti) | CC-BY 4.0 |
-| Protezione Civile (bollettini di allerta) | CC-BY 4.0 |
-| Confini ISTAT | CC-BY 4.0 |
-| CORINE Land Cover | CC-BY |
-| OpenStreetMap | ODbL |
-| GloFAS ed EFAS (Copernicus CEMS-Floods) | licenza CEMS, con dicitura obbligatoria |
+produce si porta dietro le stesse attribuzioni.** Ogni fonte, con cosa dà a
+Limen, la licenza e la dicitura che chiede, è nella pagina
+[Fonti](#/fonti).
 
 **Per l'alluvione la dicitura Copernicus è obbligatoria.** Ogni superficie
 che mostra punteggi di alluvione derivati da GloFAS deve riportare:
