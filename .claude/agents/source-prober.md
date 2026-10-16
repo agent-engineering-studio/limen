@@ -26,6 +26,11 @@ Lezioni già pagate (non ripeterle):
   incendi dalle sorgenti industriali (ILVA di Taranto).
 - **Copernicus EMS** è aperto; la verità è `observedEventA`, l'AOI è la maschera.
 - **CLMS/EEA** serve gli ImageServer discomap senza account; la RAT è la fonte sui valori.
+- **Reti cittadine (#248)**: MeteoNetwork v3 vuole un token (401 senza; quelli
+  v1/v2 `MT…` non valgono) e solo il **BULK** legge per regione; max 1 req/s,
+  sito solo HTTP/1.1 con User-Agent. Sensor.Community è aperta ma **non ha
+  pioggia** e vuole un User-Agent identificativo. Raspberry Shake, Netatmo e
+  Weather Underground sono NO-GO motivati: non riprovarle senza una ragione nuova.
 - Le credenziali (`CDSAPI_KEY`, `COPERNICUS__EWDS_KEY`, …) stanno in `.env`: non
   stamparle mai nell'output.
 

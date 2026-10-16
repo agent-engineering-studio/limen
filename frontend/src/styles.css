@@ -3610,3 +3610,95 @@ html[lang="en"] .app-nav a { white-space: nowrap; }
   font-size: 0.85em;
   line-height: 1.35;
 }
+
+/* --- pagina "Fonti" (#277) --- */
+.fonti-avviso {
+  font-size: 13px;
+  color: var(--muted);
+  border-left: 2px solid var(--line-strong);
+  padding-left: 12px;
+}
+.fonti-elenco {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 12px;
+}
+.fonte {
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  gap: 16px;
+  padding: 16px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+}
+.fonte-marchio {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fonte-marchio small {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.fonte-nome {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  padding: 8px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.25;
+  color: var(--ink-soft);
+  background: var(--panel-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+}
+.fonte-testo h4 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+.explainer .fonte-testo p {
+  margin: 4px 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.fonte-ente {
+  color: var(--muted);
+}
+.fonte-tag {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+}
+.fonte-tag .hz-landslide { color: var(--hz-landslide); }
+.fonte-tag .hz-flood { color: var(--hz-flood); }
+.fonte-tag .hz-wildfire { color: var(--hz-wildfire); }
+.fonte-meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 8px 0;
+  font-size: 13px;
+}
+.fonte-meta dt {
+  color: var(--muted);
+}
+.fonte-meta dd {
+  margin: 0;
+}
+.explainer .fonte-nota {
+  font-size: 12px;
+  color: var(--muted);
+}
+@media (max-width: 560px) {
+  .fonte {
+    grid-template-columns: 1fr;
+  }
+}

@@ -317,18 +317,8 @@ municipality, any cascades between hazards and a link to the map.
 
 **Limen's code is released under EUPL-1.2; the data it uses keep their
 sources' licences, and whoever republishes what Limen produces carries the
-same attributions along.** The main ones:
-
-| Source | Licence |
-|---|---|
-| ISPRA IdroGEO (PAI, IFFI, flood hazard) | CC-BY 4.0 |
-| Open-Meteo (forecasts and ERA5 archive) | CC-BY 4.0 |
-| INGV (earthquakes) | CC-BY 4.0 |
-| Protezione Civile (Italy's civil-protection department; warning bulletins) | CC-BY 4.0 |
-| ISTAT boundaries | CC-BY 4.0 |
-| CORINE Land Cover | CC-BY |
-| OpenStreetMap | ODbL |
-| GloFAS and EFAS (Copernicus CEMS-Floods) | CEMS licence, with mandatory wording |
+same attributions along.** Every source, with what it gives Limen, its
+licence and the wording it requires, is on the [Sources](#/fonti) page.
 
 **For floods the Copernicus wording is mandatory.** Every surface showing
 flood scores derived from GloFAS must state: "Contains modified Copernicus

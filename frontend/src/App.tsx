@@ -20,6 +20,7 @@ import type {
 } from "./types";
 import FreshnessBadge from "./components/FreshnessBadge";
 import HomePage from "./components/HomePage";
+import FontiPage from "./components/FontiPage";
 import IntegrationsPage from "./components/IntegrationsPage";
 import SensoriPage from "./components/SensoriPage";
 import LegendPanel from "./components/LegendPanel";
@@ -48,6 +49,7 @@ type Page =
   | "shadow"
   | "integrations"
   | "sensori"
+  | "fonti"
   | "verifiche";
 
 function pageFromHash(): Page {
@@ -70,6 +72,9 @@ function pageFromHash(): Page {
   }
   if (hash.startsWith("#/sensori")) {
     return "sensori";
+  }
+  if (hash.startsWith("#/fonti")) {
+    return "fonti";
   }
   switch (hash) {
     case "#/dashboard":
@@ -117,6 +122,7 @@ const T = testi(
     navGuida: "Come funziona",
     navIntegrazioni: "Integrazioni",
     navSensori: "Sensori",
+    navFonti: "Fonti",
     lingua: "Lingua",
     nomeLingua: { it: "Italiano", en: "English" },
     soloItaliano: "",
@@ -150,6 +156,7 @@ const T = testi(
     navGuida: "How it works",
     navIntegrazioni: "Integrations",
     navSensori: "Sensors",
+    navFonti: "Sources",
     lingua: "Language",
     nomeLingua: { it: "Italiano", en: "English" },
     soloItaliano:
@@ -571,6 +578,9 @@ export function App(): JSX.Element {
           <a href="#/sensori" className={page === "sensori" ? "on" : ""}>
             {t.navSensori}
           </a>
+          <a href="#/fonti" className={page === "fonti" ? "on" : ""}>
+            {t.navFonti}
+          </a>
         </nav>
         <div className="header-spazio" />
         <RicercaComune
@@ -619,6 +629,10 @@ export function App(): JSX.Element {
         ) : page === "sensori" ? (
           <div className="explainer-area">
             <SensoriPage />
+          </div>
+        ) : page === "fonti" ? (
+          <div className="explainer-area">
+            <FontiPage />
           </div>
         ) : (
           dashboard
