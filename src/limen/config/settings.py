@@ -504,6 +504,47 @@ class NotificationsSettings(BaseSettings):
     webhook: WebhookChannelSettings = Field(default_factory=WebhookChannelSettings)
 
 
+class IotCittadiniSettings(BaseSettings):
+    """Ingestore del protocollo v2 sul broker dei sensori (#252, epic #247).
+
+    È il kill switch dei dispositivi di terzi: spento, nessun messaggio v2
+    entra. Gira solo nel `worker`, mai nell'API pubblica. Le misure che fa entrare
+    non toccano lo scoring finché il dispositivo non è di livello 2 (#251).
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    enabled: bool = False
+    # Il broker dei sensori (#260): mTLS con il certificato dell'ingestore,
+    # firmato dalla CA privata. Dentro la rete docker il nome è quello del
+    # container, che è nel SAN del certificato del server.
+    broker_host: str = "limen-mosquitto-sensori"
+    broker_port: int = Field(default=8883, ge=1, le=65535)
+    cafile: str = "/run/limen-sensori/ca.crt"
+    certfile: str = "/run/limen-sensori/ingestore.crt"
+    keyfile: str = "/run/limen-sensori/ingestore.key"
+    client_id: str = "limen-ingestore-v2"
+
+    # Guardrail. Il broker tronca già a 4096 byte (`max_packet_size`).
+    max_payload_bytes: int = Field(default=2048, ge=64)
+    # Un orologio avanti di più di così è un dispositivo senza NTP: il
+    # messaggio si rifiuta, perché non si sa a che ora si riferisce.
+    tolleranza_futuro_secondi: int = Field(default=120, ge=0)
+    # Più vecchia di così una misura è «in ritardo»: si salva ma non entra nel
+    # rollup che alimenta lo scoring.
+    ritardo_minuti: int = Field(default=15, ge=1)
+    # Oltre quest'età il messaggio si rifiuta come uno dal futuro: un
+    # arretrato di settimane è un orologio rotto, non una rete caduta, e
+    # cadrebbe fuori dalle partizioni facendo perdere anche le righe buone.
+    max_ritardo_giorni: int = Field(default=30, ge=1)
+    # Messaggi al minuto per dispositivo; oltre si scartano. Una lettura ogni
+    # cinque secondi è già più di quanto serva a un pluviometro.
+    max_messaggi_al_minuto: int = Field(default=12, ge=1)
+    # Messaggi scartati per frequenza, nell'ultima ora, prima della quarantena:
+    # un firmware in loop si ferma senza toccare gli altri dispositivi.
+    scarti_per_quarantena: int = Field(default=60, ge=1)
+
+
 class IotSettings(BaseSettings):
     """V1.5 in-situ ingestion knobs.
 
@@ -544,6 +585,8 @@ class IotSettings(BaseSettings):
     # uno zero terrebbe M bassa per sempre, e un estensimetro tacitato dopo
     # un'ora in accelerazione terrebbe acceso `hard_escalation`.
     max_age_minutes: int = Field(default=120, ge=10)
+
+    cittadini: IotCittadiniSettings = Field(default_factory=IotCittadiniSettings)
 
     # Rollup + partition rollover cadence.
     rollup_minutes: int = Field(default=10, ge=1)

@@ -124,6 +124,45 @@ async def upsert(row: SensorFeaturesRow) -> None:
         )
 
 
+async def sostituisci_bucket(bucket: datetime, rows: list[SensorFeaturesRow]) -> None:
+    """Riscrive per intero le righe di un'ora: quelle in ``rows`` e nient'altro.
+
+    Il rollup ricalcola l'ora da zero a ogni giro, da tutte le osservazioni
+    grezze, quindi il suo risultato è l'ora intera. Fonderlo con il giro
+    precedente (COALESCE) conservava valori che non valgono più: la pioggia
+    parziale di un dispositivo che poi ha mandato il resto in ritardo, o la
+    misura di un dispositivo nel frattempo retrocesso o andato offline — un
+    valore più basso del vero, nella direzione che rassicura (#252).
+    """
+    async with acquire() as conn, conn.transaction():
+        await conn.execute("DELETE FROM sensor_features_hourly WHERE bucket = $1", bucket)
+        await conn.executemany(
+            """
+            INSERT INTO sensor_features_hourly (
+                cell_id, bucket, rainfall_mm, pore_pressure_kpa, soil_moisture,
+                displacement_mm, velocity_mmd, acceleration_mmd2, inverse_velocity,
+                sample_count, last_observation_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            """,
+            [
+                (
+                    r.cell_id,
+                    r.bucket,
+                    r.rainfall_mm,
+                    r.pore_pressure_kpa,
+                    r.soil_moisture,
+                    r.displacement_mm,
+                    r.velocity_mmd,
+                    r.acceleration_mmd2,
+                    r.inverse_velocity,
+                    r.sample_count,
+                    r.last_observation_at,
+                )
+                for r in rows
+            ],
+        )
+
+
 async def latest_for_cell(
     cell_id: str, *, as_of: datetime, max_age: timedelta
 ) -> SensorFeaturesRow | None:
@@ -155,4 +194,4 @@ async def latest_for_cell(
     return SensorFeaturesRow(**dict(row))
 
 
-__all__ = ["SensorFeaturesRow", "latest_for_cell", "upsert"]
+__all__ = ["SensorFeaturesRow", "latest_for_cell", "sostituisci_bucket", "upsert"]

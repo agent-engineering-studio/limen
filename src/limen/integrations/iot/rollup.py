@@ -1,7 +1,8 @@
-"""Hourly rollup — OK observations → ``sensor_features_hourly``.
+"""Hourly rollup — OK, real-time observations → ``sensor_features_hourly``.
 
 The job groups OK-quality observations into one-hour buckets and writes
-one row per (cell_id, bucket). For displacement, it derives velocity
+one row per (cell_id, bucket). Observations marked late (#252) never
+enter: they feed the archive, not the scoring. For displacement, it derives velocity
 (mm/d) by linear regression on the bucket's samples, acceleration by
 finite difference between consecutive hourly velocities, and the
 inverse-velocity = 1 / max(velocity, eps) (Fukuzono input).
@@ -69,6 +70,7 @@ async def _meteo_aggregates_for(
             WHERE device_id = $1
               AND observed_property = $2
               AND quality = 'ok'
+              AND NOT in_ritardo
               AND phenomenon_time >= $3
               AND phenomenon_time <  $4
             """,
@@ -88,13 +90,19 @@ async def _sum_rainfall_for(
     bucket_start: datetime,
     bucket_end: datetime,
 ) -> tuple[float | None, int, datetime | None]:
-    """Rainfall accumulates — sum (not mean) in the bucket."""
+    """Rainfall accumulates — sum (not mean) in the bucket.
+
+    A bucket where part of the rain arrived late is not measured: the sum of
+    the real-time part alone would be lower than what fell, and it would
+    replace the model's estimate (#252). The cell stays on the model.
+    """
     async with acquire() as conn:
         row = await conn.fetchrow(
             """
-            SELECT SUM(result_value) AS total,
-                   COUNT(*)::int     AS n,
-                   MAX(phenomenon_time) AS last_at
+            SELECT SUM(result_value) FILTER (WHERE NOT in_ritardo) AS total,
+                   (COUNT(*) FILTER (WHERE NOT in_ritardo))::int  AS n,
+                   MAX(phenomenon_time) FILTER (WHERE NOT in_ritardo) AS last_at,
+                   COALESCE(bool_or(in_ritardo), false) AS ritardo
             FROM sensor_observations
             WHERE device_id = $1
               AND observed_property = $2
@@ -107,6 +115,9 @@ async def _sum_rainfall_for(
             bucket_start,
             bucket_end,
         )
+    if row is not None and row["ritardo"]:
+        _log.info("iot.rollup.pioggia_incompleta", device_id=device_id, bucket=bucket_start)
+        return None, 0, None
     if row is None or row["n"] == 0:
         return None, 0, None
     return float(row["total"]), int(row["n"]), row["last_at"]
@@ -239,13 +250,14 @@ async def run_hourly_rollup(*, reference: datetime) -> int:
     """Roll the hour that contains ``reference`` into the per-cell features.
 
     Returns the number of (cell_id, bucket) rows written. Idempotent —
-    re-running on the same hour merges via the COALESCE upsert in
-    :mod:`sensor_features_hourly_repo`.
+    every run recomputes the whole hour from the raw observations and
+    replaces the bucket.
     """
     bucket_start = _floor_to_hour(reference)
     bucket_end = bucket_start + timedelta(hours=1)
     devices = await _devices_with_cells()
     if not devices:
+        await sensor_features_hourly_repo.sostituisci_bucket(bucket_start, [])
         _log.info("iot.rollup.no_devices")
         return 0
 
@@ -264,8 +276,7 @@ async def run_hourly_rollup(*, reference: datetime) -> int:
         else:
             by_cell[cell_id] = row
 
-    for row in by_cell.values():
-        await sensor_features_hourly_repo.upsert(row)
+    await sensor_features_hourly_repo.sostituisci_bucket(bucket_start, list(by_cell.values()))
 
     _log.info(
         "iot.rollup.done",

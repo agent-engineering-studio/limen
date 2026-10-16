@@ -175,6 +175,24 @@ async def run(*, check_health: bool = False) -> int:
             await ingestor.start()
             log.info("worker.iot.started")
 
+        # I dispositivi di terzi (#252) entrano solo da qui, mai dall'API, e
+        # indipendentemente da `enable_insitu`: salvare una misura non la porta
+        # nello scoring, lo decidono il livello (#251) e il rollup.
+        ingestore_v2: Any = None
+        if settings.iot.cittadini.enabled:
+            from limen.integrations.iot.ingestore_v2 import IngestoreV2
+
+            ingestore_v2 = IngestoreV2(
+                settings.iot,
+                sigma_v=(
+                    deps.thresholds.kinematic.sigma_v
+                    if deps.thresholds.kinematic is not None
+                    else None
+                ),
+            )
+            await ingestore_v2.start()
+            log.info("worker.iot.v2.started")
+
         heartbeat = asyncio.create_task(_heartbeat_loop(stop, scheduler))
         await stop.wait()
         log.info("worker.stopping")
@@ -186,6 +204,9 @@ async def run(*, check_health: bool = False) -> int:
         if ingestor is not None:
             with contextlib.suppress(Exception):
                 await ingestor.stop()
+        if ingestore_v2 is not None:
+            with contextlib.suppress(Exception):
+                await ingestore_v2.stop()
         with contextlib.suppress(Exception):
             await scheduler.stop()
 

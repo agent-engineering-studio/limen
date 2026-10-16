@@ -105,15 +105,15 @@ refuses what it must refuse:
 
 ## The v2 protocol
 
-**Few fields, fixed units, identity in the certificate.** The protocol is
-being defined ([#252](https://github.com/agent-engineering-studio/limen/issues/252)):
-what follows is the direction, not a contract yet.
+**Few fields, fixed units, identity in the certificate.** Limen already
+reads messages in this format ([#252](https://github.com/agent-engineering-studio/limen/issues/252)),
+but only from registered devices, and registration is not open yet.
 
 Two topics per device:
 
 ```
 limen/v2/<id>/obs       the measurements
-limen/v2/<id>/status    alive or not (MQTT client last will)
+limen/v2/<id>/status    online at connect, offline as last will
 ```
 
 The device **does not declare where it is**: Limen records its position,
@@ -121,8 +121,8 @@ region and grid cell when it approves the device. One less datum to verify,
 and a sensor that has been moved gets noticed.
 
 The message follows SenML (RFC 8428), the standard format for sensor
-measurements: JSON over Wi-Fi or mobile networks, CBOR where every byte
-counts, as on LoRaWAN.
+measurements, in JSON. CBOR, where every byte counts, will come with LoRaWAN
+([#266](https://github.com/agent-engineering-studio/limen/issues/266)).
 
 ```json
 [
@@ -133,15 +133,23 @@ counts, as on LoRaWAN.
 
 The quantities and their units:
 
-| Quantity | Unit | For which hazard |
+| Quantity | `u` field | For which hazard |
 |---|---|---|
-| `rainfall` | mm | landslide, flood |
-| `soil_moisture` | m³/m³ | landslide |
-| `water_level` | m | flood (coming) |
+| `rainfall` | `mm` | landslide, flood |
+| `soil_moisture` | `m3/m3` | landslide |
+| `water_level` | `m` | flood (coming) |
 | `air_temperature`, `relative_humidity`, `wind_speed` | °C, %, km/h | wildfire (coming) |
 
-Two rules apply to every message. Time is always UTC, taken from NTP. The
-sequence number always grows: a device that loses its network keeps its
+The unit is written exactly like this: Limen does not convert, and a
+message with a different unit is discarded. A quantity Limen does not know
+yet is ignored without discarding the others.
+
+Three rules apply to every message. Time is always UTC, taken from NTP: a
+message from the future is discarded. At most about a dozen messages a
+minute: beyond that they are discarded, and a device that insists goes into
+quarantine until someone checks it. The sequence number always grows, even
+after a reboot, so it must be kept in the device's memory: a number already
+seen is a repeated message and is discarded. A device that loses its network keeps its
 measurements and sends them again when it is back, and Limen accepts them
 marked **late**. They do not enter the forecast for the hour, but they stay
 in the archive and in the verifications: they are often the hours of the
@@ -204,7 +212,8 @@ is never published.
 |---|---|
 | Sensor broker with mTLS, private CA and automatic check ([#260](https://github.com/agent-engineering-studio/limen/issues/260)) | done |
 | Trust levels in the engine ([#251](https://github.com/agent-engineering-studio/limen/issues/251)) | done |
-| v2 protocol and measurement intake ([#252](https://github.com/agent-engineering-studio/limen/issues/252)) | to do |
+| v2 protocol and measurement intake over MQTT ([#252](https://github.com/agent-engineering-studio/limen/issues/252)) | done |
+| Signed HTTP intake ([#265](https://github.com/agent-engineering-studio/limen/issues/265)) and LoRaWAN from The Things Network ([#266](https://github.com/agent-engineering-studio/limen/issues/266)) | to do |
 | Registration without an account ([#253](https://github.com/agent-engineering-studio/limen/issues/253)) | to do |
 | Kit projects with example firmware ([#256](https://github.com/agent-engineering-studio/limen/issues/256)) | to do |
 | Measuring the value of non-official rain gauges against the radar ([#250](https://github.com/agent-engineering-studio/limen/issues/250)) | to do |

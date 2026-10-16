@@ -280,6 +280,10 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
             interval_minutes=deps.settings.iot.rollup_minutes,
         )
 
+    # Le partizioni servono a chiunque scriva `sensor_observations`, anche al
+    # solo ingestore v2 (#252) con `enable_insitu` spento: senza, finita la
+    # finestra ogni INSERT fallirebbe con «no partition of relation found».
+    if deps.settings.enable_insitu or deps.settings.iot.cittadini.enabled:
         await scheduler.add_schedule(
             track_job(JOB_IOT_PARTITION_ROLLOVER)(run_iot_partition_rollover_job),
             args=(deps,),

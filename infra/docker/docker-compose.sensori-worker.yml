@@ -1,0 +1,22 @@
+# Overlay del worker per l'ingestore v2 dei sensori (#252). `make` lo aggiunge
+# allo stack solo se LIMEN_SENSORI_DIR è nel .env: un deployment senza broker
+# dei sensori non monta niente e non crea directory vuote sull'host.
+#
+# Il worker gira come `limen` (uid 999) e la chiave dell'ingestore è del
+# proprietario della CA: `sensori_ca.sh init` la lascia leggibile al gruppo
+# (0640), e qui il worker entra in quel gruppo. Il resto della CA (ca/, broker/)
+# non viene montato.
+#
+# L'`environment` del worker in docker-compose.demo.yml è esplicito, e
+# `--env-file` serve solo all'interpolazione: il kill switch va passato qui,
+# o `IOT__CITTADINI__ENABLED=true` nel .env non accenderebbe niente. Le soglie
+# restano ai default di `IotCittadiniSettings`; per cambiarne una si aggiunge
+# la sua riga qui sotto.
+services:
+  worker:
+    environment:
+      IOT__CITTADINI__ENABLED: ${IOT__CITTADINI__ENABLED:-false}
+    volumes:
+      - ${LIMEN_SENSORI_DIR:?imposta LIMEN_SENSORI_DIR}/client:/run/limen-sensori:ro
+    group_add:
+      - "${LIMEN_SENSORI_GID:-1000}"

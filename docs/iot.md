@@ -45,6 +45,59 @@ Six observed properties, one datastream each: `rainfall`,
    threshold for them (precursor signals are dispatched even below the
    aggregate alert level).
 
+## Protocol v2 — devices of anyone (#252)
+
+Third-party devices publish on the sensor broker (#260, mTLS with a
+certificate per device) and are read by `IngestoreV2`
+(`limen.integrations.iot.ingestore_v2`), which runs in the worker only
+and only with `IOT__CITTADINI__ENABLED=true` — the kill switch.
+
+```
+limen/v2/{id}/obs       SenML (RFC 8428) JSON
+limen/v2/{id}/status    "online" | "offline"  (publish "online" at connect, LWT "offline")
+```
+
+`{id}` is the certificate's CN: the broker's ACL lets a device write only
+under its own id, so the topic *is* the identity and nothing in the payload
+can change it. A message:
+
+```json
+[
+  {"bn": "pluvio-matera-01/", "bt": 1792065600, "n": "rainfall", "u": "mm", "v": 0.4},
+  {"n": "seq", "v": 18342}
+]
+```
+
+- names resolve to `{id}/{property}`; a record naming another device makes
+  the whole message invalid;
+- units are fixed (`CANONICAL_UNITS`), no conversion;
+- time is UTC seconds (`bt` + `t`); below 2²⁸ it is relative to arrival;
+- one `seq` record per message, strictly increasing per device and
+  **persisted by the firmware across reboots**;
+- an unknown property is skipped, not rejected, so newer firmware keeps
+  working.
+
+Guardrails, in order: payload size, messages per minute per device (repeated
+excess ⇒ `quarantined`, which only an operator lifts), registered and not
+quarantined, SenML, no time in the future beyond the tolerance, then
+`seq` and the insert **in one transaction** (a failed insert does not
+consume the sequence). A measurement older than `IOT__CITTADINI__RITARDO_MINUTI`
+is stored with `in_ritardo = true` (migration 076): kept for the archive,
+the verifications and the radar comparison, excluded from the rollup and
+from the QC baseline. An hour whose rain arrived partly late is *not
+measured* — the real-time part alone is less than what fell, and it would
+replace the model — so the cell stays on the model. A message older than
+`IOT__CITTADINI__MAX_RITARDO_GIORNI` is rejected like one from the future.
+Every threshold is an `IOT__CITTADINI__*` setting.
+
+The rollup recomputes and **replaces** the whole hour on every run (it used
+to COALESCE-merge with the previous run, which kept a partial sum or the
+reading of a device since demoted). While real-time samples can still land
+in the previous hour (`RITARDO_MINUTI + rollup_minutes` after the hour), the
+job redoes that hour too.
+
+Storing is not scoring: a v2 device reaches the engine only at level 2.
+
 ## Trust levels (#251)
 
 Every device in `sensor_devices` carries a `livello` (migration 075):

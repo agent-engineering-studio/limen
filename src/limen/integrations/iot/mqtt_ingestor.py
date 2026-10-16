@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -75,7 +75,7 @@ def _topic_thing_segment(topic: str) -> str | None:
     return parts[4]
 
 
-def _calibrate(observation: Observation, calibration: dict[str, Any]) -> float:
+def calibrate(observation: Observation, calibration: dict[str, Any]) -> float:
     """Apply ``scale`` + ``offset`` from the device calibration JSON.
 
     The default identity transform (1.0 / 0.0) is used when the device
@@ -92,10 +92,7 @@ class MqttIngestor:
 
     def __init__(self, settings: IotSettings, *, sigma_v: float | None = None) -> None:
         self._settings = settings
-        self._sigma_overrides: dict[ObservedProperty, float] = {}
-        if sigma_v is not None:
-            self._sigma_overrides[ObservedProperty.VELOCITY] = float(sigma_v)
-            self._sigma_overrides[ObservedProperty.DISPLACEMENT] = float(sigma_v)
+        self._sigma_overrides = sigma_overrides_for(sigma_v)
         self._task: asyncio.Task[None] | None = None
         self._stopped = asyncio.Event()
 
@@ -183,7 +180,7 @@ class MqttIngestor:
             _log.info("iot.ingestor.quarantined_drop", thing_id=device.id)
             return
 
-        canonical_value = _calibrate(observation, device.calibration)
+        canonical_value = calibrate(observation, device.calibration)
         canonical = observation.model_copy(
             update={
                 "result_value": canonical_value,
@@ -235,28 +232,61 @@ class MqttIngestor:
             return None
 
     async def _run_qc(self, observation: Observation) -> QcQuality:
-        latest = await sensor_observations_repo.latest_for_datastream(
-            observation.thing_id, observation.observed_property
+        return await qc_in_tempo_reale(
+            observation, settings=self._settings, sigma_overrides=self._sigma_overrides
         )
-        previous_value = latest.result_value if latest is not None else None
-        previous_ts: datetime | None = latest.phenomenon_time if latest is not None else None
-        recent = await sensor_observations_repo.recent_values(
-            observation.thing_id,
-            observation.observed_property,
-            limit=max(self._settings.flatline_min_samples, 1),
-        )
-        sigma = self._sigma_overrides.get(
-            observation.observed_property,
-            _DEFAULT_SIGMA[observation.observed_property],
-        )
-        return run_qc(
-            observation,
-            previous_value=previous_value,
-            previous_timestamp=previous_ts,
-            recent_values=recent,
-            sigma=sigma,
-            settings=self._settings,
-        )
+
+
+def sigma_overrides_for(sigma_v: float | None) -> dict[ObservedProperty, float]:
+    """The YAML's ``kinematic.sigma_v`` replaces the displacement/velocity noise."""
+    if sigma_v is None:
+        return {}
+    return {
+        ObservedProperty.VELOCITY: float(sigma_v),
+        ObservedProperty.DISPLACEMENT: float(sigma_v),
+    }
+
+
+async def qc_in_tempo_reale(
+    observation: Observation,
+    *,
+    settings: IotSettings,
+    sigma_overrides: dict[ObservedProperty, float],
+    nel_messaggio: Sequence[tuple[datetime, float]] = (),
+) -> QcQuality:
+    """Run the full QC against the datastream's previous real-time samples.
+
+    ``nel_messaggio`` are the samples of the same datastream already checked
+    in the same (not yet persisted) message, oldest first: without them a
+    batch of ten identical values, or one with a jump inside, would be
+    compared only with the database and escape flatline and spike (#252).
+    """
+    limit = max(settings.flatline_min_samples, 1)
+    latest = await sensor_observations_repo.latest_for_datastream(
+        observation.thing_id, observation.observed_property
+    )
+    previous_value = latest.result_value if latest is not None else None
+    previous_ts: datetime | None = latest.phenomenon_time if latest is not None else None
+    if nel_messaggio:
+        previous_ts, previous_value = nel_messaggio[-1]
+    recent = await sensor_observations_repo.recent_values(
+        observation.thing_id,
+        observation.observed_property,
+        limit=limit,
+    )
+    recent = [*recent, *(v for _, v in nel_messaggio)][-limit:]
+    sigma = sigma_overrides.get(
+        observation.observed_property,
+        _DEFAULT_SIGMA[observation.observed_property],
+    )
+    return run_qc(
+        observation,
+        previous_value=previous_value,
+        previous_timestamp=previous_ts,
+        recent_values=recent,
+        sigma=sigma,
+        settings=settings,
+    )
 
 
 async def iter_messages(
@@ -267,4 +297,11 @@ async def iter_messages(
         yield message
 
 
-__all__ = ["CalibratedObservation", "MqttIngestor", "iter_messages"]
+__all__ = [
+    "CalibratedObservation",
+    "MqttIngestor",
+    "calibrate",
+    "iter_messages",
+    "qc_in_tempo_reale",
+    "sigma_overrides_for",
+]

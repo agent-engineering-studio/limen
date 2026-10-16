@@ -20,6 +20,7 @@ from typing import Any
 import pytest
 
 from limen.cli import worker as worker_mod
+from limen.config.settings import IotSettings
 from limen.data.repos.job_runs_repo import JobRun
 
 
@@ -230,6 +231,7 @@ def _patch_lifecycle(monkeypatch: pytest.MonkeyPatch, *, schema_ok: bool) -> dic
     class _Settings:
         db = None
         enable_insitu = False
+        iot = IotSettings()
 
     class _Deps:
         thresholds = None

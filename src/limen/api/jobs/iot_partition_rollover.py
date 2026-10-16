@@ -17,7 +17,7 @@ log = get_logger(__name__)
 
 
 async def run_iot_partition_rollover_job(deps: AppDependencies) -> int:
-    if not deps.settings.enable_insitu:
+    if not (deps.settings.enable_insitu or deps.settings.iot.cittadini.enabled):
         log.debug("job.iot_partition_rollover.skip_disabled")
         return 0
     today = datetime.now(UTC).date()
