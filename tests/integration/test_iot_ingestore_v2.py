@@ -163,6 +163,44 @@ async def test_malformato_sconosciuto_e_troppo_grande(reset_db: None) -> None:
     assert await _righe() == []
 
 
+async def test_l_arretrato_dopo_una_riconnessione_non_va_in_quarantena(
+    reset_db: None,
+) -> None:
+    """#273: il broker consegna in pochi secondi i minuti in cui l'ingestore era giù."""
+    await _cella_e_dispositivo()
+    ing = _ingestore(max_messaggi_al_minuto=2, scarti_per_quarantena=3)
+    ing._connesso_alle = ADESSO
+    esiti = [
+        await ing.gestisci(
+            topic=TOPIC,
+            payload=_msg(seq, ("rainfall", "mm", 0.2, ADESSO - timedelta(minutes=60 - seq))),
+        )
+        for seq in range(1, 11)
+    ]
+    assert esiti == [Esito.SALVATO] * 10
+
+    # Una misura di dopo la connessione non è arretrato: il limite torna.
+    dopo = [
+        await ing.gestisci(topic=TOPIC, payload=_msg(seq, ("rainfall", "mm", 0.2, ADESSO)))
+        for seq in range(11, 15)
+    ]
+    assert dopo == [Esito.SALVATO, Esito.SALVATO, Esito.FREQUENZA, Esito.FREQUENZA]
+
+
+async def test_l_arretrato_ha_una_finestra(reset_db: None) -> None:
+    await _cella_e_dispositivo()
+    ing = _ingestore(max_messaggi_al_minuto=2, scarti_per_quarantena=99)
+    ing._connesso_alle = ADESSO - timedelta(minutes=11)
+    esiti = [
+        await ing.gestisci(
+            topic=TOPIC,
+            payload=_msg(seq, ("rainfall", "mm", 0.2, ADESSO - timedelta(minutes=30 - seq))),
+        )
+        for seq in range(1, 4)
+    ]
+    assert esiti == [Esito.SALVATO, Esito.SALVATO, Esito.FREQUENZA]
+
+
 async def test_frequenza_scarta_poi_mette_in_quarantena(reset_db: None) -> None:
     await _cella_e_dispositivo()
     ing = _ingestore(max_messaggi_al_minuto=2, scarti_per_quarantena=3)

@@ -582,6 +582,13 @@ class IotCittadiniSettings(BaseSettings):
     # Messaggi scartati per frequenza, nell'ultima ora, prima della quarantena:
     # un firmware in loop si ferma senza toccare gli altri dispositivi.
     scarti_per_quarantena: int = Field(default=60, ge=1)
+    # Dopo una riconnessione il broker consegna in pochi secondi tutto ciò che
+    # ha tenuto per l'ingestore (#273): per un dispositivo sono minuti di
+    # messaggi nello stesso minuto d'arrivo. Per questa finestra un messaggio
+    # le cui misure sono tutte anteriori alla connessione è arretrato e non
+    # passa dal limite al minuto. La finestra limita quanto un dispositivo
+    # possa approfittarne datando indietro le misure.
+    grazia_arretrato_minuti: int = Field(default=10, ge=0)
     registrazione: SensoriRegistrazioneSettings = Field(
         default_factory=SensoriRegistrazioneSettings
     )
