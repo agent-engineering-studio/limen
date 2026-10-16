@@ -17,6 +17,21 @@ La rete dei sensori dei cittadini è **in costruzione** (epic
 pagina descrive cosa esiste già, cosa sta arrivando e, soprattutto, quali
 regole valgono per chi installa un sensore.
 
+## Perché un sensore in più
+
+**Il 10 ottobre 2026, nel Reggino, il modello meteo vedeva un terzo della
+pioggia che stava cadendo.** A Melito, San Lorenzo e Bagaladi le previsioni
+davano circa 50 mm nel giorno; il radar della Protezione civile, corretto con
+i pluviometri, ne misurava fra 110 e 176. Sulle celle delle frane la
+componente meteo di Limen non ha mai superato 0,29, quando per arrivare ad
+«Alto» serviva 0,65. Il terreno era quello giusto: mancava la pioggia vera.
+
+Un temporale autunnale sul Sud Italia scarica in pochi chilometri quadrati,
+e fra un pluviometro ufficiale e l'altro ci sono spesso dieci o quindici
+chilometri. Un pluviometro in più non decide da solo, ma dice al radar dove
+sbaglia, e messo insieme ad altri di persone diverse alza la stima della
+pioggia proprio dove le reti ufficiali non arrivano.
+
 ## Due broker, due mestieri
 
 | | Broker delle allerte | Broker dei sensori |
@@ -147,7 +162,8 @@ ignora senza scartare le altre.
 
 Tre regole valgono per ogni messaggio. Il tempo è sempre UTC, preso da NTP:
 un messaggio dal futuro si scarta. Al massimo una dozzina di messaggi al
-minuto: oltre si scartano, e un dispositivo che insiste va in quarantena
+minuto, contando anche `status`, il last will e le ritrasmissioni: oltre si
+scartano, e un dispositivo che insiste va in quarantena
 finché qualcuno non lo controlla. Il numero di sequenza cresce sempre, anche
 dopo un riavvio, quindi va salvato nella memoria del dispositivo: un numero
 già visto è un messaggio ripetuto e si scarta. Un dispositivo che resta senza rete
@@ -170,6 +186,174 @@ ellittiche: un ESP32, un Raspberry Pi Pico W o un Raspberry Pi. Un Arduino
 Uno non basta. Il modo più robusto di tenere la chiave è un secure element
 come l'ATECC608, che costa circa un euro e non permette di estrarla; in
 alternativa, secure boot e flash cifrata dell'ESP32.
+
+## Tre sensori da costruire
+
+**Un ESP32, il sensore, una scatola stagna e un'alimentazione: fra 35 e 60
+euro.** I prezzi sono indicativi, per pezzi singoli comprati in Italia. Gli
+inclinometri restano fuori: misurano un versante che si muove, e un dato del
+genere vale solo da un ente (livello 2).
+
+### Pluviometro a bascula
+
+Una bascula si riempie con una quantità fissa di pioggia, si svuota
+ribaltandosi e chiude per un attimo un interruttore reed: l'ESP32 conta gli
+scatti e ogni cinque minuti manda i millimetri caduti.
+
+| Componente | Costo |
+|---|---|
+| ESP32 DevKit (ESP32-WROOM-32) | 8 € |
+| Pluviometro a bascula da ricambio per stazioni meteo, uscita reed | 20 € |
+| Alimentatore USB 5 V, oppure pannello da 6 W con batteria 18650 e caricatore | 8-20 € |
+| Scatola IP65 con pressacavi | 6 € |
+| Palo o staffa, cavo, morsetti | 8 € |
+| **Totale** | **circa 50-60 €** |
+
+| Pluviometro | ESP32 |
+|---|---|
+| filo del reed | GPIO 27 |
+| altro filo del reed | GND |
+
+Non serve una resistenza: il firmware accende quella interna e ignora i
+rimbalzi del contatto. Ogni bascula ha il suo volume: si misura versando
+lentamente una quantità d'acqua nota e contando gli scatti, poi si scrive
+`mm_scatto=` sulla seriale. Il valore di partenza, 0,2794 mm, è quello dei
+modelli più diffusi.
+
+**Dove metterlo**, secondo le regole dell'Organizzazione meteorologica
+mondiale: bocca orizzontale a 1-1,5 m da terra; lontano da ogni ostacolo
+(muri, alberi, recinzioni) almeno il doppio della sua altezza sopra la bocca,
+meglio quattro volte; non su un tetto o vicino a un edificio, dove il vento
+gira e porta via la pioggia. Una volta al mese si pulisce il filtro: foglie e
+insetti lo intasano, e un pluviometro intasato segna zero.
+
+### Umidità del suolo
+
+Una sonda capacitiva misura quanto il terreno trattiene l'acqua, che per una
+frana conta quanto la pioggia: lo stesso temporale fa scivolare un versante
+già saturo e non quello asciutto.
+
+| Componente | Costo |
+|---|---|
+| ESP32 DevKit | 8 € |
+| Sonda capacitiva v2.0 con TLC555 (non quelle con NE555, che a 3,3 V non funzionano) | 3 € |
+| Cavo schermato a tre poli, 3 m | 3 € |
+| Alimentazione e scatola IP65, come sopra | 15-25 € |
+| **Totale** | **circa 35-40 €** |
+
+| Sonda | ESP32 |
+|---|---|
+| VCC | 3V3 |
+| GND | GND |
+| AOUT | GPIO 34 |
+
+La sonda va infilata in verticale fino alla linea, a 5-10 cm di profondità,
+lontano da radici e sassi, con l'elettronica sopra il terreno sigillata con
+resina o guaina termorestringente. Si calibra prima di interrarla: `grezza`
+in aria dà `secco=`, `grezza` con la sonda in un bicchiere d'acqua fino alla
+linea dà `bagnato=`. Una sonda da tre euro sbaglia di qualche punto
+percentuale anche ben calibrata, ed è uno dei motivi per cui parte come
+osservatore.
+
+### Idrometro
+
+Un sensore a ultrasuoni impermeabile, montato sopra un corso d'acqua, misura
+la distanza dalla superficie: il livello è la sua quota meno quella
+distanza. **Solo con l'autorizzazione dell'ente che gestisce il corso
+d'acqua o il ponte**, e Limen non legge ancora il livello dell'acqua: il
+modulo di registrazione lo offrirà quando il motore dell'alluvione saprà
+usarlo.
+
+| Componente | Costo |
+|---|---|
+| ESP32 DevKit | 8 € |
+| JSN-SR04T impermeabile (da 25 cm a 4,5 m) | 10 € |
+| Due resistenze, 1 kΩ e 2 kΩ | 0,5 € |
+| Staffa, alimentazione e scatola IP65 | 25-35 € |
+| **Totale** | **circa 45-55 €** |
+
+| JSN-SR04T | ESP32 |
+|---|---|
+| 5V | VIN (5 V) |
+| GND | GND |
+| TRIG | GPIO 26 |
+| ECHO | GPIO 25, attraverso il partitore: 1 kΩ verso ECHO, 2 kΩ verso GND |
+
+Il partitore serve perché l'ECHO esce a 5 V e l'ESP32 ne regge 3,3. La quota
+del trasduttore sopra lo zero idrometrico, in metri, si scrive come
+`quota=`. Un radar a onde millimetriche (40-70 €) misura meglio con la
+pioggia e la schiuma, ma il firmware di esempio non lo gestisce.
+
+## Il firmware di esempio
+
+**Un solo programma per i tre sensori, nel repository di Limen in
+[`firmware/limen-sensore`](https://github.com/agent-engineering-studio/limen/tree/main/firmware/limen-sensore),
+compilato a ogni modifica.** Si carica con
+[PlatformIO](https://platformio.org):
+
+```sh
+cd firmware/limen-sensore
+pio run -e pluviometro -t upload     # oppure umidita_suolo, idrometro
+pio device monitor                   # la seriale, a 115200
+```
+
+Nel programma non c'è nessun segreto: rete, id e certificati si danno dalla
+seriale e restano nella memoria del dispositivo.
+
+```
+ssid=LaMiaRete
+password=…
+id=pluvio-matera-01
+riavvia
+csr
+```
+
+`csr` crea la chiave del dispositivo la prima volta e stampa la richiesta da
+incollare nel modulo di registrazione. Quando arriva la mail con i due
+certificati si scrive `cert` e si incolla quello del dispositivo, poi `ca` e
+si incolla quello della CA, poi `riavvia`. Il firmware rifiuta un
+certificato che non corrisponde alla sua chiave o che è per un altro id.
+Ogni impostazione, calibrazioni comprese, vale dal riavvio successivo.
+`stato` dice cosa manca.
+
+Cosa fa da solo:
+
+- prende l'ora UTC da NTP e non misura finché non ce l'ha;
+- misura ogni cinque minuti, allineato all'orologio (`intervallo=` per
+cambiarlo);
+- pubblica in SenML con conferma (QoS 1), e annuncia `online`/`offline`;
+- senza rete tiene un giorno di misure e le rimanda al ritorno a gruppi, senza
+superare il limite di messaggi al minuto. La coda sta in memoria volatile:
+un calo di tensione la perde;
+- tiene il numero di sequenza fra un riavvio e l'altro, e un gruppo rimandato
+conserva il suo: se il primo invio era arrivato, Limen scarta il secondo
+invece di contare due volte la stessa pioggia. La conferma viene dal broker,
+non da Limen: un messaggio che Limen scarta è perso, per questo il firmware
+ne manda al massimo sei al minuto.
+
+**La chiave nella memoria è in chiaro.** Per un dispositivo che resta
+all'aperto, dove chiunque può staccarlo, si accendono la flash encryption e
+il secure boot dell'ESP32, o si tiene la chiave in un ATECC608.
+
+## Come collegarlo
+
+| Collegamento | Quando | Stato |
+|---|---|---|
+| Wi-Fi con un ESP32 | c'è una rete a portata, a casa, a scuola | il firmware di esempio |
+| Raspberry Pi Pico W | come l'ESP32; TLS con mbedTLS o MicroPython | nessun esempio |
+| Raspberry Pi | ha già Linux: bastano `mosquitto_pub` o Paho | vedi sotto |
+| LoRaWAN con The Things Network | in campagna, senza Wi-Fi, chilometri di portata | in arrivo ([#266](https://github.com/agent-engineering-studio/limen/issues/266)) |
+| Arduino Uno | — | **no**: non fa TLS |
+
+Da un Raspberry Pi, o da un computer per una prova, un messaggio si manda
+così (la sequenza deve crescere a ogni invio):
+
+```sh
+mosquitto_pub -h limen.agentengineering.it -p 8883 -q 1 \
+  --cafile ca.crt --cert dispositivo.crt --key dispositivo.key \
+  -t limen/v2/pluvio-matera-01/obs \
+  -m "[{\"bn\":\"pluvio-matera-01/\",\"bt\":$(date +%s),\"n\":\"rainfall\",\"u\":\"mm\",\"v\":0.0},{\"n\":\"seq\",\"v\":1}]"
+```
 
 ## Come si registra un sensore
 
@@ -218,6 +402,16 @@ cancellata, i dispositivi sono revocati e la loro posizione torna al centro
 della cella di un chilometro: le misure già raccolte restano, senza più
 nulla che le colleghi a te.
 
+## Licenza dei dati
+
+**Le misure di un sensore registrato sono pubblicate con licenza
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.it).**
+Chiunque può riusarle, anche per scopi commerciali, citando Limen e la
+stazione. Il modulo di registrazione lo chiede esplicitamente: è ciò che
+permette a un comune, a un'università o a un'altra rete di usarle. Le misure
+non contengono dati personali; la posizione pubblica della stazione è
+arrotondata (vedi sopra).
+
 ## Cosa può fare un sensore, e cosa no
 
 **Un sensore installato da un cittadino non fa scattare allerte e non
@@ -261,5 +455,5 @@ registra non è mai pubblicata.
 | Protocollo v2 e ingresso delle misure via MQTT ([#252](https://github.com/agent-engineering-studio/limen/issues/252)) | fatto |
 | Ingresso HTTP firmato ([#265](https://github.com/agent-engineering-studio/limen/issues/265)) e LoRaWAN da The Things Network ([#266](https://github.com/agent-engineering-studio/limen/issues/266)) | da fare |
 | Registrazione senza account ([#253](https://github.com/agent-engineering-studio/limen/issues/253)) | fatto, il modulo apre con la rete |
-| Progetti dei kit con firmware di esempio ([#256](https://github.com/agent-engineering-studio/limen/issues/256)) | da fare |
+| Progetti dei kit con firmware di esempio ([#256](https://github.com/agent-engineering-studio/limen/issues/256)) | fatto |
 | Misura del valore dei pluviometri non ufficiali contro il radar ([#250](https://github.com/agent-engineering-studio/limen/issues/250)) | da fare |
