@@ -372,7 +372,8 @@ openssl req -new -key dispositivo.key -subj "/CN=pluvio-matera-01" -out disposit
 ```
 
 Il CN è l'id del dispositivo: minuscole, cifre e trattini, da 3 a 63
-caratteri. Nel modulo va il contenuto di `dispositivo.csr`. **Il file
+caratteri. **L'id è pubblico**, perché compare sulla mappa delle stazioni:
+non metterci il tuo nome né il tuo indirizzo. Nel modulo va il contenuto di `dispositivo.csr`. **Il file
 `.key` non si manda mai**, nemmeno a Limen: se lo incolli, il modulo si
 blocca.
 
@@ -391,8 +392,8 @@ tutto quando lo chiede. Non è mai pubblicata e nessuna interfaccia di Limen
 la espone: non la mappa, non le API, non gli strumenti per agenti.
 
 - **Posizione.** Quella esatta serve a legare il sensore a una cella della
-griglia, e non è pubblicata. Quando le stazioni compariranno sulla mappa, la
-posizione pubblica sarà arrotondata a 0,01° (circa un chilometro).
+griglia, e non è pubblicata. Sulla mappa, nel livello «Stazioni dei
+cittadini», la posizione è arrotondata a 0,01° (circa un chilometro).
 - **Foto e note.** Viaggiano solo nella mail a chi cura Limen e non sono
 salvate nel database.
 - **Misure.** Sono pubblicate con licenza CC BY 4.0 e non contengono dati
@@ -453,6 +454,7 @@ registra non è mai pubblicata.
 | Broker dei sensori con mTLS, CA privata e verifica automatica ([#260](https://github.com/agent-engineering-studio/limen/issues/260)) | fatto |
 | Livelli di fiducia nel motore ([#251](https://github.com/agent-engineering-studio/limen/issues/251)) | fatto |
 | Protocollo v2 e ingresso delle misure via MQTT ([#252](https://github.com/agent-engineering-studio/limen/issues/252)) | fatto |
+| Le stazioni sulla mappa, con livello, ultimo dato e controllo di qualità ([#255](https://github.com/agent-engineering-studio/limen/issues/255)) | fatto |
 | Ingresso HTTP firmato ([#265](https://github.com/agent-engineering-studio/limen/issues/265)) e LoRaWAN da The Things Network ([#266](https://github.com/agent-engineering-studio/limen/issues/266)) | da fare |
 | Registrazione senza account ([#253](https://github.com/agent-engineering-studio/limen/issues/253)) | fatto, il modulo apre con la rete |
 | Progetti dei kit con firmware di esempio ([#256](https://github.com/agent-engineering-studio/limen/issues/256)) | fatto |

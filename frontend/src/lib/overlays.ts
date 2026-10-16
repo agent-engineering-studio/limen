@@ -11,8 +11,9 @@
 // tile le pubblicava già pg_tileserv — e nessun interruttore.
 
 import type { Lingua } from "./i18n";
+import { COLORE_LIVELLO } from "./stazioni";
 
-export type GruppoOverlay = "ufficiale" | "landslide" | "flood" | "wildfire";
+export type GruppoOverlay = "ufficiale" | "landslide" | "flood" | "wildfire" | "cittadini";
 
 export interface Overlay {
   /** Chiave dello stato acceso/spento. */
@@ -125,6 +126,25 @@ export const OVERLAYS: readonly Overlay[] = [
     minzoom: 6,
     en: { label: "Burnt areas", fonte: "EFFIS, 2012-2026" },
   },
+  {
+    // Dall'API e non da pg_tileserv (#255): la posizione di un privato esce
+    // già arrotondata, e il ruolo delle tile non deve vedere i dispositivi.
+    id: "stazioni",
+    gruppo: "cittadini",
+    label: "Stazioni dei cittadini",
+    fonte: "Limen, misure CC BY 4.0",
+    layerIds: ["ovl-stazioni"],
+    classi: [
+      { colore: COLORE_LIVELLO[0], label: "osservatore" },
+      { colore: COLORE_LIVELLO[1], label: "verificata" },
+      { colore: COLORE_LIVELLO[2], label: "ente" },
+    ],
+    en: {
+      label: "Citizen stations",
+      fonte: "Limen, measurements CC BY 4.0",
+      classi: ["observer", "verified", "institution"],
+    },
+  },
 ];
 
 export const NOME_GRUPPO: Record<Lingua, Record<GruppoOverlay, string>> = {
@@ -133,11 +153,13 @@ export const NOME_GRUPPO: Record<Lingua, Record<GruppoOverlay, string>> = {
     landslide: "Frane",
     flood: "Allagamenti",
     wildfire: "Incendi",
+    cittadini: "Rete dei sensori",
   },
   en: {
     ufficiale: "Official warnings",
     landslide: "Landslides",
     flood: "Floods",
     wildfire: "Wildfires",
+    cittadini: "Sensor network",
   },
 };

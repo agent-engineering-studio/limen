@@ -3599,3 +3599,14 @@ html[lang="en"] .app-nav a { white-space: nowrap; }
   .verifiche-lista a { flex-direction: column; }
   .verifiche-lista img { width: 100%; height: 180px; }
 }
+
+/* Il popup di una stazione dei sensori (#255). */
+.popup-stazione strong {
+  display: block;
+  margin-bottom: 4px;
+}
+.popup-stazione p {
+  margin: 4px 0 0;
+  font-size: 0.85em;
+  line-height: 1.35;
+}

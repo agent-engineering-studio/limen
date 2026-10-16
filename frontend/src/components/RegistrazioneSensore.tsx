@@ -33,6 +33,7 @@ const T = testi(
     csr: "CSR del dispositivo (PEM)",
     csrAiuto:
       "Il CN della CSR è l'id del dispositivo: minuscole, cifre e trattini. " +
+      "È pubblico, sulla mappa delle stazioni: non metterci il tuo nome. " +
       "Non incollare mai la chiave privata.",
     email: "Email",
     note: "Note sull'installazione (facoltative)",
@@ -77,6 +78,7 @@ const T = testi(
     csr: "Device CSR (PEM)",
     csrAiuto:
       "The CSR's CN is the device id: lowercase letters, digits and hyphens. " +
+      "It is public, on the station map: do not put your name in it. " +
       "Never paste the private key.",
     email: "Email",
     note: "Installation notes (optional)",

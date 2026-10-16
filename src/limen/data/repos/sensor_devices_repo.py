@@ -168,14 +168,115 @@ async def set_status(device_id: str, status: SensorStatus) -> None:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class StazionePubblica:
+    """Ciò che di un dispositivo si può mostrare a chiunque (#255).
+
+    Mai la posizione esatta di una stazione di terzi, mai chi l'ha
+    registrata: la query arrotonda e non legge ``registrante_id``.
+    """
+
+    id: str
+    device_type: str
+    livello: SensorLivello
+    status: SensorStatus
+    lon: float
+    lat: float
+    arrotondata: bool
+    grandezze: tuple[str, ...]
+    ultima_grandezza: str | None
+    ultimo_valore: float | None
+    ultima_unita: str | None
+    ultimo_istante: datetime | None
+    valide_24h: int
+    segnalate_24h: int
+
+
+# La guida (`#/sensori`, «Dati personali») promette 0,01°, circa un
+# chilometro, per ogni stazione che non sia di un ente.
+_STAZIONI_SQL = """
+SELECT d.id, d.device_type, d.livello, d.status,
+       (d.livello < 2 OR d.registrante_id IS NOT NULL) AS arrotondata,
+       CASE WHEN d.livello < 2 OR d.registrante_id IS NOT NULL
+            THEN round(ST_X(d.location)::numeric, 2)::double precision
+            ELSE ST_X(d.location) END AS lon,
+       CASE WHEN d.livello < 2 OR d.registrante_id IS NOT NULL
+            THEN round(ST_Y(d.location)::numeric, 2)::double precision
+            ELSE ST_Y(d.location) END AS lat,
+       COALESCE(g.grandezze, '{}') AS grandezze,
+       u.observed_property, u.result_value, u.result_unit, u.phenomenon_time,
+       COALESCE(q.valide, 0) AS valide, COALESCE(q.segnalate, 0) AS segnalate
+FROM sensor_devices d
+-- Le grandezze dalle ultime 500 righe, non da trenta giorni: con l'indice
+-- (device_id, phenomenon_time) sono 500 letture per stazione invece di
+-- decine di migliaia.
+LEFT JOIN LATERAL (
+    SELECT array_agg(DISTINCT x.observed_property ORDER BY x.observed_property) AS grandezze
+    FROM (
+        SELECT o.observed_property
+        FROM sensor_observations o
+        WHERE o.device_id = d.id AND o.phenomenon_time > now() - interval '30 days'
+        ORDER BY o.phenomenon_time DESC
+        LIMIT 500
+    ) x
+) g ON true
+LEFT JOIN LATERAL (
+    -- Un picco scartato dal QC non è «l'ultimo dato».
+    SELECT o.observed_property, o.result_value, o.result_unit, o.phenomenon_time
+    FROM sensor_observations o
+    WHERE o.device_id = d.id AND o.phenomenon_time > now() - interval '30 days'
+      AND o.quality = 'ok'
+    ORDER BY o.phenomenon_time DESC
+    LIMIT 1
+) u ON true
+LEFT JOIN LATERAL (
+    SELECT count(*) FILTER (WHERE o.quality = 'ok') AS valide,
+           count(*) FILTER (WHERE o.quality <> 'ok') AS segnalate
+    FROM sensor_observations o
+    WHERE o.device_id = d.id AND o.phenomenon_time > now() - interval '24 hours'
+) q ON true
+-- In quarantena c'è anche ciò che `limen sensore cancella-registrante` ha
+-- revocato: la guida promette che non resta nulla che lo colleghi a chi lo
+-- aveva, e l'id l'aveva scelto lui.
+WHERE d.status <> 'quarantined'
+ORDER BY d.id
+"""
+
+
+async def stazioni_pubbliche() -> list[StazionePubblica]:
+    async with acquire() as conn:
+        rows = await conn.fetch(_STAZIONI_SQL)
+    return [
+        StazionePubblica(
+            id=r["id"],
+            device_type=r["device_type"],
+            livello=r["livello"],
+            status=r["status"],
+            lon=r["lon"],
+            lat=r["lat"],
+            arrotondata=r["arrotondata"],
+            grandezze=tuple(r["grandezze"]),
+            ultima_grandezza=r["observed_property"],
+            ultimo_valore=r["result_value"],
+            ultima_unita=r["result_unit"],
+            ultimo_istante=r["phenomenon_time"],
+            valide_24h=r["valide"],
+            segnalate_24h=r["segnalate"],
+        )
+        for r in rows
+    ]
+
+
 __all__ = [
     "LIVELLO_SCORING",
     "SensorDevice",
     "SensorLivello",
     "SensorStatus",
+    "StazionePubblica",
     "get_device",
     "set_status",
     "stato_dal_dispositivo",
+    "stazioni_pubbliche",
     "touch_last_seen",
     "upsert_many",
 ]

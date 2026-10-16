@@ -369,7 +369,8 @@ openssl req -new -key dispositivo.key -subj "/CN=pluvio-matera-01" -out disposit
 ```
 
 The CN is the device id: lowercase letters, digits and hyphens, 3 to 63
-characters. The form takes the content of `dispositivo.csr`. **The `.key`
+characters. **The id is public**, because it appears on the station map: do
+not put your name or your address in it. The form takes the content of `dispositivo.csr`. **The `.key`
 file is never sent**, not even to Limen: if you paste it, the form stops.
 
 The request creates nothing by itself: it is emailed to the Limen
@@ -388,8 +389,8 @@ no Limen interface exposes it: not the map, not the APIs, not the agent
 tools.
 
 - **Position.** The exact one is needed to bind the sensor to a grid cell,
-and it is not published. When stations appear on the map, the public
-position will be rounded to 0.01° (about one kilometre).
+and it is not published. On the map, in the "Citizen stations" layer, the
+position is rounded to 0.01° (about one kilometre).
 - **Photo and notes.** They travel only in the email to the Limen
 maintainers and are not stored in the database.
 - **Measurements.** They are published under the CC BY 4.0 licence and
@@ -449,6 +450,7 @@ is never published.
 | Sensor broker with mTLS, private CA and automatic check ([#260](https://github.com/agent-engineering-studio/limen/issues/260)) | done |
 | Trust levels in the engine ([#251](https://github.com/agent-engineering-studio/limen/issues/251)) | done |
 | v2 protocol and measurement intake over MQTT ([#252](https://github.com/agent-engineering-studio/limen/issues/252)) | done |
+| Stations on the map, with level, last reading and quality control ([#255](https://github.com/agent-engineering-studio/limen/issues/255)) | done |
 | Signed HTTP intake ([#265](https://github.com/agent-engineering-studio/limen/issues/265)) and LoRaWAN from The Things Network ([#266](https://github.com/agent-engineering-studio/limen/issues/266)) | to do |
 | Registration without an account ([#253](https://github.com/agent-engineering-studio/limen/issues/253)) | done, the form opens with the network |
 | Kit projects with example firmware ([#256](https://github.com/agent-engineering-studio/limen/issues/256)) | done |
