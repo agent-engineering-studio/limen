@@ -9,7 +9,7 @@ export interface OverlayControlProps {
   readonly onToggle: (id: string) => void;
 }
 
-const GRUPPI: GruppoOverlay[] = ["ufficiale", "landslide", "flood", "wildfire"];
+const GRUPPI: GruppoOverlay[] = ["ufficiale", "landslide", "flood", "wildfire", "cittadini"];
 
 const T = testi(
   {

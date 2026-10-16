@@ -11,6 +11,8 @@ import { NOMI_PERICOLO, useHazard } from "../lib/hazard";
 import { testi, useLingua, useTesti } from "../lib/i18n";
 import { COLORE_ALLERTA, OVERLAYS } from "../lib/overlays";
 import { posizioneInItalia, ZOOM_POSIZIONE } from "../lib/posizione";
+import { COLORE_LIVELLO, popupStazione, RAGGIO_LIVELLO } from "../lib/stazioni";
+import type { ProprietaStazione } from "../lib/stazioni";
 import {
   maplibreColorMatch,
   maplibreMultiHazardColorMatch,
@@ -233,6 +235,14 @@ export function filtroSoglia(prop: string, attivo: boolean): maplibregl.FilterSp
   ] as maplibregl.FilterSpecification;
 }
 
+// Le stazioni si scaricano solo a livello acceso: una sorgente GeoJSON con un
+// URL lo chiede appena entra nello stile, e la mappa si ricostruisce a ogni
+// cambio di pericolo (#255).
+function caricaStazioni(map: maplibregl.Map, attivi: ReadonlySet<string>, url: string): void {
+  if (!attivi.has("stazioni")) return;
+  (map.getSource("ovl-stazioni") as maplibregl.GeoJSONSource | undefined)?.setData(url);
+}
+
 /**
  * MapLibre GL map wired to the pg_tileserv ``mv_latest_risk`` vector
  * tiles. The fill colour is bound to the ``risk_level`` attribute via
@@ -273,6 +283,11 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   const { selected: hazard, view, multi, available } = useHazard();
   const { lingua } = useLingua();
   const t = useTesti(T);
+  const urlStazioni = `${config.apiUrl.replace(/\/+$/, "")}/api/sensori/stazioni${
+    multi ? "" : `?hazard=${encodeURIComponent(hazard)}`
+  }`;
+  const urlStazioniRef = useRef(urlStazioni);
+  urlStazioniRef.current = urlStazioni;
   // Due sorgenti, non una. `v_risk_tiles` è fissata sul pericolo di default
   // in SQL (migrazione 028) perché una sorgente di tile deve dare una
   // geometria per cella e la vista ne ha una per (cella, pericolo): resta la
@@ -437,6 +452,12 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         tiles: [`${tileserv}/public.fire_perimeters/{z}/{x}/{y}.pbf?properties=fire_date,area_ha`],
         minzoom: 6,
         attribution: "EFFIS",
+      },
+      // Le stazioni dei sensori (#255): poche centinaia di punti, dall'API,
+      // con la posizione dei privati già arrotondata.
+      "ovl-stazioni": {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
       },
       "wms-pai": {
         type: "raster",
@@ -714,6 +735,38 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         layout: { visibility: visibile("ovl-bruciate-line") },
       },
       {
+        id: "ovl-stazioni",
+        type: "circle",
+        source: "ovl-stazioni",
+        paint: {
+          "circle-color": [
+            "match",
+            ["get", "livello"],
+            2,
+            COLORE_LIVELLO[2],
+            1,
+            COLORE_LIVELLO[1],
+            COLORE_LIVELLO[0],
+          ],
+          "circle-radius": [
+            "match",
+            ["get", "livello"],
+            2,
+            RAGGIO_LIVELLO[2],
+            1,
+            RAGGIO_LIVELLO[1],
+            RAGGIO_LIVELLO[0],
+          ],
+          "circle-stroke-color": "#0a0e13",
+          "circle-stroke-width": 1.5,
+          // Una stazione che non trasmette resta, sbiadita: sparire direbbe
+          // che non c'è mai stata.
+          "circle-opacity": ["match", ["get", "stato"], "online", 1, 0.45],
+          "circle-stroke-opacity": ["match", ["get", "stato"], "online", 1, 0.45],
+        },
+        layout: { visibility: visibile("ovl-stazioni") },
+      },
+      {
         // Fuori dal comune scelto: un velo, non un muro. Abbastanza da
         // staccare la zona, non tanto da nascondere il contesto intorno.
         id: HIGHLIGHT_MASK_ID,
@@ -841,16 +894,41 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     // In basso: in alto a destra stanno gli strumenti della mappa (#155).
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
 
+// MapLibre chiama tutti i listener dei livelli sotto il punto: un click su
+    // una stazione non deve aprire anche la cella o spostare la mappa.
+    const suStazione = (e: maplibregl.MapMouseEvent): boolean =>
+      map.getLayer("ovl-stazioni") !== undefined &&
+      map.queryRenderedFeatures(e.point, { layers: ["ovl-stazioni"] }).length > 0;
+
     if (haClick) {
       map.on("click", LAYER_ID, (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+        if (suStazione(e)) return;
         const cellId = e.features?.[0]?.properties?.["cell_id"];
         if (typeof cellId === "string") {
           onCellClickRef.current?.(cellId, e.lngLat, e.features?.[0]?.properties ?? undefined);
         }
       });
     }
+    map.on("click", "ovl-stazioni", (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+      const f = e.features?.[0];
+      if (!f || f.geometry.type !== "Point") return;
+      new maplibregl.Popup({ maxWidth: "280px" })
+        .setLngLat(f.geometry.coordinates as [number, number])
+        .setDOMContent(popupStazione(f.properties as unknown as ProprietaStazione, lingua))
+        .addTo(map);
+    });
+    map.on("mouseenter", "ovl-stazioni", () => {
+      map.getCanvas().style.cursor = "pointer";
+    });
+    map.on("mouseleave", "ovl-stazioni", () => {
+      map.getCanvas().style.cursor = "";
+    });
+
+    map.once("load", () => caricaStazioni(map, overlayRef.current, urlStazioniRef.current));
+
     // Click su una regione a zoom nazionale → zoom fino alle celle.
     map.on("click", REGION_LAYER_ID, (e: maplibregl.MapMouseEvent) => {
+      if (suStazione(e)) return;
       map.easeTo({ center: e.lngLat, zoom: cellMinZoom + 1 });
     });
     map.on("mouseenter", REGION_LAYER_ID, () => {
@@ -862,6 +940,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
 
     // Comune drill-down: click a comune → zoom into its cells.
     map.on("click", COMUNE_LAYER_ID, (e: maplibregl.MapMouseEvent) => {
+      if (suStazione(e)) return;
       map.easeTo({ center: e.lngLat, zoom: cellMinZoom + 2 });
     });
     map.on("mouseenter", COMUNE_LAYER_ID, () => {
@@ -916,6 +995,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
           if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", visibile(id));
         }
       }
+      caricaStazioni(map, overlayRef.current, urlStazioniRef.current);
     };
     if (map.isStyleLoaded()) apply();
     else map.once("idle", apply);

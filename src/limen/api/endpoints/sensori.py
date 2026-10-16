@@ -1,14 +1,18 @@
-"""Il modulo di registrazione dei sensori (#253): una richiesta e una mail, nessun dispositivo."""
+"""Sensori dei cittadini: il modulo di registrazione (#253) e le stazioni sulla mappa (#255)."""
 
 from __future__ import annotations
 
 from functools import partial
+from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel
 
 from limen.api.dependencies import DepsDep
 from limen.core import sensori_registrazione as reg
+from limen.core import sensori_stazioni
+from limen.core.models.hazard import HazardType
+from limen.data.repos import sensor_devices_repo
 from limen.notifications.email import invia_testo
 
 router = APIRouter(tags=["sensori"])
@@ -20,6 +24,15 @@ class RegistrazioneStato(BaseModel):
 
 class RegistrazioneRisposta(BaseModel):
     ricevuta: bool
+
+
+@router.get("/api/sensori/stazioni")
+async def stazioni(response: Response, hazard: HazardType | None = None) -> dict[str, Any]:
+    """Le stazioni in GeoJSON: posizione arrotondata per quelle di terzi, niente dati personali."""
+    # Una stazione manda un dato ogni cinque minuti: rifare la query per ogni
+    # visitatore non dice niente di più.
+    response.headers["Cache-Control"] = "public, max-age=300"
+    return sensori_stazioni.geojson(await sensor_devices_repo.stazioni_pubbliche(), hazard)
 
 
 @router.get("/api/sensori/registrazione", response_model=RegistrazioneStato)
