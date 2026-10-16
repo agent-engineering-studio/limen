@@ -37,6 +37,8 @@ from limen.integrations.iot.schemas import CANONICAL_UNITS, ObservedProperty
 # RFC 8428 §4.5.3: un tempo sotto 2**28 secondi è relativo all'istante attuale.
 _TEMPO_RELATIVO_SOTTO = 2**28
 _SEQ = "seq"
+# La colonna è un bigint.
+_SEQ_MASSIMA = 2**63 - 1
 
 
 class SenmlError(ValueError):
@@ -65,9 +67,13 @@ def _numero(record: dict[str, Any], campo: str) -> float | None:
     # bool è un int per Python, non per SenML.
     if isinstance(valore, bool) or not isinstance(valore, int | float):
         raise SenmlError(f"{campo} non numerico")
-    if not math.isfinite(valore):
+    try:
+        numero = float(valore)
+    except OverflowError as exc:  # un intero JSON di centinaia di cifre
+        raise SenmlError(f"{campo} non finito") from exc
+    if not math.isfinite(numero):
         raise SenmlError(f"{campo} non finito")
-    return float(valore)
+    return numero
 
 
 def _testo(record: dict[str, Any], campo: str) -> str | None:
@@ -86,7 +92,8 @@ def analizza(payload: bytes, *, device_id: str, ricevuto: datetime) -> Messaggio
     """
     try:
         records = json.loads(payload)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
+        # RecursionError: duemila parentesi annidate stanno in 2 KB.
         raise SenmlError("JSON non valido") from exc
     if not isinstance(records, list) or not records:
         raise SenmlError("serve un array SenML non vuoto")
@@ -123,8 +130,8 @@ def analizza(payload: bytes, *, device_id: str, ricevuto: datetime) -> Messaggio
         if grandezza == _SEQ:
             if sequenza is not None:
                 raise SenmlError("seq ripetuto")
-            if not valore.is_integer() or valore < 0:
-                raise SenmlError("seq deve essere un intero non negativo")
+            if not valore.is_integer() or not 0 <= valore <= _SEQ_MASSIMA:
+                raise SenmlError("seq deve essere un intero non negativo entro 2**63-1")
             sequenza = int(valore)
             continue
 

@@ -151,6 +151,24 @@ def test_valore_non_finito() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        b"[" * 3000 + b"]" * 3000,
+        b'[{"bn": "pluvio-matera-01/", "n": "rainfall", "u": "mm", "v": 1'
+        + b"0" * 400
+        + b'}, {"n": "seq", "v": 1}]',
+        b'[{"bn": "pluvio-matera-01/", "n": "seq", "v": 9223372036854775808}]',
+    ],
+    ids=["annidamento", "intero-enorme", "seq-oltre-bigint"],
+)
+def test_payload_ostili_sono_malformati(payload: bytes) -> None:
+    """Payload che un terzo può costruire in 2 KB: devono essere scarti, non
+    errori del worker."""
+    with pytest.raises(SenmlError):
+        analizza(payload, device_id=ID, ricevuto=ADESSO)
+
+
 def test_limite_di_frequenza_e_quarantena() -> None:
     limite = LimiteFrequenza(al_minuto=3, scarti_per_quarantena=4)
     t = ADESSO

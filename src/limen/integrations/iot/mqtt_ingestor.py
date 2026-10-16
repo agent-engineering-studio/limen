@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -252,18 +252,29 @@ async def qc_in_tempo_reale(
     *,
     settings: IotSettings,
     sigma_overrides: dict[ObservedProperty, float],
+    nel_messaggio: Sequence[tuple[datetime, float]] = (),
 ) -> QcQuality:
-    """Run the full QC against the datastream's previous real-time samples."""
+    """Run the full QC against the datastream's previous real-time samples.
+
+    ``nel_messaggio`` are the samples of the same datastream already checked
+    in the same (not yet persisted) message, oldest first: without them a
+    batch of ten identical values, or one with a jump inside, would be
+    compared only with the database and escape flatline and spike (#252).
+    """
+    limit = max(settings.flatline_min_samples, 1)
     latest = await sensor_observations_repo.latest_for_datastream(
         observation.thing_id, observation.observed_property
     )
     previous_value = latest.result_value if latest is not None else None
     previous_ts: datetime | None = latest.phenomenon_time if latest is not None else None
+    if nel_messaggio:
+        previous_ts, previous_value = nel_messaggio[-1]
     recent = await sensor_observations_repo.recent_values(
         observation.thing_id,
         observation.observed_property,
-        limit=max(settings.flatline_min_samples, 1),
+        limit=limit,
     )
+    recent = [*recent, *(v for _, v in nel_messaggio)][-limit:]
     sigma = sigma_overrides.get(
         observation.observed_property,
         _DEFAULT_SIGMA[observation.observed_property],

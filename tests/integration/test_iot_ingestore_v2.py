@@ -210,3 +210,99 @@ async def test_dispositivo_di_terzi_salvato_ma_fuori_dallo_scoring(reset_db: Non
         )
         is None
     )
+
+
+async def test_ora_con_pioggia_in_ritardo_non_e_misurata(reset_db: None) -> None:
+    """Rete caduta a metà dell'ora: la parte in tempo reale da sola è meno
+    della pioggia caduta, e non deve sostituire il modello. Neppure se un giro
+    precedente del rollup, nella stessa ora, aveva già scritto quella parte."""
+    cell_id = await _cella_e_dispositivo()
+    ora = ADESSO.replace(minute=0)
+    primo = IngestoreV2(
+        IotSettings(cittadini=IotCittadiniSettings(enabled=True)),
+        adesso=lambda: ora + timedelta(minutes=6),
+    )
+    assert (
+        await primo.gestisci(
+            topic=TOPIC, payload=_msg(1, ("rainfall", "mm", 2.0, ora + timedelta(minutes=5)))
+        )
+        is Esito.SALVATO
+    )
+    await run_hourly_rollup(reference=ora + timedelta(minutes=6))
+    parziale = await sensor_features_hourly_repo.latest_for_cell(
+        cell_id, as_of=ora + timedelta(minutes=6), max_age=timedelta(hours=2)
+    )
+    assert parziale is not None and parziale.rainfall_mm == pytest.approx(2.0)
+
+    # Alle 11:30 torna la rete: arriva l'arretrato delle 11:10 e la misura nuova.
+    ing = _ingestore()
+    esito = await ing.gestisci(
+        topic=TOPIC,
+        payload=_msg(
+            2,
+            ("rainfall", "mm", 30.0, ora + timedelta(minutes=10)),
+            ("rainfall", "mm", 4.0, ADESSO),
+        ),
+    )
+    assert esito is Esito.SALVATO
+    await run_hourly_rollup(reference=ADESSO)
+    assert (
+        await sensor_features_hourly_repo.latest_for_cell(
+            cell_id, as_of=ADESSO, max_age=timedelta(hours=2)
+        )
+        is None
+    )
+
+
+async def test_rollup_riscrive_l_ora(reset_db: None) -> None:
+    """Un dispositivo retrocesso a metà dell'ora non lascia la sua misura."""
+    cell_id = await _cella_e_dispositivo()
+    ing = _ingestore()
+    await ing.gestisci(topic=TOPIC, payload=_msg(1, ("rainfall", "mm", 0.0, ADESSO)))
+    await run_hourly_rollup(reference=ADESSO)
+    assert (
+        await sensor_features_hourly_repo.latest_for_cell(
+            cell_id, as_of=ADESSO, max_age=timedelta(hours=2)
+        )
+        is not None
+    )
+    async with acquire() as conn:
+        await conn.execute("UPDATE sensor_devices SET livello = 0 WHERE id = $1", ID)
+    await run_hourly_rollup(reference=ADESSO)
+    assert (
+        await sensor_features_hourly_repo.latest_for_cell(
+            cell_id, as_of=ADESSO, max_age=timedelta(hours=2)
+        )
+        is None
+    )
+
+
+async def test_misura_troppo_vecchia_rifiutata(reset_db: None) -> None:
+    await _cella_e_dispositivo()
+    ing = _ingestore(max_ritardo_giorni=30)
+    esito = await ing.gestisci(
+        topic=TOPIC,
+        payload=_msg(
+            1,
+            ("rainfall", "mm", 1.0, ADESSO),
+            ("rainfall", "mm", 1.0, ADESSO - timedelta(days=31)),
+        ),
+    )
+    assert esito is Esito.TROPPO_VECCHIO
+    assert await _righe() == []
+
+
+async def test_qc_vede_i_campioni_dello_stesso_messaggio(reset_db: None) -> None:
+    """Un salto dentro un solo messaggio è uno spike anche senza storia nel DB."""
+    await _cella_e_dispositivo()
+    ing = _ingestore()
+    esito = await ing.gestisci(
+        topic=TOPIC,
+        payload=_msg(
+            1,
+            ("rainfall", "mm", 0.2, ADESSO - timedelta(minutes=2)),
+            ("rainfall", "mm", 90.0, ADESSO - timedelta(minutes=1)),
+        ),
+    )
+    assert esito is Esito.SALVATO
+    assert [r["quality"] for r in await _righe()] == ["ok", "spike"]

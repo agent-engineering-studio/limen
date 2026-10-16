@@ -533,6 +533,10 @@ class IotCittadiniSettings(BaseSettings):
     # Più vecchia di così una misura è «in ritardo»: si salva ma non entra nel
     # rollup che alimenta lo scoring.
     ritardo_minuti: int = Field(default=15, ge=1)
+    # Oltre quest'età il messaggio si rifiuta come uno dal futuro: un
+    # arretrato di settimane è un orologio rotto, non una rete caduta, e
+    # cadrebbe fuori dalle partizioni facendo perdere anche le righe buone.
+    max_ritardo_giorni: int = Field(default=30, ge=1)
     # Messaggi al minuto per dispositivo; oltre si scartano. Una lettura ogni
     # cinque secondi è già più di quanto serva a un pluviometro.
     max_messaggi_al_minuto: int = Field(default=12, ge=1)

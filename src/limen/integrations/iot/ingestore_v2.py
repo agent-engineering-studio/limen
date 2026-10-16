@@ -14,13 +14,14 @@ Ogni messaggio passa, in quest'ordine, da:
    prima del database, così un firmware in loop non lo tocca;
 3. **registro** — un id sconosciuto o in quarantena si scarta;
 4. **SenML** — vedi :mod:`limen.integrations.iot.senml`;
-5. **tempo** — una misura nel futuro oltre la tolleranza fa scartare il
-   messaggio: il dispositivo ha l'orologio sbagliato, e nessuna delle sue
-   misure ha un'ora di cui fidarsi;
+5. **tempo** — una misura nel futuro oltre la tolleranza, o più vecchia di
+   ``max_ritardo_giorni``, fa scartare il messaggio: il dispositivo ha
+   l'orologio sbagliato, e nessuna delle sue misure ha un'ora di cui fidarsi;
 6. **ritardo** — una misura più vecchia di ``ritardo_minuti`` si salva marcata
    ``in_ritardo``: resta nell'archivio, non entra nel rollup e quindi non
    tocca lo scoring;
-7. **calibrazione e QC**, come nel v1; per i dati in ritardo il solo controllo
+7. **calibrazione e QC**, come nel v1, in ordine di tempo e contando anche i
+   campioni dello stesso messaggio; per i dati in ritardo il solo controllo
    di intervallo, perché il «campione precedente» di un arretrato non esiste;
 8. **sequenza e salvataggio**, in una transazione: la sequenza deve superare
    l'ultima accettata, o il messaggio è un replay e non si scrive niente.
@@ -45,6 +46,7 @@ import structlog
 
 from limen.config.settings import IotSettings
 from limen.core.logging import get_logger
+from limen.data.db import acquire
 from limen.data.repos import sensor_devices_repo, sensor_observations_repo
 from limen.data.repos.sensor_observations_repo import SensorObservation
 from limen.integrations.iot.mqtt_ingestor import (
@@ -52,8 +54,9 @@ from limen.integrations.iot.mqtt_ingestor import (
     qc_in_tempo_reale,
     sigma_overrides_for,
 )
+from limen.integrations.iot.partitions import ensure_partition_window
 from limen.integrations.iot.qc import QcQuality, check_range
-from limen.integrations.iot.schemas import CANONICAL_UNITS, Observation
+from limen.integrations.iot.schemas import CANONICAL_UNITS, Observation, ObservedProperty
 from limen.integrations.iot.senml import SenmlError, analizza
 
 _log: structlog.stdlib.BoundLogger = get_logger(__name__)
@@ -74,6 +77,7 @@ class Esito(StrEnum):
     SCONOSCIUTO = "sconosciuto"
     MALFORMATO = "malformato"
     FUTURO = "futuro"
+    TROPPO_VECCHIO = "troppo_vecchio"
     SEQUENZA = "sequenza"
     ERRORE = "errore"
 
@@ -148,6 +152,14 @@ class IngestoreV2:
     async def start(self) -> None:
         if self._task is not None:
             raise RuntimeError("IngestoreV2 già avviato")
+        # Il job mensile delle partizioni gira il 2 del mese: un worker che
+        # parte dopo mesi di fermo non deve aspettarlo per poter scrivere.
+        async with acquire() as conn:
+            await ensure_partition_window(
+                conn,
+                reference=self._adesso().date(),
+                window_months=self._settings.partition_window_months,
+            )
         self._task = asyncio.create_task(self._run(), name="limen-iot-ingestore-v2")
 
     async def stop(self) -> None:
@@ -241,9 +253,13 @@ class IngestoreV2:
         limite_futuro = ricevuto + timedelta(seconds=self._c.tolleranza_futuro_secondi)
         if any(m.istante > limite_futuro for m in messaggio.misure):
             return Esito.FUTURO
+        limite_passato = ricevuto - timedelta(days=self._c.max_ritardo_giorni)
+        if any(m.istante < limite_passato for m in messaggio.misure):
+            return Esito.TROPPO_VECCHIO
         ritardo = timedelta(minutes=self._c.ritardo_minuti)
         righe: list[SensorObservation] = []
-        for m in messaggio.misure:
+        valutate: dict[ObservedProperty, list[tuple[datetime, float]]] = {}
+        for m in sorted(messaggio.misure, key=lambda m: m.istante):
             grezza = Observation(
                 contract_version="v2",
                 thing_id=device_id,
@@ -263,9 +279,14 @@ class IngestoreV2:
                 check_range(canonica, self._settings)
                 if in_ritardo
                 else await qc_in_tempo_reale(
-                    canonica, settings=self._settings, sigma_overrides=self._sigma_overrides
+                    canonica,
+                    settings=self._settings,
+                    sigma_overrides=self._sigma_overrides,
+                    nel_messaggio=valutate.get(m.grandezza, []),
                 )
             )
+            if not in_ritardo:
+                valutate.setdefault(m.grandezza, []).append((m.istante, canonica.result_value))
             righe.append(
                 SensorObservation(
                     device_id=device_id,
