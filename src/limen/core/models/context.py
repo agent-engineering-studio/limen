@@ -13,7 +13,7 @@ state mutations stay explicit.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
@@ -145,7 +145,9 @@ class MonitoringContext(BaseModel):
     # sostituire con uno zero.
     fwi_nodes: Sequence[tuple[float, float]] = Field(default_factory=tuple)
     fwi_by_node: Sequence[FireWeatherState | None] = Field(default_factory=tuple)
-    seismic_events: Sequence[SeismicHistoryEvent] = Field(default_factory=tuple)
+    # Per cella (#284): solo i terremoti che hanno scosso **quella** cella,
+    # con la PGA della ShakeMap INGV in quel punto.
+    seismic_per_cella: Mapping[str, tuple[SeismicHistoryEvent, ...]] = Field(default_factory=dict)
     #: Riepilogo per l'AOI — l'incendio più recente che la tocca — solo per i
     #: log e i resoconti. **Non** entra nel punteggio: copiato su ogni cella
     #: dava a Trieste la spinta di un incendio a cento chilometri (#146).

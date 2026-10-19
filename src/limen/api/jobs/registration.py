@@ -26,6 +26,7 @@ from limen.api.jobs.forecast_monitoring import run_forecast_monitoring
 from limen.api.jobs.geodata_export import run_geodata_export_job
 from limen.api.jobs.hourly_monitoring import run_hourly_monitoring
 from limen.api.jobs.html_report import run_html_report
+from limen.api.jobs.ingv_sync import run_ingv_sync_job
 from limen.api.jobs.iot_partition_rollover import run_iot_partition_rollover_job
 from limen.api.jobs.iot_rollup import run_iot_rollup_job
 from limen.api.jobs.nightly import run_nightly_pipeline
@@ -50,6 +51,7 @@ from limen.api.jobs.ids import (  # noqa: E402
     JOB_GEODATA_EXPORT,
     JOB_HOURLY_MONITORING,
     JOB_HTML_REPORT,
+    JOB_INGV_SYNC,
     JOB_IOT_PARTITION_ROLLOVER,
     JOB_IOT_ROLLUP,
     JOB_NIGHTLY,
@@ -233,6 +235,17 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
             job=JOB_DPC_BOLLETTINI,
             interval_minutes=cfg.dpc_bollettini_minutes,
         )
+
+    if cfg.enable_ingv_sync:
+        await scheduler.add_schedule(
+            track_job(JOB_INGV_SYNC)(run_ingv_sync_job),
+            args=(deps,),
+            trigger=_deferred_interval(minutes=cfg.ingv_sync_minutes),
+            id=JOB_INGV_SYNC,
+            conflict_policy=ConflictPolicy.replace,
+        )
+        registered.append(JOB_INGV_SYNC)
+        log.info("scheduler.registered", job=JOB_INGV_SYNC, interval_minutes=cfg.ingv_sync_minutes)
 
     if cfg.enable_weekly_idrogeo:
         await scheduler.add_schedule(

@@ -169,7 +169,8 @@ async def test_run_ingv_sync_upserts_events_and_shakemap(
             object_store=store,
         )
 
-    assert result == {"events": 2, "shakemaps": 1}
+    # La ShakeMap finta non ha griglia: si salva il file, nessuna cella.
+    assert result == {"events": 2, "shakemaps": 1, "celle": 0}
     assert await count_events() == 2
     assert await count_raster_refs("shakemap_grid") == 1
 

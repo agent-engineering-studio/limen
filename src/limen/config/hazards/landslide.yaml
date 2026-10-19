@@ -217,6 +217,12 @@ seismic:
   lookback_days:      7
   pga_threshold_g:    0.05      # 0.05 g threshold per §2.4
   pga_scale_g:        0.05      # σ in the sigmoid
+  # Sotto questa PGA (ShakeMap INGV, dopo il decadimento) la cella non è stata
+  # scossa abbastanza da contare (#284): ~MMI V, «avvertito forte». Non si
+  # salva in `seismic_pga_cella`, ed E vale 0; da qui la sigmoide è riscalata
+  # per partire da 0, senza gradino. Il backtest di E manca ancora (#287):
+  # `SCHEDULER__ENABLE_INGV_SYNC` resta spento fino ad allora.
+  pga_min_g:          0.02
 
 # Post-fire window.
 post_fire:

@@ -1,19 +1,21 @@
 """INGV FDSN event client + ShakeMap grid.xml fetcher.
 
 FDSN event web service: ``https://webservices.ingv.it/fdsnws/event/1/query``
-ShakeMap grid:          ``https://shakemap.ingv.it/shake4/data/{eventID}/current/products/grid.xml``
+ShakeMap grid:          ``https://shakemap.ingv.it/data/{eventID}/current/products/grid.xml``
+                        (il prefisso ``/shake4/`` di prima risponde 404 per ogni evento,
+                        verificato il 19 ottobre 2026, #284)
 
 Both endpoints sometimes 404 or 5xx — terminal failures degrade to an
 empty list / ``None`` so the workflow keeps running.
 
-`fetch_shakemap_grid` returns raw XML bytes; parsing the PGA raster
-itself (XML → 2D numpy array) lives in :mod:`shakemap_grid_parser` so
-the client stays a thin transport layer.
+`fetch_shakemap_grid` returns raw XML bytes; parsing the PGA grid lives
+in :mod:`limen.integrations.ingv.shakemap_grid` so the client stays a
+thin transport layer.
 """
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -28,9 +30,7 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 FDSN_EVENT_URL = "https://webservices.ingv.it/fdsnws/event/1/query"
-SHAKEMAP_GRID_URL_TEMPLATE = (
-    "https://shakemap.ingv.it/shake4/data/{event_id}/current/products/grid.xml"
-)
+SHAKEMAP_GRID_URL_TEMPLATE = "https://shakemap.ingv.it/data/{event_id}/current/products/grid.xml"
 
 _DEGRADATION_EXC: tuple[type[BaseException], ...] = (
     httpx.HTTPError,
@@ -64,8 +64,9 @@ class IngvHttpClient:
         min_lon, min_lat, max_lon, max_lat = bbox
         params: dict[str, Any] = {
             "format": "geojson",
-            "starttime": start.isoformat(),
-            "endtime": end.isoformat(),
+            # FDSN vuole l'UTC senza offset né microsecondi.
+            "starttime": start.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S"),
+            "endtime": end.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S"),
             "minlatitude": min_lat,
             "maxlatitude": max_lat,
             "minlongitude": min_lon,
@@ -97,7 +98,15 @@ class IngvHttpClient:
         if resp.status_code == 204 or not resp.content:
             return []
 
-        payload = resp.json()
+        if resp.status_code >= 400:
+            # fetch_with_retry restituisce le 4xx senza sollevare.
+            log.warning("integration.degraded", label="ingv.events", status=resp.status_code)
+            return []
+        try:
+            payload = resp.json()
+        except ValueError:
+            log.warning("integration.degraded", label="ingv.events", error_type="json")
+            return []
         features = list(payload.get("features") or [])
         log.info("ingv.events.fetched", count=len(features))
         return features

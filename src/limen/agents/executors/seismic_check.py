@@ -1,9 +1,13 @@
-"""INGV events (last N days) → seismic history for the engine.
+"""Terremoti recenti → scuotimento per cella per il motore (#284).
 
-Reads pre-ingested events from ``seismic_events`` rather than calling
-INGV live: the live ingestion job (Phase 2) runs separately on a
-schedule (Phase 5 wires APScheduler). At workflow execution time we
-just consume what's already in the DB so the scoring path stays fast.
+Legge ciò che il job `limen-ingv-sync` ha già scritto: gli eventi INGV e, per
+ognuno con una ShakeMap, la PGA di ogni cella scossa oltre
+`seismic.pga_min_g` (`seismic_pga_cella`). Ogni cella riceve solo i
+terremoti che l'hanno scossa, con la sua PGA: prima riceveva tutti quelli
+d'Italia, con una PGA ricavata dalla sola magnitudo.
+
+Un evento senza ShakeMap non arriva qui: nessuna legge di attenuazione
+inventata al posto di quella di INGV.
 """
 
 from __future__ import annotations
@@ -15,31 +19,13 @@ from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
 from limen.core.models.risk import SeismicHistoryEvent
 from limen.core.scoring.regional_thresholds import load_regional_thresholds
-from limen.data.db import acquire
+from limen.data.repos.seismic_repo import scosse_per_cella
 
 log = get_logger(__name__)
 
 
-# A coarse PGA estimate for events without a stored ShakeMap raster:
-# GMPE attenuation is out of scope for V1 (later prompt). We assume a
-# nominal PGA equal to ``0.05 g * 10^((mag - 4.5) / 1.5)`` clipped at
-# 1.0 g — good enough as an order-of-magnitude pre-filter; the
-# engine's seismic_factor sigmoid handles the rest.
-def _nominal_pga_g(magnitude: float) -> float:
-    pga = 0.05 * (10.0 ** ((magnitude - 4.5) / 1.5))
-    return float(min(max(pga, 0.0), 1.0))
-
-
-_QUERY_SQL = """
-SELECT id, origin_time, magnitude, depth_km, geom
-FROM seismic_events
-WHERE origin_time >= $1 AND origin_time <= $2
-  AND magnitude >= $3
-"""
-
-
 class SeismicCheckExecutor(Executor):
-    """Loads recent seismic events into the context."""
+    """Carica nel contesto, per cella, i terremoti della finestra che l'hanno scossa."""
 
     def __init__(self, lookback_days: int | None = None) -> None:
         super().__init__(name="SeismicCheck")
@@ -52,27 +38,29 @@ class SeismicCheckExecutor(Executor):
         end: datetime = ctx.valuation_time
         start = end - timedelta(days=lookback)
 
-        async with acquire() as conn:
-            rows = await conn.fetch(_QUERY_SQL, start, end, cfg.min_magnitude)
-
-        history: list[SeismicHistoryEvent] = []
-        for r in rows:
-            mag = float(r["magnitude"])
-            history.append(
+        scosse = await scosse_per_cella(
+            list(ctx.cell_ids), start, end, min_magnitude=cfg.min_magnitude
+        )
+        per_cella: dict[str, list[SeismicHistoryEvent]] = {}
+        for s in scosse:
+            per_cella.setdefault(s.cell_id, []).append(
                 SeismicHistoryEvent(
-                    event_id=str(r["id"]),
-                    origin_time=r["origin_time"],
-                    magnitude=mag,
-                    distance_km=0.0,  # AOI-centroid distance not modelled in V1
-                    pga_g=_nominal_pga_g(mag),
+                    event_id=s.event_id,
+                    origin_time=s.origin_time,
+                    magnitude=s.magnitude,
+                    distance_km=s.distanza_km,
+                    pga_g=s.pga_g,
                 )
             )
 
         log.info(
             "executor.seismic_check",
             aoi_id=ctx.aoi_id,
-            events=len(history),
+            eventi=len({s.event_id for s in scosse}),
+            celle_scosse=len(per_cella),
             window_start=start.isoformat(),
             window_end=end.isoformat(),
         )
-        return ctx.with_update(seismic_events=tuple(history))
+        return ctx.with_update(
+            seismic_per_cella={cella: tuple(eventi) for cella, eventi in per_cella.items()}
+        )

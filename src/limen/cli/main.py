@@ -65,6 +65,7 @@ from limen.cli.imperviousness_fetch import run as _run_imperviousness_fetch
 from limen.cli.ingest_events import run as _run_ingest_events
 from limen.cli.ingest_fire_history import run as _run_ingest_fire_history
 from limen.cli.ingest_kb import run as _run_ingest_kb
+from limen.cli.ingv_sync import run as _run_ingv_sync
 from limen.cli.jobs import run as _run_jobs
 from limen.cli.llm_check import run as _run_llm_check
 from limen.cli.mcp_serve import run as _run_mcp_serve
@@ -173,6 +174,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "replay the FWI chain against EFFIS burnt-area perimeters "
             "(env: LIMEN_BACKTEST_WILDFIRE_AOI / _START / _END / _LEVEL)"
+        ),
+    )
+    sub.add_parser(
+        "ingv-sync",
+        help=(
+            "INGV earthquakes + per-cell shaking from the ShakeMaps (#284) "
+            "(env: LIMEN_INGV_GIORNI / LIMEN_INGV_MAGNITUDO)"
         ),
     )
     sub.add_parser(
@@ -373,6 +381,7 @@ def main(argv: list[str] | None = None) -> int:
         "fwi-climatology": _run_fwi_climatology,
         "rain-climatology": _run_rain_climatology,
         "dpc-bollettini": _run_dpc_bollettini,
+        "ingv-sync": _run_ingv_sync,
         "rain-ensemble-fetch": _run_rain_ens_fetch,
         "rain-ensemble-train": _run_rain_ens_train,
         "monitor-once": _run_monitor_once,

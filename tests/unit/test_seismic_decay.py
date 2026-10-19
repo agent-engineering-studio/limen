@@ -77,3 +77,15 @@ def test_compute_seismic_returns_pair(thresholds) -> None:
     )
     assert pga > 0.0
     assert 0.0 < e <= 1.0
+
+
+def test_niente_gradino_al_bordo_di_pga_min(thresholds) -> None:
+    """#284: la sigmoide nuda valeva 0,27 per una PGA infinitesima."""
+    s = thresholds.seismic
+    sotto = seismic_factor(s.pga_min_g * 0.999, seismic=s)
+    sopra = seismic_factor(s.pga_min_g * 1.001, seismic=s)
+    assert sotto == 0.0
+    assert 0.0 <= sopra < 0.01
+    # E cresce ancora con la PGA e si avvicina a 1 per uno scuotimento forte.
+    assert seismic_factor(0.10, seismic=s) > seismic_factor(0.05, seismic=s) > sopra
+    assert seismic_factor(1.0, seismic=s) > 0.99

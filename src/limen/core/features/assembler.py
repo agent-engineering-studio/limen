@@ -26,7 +26,6 @@ from limen.core.models.risk import (
     DynamicInputs,
     RainfallSample,
     RainfallSeries,
-    SeismicHistoryEvent,
     StaticFactors,
 )
 from limen.integrations.openmeteo.grid import nearest_node
@@ -67,7 +66,6 @@ def assemble_bundles(
     nodes = [(float(lon), float(lat)) for lon, lat in ctx.rain_nodes]
     node_series = [_to_series(series) for series in ctx.rainfall_by_node]
     use_grid = bool(nodes) and len(node_series) == len(nodes)
-    seismic: tuple[SeismicHistoryEvent, ...] = tuple(ctx.seismic_events)
 
     # The FWI chain lives on its own lattice (#62), so it gets its own
     # nearest-node lookup rather than reusing the rainfall one.
@@ -127,7 +125,7 @@ def assemble_bundles(
             flood_rain_observed_mm=ctx.flood_rain_observed_by_cell.get(cell_id),
             flood_rain_head_mm=flood_head,
             coastal_surge_norm=ctx.coastal_surge_norm,
-            seismic_history=seismic,
+            seismic_history=ctx.seismic_per_cella.get(cell_id, ()),
             # Per cella (#146): la data dell'incendio che tocca **questa**
             # cella, non il più recente della regione.
             months_since_fire=fuoco[0] if (fuoco := ctx.fuoco_per_cella.get(cell_id)) else None,
