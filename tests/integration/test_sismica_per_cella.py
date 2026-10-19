@@ -118,6 +118,14 @@ async def test_la_scossa_arriva_solo_alle_celle_scosse(reset_db: None, tmp_path:
 async def test_un_evento_gia_calcolato_e_vecchio_non_si_riscarica(
     reset_db: None, tmp_path: Path
 ) -> None:
+    await upsert_aoi(
+        id=_AOI,
+        name="sisma",
+        kind="test",
+        geom=Polygon([(16.83, 41.12), (16.95, 41.12), (16.95, 41.18), (16.83, 41.18)]),
+        metadata={},
+    )
+    await generate_and_store_grid(_AOI)
     """Dopo un giorno la ShakeMap non cambia più: non si riscaricano 10 MB ogni ora.
 
     Ma un evento salvato senza la PGA per cella (prima della 080) sì.
@@ -145,4 +153,9 @@ async def test_un_evento_gia_calcolato_e_vecchio_non_si_riscarica(
     assert (await giro()).call_count == 0
     async with acquire() as conn:
         await conn.execute("UPDATE seismic_events SET pga_celle_at = NULL")
+    assert (await giro()).call_count == 1
+    assert (await giro()).call_count == 0
+    # Codex, #288: una regione aggiunta dopo il calcolo rimette in gioco l'evento.
+    async with acquire() as conn:
+        await conn.execute("UPDATE grid_cells SET created_at = now() + interval '1 minute'")
     assert (await giro()).call_count == 1

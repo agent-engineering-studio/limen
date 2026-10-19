@@ -30,6 +30,7 @@ from limen.data.repos.seismic_repo import (
     get_event,
     pga_celle_calcolata,
     salva_pga_celle,
+    ultima_cella_creata,
     upsert_event,
 )
 from limen.integrations.ingv.shakemap_client import IngvHttpClient
@@ -143,6 +144,9 @@ async def run_ingv_sync(
     celle = 0
     bbox_geom = box(*bbox)
     pga_min_g = load_regional_thresholds().seismic.pga_min_g
+    # Codex, #288: celle nate dopo il calcolo (una regione aggiunta) vogliono
+    # la loro PGA anche da un evento già vecchio.
+    ultima_cella = await ultima_cella_creata()
 
     for feat in features:
         event = _parse_feature(feat)
@@ -154,7 +158,7 @@ async def run_ingv_sync(
             precedente is not None
             and precedente.shakemap_path is not None
             and end - event.origin_time > _SHAKEMAP_STABILE_DOPO
-            and await pga_celle_calcolata(event.id)
+            and await pga_celle_calcolata(event.id, dopo=ultima_cella)
         ):
             await upsert_event(event)
             events += 1

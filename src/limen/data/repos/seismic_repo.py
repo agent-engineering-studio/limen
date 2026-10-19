@@ -145,14 +145,21 @@ async def salva_pga_celle(event_id: str, pga: list[tuple[str, float]]) -> int:
     return len(pga)
 
 
-async def pga_celle_calcolata(event_id: str) -> bool:
-    """Se la PGA per cella di questo evento è già stata calcolata (#284)."""
+async def ultima_cella_creata() -> datetime | None:
+    """Quando è nata la cella più recente: una regione aggiunta dopo un
+    terremoto deve ricevere anche lei la sua PGA."""
     async with acquire() as conn:
-        return bool(
-            await conn.fetchval(
-                "SELECT pga_celle_at IS NOT NULL FROM seismic_events WHERE id = $1", event_id
-            )
+        valore: datetime | None = await conn.fetchval("SELECT max(created_at) FROM grid_cells")
+    return valore
+
+
+async def pga_celle_calcolata(event_id: str, *, dopo: datetime | None) -> bool:
+    """Se la PGA per cella di questo evento è stata calcolata dopo ``dopo`` (#284)."""
+    async with acquire() as conn:
+        calcolata: datetime | None = await conn.fetchval(
+            "SELECT pga_celle_at FROM seismic_events WHERE id = $1", event_id
         )
+    return calcolata is not None and (dopo is None or calcolata >= dopo)
 
 
 @dataclass(frozen=True, slots=True)

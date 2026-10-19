@@ -61,7 +61,8 @@ def leggi_griglia(xml: bytes) -> GrigliaPga:
         return _leggi(xml)
     except GrigliaNonValidaError:
         raise
-    except (ValueError, TypeError, KeyError) as exc:
+    # IndexError: un indice di campo oltre le colonne di grid_data (Codex, #288).
+    except (ValueError, TypeError, KeyError, IndexError) as exc:
         raise GrigliaNonValidaError(f"griglia illeggibile: {exc}") from exc
 
 

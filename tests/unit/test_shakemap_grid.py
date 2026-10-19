@@ -54,6 +54,8 @@ def test_fuori_dalla_griglia_non_c_e_valore() -> None:
         b"<non xml",
         griglia_xml(RIGHE[:4]),  # righe che non tornano con nlon x nlat
         griglia_xml(RIGHE).replace(b'name="PGA"', b'name="PGV"'),
+        # Codex, #288: un indice di campo oltre le colonne dei dati.
+        griglia_xml(RIGHE).replace(b'index="4" name="PGA"', b'index="9" name="PGA"'),
     ],
 )
 def test_una_griglia_illeggibile_si_dice(xml: bytes) -> None:
