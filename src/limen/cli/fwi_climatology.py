@@ -103,6 +103,7 @@ async def _lotto(
     params: FwiParams,
     client: OpenMeteoHttpClient,
     max_buco: int,
+    ora_utc: int,
 ) -> list[NodoMese]:
     stati: dict[tuple[float, float], FwiState] = dict.fromkeys(nodi, params.initial_state)
     avviati: dict[tuple[float, float], int] = dict.fromkeys(nodi, 0)
@@ -133,6 +134,7 @@ async def _lotto(
                     samples=campioni,
                 ),
                 giorni,
+                ora_utc=ora_utc,
             )
             if not copertura_valida(list(osservazioni), giorni, max_buco):
                 rotti.add(nodo)
@@ -194,7 +196,12 @@ async def run() -> int:
         scritti = 0
         for i in range(0, len(da_fare), _LOTTO):
             righe = await _lotto(
-                da_fare[i : i + _LOTTO], anni, params, client, thresholds.fwi.max_gap_days
+                da_fare[i : i + _LOTTO],
+                anni,
+                params,
+                client,
+                thresholds.fwi.max_gap_days,
+                ora_utc=thresholds.fwi.ora_osservazione_utc,
             )
             scritti += await fwi_climatology_repo.upsert_many(righe)
             log.info(

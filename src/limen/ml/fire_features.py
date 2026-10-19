@@ -118,7 +118,7 @@ def chain_for_days(
     # che nasconde le altre nello SHAP.
     rain_by_day: dict[date, float] = {}
     for day in days:
-        obs = snapshot.noon_observation(day)
+        obs = snapshot.noon_observation(day, noon_hour=thresholds.fwi.ora_osservazione_utc)
         if obs is None:
             continue
         rain_by_day[day] = obs.rain_24h_mm

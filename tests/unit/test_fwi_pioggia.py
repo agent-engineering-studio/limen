@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, time, timedelta
+from typing import cast
 
 import pytest
 
@@ -246,3 +247,35 @@ def test_il_contatore_della_catena_prosegue_dalla_partenza() -> None:
     lunga = NodeDay(**{**{f: getattr(serie[0], f) for f in NodeDay.__slots__}, "chain_days": 197})
     nuove = ricalcola(serie[1:], lunga, {}, _params(), 5)
     assert [r.chain_days for r in nuove] == [198, 199]
+
+
+async def test_la_pioggia_osservata_si_chiude_all_ora_del_campione() -> None:
+    """Codex, #290: meteo alle 11 UTC e pioggia fino alle 12 mettevano un'ora di
+    pioggia nel giorno sbagliato. La finestra finisce all'ora di `wildfire.yaml`."""
+    from limen.core.models.hazard import HazardType
+    from limen.core.scoring.regional_thresholds import (
+        WildfireThresholds,
+        load_hazard_thresholds,
+    )
+    from limen.integrations.dpc.fwi_pioggia import fonte_archivio
+    from limen.integrations.dpc.merging_archive import MergingArchive
+
+    soglie = load_hazard_thresholds(HazardType.WILDFIRE)
+    assert isinstance(soglie, WildfireThresholds)
+    finestre: list[tuple[datetime, datetime]] = []
+
+    class _Archivio:
+        def oraria(
+            self, nodi: list[tuple[float, float]], inizio: datetime, fine: datetime
+        ) -> dict[datetime, list[float | None]]:
+            finestre.append((inizio, fine))
+            return {}
+
+    archivio = cast("MergingArchive", _Archivio())
+    await fonte_archivio(archivio)([(16.0, 41.0)], date(2026, 8, 1))
+    assert finestre == [
+        (
+            datetime(2026, 7, 31, soglie.fwi.ora_osservazione_utc, tzinfo=UTC),
+            datetime(2026, 8, 1, soglie.fwi.ora_osservazione_utc, tzinfo=UTC),
+        )
+    ]

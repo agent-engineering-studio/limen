@@ -330,8 +330,9 @@ punteggio = FWI normalizzato × (0,25 + 0,60 × combustibile + 0,15 × pendenza)
 - **FWI** (Fire Weather Index, Van Wagner 1987) è l'indice meteorologico
   degli incendi usato da Copernicus EFFIS. Combina tre codici di umidità dei
   combustibili — dalla lettiera (FFMC) al suolo profondo (DC) — con il vento.
-  È calcolato una volta al giorno sulle condizioni di mezzogiorno, per nodo
-  meteo da 0,25°, come una catena: ogni giorno parte da quello prima.
+  È calcolato una volta al giorno sulle condizioni del mezzogiorno solare
+  (11 UTC, come Copernicus), per nodo meteo da 0,25°, come una catena: ogni
+  giorno parte da quello prima.
 - Il **codice di siccità DC** è la memoria lunga: sopra 500 il suolo e i
   combustibili grossi sono molto secchi, come a fine estate, e si abbassano
   solo con piogge abbondanti. È il motivo per cui il pericolo può restare

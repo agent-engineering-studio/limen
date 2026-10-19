@@ -91,10 +91,12 @@ async def _aoi_bbox(aoi_id: str) -> tuple[float, float, float, float] | None:
     return (float(row["x0"]), float(row["y0"]), float(row["x1"]), float(row["y1"]))
 
 
-def _observations(snapshot: MeteoSnapshot, days: list[date]) -> dict[date, FireWeatherObservation]:
+def _observations(
+    snapshot: MeteoSnapshot, days: list[date], *, ora_utc: int
+) -> dict[date, FireWeatherObservation]:
     out: dict[date, FireWeatherObservation] = {}
     for day in days:
-        obs = snapshot.noon_observation(day)
+        obs = snapshot.noon_observation(day, noon_hour=ora_utc)
         if obs is not None:
             out[day] = obs
     return out
@@ -210,6 +212,7 @@ async def backfill_aoi(
                 samples=samples,
             ),
             days,
+            ora_utc=thresholds.fwi.ora_osservazione_utc,
         )
         if not observations:
             continue

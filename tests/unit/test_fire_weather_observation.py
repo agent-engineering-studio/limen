@@ -37,7 +37,7 @@ def _snapshot(samples: list[WeatherSample]) -> MeteoSnapshot:
 def test_the_hottest_hour_is_picked_not_the_daily_mean() -> None:
     """Il campione scelto è quello più vicino a mezzogiorno, non una media."""
     snap = _snapshot([_hour(6, temp=12.0), _hour(12, temp=34.0), _hour(20, temp=18.0)])
-    obs = snap.noon_observation(dt.date(2026, 7, 15))
+    obs = snap.noon_observation(dt.date(2026, 7, 15), noon_hour=12)
     assert obs is not None
     assert obs.temperature_c == 34.0
 
@@ -45,7 +45,7 @@ def test_the_hottest_hour_is_picked_not_the_daily_mean() -> None:
 def test_the_nearest_hour_wins_when_noon_itself_is_missing() -> None:
     """Le finestre di archivio hanno buchi: 11:00 vale più di 06:00."""
     snap = _snapshot([_hour(6, temp=12.0), _hour(11, temp=30.0), _hour(23, temp=15.0)])
-    obs = snap.noon_observation(dt.date(2026, 7, 15))
+    obs = snap.noon_observation(dt.date(2026, 7, 15), noon_hour=12)
     assert obs is not None
     assert obs.temperature_c == 30.0
 
@@ -66,7 +66,7 @@ def test_rain_is_summed_over_the_24_h_before_noon_across_the_day_boundary() -> N
             _hour(10, day=14, rain=77.0),  # oltre 24 h prima: fuori
         ]
     )
-    obs = snap.noon_observation(dt.date(2026, 7, 15))
+    obs = snap.noon_observation(dt.date(2026, 7, 15), noon_hour=12)
     assert obs is not None
     assert obs.rain_24h_mm == 16.0
 
@@ -75,7 +75,7 @@ def test_a_day_without_the_three_variables_yields_no_observation() -> None:
     """Assente ≠ zero. Uno zero inventato sarebbe una giornata di asciugatura
     finta, e la ricorsione se la porterebbe dietro per settimane."""
     snap = _snapshot([_hour(12, temp=None)])
-    assert snap.noon_observation(dt.date(2026, 7, 15)) is None
+    assert snap.noon_observation(dt.date(2026, 7, 15), noon_hour=12) is None
 
 
 def test_a_snapshot_cached_before_fire_weather_existed_still_parses() -> None:
@@ -83,4 +83,13 @@ def test_a_snapshot_cached_before_fire_weather_existed_still_parses() -> None:
     esplodere il parsing, deve solo non produrre osservazioni."""
     old = WeatherSample(timestamp=dt.datetime(2026, 7, 15, 12, tzinfo=dt.UTC), precipitation_mm=2.0)
     assert old.has_fire_weather is False
-    assert _snapshot([old]).noon_observation(dt.date(2026, 7, 15)) is None
+    assert _snapshot([old]).noon_observation(dt.date(2026, 7, 15), noon_hour=12) is None
+
+
+def test_l_ora_si_sceglie_dallo_yaml() -> None:
+    """#289: il campione è quello dell'ora configurata, non sempre delle 12."""
+    snap = _snapshot([_hour(11, temp=30.0), _hour(12, temp=32.0)])
+    obs_11 = snap.noon_observation(dt.date(2026, 7, 15), noon_hour=11)
+    obs_12 = snap.noon_observation(dt.date(2026, 7, 15), noon_hour=12)
+    assert obs_11 is not None and obs_11.temperature_c == 30.0
+    assert obs_12 is not None and obs_12.temperature_c == 32.0

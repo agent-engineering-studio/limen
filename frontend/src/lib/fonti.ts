@@ -129,8 +129,8 @@ export const FONTI: readonly Fonte[] = [
       "Hourly rain, soil moisture, snow, temperature, humidity and wind.",
     ),
     accesso: t(
-      "API REST, da un'istanza propria sul server quando c'è. A ogni giro orario: 48 ore di pioggia per nodo e umidità del suolo; a mezzogiorno temperatura, umidità, vento e pioggia per la catena dell'indice incendi (tabella fwi_state).",
-      "REST API, from a self-hosted instance when there is one. Every hourly run: 48 hours of rain per node and soil moisture; at noon temperature, humidity, wind and rain for the fire-index chain (fwi_state table).",
+      "API REST, da un'istanza propria sul server quando c'è. A ogni giro orario: 48 ore di pioggia per nodo e umidità del suolo; alle 11 UTC (mezzogiorno solare) temperatura, umidità, vento e la pioggia delle 24 ore prima per la catena dell'indice incendi (tabella fwi_state).",
+      "REST API, from a self-hosted instance when there is one. Every hourly run: 48 hours of rain per node and soil moisture; at 11 UTC (solar noon) temperature, humidity, wind and the previous 24 hours of rain for the fire-index chain (fwi_state table).",
     ),
     interpretazione: t(
       "Frana, componente meteo M = 0,45 pioggia oltre la soglia di Caine (curve per Nord, Centro, Sud) + 0,30 pioggia dei 30 giorni + 0,25 umidità del suolo, più la pioggia sulla neve (fino a +0,15). Alluvione: la pioggia delle 72 ore per nodo, da 40 mm (inizio) a 120 mm (pieno), smorzata se il suolo è asciutto. Incendio: gli ingressi della catena FWI canadese (Van Wagner 1987).",

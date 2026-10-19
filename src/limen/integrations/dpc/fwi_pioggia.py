@@ -24,6 +24,8 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime, time, timedelta
 
 from limen.core.logging import get_logger
+from limen.core.models.hazard import HazardType
+from limen.core.scoring.regional_thresholds import WildfireThresholds, load_hazard_thresholds
 from limen.core.scoring.wildfire.fwi import FwiParams, advance
 from limen.data.repos import fwi_state_repo
 from limen.data.repos.fwi_state_repo import NodeDay
@@ -46,15 +48,28 @@ Meteo = Callable[
 _ORE_MINIME = 20
 
 
-def _mezzogiorno(giorno: date) -> datetime:
-    return datetime.combine(giorno, time(12), UTC)
+def _ora_osservazione() -> int:
+    soglie = load_hazard_thresholds(HazardType.WILDFIRE)
+    if not isinstance(soglie, WildfireThresholds):
+        raise TypeError(f"la catena FWI vuole WildfireThresholds, non {type(soglie).__name__}")
+    return soglie.fwi.ora_osservazione_utc
+
+
+def _mezzogiorno(giorno: date, ora_utc: int) -> datetime:
+    """La fine delle 24 ore di pioggia: la stessa ora del campione meteo.
+
+    Codex, #290: con l'ora a 11 e la pioggia chiusa alle 12, un'ora di pioggia
+    finiva nel giorno sbagliato della catena.
+    """
+    return datetime.combine(giorno, time(ora_utc), UTC)
 
 
 def fonte_dpc(max_step_mm: float) -> Fonte:
-    """La cumulata CUM24 delle 12 UTC dall'API DPC, controllata come in #235."""
+    """La cumulata CUM24 all'ora di osservazione dall'API DPC, controllata come in #235."""
+    ora = _ora_osservazione()
 
     async def pioggia(nodi: list[tuple[float, float]], giorno: date) -> list[float | None]:
-        t = _mezzogiorno(giorno)
+        t = _mezzogiorno(giorno, ora)
         grid = await get_cum_at(24, t)
         if grid is None:
             return [None] * len(nodi)
@@ -68,9 +83,10 @@ def fonte_dpc(max_step_mm: float) -> Fonte:
 
 def fonte_archivio(archivio: MergingArchive) -> Fonte:
     """La stessa cumulata ricostruita dall'archivio locale del «Merging»."""
+    ora = _ora_osservazione()
 
     async def pioggia(nodi: list[tuple[float, float]], giorno: date) -> list[float | None]:
-        fine = _mezzogiorno(giorno)
+        fine = _mezzogiorno(giorno, ora)
         ore = archivio.oraria(nodi, fine - timedelta(hours=24), fine)
         out: list[float | None] = []
         for k in range(len(nodi)):
@@ -86,6 +102,7 @@ def meteo_open_meteo(client: OpenMeteoHttpClient | None = None) -> Meteo:
     passato dà le corse più recenti: meglio della previsione delle 00 UTC con
     cui la riga di quel giorno era stata scritta (#201)."""
     cli = client or OpenMeteoHttpClient()
+    ora = _ora_osservazione()
 
     async def meteo(
         nodi: list[tuple[float, float]], giorni: list[date]
@@ -104,7 +121,9 @@ def meteo_open_meteo(client: OpenMeteoHttpClient | None = None) -> Meteo:
                 window_end=fine,
                 samples=campioni,
             )
-            out.append({g: o for g in giorni if (o := snap.noon_observation(g)) is not None})
+            out.append(
+                {g: o for g in giorni if (o := snap.noon_observation(g, noon_hour=ora)) is not None}
+            )
         return out
 
     return meteo
