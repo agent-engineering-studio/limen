@@ -739,12 +739,12 @@ export const FONTI: readonly Fonte[] = [
     pericoli: ["wildfire"],
     cosa: t("I tipi di vegetazione che bruciano.", "The kinds of vegetation that burn."),
     accesso: t(
-      "WMS di EFFIS per vederla; per i valori serve lo shapefile, da recuperare.",
-      "EFFIS WMS to view it; the values need the shapefile, still to be obtained.",
+      "GeoTIFF aperto a 250 m (LAEA) con i codici NFFL dei tipi di combustibile, scaricabile senza account.",
+      "Open 250 m GeoTIFF (LAEA) with the NFFL fuel-type codes, downloadable without an account.",
     ),
     interpretazione: t(
-      "Candidata a sostituire CORINE nel termine combustibile dell'incendio, dopo un backtest (#283).",
-      "Candidate to replace CORINE in the wildfire fuel term, after a backtest (#283).",
+      "Provata e scartata (#283): non copre seminativi, prati e città (un terzo d'Italia, dove sta il 38 % delle celle bruciate) e, a parità di regione e quota, non distingue gli incendi meglio di CORINE.",
+      "Tried and discarded (#283): it does not cover cropland, grassland and towns (a third of Italy, holding 38% of burnt cells) and, at equal region and altitude, it does not tell fires apart better than CORINE.",
     ),
     licenza: "CC BY 4.0",
     url: "https://forest-fire.emergency.copernicus.eu/applications/data-and-services",
