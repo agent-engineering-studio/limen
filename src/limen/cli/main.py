@@ -55,6 +55,7 @@ from limen.cli.forecast import run as _run_forecast
 from limen.cli.forecast_history import run as _run_forecast_history
 from limen.cli.fwi_backfill import run as _run_fwi_backfill
 from limen.cli.fwi_climatology import run as _run_fwi_climatology
+from limen.cli.fwi_confronto import run as _run_fwi_confronto
 from limen.cli.fwi_pioggia import run as _run_fwi_pioggia
 from limen.cli.geodata import build_subparser as _build_geodata_subparser
 from limen.cli.geodata import run as _run_geodata
@@ -202,6 +203,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "FWI distribution per weather node and month from the ERA5 archive "
             "(env: LIMEN_FWI_CLIM_YEARS / LIMEN_FWI_CLIM_AOI / LIMEN_FWI_CLIM_FORCE)"
+        ),
+    )
+    sub.add_parser(
+        "fwi-confronto",
+        help=(
+            "compare our FWI chain with the official Copernicus one, EWDS + EFFIS "
+            "(env: LIMEN_FWI_CONFRONTO_INIZIO / _FINE / _FONTE)"
         ),
     )
     sub.add_parser(
@@ -370,6 +378,7 @@ def main(argv: list[str] | None = None) -> int:
         "backtest-flood": _run_backtest_flood,
         "backtest-wildfire": _run_backtest_wildfire,
         "fwi-backfill": _run_fwi_backfill,
+        "fwi-confronto": _run_fwi_confronto,
         "fwi-climatology": _run_fwi_climatology,
         "rain-climatology": _run_rain_climatology,
         "dpc-bollettini": _run_dpc_bollettini,

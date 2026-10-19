@@ -3702,3 +3702,42 @@ html[lang="en"] .app-nav a { white-space: nowrap; }
     grid-template-columns: 1fr;
   }
 }
+.fonte-copernicus {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
+  color: var(--ink-soft);
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+}
+.fonti-copernicus table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 8px 0;
+}
+.fonti-copernicus th,
+.fonti-copernicus td {
+  text-align: left;
+  vertical-align: top;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--hairline);
+}
+.fonti-copernicus th {
+  color: var(--muted);
+  font-weight: 600;
+}
+@media (max-width: 560px) {
+  .fonti-copernicus table,
+  .fonti-copernicus tbody,
+  .fonti-copernicus tr,
+  .fonti-copernicus td {
+    display: block;
+  }
+  .fonti-copernicus thead {
+    display: none;
+  }
+}

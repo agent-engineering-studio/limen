@@ -17,6 +17,11 @@ describe("fonti dei dati", () => {
       expect(f.url).toMatch(/^(https:\/\/|#\/)/);
       expect(f.dataset.it.length).toBeGreaterThan(0);
       expect(f.dataset.en.length).toBeGreaterThan(0);
+      // Ogni fonte dice come si legge e come Limen la usa, in entrambe le lingue.
+      expect(f.accesso.it.length).toBeGreaterThan(10);
+      expect(f.accesso.en.length).toBeGreaterThan(10);
+      expect(f.interpretazione.it.length).toBeGreaterThan(10);
+      expect(f.interpretazione.en.length).toBeGreaterThan(10);
     }
   });
 
@@ -46,5 +51,22 @@ describe("fonti dei dati", () => {
     expect(screen.getByText(/non vuol dire che l'ente approvi Limen/)).toBeInTheDocument();
     expect(screen.getByAltText("OpenStreetMap")).toBeInTheDocument();
     expect(screen.getAllByRole("listitem")).toHaveLength(FONTI.length);
+    expect(screen.getByRole("heading", { name: /Copernicus: i dati aperti europei/ })).toBeInTheDocument();
+    expect(screen.getAllByText(/Come la usa Limen/)).toHaveLength(FONTI.length);
+  });
+
+  it("le fonti Copernicus dicono da quale servizio vengono", () => {
+    const copernicus = FONTI.filter((f) => f.copernicus);
+    expect(copernicus.length).toBeGreaterThanOrEqual(8);
+    expect(copernicus.map((f) => f.id)).toEqual(
+      expect.arrayContaining(["glofas", "cems-fire", "effis-fwi", "cems-rapid-mapping", "corine"]),
+    );
+  });
+
+  it("i link della tabella Copernicus restano nella rotta #/fonti", () => {
+    // Codex, PR #286: un `#fonte-…` nudo riportava alla home.
+    render(<FontiPage />);
+    const link = screen.getByRole("link", { name: /GloFAS, previsione di portata/ });
+    expect(link.getAttribute("href")).toBe("#/fonti/glofas");
   });
 });
