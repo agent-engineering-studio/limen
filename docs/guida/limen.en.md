@@ -341,8 +341,8 @@ score = normalised FWI × (0.25 + 0.60 × fuel + 0.15 × slope)
 - **FWI** (Fire Weather Index, Van Wagner 1987) is the fire weather index
   used by Copernicus EFFIS. It combines three fuel-moisture codes — from the
   litter (FFMC) to the deep soil (DC) — with the wind. It is calculated once
-  a day on midday conditions, per 0.25° weather node, as a chain: each day
-  starts from the one before.
+  a day on solar-noon conditions (11 UTC, like Copernicus), per 0.25° weather
+  node, as a chain: each day starts from the one before.
 - The **Drought Code DC** is the long memory: above 500 the soil and the
   heavy fuels are very dry, as at the end of summer, and they come down only
   with abundant rain. It is why the hazard can stay high in a mild October,
