@@ -43,11 +43,12 @@ from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
 import aiomqtt
+import asyncpg
 import structlog
 
-from limen.config.settings import IotSettings
+from limen.config.settings import IotSettings, get_settings
 from limen.core.logging import get_logger
-from limen.data.db import acquire
+from limen.data.db import acquire, crea_pool, dsn_con_ruolo, usa_pool
 from limen.data.repos import sensor_devices_repo, sensor_observations_repo
 from limen.data.repos.sensor_observations_repo import SensorObservation
 from limen.integrations.iot.mqtt_ingestor import (
@@ -153,6 +154,7 @@ class IngestoreV2:
         self._task: asyncio.Task[None] | None = None
         self._fermo = asyncio.Event()
         self._connesso_alle: datetime | None = None
+        self._pool: asyncpg.Pool | None = None
 
     async def start(self) -> None:
         if self._task is not None:
@@ -175,8 +177,46 @@ class IngestoreV2:
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await self._task
         self._task = None
+        if self._pool is not None:
+            await self._pool.close()
+            self._pool = None
+
+    async def _pool_ristretto(self) -> asyncpg.Pool | None:
+        """Il pool di `limen_ingestore` (#267), o ``None`` senza password.
+
+        Con la password ma senza il ruolo pronto (l'API non è ancora partita a
+        impostarla) si aspetta e si riprova, invece di scrivere col ruolo del
+        worker: intanto il broker tiene i messaggi nella sessione (#273).
+        """
+        password = self._c.db_password
+        if password is None or not password.get_secret_value():
+            return None
+        while self._pool is None:
+            try:
+                dsn = dsn_con_ruolo(
+                    get_settings().db.connection_string,
+                    "limen_ingestore",
+                    password.get_secret_value(),
+                )
+                self._pool = await crea_pool(dsn, max_size=4)
+            except Exception as exc:
+                # Qualunque cosa, non solo Postgres: un DSN che non si legge
+                # (password non esadecimale, più host) farebbe morire il task
+                # in silenzio. Non si ripiega mai sul ruolo del worker.
+                _log.error("iot.v2.ruolo_non_disponibile", error_type=type(exc).__name__)
+                await asyncio.sleep(30.0)
+        return self._pool
 
     async def _run(self) -> None:
+        pool = await self._pool_ristretto()
+        if pool is None:
+            await self._consuma()
+            return
+        _log.info("iot.v2.ruolo_ristretto", ruolo="limen_ingestore")
+        with usa_pool(pool):
+            await self._consuma()
+
+    async def _consuma(self) -> None:
         tls = aiomqtt.TLSParameters(
             ca_certs=self._c.cafile,
             certfile=self._c.certfile,

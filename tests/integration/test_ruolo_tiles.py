@@ -15,7 +15,7 @@ import pytest
 from pydantic import SecretStr
 
 from limen.data.db import acquire
-from limen.data.migrate import imposta_password_tiles
+from limen.data.migrate import imposta_password
 
 pytestmark = pytest.mark.integration
 
@@ -96,7 +96,9 @@ async def test_le_tabelle_grezze_restano_chiuse(pg_pool: asyncpg.Pool) -> None:
 
 async def test_la_password_viene_dal_env(postgres_container: str, pg_pool: asyncpg.Pool) -> None:
     password = "0123456789abcdef0123456789abcdef"
-    await imposta_password_tiles(SecretStr(password))
+    await imposta_password(
+        "limen_tiles", SecretStr(password), variabile="DB__TILES_PASSWORD", obbligatoria=True
+    )
 
     parti = urlsplit(postgres_container)
     netloc = f"limen_tiles:{password}@{parti.hostname}:{parti.port}"
@@ -125,7 +127,12 @@ async def test_le_funzioni_delle_tile_restano_security_definer(pg_pool: asyncpg.
 async def test_una_password_che_romperebbe_l_url_non_si_imposta(
     postgres_container: str, pg_pool: asyncpg.Pool
 ) -> None:
-    await imposta_password_tiles(SecretStr("a@b/c:" + "0" * 32))
+    await imposta_password(
+        "limen_tiles",
+        SecretStr("a@b/c:" + "0" * 32),
+        variabile="DB__TILES_PASSWORD",
+        obbligatoria=True,
+    )
 
     parti = urlsplit(postgres_container)
     netloc = f"limen_tiles:a%40b%2Fc%3A{'0' * 32}@{parti.hostname}:{parti.port}"

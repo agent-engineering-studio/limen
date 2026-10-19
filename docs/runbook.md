@@ -156,7 +156,7 @@ compresa.
 La password di `limen_tiles` sta nel `.env` come `DB__TILES_PASSWORD`
 (esadecimale, `openssl rand -hex 24`: finisce dentro un URL) e la imposta
 l'API all'avvio, così come `uv run limen migrate`. Senza, l'API scrive
-`migrate.tiles_senza_password` e pg_tileserv riparte in loop perché non
+`migrate.ruolo_senza_password` (con `ruolo=limen_tiles`) e pg_tileserv riparte in loop perché non
 entra. Dopo averla messa: `make up`, poi
 `curl -s http://127.0.0.1:7800/index.json | jq 'keys'` deve elencare dodici
 layer e nessuna tabella grezza.
@@ -346,6 +346,18 @@ firmware riscritto) viene scartato con `esito=sequenza` a ogni messaggio,
 perché ricomincia da numeri già visti. Dopo aver controllato che sia davvero
 lui e non un replay: `UPDATE sensor_devices SET ultima_sequenza = NULL WHERE
 id = …`, e il primo messaggio successivo riparte da lì.
+
+### L'ingestore dei sensori con un ruolo suo (#267)
+
+L'ingestore v2 legge messaggi che chiunque abbia un certificato può aver
+scritto. Con `IOT__CITTADINI__DB_PASSWORD` nel `.env` (esadecimale, `openssl
+rand -hex 24`) scrive come `limen_ingestore` (migrazione 079): osservazioni,
+sequenza, ultimo dato e stato, e niente altro — non il livello di un
+dispositivo, non i punteggi, non il registro dei registranti. La password la
+imposta l'API all'avvio; finché il ruolo non entra, l'ingestore scrive
+`iot.v2.ruolo_non_disponibile` e aspetta, senza ripiegare sul ruolo del
+worker, mentre il broker tiene i messaggi. Senza la variabile resta sul pool
+principale, com'era. Le partizioni le crea comunque il worker col suo ruolo.
 
 ### Registrazione dei sensori (#253)
 

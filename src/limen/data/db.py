@@ -12,8 +12,10 @@ PostgreSQL+PostGIS and to Neon (sslmode=require). Only
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
+from contextvars import ContextVar
 from typing import TYPE_CHECKING, cast
+from urllib.parse import urlsplit, urlunsplit
 
 import asyncpg
 from shapely import from_wkb, to_wkb
@@ -23,7 +25,7 @@ from limen.config.settings import DBSettings, get_settings
 from limen.core.logging import get_logger
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncIterator, Iterator
 
 log = get_logger(__name__)
 
@@ -75,6 +77,11 @@ async def register_postgis(conn: asyncpg.Connection) -> None:
 
 
 _pool: asyncpg.Pool | None = None
+# Un pool diverso per il task corrente: l'ingestore dei sensori di terzi scrive
+# con un ruolo ristretto (#267) passando dagli stessi repo di tutti gli altri.
+# Una ContextVar e non un parametro: vale solo nel task che la imposta, e i
+# repo non devono sapere chi li chiama.
+_pool_del_task: ContextVar[asyncpg.Pool | None] = ContextVar("pool_del_task", default=None)
 
 
 async def init_pool(settings: DBSettings | None = None) -> asyncpg.Pool:
@@ -144,10 +151,47 @@ async def lifespan_pool(
 
 @asynccontextmanager
 async def acquire() -> AsyncIterator[asyncpg.Connection]:
-    """Acquire a connection from the global pool as an async context manager."""
-    pool = get_pool()
+    """Acquire a connection from the global pool as an async context manager.
+
+    Inside :func:`usa_pool`, from that pool instead.
+    """
+    pool = _pool_del_task.get() or get_pool()
     async with pool.acquire() as conn:
         yield conn
+
+
+@contextmanager
+def usa_pool(pool: asyncpg.Pool) -> Iterator[None]:
+    """Fa passare da ``pool`` ogni :func:`acquire` del task corrente."""
+    token = _pool_del_task.set(pool)
+    try:
+        yield
+    finally:
+        _pool_del_task.reset(token)
+
+
+def dsn_con_ruolo(dsn: str, ruolo: str, password: str) -> str:
+    """Lo stesso database, con un altro utente: il ruolo ristretto di un servizio.
+
+    Si sostituiscono solo utente e password: la lista degli host resta com'è,
+    anche con più host (``db1:5432,db2:5432``), che ``urlsplit`` non sa leggere.
+    """
+    parti = urlsplit(dsn)
+    host = parti.netloc.rpartition("@")[2]
+    return urlunsplit(parti._replace(netloc=f"{ruolo}:{password}@{host}"))
+
+
+async def crea_pool(dsn: str, *, max_size: int) -> asyncpg.Pool:
+    """Un pool a parte, col codec PostGIS come quello globale."""
+    cfg = get_settings().db
+    return await asyncpg.create_pool(
+        dsn=dsn,
+        min_size=1,
+        max_size=max_size,
+        statement_cache_size=cfg.statement_cache_size,
+        command_timeout=cfg.command_timeout_seconds,
+        init=_register_postgis,
+    )
 
 
 def _redact_dsn(dsn: str) -> str:
