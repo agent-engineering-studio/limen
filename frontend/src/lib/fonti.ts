@@ -699,8 +699,8 @@ export const FONTI: readonly Fonte[] = [
       "Open HTTP folder of the observatory, a NetCDF of a few MB a year, without an account.",
     ),
     interpretazione: t(
-      "Da provare nel backtest incendio come aridità di stagione (#281): entra nel motore solo se migliora la capacità di distinguere i giorni pericolosi.",
-      "To be tried in the wildfire backtest as seasonal dryness (#281): it enters the engine only if it improves how well dangerous days are told apart.",
+      "Provato e scartato (#281): a parità di indice FWI e di zona non cambia la probabilità di incendio. Misura l'anomalia, e un'estate siciliana arida è normale, quindi lì segna «nessuna siccità» proprio dove gli incendi sono di più. Ogni modo di aggiungerlo peggiorava la capacità di distinguere i giorni pericolosi.",
+      "Tried and discarded (#281): at equal FWI and area it does not change the probability of fire. It measures the anomaly, and an arid Sicilian summer is normal, so there it reads \"no drought\" exactly where fires are most frequent. Every way of adding it worsened how well dangerous days are told apart.",
     ),
     licenza: "CC BY 4.0",
     url: "https://drought.emergency.copernicus.eu",
