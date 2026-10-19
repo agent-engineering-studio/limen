@@ -724,8 +724,8 @@ export const FONTI: readonly Fonte[] = [
       "Same open folder, a NetCDF of about 500 MB a year.",
     ),
     interpretazione: t(
-      "Da confrontare nel backtest frane con l'umidità di Open-Meteo che la componente M usa oggi (#282).",
-      "To be compared in the landslide backtest with the Open-Meteo soil moisture the M component uses today (#282).",
+      "Provata e scartata (#282): su 1.117 frane, letta con il ritardo con cui arriva davvero, separa le frane dai giorni tranquilli peggio del caso, e accanto all'umidità di Open-Meteo non aggiunge niente.",
+      "Tried and discarded (#282): on 1,117 landslides, read with the delay it really arrives with, it separates landslides from quiet days worse than chance, and next to the Open-Meteo soil moisture it adds nothing.",
     ),
     licenza: "CC BY 4.0",
     url: "https://drought.emergency.copernicus.eu",
