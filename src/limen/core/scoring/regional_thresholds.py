@@ -26,7 +26,7 @@ rather than reaching for blocks only one hazard has.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from functools import cache
 from importlib import resources
 from itertools import pairwise
@@ -600,6 +600,20 @@ class FwiBlock(_StrictModel):
         mese, gg = (int(x) for x in self.season_start.split("-"))
         inizio = date(giorno.year, mese, gg)
         return inizio if giorno >= inizio else date(giorno.year - 1, mese, gg)
+
+    def in_assestamento(self, giorno: date, chain_days: int) -> bool:
+        """La catena di ``giorno`` non è ancora significativa.
+
+        Troppo corta, oppure partita oltre ``spinup_days`` dopo l'inizio della
+        stagione: il DC non ha ancora la siccità che la stagione ha accumulato
+        (#201). Il margine assorbe i giorni senza osservazione, che
+        ``chain_days`` non conta. Una regola sola per il motore e per
+        ``limen fwi-confronto`` (#280).
+        """
+        if chain_days < self.spinup_days:
+            return True
+        partenza = giorno - timedelta(days=chain_days)
+        return partenza > self.inizio_stagione(giorno) + timedelta(days=self.spinup_days)
 
     #: Longest interruption a chain survives. Beyond it the stored state is a
     #: fiction -- carrying a code across three weeks of missing weather as if

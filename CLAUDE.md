@@ -219,6 +219,9 @@ uv run limen fwi-backfill       # rebuild the recursive FWI chain from the ERA5 
                                 # (env knobs: LIMEN_FWI_AOI / LIMEN_FWI_DAYS)
 uv run limen backtest-wildfire  # replay the FWI chain against EFFIS burnt-area perimeters
                                 # (env: LIMEN_BACKTEST_WILDFIRE_AOI / _START / _END / _LEVEL)
+uv run --group copernicus limen fwi-confronto  # our FWI chain vs the official Copernicus one
+                                # (EWDS cems-fire-historical + EFFIS WMS mf010.*; measure only;
+                                #  env: LIMEN_FWI_CONFRONTO_INIZIO / _FINE / _FONTE)
 uv run limen data-status        # which per-cell static layers are loaded, and what gates the rest
 uv run limen registra-verifica F # fact-check event → verifiche_eventi (+ landslide_events if a landslide)
 uv run limen verifiche-report   # verified events vs forecasts per hazard, with the base rate

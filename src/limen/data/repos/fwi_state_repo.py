@@ -223,4 +223,47 @@ async def upsert_many(days: list[NodeDay]) -> int:
     return len(records)
 
 
-__all__ = ["NodeDay", "StoredChain", "latest_before", "quantize", "read_day", "upsert_many"]
+@dataclass(frozen=True, slots=True)
+class GiornoCatena:
+    lon: float
+    lat: float
+    day: date
+    chain_days: int
+    componenti: dict[str, float]
+
+
+async def catena_fra(dal: date, al: date) -> list[GiornoCatena]:
+    """I giorni salvati fra ``dal`` e ``al``, con quanta catena hanno alle spalle (#280)."""
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT node_lon, node_lat, day, chain_days, ffmc, dmc, dc, isi, bui, fwi
+              FROM fwi_state
+             WHERE day BETWEEN $1 AND $2
+             ORDER BY day, node_lon, node_lat
+            """,
+            dal,
+            al,
+        )
+    return [
+        GiornoCatena(
+            lon=float(r["node_lon"]),
+            lat=float(r["node_lat"]),
+            day=r["day"],
+            chain_days=int(r["chain_days"]),
+            componenti={c: float(r[c]) for c in ("fwi", "ffmc", "dmc", "dc", "isi", "bui")},
+        )
+        for r in rows
+    ]
+
+
+__all__ = [
+    "GiornoCatena",
+    "NodeDay",
+    "StoredChain",
+    "catena_fra",
+    "latest_before",
+    "quantize",
+    "read_day",
+    "upsert_many",
+]

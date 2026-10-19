@@ -22,8 +22,6 @@ and stepping them is the workflow's job, not the engine's.
 
 from __future__ import annotations
 
-from datetime import timedelta
-
 from limen.core.models.risk import (
     CellFeatureBundle,
     RiskScore,
@@ -71,14 +69,7 @@ class WildfireScoringEngine(ScoringEngine[WildfireBreakdown]):
                 # A missing chain is the extreme case of an untrustworthy one,
                 # not a separate state: flagging only the short chains would
                 # report the worst case as settled.
-                spinup=fw is None
-                or fw.chain_days < t.fwi.spinup_days
-                # Partita oltre un mese dopo l'inizio della stagione: il DC
-                # non ha ancora la siccità che la stagione ha accumulato
-                # (#201). Il margine assorbe i giorni senza osservazione,
-                # che `chain_days` non conta.
-                or fw.day - timedelta(days=fw.chain_days)
-                > t.fwi.inizio_stagione(fw.day) + timedelta(days=t.fwi.spinup_days),
+                spinup=fw is None or t.fwi.in_assestamento(fw.day, fw.chain_days),
             ),
             model_version=t.model_version,
         )
