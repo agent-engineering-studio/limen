@@ -18,6 +18,11 @@ può interrogare a costo zero per sapere se è cambiato. Conseguenza:
 dopo un sync che porta perimetri nuovi, il giro successivo rifà la fetch una
 volta di troppo e poi si assesta. Una richiesta da ~300 KB per regione è un
 prezzo accettabile; interrogare EFFIS per decidere se interrogarlo no.
+
+``LIMEN_EFFIS_GIORNI`` allarga la finestra (default 90, come il passo
+notturno): il notturno guarda solo indietro di 90 giorni, quindi uno storico
+lo riempie solo questo comando, una volta (#291 — nel 2025 la Sicilia aveva 23
+perimetri contro 365). Con la finestra lunga forza anche l'impronta.
 """
 
 from __future__ import annotations
@@ -28,6 +33,7 @@ from limen.cli.bootstrap_static import FORCE_ENV
 from limen.core.logging import get_logger
 from limen.data.db import lifespan_pool
 from limen.data.repos.aoi_repo import get_aoi, list_aoi_ids
+from limen.integrations.effis.sync_job import DEFAULT_LOOKBACK_DAYS
 from limen.integrations.static_bootstrap import fingerprint
 
 log = get_logger(__name__)
@@ -35,7 +41,7 @@ log = get_logger(__name__)
 _STEP = "fire_perimeters"
 
 
-async def sincronizza(*, forzato: bool) -> dict[str, int]:
+async def sincronizza(*, forzato: bool, giorni: int = DEFAULT_LOOKBACK_DAYS) -> dict[str, int]:
     """Scarica i perimetri per ogni AOI seminata. Non solleva mai.
 
     Senza ``forzato`` salta le AOI la cui impronta non è cambiata. Il passo
@@ -62,7 +68,7 @@ async def sincronizza(*, forzato: bool) -> dict[str, int]:
         # `run_effis_sync` vuole la tupla (minx, miny, maxx, maxy).
         bbox = aoi.geom.bounds
         try:
-            counts = await run_effis_sync(bbox=bbox)
+            counts = await run_effis_sync(bbox=bbox, lookback_days=giorni)
         except Exception as exc:
             # Degradazione: EFFIS giu' non deve far fallire la sequenza
             # degli altri layer. Nessuna versione registrata, quindi il
@@ -84,8 +90,16 @@ async def sincronizza(*, forzato: bool) -> dict[str, int]:
 
 async def run() -> int:
     forced = os.environ.get(FORCE_ENV, "").strip().lower() in {"1", "true", "yes"}
+    try:
+        giorni = int(os.environ.get("LIMEN_EFFIS_GIORNI", str(DEFAULT_LOOKBACK_DAYS)))
+    except ValueError:
+        log.error("effis_sync.giorni_non_validi", valore=os.environ.get("LIMEN_EFFIS_GIORNI"))
+        return 1
     async with lifespan_pool():
-        await sincronizza(forzato=forced)
+        # Una finestra più lunga del solito è uno storico da riempire: l'impronta
+        # della tabella non lo sa, quindi si forza.
+        conti = await sincronizza(forzato=forced or giorni > DEFAULT_LOOKBACK_DAYS, giorni=giorni)
+    log.info("effis_sync.totale", giorni=giorni, **conti)
     return 0
 
 
