@@ -199,7 +199,7 @@ class _Snapshot:
     def __init__(self, *, rain_mm: float = 0.0) -> None:
         self._rain = rain_mm
 
-    def noon_observation(self, day: dt.date) -> object:
+    def noon_observation(self, day: dt.date, *, noon_hour: int = 12) -> object:
         class _Obs:
             temperature_c = 30.0
             relative_humidity_pct = 25.0

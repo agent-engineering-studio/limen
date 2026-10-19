@@ -213,7 +213,7 @@ def replay_chain(
     chain_days = 0
     out: dict[date, FireWeatherState] = {}
     for day in days:
-        obs = snapshot.noon_observation(day)
+        obs = snapshot.noon_observation(day, noon_hour=thresholds.fwi.ora_osservazione_utc)
         if obs is None:
             continue
         step = advance(

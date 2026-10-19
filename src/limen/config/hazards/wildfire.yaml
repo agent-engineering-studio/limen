@@ -48,6 +48,17 @@ fwi:
   # normalizzazione satura.
   normalisation_max: 50.0
 
+  # L'ora (UTC) del campione meteo del giorno: T, umidità e vento di
+  # quell'ora, pioggia delle 24 ore prima. Van Wagner vuole il mezzogiorno
+  # solare, che in Italia sono le 11 UTC, e Copernicus (CEMS/GEFF-ERA5) usa
+  # quello. Limen ha sempre usato le 12: un'ora più calda e secca. Misurato
+  # sul 15/09-14/10/2026 (#289): con 11 l'FWI contro EWDS passa da +3,2 a
+  # +1,3 e la stessa classe dal 51 al 56 %, ma da giugno a settembre la
+  # fascia alta o sopra scende dal 48 al 39 % dei giorni-nodo. Resta 12
+  # finché il backtest sui perimetri non dice che 11 discrimina meglio.
+  # Cambiarlo vuol dire rifare la catena (fwi-backfill + fwi-pioggia).
+  ora_osservazione_utc: 12
+
   # I tre codici sono ricorsivi: partiti dai valori standard servono
   # settimane prima di significare qualcosa. Sotto questa soglia il motore
   # scora comunque, ma lo dichiara nel breakdown.

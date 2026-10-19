@@ -586,6 +586,9 @@ class FwiBlock(_StrictModel):
     #: FWI value mapped to a normalised 1.0. EFFIS calls ≥ 50 "extreme"; above
     #: it the index keeps climbing but the operational answer stops changing.
     normalisation_max: float = Field(..., gt=0.0)
+    #: L'ora UTC del campione meteo del giorno (#289): Van Wagner vuole il
+    #: mezzogiorno solare, 11 UTC in Italia.
+    ora_osservazione_utc: int = Field(..., ge=0, le=23)
     #: Days of spin-up below which the codes are not yet meaningful. The
     #: engine still scores, but flags the breakdown so nobody reads a
     #: three-day-old chain as a seasoned one.

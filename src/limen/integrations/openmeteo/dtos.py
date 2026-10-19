@@ -87,7 +87,7 @@ class MeteoSnapshot(BaseModel):
         ]
         return max(values) if values else None
 
-    def noon_observation(self, day: date, *, noon_hour: int = 12) -> FireWeatherObservation | None:
+    def noon_observation(self, day: date, *, noon_hour: int) -> FireWeatherObservation | None:
         """Fire weather at local noon on ``day``, with the rain of the 24 h before it.
 
         The FWI chain is defined on a single daily observation taken at local
@@ -95,10 +95,9 @@ class MeteoSnapshot(BaseModel):
         moisture of fuels at the hottest, driest hour, and averaging would
         systematically understate the danger.
 
-        Snapshots are requested in UTC. Italy is UTC+1/+2, so the sample
-        nearest ``noon_hour`` UTC is within an hour of solar noon -- close
-        enough for the fuel-moisture equations, and it avoids carrying a
-        timezone database into a pure DTO.
+        Snapshots are requested in UTC; ``noon_hour`` is `fwi.ora_osservazione_utc`
+        of `wildfire.yaml` (#289) — no default, so no caller can drift from
+        the configured hour. Solar noon in Italy is 11 UTC.
 
         Returns ``None`` when the day has no sample carrying all three
         variables: a missing observation must not silently become a zero,

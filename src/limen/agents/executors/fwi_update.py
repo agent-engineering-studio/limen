@@ -223,7 +223,12 @@ class FwiUpdateExecutor(Executor):
                 window_end=window_end,
                 samples=samples,
             )
-            observed = {d: obs for d in days if (obs := snapshot.noon_observation(d)) is not None}
+            ora = self._t.fwi.ora_osservazione_utc
+            observed = {
+                d: obs
+                for d in days
+                if (obs := snapshot.noon_observation(d, noon_hour=ora)) is not None
+            }
             out.append(observed)
         return out
 
