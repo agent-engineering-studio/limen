@@ -9,12 +9,13 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from datetime import timedelta
+from importlib import resources
 
 import asyncpg
 import pytest
 from pydantic import SecretStr
 
-from limen.data.db import crea_pool, dsn_con_ruolo, usa_pool
+from limen.data.db import acquire, crea_pool, dsn_con_ruolo, usa_pool
 from limen.data.migrate import imposta_password
 from limen.integrations.iot.ingestore_v2 import Esito
 from tests.integration.test_iot_ingestore_v2 import (
@@ -95,3 +96,21 @@ async def test_il_ruolo_ristretto_non_arriva_oltre(
     async with pool_ristretto.acquire() as conn:
         with pytest.raises(asyncpg.InsufficientPrivilegeError):
             await conn.execute(sql)
+
+
+async def test_un_ruolo_ristretto_con_privilegi_ferma_la_migrazione(pg_pool: asyncpg.Pool) -> None:
+    """Codex, PR #279: i REVOKE della 079 non tolgono SUPERUSER né appartenenze."""
+    sql = (
+        resources.files("limen.data.migrations")
+        .joinpath("079_ruolo_ingestore.sql")
+        .read_text(encoding="utf-8")
+    )
+    async with acquire() as conn:
+        await conn.execute("GRANT pg_read_all_data TO limen_ingestore")
+        try:
+            with pytest.raises(asyncpg.RaiseError, match="limen_ingestore"):
+                await conn.execute(sql)
+        finally:
+            await conn.execute("REVOKE pg_read_all_data FROM limen_ingestore")
+        # Pulito, la stessa migrazione si riapplica senza errori.
+        await conn.execute(sql)

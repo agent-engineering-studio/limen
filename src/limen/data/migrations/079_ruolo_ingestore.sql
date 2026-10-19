@@ -25,6 +25,29 @@ BEGIN
     END IF;
 END $$;
 
+-- Un ruolo ristretto che esisteva già (creato a mano, o su un cluster
+-- condiviso) può portarsi dietro SUPERUSER, BYPASSRLS o l'appartenenza a un
+-- ruolo che può tutto: i REVOKE qui sotto toccano solo i permessi sulle
+-- tabelle, e il confine non varrebbe niente. Si ferma la migrazione invece di
+-- fidarsi. Vale anche per `limen_tiles` (078), che ha lo stesso confine.
+DO $$
+DECLARE
+    pericoloso text;
+BEGIN
+    SELECT string_agg(r.rolname, ', ') INTO pericoloso
+    FROM pg_roles r
+    WHERE r.rolname IN ('limen_ingestore', 'limen_tiles')
+      AND (r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR r.rolcreatedb
+           OR r.rolreplication
+           OR EXISTS (SELECT 1 FROM pg_auth_members m WHERE m.member = r.oid));
+    IF pericoloso IS NOT NULL THEN
+        RAISE EXCEPTION
+            'ruoli ristretti con privilegi elevati o appartenenze ad altri ruoli: %. '
+            'Toglierli a mano (ALTER ROLE ... NOSUPERUSER ...; REVOKE ... FROM ...) '
+            'e rilanciare le migrazioni.', pericoloso;
+    END IF;
+END $$;
+
 GRANT USAGE ON SCHEMA public TO limen_ingestore;
 
 -- Da zero su queste due tabelle, anche dove il ruolo esisteva già. Gli

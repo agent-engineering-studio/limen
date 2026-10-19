@@ -171,13 +171,14 @@ def usa_pool(pool: asyncpg.Pool) -> Iterator[None]:
 
 
 def dsn_con_ruolo(dsn: str, ruolo: str, password: str) -> str:
-    """Lo stesso database, con un altro utente: il ruolo ristretto di un servizio."""
+    """Lo stesso database, con un altro utente: il ruolo ristretto di un servizio.
+
+    Si sostituiscono solo utente e password: la lista degli host resta com'è,
+    anche con più host (``db1:5432,db2:5432``), che ``urlsplit`` non sa leggere.
+    """
     parti = urlsplit(dsn)
-    host = parti.hostname or ""
-    if ":" in host:
-        host = f"[{host}]"
-    porta = f":{parti.port}" if parti.port else ""
-    return urlunsplit(parti._replace(netloc=f"{ruolo}:{password}@{host}{porta}"))
+    host = parti.netloc.rpartition("@")[2]
+    return urlunsplit(parti._replace(netloc=f"{ruolo}:{password}@{host}"))
 
 
 async def crea_pool(dsn: str, *, max_size: int) -> asyncpg.Pool:

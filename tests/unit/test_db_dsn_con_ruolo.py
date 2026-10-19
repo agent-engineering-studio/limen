@@ -24,6 +24,14 @@ PW = "0123456789abcdef0123456789abcdef"
             "postgresql://u:p@[::1]:5432/limen",
             f"postgresql://limen_ingestore:{PW}@[::1]:5432/limen",
         ),
+        (
+            "postgresql://u:p@db1:5432,db2:5432/limen?target_session_attrs=read-write",
+            f"postgresql://limen_ingestore:{PW}@db1:5432,db2:5432/limen?target_session_attrs=read-write",
+        ),
+        (
+            "postgresql:///limen?host=/run/postgresql",
+            f"postgresql://limen_ingestore:{PW}@/limen?host=/run/postgresql",
+        ),
     ],
 )
 def test_cambia_solo_l_utente(dsn: str, atteso: str) -> None:
