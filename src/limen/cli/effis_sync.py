@@ -93,6 +93,10 @@ async def run() -> int:
     try:
         giorni = int(os.environ.get("LIMEN_EFFIS_GIORNI", str(DEFAULT_LOOKBACK_DAYS)))
     except ValueError:
+        giorni = 0
+    if giorni < 1:
+        # Codex, #292: un numero negativo capovolge la finestra, non entra
+        # nessun perimetro e l'impronta si registra lo stesso, spegnendo i giri dopo.
         log.error("effis_sync.giorni_non_validi", valore=os.environ.get("LIMEN_EFFIS_GIORNI"))
         return 1
     async with lifespan_pool():
