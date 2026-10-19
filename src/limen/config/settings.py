@@ -361,6 +361,13 @@ class SchedulerSettings(BaseSettings):
     # aggiorna dopo, quindi un controllo all'ora. Pubblico, nessuna chiave.
     enable_dpc_bollettini: bool = True
     dpc_bollettini_minutes: int = Field(default=60, ge=10)
+    # Terremoti INGV e scuotimento per cella dalle ShakeMap (#284). Spento:
+    # accenderlo porta in vita la componente E delle frane (peso 0,15), che
+    # finora valeva zero ovunque, e sposta il campione V1. Prima il backtest.
+    enable_ingv_sync: bool = False
+    ingv_sync_minutes: int = Field(default=60, ge=10)
+    #: Ovest, sud, est, nord: il riquadro del portale ShakeMap INGV.
+    ingv_bbox: tuple[float, float, float, float] = (5.0, 35.0, 20.0, 49.0)
     # Run the ISPRA IdroGEO sync every N hours.
     weekly_idrogeo_hours: int = Field(default=24 * 7, ge=1)
     # Hot-table partition maintenance + retention. Partitions are created a

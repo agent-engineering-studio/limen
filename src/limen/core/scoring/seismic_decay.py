@@ -67,13 +67,18 @@ def seismic_factor(
 ) -> float:
     """Sigmoid-transform a local PGA (in g) into a 0..1 factor.
 
-    Returns 0 below the threshold so quiet conditions do not contribute
-    a baseline seismic load.
+    Zero sotto ``pga_min_g`` e da lì sale con continuità (#284): la sigmoide
+    nuda valeva già 0,27 per una PGA infinitesima, e ogni cella sfiorata da
+    un terremoto prendeva un gradino di punteggio per tutta la settimana. Si
+    toglie il valore della sigmoide al bordo e si riscala, così il fattore
+    parte da 0 su ``pga_min_g`` e arriva a 1 come prima.
     """
-    if pga <= 0:
+    if pga < seismic.pga_min_g:
         return 0.0
     z = (pga - seismic.pga_threshold_g) / seismic.pga_scale_g
-    return _sigmoid(z)
+    z_min = (seismic.pga_min_g - seismic.pga_threshold_g) / seismic.pga_scale_g
+    base = _sigmoid(z_min)
+    return max(0.0, (_sigmoid(z) - base) / (1.0 - base))
 
 
 def compute_seismic(

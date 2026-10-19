@@ -106,3 +106,104 @@ async def get_event(event_id: str) -> SeismicEvent | None:
         dataset_version_id=row["dataset_version_id"],
         attributes=attrs or {},
     )
+
+
+async def celle_nel_riquadro(
+    ovest: float, sud: float, est: float, nord: float
+) -> list[tuple[str, float, float]]:
+    """(cell_id, lon, lat del centroide) delle celle dentro il riquadro di una ShakeMap."""
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, ST_X(centroid) AS lon, ST_Y(centroid) AS lat
+              FROM grid_cells
+             WHERE centroid && ST_MakeEnvelope($1, $2, $3, $4, 4326)
+            """,
+            ovest,
+            sud,
+            est,
+            nord,
+        )
+    return [(r["id"], float(r["lon"]), float(r["lat"])) for r in rows]
+
+
+async def salva_pga_celle(event_id: str, pga: list[tuple[str, float]]) -> int:
+    """Sostituisce lo scuotimento per cella di un evento (#284).
+
+    Sostituisce e non aggiunge: una ShakeMap rivista nelle ore dopo il
+    terremoto può restringere l'area, e le celle che ne escono non devono
+    restare scosse.
+    """
+    async with acquire() as conn, conn.transaction():
+        await conn.execute("DELETE FROM seismic_pga_cella WHERE event_id = $1", event_id)
+        if pga:
+            await conn.executemany(
+                "INSERT INTO seismic_pga_cella (event_id, cell_id, pga_g) VALUES ($1, $2, $3)",
+                [(event_id, cella, valore) for cella, valore in pga],
+            )
+        await conn.execute("UPDATE seismic_events SET pga_celle_at = now() WHERE id = $1", event_id)
+    return len(pga)
+
+
+async def ultima_cella_creata() -> datetime | None:
+    """Quando è nata la cella più recente: una regione aggiunta dopo un
+    terremoto deve ricevere anche lei la sua PGA."""
+    async with acquire() as conn:
+        valore: datetime | None = await conn.fetchval("SELECT max(created_at) FROM grid_cells")
+    return valore
+
+
+async def pga_celle_calcolata(event_id: str, *, dopo: datetime | None) -> bool:
+    """Se la PGA per cella di questo evento è stata calcolata dopo ``dopo`` (#284)."""
+    async with acquire() as conn:
+        calcolata: datetime | None = await conn.fetchval(
+            "SELECT pga_celle_at FROM seismic_events WHERE id = $1", event_id
+        )
+    return calcolata is not None and (dopo is None or calcolata >= dopo)
+
+
+@dataclass(frozen=True, slots=True)
+class ScossaCella:
+    cell_id: str
+    event_id: str
+    origin_time: datetime
+    magnitude: float
+    pga_g: float
+    distanza_km: float
+
+
+async def scosse_per_cella(
+    cell_ids: list[str], dal: datetime, al: datetime, *, min_magnitude: float
+) -> list[ScossaCella]:
+    """I terremoti della finestra che hanno scosso queste celle, con la PGA di ognuna."""
+    if not cell_ids:
+        return []
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT p.cell_id, e.id, e.origin_time, e.magnitude, p.pga_g,
+                   ST_Distance(e.geom::geography, c.centroid::geography) / 1000.0
+                       AS distanza_km
+              FROM seismic_pga_cella p
+              JOIN seismic_events e ON e.id = p.event_id
+              JOIN grid_cells c ON c.id = p.cell_id
+             WHERE p.cell_id = ANY($1::text[])
+               AND e.origin_time BETWEEN $2 AND $3
+               AND e.magnitude >= $4
+            """,
+            cell_ids,
+            dal,
+            al,
+            min_magnitude,
+        )
+    return [
+        ScossaCella(
+            cell_id=r["cell_id"],
+            event_id=r["id"],
+            origin_time=r["origin_time"],
+            magnitude=float(r["magnitude"]),
+            pga_g=float(r["pga_g"]),
+            distanza_km=float(r["distanza_km"]),
+        )
+        for r in rows
+    ]

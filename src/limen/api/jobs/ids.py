@@ -26,6 +26,7 @@ JOB_HTML_REPORT = "limen-html-report"
 JOB_BRIEFING_ENRICHMENT = "limen-briefing-enrichment"
 JOB_NIGHTLY = "limen-nightly"
 JOB_DPC_BOLLETTINI = "limen-dpc-bollettini"
+JOB_INGV_SYNC = "limen-ingv-sync"
 JOB_FEDELTA_RACCONTI = "limen-fedelta-racconti"
 
 
@@ -43,6 +44,7 @@ __all__ = [
     "JOB_GEODATA_EXPORT",
     "JOB_HOURLY_MONITORING",
     "JOB_HTML_REPORT",
+    "JOB_INGV_SYNC",
     "JOB_IOT_PARTITION_ROLLOVER",
     "JOB_IOT_ROLLUP",
     "JOB_NIGHTLY",

@@ -12,22 +12,55 @@ the same key.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from shapely.geometry import Point, box
 
 from limen.core.logging import get_logger
+from limen.core.scoring.regional_thresholds import load_regional_thresholds
 from limen.data.object_store import ObjectStore, build_object_store
 from limen.data.repos.raster_refs_repo import sha256_hex
 from limen.data.repos.raster_refs_repo import upsert as upsert_raster_ref
-from limen.data.repos.seismic_repo import SeismicEvent, count_events, upsert_event
+from limen.data.repos.seismic_repo import (
+    SeismicEvent,
+    celle_nel_riquadro,
+    count_events,
+    get_event,
+    pga_celle_calcolata,
+    salva_pga_celle,
+    ultima_cella_creata,
+    upsert_event,
+)
 from limen.integrations.ingv.shakemap_client import IngvHttpClient
+from limen.integrations.ingv.shakemap_grid import GrigliaNonValidaError, leggi_griglia
 
 log = get_logger(__name__)
 
 DEFAULT_LOOKBACK_DAYS = 7
 DEFAULT_MIN_MAGNITUDE = 3.5
+#: Una ShakeMap si rivede nelle prime ore (da «automatica» a rivista); dopo
+#: non cambia più, e riscaricarne 10 MB ogni ora non serve.
+_SHAKEMAP_STABILE_DOPO = timedelta(hours=24)
+
+
+async def _pga_per_cella(event_id: str, grid_bytes: bytes, pga_min_g: float) -> int:
+    """Lo scuotimento della ShakeMap sulle celle della griglia, sopra la soglia."""
+    try:
+        # Fino a 12 MB di testo: fuori dal loop, che è lo stesso dello sweep.
+        griglia = await asyncio.to_thread(leggi_griglia, grid_bytes)
+    except GrigliaNonValidaError as exc:
+        log.warning("ingv.shakemap.illeggibile", event_id=event_id, error=str(exc))
+        return 0
+    righe: list[tuple[str, float]] = []
+    for cell_id, lon, lat in await celle_nel_riquadro(*griglia.riquadro):
+        pga = griglia.pga_in(lon, lat)
+        if pga is not None and pga >= pga_min_g:
+            righe.append((cell_id, pga))
+    salvate = await salva_pga_celle(event_id, righe)
+    log.info("ingv.shakemap.celle", event_id=event_id, celle=salvate, pga_min_g=pga_min_g)
+    return salvate
 
 
 def _shakemap_key(event_id: str) -> str:
@@ -108,11 +141,27 @@ async def run_ingv_sync(
 
     events = 0
     shakemaps = 0
+    celle = 0
     bbox_geom = box(*bbox)
+    pga_min_g = load_regional_thresholds().seismic.pga_min_g
+    # Codex, #288: celle nate dopo il calcolo (una regione aggiunta) vogliono
+    # la loro PGA anche da un evento già vecchio.
+    ultima_cella = await ultima_cella_creata()
 
     for feat in features:
         event = _parse_feature(feat)
         if event is None:
+            continue
+
+        precedente = await get_event(event.id)
+        if (
+            precedente is not None
+            and precedente.shakemap_path is not None
+            and end - event.origin_time > _SHAKEMAP_STABILE_DOPO
+            and await pga_celle_calcolata(event.id, dopo=ultima_cella)
+        ):
+            await upsert_event(event)
+            events += 1
             continue
 
         # Try to attach a ShakeMap if one exists.
@@ -157,7 +206,10 @@ async def run_ingv_sync(
 
         await upsert_event(event)
         events += 1
+        if grid_bytes:
+            # Dopo l'evento: le righe per cella hanno la chiave verso di lui.
+            celle += await _pga_per_cella(event.id, grid_bytes, pga_min_g)
 
     total_after = await count_events()
-    log.info("ingv.sync.done", events=events, shakemaps=shakemaps, total=total_after)
-    return {"events": events, "shakemaps": shakemaps}
+    log.info("ingv.sync.done", events=events, shakemaps=shakemaps, celle=celle, total=total_after)
+    return {"events": events, "shakemaps": shakemaps, "celle": celle}

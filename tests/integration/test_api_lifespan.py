@@ -130,3 +130,19 @@ async def test_partitions_job_registers_under_pg_cron_backend(
     assert JOB_CACHE_CLEANUP not in registered
     assert JOB_PARTITIONS in registered
     assert JOB_NIGHTLY in registered
+
+
+async def test_il_job_ingv_si_registra_solo_con_il_flag(reset_db: None, pg_pool: object) -> None:
+    """#284: accenderlo dà un valore alla componente E delle frane."""
+    from limen.api.jobs.ids import JOB_INGV_SYNC
+
+    for acceso in (False, True):
+        settings = Settings.model_validate(
+            {"scheduler": {"cache_cleanup": "apscheduler", "enable_ingv_sync": acceso}}
+        )
+        deps = await AppDependencies.build(
+            pool=get_pool(), settings=settings, llm_factory=StubLlmClientFactory()
+        )
+        async with AsyncScheduler() as scheduler:
+            registered = await register_jobs(scheduler, deps)
+        assert (JOB_INGV_SYNC in registered) is acceso

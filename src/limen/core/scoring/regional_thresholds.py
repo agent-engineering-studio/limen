@@ -292,6 +292,7 @@ class SeismicBlock(_StrictModel):
     lookback_days: int = Field(..., gt=0)
     pga_threshold_g: float = Field(..., gt=0.0)
     pga_scale_g: float = Field(..., gt=0.0)
+    pga_min_g: float = Field(..., gt=0.0)
 
 
 class PostFireBlock(_StrictModel):
