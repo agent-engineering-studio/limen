@@ -18,7 +18,7 @@ from __future__ import annotations
 import hashlib
 import re
 from importlib import resources
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import asyncpg
 
@@ -29,6 +29,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from pydantic import SecretStr
+
+    from limen.config.settings import Settings
 
 log = get_logger(__name__)
 
@@ -124,33 +126,61 @@ async def run_migrations(only: Iterable[str] | None = None) -> list[str]:
     return applied_now
 
 
-_PASSWORD_TILES = re.compile(r"[0-9a-f]{32,}")
+# Finisce dentro un URL (pg_tileserv, il DSN dell'ingestore): un `@` o un `/`
+# lo romperebbe, e l'unico segno sarebbe un servizio che non entra.
+_PASSWORD_ESADECIMALE = re.compile(r"[0-9a-f]{32,}")
+
+RuoloConPassword = Literal["limen_tiles", "limen_ingestore"]
 
 
-async def imposta_password_tiles(password: SecretStr | None) -> None:
-    """Dà a ``limen_tiles`` (migrazione 078) la password del ``.env``.
+async def imposta_password(
+    ruolo: RuoloConPassword,
+    password: SecretStr | None,
+    *,
+    variabile: str,
+    obbligatoria: bool,
+) -> None:
+    """Dà a un ruolo ristretto (migrazioni 078, 079) la password del ``.env``.
 
-    Il repo non la conosce, quindi non può stare nella migrazione. Senza,
-    pg_tileserv non entra e la mappa resta vuota: lo si dice, ma non si
-    rifiuta di servire l'API per questo.
+    Il repo non la conosce, quindi non può stare nella migrazione. Senza
+    password il servizio che usa il ruolo non entra (pg_tileserv) o resta sul
+    pool principale (l'ingestore): lo si dice, ma non si rifiuta di servire
+    l'API per questo.
     """
     if password is None or not password.get_secret_value():
-        log.warning("migrate.tiles_senza_password", variabile="DB__TILES_PASSWORD")
+        if obbligatoria:
+            log.warning("migrate.ruolo_senza_password", ruolo=ruolo, variabile=variabile)
         return
-    # Finisce nell'URL di pg_tileserv: un `@` o un `/` lo romperebbe, e
-    # l'unico segno sarebbe pg_tileserv che riparte in loop.
-    if not _PASSWORD_TILES.fullmatch(password.get_secret_value()):
-        log.warning("migrate.tiles_password_non_esadecimale", variabile="DB__TILES_PASSWORD")
+    if not _PASSWORD_ESADECIMALE.fullmatch(password.get_secret_value()):
+        log.warning("migrate.password_non_esadecimale", ruolo=ruolo, variabile=variabile)
         return
     try:
         async with acquire() as conn, conn.transaction():
             await conn.execute(
-                "SELECT set_config('limen.tiles_password', $1, true)",
+                "SELECT set_config('limen.ruolo', $1, true), "
+                "set_config('limen.password', $2, true)",
+                ruolo,
                 password.get_secret_value(),
             )
             await conn.execute(
-                "DO $$ BEGIN EXECUTE format('ALTER ROLE limen_tiles LOGIN PASSWORD %L', "
-                "current_setting('limen.tiles_password')); END $$"
+                "DO $$ BEGIN EXECUTE format('ALTER ROLE %I LOGIN PASSWORD %L', "
+                "current_setting('limen.ruolo'), current_setting('limen.password')); END $$"
             )
     except asyncpg.PostgresError as exc:
-        log.warning("migrate.tiles_password_fallita", error_type=type(exc).__name__)
+        log.warning("migrate.password_fallita", ruolo=ruolo, error_type=type(exc).__name__)
+
+
+async def imposta_password_dei_ruoli(settings: Settings) -> None:
+    """Le password di tutti i ruoli ristretti, dall'API all'avvio e da ``limen migrate``."""
+    await imposta_password(
+        "limen_tiles",
+        settings.db.tiles_password,
+        variabile="DB__TILES_PASSWORD",
+        obbligatoria=True,
+    )
+    await imposta_password(
+        "limen_ingestore",
+        settings.iot.cittadini.db_password,
+        variabile="IOT__CITTADINI__DB_PASSWORD",
+        obbligatoria=False,
+    )

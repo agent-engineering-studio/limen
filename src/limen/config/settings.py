@@ -563,6 +563,11 @@ class IotCittadiniSettings(BaseSettings):
     certfile: str = "/run/limen-sensori/ingestore.crt"
     keyfile: str = "/run/limen-sensori/ingestore.key"
     client_id: str = "limen-ingestore-v2"
+    # Password di `limen_ingestore` (migrazione 079, #267): con questa
+    # l'ingestore scrive col ruolo ristretto invece che con quello del worker.
+    # Solo esadecimale (`openssl rand -hex 24`): finisce nel DSN. Vuota ⇒ il
+    # pool principale, com'era.
+    db_password: SecretStr | None = None
 
     # Guardrail. Il broker tronca già a 4096 byte (`max_packet_size`).
     max_payload_bytes: int = Field(default=2048, ge=64)

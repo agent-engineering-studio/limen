@@ -36,7 +36,7 @@ from limen.config.settings import Settings, get_settings
 from limen.core.logging import configure_logging, get_logger
 from limen.core.scoring.resolver import HazardNotScorableError, check_scorable
 from limen.data.db import close_pool, init_pool
-from limen.data.migrate import imposta_password_tiles, run_migrations
+from limen.data.migrate import imposta_password_dei_ruoli, run_migrations
 from limen.data.repos import hazards_repo, partitions_repo
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.iot.mqtt_ingestor import MqttIngestor
@@ -55,7 +55,7 @@ async def _lifespan_default(app: FastAPI) -> AsyncIterator[None]:
 
     pool = await init_pool(settings.db)
     await run_migrations()
-    await imposta_password_tiles(settings.db.tiles_password)
+    await imposta_password_dei_ruoli(settings)
     # A missing daily partition makes every INSERT land in the DEFAULT one,
     # where retention cannot reach it. Cheap and idempotent, so it runs on
     # every boot rather than only on the scheduler's first tick. Best-effort:

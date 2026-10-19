@@ -133,6 +133,9 @@ services:
       CONTRIBUTI__MAX_PER_IP_ORA: ${CONTRIBUTI__MAX_PER_IP_ORA:-3}
       CONTRIBUTI__MAX_TOTALI_ORA: ${CONTRIBUTI__MAX_TOTALI_ORA:-30}
       CONTRIBUTI__SECONDI_MINIMI: ${CONTRIBUTI__SECONDI_MINIMI:-5}
+      # Ruolo ristretto dell'ingestore (#267): l'API ne imposta la password, il
+      # worker la usa. Vuota ⇒ il ruolo del worker.
+      IOT__CITTADINI__DB_PASSWORD: ${IOT__CITTADINI__DB_PASSWORD:-}
       # Modulo di registrazione dei sensori (#253): chiuso finché non lo si
       # apre. Le richieste vanno a CONTRIBUTI__DESTINATARI; si approvano
       # dall'host con `uv run limen sensore approva`.
@@ -377,6 +380,8 @@ services:
       # Open-Meteo API, degrading silently on both.
       <<: *api-env
       LIMEN_MCP_TRANSPORT: http
+      # Le password dei ruoli ristretti servono ad api e worker, non qui.
+      IOT__CITTADINI__DB_PASSWORD: ""
       # Unset ⇒ the run_monitor admin tool is disabled (fail-closed).
       MCP_ADMIN_TOKEN: ${MCP_ADMIN_TOKEN:-}
       LOG_JSON: "true"
