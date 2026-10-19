@@ -2,6 +2,7 @@
 // unico di `lib/fonti.ts`. Il logo solo dove il titolare lo concede; per gli
 // altri il nome, in un riquadro uguale per tutti.
 
+import { useEffect } from "react";
 import type { JSX } from "react";
 
 import {
@@ -162,7 +163,7 @@ function Copernicus(): JSX.Element {
                 {f.copernicus}
               </td>
               <td>
-                <a href={`#fonte-${f.id}`}>{f.dataset[lingua]}</a>
+                <a href={`#/fonti/${f.id}`}>{f.dataset[lingua]}</a>
               </td>
               <td>{NOME_RUOLO[f.ruolo][lingua]}</td>
               <td>{f.accesso[lingua]}</td>
@@ -175,9 +176,21 @@ function Copernicus(): JSX.Element {
   );
 }
 
+// Il link a una scheda resta dentro la rotta (`#/fonti/<id>`): un `#fonte-…`
+// nudo cambierebbe l'hash, e `pageFromHash` riporterebbe alla home.
+function scorriAllaScheda(): void {
+  const id = /^#\/fonti\/([\w-]+)/.exec(window.location.hash)?.[1];
+  if (id) document.getElementById(`fonte-${id}`)?.scrollIntoView?.({ block: "start" });
+}
+
 export function FontiPage(): JSX.Element {
   const { lingua } = useLingua();
   const t = useTesti(T);
+  useEffect(() => {
+    scorriAllaScheda();
+    window.addEventListener("hashchange", scorriAllaScheda);
+    return () => window.removeEventListener("hashchange", scorriAllaScheda);
+  }, []);
   return (
     <article className="explainer fonti">
       <div className="exp-eyebrow">{t.occhiello}</div>

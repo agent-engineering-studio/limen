@@ -62,4 +62,11 @@ describe("fonti dei dati", () => {
       expect.arrayContaining(["glofas", "cems-fire", "effis-fwi", "cems-rapid-mapping", "corine"]),
     );
   });
+
+  it("i link della tabella Copernicus restano nella rotta #/fonti", () => {
+    // Codex, PR #286: un `#fonte-…` nudo riportava alla home.
+    render(<FontiPage />);
+    const link = screen.getByRole("link", { name: /GloFAS, previsione di portata/ });
+    expect(link.getAttribute("href")).toBe("#/fonti/glofas");
+  });
 });
