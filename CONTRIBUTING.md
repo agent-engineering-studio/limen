@@ -132,4 +132,5 @@ applies to all spaces (issues, PRs, discussions, chat).
 * Versions follow [SemVer](https://semver.org/).
 * `CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/).
 * Tagged releases trigger the CI image push to GHCR; deploys are
-  manual via the `deploy-aruba` / `deploy-azure` workflows.
+  manual: `docker compose pull && up` on the host, or the
+  `deploy-azure` workflow.
