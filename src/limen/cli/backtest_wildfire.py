@@ -37,14 +37,25 @@ Accanto all'hit rate il report dà il **carico meteo**: la quota di
 giornate-nodo della stagione con FWI in fascia alta o oltre. Le celle bruciate
 dicono se l'allerta c'era; il carico dice quante allerte c'erano in tutto, e
 quindi quante sono rumore per chi le riceve.
+
+Il carico meteo non vede il terreno, e il tasso di base guarda solo le celle
+bruciate: nessuno dei due si accorge di un peso del combustibile che accende
+mezza regione (#295). Lo fa il **carico per cella**: la quota di
+giornate-cella della stagione, su **tutte** le celle dell'AOI, in allerta. Il
+rapporto fra hit rate e carico per cella è la discriminazione spaziale, lo
+stesso metro del backtest frane: alzare un peso fa salire l'hit rate, ma se fa
+salire il carico altrettanto non ha insegnato niente.
 """
 
 from __future__ import annotations
 
 import os
+from collections import defaultdict
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
+
+import numpy as np
 
 from limen.cli.fwi_backfill import params_from
 from limen.config.settings import get_settings
@@ -120,6 +131,9 @@ class WildfireBacktestMetrics:
     #: su tutta l'AOI: quante allerte meteo c'erano, bruciato o no.
     carico_meteo: float = 0.0
     pioggia: str = "modello"
+    #: Quota di giornate-cella della stagione in allerta, su tutte le celle
+    #: dell'AOI: quanto territorio il modello accende, bruciato o no.
+    carico_celle: float = 0.0
 
 
 def _at_least(level: RiskLevel, threshold: RiskLevel) -> bool:
@@ -377,9 +391,113 @@ def carico_meteo(
     return sum(1 for s in giorni if s.fwi >= soglia) / len(giorni) if giorni else 0.0
 
 
+@dataclass(frozen=True, slots=True)
+class CellaAoi:
+    cell_id: str
+    lon: float
+    lat: float
+    static: StaticFactors
+
+
+async def celle_aoi(aoi_id: str) -> list[CellaAoi]:
+    """Ogni cella dell'AOI con i fattori che il motore legge."""
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT g.id AS cell_id,
+                   ST_X(ST_Centroid(g.geom)) AS lon, ST_Y(ST_Centroid(g.geom)) AS lat,
+                   s.landuse_code, s.slope_deg
+              FROM grid_cells g
+              LEFT JOIN cell_static_factors s ON s.cell_id = g.id
+             WHERE g.aoi_id = $1
+            """,
+            aoi_id,
+        )
+    return [
+        CellaAoi(
+            cell_id=str(r["cell_id"]),
+            lon=float(r["lon"]),
+            lat=float(r["lat"]),
+            static=StaticFactors(
+                cell_id=str(r["cell_id"]),
+                landuse_code=r["landuse_code"],
+                slope_deg=r["slope_deg"],
+            ),
+        )
+        for r in rows
+    ]
+
+
+def _soglia(level: RiskLevel, thresholds: WildfireThresholds) -> float:
+    c = thresholds.classes
+    return {
+        RiskLevel.None_: c.none.lo,
+        RiskLevel.Low: c.low.lo,
+        RiskLevel.Moderate: c.moderate.lo,
+        RiskLevel.High: c.high.lo,
+        RiskLevel.VeryHigh: c.very_high.lo,
+    }[level]
+
+
+def carico_celle(
+    celle: list[CellaAoi],
+    *,
+    nodes: list[tuple[float, float]],
+    chains: list[dict[date, FireWeatherState]],
+    start: date,
+    end: date,
+    thresholds: WildfireThresholds,
+    alert_level: RiskLevel,
+) -> float:
+    """Quota di giornate-cella in ``[start, end]`` con la cella in ``alert_level``
+    o oltre, su tutte le celle dell'AOI.
+
+    Il punteggio è ``min(fwi_norm * terreno, 1)``: il terreno di una cella si
+    chiede al motore una volta sola, con il meteo al massimo (``fwi_norm`` = 1),
+    e poi si moltiplica per i giorni del suo nodo. Stesso conto del motore,
+    senza i milioni di valutazioni di un replay cella per cella.
+    """
+    engine = WildfireScoringEngine(thresholds)
+    pieno = thresholds.fwi.normalisation_max
+    soglia = _soglia(alert_level, thresholds)
+    per_nodo: dict[int, list[float]] = defaultdict(list)
+    for cella in celle:
+        terreno = engine.score(
+            CellFeatureBundle(
+                aoi_id="carico",
+                cell_id=cella.cell_id,
+                static=cella.static,
+                dynamic=DynamicInputs(
+                    valuation_time=datetime.combine(start, time(12), UTC),
+                    fire_weather=FireWeatherState(
+                        day=start, ffmc=0, dmc=0, dc=0, isi=0, bui=0, fwi=pieno, chain_days=0
+                    ),
+                ),
+            )
+        ).score
+        per_nodo[nearest_node(cella.lon, cella.lat, nodes)].append(terreno)
+    giornate = 0
+    in_allerta = 0
+    for k, terreni in per_nodo.items():
+        fwi_norm = np.array(
+            [min(s.fwi / pieno, 1.0) for d, s in chains[k].items() if start <= d <= end]
+        )
+        if fwi_norm.size == 0:
+            continue
+        punteggi = np.minimum(np.outer(np.array(terreni), fwi_norm), 1.0)
+        giornate += punteggi.size
+        in_allerta += int(np.count_nonzero(punteggi >= soglia))
+    return in_allerta / giornate if giornate else 0.0
+
+
 def _lift(metrics: WildfireBacktestMetrics) -> float:
     """Quante volte l'hit rate supera il tasso di base. 0 se non misurabile."""
     return metrics.hit_rate / metrics.base_rate if metrics.base_rate > 0 else 0.0
+
+
+def _lift_spaziale(metrics: WildfireBacktestMetrics) -> float:
+    """Quante volte l'hit rate supera il carico per cella. 0 se non misurabile."""
+    return metrics.hit_rate / metrics.carico_celle if metrics.carico_celle > 0 else 0.0
 
 
 def write_report(
@@ -409,6 +527,9 @@ def write_report(
         f"- **Discriminazione**: {_lift(metrics):.2f} volte il tasso di base",
         f"- **Carico meteo**: {metrics.carico_meteo:.2%} delle giornate-nodo della "
         "stagione con FWI in fascia alta o oltre",
+        f"- **Carico per cella**: {metrics.carico_celle:.2%} delle giornate-cella della "
+        "stagione in allerta, su tutte le celle dell'AOI",
+        f"- **Discriminazione spaziale**: {_lift_spaziale(metrics):.2f} volte il carico per cella",
         "- **FAR**: non misurato (vedi nota)",
         f"- **Preavviso medio**: {metrics.mean_lead_hours:.1f} h",
         "",
@@ -516,6 +637,15 @@ async def backtest_aoi(
     metrics = replace(
         metrics,
         carico_meteo=carico_meteo(chains, start=start, end=end, thresholds=thresholds),
+        carico_celle=carico_celle(
+            await celle_aoi(aoi_id),
+            nodes=nodes,
+            chains=chains,
+            start=start,
+            end=end,
+            thresholds=thresholds,
+            alert_level=alert_level,
+        ),
         pioggia="osservata" if fonte is not None else "modello",
     )
     path = write_report(metrics, start=start, end=end, alert_level=alert_level)
@@ -529,6 +659,8 @@ async def backtest_aoi(
         base_rate=round(metrics.base_rate, 4),
         lift=round(_lift(metrics), 2),
         carico_meteo=round(metrics.carico_meteo, 4),
+        carico_celle=round(metrics.carico_celle, 4),
+        lift_spaziale=round(_lift_spaziale(metrics), 2),
         pioggia=metrics.pioggia,
         report=str(path),
     )
@@ -596,8 +728,11 @@ async def run() -> int:
 
 
 __all__ = [
+    "CellaAoi",
     "WildfireBacktestMetrics",
     "backtest_aoi",
+    "carico_celle",
+    "celle_aoi",
     "evaluate",
     "fetch_burnt_cells",
     "replay_chain",
