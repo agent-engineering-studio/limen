@@ -2,8 +2,10 @@
 --
 -- Un dispositivo LoRaWAN non ha una CSR: lo identifica il DevEUI, e TTN
 -- consegna i suoi uplink a un webhook che è dell'applicazione TTN, non del
--- dispositivo. Ogni registrante ha la sua applicazione: il webhook si
--- autentica con un segreto di quell'applicazione, generato da
+-- dispositivo. L'applicazione è del registrante, non di Limen (di solito una,
+-- al più una per dispositivo approvato, quindi entro la quota per
+-- registrante): il webhook si autentica con un segreto di quell'applicazione,
+-- generato da
 -- `limen sensore approva` e mandato una volta per mail. Qui ne resta solo lo
 -- SHA-256 — il segreto è casuale a 256 bit, non serve un hash lento — e un
 -- segreto vale solo per i dispositivi della sua applicazione.

@@ -276,8 +276,8 @@ _SEGRETI_VALGONO_SECONDI = 5.0
 
 
 class _SegretiTtn:
-    """Tutta `sensori_ttn` in memoria, riletta al più ogni pochi secondi: una
-    riga per registrante. Un'applicazione che non esiste, scritta in un corpo
+    """Tutta `sensori_ttn` in memoria, riletta al più ogni pochi secondi: al
+    più una riga per dispositivo approvato. Un'applicazione che non esiste, scritta in un corpo
     non autenticato, non costa una query sul pool che l'ingestore divide con
     l'MQTT."""
 

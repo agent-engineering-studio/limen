@@ -151,8 +151,8 @@ async def per_dev_eui(dev_eui: str) -> tuple[str, str | None] | None:
 
 
 async def segreti_ttn() -> dict[str, bytes]:
-    """Lo SHA-256 del segreto del webhook di ogni applicazione TTN (#266): una
-    riga per registrante, si legge tutta."""
+    """Lo SHA-256 del segreto del webhook di ogni applicazione TTN (#266). Al più
+    una riga per dispositivo approvato, quindi poche: si legge tutta."""
     async with acquire() as conn:
         rows = await conn.fetch("SELECT applicazione, segreto_sha256 FROM sensori_ttn")
     return {r["applicazione"]: r["segreto_sha256"] for r in rows}
