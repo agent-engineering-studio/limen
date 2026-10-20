@@ -7,6 +7,7 @@
     limen sensore quarantena <id>
     limen sensore quarantena --registrante <mail> tutti i dispositivi di un registrante
     limen sensore cancella-registrante <mail>     GDPR: revoca, quarantena, cancella la mail
+    limen sensore ttn-segreto <applicazione>      nuovo segreto del webhook TTN, per mail
 
 Gira **sull'host**, dalla radice del repo: firmare e revocare passano da
 ``scripts/sensori_ca.sh``, perché la chiave della CA vive in
@@ -15,16 +16,26 @@ Gira **sull'host**, dalla radice del repo: firmare e revocare passano da
 Tutti idempotenti: ``approva`` su una richiesta già approvata rimanda la
 mail con lo stesso certificato invece di firmarne un altro; revocare,
 mettere in quarantena o cancellare due volte non cambia niente.
+
+Un sensore LoRaWAN (#266) non ha certificato: approvarlo crea, se manca,
+l'applicazione TTN del registrante con un segreto per il webhook, che parte
+nella mail e di cui resta solo lo SHA-256. Rilanciare ``approva`` rimanda la
+mail ma non il segreto: se la prima mail non è partita, o il segreto è perso,
+``ttn-segreto`` ne genera uno nuovo.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
+import secrets
 import tempfile
 from collections.abc import Awaitable, Callable
 from functools import partial
 from pathlib import Path
+
+import asyncpg
 
 from limen.config.settings import Settings, get_settings
 from limen.core.logging import get_logger
@@ -99,6 +110,156 @@ def mail_approvazione(device_id: str, tipo: str, *, broker: str) -> tuple[str, s
     return oggetto, testo
 
 
+def _istruzioni_webhook(applicazione: str, *, webhook: str, segreto: str | None) -> list[str]:
+    if segreto is None:
+        # Anche quando la mail con il segreto non è partita: Limen non lo ha
+        # più, e il rimedio è generarne uno nuovo.
+        return [
+            f"Il webhook dell'applicazione {applicazione} è già registrato: vale il",
+            "segreto che hai ricevuto per mail. Se non l'hai ricevuto, o l'hai perso,",
+            "rispondi a questa mail: ne generiamo uno nuovo.",
+        ]
+    return [
+        f"Nella console di The Things Network, applicazione {applicazione},",
+        "aggiungi un webhook (Integrations → Webhooks → Custom webhook):",
+        "",
+        "  Formato:          JSON",
+        f"  URL base:         {webhook}",
+        f"  Header:           Authorization: Bearer {segreto}",
+        "  Uplink message:   attivo, percorso vuoto",
+        "",
+        f"Il segreto vale per tutti i dispositivi dell'applicazione {applicazione}.",
+        "Tienilo come una password: chi lo conosce parla a nome dei tuoi sensori.",
+        "Limen ne conserva solo l'impronta: se lo perdi, rispondi a questa mail e",
+        "ne generiamo uno nuovo.",
+    ]
+
+
+def mail_lorawan(r: repo.Richiesta, *, webhook: str, segreto: str | None) -> tuple[str, str]:
+    assert r.ttn_applicazione is not None
+    oggetto = f"[Limen] Il tuo sensore {r.device_id} è registrato"
+    testo = "\n".join(
+        [
+            f"Il sensore {r.device_id} ({TIPO_IT.get(r.device_type, r.device_type)}, "
+            f"DevEUI {r.dev_eui}) è nel registro di Limen.",
+            "",
+            *_istruzioni_webhook(r.ttn_applicazione, webhook=webhook, segreto=segreto),
+            "",
+            "Il payload è SenML in CBOR (RFC 8428), con l'id del dispositivo nei nomi",
+            "e un record seq: il protocollo è nella pagina Sensori di Limen. Il",
+            "payload formatter di TTN non serve, Limen legge i byte del dispositivo.",
+            "",
+            "Il sensore parte come osservatore (livello 0): le sue misure si salvano",
+            "e si confrontano con il radar, ma non cambiano i punteggi né le allerte.",
+            "",
+            "Per cancellare la registrazione e i tuoi dati basta rispondere a questa mail.",
+        ]
+    )
+    return oggetto, testo
+
+
+def _segreto() -> tuple[str, bytes]:
+    segreto = secrets.token_urlsafe(32)
+    return segreto, hashlib.sha256(segreto.encode()).digest()
+
+
+async def _approva_lorawan(r: repo.Richiesta, *, settings: Settings) -> int:
+    assert r.ttn_applicazione is not None
+    segreto: str | None = None
+    if r.stato == "in_attesa":
+        if await sensor_devices_repo.get_device(r.device_id) is not None:
+            log.error("sensore.id_in_uso", device_id=r.device_id)
+            return 1
+        cell_id = r.cell_id or await repo.cella_per_punto(r.lon, r.lat)
+        if cell_id is None:
+            log.error("sensore.fuori_griglia", richiesta=r.id, lon=r.lon, lat=r.lat)
+            return 1
+        candidato, impronta = _segreto()
+        try:
+            nuova = await repo.approva_lorawan(r, cell_id=cell_id, segreto_sha256=impronta)
+        except repo.ApplicazioneAltruiError:
+            log.error("sensore.applicazione_altrui", applicazione=r.ttn_applicazione)
+            return 1
+        except asyncpg.UniqueViolationError as exc:
+            # L'id o il DevEUI, preso nel frattempo da un altro dispositivo.
+            log.error(
+                "sensore.gia_in_uso",
+                device_id=r.device_id,
+                dev_eui=r.dev_eui,
+                vincolo=exc.constraint_name,
+            )
+            return 1
+        if nuova is None:
+            log.error("sensore.gia_decisa", richiesta=r.id)
+            return 1
+        segreto = candidato if nuova else None
+        log.info(
+            "sensore.approvato",
+            richiesta=r.id,
+            device_id=r.device_id,
+            cell_id=cell_id,
+            applicazione_nuova=nuova,
+        )
+    else:
+        dispositivo = await sensor_devices_repo.get_device(r.device_id)
+        if dispositivo is not None and dispositivo.status == "quarantined":
+            log.error("sensore.in_quarantena", device_id=r.device_id)
+            return 1
+
+    oggetto, testo = mail_lorawan(
+        r, webhook=settings.iot.cittadini.registrazione.webhook_ttn_pubblico, segreto=segreto
+    )
+    partita = await invia_testo(
+        settings.notifications.email, destinatari=[r.email], oggetto=oggetto, testo=testo
+    )
+    if not partita:
+        # Un segreto nuovo che non è partito è perso: se ne genera un altro.
+        rimedio = (
+            f"limen sensore ttn-segreto {r.ttn_applicazione}"
+            if segreto is not None
+            else f"limen sensore approva {r.id}"
+        )
+        log.error("sensore.mail_non_partita", device_id=r.device_id, rimedio=rimedio)
+        return 1
+    log.info("sensore.registrazione_inviata", device_id=r.device_id)
+    return 0
+
+
+async def ttn_segreto(applicazione: str, *, settings: Settings) -> int:
+    segreto, impronta = _segreto()
+    email = await repo.ruota_segreto_ttn(applicazione, impronta)
+    if email is None:
+        log.error("sensore.applicazione_sconosciuta", applicazione=applicazione)
+        return 1
+    testo = "\n".join(
+        [
+            f"Il segreto del webhook dell'applicazione {applicazione} è cambiato:",
+            "quello di prima non vale più. Aggiorna l'header del webhook.",
+            "",
+            *_istruzioni_webhook(
+                applicazione,
+                webhook=settings.iot.cittadini.registrazione.webhook_ttn_pubblico,
+                segreto=segreto,
+            ),
+        ]
+    )
+    partita = await invia_testo(
+        settings.notifications.email,
+        destinatari=[email],
+        oggetto=f"[Limen] Nuovo segreto per il webhook di {applicazione}",
+        testo=testo,
+    )
+    if not partita:
+        log.error(
+            "sensore.mail_non_partita",
+            applicazione=applicazione,
+            rimedio=f"rilancia `limen sensore ttn-segreto {applicazione}`",
+        )
+        return 1
+    log.info("sensore.segreto_ttn_ruotato", applicazione=applicazione)
+    return 0
+
+
 async def approva(richiesta_id: int, *, settings: Settings, ca: CaSensori) -> int:
     r = await repo.richiesta(richiesta_id)
     if r is None:
@@ -107,6 +268,9 @@ async def approva(richiesta_id: int, *, settings: Settings, ca: CaSensori) -> in
     if r.stato == "respinta":
         log.error("sensore.richiesta_respinta", richiesta=richiesta_id)
         return 1
+    if r.csr is None:
+        return await _approva_lorawan(r, settings=settings)
+    csr = r.csr
     certificato = r.certificato
     if r.stato == "in_attesa":
         if await sensor_devices_repo.get_device(r.device_id) is not None:
@@ -118,11 +282,11 @@ async def approva(richiesta_id: int, *, settings: Settings, ca: CaSensori) -> in
             return 1
         if certificato is None:
             certificato = await ca.firma(
-                r.csr, giorni=settings.iot.cittadini.registrazione.giorni_certificato
+                csr, giorni=settings.iot.cittadini.registrazione.giorni_certificato
             )
             await repo.salva_certificato(r.id, certificato)
         if not await repo.approva(
-            r, cell_id=cell_id, certificato=certificato, chiave=leggi_csr(r.csr).chiave
+            r, cell_id=cell_id, certificato=certificato, chiave=leggi_csr(csr).chiave
         ):
             log.error("sensore.gia_decisa", richiesta=r.id)
             return 1
@@ -134,7 +298,7 @@ async def approva(richiesta_id: int, *, settings: Settings, ca: CaSensori) -> in
             log.error("sensore.in_quarantena", device_id=r.device_id)
             return 1
         if dispositivo is not None and await repo.chiave_se_manca(
-            r.device_id, leggi_csr(r.csr).chiave
+            r.device_id, leggi_csr(csr).chiave
         ):
             log.info("sensore.chiave_aggiunta", device_id=r.device_id)
     assert certificato is not None  # una richiesta approvata ha il suo certificato
@@ -251,6 +415,9 @@ def build_subparser(top: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     sub.add_parser(
         "cancella-registrante", help="GDPR: revoca e quarantena dei dispositivi, via la mail"
     ).add_argument("email")
+    sub.add_parser(
+        "ttn-segreto", help="nuovo segreto del webhook di un'applicazione TTN (#266)"
+    ).add_argument("applicazione")
 
 
 async def run(args: argparse.Namespace, *, ca: CaSensori | None = None) -> int:
@@ -270,6 +437,9 @@ async def run(args: argparse.Namespace, *, ca: CaSensori | None = None) -> int:
             ),
             "cancella-registrante": partial(
                 cancella_registrante, getattr(args, "email", ""), ca=ca
+            ),
+            "ttn-segreto": partial(
+                ttn_segreto, getattr(args, "applicazione", ""), settings=settings
             ),
         }
         try:

@@ -223,3 +223,55 @@ async def test_invia_testo_con_allegati(monkeypatch: pytest.MonkeyPatch) -> None
     [allegato] = list(spedite[0].iter_attachments())
     assert allegato.get_filename() == "dev.crt"
     assert allegato.get_content_type() == "application/x-pem-file"
+
+
+def _lorawan(**modifiche: Any) -> dict[str, Any]:
+    lora: dict[str, Any] = {
+        "csr": None,
+        "modo": "lorawan",
+        "device_id": "pluvio-aliano-01",
+        "dev_eui": "70:b3:d5:7e:d0:01:23:45",
+        "ttn_applicazione": "pluviometri-aliano",
+    }
+    return modulo(**{**lora, **modifiche})
+
+
+def test_lorawan_valido() -> None:
+    dati = reg.RichiestaSensoreIn.model_validate(_lorawan())
+    assert dati.device_id and dati.dev_eui and dati.ttn_applicazione
+    lora = reg.leggi_lorawan(dati.device_id, dati.dev_eui, dati.ttn_applicazione)
+    assert lora == reg.Lorawan("pluvio-aliano-01", "70B3D57ED0012345", "pluviometri-aliano")
+
+
+@pytest.mark.parametrize(
+    "dati",
+    [
+        modulo(device_id="pluvio-01"),  # certificato con campi LoRaWAN
+        modulo(csr=None),  # certificato senza CSR
+        _lorawan(csr=csr_pem()),  # LoRaWAN con la CSR
+        _lorawan(dev_eui=None),
+        _lorawan(ttn_applicazione=None),
+    ],
+    ids=["cert_con_lora", "cert_senza_csr", "lora_con_csr", "lora_senza_eui", "lora_senza_app"],
+)
+def test_un_modo_solo(dati: dict[str, Any]) -> None:
+    with pytest.raises(ValueError, match="CSR"):
+        reg.RichiestaSensoreIn.model_validate(dati)
+
+
+@pytest.mark.parametrize(
+    ("device_id", "dev_eui", "app", "motivo"),
+    [
+        ("pluvio-01", "70B3D57ED00123", "app-ok", "16 cifre"),
+        ("pluvio-01", "70B3D57ED001234G", "app-ok", "16 cifre"),
+        ("pluvio-01", "0000000000000000", "app-ok", "tutto zeri"),
+        ("pluvio-01", "70B3D57ED0012345", "App_Ko", "applicazione"),
+        ("pluvio-01", "70B3D57ED0012345", "app--ko", "applicazione"),
+        ("pluvio-01", "70B3D57ED0012345", "a" * 37, "applicazione"),
+        ("Pluvio", "70B3D57ED0012345", "app-ok", "minuscole"),
+        ("limen-ingestore", "70B3D57ED0012345", "app-ok", "riservato"),
+    ],
+)
+def test_lorawan_non_valido(device_id: str, dev_eui: str, app: str, motivo: str) -> None:
+    with pytest.raises(reg.LorawanNonValidoError, match=motivo):
+        reg.leggi_lorawan(device_id, dev_eui, app)

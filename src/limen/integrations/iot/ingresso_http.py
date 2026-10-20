@@ -18,6 +18,17 @@ Dopo la firma il messaggio è esattamente un messaggio MQTT sul topic
 ``limen/v2/{id}/obs``: stessa pipeline, stesso limite di frequenza, stessa
 sequenza, e quindi le stesse righe.
 
+Sullo stesso listener arriva il webhook di The Things Network (#266):
+
+    POST /sensori/v2/ttn
+    Authorization: Bearer <segreto dell'applicazione TTN>
+
+con l'``uplink_message`` di TTN v3. Il segreto è dell'applicazione e vale solo
+per i dispositivi registrati con quell'applicazione; il dispositivo è il
+DevEUI. Il ``frm_payload`` è SenML CBOR, riscritto in JSON e poi trattato come
+sopra. La ``seq`` è quella di SenML, non il frame counter LoRaWAN, che si
+azzera a ogni join.
+
 Gira nel worker accanto all'ingestore MQTT, mai nell'API pubblica: nginx lo
 raggiunge con una ``location`` dedicata e il suo ``limit_req``.
 """
@@ -29,11 +40,15 @@ import base64
 import binascii
 import contextlib
 import hashlib
+import hmac
+import json
+import re
 import socket
 from collections import deque
 from collections.abc import Awaitable, Callable, Generator
 from datetime import datetime
 from http import HTTPStatus
+from typing import Any
 
 import structlog
 import uvicorn
@@ -47,6 +62,7 @@ from limen.core.logging import get_logger
 from limen.data.repos import sensor_devices_repo
 from limen.integrations.iot.firma_http import messaggio_firmato, verifica
 from limen.integrations.iot.schemas import ID_DISPOSITIVO
+from limen.integrations.iot.senml import SenmlError, cbor_a_json
 
 _log: structlog.stdlib.BoundLogger = get_logger(__name__)
 
@@ -84,7 +100,7 @@ async def _corpo(request: Request, massimo: int) -> bytes | None:
 
 
 # Quanto a lungo una chiave letta dal registro vale senza rileggerla. Una
-# chiave cambia solo all'approvazione: un dispositivo appena approvato aspetta
+# chiave pubblica cambia solo all'approvazione: un dispositivo appena approvato aspetta
 # al più questo, e una raffica di firme false non tocca il database (che
 # l'ingestore divide con l'MQTT, su un pool di quattro connessioni).
 _CHIAVE_VALE_SECONDI = 60.0
@@ -189,7 +205,130 @@ def applicazione(
                 futuro.set_result(esito)
         return _risposta(_STATO_PER_ESITO.get(esito, HTTPStatus.SERVICE_UNAVAILABLE), esito)
 
-    return Starlette(routes=[Route("/sensori/v2/{device_id}/obs", ricevi, methods=["POST"])])
+    segreti = _SegretiTtn()
+
+    async def ttn(request: Request) -> Response:
+        dichiarata = request.headers.get("content-length", "")
+        if (
+            dichiarata.isascii()
+            and dichiarata.isdigit()
+            and int(dichiarata) > c.ttn_max_corpo_bytes
+        ):
+            return _risposta(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "troppo_grande")
+        corpo = await _corpo(request, c.ttn_max_corpo_bytes)
+        if corpo is None:
+            return _risposta(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "troppo_grande")
+        evento = _evento_ttn(corpo)
+        if evento is None:
+            return _risposta(HTTPStatus.BAD_REQUEST, "malformato")
+        applicazione, dev_eui, uplink = evento
+
+        atteso = await segreti.di(applicazione, adesso().timestamp())
+        dato = _bearer(request)
+        if (
+            atteso is None
+            or dato is None
+            or not hmac.compare_digest(hashlib.sha256(dato).digest(), atteso)
+        ):
+            _log.info("iot.ttn.non_autentico", applicazione=applicazione)
+            return _risposta(HTTPStatus.UNAUTHORIZED, "segreto")
+
+        # Da qui in poi ogni risposta è 2xx, tranne un nostro errore: il
+        # dispositivo non legge la risposta, e TTN mette in pausa un webhook
+        # che fallisce — anche per gli altri dispositivi dell'applicazione.
+        if uplink is None or dev_eui is None:
+            return _risposta(HTTPStatus.ACCEPTED, "ignorato")
+        dispositivo = await sensor_devices_repo.per_dev_eui(dev_eui)
+        if dispositivo is None or dispositivo[1] != applicazione:
+            _log.info("iot.ttn.dev_eui_sconosciuto", applicazione=applicazione, dev_eui=dev_eui)
+            return _risposta(HTTPStatus.ACCEPTED, "sconosciuto")
+        device_id = dispositivo[0]
+        try:
+            grezzo = base64.b64decode(str(uplink.get("frm_payload", "")), validate=True)
+            if not grezzo or len(grezzo) > c.max_payload_bytes:
+                raise SenmlError("frm_payload vuoto o troppo grande")
+            payload = cbor_a_json(grezzo)
+        except (binascii.Error, ValueError) as exc:  # SenmlError è un ValueError
+            _log.info("iot.ttn.senml", device_id=device_id, error=str(exc))
+            return _risposta(HTTPStatus.ACCEPTED, "malformato")
+        esito = str(
+            await gestisci(topic=f"limen/v2/{device_id}/obs", payload=payload, dal_broker=False)
+        )
+        if esito not in _STATO_PER_ESITO:
+            return _risposta(HTTPStatus.SERVICE_UNAVAILABLE, esito)
+        return _risposta(HTTPStatus.OK if esito == "salvato" else HTTPStatus.ACCEPTED, esito)
+
+    return Starlette(
+        routes=[
+            Route("/sensori/v2/ttn", ttn, methods=["POST"]),
+            Route("/sensori/v2/{device_id}/obs", ricevi, methods=["POST"]),
+        ]
+    )
+
+
+_APPLICAZIONE_TTN = re.compile(r"^[a-z0-9](-?[a-z0-9])*$")
+_DEV_EUI = re.compile(r"^[0-9A-Fa-f]{16}$")
+
+
+# Quanto vale la copia in memoria dei segreti TTN. Una rotazione
+# (`limen sensore ttn-segreto`) arriva al webhook entro questo tempo.
+_SEGRETI_VALGONO_SECONDI = 5.0
+
+
+class _SegretiTtn:
+    """Tutta `sensori_ttn` in memoria, riletta al più ogni pochi secondi: al
+    più una riga per dispositivo approvato. Un'applicazione che non esiste, scritta in un corpo
+    non autenticato, non costa una query sul pool che l'ingestore divide con
+    l'MQTT."""
+
+    def __init__(self) -> None:
+        self._segreti: dict[str, bytes] = {}
+        self._letti_alle: float | None = None
+        self._lucchetto = asyncio.Lock()
+
+    async def di(self, applicazione: str, ora: float) -> bytes | None:
+        async with self._lucchetto:
+            if self._letti_alle is None or ora - self._letti_alle >= _SEGRETI_VALGONO_SECONDI:
+                self._segreti = await sensor_devices_repo.segreti_ttn()
+                self._letti_alle = ora
+        return self._segreti.get(applicazione)
+
+
+def _evento_ttn(corpo: bytes) -> tuple[str, str | None, dict[str, Any] | None] | None:
+    """Applicazione, DevEUI (maiuscolo) e ``uplink_message`` di un evento TTN v3;
+    ``None`` se non si legge l'applicazione. Un DevEUI che manca o è storto
+    si scopre dopo il segreto: un evento autenticato riceve sempre un 2xx."""
+    try:
+        evento = json.loads(corpo)
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+        return None
+    if not isinstance(evento, dict):
+        return None
+    ids = evento.get("end_device_ids")
+    if not isinstance(ids, dict) or not isinstance(ids.get("application_ids"), dict):
+        return None
+    applicazione = ids["application_ids"].get("application_id")
+    if not (
+        isinstance(applicazione, str)
+        and len(applicazione) <= 36
+        and _APPLICAZIONE_TTN.fullmatch(applicazione)
+    ):
+        return None
+    dev_eui = ids.get("dev_eui")
+    valido = isinstance(dev_eui, str) and _DEV_EUI.fullmatch(dev_eui)
+    uplink = evento.get("uplink_message")
+    return (
+        applicazione,
+        dev_eui.upper() if valido and isinstance(dev_eui, str) else None,
+        uplink if isinstance(uplink, dict) else None,
+    )
+
+
+def _bearer(request: Request) -> bytes | None:
+    schema, _, segreto = request.headers.get("authorization", "").partition(" ")
+    if schema.lower() != "bearer" or not segreto.strip():
+        return None
+    return segreto.strip().encode()
 
 
 def _tempo(request: Request, ora: float, c: IotCittadiniSettings) -> int | str:

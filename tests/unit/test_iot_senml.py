@@ -6,11 +6,12 @@ import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import cbor2
 import pytest
 
 from limen.integrations.iot.ingestore_v2 import Esito, LimiteFrequenza, _topic
 from limen.integrations.iot.schemas import ObservedProperty
-from limen.integrations.iot.senml import SenmlError, analizza
+from limen.integrations.iot.senml import SenmlError, analizza, cbor_a_json
 
 ID = "pluvio-matera-01"
 ADESSO = datetime(2026, 10, 16, 10, 0, tzinfo=UTC)
@@ -229,3 +230,69 @@ def test_limite_di_frequenza_e_quarantena() -> None:
 )
 def test_topic(topic: str, atteso: tuple[str, str] | None) -> None:
     assert _topic(topic) == atteso
+
+
+def test_cbor_come_json() -> None:
+    """RFC 8428 §6: le etichette intere diventano i nomi JSON (#266)."""
+    cbor = cbor2.dumps(
+        [{-2: f"{ID}/", -3: 1792065600, 0: "rainfall", 1: "mm", 2: 0.4}, {0: "seq", 2: 7}]
+    )
+    assert json.loads(cbor_a_json(cbor)) == [
+        {"bn": f"{ID}/", "bt": 1792065600, "n": "rainfall", "u": "mm", "v": 0.4},
+        {"n": "seq", "v": 7},
+    ]
+    messaggio = analizza(cbor_a_json(cbor), device_id=ID, ricevuto=ADESSO)
+    assert messaggio.sequenza == 7
+    assert [(m.grandezza, m.valore) for m in messaggio.misure] == [(ObservedProperty.RAINFALL, 0.4)]
+
+
+def test_cbor_campi_testuali_e_obbligatori() -> None:
+    """Un campo con nome testuale segue le regole JSON: «_» finale scarta tutto."""
+    ignoto = cbor2.dumps([{-2: f"{ID}/", 0: "seq", 2: 1, "nota": "x"}])
+    assert json.loads(cbor_a_json(ignoto))[0]["nota"] == "x"
+    obbligatorio = cbor_a_json(cbor2.dumps([{-2: f"{ID}/", 0: "seq", 2: 1, "rif_": 1}]))
+    with pytest.raises(SenmlError):
+        analizza(obbligatorio, device_id=ID, ricevuto=ADESSO)
+
+
+@pytest.mark.parametrize(
+    "valore",
+    [
+        {"a": 1},
+        [[1]],
+        [{-2: f"{ID}/", 0: "seq", 2: 1, 42: 1}],
+        [{-2: f"{ID}/", 0: "seq", 2: 1, 1.5: 1}],
+        [{-2: f"{ID}/", 0: "seq", 8: b"\x00"}],
+        [{-2: f"{ID}/", 0: "seq", 2: float("nan")}],
+        [{-2: f"{ID}/", 0: "seq", 2: cbor2.CBORTag(1234, 1)}],
+        # Tag che cbor2 decodifica da sé: regex, bigfloat, decimale, MIME, UUID.
+        [{-2: f"{ID}/", 0: "seq", 2: cbor2.CBORTag(35, "(")}],
+        [{-2: f"{ID}/", 0: "seq", 2: cbor2.CBORTag(5, [10**9, 1])}],
+        [{-2: f"{ID}/", 0: "seq", 2: cbor2.CBORTag(4, [10**9, 1])}],
+        [{-2: f"{ID}/", 0: "seq", 2: cbor2.CBORTag(36, "x")}],
+        [{-2: f"{ID}/", 0: "seq", 2: cbor2.CBORTag(37, b"x")}],
+    ],
+    ids=[
+        "mappa",
+        "non_mappa",
+        "etichetta_ignota",
+        "etichetta_float",
+        "byte",
+        "nan",
+        "tag",
+        "regex",
+        "bigfloat",
+        "decimale",
+        "mime",
+        "uuid",
+    ],
+)
+def test_cbor_rifiutato(valore: Any) -> None:
+    with pytest.raises(SenmlError):
+        cbor_a_json(cbor2.dumps(valore))
+
+
+@pytest.mark.parametrize("grezzo", [b"", b"\xff", b"\x9b\xff\xff\xff\xff\xff\xff\xff\xff"])
+def test_cbor_illeggibile(grezzo: bytes) -> None:
+    with pytest.raises(SenmlError):
+        cbor_a_json(grezzo)

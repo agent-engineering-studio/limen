@@ -2,15 +2,17 @@
 //
 // Non c'è un login: la richiesta arriva per mail a chi cura Limen, che la
 // approva dalla CLI. Si manda la CSR, non la chiave: il dispositivo tiene la
-// sua chiave privata e riceve per mail il certificato firmato. Chiuso, il
-// modulo non si mostra: dice solo che le registrazioni apriranno.
+// sua chiave privata e riceve per mail il certificato firmato. Un sensore
+// LoRaWAN (#266) non ha CSR: manda id, DevEUI e applicazione TTN, e riceve il
+// segreto del webhook. Chiuso, il modulo non si mostra: dice solo che le
+// registrazioni apriranno.
 
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, JSX } from "react";
 
 import { ApiClientError, defaultApiClient } from "../lib/api-client";
 import { testi, useTesti } from "../lib/i18n";
-import type { TipoSensore } from "../types";
+import type { CollegamentoSensore, TipoSensore } from "../types";
 
 const T = testi(
   {
@@ -30,6 +32,20 @@ const T = testi(
     } as Record<TipoSensore, string>,
     lat: "Latitudine (gradi decimali)",
     lon: "Longitudine (gradi decimali)",
+    modo: "Collegamento",
+    modi: {
+      certificato: "Wi-Fi o rete mobile (MQTT o HTTP, con certificato)",
+      lorawan: "LoRaWAN, via The Things Network",
+    } as Record<CollegamentoSensore, string>,
+    deviceId: "Id del dispositivo",
+    deviceIdAiuto:
+      "Minuscole, cifre e trattini. È pubblico, sulla mappa delle stazioni: " +
+      "non metterci il tuo nome.",
+    devEui: "DevEUI (16 cifre esadecimali)",
+    applicazione: "Id dell'applicazione su The Things Network",
+    applicazioneAiuto:
+      "L'applicazione è tua: se la approviamo ricevi il segreto per il suo " +
+      "webhook. Le chiavi LoRaWAN restano fra il dispositivo e TTN.",
     csr: "CSR del dispositivo (PEM)",
     csrAiuto:
       "Il CN della CSR è l'id del dispositivo: minuscole, cifre e trattini. " +
@@ -48,7 +64,8 @@ const T = testi(
     invia: "Invia la richiesta",
     grazie:
       "Richiesta inviata. Ti scriveremo all'indirizzo che hai lasciato, con il " +
-      "certificato se la richiesta è approvata.",
+      "certificato (o il segreto del webhook, per LoRaWAN) se la richiesta è " +
+      "approvata.",
     errori: {
       e429: "Troppe richieste in poco tempo: riprova fra un'ora.",
       e422: "La richiesta non è valida",
@@ -75,6 +92,20 @@ const T = testi(
     },
     lat: "Latitude (decimal degrees)",
     lon: "Longitude (decimal degrees)",
+    modo: "Connection",
+    modi: {
+      certificato: "Wi-Fi or mobile network (MQTT or HTTP, with a certificate)",
+      lorawan: "LoRaWAN, via The Things Network",
+    },
+    deviceId: "Device id",
+    deviceIdAiuto:
+      "Lowercase letters, digits and hyphens. It is public, on the station " +
+      "map: do not put your name in it.",
+    devEui: "DevEUI (16 hex digits)",
+    applicazione: "Application id on The Things Network",
+    applicazioneAiuto:
+      "The application is yours: if we approve it you receive the secret for " +
+      "its webhook. The LoRaWAN keys stay between the device and TTN.",
     csr: "Device CSR (PEM)",
     csrAiuto:
       "The CSR's CN is the device id: lowercase letters, digits and hyphens. " +
@@ -92,7 +123,8 @@ const T = testi(
     invia: "Send the request",
     grazie:
       "Request sent. We will write to the address you left, with the " +
-      "certificate if the request is approved.",
+      "certificate (or the webhook secret, for LoRaWAN) if the request is " +
+      "approved.",
     errori: {
       e429: "Too many requests in a short time: try again in an hour.",
       e422: "The request is not valid",
@@ -107,6 +139,7 @@ const T = testi(
 type Testi = (typeof T)["it"];
 
 const ORDINE_TIPI: readonly TipoSensore[] = ["pluviometro", "umidita_suolo"];
+const ORDINE_MODI: readonly CollegamentoSensore[] = ["certificato", "lorawan"];
 const EMAIL = '[^@\\s<>,;"]+@[^@\\s<>,;"]+\\.[^@\\s<>,;"]{2,}';
 // Il server scarta come automatico un modulo compilato in meno di
 // IOT__CITTADINI__REGISTRAZIONE__SECONDI_MINIMI (20 s) e risponde comunque 201.
@@ -147,7 +180,11 @@ export default function RegistrazioneSensore(): JSX.Element | null {
   const [tipo, setTipo] = useState<TipoSensore>("pluviometro");
   const [lat, setLat] = useState("");
   const [lon, setLon] = useState("");
+  const [modo, setModo] = useState<CollegamentoSensore>("certificato");
   const [csr, setCsr] = useState("");
+  const [deviceId, setDeviceId] = useState("");
+  const [devEui, setDevEui] = useState("");
+  const [applicazione, setApplicazione] = useState("");
   const [email, setEmail] = useState("");
   const [note, setNote] = useState("");
   const [foto, setFoto] = useState<File | null>(null);
@@ -183,7 +220,8 @@ export default function RegistrazioneSensore(): JSX.Element | null {
     );
   }
 
-  const chiaveNelCampo = /PRIVATE KEY/.test(csr);
+  const lorawan = modo === "lorawan";
+  const chiaveNelCampo = !lorawan && /PRIVATE KEY/.test(csr);
   const pronto = licenza && regole && informativa && !chiaveNelCampo;
 
   const invia = async (ev: FormEvent<HTMLFormElement>): Promise<void> => {
@@ -199,7 +237,14 @@ export default function RegistrazioneSensore(): JSX.Element | null {
         tipo,
         lat: Number(lat),
         lon: Number(lon),
-        csr: csr.trim(),
+        modo,
+        ...(lorawan
+          ? {
+              device_id: deviceId.trim(),
+              dev_eui: devEui.trim(),
+              ttn_applicazione: applicazione.trim(),
+            }
+          : { csr: csr.trim() }),
         email: email.trim(),
         note: note.trim() || null,
         foto: fotoB64,
@@ -259,18 +304,75 @@ export default function RegistrazioneSensore(): JSX.Element | null {
           />
         </label>
         <label>
-          {t.csr}
-          <textarea
-            value={csr}
-            onChange={(e) => setCsr(e.target.value)}
-            rows={6}
-            maxLength={4000}
-            required
-            spellCheck={false}
-            placeholder="-----BEGIN CERTIFICATE REQUEST-----"
-          />
-          <span className="contributo-aiuto">{t.csrAiuto}</span>
+          {t.modo}
+          <select
+            value={modo}
+            onChange={(e) => setModo(e.target.value as CollegamentoSensore)}
+          >
+            {ORDINE_MODI.map((v) => (
+              <option key={v} value={v}>
+                {t.modi[v]}
+              </option>
+            ))}
+          </select>
         </label>
+        {lorawan ? (
+          <>
+            <label>
+              {t.deviceId}
+              <input
+                type="text"
+                value={deviceId}
+                onChange={(e) => setDeviceId(e.target.value)}
+                pattern="[a-z0-9][a-z0-9\-]{2,62}"
+                maxLength={63}
+                required
+                spellCheck={false}
+              />
+              <span className="contributo-aiuto">{t.deviceIdAiuto}</span>
+            </label>
+            <label>
+              {t.devEui}
+              <input
+                type="text"
+                value={devEui}
+                onChange={(e) => setDevEui(e.target.value)}
+                pattern="(?:[0-9A-Fa-f]{2}[\s:\-]?){7}[0-9A-Fa-f]{2}"
+                maxLength={23}
+                required
+                spellCheck={false}
+                placeholder="70B3D57ED0000000"
+              />
+            </label>
+            <label>
+              {t.applicazione}
+              <input
+                type="text"
+                value={applicazione}
+                onChange={(e) => setApplicazione(e.target.value)}
+                pattern="[a-z0-9](?:-?[a-z0-9])+"
+                maxLength={36}
+                required
+                spellCheck={false}
+              />
+              <span className="contributo-aiuto">{t.applicazioneAiuto}</span>
+            </label>
+          </>
+        ) : (
+          <label>
+            {t.csr}
+            <textarea
+              value={csr}
+              onChange={(e) => setCsr(e.target.value)}
+              rows={6}
+              maxLength={4000}
+              required
+              spellCheck={false}
+              placeholder="-----BEGIN CERTIFICATE REQUEST-----"
+            />
+            <span className="contributo-aiuto">{t.csrAiuto}</span>
+          </label>
+        )}
         {chiaveNelCampo ? (
           <p className="contributo-errore" role="alert">
             {t.errori.chiaveNelCampo}

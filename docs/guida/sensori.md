@@ -137,8 +137,8 @@ cella della griglia le registra Limen quando approva il dispositivo. Un dato
 in meno da verificare, e un sensore spostato si nota.
 
 Il messaggio segue SenML (RFC 8428), il formato standard per le misure dei
-sensori, in JSON. Il CBOR, dove ogni byte conta, arriverà con LoRaWAN
-([#266](https://github.com/agent-engineering-studio/limen/issues/266)).
+sensori, in JSON. Su LoRaWAN, dove ogni byte conta, lo stesso messaggio
+viaggia in CBOR (vedi sotto).
 
 ```json
 [
@@ -210,6 +210,47 @@ risposta del primo invio, quindi dopo un `429` o un errore un nuovo tentativo
 si rifirma con un tempo nuovo. La chiave non scade con il certificato: resta valida
 finché il dispositivo non va in quarantena, e cambiarla vuol dire
 registrare un nuovo id.
+
+### Senza rete: LoRaWAN con The Things Network
+
+Su un versante senza Wi-Fi né copertura mobile l'unica via è LoRaWAN: il
+dispositivo trasmette a un gateway anche a chilometri di distanza, The Things
+Network (TTN) riceve l'uplink e lo consegna a Limen con un webhook
+([#266](https://github.com/agent-engineering-studio/limen/issues/266)).
+
+**L'applicazione TTN è tua.** Registri il dispositivo nella tua applicazione
+sulla console di TTN, e le chiavi LoRaWAN restano fra il dispositivo e TTN:
+Limen non le vede. Nel modulo di registrazione scegli «LoRaWAN» e scrivi
+l'id del dispositivo, il suo DevEUI e l'id della tua applicazione. Se la
+richiesta è approvata ricevi per mail il **segreto del webhook**, che vale
+per tutti i dispositivi della tua applicazione e solo per quelli; Limen ne
+conserva solo l'impronta. Sulla console aggiungi un webhook personalizzato:
+
+| Campo | Valore |
+|---|---|
+| Formato | JSON |
+| URL base | `https://limen.agentengineering.it/sensori/v2/ttn` |
+| Header | `Authorization: Bearer <segreto>` |
+| Uplink message | attivo, percorso vuoto |
+
+Il payload è il SenML di sempre in CBOR (RFC 8428 §6), dove i nomi dei
+campi diventano interi: `bn` è −2, `bt` −3, `n` 0, `u` 1, `v` 2, `t` 6. Il
+messaggio di prima pesa una cinquantina di byte:
+
+```text
+[{-2: "pluvio-matera-01/", 0: "rainfall", 1: "mm", 2: 3.5, 6: -120},
+ {0: "seq", 2: 1}]
+```
+
+Il tempo `t: -120` è relativo all'arrivo — due minuti prima — e risparmia
+l'orologio a un dispositivo che dorme. Il payload formatter di TTN non serve:
+Limen legge i byte del dispositivo, non il JSON che ne ricava la console.
+Duplicati e ordine li decide la `seq` di SenML, non il frame counter LoRaWAN,
+che si azzera a ogni join. Il dispositivo non legge la risposta, quindi Limen
+risponde sempre `2xx` a un uplink autenticato, anche quando lo scarta: un
+webhook che fallisce TTN lo mette in pausa, e con lui gli altri dispositivi
+della tua applicazione. Un segreto perso o sospetto si sostituisce
+rispondendo alla mail: quello vecchio smette di valere entro pochi secondi.
 
 ## Come un dispositivo ottiene la sua identità
 
@@ -382,7 +423,7 @@ il secure boot dell'ESP32, o si tiene la chiave in un ATECC608.
 | Wi-Fi con un ESP32 | c'è una rete a portata, a casa, a scuola | il firmware di esempio |
 | Raspberry Pi Pico W | come l'ESP32; TLS con mbedTLS o MicroPython | nessun esempio |
 | Raspberry Pi | ha già Linux: bastano `mosquitto_pub` o Paho | vedi sotto |
-| LoRaWAN con The Things Network | in campagna, senza Wi-Fi, chilometri di portata | in arrivo ([#266](https://github.com/agent-engineering-studio/limen/issues/266)) |
+| LoRaWAN con The Things Network | in campagna, senza Wi-Fi, chilometri di portata | si accende con la rete; nessun esempio |
 | Arduino Uno | — | **no**: non fa TLS |
 
 Da un Raspberry Pi, o da un computer per una prova, un messaggio si manda
@@ -400,7 +441,8 @@ mosquitto_pub -h limen.agentengineering.it -p 8883 -q 1 \
 **Senza account: un modulo, una mail, una persona che approva.** Il modulo è
 in fondo a questa pagina e si apre quando la rete accetta nuovi dispositivi
 ([#253](https://github.com/agent-engineering-studio/limen/issues/253)). Chiede
-il tipo di sensore, la posizione, la CSR del dispositivo, una mail e tre
+il tipo di sensore, la posizione, la CSR del dispositivo (per LoRaWAN l'id, il
+DevEUI e l'applicazione TTN), una mail e tre
 conferme: la licenza dei dati, le regole di sicurezza e l'informativa qui
 sotto. La foto dell'installazione è facoltativa.
 
@@ -496,7 +538,7 @@ registra non è mai pubblicata.
 | Protocollo v2 e ingresso delle misure via MQTT ([#252](https://github.com/agent-engineering-studio/limen/issues/252)) | fatto |
 | Le stazioni sulla mappa, con livello, ultimo dato e controllo di qualità ([#255](https://github.com/agent-engineering-studio/limen/issues/255)) | fatto |
 | Ingresso HTTP firmato ([#265](https://github.com/agent-engineering-studio/limen/issues/265)) | fatto, si accende con la rete |
-| LoRaWAN da The Things Network ([#266](https://github.com/agent-engineering-studio/limen/issues/266)) | da fare |
+| LoRaWAN da The Things Network ([#266](https://github.com/agent-engineering-studio/limen/issues/266)) | fatto, si accende con la rete |
 | Registrazione senza account ([#253](https://github.com/agent-engineering-studio/limen/issues/253)) | fatto, il modulo apre con la rete |
 | Progetti dei kit con firmware di esempio ([#256](https://github.com/agent-engineering-studio/limen/issues/256)) | fatto |
 | Misura del valore dei pluviometri non ufficiali contro il radar ([#250](https://github.com/agent-engineering-studio/limen/issues/250)) | da fare |

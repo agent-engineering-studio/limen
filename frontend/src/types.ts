@@ -669,11 +669,19 @@ export interface RegistrazioneSensoriStato {
   aperta: boolean;
 }
 
+export type CollegamentoSensore = "certificato" | "lorawan";
+
 export interface RegistrazioneSensoreRichiesta {
   tipo: TipoSensore;
   lat: number;
   lon: number;
-  csr: string;
+  modo: CollegamentoSensore;
+  /** Solo con un certificato: il CN è l'id del dispositivo. */
+  csr?: string;
+  /** Solo LoRaWAN (#266): niente CSR, l'id si scrive a mano. */
+  device_id?: string;
+  dev_eui?: string;
+  ttn_applicazione?: string;
   email: string;
   note: string | null;
   /** Base64 di un JPEG o PNG, senza il prefisso `data:`. */
