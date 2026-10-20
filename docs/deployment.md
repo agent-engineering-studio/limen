@@ -121,23 +121,10 @@ Servizi esposti:
 
 ### Deploy da CI
 
-Il deploy verso la VPS self-hosted avviene via SSH + `docker compose
-pull/up`: pubblica l'ultima immagine
-`ghcr.io/agent-engineering-studio/limen-api` sulla VPS. È **manuale** e
-protetto da un GitHub Environment (reviewer richiesti + secret).
-
-Il workflow è attualmente
-[`deploy-aruba.yml`](../.github/workflows/deploy-aruba.yml) (rinomina
-pendente). I secret richiesti sull'ambiente GitHub sono:
-
-| Secret | Valore |
-|---|---|
-| `ARUBA_SSH_HOST` | IP / FQDN della VPS |
-| `ARUBA_SSH_USER` | Utente di deploy nel gruppo `docker` |
-| `ARUBA_SSH_PRIVATE_KEY` | Chiave SSH privata |
-| `ARUBA_COMPOSE_PATH` | Path assoluto del file compose sulla VPS |
-
-Trigger: GitHub UI → "Actions" → seleziona il workflow → "Run workflow".
+Non c'è un workflow di deploy verso il server self-hosted: la CI pubblica
+l'immagine `ghcr.io/agent-engineering-studio/limen-api` e l'aggiornamento
+sull'host è `docker compose pull && docker compose up -d`. Portabilità e
+ripristino su un altro server: epic #308.
 
 ## LLM in produzione
 
