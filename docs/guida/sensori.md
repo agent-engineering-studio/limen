@@ -205,8 +205,9 @@ Una firma sbagliata, una chiave sconosciuta o un tempo fuori finestra danno
 dell'MQTT, con lo stesso limite al minuto: `200` salvato, `409` sequenza già
 vista (il messaggio c'è già, si passa al successivo), `429` troppi messaggi,
 `422` misure dal futuro o troppo vecchie, `403` dispositivo in quarantena.
-Ogni messaggio firmato entra una volta sola: un nuovo tentativo si rifirma
-con un tempo nuovo. La chiave non scade con il certificato: resta valida
+Ogni messaggio firmato si valuta una volta sola: rimandato uguale riceve la
+risposta del primo invio, quindi dopo un `429` o un errore un nuovo tentativo
+si rifirma con un tempo nuovo. La chiave non scade con il certificato: resta valida
 finché il dispositivo non va in quarantena, e cambiarla vuol dire
 registrare un nuovo id.
 

@@ -11,8 +11,9 @@ Consegna lo stesso SenML dell'MQTT a
 e la firma (vedi :mod:`limen.integrations.iot.firma_http`) prende il posto del
 certificato: l'MQTT autentica l'id con l'ACL del broker, qui lo autentica la
 chiave registrata. Firma, chiave o tempo sbagliati ⇒ 401 e nulla si salva.
-Ogni messaggio firmato entra una volta sola: un nuovo tentativo si rifirma
-con un tempo nuovo.
+Ogni messaggio firmato passa dalla pipeline una volta sola: rimandato uguale
+riceve l'esito del primo invio, e un nuovo tentativo si rifirma con un tempo
+nuovo.
 Dopo la firma il messaggio è esattamente un messaggio MQTT sul topic
 ``limen/v2/{id}/obs``: stessa pipeline, stesso limite di frequenza, stessa
 sequenza, e quindi le stesse righe.
@@ -23,6 +24,7 @@ raggiunge con una ``location`` dedicata e il suo ``limit_req``.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import contextlib
@@ -120,7 +122,8 @@ def applicazione(
     gestisci: Gestisci, c: IotCittadiniSettings, *, adesso: Callable[[], datetime]
 ) -> Starlette:
     chiavi = _Scadenze()
-    # I messaggi firmati già entrati: ognuno passa una volta sola. Senza, un
+    # I messaggi firmati già entrati, con il loro esito: ognuno passa una volta
+    # sola dalla pipeline. Senza, un
     # POST intercettato e rimandato dentro la finestra consumerebbe la quota al
     # minuto del dispositivo vero fino a metterlo in quarantena, perché la
     # frequenza si conta prima della sequenza. L'impronta è del messaggio e non
@@ -161,16 +164,29 @@ def applicazione(
             return _non_autentico(device_id, "firma")
 
         impronta = hashlib.sha256(messaggio).digest()
-        if visti.get(impronta, ora)[0]:
+        trovato, primo = visti.get(impronta, ora)
+        if trovato and isinstance(primo, asyncio.Future):
+            # Lo stesso esito del primo invio, senza ripassare dalla pipeline:
+            # un 409 qui direbbe «salvato» anche a un messaggio che ha preso un
+            # 429 o un 503 e non è mai entrato (Codex, #298).
             _log.info("iot.http.ripetuto", device_id=device_id)
-            return _risposta(HTTPStatus.CONFLICT, "sequenza")
-        # Il tempo resta valido fino a `tempo + finestra`, e `tempo` arriva al
-        # più a `ora + tolleranza`: fino ad allora il messaggio va ricordato.
-        visti.metti(impronta, None, ora + c.finestra_firma_secondi + c.tolleranza_futuro_secondi)
-
-        esito = str(
-            await gestisci(topic=f"limen/v2/{device_id}/obs", payload=corpo, dal_broker=False)
-        )
+            esito = str(await asyncio.shield(primo))
+        else:
+            # Il tempo resta valido fino a `tempo + finestra`, e `tempo` arriva
+            # al più a `ora + tolleranza`: fino ad allora va ricordato.
+            futuro: asyncio.Future[str] = asyncio.get_running_loop().create_future()
+            visti.metti(
+                impronta, futuro, ora + c.finestra_firma_secondi + c.tolleranza_futuro_secondi
+            )
+            esito = "errore"
+            try:
+                esito = str(
+                    await gestisci(
+                        topic=f"limen/v2/{device_id}/obs", payload=corpo, dal_broker=False
+                    )
+                )
+            finally:
+                futuro.set_result(esito)
         return _risposta(_STATO_PER_ESITO.get(esito, HTTPStatus.SERVICE_UNAVAILABLE), esito)
 
     return Starlette(routes=[Route("/sensori/v2/{device_id}/obs", ricevi, methods=["POST"])])

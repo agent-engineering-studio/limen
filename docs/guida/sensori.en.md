@@ -204,8 +204,9 @@ and store nothing. Past the signature the message follows the same rules as
 MQTT, with the same per-minute limit: `200` stored, `409` sequence already
 seen (the message is already there, move on to the next), `429` too many
 messages, `422` measurements from the future or too old, `403` device in
-quarantine. Each signed message gets in only once: a retry is signed again
-with a new time. The key does not expire with the certificate: it stays
+quarantine. Each signed message is evaluated only once: sent again unchanged it gets
+the answer of the first attempt, so after a `429` or an error a retry is
+signed again with a new time. The key does not expire with the certificate: it stays
 valid until the device is quarantined, and changing it means registering a
 new id.
 

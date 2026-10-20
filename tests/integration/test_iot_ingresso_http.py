@@ -171,7 +171,9 @@ async def test_doppione_troppo_grande_e_id_non_valido(reset_db: None) -> None:
     await _registra(chiave)
     ing = _ingestore()
     assert (await _post(ing, _corpo(), firma=_firma(chiave, _corpo()))).status_code == 200
-    doppione = await _post(ing, _corpo(), firma=_firma(chiave, _corpo()))
+    # La stessa sequenza rifirmata con un altro tempo è un doppione vero.
+    rifirmato = _firma(chiave, _corpo(), tempo=TEMPO + 1)
+    doppione = await _post(ing, _corpo(), firma=rifirmato, tempo=TEMPO + 1)
     assert doppione.status_code == 409
     assert doppione.json() == {"esito": "sequenza"}
 
@@ -204,10 +206,26 @@ async def test_un_messaggio_rimandato_non_consuma_la_quota(reset_db: None) -> No
     firma = _firma(chiave, _corpo(1))
     assert (await _post(ing, _corpo(1), firma=firma)).status_code == 200
     for _ in range(5):
-        assert (await _post(ing, _corpo(1), firma=firma)).status_code == 409
+        assert (await _post(ing, _corpo(1), firma=firma)).status_code == 200
     assert (await _post(ing, _corpo(2), firma=_firma(chiave, _corpo(2)))).status_code == 200
     dispositivo = await sensor_devices_repo.get_device(ID)
     assert dispositivo is not None and dispositivo.status != "quarantined"
+
+
+async def test_un_rimandato_ha_l_esito_del_primo_invio(reset_db: None) -> None:
+    """Un 409 direbbe «c'è già» a un messaggio che ha preso un 429 e non è mai
+    entrato: la copia riceve l'esito vero del primo invio (Codex, #298)."""
+    await _cella_e_dispositivo()
+    chiave = ed25519.Ed25519PrivateKey.generate()
+    await _registra(chiave)
+    ing = _ingestore(max_messaggi_al_minuto=1)
+    assert await ing.gestisci(topic=TOPIC, payload=_corpo(1)) is Esito.SALVATO
+    firma = _firma(chiave, _corpo(2))
+    for _ in range(3):
+        risposta = await _post(ing, _corpo(2), firma=firma)
+        assert risposta.status_code == 429
+        assert risposta.json() == {"esito": "frequenza"}
+    assert len(await _righe()) == 1
 
 
 async def test_l_arretrato_del_broker_non_vale_per_http(reset_db: None) -> None:
