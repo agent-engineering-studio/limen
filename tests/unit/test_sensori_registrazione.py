@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec, rsa
+from cryptography.hazmat.primitives.asymmetric import ec, ed25519, rsa
 from cryptography.x509.oid import NameOID
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -35,7 +35,8 @@ def csr_pem(cn: str = "pluvio-matera-01", *, chiave: Any = None, **altri: str) -
     csr = (
         x509.CertificateSigningRequestBuilder()
         .subject_name(x509.Name(attributi))
-        .sign(chiave, hashes.SHA256())
+        # Ed25519 firma senza un hash a parte.
+        .sign(chiave, None if isinstance(chiave, ed25519.Ed25519PrivateKey) else hashes.SHA256())
     )
     return csr.public_bytes(serialization.Encoding.PEM).decode()
 
@@ -62,9 +63,23 @@ def modulo(**modifiche: Any) -> dict[str, Any]:
 
 
 def test_csr_valida() -> None:
-    csr = reg.leggi_csr(csr_pem())
+    chiave = ec.generate_private_key(ec.SECP256R1())
+    csr = reg.leggi_csr(csr_pem(chiave=chiave))
     assert csr.device_id == "pluvio-matera-01"
     assert len(csr.impronta.split(":")) == 32
+    assert csr.chiave == chiave.public_key().public_bytes(
+        serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+
+
+def test_csr_ed25519_per_l_ingresso_http() -> None:
+    """#265: un dispositivo che consegna solo via HTTP può avere una Ed25519."""
+    chiave = ed25519.Ed25519PrivateKey.generate()
+    csr = reg.leggi_csr(csr_pem("datalogger-01", chiave=chiave))
+    assert csr.device_id == "datalogger-01"
+    assert csr.chiave == chiave.public_key().public_bytes(
+        serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
+    )
 
 
 @pytest.mark.parametrize(

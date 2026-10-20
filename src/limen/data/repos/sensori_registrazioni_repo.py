@@ -161,27 +161,27 @@ class _GiaDecisaError(Exception):
     pass
 
 
-async def approva(r: Richiesta, *, cell_id: str, certificato: str) -> bool:
+async def approva(r: Richiesta, *, cell_id: str, certificato: str, chiave: bytes) -> bool:
     """Il dispositivo nasce al livello 0, offline finché non si collega.
 
     Niente ``ON CONFLICT``: un id già usato da un altro dispositivo deve far
     fallire l'approvazione, non regalare al registrante quel dispositivo.
     """
     try:
-        await _approva(r, cell_id=cell_id, certificato=certificato)
+        await _approva(r, cell_id=cell_id, certificato=certificato, chiave=chiave)
     except _GiaDecisaError:
         return False
     return True
 
 
-async def _approva(r: Richiesta, *, cell_id: str, certificato: str) -> None:
+async def _approva(r: Richiesta, *, cell_id: str, certificato: str, chiave: bytes) -> None:
     async with acquire() as conn, conn.transaction():
         await conn.execute(
             """
             INSERT INTO sensor_devices (
                 id, device_type, cell_id, location, status, livello,
-                registrante_id, metadata
-            ) VALUES ($1, $2, $3, ST_SetSRID($4::geometry, 4326), 'offline', 0, $5, $6::jsonb)
+                registrante_id, metadata, chiave_pubblica
+            ) VALUES ($1, $2, $3, ST_SetSRID($4::geometry, 4326), 'offline', 0, $5, $6::jsonb, $7)
             """,
             r.device_id,
             r.device_type,
@@ -189,6 +189,7 @@ async def _approva(r: Richiesta, *, cell_id: str, certificato: str) -> None:
             Point(r.lon, r.lat),
             r.registrante_id,
             json.dumps({"licenza": r.licenza, "richiesta": r.id}),
+            chiave,
         )
         esito: str = await conn.execute(
             """
@@ -203,6 +204,19 @@ async def _approva(r: Richiesta, *, cell_id: str, certificato: str) -> None:
         if not esito.endswith(" 1"):
             # Un altro operatore l'ha decisa nel frattempo: niente dispositivo.
             raise _GiaDecisaError
+
+
+async def chiave_se_manca(device_id: str, chiave: bytes) -> bool:
+    """La chiave di un dispositivo approvato prima della 081 (#265). Una chiave
+    già scritta non si sostituisce: viene dalla stessa CSR."""
+    async with acquire() as conn:
+        esito: str = await conn.execute(
+            "UPDATE sensor_devices SET chiave_pubblica = $2, updated_at = now() "
+            "WHERE id = $1 AND chiave_pubblica IS NULL",
+            device_id,
+            chiave,
+        )
+    return esito.endswith(" 1")
 
 
 async def salva_certificato(richiesta_id: int, certificato: str) -> None:
@@ -275,6 +289,7 @@ __all__ = [
     "approva",
     "cancella_registrante",
     "cella_per_punto",
+    "chiave_se_manca",
     "dispositivi_del_registrante",
     "id_in_uso",
     "in_attesa",

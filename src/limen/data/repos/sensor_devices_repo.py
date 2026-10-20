@@ -130,6 +130,17 @@ async def get_device(device_id: str) -> SensorDevice | None:
     )
 
 
+async def chiave_pubblica(device_id: str) -> bytes | None:
+    """La chiave che firma l'ingresso HTTP (#265); ``None`` senza dispositivo o
+    senza chiave, che per chi chiede sono la stessa cosa: una firma che non si
+    può verificare."""
+    async with acquire() as conn:
+        chiave: bytes | None = await conn.fetchval(
+            "SELECT chiave_pubblica FROM sensor_devices WHERE id = $1", device_id
+        )
+    return chiave
+
+
 async def touch_last_seen(device_id: str, *, at: datetime) -> None:
     """Bump ``last_seen_at`` (idempotent — no-op if device is missing)."""
     async with acquire() as conn:
@@ -273,6 +284,7 @@ __all__ = [
     "SensorLivello",
     "SensorStatus",
     "StazionePubblica",
+    "chiave_pubblica",
     "get_device",
     "set_status",
     "stato_dal_dispositivo",

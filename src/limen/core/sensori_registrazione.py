@@ -26,7 +26,7 @@ from typing import Annotated, Literal
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric import ec, ed25519
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from cryptography.x509.oid import NameOID
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
@@ -87,13 +87,16 @@ class RichiestaSensoreIn(BaseModel):
 class Csr:
     device_id: str
     impronta: str
+    #: SubjectPublicKeyInfo in DER: verifica le firme dell'ingresso HTTP (#265).
+    chiave: bytes
 
 
 def leggi_csr(pem: str) -> Csr:
     """L'id del dispositivo dalla CSR, dopo averne verificato la firma.
 
-    La firma prova che chi ha mandato la CSR ha la chiave privata. La curva è
-    P-256 perché è l'unica del secure element ATECC608 (#252).
+    La firma prova che chi ha mandato la CSR ha la chiave privata. P-256 perché
+    è l'unica curva del secure element ATECC608 (#252); Ed25519 per i
+    dispositivi che consegnano solo via HTTP (#265).
     """
     try:
         csr = x509.load_pem_x509_csr(pem.encode())
@@ -102,8 +105,9 @@ def leggi_csr(pem: str) -> Csr:
     if not csr.is_signature_valid:
         raise CsrNonValidaError("la firma della CSR non è valida")
     chiave = csr.public_key()
-    if not isinstance(chiave, ec.EllipticCurvePublicKey) or chiave.curve.name != "secp256r1":
-        raise CsrNonValidaError("serve una chiave EC P-256 (prime256v1)")
+    p256 = isinstance(chiave, ec.EllipticCurvePublicKey) and chiave.curve.name == "secp256r1"
+    if not p256 and not isinstance(chiave, ed25519.Ed25519PublicKey):
+        raise CsrNonValidaError("serve una chiave EC P-256 (prime256v1) o Ed25519")
     cn = csr.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
     if len(cn) != 1 or not isinstance(cn[0].value, str):
         raise CsrNonValidaError("la CSR deve avere un solo CN, l'id del dispositivo")
@@ -114,9 +118,10 @@ def leggi_csr(pem: str) -> Csr:
         )
     if device_id in ID_RISERVATI:
         raise CsrNonValidaError(f"'{device_id}' è un id riservato")
+    der = chiave.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
     h = hashes.Hash(hashes.SHA256())
-    h.update(chiave.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo))
-    return Csr(device_id=device_id, impronta=h.finalize().hex(":"))
+    h.update(der)
+    return Csr(device_id=device_id, impronta=h.finalize().hex(":"), chiave=der)
 
 
 def _foto(b64: str, *, max_kb: int) -> tuple[str, str, bytes]:

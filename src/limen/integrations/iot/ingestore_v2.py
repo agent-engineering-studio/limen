@@ -30,6 +30,10 @@ Ogni messaggio passa, in quest'ordine, da:
 
 Che una misura salvata conti per lo scoring lo decide poi il livello del
 dispositivo (#251), non questo modulo. Gira nel worker, mai nell'API.
+
+Con ``http_attivo`` accanto al consumer MQTT gira l'ingresso HTTP firmato
+(:mod:`limen.integrations.iot.ingresso_http`), che dopo la firma passa da
+:meth:`IngestoreV2.gestisci` come un messaggio del broker.
 """
 
 from __future__ import annotations
@@ -123,6 +127,14 @@ class LimiteFrequenza:
         return Esito.FREQUENZA
 
 
+def _morto(task: asyncio.Task[None]) -> None:
+    """Un ingestore che muore da solo lo deve dire: il worker resta su, e senza
+    questa riga nessuna misura entrerebbe più in silenzio."""
+    if not task.cancelled() and task.exception() is not None:
+        exc = task.exception()
+        _log.error("iot.v2.fermo", error=str(exc), error_type=type(exc).__name__)
+
+
 def _topic(topic: str) -> tuple[str, str] | None:
     parti = topic.split("/")
     if len(parti) != 4 or parti[0] != "limen" or parti[1] != "v2":
@@ -168,6 +180,7 @@ class IngestoreV2:
                 window_months=self._settings.partition_window_months,
             )
         self._task = asyncio.create_task(self._run(), name="limen-iot-ingestore-v2")
+        self._task.add_done_callback(_morto)
 
     async def stop(self) -> None:
         if self._task is None:
@@ -209,12 +222,19 @@ class IngestoreV2:
 
     async def _run(self) -> None:
         pool = await self._pool_ristretto()
-        if pool is None:
-            await self._consuma()
-            return
-        _log.info("iot.v2.ruolo_ristretto", ruolo="limen_ingestore")
-        with usa_pool(pool):
-            await self._consuma()
+        if pool is not None:
+            _log.info("iot.v2.ruolo_ristretto", ruolo="limen_ingestore")
+        # L'ingresso HTTP (#265) nasce dentro `usa_pool`: i task che crea ne
+        # ereditano il contesto e scrivono col ruolo ristretto anche loro.
+        with usa_pool(pool) if pool is not None else contextlib.nullcontext():
+            if not self._c.http_attivo:
+                await self._consuma()
+                return
+            from limen.integrations.iot.ingresso_http import servi
+
+            async with asyncio.TaskGroup() as gruppo:
+                gruppo.create_task(self._consuma())
+                gruppo.create_task(servi(self.gestisci, self._c, adesso=self._adesso))
 
     async def _consuma(self) -> None:
         tls = aiomqtt.TLSParameters(
@@ -261,9 +281,11 @@ class IngestoreV2:
                 _log.warning("iot.v2.disconnesso", error=str(exc), error_type=type(exc).__name__)
                 await asyncio.sleep(5.0)
 
-    async def gestisci(self, *, topic: str, payload: bytes) -> Esito:
+    async def gestisci(self, *, topic: str, payload: bytes, dal_broker: bool = True) -> Esito:
+        """``dal_broker=False`` per l'ingresso HTTP: l'esenzione dell'arretrato
+        vale solo per ciò che il broker consegna dopo una riconnessione."""
         try:
-            esito = await self._gestisci(topic=topic, payload=payload)
+            esito = await self._gestisci(topic=topic, payload=payload, dal_broker=dal_broker)
         except Exception as exc:
             # Un errore del database su un messaggio non deve fermare il
             # consumer: gli altri dispositivi continuano a essere letti.
@@ -282,7 +304,7 @@ class IngestoreV2:
             m.istante < self._connesso_alle for m in messaggio.misure
         )
 
-    async def _gestisci(self, *, topic: str, payload: bytes) -> Esito:
+    async def _gestisci(self, *, topic: str, payload: bytes, dal_broker: bool) -> Esito:
         ricevuto = self._adesso()
         if len(payload) > self._c.max_payload_bytes:
             return Esito.TROPPO_GRANDE
@@ -302,7 +324,7 @@ class IngestoreV2:
 
         limite = (
             None
-            if self._arretrato(messaggio, ricevuto)
+            if dal_broker and self._arretrato(messaggio, ricevuto)
             else self._limite.valuta(device_id, ricevuto)
         )
         if limite is Esito.QUARANTENA:

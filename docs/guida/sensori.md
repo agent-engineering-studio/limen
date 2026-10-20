@@ -179,10 +179,43 @@ conserva le misure e le rimanda al ritorno, e Limen le accetta marcandole
 nell'archivio e nelle verifiche: sono spesso le ore del temporale, quelle
 che contano di più.
 
+### Senza MQTT: un POST firmato
+
+**Un dispositivo che non può tenere una connessione aperta consegna lo
+stesso messaggio con un POST.** È il caso di un modem LTE-M che si sveglia
+una volta l'ora, o di un datalogger che sa fare solo HTTP. Il corpo è lo
+stesso array SenML, con il suo `seq`; al posto del certificato c'è una firma
+fatta con la chiave registrata:
+
+```
+POST https://limen.agentengineering.it/sensori/v2/pluvio-matera-01/obs
+X-Limen-Tempo: 1792065600
+X-Limen-Firma: <firma in base64>
+```
+
+La firma copre i byte `limen-v2`, a capo, l'id, a capo, il tempo in secondi
+Unix, a capo, e il corpo esattamente come viaggia. Con una chiave P-256 è
+ECDSA su SHA-256, in DER o grezza su 64 byte (`r` seguito da `s`, come la
+restituisce l'ATECC608); con una Ed25519 è la firma di 64 byte. Il tempo nella
+firma deve stare entro cinque minuti dall'ora di Limen: una firma più vecchia
+è un messaggio rimandato da qualcun altro, e si rifiuta.
+
+Una firma sbagliata, una chiave sconosciuta o un tempo fuori finestra danno
+`401` e non salvano niente. Dopo la firma il messaggio segue le stesse regole
+dell'MQTT, con lo stesso limite al minuto: `200` salvato, `409` sequenza già
+vista (il messaggio c'è già, si passa al successivo), `429` troppi messaggi,
+`422` misure dal futuro o troppo vecchie, `403` dispositivo in quarantena.
+Ogni messaggio firmato si valuta una volta sola: rimandato uguale riceve la
+risposta del primo invio, quindi dopo un `429` o un errore un nuovo tentativo
+si rifirma con un tempo nuovo. La chiave non scade con il certificato: resta valida
+finché il dispositivo non va in quarantena, e cambiarla vuol dire
+registrare un nuovo id.
+
 ## Come un dispositivo ottiene la sua identità
 
 **La chiave privata nasce nel dispositivo e non ne esce mai.** Il dispositivo
-genera la sua coppia di chiavi su curva P-256 e manda a Limen solo una
+genera la sua coppia di chiavi su curva P-256 (o Ed25519, se consegna solo
+con il POST firmato) e manda a Limen solo una
 richiesta di firma (CSR) con il proprio id. Limen la firma con la CA dei
 sensori e restituisce il certificato. Insieme al certificato, il
 dispositivo riceve il certificato della CA, l'unico di cui si fiderà come
@@ -462,7 +495,8 @@ registra non è mai pubblicata.
 | Livelli di fiducia nel motore ([#251](https://github.com/agent-engineering-studio/limen/issues/251)) | fatto |
 | Protocollo v2 e ingresso delle misure via MQTT ([#252](https://github.com/agent-engineering-studio/limen/issues/252)) | fatto |
 | Le stazioni sulla mappa, con livello, ultimo dato e controllo di qualità ([#255](https://github.com/agent-engineering-studio/limen/issues/255)) | fatto |
-| Ingresso HTTP firmato ([#265](https://github.com/agent-engineering-studio/limen/issues/265)) e LoRaWAN da The Things Network ([#266](https://github.com/agent-engineering-studio/limen/issues/266)) | da fare |
+| Ingresso HTTP firmato ([#265](https://github.com/agent-engineering-studio/limen/issues/265)) | fatto, si accende con la rete |
+| LoRaWAN da The Things Network ([#266](https://github.com/agent-engineering-studio/limen/issues/266)) | da fare |
 | Registrazione senza account ([#253](https://github.com/agent-engineering-studio/limen/issues/253)) | fatto, il modulo apre con la rete |
 | Progetti dei kit con firmware di esempio ([#256](https://github.com/agent-engineering-studio/limen/issues/256)) | fatto |
 | Misura del valore dei pluviometri non ufficiali contro il radar ([#250](https://github.com/agent-engineering-studio/limen/issues/250)) | da fare |

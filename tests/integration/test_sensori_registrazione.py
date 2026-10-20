@@ -139,6 +139,8 @@ async def test_richiesta_approva_osserva_revoca(
     dispositivo = await sensor_devices_repo.get_device(ID)
     assert dispositivo is not None
     assert (dispositivo.livello, dispositivo.status, dispositivo.cell_id) == (0, "offline", cella)
+    # La chiave della CSR, per l'ingresso HTTP firmato (#265).
+    assert await sensor_devices_repo.chiave_pubblica(ID) is not None
     [consegna] = posta_cli.mail
     assert consegna["destinatari"] == [MAIL]
     assert [a[0] for a in consegna["allegati"]] == [f"{ID}.crt", "ca.crt"]
@@ -172,6 +174,22 @@ async def test_approva_due_volte_rimanda_lo_stesso_certificato(
     assert await sensore.approva(rid, settings=get_settings(), ca=ca) == 0
     assert len(ca.firmate) == 1
     assert posta.mail[0]["allegati"][0][2] == posta.mail[1]["allegati"][0][2]
+
+
+async def test_rilanciare_approva_aggiunge_la_chiave_mancante(
+    cella: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Un dispositivo approvato prima della 081 ottiene la chiave per l'HTTP (#265)."""
+    await _ricevi(_Posta())
+    rid = await _richiesta_id()
+    ca = _CaFinta()
+    monkeypatch.setattr(sensore, "invia_testo", _Posta().invia)
+    assert await sensore.approva(rid, settings=get_settings(), ca=ca) == 0
+    chiave = await sensor_devices_repo.chiave_pubblica(ID)
+    async with acquire() as conn:
+        await conn.execute("UPDATE sensor_devices SET chiave_pubblica = NULL WHERE id = $1", ID)
+    assert await sensore.approva(rid, settings=get_settings(), ca=ca) == 0
+    assert await sensor_devices_repo.chiave_pubblica(ID) == chiave
 
 
 async def test_mail_non_partita_rimanda_alla_cli(

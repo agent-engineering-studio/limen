@@ -601,6 +601,18 @@ class IotCittadiniSettings(BaseSettings):
     # passa dal limite al minuto. La finestra limita quanto un dispositivo
     # possa approfittarne datando indietro le misure.
     grazia_arretrato_minuti: int = Field(default=10, ge=0)
+    # Ingresso HTTP firmato (#265), per chi non tiene una sessione MQTT: un
+    # listener nel worker, mai nell'API pubblica, dietro nginx. Spento finché
+    # non lo si accende; il kill switch resta `enabled`, che lo spegne con
+    # l'MQTT. Nel container si ascolta su 0.0.0.0 e la porta si pubblica solo
+    # sul loopback (docker-compose.sensori-worker.yml).
+    http_attivo: bool = False
+    http_host: str = "127.0.0.1"
+    http_porta: int = Field(default=8087, ge=1, le=65535)
+    # Quanto può distare dall'arrivo il tempo dentro la firma: oltre, la firma
+    # è vecchia (un replay) o l'orologio è rotto. La sequenza resta l'altro
+    # muro contro i replay, dentro la finestra.
+    finestra_firma_secondi: int = Field(default=300, ge=10)
     registrazione: SensoriRegistrazioneSettings = Field(
         default_factory=SensoriRegistrazioneSettings
     )
