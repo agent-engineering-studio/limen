@@ -28,7 +28,7 @@ from pathlib import Path
 
 from limen.config.settings import Settings, get_settings
 from limen.core.logging import get_logger
-from limen.core.sensori_registrazione import TIPO_IT
+from limen.core.sensori_registrazione import TIPO_IT, leggi_csr
 from limen.data.db import lifespan_pool
 from limen.data.migrate import run_migrations
 from limen.data.repos import sensor_devices_repo
@@ -121,7 +121,9 @@ async def approva(richiesta_id: int, *, settings: Settings, ca: CaSensori) -> in
                 r.csr, giorni=settings.iot.cittadini.registrazione.giorni_certificato
             )
             await repo.salva_certificato(r.id, certificato)
-        if not await repo.approva(r, cell_id=cell_id, certificato=certificato):
+        if not await repo.approva(
+            r, cell_id=cell_id, certificato=certificato, chiave=leggi_csr(r.csr).chiave
+        ):
             log.error("sensore.gia_decisa", richiesta=r.id)
             return 1
         log.info("sensore.approvato", richiesta=r.id, device_id=r.device_id, cell_id=cell_id)
@@ -131,6 +133,10 @@ async def approva(richiesta_id: int, *, settings: Settings, ca: CaSensori) -> in
             # Un certificato revocato non si rimanda come «registrato».
             log.error("sensore.in_quarantena", device_id=r.device_id)
             return 1
+        if dispositivo is not None and await repo.chiave_se_manca(
+            r.device_id, leggi_csr(r.csr).chiave
+        ):
+            log.info("sensore.chiave_aggiunta", device_id=r.device_id)
     assert certificato is not None  # una richiesta approvata ha il suo certificato
 
     oggetto, testo = mail_approvazione(

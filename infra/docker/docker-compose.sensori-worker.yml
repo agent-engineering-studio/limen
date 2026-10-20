@@ -12,10 +12,23 @@
 # o `IOT__CITTADINI__ENABLED=true` nel .env non accenderebbe niente. Le soglie
 # restano ai default di `IotCittadiniSettings`; per cambiarne una si aggiunge
 # la sua riga qui sotto.
+#
+# L'ingresso HTTP firmato (#265) ascolta nel container su 0.0.0.0 e si
+# pubblica solo sul loopback dell'host: lo raggiunge nginx (`location
+# /sensori/v2/`), mai la rete. Spento finché IOT__CITTADINI__HTTP_ATTIVO non è
+# true; pubblicare la porta con il listener spento non apre niente. Dentro la
+# rete docker gli altri container lo raggiungono senza passare da nginx: il
+# worker ripete i suoi controlli (dimensione, firma, frequenza), non il
+# limit_req per IP.
 services:
   worker:
     environment:
       IOT__CITTADINI__ENABLED: ${IOT__CITTADINI__ENABLED:-false}
+      IOT__CITTADINI__HTTP_ATTIVO: ${IOT__CITTADINI__HTTP_ATTIVO:-false}
+      IOT__CITTADINI__HTTP_HOST: 0.0.0.0
+      IOT__CITTADINI__HTTP_PORTA: "8087"
+    ports:
+      - "${LIMEN_SENSORI_HTTP_BIND:-127.0.0.1}:8087:8087"
     volumes:
       - ${LIMEN_SENSORI_DIR:?imposta LIMEN_SENSORI_DIR}/client:/run/limen-sensori:ro
     group_add:

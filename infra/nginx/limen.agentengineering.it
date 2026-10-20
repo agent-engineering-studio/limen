@@ -3,6 +3,7 @@
 #   /            -> limen-frontend-static (127.0.0.1:5173)
 #   /api/        -> limen-api             (127.0.0.1:8080)  rotte gia' sotto /api
 #   /tiles/      -> limen-pg-tileserv     (127.0.0.1:7800)  prefisso rimosso
+#   /sensori/v2/ -> limen-worker          (127.0.0.1:8087)  ingresso HTTP firmato dei sensori (#265)
 #
 # Le stesse rotte di office-gdc.w3pro.it, senza /inference. Il frontend e'
 # costruito con VITE_API_URL=/ e VITE_TILESERV_URL=/tiles: chiama l'API sul
@@ -14,6 +15,11 @@
 #
 # Richiede /etc/nginx/snippets/office-gdc-proxy.conf e la map
 # $connection_upgrade in /etc/nginx/conf.d/upgrade.conf.
+
+# Per IP, prima che il worker legga la firma: la chiave si cerca nel database
+# e un client che martella con firme false non deve arrivarci. Un sensore
+# vero manda un messaggio ogni pochi minuti; il burst copre un arretrato.
+limit_req_zone $binary_remote_addr zone=limen_sensori_http:10m rate=30r/m;
 
 server {
     listen 80;
@@ -72,6 +78,16 @@ server {
     location = /openapi.json { proxy_pass http://127.0.0.1:8080; include /etc/nginx/snippets/office-gdc-proxy.conf; }
     location = /docs         { proxy_pass http://127.0.0.1:8080; include /etc/nginx/snippets/office-gdc-proxy.conf; }
     location = /redoc        { proxy_pass http://127.0.0.1:8080; include /etc/nginx/snippets/office-gdc-proxy.conf; }
+
+    location /sensori/v2/ {
+        limit_req zone=limen_sensori_http burst=20 nodelay;
+        limit_req_status 429;
+        # Il worker rifiuta già oltre i 2 KiB; qui si taglia prima di leggerlo.
+        client_max_body_size 4k;
+        proxy_pass http://127.0.0.1:8087;
+        include /etc/nginx/snippets/office-gdc-proxy.conf;
+        proxy_read_timeout 30s;
+    }
 
     location /tiles/ {
         proxy_pass http://127.0.0.1:7800/;

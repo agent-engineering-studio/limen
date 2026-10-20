@@ -7,17 +7,26 @@ dispositivo, ai punteggi o al registro di chi ha registrato i sensori.
 
 from __future__ import annotations
 
+import asyncio
+import base64
+import contextlib
+import socket
 from collections.abc import AsyncIterator
 from datetime import timedelta
 from importlib import resources
 
 import asyncpg
+import httpx
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ed25519
 from pydantic import SecretStr
 
 from limen.data.db import acquire, crea_pool, dsn_con_ruolo, usa_pool
 from limen.data.migrate import imposta_password
+from limen.integrations.iot.firma_http import messaggio_firmato
 from limen.integrations.iot.ingestore_v2 import Esito
+from limen.integrations.iot.ingresso_http import servi
 from tests.integration.test_iot_ingestore_v2 import (
     ADESSO,
     ID,
@@ -77,11 +86,64 @@ async def test_la_pipeline_salva_col_ruolo_ristretto(
     assert len(await _righe()) == 1
 
 
+async def test_la_firma_http_si_verifica_col_ruolo_ristretto(
+    reset_db: None, pool_ristretto: asyncpg.Pool
+) -> None:
+    """Il listener vero, su una porta vera: il ruolo ristretto deve arrivare
+    fino al task di ogni richiesta, e la 081 deve concedergli la chiave."""
+    await _cella_e_dispositivo()
+    chiave = ed25519.Ed25519PrivateKey.generate()
+    async with acquire() as conn:
+        await conn.execute(
+            "UPDATE sensor_devices SET chiave_pubblica = $2 WHERE id = $1",
+            ID,
+            chiave.public_key().public_bytes(
+                serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
+            ),
+        )
+    corpo = _msg(1, ("rainfall", "mm", 0.4, ADESSO - timedelta(minutes=5)))
+    tempo = int(ADESSO.timestamp())
+    with socket.socket() as libera:
+        libera.bind(("127.0.0.1", 0))
+        porta = int(libera.getsockname()[1])
+    ing = _ingestore(http_attivo=True, http_porta=porta)
+    with usa_pool(pool_ristretto):
+        listener = asyncio.create_task(servi(ing.gestisci, ing._c, adesso=lambda: ADESSO))
+    try:
+        async with httpx.AsyncClient() as client:
+            for _ in range(100):
+                try:
+                    risposta = await client.post(
+                        f"http://127.0.0.1:{porta}/sensori/v2/{ID}/obs",
+                        content=corpo,
+                        headers={
+                            "X-Limen-Tempo": str(tempo),
+                            "X-Limen-Firma": base64.b64encode(
+                                chiave.sign(messaggio_firmato(ID, tempo, corpo))
+                            ).decode(),
+                        },
+                    )
+                    break
+                except httpx.ConnectError:
+                    await asyncio.sleep(0.05)
+    finally:
+        listener.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await listener
+    assert risposta.status_code == 200
+    assert len(await _righe()) == 1
+    async with acquire() as conn:
+        # La riga è dell'ingestore, non del ruolo con cui gira il test.
+        assert await conn.fetchval("SELECT count(*) FROM sensor_observations") == 1
+
+
 @pytest.mark.parametrize(
     "sql",
     [
         f"UPDATE sensor_devices SET livello = 2 WHERE id = '{ID}'",
         f"UPDATE sensor_devices SET calibration = '{{}}' WHERE id = '{ID}'",
+        # La chiave la scrive solo l'approvazione (#265).
+        f"UPDATE sensor_devices SET chiave_pubblica = NULL WHERE id = '{ID}'",
         "SELECT email FROM sensori_registranti",
         "SELECT registrante_id FROM sensor_devices",
         "DELETE FROM sensor_observations",

@@ -178,10 +178,42 @@ marked **late**. They do not enter the forecast for the hour, but they stay
 in the archive and in the verifications: they are often the hours of the
 storm, the ones that matter most.
 
+### Without MQTT: a signed POST
+
+**A device that cannot keep a connection open delivers the same message
+with a POST.** Think of an LTE-M modem that wakes up once an hour, or a
+datalogger that only speaks HTTP. The body is the same SenML array, with its
+`seq`; instead of the certificate there is a signature made with the
+registered key:
+
+```
+POST https://limen.agentengineering.it/sensori/v2/pluvio-matera-01/obs
+X-Limen-Tempo: 1792065600
+X-Limen-Firma: <base64 signature>
+```
+
+The signature covers the bytes `limen-v2`, newline, the id, newline, the
+time in Unix seconds, newline, and the body exactly as sent. With a P-256 key
+it is ECDSA over SHA-256, in DER or raw on 64 bytes (`r` followed by `s`, as
+the ATECC608 returns it); with an Ed25519 key it is the 64-byte signature.
+The time inside the signature must be within five minutes of Limen's clock:
+an older signature is a message replayed by someone else, and is refused.
+
+A wrong signature, an unknown key or a time outside the window give `401`
+and store nothing. Past the signature the message follows the same rules as
+MQTT, with the same per-minute limit: `200` stored, `409` sequence already
+seen (the message is already there, move on to the next), `429` too many
+messages, `422` measurements from the future or too old, `403` device in
+quarantine. Each signed message gets in only once: a retry is signed again
+with a new time. The key does not expire with the certificate: it stays
+valid until the device is quarantined, and changing it means registering a
+new id.
+
 ## How a device gets its identity
 
 **The private key is born in the device and never leaves it.** The device
-generates its key pair on the P-256 curve and sends Limen only a signing
+generates its key pair on the P-256 curve (or Ed25519, if it only delivers
+with the signed POST) and sends Limen only a signing
 request (CSR) carrying its id. Limen signs it with the sensor CA and returns
 the certificate. Together with it, the device receives the CA certificate,
 the only one it will trust as a server.
@@ -458,7 +490,8 @@ is never published.
 | Trust levels in the engine ([#251](https://github.com/agent-engineering-studio/limen/issues/251)) | done |
 | v2 protocol and measurement intake over MQTT ([#252](https://github.com/agent-engineering-studio/limen/issues/252)) | done |
 | Stations on the map, with level, last reading and quality control ([#255](https://github.com/agent-engineering-studio/limen/issues/255)) | done |
-| Signed HTTP intake ([#265](https://github.com/agent-engineering-studio/limen/issues/265)) and LoRaWAN from The Things Network ([#266](https://github.com/agent-engineering-studio/limen/issues/266)) | to do |
+| Signed HTTP intake ([#265](https://github.com/agent-engineering-studio/limen/issues/265)) | done, switched on with the network |
+| LoRaWAN from The Things Network ([#266](https://github.com/agent-engineering-studio/limen/issues/266)) | to do |
 | Registration without an account ([#253](https://github.com/agent-engineering-studio/limen/issues/253)) | done, the form opens with the network |
 | Kit projects with example firmware ([#256](https://github.com/agent-engineering-studio/limen/issues/256)) | done |
 | Measuring the value of non-official rain gauges against the radar ([#250](https://github.com/agent-engineering-studio/limen/issues/250)) | to do |
