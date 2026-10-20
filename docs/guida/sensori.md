@@ -154,7 +154,14 @@ Le grandezze e le loro unità:
 | `rainfall` | `mm` | frana, alluvione |
 | `soil_moisture` | `m3/m3` | frana |
 | `water_level` | `m` | alluvione (in arrivo) |
-| `air_temperature`, `relative_humidity`, `wind_speed` | °C, %, km/h | incendio (in arrivo) |
+| `air_temperature` | `Cel` | incendio (in arrivo) |
+| `relative_humidity` | `%` | incendio (in arrivo) |
+| `wind_speed` | `km/h` | incendio (in arrivo) |
+
+Le grandezze «in arrivo» si accettano già, con gli stessi controlli di
+qualità delle altre, e si conservano: nessun motore le legge ancora, quindi
+non cambiano i punteggi. Il livello idrometrico è riferito allo zero
+dell'idrometro e può essere negativo.
 
 L'unità si scrive esattamente così: Limen non converte, e un messaggio con
 un'unità diversa si scarta. Una grandezza che Limen non conosce ancora si

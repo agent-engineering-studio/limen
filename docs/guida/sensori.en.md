@@ -154,7 +154,14 @@ The quantities and their units:
 | `rainfall` | `mm` | landslide, flood |
 | `soil_moisture` | `m3/m3` | landslide |
 | `water_level` | `m` | flood (coming) |
-| `air_temperature`, `relative_humidity`, `wind_speed` | °C, %, km/h | wildfire (coming) |
+| `air_temperature` | `Cel` | wildfire (coming) |
+| `relative_humidity` | `%` | wildfire (coming) |
+| `wind_speed` | `km/h` | wildfire (coming) |
+
+The «coming» quantities are already accepted, with the same quality checks
+as the others, and stored: no engine reads them yet, so they do not change
+the scores. The water level is relative to the gauge zero and can be
+negative.
 
 The unit is written exactly like this: Limen does not convert, and a
 message with a different unit is discarded. A quantity Limen does not know

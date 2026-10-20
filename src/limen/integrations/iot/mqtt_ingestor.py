@@ -55,6 +55,12 @@ _DEFAULT_SIGMA: dict[ObservedProperty, float] = {
     ObservedProperty.DISPLACEMENT: 1.0,
     ObservedProperty.VELOCITY: 3.0,
     ObservedProperty.ACCELERATION: 0.5,
+    # Una piena lampo alza un torrente di metri in pochi minuti: il passo
+    # ammesso (5 sigma) deve lasciarla passare, non scambiarla per un guasto.
+    ObservedProperty.WATER_LEVEL: 0.5,
+    ObservedProperty.AIR_TEMPERATURE: 2.0,
+    ObservedProperty.RELATIVE_HUMIDITY: 5.0,
+    ObservedProperty.WIND_SPEED: 10.0,
 }
 
 
