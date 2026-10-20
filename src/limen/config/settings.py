@@ -637,6 +637,12 @@ class IotSettings(BaseSettings):
     qc_displacement_range: tuple[float, float] = (-50000.0, 50000.0)
     qc_velocity_range: tuple[float, float] = (-2000.0, 2000.0)
     qc_acceleration_range: tuple[float, float] = (-2000.0, 2000.0)
+    # Il livello è riferito allo zero dell'idrometro, che può stare sopra il
+    # pelo dell'acqua in magra: un valore negativo è una misura, non un guasto.
+    qc_water_level_range: tuple[float, float] = (-20.0, 50.0)
+    qc_air_temperature_range: tuple[float, float] = (-40.0, 55.0)
+    qc_relative_humidity_range: tuple[float, float] = (0.0, 100.0)
+    qc_wind_speed_range: tuple[float, float] = (0.0, 250.0)
     spike_step_factor: float = Field(default=5.0, gt=0.0)
     flatline_window_minutes: int = Field(default=120, ge=5)
     flatline_min_samples: int = Field(default=12, ge=2)

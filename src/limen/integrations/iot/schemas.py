@@ -30,9 +30,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ObservedProperty(StrEnum):
-    """Six supported observed properties for V1.5.
+    """The observed properties a device may send.
 
-    Maps 1:1 to the rollup columns in ``sensor_features_hourly``.
+    The first six map 1:1 to the rollup columns in ``sensor_features_hourly``.
+    The last four (#254) are stored and quality-checked but no engine reads
+    them yet, so they have no rollup column: water level is for flood,
+    the other three for the wildfire FWI chain.
     """
 
     RAINFALL = "rainfall"
@@ -41,6 +44,10 @@ class ObservedProperty(StrEnum):
     DISPLACEMENT = "displacement"
     VELOCITY = "velocity"
     ACCELERATION = "acceleration"
+    WATER_LEVEL = "water_level"
+    AIR_TEMPERATURE = "air_temperature"
+    RELATIVE_HUMIDITY = "relative_humidity"
+    WIND_SPEED = "wind_speed"
 
 
 # UCUM unit codes considered canonical for each property. Devices may
@@ -52,6 +59,10 @@ CANONICAL_UNITS: dict[ObservedProperty, str] = {
     ObservedProperty.DISPLACEMENT: "mm",
     ObservedProperty.VELOCITY: "mm/d",
     ObservedProperty.ACCELERATION: "mm/d2",
+    ObservedProperty.WATER_LEVEL: "m",
+    ObservedProperty.AIR_TEMPERATURE: "Cel",
+    ObservedProperty.RELATIVE_HUMIDITY: "%",
+    ObservedProperty.WIND_SPEED: "km/h",
 }
 
 

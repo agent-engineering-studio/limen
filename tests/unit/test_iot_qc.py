@@ -164,3 +164,53 @@ def test_run_qc_ok_when_everything_passes() -> None:
         )
         is QcQuality.OK
     )
+
+
+# ---------------------------------------------------------------------------
+# Grandezze per alluvione e incendio (#254)
+# ---------------------------------------------------------------------------
+
+_NUOVE = (
+    (ObservedProperty.WATER_LEVEL, "m", -0.4, "qc_water_level_range"),
+    (ObservedProperty.AIR_TEMPERATURE, "Cel", 31.5, "qc_air_temperature_range"),
+    (ObservedProperty.RELATIVE_HUMIDITY, "%", 18.0, "qc_relative_humidity_range"),
+    (ObservedProperty.WIND_SPEED, "km/h", 42.0, "qc_wind_speed_range"),
+)
+
+
+@pytest.mark.parametrize(("prop", "unita", "valore", "campo"), _NUOVE)
+def test_nuove_grandezze_unita_e_intervallo(
+    prop: ObservedProperty, unita: str, valore: float, campo: str
+) -> None:
+    settings = IotSettings()
+    lo, hi = getattr(settings, campo)
+    assert _canonical_unit(prop) == unita
+    assert (
+        run_qc(
+            _obs(prop=prop, value=valore),
+            previous_value=None,
+            previous_timestamp=None,
+            recent_values=[],
+            sigma=1.0,
+            settings=settings,
+        )
+        is QcQuality.OK
+    )
+    assert check_range(_obs(prop=prop, value=hi + 1.0), settings) is QcQuality.RANGE
+    assert check_range(_obs(prop=prop, value=lo - 1.0), settings) is QcQuality.RANGE
+
+
+def test_umidita_relativa_oltre_cento_e_un_guasto() -> None:
+    obs = _obs(prop=ObservedProperty.RELATIVE_HUMIDITY, value=100.5)
+    assert check_range(obs, IotSettings()) is QcQuality.RANGE
+
+
+def test_ogni_grandezza_ha_intervallo_e_sigma() -> None:
+    from limen.integrations.iot.mqtt_ingestor import _DEFAULT_SIGMA
+    from limen.integrations.iot.qc import _range_for
+
+    settings = IotSettings()
+    for prop in ObservedProperty:
+        lo, hi = _range_for(prop, settings)
+        assert lo < hi
+        assert _DEFAULT_SIGMA[prop] > 0

@@ -71,6 +71,14 @@ def _range_for(prop: ObservedProperty, settings: IotSettings) -> tuple[float, fl
             return settings.qc_velocity_range
         case ObservedProperty.ACCELERATION:
             return settings.qc_acceleration_range
+        case ObservedProperty.WATER_LEVEL:
+            return settings.qc_water_level_range
+        case ObservedProperty.AIR_TEMPERATURE:
+            return settings.qc_air_temperature_range
+        case ObservedProperty.RELATIVE_HUMIDITY:
+            return settings.qc_relative_humidity_range
+        case ObservedProperty.WIND_SPEED:
+            return settings.qc_wind_speed_range
 
 
 def check_unit(observation: Observation) -> QcQuality:

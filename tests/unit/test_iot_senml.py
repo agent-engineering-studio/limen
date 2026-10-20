@@ -68,15 +68,49 @@ def test_tempo_relativo_all_arrivo() -> None:
 def test_grandezza_sconosciuta_ignorata_non_rifiutata() -> None:
     msg = analizza(
         _payload(
-            {"bn": f"{ID}/", "bt": BT, "n": "water_level", "u": "m", "v": 1.0},
+            {"bn": f"{ID}/", "bt": BT, "n": "snow_depth", "u": "cm", "v": 1.0},
             {"n": "rainfall", "u": "mm", "v": 0.0},
             {"n": "seq", "v": 3},
         ),
         device_id=ID,
         ricevuto=ADESSO,
     )
-    assert msg.ignorate == ("water_level",)
+    assert msg.ignorate == ("snow_depth",)
     assert len(msg.misure) == 1
+
+
+def test_grandezze_per_alluvione_e_incendio() -> None:
+    """#254: idrometro e stazione meteo passano con le unità del protocollo."""
+    msg = analizza(
+        _payload(
+            {"bn": f"{ID}/", "bt": BT, "n": "water_level", "u": "m", "v": 1.85},
+            {"n": "air_temperature", "u": "Cel", "v": 33.2},
+            {"n": "relative_humidity", "u": "%", "v": 21.0},
+            {"n": "wind_speed", "u": "km/h", "v": 27.5},
+            {"n": "seq", "v": 4},
+        ),
+        device_id=ID,
+        ricevuto=ADESSO,
+    )
+    assert msg.ignorate == ()
+    assert [m.grandezza for m in msg.misure] == [
+        ObservedProperty.WATER_LEVEL,
+        ObservedProperty.AIR_TEMPERATURE,
+        ObservedProperty.RELATIVE_HUMIDITY,
+        ObservedProperty.WIND_SPEED,
+    ]
+
+
+def test_temperatura_in_gradi_con_simbolo_si_scarta() -> None:
+    with pytest.raises(SenmlError, match="Cel"):
+        analizza(
+            _payload(
+                {"bn": f"{ID}/", "bt": BT, "n": "air_temperature", "u": "°C", "v": 20.0},
+                {"n": "seq", "v": 5},
+            ),
+            device_id=ID,
+            ricevuto=ADESSO,
+        )
 
 
 @pytest.mark.parametrize(
