@@ -548,6 +548,9 @@ class SensoriRegistrazioneSettings(BaseSettings):
     giorni_certificato: int = Field(default=730, ge=1)
     # Dove si collega il dispositivo, scritto nella mail di approvazione.
     broker_pubblico: str = "mqtts://limen.agentengineering.it:8883"
+    # Il webhook di The Things Network, scritto nella mail di un sensore
+    # LoRaWAN (#266).
+    webhook_ttn_pubblico: str = "https://limen.agentengineering.it/sensori/v2/ttn"
 
 
 class IotCittadiniSettings(BaseSettings):
@@ -613,6 +616,9 @@ class IotCittadiniSettings(BaseSettings):
     # è vecchia (un replay) o l'orologio è rotto. La sequenza resta l'altro
     # muro contro i replay, dentro la finestra.
     finestra_firma_secondi: int = Field(default=300, ge=10)
+    # Un uplink del webhook TTN (#266) porta i metadati di ogni gateway che
+    # l'ha ricevuto: qualche KB, non i 50 byte della misura.
+    ttn_max_corpo_bytes: int = Field(default=65536, ge=1024)
     registrazione: SensoriRegistrazioneSettings = Field(
         default_factory=SensoriRegistrazioneSettings
     )

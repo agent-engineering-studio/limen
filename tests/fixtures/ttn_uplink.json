@@ -1,0 +1,70 @@
+{
+  "end_device_ids": {
+    "device_id": "eui-70b3d57ed0012345",
+    "application_ids": {
+      "application_id": "pluviometri-matera"
+    },
+    "dev_eui": "70B3D57ED0012345",
+    "join_eui": "0000000000000000",
+    "dev_addr": "260B1234"
+  },
+  "correlation_ids": [
+    "as:up:01JAB0QK8Z3T5W7Y9A1C3E5G7J",
+    "gs:conn:01JA9ZX2M4P6R8T0V2X4Z6B8D0",
+    "gs:up:host:01JA9ZX2M5Q7S9U1W3Y5A7C9E1",
+    "gs:uplink:01JAB0QK1H3K5M7P9R1T3V5X7Z",
+    "ns:uplink:01JAB0QK1J4L6N8Q0S2U4W6Y8A",
+    "rpc:/ttn.lorawan.v3.GsNs/HandleUplink:01JAB0QK1J8C0E2G4J6L8N0Q2S",
+    "rpc:/ttn.lorawan.v3.NsAs/HandleUplink:01JAB0QK8Y1B3D5F7H9K1M3P5R"
+  ],
+  "received_at": "2026-06-01T11:30:00.412345678Z",
+  "uplink_message": {
+    "session_key_id": "AZJ5Q2xK3m8wT1vN4bR7yA==",
+    "f_port": 1,
+    "f_cnt": 4,
+    "frm_payload": "gqUhcXBsdXZpby1tYXRlcmEtMDEvAGhyYWluZmFsbAFibW0C+0AMAAAAAAAABjh3ogBjc2VxAgE=",
+    "rx_metadata": [
+      {
+        "gateway_ids": {
+          "gateway_id": "matera-sassi-gw",
+          "eui": "B827EBFFFE123456"
+        },
+        "time": "2026-06-01T11:29:59.987654Z",
+        "timestamp": 2876543210,
+        "rssi": -108,
+        "channel_rssi": -108,
+        "snr": -4.25,
+        "location": {
+          "latitude": 40.6664,
+          "longitude": 16.6043,
+          "altitude": 410,
+          "source": "SOURCE_REGISTRY"
+        },
+        "uplink_token": "Ch0KGwoPbWF0ZXJhLXNhc3NpLWd3EgipJ+v//hI0VhDqsMXbChoMCJ+r8LYGEJDv2pYDIJDKkp2kpwE=",
+        "channel_index": 3,
+        "received_at": "2026-06-01T11:30:00.012345Z"
+      }
+    ],
+    "settings": {
+      "data_rate": {
+        "lora": {
+          "bandwidth": 125000,
+          "spreading_factor": 10,
+          "coding_rate": "4/5"
+        }
+      },
+      "frequency": "867300000",
+      "timestamp": 2876543210,
+      "time": "2026-06-01T11:29:59.987654Z"
+    },
+    "received_at": "2026-06-01T11:30:00.198765432Z",
+    "consumed_airtime": "0.452608s",
+    "network_ids": {
+      "net_id": "000013",
+      "ns_id": "EC656E0000000181",
+      "tenant_id": "ttn",
+      "cluster_id": "eu1",
+      "cluster_address": "eu1.cloud.thethings.network"
+    }
+  }
+}

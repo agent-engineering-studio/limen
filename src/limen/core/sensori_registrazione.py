@@ -10,6 +10,10 @@ La CSR e non la chiave: il dispositivo genera la sua chiave privata e la
 tiene (#252), Limen firma il certificato e lo manda per mail. Un certificato è
 pubblico, una chiave in una casella di posta no.
 
+Un sensore LoRaWAN (#266) non ha una CSR: manda l'id, il DevEUI e l'id della
+sua applicazione su The Things Network. Le chiavi LoRaWAN restano fra il
+dispositivo e TTN; approvare genera il segreto del webhook dell'applicazione.
+
 Le difese del modulo sono quelle di :mod:`limen.core.contributi` — campo
 nascosto, tempo minimo, limite per indirizzo e complessivo — più la quota di
 dispositivi per registrante. La richiesta si scrive nella stessa transazione
@@ -20,6 +24,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Annotated, Literal
@@ -29,7 +34,14 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec, ed25519
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from cryptography.x509.oid import NameOID
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 from limen.config.settings import SensoriRegistrazioneSettings
 from limen.core.contributi import Limitatore, _Email
@@ -57,6 +69,15 @@ class CsrNonValidaError(ValueError):
     pass
 
 
+class LorawanNonValidoError(ValueError):
+    pass
+
+
+# Gli id di The Things Stack: minuscole, cifre e trattini singoli, fino a 36.
+APPLICAZIONE_TTN = re.compile(r"^[a-z0-9](-?[a-z0-9])*$")
+DEV_EUI = re.compile(r"^[0-9A-F]{16}$")
+
+
 class RichiestaSensoreIn(BaseModel):
     """Il modulo come arriva dal browser."""
 
@@ -65,7 +86,14 @@ class RichiestaSensoreIn(BaseModel):
     tipo: TipoSensore
     lon: float = Field(ge=-180, le=180)
     lat: float = Field(ge=-90, le=90)
-    csr: _PEM_CSR
+    modo: Literal["certificato", "lorawan"] = "certificato"
+    csr: _PEM_CSR | None = None
+    # Solo LoRaWAN: con un certificato l'id è il CN della CSR.
+    device_id: Annotated[str, StringConstraints(strip_whitespace=True, max_length=63)] | None = None
+    dev_eui: Annotated[str, StringConstraints(strip_whitespace=True, max_length=23)] | None = None
+    ttn_applicazione: (
+        Annotated[str, StringConstraints(strip_whitespace=True, max_length=36)] | None
+    ) = None
     email: _Email
     note: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] | None = None
     # Base64 di un JPEG o PNG; il tetto vero è in settings, questo ferma un
@@ -81,6 +109,15 @@ class RichiestaSensoreIn(BaseModel):
     @classmethod
     def _minuscola(cls, v: str) -> str:
         return v.lower()
+
+    @model_validator(mode="after")
+    def _un_modo(self) -> RichiestaSensoreIn:
+        lorawan = (self.device_id, self.dev_eui, self.ttn_applicazione)
+        if self.modo == "certificato" and (self.csr is None or any(lorawan)):
+            raise ValueError("con un certificato serve la CSR, e solo quella")
+        if self.modo == "lorawan" and (self.csr is not None or not all(lorawan)):
+            raise ValueError("un sensore LoRaWAN manda id, DevEUI e applicazione TTN, non la CSR")
+        return self
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,12 +153,44 @@ def leggi_csr(pem: str) -> Csr:
         raise CsrNonValidaError(
             "il CN va scritto in minuscole, cifre e trattini, da 3 a 63 caratteri"
         )
-    if device_id in ID_RISERVATI:
-        raise CsrNonValidaError(f"'{device_id}' è un id riservato")
+    _id_dispositivo(device_id, CsrNonValidaError)
     der = chiave.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
     h = hashes.Hash(hashes.SHA256())
     h.update(der)
     return Csr(device_id=device_id, impronta=h.finalize().hex(":"), chiave=der)
+
+
+@dataclass(frozen=True, slots=True)
+class Lorawan:
+    device_id: str
+    dev_eui: str
+    applicazione: str
+
+
+def _id_dispositivo(device_id: str, errore: type[ValueError]) -> str:
+    if not ID_DISPOSITIVO.match(device_id):
+        raise errore("l'id va scritto in minuscole, cifre e trattini, da 3 a 63 caratteri")
+    if device_id in ID_RISERVATI:
+        raise errore(f"'{device_id}' è un id riservato")
+    return device_id
+
+
+def leggi_lorawan(device_id: str, dev_eui: str, applicazione: str) -> Lorawan:
+    """Id, DevEUI (16 cifre esadecimali, separatori ammessi) e applicazione TTN."""
+    eui = re.sub(r"[\s:-]", "", dev_eui).upper()
+    if not DEV_EUI.fullmatch(eui):
+        raise LorawanNonValidoError("il DevEUI sono 16 cifre esadecimali")
+    if eui == "0" * 16:
+        raise LorawanNonValidoError("il DevEUI tutto zeri non identifica un dispositivo")
+    if not (2 <= len(applicazione) <= 36 and APPLICAZIONE_TTN.fullmatch(applicazione)):
+        raise LorawanNonValidoError(
+            "l'id dell'applicazione TTN va scritto in minuscole, cifre e trattini"
+        )
+    return Lorawan(
+        device_id=_id_dispositivo(device_id, LorawanNonValidoError),
+        dev_eui=eui,
+        applicazione=applicazione,
+    )
 
 
 def _foto(b64: str, *, max_kb: int) -> tuple[str, str, bytes]:
@@ -184,16 +253,34 @@ LIMITATORE = Limitatore()
 
 
 def componi_mail(
-    dati: RichiestaSensoreIn, *, richiesta_id: int, csr: Csr, cell_id: str, foto: bool
+    dati: RichiestaSensoreIn,
+    *,
+    richiesta_id: int,
+    identita: Csr | Lorawan,
+    cell_id: str,
+    foto: bool,
 ) -> tuple[str, str]:
-    oggetto = f"[Limen] Richiesta sensore #{richiesta_id} · {TIPO_IT[dati.tipo]} · {csr.device_id}"
+    device_id = identita.device_id
+    oggetto = f"[Limen] Richiesta sensore #{richiesta_id} · {TIPO_IT[dati.tipo]} · {device_id}"
+    if isinstance(identita, Csr):
+        chi = [f"Impronta della chiave (SHA-256): {identita.impronta}"]
+        approvare = "Approvare firma la CSR, crea il dispositivo al livello 0 (fuori dallo"
+        manda = "scoring) e manda il certificato al registrante. Per rispondere a chi ha"
+    else:
+        chi = [
+            "Collegamento: LoRaWAN, via il webhook di The Things Network",
+            f"DevEUI: {identita.dev_eui}",
+            f"Applicazione TTN: {identita.applicazione}",
+        ]
+        approvare = "Approvare crea il dispositivo al livello 0 (fuori dallo scoring) e"
+        manda = "manda il segreto del webhook al registrante. Per rispondere a chi ha"
     righe = [
         f"Richiesta di registrazione #{richiesta_id}",
         "",
-        f"Dispositivo: {csr.device_id}",
+        f"Dispositivo: {device_id}",
         f"Tipo: {TIPO_IT[dati.tipo]}",
         f"Posizione proposta: {dati.lat:.5f}, {dati.lon:.5f} (cella {cell_id})",
-        f"Impronta della chiave (SHA-256): {csr.impronta}",
+        *chi,
         f"Licenza dei dati: {dati.licenza}",
         f"Foto dell'installazione: {'allegata' if foto else 'non inviata'}",
         "",
@@ -204,8 +291,8 @@ def componi_mail(
         f"  uv run limen sensore approva {richiesta_id}",
         f"  uv run limen sensore respingi {richiesta_id}",
         "",
-        "Approvare firma la CSR, crea il dispositivo al livello 0 (fuori dallo",
-        "scoring) e manda il certificato al registrante. Per rispondere a chi ha",
+        approvare,
+        manda,
         "scritto basta rispondere a questa mail.",
     ]
     return oggetto, "\n".join(righe)
@@ -233,11 +320,18 @@ async def ricevi(
         log.warning("sensori.registrazione.non_configurata")
         return NonPartita()
 
+    identita: Csr | Lorawan
     try:
-        csr = leggi_csr(dati.csr)
+        if dati.csr is not None:
+            identita = leggi_csr(dati.csr)
+        else:
+            assert dati.device_id and dati.dev_eui and dati.ttn_applicazione  # il validatore
+            identita = leggi_lorawan(dati.device_id, dati.dev_eui, dati.ttn_applicazione)
         allegati = [] if dati.foto is None else [_foto(dati.foto, max_kb=settings.max_foto_kb)]
     except ValueError as exc:
         return NonValida(str(exc))
+    device_id = identita.device_id
+    dev_eui = identita.dev_eui if isinstance(identita, Lorawan) else None
     # Il limite prima di ogni domanda al database: altrimenti il modulo
     # direbbe, senza freno, quali id esistono. Un rifiuto consuma il posto.
     momento = await limitatore.prenota(
@@ -249,8 +343,10 @@ async def ricevi(
     cell_id = await repo.cella_per_punto(dati.lon, dati.lat)
     if cell_id is None:
         return NonValida("la posizione è fuori dal territorio coperto da Limen")
-    if await repo.id_in_uso(csr.device_id):
-        return NonValida(f"l'id '{csr.device_id}' è già in uso: scegli un altro CN")
+    if await repo.id_in_uso(device_id):
+        return NonValida(f"l'id '{device_id}' è già in uso: scegli un altro id")
+    if dev_eui is not None and await repo.dev_eui_in_uso(dev_eui):
+        return NonValida(f"il DevEUI {dev_eui} è già registrato")
 
     try:
         async with repo.transazione() as conn:
@@ -266,20 +362,26 @@ async def ricevi(
             richiesta_id = await repo.inserisci_richiesta(
                 conn,
                 registrante_id=registrante_id,
-                device_id=csr.device_id,
+                device_id=device_id,
                 device_type=dati.tipo,
                 lon=dati.lon,
                 lat=dati.lat,
                 cell_id=cell_id,
                 csr=dati.csr,
+                dev_eui=dev_eui,
+                ttn_applicazione=None if dev_eui is None else dati.ttn_applicazione,
                 licenza=dati.licenza,
             )
             if richiesta_id is None:
-                # Lo stesso id inviato due volte in parallelo: il vincolo del
-                # database l'ha fermato, la transazione si annulla.
+                # Lo stesso id (o DevEUI) inviato due volte in parallelo: il
+                # vincolo del database l'ha fermato, la transazione si annulla.
                 raise _DoppioInvioError
             oggetto, testo = componi_mail(
-                dati, richiesta_id=richiesta_id, csr=csr, cell_id=cell_id, foto=bool(allegati)
+                dati,
+                richiesta_id=richiesta_id,
+                identita=identita,
+                cell_id=cell_id,
+                foto=bool(allegati),
             )
             try:
                 partita = await invia(
@@ -302,10 +404,11 @@ async def ricevi(
                 raise _MailNonPartitaError
     except _DoppioInvioError:
         await limitatore.libera(ip, momento)
-        return NonValida(f"l'id '{csr.device_id}' è già in uso: scegli un altro CN")
+        quale = "l'id o il DevEUI" if dev_eui is not None else "l'id"
+        return NonValida(f"{quale} è già in uso: scegli un altro id")
     except _MailNonPartitaError:
         await limitatore.libera(ip, momento)
-        log.warning("sensori.registrazione.mail_non_inviata", device_id=csr.device_id)
+        log.warning("sensori.registrazione.mail_non_inviata", device_id=device_id)
         return NonPartita()
-    log.info("sensori.registrazione.ricevuta", richiesta=richiesta_id, device_id=csr.device_id)
+    log.info("sensori.registrazione.ricevuta", richiesta=richiesta_id, device_id=device_id)
     return Ricevuta()

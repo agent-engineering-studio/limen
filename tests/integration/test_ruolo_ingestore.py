@@ -36,6 +36,7 @@ from tests.integration.test_iot_ingestore_v2 import (
     _msg,
     _righe,
 )
+from tests.integration.test_iot_ttn import UPLINK, _registra_ttn, _webhook
 
 pytestmark = pytest.mark.integration
 
@@ -137,6 +138,19 @@ async def test_la_firma_http_si_verifica_col_ruolo_ristretto(
         assert await conn.fetchval("SELECT count(*) FROM sensor_observations") == 1
 
 
+async def test_il_webhook_ttn_col_ruolo_ristretto(
+    reset_db: None, pool_ristretto: asyncpg.Pool
+) -> None:
+    """La 082 concede DevEUI, applicazione e impronta del segreto (#266)."""
+    await _cella_e_dispositivo()
+    await _registra_ttn()
+    ing = _ingestore()
+    with usa_pool(pool_ristretto):
+        risposta = await _webhook(ing, UPLINK)
+    assert (risposta.status_code, risposta.json()) == (200, {"esito": "salvato"})
+    assert len(await _righe()) == 1
+
+
 @pytest.mark.parametrize(
     "sql",
     [
@@ -146,6 +160,10 @@ async def test_la_firma_http_si_verifica_col_ruolo_ristretto(
         f"UPDATE sensor_devices SET chiave_pubblica = NULL WHERE id = '{ID}'",
         "SELECT email FROM sensori_registranti",
         "SELECT registrante_id FROM sensor_devices",
+        # Il webhook legge l'impronta del segreto, non la scrive né sa di chi è (#266).
+        "SELECT registrante_id FROM sensori_ttn",
+        "UPDATE sensori_ttn SET segreto_sha256 = segreto_sha256",
+        f"UPDATE sensor_devices SET dev_eui = NULL WHERE id = '{ID}'",
         "DELETE FROM sensor_observations",
         "SELECT count(*) FROM risk_assessments",
         "INSERT INTO alert_dispatches DEFAULT VALUES",
@@ -176,3 +194,12 @@ async def test_un_ruolo_ristretto_con_privilegi_ferma_la_migrazione(pg_pool: asy
             await conn.execute("REVOKE pg_read_all_data FROM limen_ingestore")
         # Pulito, la stessa migrazione si riapplica senza errori.
         await conn.execute(sql)
+        # Il suo REVOKE ALL toglie anche le colonne concesse dopo: le
+        # migrazioni successive, idempotenti, le rimettono per i test che
+        # vengono dopo questo.
+        for successiva in ("081_sensori_chiave_pubblica.sql", "082_sensori_lorawan.sql"):
+            await conn.execute(
+                resources.files("limen.data.migrations")
+                .joinpath(successiva)
+                .read_text(encoding="utf-8")
+            )

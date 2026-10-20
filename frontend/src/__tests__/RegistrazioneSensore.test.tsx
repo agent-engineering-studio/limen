@@ -16,7 +16,7 @@ function aperta(valore: boolean): void {
   });
 }
 
-async function compila(csr = CSR): Promise<void> {
+async function compila(csr: string | null = CSR): Promise<void> {
   await screen.findByLabelText("Tipo di sensore");
   const aperto = Date.now();
   vi.spyOn(Date, "now").mockReturnValue(aperto + 60_000);
@@ -26,9 +26,11 @@ async function compila(csr = CSR): Promise<void> {
   fireEvent.change(screen.getByLabelText(/Longitudine/), {
     target: { value: "16.6" },
   });
-  fireEvent.change(screen.getByLabelText(/CSR del dispositivo/), {
-    target: { value: csr },
-  });
+  if (csr !== null) {
+    fireEvent.change(screen.getByLabelText(/CSR del dispositivo/), {
+      target: { value: csr },
+    });
+  }
   fireEvent.change(screen.getByLabelText("Email"), {
     target: { value: "maker@example.org" },
   });
@@ -64,6 +66,7 @@ describe("RegistrazioneSensore", () => {
       tipo: "pluviometro",
       lat: 40.66,
       lon: 16.6,
+      modo: "certificato",
       csr: CSR,
       email: "maker@example.org",
       note: null,
@@ -73,6 +76,40 @@ describe("RegistrazioneSensore", () => {
       informativa: true,
       sito_web: "",
     });
+  });
+
+  it("LoRaWAN: manda id, DevEUI e applicazione TTN, senza CSR", async () => {
+    aperta(true);
+    const invia = vi
+      .spyOn(defaultApiClient, "registraSensore")
+      .mockResolvedValue({ ricevuta: true });
+    render(<RegistrazioneSensore />);
+    await screen.findByLabelText("Collegamento");
+    fireEvent.change(screen.getByLabelText("Collegamento"), {
+      target: { value: "lorawan" },
+    });
+    expect(screen.queryByLabelText(/CSR del dispositivo/)).toBeNull();
+    fireEvent.change(screen.getByLabelText(/^Id del dispositivo/), {
+      target: { value: "pluvio-aliano-01" },
+    });
+    fireEvent.change(screen.getByLabelText(/DevEUI/), {
+      target: { value: "70B3D57ED0012345" },
+    });
+    fireEvent.change(screen.getByLabelText(/applicazione su The Things/), {
+      target: { value: "pluviometri-aliano" },
+    });
+    await compila(null);
+    fireEvent.click(screen.getByRole("button", { name: "Invia la richiesta" }));
+
+    expect(await screen.findByText(/Richiesta inviata/)).toBeTruthy();
+    const body = invia.mock.calls[0]![0];
+    expect(body).toMatchObject({
+      modo: "lorawan",
+      device_id: "pluvio-aliano-01",
+      dev_eui: "70B3D57ED0012345",
+      ttn_applicazione: "pluviometri-aliano",
+    });
+    expect(body).not.toHaveProperty("csr");
   });
 
   it("una chiave privata incollata blocca l'invio", async () => {

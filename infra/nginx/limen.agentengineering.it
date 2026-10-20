@@ -4,6 +4,7 @@
 #   /api/        -> limen-api             (127.0.0.1:8080)  rotte gia' sotto /api
 #   /tiles/      -> limen-pg-tileserv     (127.0.0.1:7800)  prefisso rimosso
 #   /sensori/v2/ -> limen-worker          (127.0.0.1:8087)  ingresso HTTP firmato dei sensori (#265)
+#                                                           e webhook di The Things Network (#266)
 #
 # Le stesse rotte di office-gdc.w3pro.it, senza /inference. Il frontend e'
 # costruito con VITE_API_URL=/ e VITE_TILESERV_URL=/tiles: chiama l'API sul
@@ -20,6 +21,12 @@
 # e un client che martella con firme false non deve arrivarci. Un sensore
 # vero manda un messaggio ogni pochi minuti; il burst copre un arretrato.
 limit_req_zone $binary_remote_addr zone=limen_sensori_http:10m rate=30r/m;
+# Il webhook TTN arriva da pochi indirizzi di TTN per tutte le applicazioni:
+# per IP si fermerebbero insieme. Si conta per segreto, cioè per applicazione,
+# con un tetto per IP più largo contro chi cambia header a ogni richiesta (una
+# richiesta senza header ha la chiave vuota e conta solo per IP).
+limit_req_zone $http_authorization zone=limen_sensori_ttn:10m rate=30r/m;
+limit_req_zone $binary_remote_addr zone=limen_sensori_ttn_ip:10m rate=600r/m;
 
 server {
     listen 80;
@@ -84,6 +91,18 @@ server {
         limit_req_status 429;
         # Il worker rifiuta già oltre i 2 KiB; qui si taglia prima di leggerlo.
         client_max_body_size 4k;
+        proxy_pass http://127.0.0.1:8087;
+        include /etc/nginx/snippets/office-gdc-proxy.conf;
+        proxy_read_timeout 30s;
+    }
+
+    location = /sensori/v2/ttn {
+        limit_req zone=limen_sensori_ttn burst=20 nodelay;
+        limit_req zone=limen_sensori_ttn_ip burst=100 nodelay;
+        limit_req_status 429;
+        # Un uplink porta i metadati di ogni gateway: qualche KB. Il worker
+        # rifiuta oltre IOT__CITTADINI__TTN_MAX_CORPO_BYTES (64 KiB).
+        client_max_body_size 64k;
         proxy_pass http://127.0.0.1:8087;
         include /etc/nginx/snippets/office-gdc-proxy.conf;
         proxy_read_timeout 30s;

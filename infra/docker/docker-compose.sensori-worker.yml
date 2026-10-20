@@ -13,13 +13,13 @@
 # restano ai default di `IotCittadiniSettings`; per cambiarne una si aggiunge
 # la sua riga qui sotto.
 #
-# L'ingresso HTTP firmato (#265) ascolta nel container su 0.0.0.0 e si
-# pubblica solo sul loopback dell'host: lo raggiunge nginx (`location
-# /sensori/v2/`), mai la rete. Spento finché IOT__CITTADINI__HTTP_ATTIVO non è
-# true; pubblicare la porta con il listener spento non apre niente. Dentro la
-# rete docker gli altri container lo raggiungono senza passare da nginx: il
-# worker ripete i suoi controlli (dimensione, firma, frequenza), non il
-# limit_req per IP.
+# L'ingresso HTTP firmato (#265) e il webhook TTN (#266) ascoltano nel
+# container su 0.0.0.0 e si pubblicano solo sul loopback dell'host: li
+# raggiunge nginx (`location /sensori/v2/`), mai la rete. Spenti finché
+# IOT__CITTADINI__HTTP_ATTIVO non è true; pubblicare la porta con il listener
+# spento non apre niente. Dentro la rete docker gli altri container li
+# raggiungono senza passare da nginx: il worker ripete i suoi controlli
+# (dimensione, firma o segreto, frequenza), non il limit_req.
 services:
   worker:
     environment:

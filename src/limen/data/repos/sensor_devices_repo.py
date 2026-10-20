@@ -141,6 +141,23 @@ async def chiave_pubblica(device_id: str) -> bytes | None:
     return chiave
 
 
+async def per_dev_eui(dev_eui: str) -> tuple[str, str | None] | None:
+    """L'id e l'applicazione TTN del dispositivo LoRaWAN con questo DevEUI (#266)."""
+    async with acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id, ttn_applicazione FROM sensor_devices WHERE dev_eui = $1", dev_eui
+        )
+    return None if row is None else (row["id"], row["ttn_applicazione"])
+
+
+async def segreti_ttn() -> dict[str, bytes]:
+    """Lo SHA-256 del segreto del webhook di ogni applicazione TTN (#266): una
+    riga per registrante, si legge tutta."""
+    async with acquire() as conn:
+        rows = await conn.fetch("SELECT applicazione, segreto_sha256 FROM sensori_ttn")
+    return {r["applicazione"]: r["segreto_sha256"] for r in rows}
+
+
 async def touch_last_seen(device_id: str, *, at: datetime) -> None:
     """Bump ``last_seen_at`` (idempotent — no-op if device is missing)."""
     async with acquire() as conn:
@@ -286,6 +303,8 @@ __all__ = [
     "StazionePubblica",
     "chiave_pubblica",
     "get_device",
+    "per_dev_eui",
+    "segreti_ttn",
     "set_status",
     "stato_dal_dispositivo",
     "stazioni_pubbliche",

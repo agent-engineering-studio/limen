@@ -21,6 +21,9 @@ dato di cui fidarsi:
 * i campi che la RFC dichiara da capire per forza (quelli che finiscono con
   ``_``) fanno scartare il messaggio; gli altri campi sconosciuti si ignorano.
 
+Su LoRaWAN lo stesso messaggio viaggia in CBOR (RFC 8428 §6, #266):
+:func:`cbor_a_json` lo riscrive in JSON e da lì le regole sono queste.
+
 Il parser è puro: nessun I/O, nessun orologio letto da qui.
 """
 
@@ -161,4 +164,63 @@ def analizza(payload: bytes, *, device_id: str, ricevuto: datetime) -> Messaggio
     return MessaggioV2(sequenza=sequenza, misure=tuple(misure), ignorate=tuple(ignorate))
 
 
-__all__ = ["MessaggioV2", "Misura", "SenmlError", "analizza"]
+# RFC 8428 §6, tabella 6: in CBOR le etichette sono interi.
+_ETICHETTE_CBOR: dict[int, str] = {
+    -1: "bver",
+    -2: "bn",
+    -3: "bt",
+    -4: "bu",
+    -5: "bv",
+    -6: "bs",
+    0: "n",
+    1: "u",
+    2: "v",
+    3: "vs",
+    4: "vb",
+    5: "s",
+    6: "t",
+    7: "ut",
+    8: "vd",
+}
+
+
+def cbor_a_json(payload: bytes) -> bytes:
+    """Un SenML CBOR come SenML JSON, che poi passa da :func:`analizza`.
+
+    Un'etichetta intera fuori dalla tabella non si sa se vada capita per
+    forza, e un valore senza equivalente JSON (byte, tag) non è una misura:
+    in entrambi i casi si scarta il messaggio.
+    """
+    import cbor2
+
+    try:
+        records = cbor2.loads(payload)
+    except (cbor2.CBORError, ValueError, TypeError, RecursionError, OverflowError) as exc:
+        # RecursionError: un tag condiviso annida all'infinito, come le
+        # parentesi del JSON.
+        raise SenmlError("CBOR non valido") from exc
+    if not isinstance(records, list):
+        raise SenmlError("serve un array SenML non vuoto")
+    tradotti: list[dict[str, Any]] = []
+    for record in records:
+        if not isinstance(record, dict):
+            raise SenmlError("ogni record deve essere una mappa")
+        tradotto: dict[str, Any] = {}
+        for chiave, valore in record.items():
+            if isinstance(chiave, str):
+                nome = chiave
+            elif isinstance(chiave, int) and not isinstance(chiave, bool):
+                if chiave not in _ETICHETTE_CBOR:
+                    raise SenmlError(f"etichetta CBOR {chiave} sconosciuta")
+                nome = _ETICHETTE_CBOR[chiave]
+            else:
+                raise SenmlError("etichetta CBOR né intera né testo")
+            tradotto[nome] = valore
+        tradotti.append(tradotto)
+    try:
+        return json.dumps(tradotti, allow_nan=False).encode()
+    except (TypeError, ValueError, RecursionError) as exc:
+        raise SenmlError("valore CBOR senza equivalente JSON") from exc
+
+
+__all__ = ["MessaggioV2", "Misura", "SenmlError", "analizza", "cbor_a_json"]

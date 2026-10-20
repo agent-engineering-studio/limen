@@ -10,10 +10,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
+import re
 from datetime import UTC, datetime
 from typing import Any
 
+import asyncpg
+import httpx
 import pytest
 from shapely.geometry import Polygon
 
@@ -29,6 +33,8 @@ from limen.core import sensori_registrazione as reg
 from limen.data.db import acquire
 from limen.data.repos import aoi_repo, grid_repo, sensor_devices_repo
 from limen.integrations.iot.ingestore_v2 import Esito, IngestoreV2
+from limen.integrations.iot.ingresso_http import applicazione
+from tests.integration.test_iot_ttn import UPLINK
 from tests.unit.test_sensori_registrazione import csr_pem, modulo
 
 pytestmark = pytest.mark.integration
@@ -319,3 +325,174 @@ async def test_ricevi_tiene_la_quota_contro_invii_paralleli(cella: str) -> None:
         )
     )
     assert sum(isinstance(e, reg.Ricevuta) for e in esiti) == 1
+
+
+LORA: dict[str, Any] = {
+    "modo": "lorawan",
+    "csr": None,
+    "device_id": ID,
+    # Come lo stampa la console TTN, con i separatori.
+    "dev_eui": "70-B3-D5-7E-D0-01-23-45",
+    "ttn_applicazione": "pluviometri-matera",
+}
+
+
+def _segreto_nella_mail(testo: str) -> str | None:
+    trovato = re.search(r"Authorization: Bearer (\S+)", testo)
+    return None if trovato is None else trovato.group(1)
+
+
+async def _uplink(ingestore: IngestoreV2, segreto: str) -> httpx.Response:
+    app = applicazione(ingestore.gestisci, ingestore._c, adesso=lambda: ADESSO)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://sensori"
+    ) as client:
+        return await client.post(
+            "/sensori/v2/ttn",
+            content=json.dumps(UPLINK).encode(),
+            headers={"Authorization": f"Bearer {segreto}"},
+        )
+
+
+async def test_lorawan_richiesta_approva_webhook(
+    cella: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#266: modulo LoRaWAN → approva → segreto per mail → l'uplink TTN entra."""
+    posta = _Posta()
+    assert isinstance(await _ricevi(posta, **LORA), reg.Ricevuta)
+    [avviso] = posta.mail
+    assert "DevEUI: 70B3D57ED0012345" in avviso["testo"]
+    assert "Applicazione TTN: pluviometri-matera" in avviso["testo"]
+    rid = await _richiesta_id()
+
+    ca = _CaFinta()
+    posta_cli = _Posta()
+    monkeypatch.setattr(sensore, "invia_testo", posta_cli.invia)
+    assert await sensore.approva(rid, settings=get_settings(), ca=ca) == 0
+    assert ca.firmate == []
+    [consegna] = posta_cli.mail
+    segreto = _segreto_nella_mail(consegna["testo"])
+    assert segreto is not None and len(segreto) >= 40
+    async with acquire() as conn:
+        # Nel database solo l'impronta.
+        assert await conn.fetchval("SELECT segreto_sha256 FROM sensori_ttn") == (
+            hashlib.sha256(segreto.encode()).digest()
+        )
+    dispositivo = await sensor_devices_repo.get_device(ID)
+    assert dispositivo is not None and (dispositivo.livello, dispositivo.status) == (0, "offline")
+    assert await sensor_devices_repo.per_dev_eui("70B3D57ED0012345") == (ID, "pluviometri-matera")
+
+    ingestore = IngestoreV2(
+        IotSettings(cittadini=IotCittadiniSettings(enabled=True)), adesso=lambda: ADESSO
+    )
+    risposta = await _uplink(ingestore, segreto)
+    assert (risposta.status_code, risposta.json()) == (200, {"esito": "salvato"})
+
+    # Rilanciare `approva` rimanda la mail, ma un segreto non si rimanda.
+    assert await sensore.approva(rid, settings=get_settings(), ca=ca) == 0
+    assert _segreto_nella_mail(posta_cli.mail[1]["testo"]) is None
+
+    # Un segreto perso si sostituisce: il vecchio smette di valere.
+    assert await sensore.ttn_segreto("pluviometri-matera", settings=get_settings()) == 0
+    nuovo = _segreto_nella_mail(posta_cli.mail[2]["testo"])
+    assert nuovo is not None and nuovo != segreto
+    assert posta_cli.mail[2]["destinatari"] == [MAIL]
+    assert (await _uplink(ingestore, segreto)).status_code == 401
+    assert (await _uplink(ingestore, nuovo)).status_code == 202  # stessa seq: doppione
+    assert await sensore.ttn_segreto("non-esiste", settings=get_settings()) == 1
+
+
+async def test_lorawan_seconda_applicazione_e_applicazione_altrui(
+    cella: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    posta_cli = _Posta()
+    monkeypatch.setattr(sensore, "invia_testo", posta_cli.invia)
+    await _ricevi(_Posta(), **LORA)
+    assert await sensore.approva(await _richiesta_id(), settings=get_settings(), ca=_CaFinta()) == 0
+
+    # Un secondo dispositivo nella stessa applicazione: vale il segreto già dato.
+    await _ricevi(
+        _Posta(),
+        ip="203.0.113.8",
+        **{**LORA, "device_id": "pluvio-matera-02", "dev_eui": "70B3D57ED0012346"},
+    )
+    assert (
+        await sensore.approva(
+            await _richiesta_id("pluvio-matera-02"), settings=get_settings(), ca=_CaFinta()
+        )
+        == 0
+    )
+    assert _segreto_nella_mail(posta_cli.mail[1]["testo"]) is None
+
+    # Un altro registrante non si prende un'applicazione che non è sua.
+    await _ricevi(
+        _Posta(),
+        ip="203.0.113.9",
+        email="altro@example.org",
+        **{**LORA, "device_id": "pluvio-matera-03", "dev_eui": "70B3D57ED0012347"},
+    )
+    assert (
+        await sensore.approva(
+            await _richiesta_id("pluvio-matera-03"), settings=get_settings(), ca=_CaFinta()
+        )
+        == 1
+    )
+    assert await sensor_devices_repo.get_device("pluvio-matera-03") is None
+    async with acquire() as conn:
+        assert (
+            await conn.fetchval(
+                "SELECT stato FROM sensori_richieste WHERE device_id = 'pluvio-matera-03'"
+            )
+            == "in_attesa"
+        )
+
+
+async def test_lorawan_dev_eui_gia_registrato(cella: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sensore, "invia_testo", _Posta().invia)
+    assert isinstance(await _ricevi(_Posta(), **LORA), reg.Ricevuta)
+    doppio = await _ricevi(_Posta(), ip="203.0.113.8", **{**LORA, "device_id": "pluvio-matera-02"})
+    assert isinstance(doppio, reg.NonValida) and "DevEUI" in doppio.motivo
+    assert await sensore.approva(await _richiesta_id(), settings=get_settings(), ca=_CaFinta()) == 0
+    dopo = await _ricevi(_Posta(), ip="203.0.113.9", **{**LORA, "device_id": "pluvio-matera-04"})
+    assert isinstance(dopo, reg.NonValida) and "DevEUI" in dopo.motivo
+
+
+async def test_la_richiesta_con_un_solo_campo_lorawan_non_entra(cella: str) -> None:
+    """Il CHECK della 082 non si fida del modulo: una regex su NULL vale NULL."""
+    async with acquire() as conn:
+        rid = await conn.fetchval(
+            "INSERT INTO sensori_registranti (email) VALUES ('x@example.org') RETURNING id"
+        )
+        for dev_eui, app in [(None, "app-ok"), ("70B3D57ED0012345", None), ("0" * 16, "app-ok")]:
+            with pytest.raises(asyncpg.CheckViolationError):
+                await conn.execute(
+                    "INSERT INTO sensori_richieste (registrante_id, device_id, device_type, lon, "
+                    "lat, licenza, dev_eui, ttn_applicazione) "
+                    "VALUES ($1, 'x-01', 'pluviometro', 16.6, 40.66, 'CC-BY-4.0', $2, $3)",
+                    rid,
+                    dev_eui,
+                    app,
+                )
+
+
+async def test_cancella_registrante_lorawan(cella: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """GDPR (#266): via l'applicazione TTN e il suo segreto, il DevEUI torna libero."""
+    posta_cli = _Posta()
+    monkeypatch.setattr(sensore, "invia_testo", posta_cli.invia)
+    await _ricevi(_Posta(), **LORA)
+    assert await sensore.approva(await _richiesta_id(), settings=get_settings(), ca=_CaFinta()) == 0
+    segreto = _segreto_nella_mail(posta_cli.mail[0]["testo"])
+    assert segreto is not None
+
+    assert await sensore.cancella_registrante(MAIL, ca=_CaFinta()) == 0
+    async with acquire() as conn:
+        assert await conn.fetchval("SELECT count(*) FROM sensori_ttn") == 0
+        row = await conn.fetchrow(
+            "SELECT status, dev_eui, ttn_applicazione FROM sensor_devices WHERE id = $1", ID
+        )
+    assert dict(row) == {"status": "quarantined", "dev_eui": None, "ttn_applicazione": None}
+    ingestore = IngestoreV2(
+        IotSettings(cittadini=IotCittadiniSettings(enabled=True)), adesso=lambda: ADESSO
+    )
+    assert (await _uplink(ingestore, segreto)).status_code == 401
+    assert not await reg.repo.dev_eui_in_uso("70B3D57ED0012345")
