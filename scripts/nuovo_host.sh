@@ -39,10 +39,20 @@ docker compose version >/dev/null 2>&1 || stop "manca il plugin compose v2 (dock
 ok "Compose $(docker compose version --short)"
 
 [ -f .env ] || stop "manca .env: cp .env.example .env, poi almeno LIMEN_DATA_ROOT"
-set -a
-# shellcheck disable=SC1091
-. ./.env
-set +a
+# Si leggono solo le variabili che servono qui, testo per testo, e non si
+# esportano: con `. ./.env` la shell toglieva le virgolette ai valori JSON
+# (CONTRIBUTI__DESTINATARI=["…"] diventava [contributi@…]) e il valore
+# rovinato, esportato, vinceva sul file quando compose interpola (Codex, #314).
+# Compose e `limen` il .env lo leggono da soli.
+dotenv() {  # dotenv NOME: dall'ambiente, o l'ultima riga NOME= del .env
+  local v="${!1:-}"
+  [ -n "$v" ] || v="$(grep -E "^$1=" .env | tail -n 1 | cut -d= -f2-)"
+  printf '%s' "$v"
+}
+for nome in LIMEN_DATA_ROOT LIMEN_DATASETS_DIR LIMEN_REPORTS_HOST_DIR LIMEN_MLRUNS_DIR \
+  LIMEN_SENSORI_DIR BACKUP__BUCKET BACKUP__ROOT SCHEDULER__NIGHTLY_HOUR_UTC POSTGIS_BASE; do
+  printf -v "$nome" '%s' "$(dotenv "$nome")"
+done
 RADICE="${LIMEN_DATA_ROOT:-$(pwd)/data}"
 case "$RADICE" in
   /*) ok "LIMEN_DATA_ROOT=$RADICE" ;;
@@ -53,12 +63,10 @@ if grep -qs '^DB__TILES_PASSWORD=[0-9a-f]\{32,\}$' .env; then
 elif [ "$MODO" = "--controlla" ]; then
   no "manca DB__TILES_PASSWORD: le altre modalità la generano"
 else
-  # Nel .env e nell'ambiente: `set -a` sopra ha già esportato la riga vuota
-  # di .env.example, e un valore vuoto nell'ambiente vince sul file quando
-  # compose interpola (Codex, #314). La riga vuota si sostituisce, non si
-  # duplica.
+  # La riga vuota di .env.example si sostituisce, non si duplica: compose
+  # legge il file, e una riga vuota nell'ambiente vincerebbe (Codex, #314).
+  [ -z "${DB__TILES_PASSWORD:-}" ] || stop "DB__TILES_PASSWORD nell'ambiente non è valida: toglila (unset) e rilancia"
   DB__TILES_PASSWORD="$(openssl rand -hex 24)"
-  export DB__TILES_PASSWORD
   if grep -q '^DB__TILES_PASSWORD=' .env; then
     sed -i "s/^DB__TILES_PASSWORD=.*/DB__TILES_PASSWORD=$DB__TILES_PASSWORD/" .env
   else
@@ -148,14 +156,18 @@ if [ "$MODO" = "--ripristina" ]; then
   fi
 fi
 
-say "stack (make up)"
-if ! command -v uv >/dev/null; then
-  # Il seed gira nel container; i dati statici ancora no (#306, parte sui
-  # dati statici): senza uv sull'host `make up` si ferma lì, dopo aver
-  # avviato e seminato tutto.
-  no "senza uv sull'host i dati statici non si caricano: lo stack parte, i fattori per cella restano quelli del backup o vuoti"
+# Lo stack è obbligatorio: se non parte, lo script si ferma (Codex, #314).
+# I dati statici no: girano ancora sull'host (uv e GDAL, #306), e senza i
+# fattori per cella restano quelli del backup o vuoti, che è un degrado.
+say "stack (make up-stack)"
+make --no-print-directory up-stack || stop "lo stack non è partito: guarda sopra"
+ok "API pronta, seed fatto"
+say "dati statici (make static-data)"
+if command -v uv >/dev/null; then
+  make --no-print-directory static-data || no "dati statici incompleti: guarda sopra, poi make static-data"
+else
+  no "senza uv sull'host i dati statici non si caricano: i fattori per cella restano quelli del backup o vuoti"
 fi
-make --no-print-directory up || no "make up non è finito del tutto: guarda sopra (i dati statici sono l'ultimo passo)"
 
 limen() { docker exec limen-worker limen "$@"; }
 
@@ -170,8 +182,10 @@ fi
 
 # --- 4. Verifica --------------------------------------------------------------
 say "verifica"
-limen data-status || true
-limen jobs || true
+esito=0
+limen data-status || { no "limen data-status non ha risposto"; esito=1; }
+limen jobs || { no "limen jobs non ha risposto"; esito=1; }
+[ "$esito" = 0 ] || stop "verifica non riuscita: lo stack non risponde come dovrebbe"
 cat <<FINE
 
 Fatto. Cosa si riempie da sé, e quando:
