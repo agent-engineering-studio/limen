@@ -199,7 +199,11 @@ def _resolve_dest(dest: Path | str | None) -> Path:
     if dest is not None:
         return Path(dest)
     env_value = os.environ.get(DEST_ENV)
-    return Path(env_value) if env_value else DEFAULT_DEST
+    if env_value:
+        return Path(env_value)
+    # Sotto la radice dati del deployment, se c'è (#302).
+    radice = os.environ.get("LIMEN_DATA_ROOT")
+    return Path(radice) / DEFAULT_DEST.relative_to("data") if radice else DEFAULT_DEST
 
 
 async def fetch_imperviousness(

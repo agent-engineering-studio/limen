@@ -263,6 +263,9 @@ services:
       # `infra/postgres/initdb/01-mlflow-db.sql` al primo boot del cluster.
       # sqlite resta il default solo per lo sviluppo locale.
       SCORING__MLFLOW_TRACKING_URI: ${SCORING__MLFLOW_TRACKING_URI:-postgresql://limen:limen@postgres:5432/mlflow}
+      # Gli artefatti degli esperimenti nuovi, nel volume ${LIMEN_DATA_ROOT}/mlruns
+      # montato qui sotto (#302): prima il percorso del Mac dell'autore.
+      SCORING__MLFLOW_ARTIFACT_ROOT: ${SCORING__MLFLOW_ARTIFACT_ROOT:-file:///var/lib/limen/mlruns}
       LLM__OLLAMA_API_KEY: ${LLM__OLLAMA_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     extra_hosts:
@@ -280,17 +283,17 @@ services:
       # backtest. Senza questi due l'immagine non ha dove scrivere: la
       # directory di lavoro e' di root, il processo gira come `limen`, e i
       # comandi morivano su "Permission denied" dopo aver lavorato per minuti.
-      - ${LIMEN_DATASETS_DIR:-/srv/data/limen-datasets}:/var/lib/limen/datasets
-      - ${LIMEN_REPORTS_HOST_DIR:-/srv/data/limen-reports}:/var/lib/limen/reports
+      - ${LIMEN_DATASETS_DIR:-${LIMEN_DATA_ROOT:-../../data}/datasets}:/var/lib/limen/datasets
+      - ${LIMEN_REPORTS_HOST_DIR:-${LIMEN_DATA_ROOT:-../../data}/reports}:/var/lib/limen/reports
       # DTM / shared vector data (read-only). Same folder GeoServer serves.
-      - ${GEOSERVER_SHAPEFILE_DIR:-../../../mcp-geoserver/data}:/data:ro
+      - ${GEOSERVER_SHAPEFILE_DIR:-${LIMEN_DATA_ROOT:-../../data}/geoserver}:/data:ro
       # Gli **artefatti** del challenger. Il registry sta su Postgres (#78) e
-      # mlflow.db non è più montato, ma questo mount resta e allo stesso
-      # percorso assoluto dell'host: il registry salva URI assoluti al momento
-      # del log. rw perché il caricamento del modello scrive
-      # registered_model_meta nella cartella dell'artefatto. File mancanti ⇒
-      # il challenger degrada a None.
-      - ../../mlruns:/Users/gzileni/Git/limen/mlruns
+      # salva URI assoluti al momento del log: gli esperimenti nuovi scrivono
+      # in /var/lib/limen/mlruns (SCORING__MLFLOW_ARTIFACT_ROOT), uguale su ogni
+      # host (#302; prima era il percorso del Mac dell'autore). rw perché il
+      # caricamento del modello scrive registered_model_meta nella cartella
+      # dell'artefatto. File mancanti ⇒ il challenger degrada a None.
+      - ${LIMEN_MLRUNS_DIR:-${LIMEN_DATA_ROOT:-../../data}/mlruns}:/var/lib/limen/mlruns
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/ready', timeout=3).status==200 else 1)\""]
       interval: 15s
@@ -341,7 +344,7 @@ services:
       BACKUP__SOGLIA_CROLLO: ${BACKUP__SOGLIA_CROLLO:-0.5}
       BACKUP__ETA_MASSIMA_ORE: ${BACKUP__ETA_MASSIMA_ORE:-36}
       # Gli artefatti MLflow, al percorso del volume qui sotto.
-      BACKUP__CARTELLE: ${BACKUP__CARTELLE:-/Users/gzileni/Git/limen/mlruns}
+      BACKUP__CARTELLE: ${BACKUP__CARTELLE:-/var/lib/limen/mlruns}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -350,13 +353,12 @@ services:
       # backtest. Senza questi due l'immagine non ha dove scrivere: la
       # directory di lavoro e' di root, il processo gira come `limen`, e i
       # comandi morivano su "Permission denied" dopo aver lavorato per minuti.
-      - ${LIMEN_DATASETS_DIR:-/srv/data/limen-datasets}:/var/lib/limen/datasets
-      - ${LIMEN_REPORTS_HOST_DIR:-/srv/data/limen-reports}:/var/lib/limen/reports
-      - ${GEOSERVER_SHAPEFILE_DIR:-../../../mcp-geoserver/data}:/data:ro
+      - ${LIMEN_DATASETS_DIR:-${LIMEN_DATA_ROOT:-../../data}/datasets}:/var/lib/limen/datasets
+      - ${LIMEN_REPORTS_HOST_DIR:-${LIMEN_DATA_ROOT:-../../data}/reports}:/var/lib/limen/reports
+      - ${GEOSERVER_SHAPEFILE_DIR:-${LIMEN_DATA_ROOT:-../../data}/geoserver}:/data:ro
       # Il registry sta su Postgres (#78): niente più mlflow.db montato. Gli
-      # **artefatti** restano qui, allo stesso percorso assoluto dell'host,
-      # perché il registry salva URI assoluti al momento del log.
-      - ../../mlruns:/Users/gzileni/Git/limen/mlruns
+      # **artefatti** stanno qui, in /var/lib/limen/mlruns su ogni host (#302).
+      - ${LIMEN_MLRUNS_DIR:-${LIMEN_DATA_ROOT:-../../data}/mlruns}:/var/lib/limen/mlruns
     # Nessuna `ports:`: il worker non serve niente.
     deploy:
       replicas: 1

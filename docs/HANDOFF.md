@@ -9,15 +9,17 @@
 
 ## 0. La prima cosa da fare sul nuovo server
 
-1. **Correggere i path assoluti in `.env`** (oggi puntano al Mac dell'autore):
-   ```
-   LIMEN_DEM_RASTER=/Users/gzileni/Git/mcp-geoserver/data/HRDTM5m.tif
-   LIMEN_CORINE_RASTER=/Users/gzileni/Git/mcp-geoserver/data/clc2018_it/clc2018_it_100m.tif
-   LIMEN_GEOLOGICAL_SHAPEFILE=/Users/gzileni/Git/mcp-geoserver/data/carta_geolitologica/carta_geolitologica.shp
-   ```
-   Ripuntarli alla posizione dei dataset sul nuovo host (o lasciarli vuoti: gli
-   slot mancanti degradano e il bootstrap logga `static_bootstrap.skip`).
-   Anche `GEOSERVER_SOURCE__DB_DSN` va aggiornato all'host del DB GeoServer.
+1. **Una sola radice per i dati (#302)**: `LIMEN_DATA_ROOT` nel `.env`
+   (assoluta), con sotto `datasets/ reports/ mlruns/ models/ geoserver/ osm/
+   sealing/ radar/` — l'albero completo è in testa a `.env.example`. Copiare
+   la cartella e cambiare quella riga basta: compose, Makefile e
+   `make static-data` ricavano i path da lì (DTM, CORINE e geolitologia li
+   cercano in `GEOSERVER_SHAPEFILE_DIR`, o in `$LIMEN_DATA_ROOT/geoserver`).
+   Le variabili specifiche (`LIMEN_DEM_RASTER`, `LIMEN_DATASETS_DIR`, …)
+   restano override; vuote, gli slot mancanti degradano e il bootstrap logga
+   `static_bootstrap.skip`. Il server attuale le ha ancora esplicite nel
+   `.env`. Anche `GEOSERVER_SOURCE__DB_DSN` va aggiornato all'host del DB
+   GeoServer.
 2. **Docker su Linux x86**: usare l'immagine PostGIS ufficiale `postgis/postgis:16-3.5`
    (su Apple Silicon serviva `imresamu/postgis-arm64` via `LIMEN_TEST_POSTGIS_IMAGE`
    / `POSTGIS_BASE`; sul server dedicato x86 non serve l'override).

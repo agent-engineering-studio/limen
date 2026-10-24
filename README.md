@@ -204,6 +204,7 @@ Loaded from environment variables (and an optional `.env`) via
 
 | Variable | Default | Notes |
 |-----------|---------|------|
+| `LIMEN_DATA_ROOT` | the repo's `data/` | One root for the deployment's data (#302): datasets, reports, MLflow artifacts, models, GeoServer data, OSM, imperviousness, radar. Moving Limen = copying this folder and changing this line. Absolute when set; every specific `*_DIR`/`*_RASTER` variable still overrides it. The tree is at the top of `.env.example`. |
 | `DB__CONNECTION_STRING` | `postgresql://limen:limen@localhost:5432/limen` | PostgreSQL DSN. Add `?sslmode=require` for Neon. |
 | `OBJECT_STORE__BACKEND` | `filesystem` | `filesystem` or `s3`. |
 | `OBJECT_STORE__ENDPOINT_URL` | _empty_ | S3-compatible endpoint (MinIO, R2, B2). |

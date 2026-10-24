@@ -10,6 +10,14 @@ else
 POSTGIS_BASE ?= postgis/postgis:16-3.5
 endif
 export POSTGIS_BASE
+# Una sola radice per i dati del deployment (#302): dataset, report, modelli,
+# mlruns, sorgenti statiche, sensori. Dal .env, o la cartella `data/` del repo
+# (la stessa che i compose risolvono come `../../data`). Se la imposti, assoluta.
+LIMEN_DATA_ROOT ?= $(or $(shell grep -s '^LIMEN_DATA_ROOT=' .env | cut -d= -f2-),$(CURDIR)/data)
+# I dati condivisi con GeoServer (DTM, CORINE, geolitologia): dove li monta
+# il compose, cioè GEOSERVER_SHAPEFILE_DIR o la radice.
+GEOSERVER_SHAPEFILE_DIR ?= $(or $(shell grep -s '^GEOSERVER_SHAPEFILE_DIR=' .env | cut -d= -f2-),$(LIMEN_DATA_ROOT)/geoserver)
+
 COMPOSE_DEV  := infra/docker/docker-compose.dev.yml
 COMPOSE_DEMO := infra/docker/docker-compose.demo.yml
 COMPOSE_OBS  := infra/docker/docker-compose.observability.yml
@@ -270,7 +278,7 @@ imperviousness-data:
 	$(UV) run limen imperviousness-fetch
 	@echo
 	@echo "  Ora punta la variabile al file e riempi le celle:"
-	@echo "    LIMEN_IMPERVIOUSNESS_RASTER=$(CURDIR)/data/sealing/clms_imd_2018/imd_2018_100m.tif"
+	@echo "    LIMEN_IMPERVIOUSNESS_RASTER=$(LIMEN_DATA_ROOT)/sealing/clms_imd_2018/imd_2018_100m.tif"
 	@echo "    make bootstrap-static"
 
 # Storia del fuoco: archivio FIRMS per paese, 2000-2024. Nessuna credenziale
@@ -459,7 +467,7 @@ geoserver-down:
 	docker compose $(COMPOSE_GS) --profile geoserver down
 
 # DTM tiles live in the /data folder shared with the GeoServer container.
-GEOSERVER_DTM_DIR ?= ../mcp-geoserver/data/dtm
+GEOSERVER_DTM_DIR ?= $(GEOSERVER_SHAPEFILE_DIR)/dtm
 
 geoserver-sync:                # load IFFI + PAI from GeoServer PostGIS into the operational DB
 	$(UV) run limen geoserver-sync
@@ -470,13 +478,13 @@ dtm-vrt:                       # build a virtual mosaic over the 5 m DTM tiles (
 
 # OSM road/rail network for the alert-exposure factor (© OpenStreetMap, ODbL).
 # Country-agnostic: override OSM_PBF_URL with another Geofabrik extract.
-OSM_DIR     ?= ./data/osm
+OSM_DIR     ?= $(LIMEN_DATA_ROOT)/osm
 OSM_PBF_URL ?= https://download.geofabrik.de/europe/italy-latest.osm.pbf
 OSM_PBF      = $(OSM_DIR)/$(notdir $(OSM_PBF_URL))
 
 radar-data:                    # IT-DPC-SRI 2010-2025 (~51 GB) dall'object store ECMWF, riprendibile; solo per il backtest
-	$(UV) run python scripts/mirror_it_dpc_sri.py data/radar/it_dpc_sri/italian-radar-dpc-sri.zarr 32 179087
-	$(UV) run python scripts/mirror_it_dpc_sri.py data/radar/it_dpc_sri/italian-radar-dpc-sri.zarr 32 0 179087
+	$(UV) run python scripts/mirror_it_dpc_sri.py $(LIMEN_DATA_ROOT)/radar/it_dpc_sri/italian-radar-dpc-sri.zarr 32 179087
+	$(UV) run python scripts/mirror_it_dpc_sri.py $(LIMEN_DATA_ROOT)/radar/it_dpc_sri/italian-radar-dpc-sri.zarr 32 0 179087
 
 osm-data:                      # download the Geofabrik PBF + extract road/rail GPKGs (needs host GDAL)
 	mkdir -p $(OSM_DIR)

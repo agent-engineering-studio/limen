@@ -21,8 +21,8 @@
 #   geoserver-mcp      -> 9000   (streamable-HTTP /mcp)
 #
 # Data bootstrap: the geoserver-init one-shot loads EVERY shapefile under
-# ${GEOSERVER_SHAPEFILE_DIR} (default: the sibling mcp-geoserver repo's
-# ./data) into PostGIS and publishes each as a GeoServer layer. Idempotent.
+# ${GEOSERVER_SHAPEFILE_DIR} (default: ${LIMEN_DATA_ROOT}/geoserver, #302)
+# into PostGIS and publishes each as a GeoServer layer. Idempotent.
 # Point GEOSERVER_SHAPEFILE_DIR at a subset (e.g. Puglia+Basilicata only)
 # for a faster first test.
 #
@@ -153,7 +153,7 @@ services:
       GEO_INIT_STYLES: ${GEO_INIT_STYLES:-true}
       GEO_STYLES_CONFIG: ${GEO_STYLES_CONFIG:-/data/styles.yml}
     volumes:
-      - ${GEOSERVER_SHAPEFILE_DIR:-../../../mcp-geoserver/data}:/data:ro
+      - ${GEOSERVER_SHAPEFILE_DIR:-${LIMEN_DATA_ROOT:-../../data}/geoserver}:/data:ro
 
   # Chat + map web UI (FastAPI + Leaflet) — also proxies WMS same-origin.
   geoserver-webui:
