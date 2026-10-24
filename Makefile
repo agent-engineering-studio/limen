@@ -68,7 +68,7 @@ BUILD_PROFILES ?= --profile geoserver --profile frontend --profile geodata
 
 .PHONY: inference-up inference-up-colibri inference-down inference-logs inference-check help install docs-links docs-bundle \
         up down build rebuild up-host-ollama \
-        up-dev down-dev logs migrate seed db-up backup backup-elenco restore bootstrap-static calibrate backtest serve \
+        up-dev down-dev logs migrate seed immagine db-up backup backup-elenco restore bootstrap-static calibrate backtest serve \
         data-status static-data flood-data flood-events backtest-flood fire-history \
         logs-worker \
         demo demo-down demo-walkthrough \
@@ -319,6 +319,9 @@ dump-training:
 	docker exec limen-postgres pg_dump -U limen -d limen -t training_samples --data-only -Fc > data/backups/training_samples_$$(date +%F).dump
 	tar czf data/backups/mlflow_$$(date +%F).tgz mlflow.db mlruns
 	@ls -lah data/backups/
+
+immagine:                    # costruisce l'immagine di api e worker (limen/api), senza avviare niente
+	docker compose $(COMPOSE_ALL) build api
 
 db-up:                       # solo Postgres, e aspetta che sia sano (ripristino da zero, #306)
 	docker compose $(COMPOSE_ALL) up -d postgres

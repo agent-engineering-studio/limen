@@ -53,8 +53,18 @@ if grep -qs '^DB__TILES_PASSWORD=[0-9a-f]\{32,\}$' .env; then
 elif [ "$MODO" = "--controlla" ]; then
   no "manca DB__TILES_PASSWORD: le altre modalità la generano"
 else
-  printf '\n# Generata da nuovo_host.sh (#269): la password del ruolo di pg_tileserv.\nDB__TILES_PASSWORD=%s\n' \
-    "$(openssl rand -hex 24)" >>.env
+  # Nel .env e nell'ambiente: `set -a` sopra ha già esportato la riga vuota
+  # di .env.example, e un valore vuoto nell'ambiente vince sul file quando
+  # compose interpola (Codex, #314). La riga vuota si sostituisce, non si
+  # duplica.
+  DB__TILES_PASSWORD="$(openssl rand -hex 24)"
+  export DB__TILES_PASSWORD
+  if grep -q '^DB__TILES_PASSWORD=' .env; then
+    sed -i "s/^DB__TILES_PASSWORD=.*/DB__TILES_PASSWORD=$DB__TILES_PASSWORD/" .env
+  else
+    printf '\n# Generata da nuovo_host.sh (#269): la password del ruolo di pg_tileserv.\nDB__TILES_PASSWORD=%s\n' \
+      "$DB__TILES_PASSWORD" >>.env
+  fi
   ok "DB__TILES_PASSWORD generata nel .env"
 fi
 
@@ -96,6 +106,26 @@ done
 ok "datasets reports mlruns models geoserver osm sealing radar"
 make --no-print-directory gs-volumes
 ok "volumi esterni di GeoServer"
+
+# API e worker girano come l'utente `limen` dell'immagine, non come chi lancia
+# lo script: le cartelle che scrivono (cataloghi, report, artefatti MLflow)
+# devono essere sue, o ingest, calibrazione e ripristino falliscono su
+# "Permission denied" (Codex, #314). L'uid si chiede all'immagine; il chown
+# lo fa un container, così sull'host non serve sudo.
+say "proprietario delle cartelle scritte dai container"
+make --no-print-directory immagine
+uid=$(docker run --rm --entrypoint id limen/api:0.1 -u)
+gid=$(docker run --rm --entrypoint id limen/api:0.1 -g)
+scritte=(
+  "${LIMEN_DATASETS_DIR:-$RADICE/datasets}"
+  "${LIMEN_REPORTS_HOST_DIR:-$RADICE/reports}"
+  "${LIMEN_MLRUNS_DIR:-$RADICE/mlruns}"
+)
+for d in "${scritte[@]}"; do
+  mkdir -p "$d"
+  docker run --rm -v "$d:/d" alpine chown -R "$uid:$gid" /d
+done
+ok "limen ($uid:$gid): ${scritte[*]}"
 
 # --- 3. Stato ------------------------------------------------------------------
 if [ "$MODO" = "--ripristina" ]; then
