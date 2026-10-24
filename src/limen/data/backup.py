@@ -46,7 +46,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 import asyncpg
 
@@ -103,11 +103,12 @@ def _pg(cfg: BackupSettings, dsn: str) -> _Pg:
     env = dict(os.environ)
     prefisso = shlex.split(cfg.comando_pg)
     if parti.password:
-        env["PGPASSWORD"] = parti.password
-        host = parti.hostname or ""
-        utente = f"{parti.username}@" if parti.username else ""
-        porta = f":{parti.port}" if parti.port else ""
-        dsn = urlunsplit(parti._replace(netloc=f"{utente}{host}{porta}"))
+        # Decodificata (`p%40ss` è `p@ss`: Codex, #311); il resto dell'indirizzo
+        # resta byte per byte com'era, IPv6 fra parentesi compreso.
+        env["PGPASSWORD"] = unquote(parti.password)
+        credenziali, _, indirizzo = parti.netloc.rpartition("@")
+        utente = credenziali.split(":", 1)[0]
+        dsn = urlunsplit(parti._replace(netloc=f"{utente}@{indirizzo}"))
         if "exec" in prefisso and prefisso and Path(prefisso[0]).name == "docker":
             # `-e NOME` senza valore: docker lo prende dall'ambiente del client.
             i = prefisso.index("exec") + 1
@@ -335,8 +336,16 @@ async def esegui_backup(
         "escluse": list(cfg.escluse),
         "righe": conti,
         "mlflow": mlflow if (lavoro / "mlflow.dump") in file else None,
+        "crollato": False,
         "file": {},
     }
+    try:
+        # Prima di pubblicare il manifest: il crollo si scrive lì.
+        manifest["crollato"] = await _crollato(store, cfg, conti)
+    except Exception as exc:
+        # Senza poter confrontare, la retention non si fida: aspetta.
+        manifest["crollato"] = True
+        log.warning("backup.confronto_fallito", error=str(exc))
     for f in file:
         impronta = await asyncio.to_thread(_sha256, f)
         manifest["file"][f.name] = {"byte": f.stat().st_size, "sha256": impronta}
@@ -349,8 +358,8 @@ async def esegui_backup(
     )
     cancellati: list[str] = []
     try:
-        if await _crollato(store, cfg, conti, escludi=base):
-            avvisi.append("righe di stato crollate rispetto al precedente: retention sospesa")
+        if manifest["crollato"]:
+            avvisi.append("righe di stato crollate rispetto all'ultimo sano: retention sospesa")
         else:
             cancellati = await pulisci(store, cfg, adesso)
     except Exception as exc:
@@ -368,20 +377,23 @@ async def esegui_backup(
     )
 
 
-async def _crollato(
-    store: ObjectStore, cfg: BackupSettings, conti: Mapping[str, int], *, escludi: str
-) -> bool:
-    """Le righe di stato sotto ``soglia_crollo`` del backup precedente: un volume
-    ricreato vuoto, o il database sbagliato. Allora la retention aspetta, o in
-    ``retention_giorni`` i backup buoni uscirebbero dal bucket."""
-    precedenti = [c for c in await backup_completi(store) if c != escludi]
-    if not precedenti:
-        return False
-    prima: dict[str, int] = (
-        json.loads(await store.get(precedenti[-1] + "manifest.json")).get("righe") or {}
-    )
-    totale_prima = sum(prima.values())
-    return totale_prima > 0 and sum(conti.values()) < cfg.soglia_crollo * totale_prima
+async def _crollato(store: ObjectStore, cfg: BackupSettings, conti: Mapping[str, int]) -> bool:
+    """Le righe di stato sotto ``soglia_crollo`` dell'ultimo backup **sano**: un
+    volume ricreato vuoto, o il database sbagliato. Allora la retention
+    aspetta, o in ``retention_giorni`` i backup buoni uscirebbero dal bucket.
+
+    Contro l'ultimo sano e non contro il precedente: due backup crollati di
+    fila non devono diventare il nuovo metro (Codex, #311). Il crollo resta
+    scritto nel manifest, e la retention resta ferma finché le righe tornano.
+    """
+    for chiave in reversed(await backup_completi(store)):
+        manifest = json.loads(await store.get(chiave + "manifest.json"))
+        if manifest.get("crollato"):
+            continue
+        prima: dict[str, int] = manifest.get("righe") or {}
+        totale_prima = sum(prima.values())
+        return totale_prima > 0 and sum(conti.values()) < cfg.soglia_crollo * totale_prima
+    return False
 
 
 async def backup_completi(store: ObjectStore) -> list[str]:

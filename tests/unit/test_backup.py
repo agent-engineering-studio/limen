@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,7 @@ import structlog
 from limen.api.jobs import _tracking, hourly_monitoring
 from limen.config.settings import BackupSettings, ObjectStoreBackend
 from limen.data.backup import (
+    _crollato,
     _errori_non_ammessi,
     _pg,
     archivio_cartella,
@@ -198,3 +200,33 @@ def test_mlflow_solo_se_su_postgresql() -> None:
     assert mlflow_database("postgresql://limen:x@postgres:5432/mlflow") == "mlflow"
     assert mlflow_database("sqlite:///mlflow.db") is None
     assert mlflow_database("http://mlflow:5000") is None
+
+
+async def _manifest(
+    store: FilesystemObjectStore, giorni_fa: float, righe: int, *, crollato: bool
+) -> None:
+    base = await _backup(store, giorni_fa)
+    await store.put(
+        base + "manifest.json",
+        json.dumps({"righe": {"public.t": righe}, "crollato": crollato}).encode(),
+    )
+
+
+async def test_il_metro_del_crollo_e_l_ultimo_backup_sano(tmp_path: Path) -> None:
+    """Codex su #311: un secondo backup crollato non deve diventare il metro."""
+    store = FilesystemObjectStore(tmp_path)
+    cfg = BackupSettings()
+    await _manifest(store, 10, 1000, crollato=False)
+    await _manifest(store, 9, 10, crollato=True)
+    await _manifest(store, 8, 10, crollato=True)
+    assert await _crollato(store, cfg, {"public.t": 10}) is True
+    # Il database si riprende: si torna a confrontare normalmente.
+    assert await _crollato(store, cfg, {"public.t": 990}) is False
+    assert await _crollato(FilesystemObjectStore(tmp_path / "vuoto"), cfg, {"public.t": 1}) is False
+
+
+def test_password_codificata_e_ipv6() -> None:
+    """Codex su #311: `p%40ss` in una DSN è `p@ss` per PostgreSQL."""
+    pg = _pg(BackupSettings(), "postgresql://limen:p%40ss%3Aword@[::1]:5432/limen")
+    assert pg.env["PGPASSWORD"] == "p@ss:word"
+    assert pg.dsn == "postgresql://limen@[::1]:5432/limen"
