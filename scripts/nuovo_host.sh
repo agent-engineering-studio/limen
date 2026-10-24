@@ -46,7 +46,17 @@ ok "Compose $(docker compose version --short)"
 # Compose e `limen` il .env lo leggono da soli.
 dotenv() {  # dotenv NOME: dall'ambiente, o l'ultima riga NOME= del .env
   local v="${!1:-}"
-  [ -n "$v" ] || v="$(grep -E "^$1=" .env | tail -n 1 | cut -d= -f2-)"
+  if [ -z "$v" ]; then
+    v="$(grep -E "^$1=" .env | tail -n 1 | cut -d= -f2-)"
+    # Le regole del dotenv che compose rispetta, senza far valutare niente
+    # alla shell (Codex, #314): una coppia di virgolette uguali intorno si
+    # toglie; senza virgolette, ` #` apre un commento.
+    case "$v" in
+      \"*\") v="${v:1:${#v}-2}" ;;
+      \'*\') v="${v:1:${#v}-2}" ;;
+      *) v="${v%% \#*}" ;;
+    esac
+  fi
   printf '%s' "$v"
 }
 for nome in LIMEN_DATA_ROOT LIMEN_DATASETS_DIR LIMEN_REPORTS_HOST_DIR LIMEN_MLRUNS_DIR \
