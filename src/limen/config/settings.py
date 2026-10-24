@@ -363,9 +363,15 @@ class SchedulerSettings(BaseSettings):
     dpc_bollettini_minutes: int = Field(default=60, ge=10)
     # Terremoti INGV e scuotimento per cella dalle ShakeMap (#284). Spento:
     # accenderlo porta in vita la componente E delle frane (peso 0,15), che
-    # finora valeva zero ovunque, e sposta il campione V1. Prima il backtest.
+    # finora valeva zero ovunque, e sposta il campione V1. Il backtest della
+    # #287 dice di non farlo: sulla sequenza 2016-17 nessuna frana in più, e
+    # fino a ventitré volte le ore-cella in allerta.
     enable_ingv_sync: bool = False
     ingv_sync_minutes: int = Field(default=60, ge=10)
+    # Acceso ma fermo da più di così, lo sweep lo dice (#287): E additiva
+    # sbaglia al più di 0,15, ma tornare a zero in silenzio in piena sequenza
+    # sismica è lo stesso guasto rassicurante della #143.
+    ingv_sync_ritardo_massimo_minuti: int = Field(default=180, ge=30)
     #: Ovest, sud, est, nord: il riquadro del portale ShakeMap INGV.
     ingv_bbox: tuple[float, float, float, float] = (5.0, 35.0, 20.0, 49.0)
     # Run the ISPRA IdroGEO sync every N hours.

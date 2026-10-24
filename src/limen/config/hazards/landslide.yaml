@@ -220,8 +220,11 @@ seismic:
   # Sotto questa PGA (ShakeMap INGV, dopo il decadimento) la cella non è stata
   # scossa abbastanza da contare (#284): ~MMI V, «avvertito forte». Non si
   # salva in `seismic_pga_cella`, ed E vale 0; da qui la sigmoide è riscalata
-  # per partire da 0, senza gradino. Il backtest di E manca ancora (#287):
-  # `SCHEDULER__ENABLE_INGV_SYNC` resta spento fino ad allora.
+  # per partire da 0, senza gradino. Backtest #287 (sequenza 2016-17, Marche e
+  # Abruzzo, `LIMEN_BACKTEST_SISMICA=shakemap`): con E nessuna frana colta in
+  # più su 40, e le ore-cella in allerta ×23 nelle Marche, +25 % in Abruzzo.
+  # `SCHEDULER__ENABLE_INGV_SYNC` resta spento: E costa senza un beneficio
+  # misurabile con il catalogo che abbiamo (ITALICA è solo da pioggia).
   pga_min_g:          0.02
 
 # Post-fire window.
