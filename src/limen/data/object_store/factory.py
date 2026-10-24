@@ -7,6 +7,7 @@ else only knows about the :class:`ObjectStore` Protocol.
 from __future__ import annotations
 
 from limen.config.settings import (
+    BackupSettings,
     ObjectStoreBackend,
     ObjectStoreSettings,
     get_settings,
@@ -44,3 +45,25 @@ def build_object_store(settings: ObjectStoreSettings | None = None) -> ObjectSto
         )
 
     raise ValueError(f"Unknown object-store backend: {cfg.backend!r}")
+
+
+def build_backup_store(settings: BackupSettings | None = None) -> ObjectStore | None:
+    """Lo store del backup notturno (#304), separato da quello dell'app;
+    ``None`` se non è configurato."""
+    cfg = settings or get_settings().backup
+    if not cfg.attivo:
+        return None
+    if cfg.backend is ObjectStoreBackend.FILESYSTEM:
+        assert cfg.root is not None  # attivo
+        return FilesystemObjectStore(cfg.root)
+    from limen.data.object_store.s3 import S3ObjectStore
+
+    assert cfg.bucket is not None  # attivo
+    return S3ObjectStore(
+        bucket=cfg.bucket,
+        prefix=cfg.prefix,
+        region=cfg.region,
+        endpoint_url=cfg.endpoint_url,
+        access_key_id=cfg.access_key_id,
+        secret_access_key=cfg.secret_access_key,
+    )

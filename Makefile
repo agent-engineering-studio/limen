@@ -60,7 +60,7 @@ BUILD_PROFILES ?= --profile geoserver --profile frontend --profile geodata
 
 .PHONY: inference-up inference-up-colibri inference-down inference-logs inference-check help install docs-links docs-bundle \
         up down build rebuild up-host-ollama \
-        up-dev down-dev logs migrate seed bootstrap-static calibrate backtest serve \
+        up-dev down-dev logs migrate seed backup backup-elenco restore bootstrap-static calibrate backtest serve \
         data-status static-data flood-data flood-events backtest-flood fire-history \
         logs-worker \
         demo demo-down demo-walkthrough \
@@ -311,6 +311,18 @@ dump-training:
 	docker exec limen-postgres pg_dump -U limen -d limen -t training_samples --data-only -Fc > data/backups/training_samples_$$(date +%F).dump
 	tar czf data/backups/mlflow_$$(date +%F).tgz mlflow.db mlruns
 	@ls -lah data/backups/
+
+backup:                      # backup dello stato sullo store BACKUP__* (#304), dal worker
+	docker exec limen-worker limen backup
+
+backup-elenco:
+	docker exec limen-worker limen backup elenco
+
+restore:                     # usage: make restore CONFERMA=1 [CHIAVE=backup/<istante>/] — ferma API e worker, sovrascrive il DB
+	@test "$(CONFERMA)" = "1" || { echo "sovrascrive il database: make restore CONFERMA=1, con API e worker fermi"; exit 1; }
+	docker compose $(COMPOSE_ALL) stop api worker mcp pg_tileserv
+	docker compose $(COMPOSE_ALL) run --rm --no-deps worker limen restore --conferma $(if $(CHIAVE),--chiave $(CHIAVE))
+	@echo "[restore] fatto: riavvia con make up"
 
 restore-training:            # usage: make restore-training DUMP=data/backups/training_samples_YYYY-MM-DD.dump [MLTGZ=data/backups/mlflow_YYYY-MM-DD.tgz]
 	@test -n "$(DUMP)" || { echo "usa: make restore-training DUMP=data/backups/training_samples_YYYY-MM-DD.dump"; ls data/backups/ 2>/dev/null; exit 1; }

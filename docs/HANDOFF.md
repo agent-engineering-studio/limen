@@ -222,9 +222,15 @@ Prossima: **#252**, l'ingestore del protocollo v2 (SenML su `limen/v2/{id}/obs`)
 **Il broker gira fuori dal repo, e un trasloco di server deve portarselo:**
 
 - CA e certificati stanno in `LIMEN_SENSORI_DIR=/srv/data/limen-sensori`. La
-  chiave della CA (`ca/ca.key`) **non è nel repo** e non ha altre copie oltre al
-  backup `/srv/backup/limen-sensori/ca`, che va rifatto a mano dopo ogni firma o
-  revoca. Se la perdi devi ricertificare tutti i dispositivi.
+  chiave della CA (`ca/ca.key`) **non è nel repo**. Dalla #304 la CLI dell'host
+  la salva cifrata sul bucket del backup dopo ogni firma e revoca (`limen
+  sensore backup-ca`, passphrase in `BACKUP__PASSPHRASE_CA`, da tenere anche
+  fuori dal server); la copia locale `/srv/backup/limen-sensori/ca` resta un di
+  più. Su un server nuovo: `limen sensore ripristina-ca --dove
+  "$LIMEN_SENSORI_DIR"`. Se la perdi devi ricertificare tutti i dispositivi.
+- Lo **stato del database** si salva ogni notte sullo stesso bucket (#304):
+  README, «Backup and restore». Senza `BACKUP__BUCKET` nel `.env` il notturno
+  lo salta, e dopo 36 ore lo sweep logga `integration.degraded label=backup.stale`.
 - La CRL si rinnova con un cron mensile nel crontab dell'utente
   (`make sensori-crl`). Se la CRL scade, il broker rifiuta tutti i dispositivi.
 - nginx: `/etc/nginx/mqtt-sensori.stream.conf` è incluso in fondo a

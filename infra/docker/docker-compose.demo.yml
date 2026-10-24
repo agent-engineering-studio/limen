@@ -327,6 +327,19 @@ services:
       # Il worker ignora il flag — è la sua ragione di esistere — ma tenerlo
       # esplicito evita che qualcuno legga l'ancora e pensi il contrario.
       SCHEDULER__ENABLED: "true"
+      # Il backup notturno dello stato, fuori dal server (#304). Vuoto
+      # BACKUP__BUCKET, il passo si salta. La passphrase della CA dei sensori
+      # non è qui: la CA sta sull'host, e lì si salva.
+      BACKUP__BUCKET: ${BACKUP__BUCKET:-}
+      BACKUP__PREFIX: ${BACKUP__PREFIX:-limen}
+      BACKUP__REGION: ${BACKUP__REGION:-}
+      BACKUP__ENDPOINT_URL: ${BACKUP__ENDPOINT_URL:-}
+      BACKUP__ACCESS_KEY_ID: ${BACKUP__ACCESS_KEY_ID:-}
+      BACKUP__SECRET_ACCESS_KEY: ${BACKUP__SECRET_ACCESS_KEY:-}
+      BACKUP__RETENTION_GIORNI: ${BACKUP__RETENTION_GIORNI:-30}
+      BACKUP__ETA_MASSIMA_ORE: ${BACKUP__ETA_MASSIMA_ORE:-36}
+      # Gli artefatti MLflow, al percorso del volume qui sotto.
+      BACKUP__CARTELLE: ${BACKUP__CARTELLE:-/Users/gzileni/Git/limen/mlruns}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

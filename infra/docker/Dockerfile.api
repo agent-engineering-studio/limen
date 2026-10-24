@@ -42,11 +42,13 @@ COPY pyproject.toml uv.lock README.md ./
 # `--group mcp` ships fastmcp so the same image serves `limen mcp-serve`.
 # `--group report` ships jinja2+pillow for the static-HTML risk report.
 # `--group copernicus` ships cdsapi+netCDF4 for the GloFAS forecast from EWDS.
+# `--group storage` ships boto3: the nightly backup goes to an S3-compatible
+# bucket off the server (#304).
 RUN uv sync --frozen --no-dev --no-editable --no-install-project \
-    --group ml --group mcp --group report --group copernicus
+    --group ml --group mcp --group report --group copernicus --group storage
 COPY src ./src
 RUN uv sync --frozen --no-dev --no-editable \
-    --group ml --group mcp --group report --group copernicus
+    --group ml --group mcp --group report --group copernicus --group storage
 
 # ---------------------------------------------------------------------------
 # Stage 2 — runtime
@@ -60,14 +62,23 @@ ENV PYTHONUNBUFFERED=1 \
     API__PORT=8080 \
     LOG_JSON=true
 
-# Minimal system libs for the geospatial stack at runtime.
+# Minimal system libs for the geospatial stack at runtime, plus the
+# PostgreSQL 16 client for the nightly backup (#304): pg_dump must match the
+# server's major version, and bookworm ships 15, so it comes from PGDG.
 RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+        | gpg --dearmor -o /usr/share/keyrings/pgdg.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
     && apt-get install -y --no-install-recommends \
         libgdal32 \
         libgeos-c1v5 \
         libproj25 \
         libgomp1 \
-        ca-certificates \
+        postgresql-client-16 \
+    && apt-get purge -y --auto-remove curl gnupg \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system limen \
     && useradd --system --gid limen --create-home --home-dir /home/limen limen
