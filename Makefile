@@ -68,7 +68,7 @@ BUILD_PROFILES ?= --profile geoserver --profile frontend --profile geodata
 
 .PHONY: inference-up inference-up-colibri inference-down inference-logs inference-check help install docs-links docs-bundle \
         up down build rebuild up-host-ollama \
-        up-dev down-dev logs migrate seed backup backup-elenco restore bootstrap-static calibrate backtest serve \
+        up-dev down-dev logs migrate seed immagine db-up up-stack backup backup-elenco restore bootstrap-static calibrate backtest serve \
         data-status static-data flood-data flood-events backtest-flood fire-history \
         logs-worker \
         demo demo-down demo-walkthrough \
@@ -154,7 +154,20 @@ gs-volumes:
 	@docker volume create limen-geoserver-pgdata >/dev/null
 	@docker volume create limen-geoserver-gsdata >/dev/null
 
-up: gs-volumes
+up: up-stack
+	@echo ""
+	@echo "[up] sorgenti + fattori statici, sull'HOST (che legge i raster e .env)."
+	@echo "     geoserver-sync sta qui e non nel container: lo script e' l'unica"
+	@echo "     descrizione della sequenza, e farlo due volte costava due volte."
+	@echo "     Idempotente sul COSTO (#101): salta i passi la cui sorgente non è"
+	@echo "     cambiata. La PRIMA esecuzione però paga tutto — misurato sul DTM 5 m,"
+	@echo "     ~2m45s ogni 11k celle, cioè ~1.5-2h sulle 312k delle 20 regioni."
+	@echo "     Forzare il ricalcolo:  LIMEN_BOOTSTRAP_FORCE=1 make bootstrap-static"
+	@bash scripts/load_static_data.sh
+
+# Lo stack senza i dati statici: avvio, attesa dell'API, seed. È la parte
+# obbligatoria per nuovo_host.sh (#306), che i dati statici li tratta a parte.
+up-stack: gs-volumes
 	@grep -qs '^DB__TILES_PASSWORD=[0-9a-f]\{32,\}$$' .env || { \
 	  echo "[up] manca DB__TILES_PASSWORD nel .env: senza, pg_tileserv non entra e la mappa resta senza tile (#269)."; \
 	  echo "     echo DB__TILES_PASSWORD=\$$(openssl rand -hex 24) >> .env"; exit 1; }
@@ -172,15 +185,6 @@ up: gs-volumes
 	@echo "[up] Stack ready:"
 	@echo "   API      http://localhost:8080/docs      Frontend  http://localhost:5173"
 	@echo "   GeoServer http://localhost:8081/geoserver Web UI    http://localhost:8000"
-	@echo ""
-	@echo "[up] sorgenti + fattori statici, sull'HOST (che legge i raster e .env)."
-	@echo "     geoserver-sync sta qui e non nel container: lo script e' l'unica"
-	@echo "     descrizione della sequenza, e farlo due volte costava due volte."
-	@echo "     Idempotente sul COSTO (#101): salta i passi la cui sorgente non è"
-	@echo "     cambiata. La PRIMA esecuzione però paga tutto — misurato sul DTM 5 m,"
-	@echo "     ~2m45s ogni 11k celle, cioè ~1.5-2h sulle 312k delle 20 regioni."
-	@echo "     Forzare il ricalcolo:  LIMEN_BOOTSTRAP_FORCE=1 make bootstrap-static"
-	@bash scripts/load_static_data.sh
 
 down:
 	docker compose $(COMPOSE_ALL) $(UP_PROFILES) down
@@ -319,6 +323,16 @@ dump-training:
 	docker exec limen-postgres pg_dump -U limen -d limen -t training_samples --data-only -Fc > data/backups/training_samples_$$(date +%F).dump
 	tar czf data/backups/mlflow_$$(date +%F).tgz mlflow.db mlruns
 	@ls -lah data/backups/
+
+immagine:                    # costruisce l'immagine di api e worker (limen/api), senza avviare niente
+	docker compose $(COMPOSE_ALL) build api
+
+db-up:                       # solo Postgres, e aspetta che sia sano (ripristino da zero, #306)
+	docker compose $(COMPOSE_ALL) up -d postgres
+	@for i in $$(seq 1 60); do \
+	  [ "$$(docker inspect -f '{{.State.Health.Status}}' limen-postgres 2>/dev/null)" = healthy ] && exit 0; \
+	  sleep 3; \
+	done; echo "[db-up] Postgres non è diventato sano in 3 minuti"; exit 1
 
 backup:                      # backup dello stato sullo store BACKUP__* (#304), dal worker
 	docker exec limen-worker limen backup
