@@ -9,6 +9,10 @@
 
 ## 0. La prima cosa da fare sul nuovo server
 
+`./scripts/nuovo_host.sh --controlla`, poi `--ripristina` (dal backup
+notturno, #304) o `--da-zero` (#306): fa da solo i passi sotto che riguardano
+cartelle, volumi, ripristino e avvio. README, «Installing on a new server».
+
 1. **Una sola radice per i dati (#302)**: `LIMEN_DATA_ROOT` nel `.env`
    (assoluta), con sotto `datasets/ reports/ mlruns/ models/ geoserver/ osm/
    sealing/ radar/` — l'albero completo è in testa a `.env.example`. Copiare

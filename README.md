@@ -250,6 +250,46 @@ a bind to `0.0.0.0`.
 
 ---
 
+## Installing on a new server
+
+Limen needs **only Docker** on the host (#306, epic #308), plus the
+repository and a `.env`. The `limen` commands run inside the worker
+container; the periodic jobs are in the worker or in their own compose
+services, not in the host's crontab.
+
+```sh
+git clone https://github.com/agent-engineering-studio/limen.git && cd limen
+cp .env.example .env              # at least LIMEN_DATA_ROOT (absolute)
+./scripts/nuovo_host.sh --controlla    # prerequisites only, changes nothing
+./scripts/nuovo_host.sh --ripristina   # from the nightly backup (needs BACKUP__*)
+./scripts/nuovo_host.sh --da-zero      # a fresh stack: seed, events, calibration, FWI
+```
+
+`--controlla` checks Docker and Compose, free space under `LIMEN_DATA_ROOT`
+(`NUOVO_HOST_DISCO_GB`, 50) and the **fsync latency** of the disk holding
+the Docker volumes, measured with `pg_test_fsync` (`NUOVO_HOST_FSYNC_MS_MAX`,
+20 ms). The threshold is a lesson already paid for: on a disk at ~1 s per
+fsync, `initdb` timed out and every integration test with it.
+
+The other two modes are re-runnable. Both create the folders under
+`LIMEN_DATA_ROOT` and the external volumes, and generate
+`DB__TILES_PASSWORD` if it is missing. `--ripristina` starts only Postgres,
+restores the state (see *Backup and restore*), brings back the sensors CA
+when `LIMEN_SENSORI_DIR` is set, then runs `make up`. `--da-zero` runs
+`make up`, then `ingest-events`, `calibrate` and `fwi-backfill` in the
+worker. Both end with `limen data-status` and `limen jobs`.
+
+**What fills in by itself, and when.** The map: the first hourly sweep,
+within the hour. The per-cell forecast: 02, 08, 14 and 20:20 UTC. The FWI
+chain needs a month of spin-up after `fwi-backfill` before wildfire numbers
+settle; a restore brings it back already settled. The GloFAS references: a
+share of nodes every night, weeks for all of them.
+
+**Not yet in Docker** (#306, still open): the static data loader
+(`make static-data` needs `uv` and GDAL on the host), the reverse proxy and
+certificates, and the LLM gateway (`infra/docker/docker-compose.inference.yml`
+exists, but the gateway-only profile without a GPU does not yet).
+
 ## Backup and restore
 
 Limen backs up its **state** every night, off the server (#304). The
@@ -320,12 +360,13 @@ And a registrant deleted with `limen sensore cancella-registrante` stays in
 the backups until they leave the retention window: a restore older than the
 deletion brings the e-mail back, and the deletion must be repeated.
 
-**Restoring on a new server**, in this order:
+**Restoring on a new server**: `./scripts/nuovo_host.sh --ripristina` does
+steps 2–5 below (see *Installing on a new server*). By hand, in this order:
 
 1. Docker, the repository and the `.env`, with the `BACKUP__*` variables and
    the CA passphrase.
-2. Start only the database: `docker compose $(...) up -d postgres` (an empty
-   `limen` database, as the image creates it).
+2. Start only the database: `make db-up` (an empty `limen` database, as the
+   image creates it).
 3. `make restore CONFERMA=1`: roles first, then `pg_restore --clean
    --if-exists`, then the partitions for the coming days and the map view.
    Running it twice is safe.

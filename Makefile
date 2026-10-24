@@ -68,7 +68,7 @@ BUILD_PROFILES ?= --profile geoserver --profile frontend --profile geodata
 
 .PHONY: inference-up inference-up-colibri inference-down inference-logs inference-check help install docs-links docs-bundle \
         up down build rebuild up-host-ollama \
-        up-dev down-dev logs migrate seed backup backup-elenco restore bootstrap-static calibrate backtest serve \
+        up-dev down-dev logs migrate seed db-up backup backup-elenco restore bootstrap-static calibrate backtest serve \
         data-status static-data flood-data flood-events backtest-flood fire-history \
         logs-worker \
         demo demo-down demo-walkthrough \
@@ -319,6 +319,13 @@ dump-training:
 	docker exec limen-postgres pg_dump -U limen -d limen -t training_samples --data-only -Fc > data/backups/training_samples_$$(date +%F).dump
 	tar czf data/backups/mlflow_$$(date +%F).tgz mlflow.db mlruns
 	@ls -lah data/backups/
+
+db-up:                       # solo Postgres, e aspetta che sia sano (ripristino da zero, #306)
+	docker compose $(COMPOSE_ALL) up -d postgres
+	@for i in $$(seq 1 60); do \
+	  [ "$$(docker inspect -f '{{.State.Health.Status}}' limen-postgres 2>/dev/null)" = healthy ] && exit 0; \
+	  sleep 3; \
+	done; echo "[db-up] Postgres non è diventato sano in 3 minuti"; exit 1
 
 backup:                      # backup dello stato sullo store BACKUP__* (#304), dal worker
 	docker exec limen-worker limen backup
