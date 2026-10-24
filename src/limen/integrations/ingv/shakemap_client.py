@@ -40,6 +40,15 @@ _DEGRADATION_EXC: tuple[type[BaseException], ...] = (
 )
 
 
+class IngvNonDisponibileError(RuntimeError):
+    """INGV non ha risposto: con ``solleva=True`` al posto del risultato vuoto.
+
+    Il backtest lo chiede (#287, Codex su #310): un catalogo irraggiungibile
+    darebbe un report «con E» identico a quello senza, e una conclusione
+    sbagliata. Lo sweep invece degrada, come ogni integrazione in lettura.
+    """
+
+
 class IngvHttpClient:
     """Concrete :class:`IngvClient` Protocol implementation."""
 
@@ -56,10 +65,13 @@ class IngvHttpClient:
         start: datetime,
         end: datetime,
         min_magnitude: float = 3.5,
+        solleva: bool = False,
     ) -> Iterable[dict[str, Any]]:
         """Return FDSN event features (GeoJSON) intersecting ``bbox`` and ``[start, end]``.
 
-        On terminal HTTP failure: returns ``[]`` and logs ``integration.degraded``.
+        On terminal HTTP failure: returns ``[]`` and logs ``integration.degraded``,
+        or raises :class:`IngvNonDisponibileError` with ``solleva=True``. An
+        empty window (204) is ``[]`` either way.
         """
         min_lon, min_lat, max_lon, max_lat = bbox
         params: dict[str, Any] = {
@@ -86,6 +98,8 @@ class IngvHttpClient:
                 "GET", FDSN_EVENT_URL, client=await self._client(), params=params
             )
         except _DEGRADATION_EXC as exc:
+            if solleva:
+                raise IngvNonDisponibileError(f"catalogo FDSN: {exc}") from exc
             log.warning(
                 "integration.degraded",
                 label="ingv.events",
@@ -94,34 +108,43 @@ class IngvHttpClient:
             )
             return []
 
+        # Prima l'errore e poi il vuoto: un 4xx senza corpo non è una finestra
+        # senza terremoti, e passava per tale.
+        if resp.status_code >= 400:
+            # fetch_with_retry restituisce le 4xx senza sollevare.
+            if solleva:
+                raise IngvNonDisponibileError(f"catalogo FDSN: HTTP {resp.status_code}")
+            log.warning("integration.degraded", label="ingv.events", status=resp.status_code)
+            return []
+
         # The FDSN event service sometimes returns 204/No Content for empty windows.
         if resp.status_code == 204 or not resp.content:
             return []
-
-        if resp.status_code >= 400:
-            # fetch_with_retry restituisce le 4xx senza sollevare.
-            log.warning("integration.degraded", label="ingv.events", status=resp.status_code)
-            return []
         try:
             payload = resp.json()
-        except ValueError:
+        except ValueError as exc:
+            if solleva:
+                raise IngvNonDisponibileError("catalogo FDSN: JSON non valido") from exc
             log.warning("integration.degraded", label="ingv.events", error_type="json")
             return []
         features = list(payload.get("features") or [])
         log.info("ingv.events.fetched", count=len(features))
         return features
 
-    async def fetch_shakemap_grid(self, event_id: str) -> bytes | None:
+    async def fetch_shakemap_grid(self, event_id: str, *, solleva: bool = False) -> bytes | None:
         """Return the raw ``grid.xml`` for ``event_id``, or ``None`` if not published.
 
         404 is treated as "no ShakeMap" (a legitimate state for small events);
-        5xx is treated as transient and degrades to ``None``.
+        5xx is treated as transient and degrades to ``None``, or raises
+        :class:`IngvNonDisponibileError` with ``solleva=True``.
         """
         url = SHAKEMAP_GRID_URL_TEMPLATE.format(event_id=event_id)
         log.info("ingv.shakemap.fetch", event_id=event_id, url=url)
         try:
             resp = await fetch_with_retry("GET", url, client=await self._client())
         except _DEGRADATION_EXC as exc:
+            if solleva:
+                raise IngvNonDisponibileError(f"ShakeMap {event_id}: {exc}") from exc
             log.warning(
                 "integration.degraded",
                 label="ingv.shakemap",
@@ -135,6 +158,8 @@ class IngvHttpClient:
             log.info("ingv.shakemap.absent", event_id=event_id)
             return None
         if resp.status_code >= 400:
+            if solleva:
+                raise IngvNonDisponibileError(f"ShakeMap {event_id}: HTTP {resp.status_code}")
             log.warning(
                 "ingv.shakemap.bad_status",
                 event_id=event_id,

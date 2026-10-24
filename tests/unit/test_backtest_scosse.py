@@ -46,10 +46,12 @@ class _Finto:
         pass
 
     async def fetch_events(self, **kw: Any) -> list[dict[str, Any]]:
+        assert kw.pop("solleva") is True
         _Finto.finestra = kw
         return [_evento("con-mappa", 5.0), _evento("senza-mappa", 4.0)]
 
-    async def fetch_shakemap_grid(self, event_id: str) -> bytes | None:
+    async def fetch_shakemap_grid(self, event_id: str, *, solleva: bool = False) -> bytes | None:
+        assert solleva, "il backtest non deve scambiare un guasto per «nessuna ShakeMap»"
         _Finto.scaricati.append(event_id)
         return griglia_xml(RIGHE) if event_id == "con-mappa" else None
 
@@ -92,3 +94,16 @@ async def test_la_cache_evita_di_riscaricare(tmp_path: Path) -> None:
     assert await _scosse(tmp_path) == prima
     # Un evento senza ShakeMap non lascia file: si richiede, la griglia no.
     assert _Finto.scaricati == ["senza-mappa"]
+
+
+async def test_un_catalogo_irraggiungibile_ferma_il_backtest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Codex su #310: un catalogo che non risponde non è un periodo senza terremoti."""
+
+    async def guasto(self: _Finto, **kw: Any) -> list[dict[str, Any]]:
+        raise shakemap_client.IngvNonDisponibileError("catalogo FDSN: HTTP 503")
+
+    monkeypatch.setattr(_Finto, "fetch_events", guasto)
+    with pytest.raises(shakemap_client.IngvNonDisponibileError):
+        await _scosse()

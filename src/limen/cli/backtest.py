@@ -554,8 +554,11 @@ async def scosse_storiche(
     """Per cella, i terremoti della finestra che l'hanno scossa oltre
     ``seismic.pga_min_g`` secondo la ShakeMap INGV (#287).
 
-    Un evento senza ShakeMap, o con una griglia illeggibile, non scuote
-    nessuna cella: come in produzione, nessuna attenuazione inventata.
+    Un evento senza ShakeMap (404), o con una griglia illeggibile, non scuote
+    nessuna cella: come in produzione, nessuna attenuazione inventata. Un
+    INGV che non risponde invece solleva :class:`IngvNonDisponibileError`:
+    un report «con E» senza i terremoti sarebbe il riferimento con
+    un'etichetta sbagliata (Codex, #310).
     Il riquadro si allarga di un grado: un M 5 appena fuori dall'AOI la
     scuote eccome.
     """
@@ -572,6 +575,7 @@ async def scosse_storiche(
             start=start - timedelta(days=seismic.lookback_days),
             end=end,
             min_magnitude=seismic.min_magnitude,
+            solleva=True,
         )
         if (ev := _parse_feature(f)) is not None
     ]
@@ -581,7 +585,7 @@ async def scosse_storiche(
         if file is not None and file.exists():
             grezzo: bytes | None = file.read_bytes()
         else:
-            grezzo = await client.fetch_shakemap_grid(ev.id)
+            grezzo = await client.fetch_shakemap_grid(ev.id, solleva=True)
             if grezzo is not None and file is not None:
                 file.parent.mkdir(parents=True, exist_ok=True)
                 file.write_bytes(grezzo)
@@ -748,6 +752,8 @@ async def run() -> int:
         f"sismica {'ShakeMap INGV' if sismica == 'shakemap' else 'spenta'}"
     )
 
+    from limen.integrations.ingv.shakemap_client import IngvNonDisponibileError
+
     try:
         async with lifespan_pool():
             await run_migrations()
@@ -867,6 +873,9 @@ async def run() -> int:
                     mean_lead_hours=metrics.mean_lead_hours,
                     report=str(metrics.report_path),
                 )
+    except IngvNonDisponibileError as exc:
+        log.error("backtest.sismica.non_disponibile", error=str(exc))
+        return 1
     finally:
         await SharedHttpClient.aclose()
     return 0
