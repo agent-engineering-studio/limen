@@ -196,10 +196,16 @@ def test_la_ca_si_archivia_sempre_come_ca(tmp_path: Path) -> None:
     assert (tmp_path / "dove" / "ca" / "ca.key").read_text() == "k"
 
 
-def test_mlflow_solo_se_su_postgresql() -> None:
-    assert mlflow_database("postgresql://limen:x@postgres:5432/mlflow") == "mlflow"
-    assert mlflow_database("sqlite:///mlflow.db") is None
-    assert mlflow_database("http://mlflow:5000") is None
+def test_mlflow_solo_se_su_postgresql_nello_stesso_server() -> None:
+    app = "postgresql://limen:limen@postgres:5432/limen"
+    assert mlflow_database("postgresql://limen:x@postgres:5432/mlflow", app) == "mlflow"
+    assert mlflow_database("postgresql://limen:x@Postgres/mlflow", app) == "mlflow"
+    assert mlflow_database("sqlite:///mlflow.db", app) is None
+    assert mlflow_database("http://mlflow:5000", app) is None
+    # Codex su #311: un registry su un altro server non si confonde con un
+    # omonimo locale.
+    assert mlflow_database("postgresql://u:x@registry.example.org/mlflow", app) is None
+    assert mlflow_database("postgresql://u:x@postgres:6543/mlflow", app) is None
 
 
 async def _manifest(

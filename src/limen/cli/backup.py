@@ -69,7 +69,9 @@ async def _fai(settings: Settings) -> int:
                     store=store,
                     adesso=datetime.now(UTC),
                     lavoro=Path(d),
-                    mlflow=mlflow_database(settings.scoring.mlflow_tracking_uri),
+                    mlflow=mlflow_database(
+                        settings.scoring.mlflow_tracking_uri, settings.db.connection_string
+                    ),
                 )
                 metrics.update(chiave=esito.chiave, byte=esito.byte, a_mano=True)
                 if esito.avvisi:

@@ -214,10 +214,24 @@ def _nome_database(dsn: str) -> str | None:
     return nome or None
 
 
-def mlflow_database(tracking_uri: str) -> str | None:
-    """Il database del registry MLflow, se sta su PostgreSQL; ``None`` per
-    sqlite o un server remoto (``http://``), che non sono di questo backup."""
+def _server(dsn: str) -> tuple[str, int]:
+    parti = urlsplit(dsn)
+    return ((parti.hostname or "localhost").lower(), parti.port or 5432)
+
+
+def mlflow_database(tracking_uri: str, dsn_app: str) -> str | None:
+    """Il database del registry MLflow, se sta su PostgreSQL **nello stesso
+    server** del database dell'app; ``None`` altrimenti (sqlite, ``http://``,
+    un altro server). Sullo stesso server il dump usa la connessione del
+    backup: con un registry altrove salverebbe un omonimo che non è lui
+    (Codex, #311), quindi un registry remoto si dice e non si salva."""
     if not tracking_uri.startswith(("postgresql://", "postgresql+")):
+        return None
+    if _server(tracking_uri.replace("postgresql+psycopg2://", "postgresql://")) != _server(dsn_app):
+        log.warning(
+            "backup.mlflow_remoto",
+            hint="il registry MLflow è su un altro server: non entra in questo backup",
+        )
         return None
     return _nome_database(tracking_uri)
 

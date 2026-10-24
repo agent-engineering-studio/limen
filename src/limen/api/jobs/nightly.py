@@ -322,7 +322,9 @@ async def _backup(deps: AppDependencies) -> dict[str, Any]:
                 store=store,
                 adesso=datetime.now(UTC),
                 lavoro=Path(d),
-                mlflow=mlflow_database(deps.settings.scoring.mlflow_tracking_uri),
+                mlflow=mlflow_database(
+                    deps.settings.scoring.mlflow_tracking_uri, deps.settings.db.connection_string
+                ),
             )
     out: dict[str, Any] = {
         "chiave": esito.chiave,
