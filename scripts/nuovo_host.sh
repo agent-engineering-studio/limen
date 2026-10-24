@@ -39,25 +39,16 @@ docker compose version >/dev/null 2>&1 || stop "manca il plugin compose v2 (dock
 ok "Compose $(docker compose version --short)"
 
 [ -f .env ] || stop "manca .env: cp .env.example .env, poi almeno LIMEN_DATA_ROOT"
-# Si leggono solo le variabili che servono qui, testo per testo, e non si
-# esportano: con `. ./.env` la shell toglieva le virgolette ai valori JSON
-# (CONTRIBUTI__DESTINATARI=["…"] diventava [contributi@…]) e il valore
-# rovinato, esportato, vinceva sul file quando compose interpola (Codex, #314).
-# Compose e `limen` il .env lo leggono da soli.
-dotenv() {  # dotenv NOME: dall'ambiente, o l'ultima riga NOME= del .env
-  local v="${!1:-}"
-  if [ -z "$v" ]; then
-    v="$(grep -E "^$1=" .env | tail -n 1 | cut -d= -f2-)"
-    # Le regole del dotenv che compose rispetta, senza far valutare niente
-    # alla shell (Codex, #314): una coppia di virgolette uguali intorno si
-    # toglie; senza virgolette, ` #` apre un commento.
-    case "$v" in
-      \"*\") v="${v:1:${#v}-2}" ;;
-      \'*\') v="${v:1:${#v}-2}" ;;
-      *) v="${v%% \#*}" ;;
-    esac
-  fi
-  printf '%s' "$v"
+# Le variabili che servono qui si chiedono a compose, già risolte come lui le
+# risolverà per i bind mount: virgolette, riferimenti (${HOME}/limen,
+# ${LIMEN_DATA_ROOT}/datasets) e precedenza dell'ambiente sul file. Un lettore
+# a mano sbagliava un caso dopo l'altro (Codex, #314), e con `. ./.env` la
+# shell rovinava i valori JSON. Niente si esporta: compose e `limen` il .env
+# lo leggono da soli.
+AMBIENTE="$(docker compose --env-file .env -f infra/docker/docker-compose.demo.yml config --environment)" ||
+  stop "compose non riesce a leggere il .env: docker compose --env-file .env -f infra/docker/docker-compose.demo.yml config"
+dotenv() {  # dotenv NOME: il valore che compose userà
+  printf '%s' "$AMBIENTE" | grep -E "^$1=" | tail -n 1 | cut -d= -f2-
 }
 for nome in LIMEN_DATA_ROOT LIMEN_DATASETS_DIR LIMEN_REPORTS_HOST_DIR LIMEN_MLRUNS_DIR \
   LIMEN_SENSORI_DIR BACKUP__BUCKET BACKUP__ROOT SCHEDULER__NIGHTLY_HOUR_UTC POSTGIS_BASE; do
