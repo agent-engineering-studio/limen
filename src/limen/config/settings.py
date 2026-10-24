@@ -696,6 +696,12 @@ class ScoringSettings(BaseSettings):
     # (the project's Postgres can host the MLflow backend, avoiding a
     # separate database). Artifacts go to the ObjectStore root by default.
     mlflow_tracking_uri: str = "sqlite:///mlflow.db"
+    # Dove un esperimento NUOVO tiene gli artefatti (#302). Vuoto = il default
+    # di MLflow, `./mlruns` della cartella di lavoro: nel container è /app,
+    # che non è montato, e gli artefatti sparirebbero al primo rebuild. Il
+    # compose lo punta a file:///var/lib/limen/mlruns, montato dalla radice
+    # dati. Un esperimento che esiste già resta dov'è.
+    mlflow_artifact_root: str = ""
     mlflow_experiment: str = "limen-landslide"
     mlflow_registered_model: str = "limen-landslide-ml"
     # Shadow rows older than this are purged by the cleanup job — the

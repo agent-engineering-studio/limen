@@ -64,6 +64,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from limen.config.percorsi import radice_dati
 from limen.core.logging import get_logger
 from limen.core.models.risk import (
     CellFeatureBundle,
@@ -93,7 +94,8 @@ log = get_logger(__name__)
 #: Dove finisce il report. Configurabile con `LIMEN_REPORTS_DIR` perche'
 #: dentro un container la directory di lavoro non e' scrivibile.
 REPORTS_DIR = Path(os.getenv("LIMEN_REPORTS_DIR", "reports"))
-_RADAR_ZARR = "./data/radar/it_dpc_sri/italian-radar-dpc-sri.zarr"
+# Sotto la radice dati, dove lo scarica `make radar-data` (#302).
+_RADAR_ZARR = Path("radar/it_dpc_sri/italian-radar-dpc-sri.zarr")
 # March 2009 Southern-Italy storm — 23 ITALICA events in Puglia/Basilicata
 # cluster on the 7th, so the default window has a real truth set.
 _DEFAULT_START = datetime(2009, 3, 4, 0, 0, tzinfo=UTC)
@@ -737,7 +739,8 @@ async def run() -> int:
     if pioggia == "radar":
         from limen.integrations.dpc.sri_archive import SriArchive
 
-        archivio = SriArchive(Path(os.getenv("LIMEN_BACKTEST_RADAR_ZARR", _RADAR_ZARR)))
+        zarr = os.getenv("LIMEN_BACKTEST_RADAR_ZARR")
+        archivio = SriArchive(Path(zarr) if zarr else radice_dati() / _RADAR_ZARR)
     elif pioggia == "merging":
         from limen.config.settings import get_settings
         from limen.integrations.dpc.merging_archive import MergingArchive

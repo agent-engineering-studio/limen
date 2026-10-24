@@ -25,6 +25,24 @@ if [ -f .env ]; then
   set +a
 fi
 
+# Una sola radice per i dati (#302): una sorgente non impostata si cerca lì,
+# al nome che le producono `make dtm-vrt`, `make osm-data` e
+# `make imperviousness-data`. Una variabile impostata vince sempre.
+RADICE="${LIMEN_DATA_ROOT:-$(pwd)/data}"
+# I dati di GeoServer stanno dove li monta il compose.
+GEOSERVER_DATI="${GEOSERVER_SHAPEFILE_DIR:-$RADICE/geoserver}"
+predefinito() {  # predefinito VARIABILE percorso
+  if [ -z "${!1:-}" ] && [ -e "$2" ]; then
+    export "$1=$2"
+  fi
+}
+predefinito LIMEN_DEM_RASTER "$GEOSERVER_DATI/dtm/dtm5m.vrt"
+predefinito LIMEN_CORINE_RASTER "$GEOSERVER_DATI/clc2018_it/clc2018_it_100m.tif"
+predefinito LIMEN_GEOLOGICAL_SHAPEFILE "$GEOSERVER_DATI/carta_geolitologica/carta_geolitologica.shp"
+predefinito LIMEN_OSM_ROADS "$RADICE/osm/osm_roads.gpkg"
+predefinito LIMEN_OSM_RAILWAYS "$RADICE/osm/osm_rails.gpkg"
+predefinito LIMEN_IMPERVIOUSNESS_RASTER "$RADICE/sealing/clms_imd_2018/imd_2018_100m.tif"
+
 say()  { printf '\n\033[1m%s\033[0m\n' "$*"; }
 ok()   { printf '  [ok]      %s\n' "$*"; }
 skip() { printf '  [manca]   %s\n' "$*"; }
