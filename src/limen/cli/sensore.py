@@ -530,15 +530,17 @@ async def run(args: argparse.Namespace, *, ca: CaSensori | None = None) -> int:
             ),
         }
         try:
-            esito = await comando[args.sensore_command]()
+            return await comando[args.sensore_command]()
         except CaError as exc:
             log.error("sensore.ca", error=str(exc))
             return 1
-        if esito == 0 and args.sensore_command in _CAMBIANO_LA_CA:
-            # Il backup non decide l'esito: la firma o la revoca sono fatte,
-            # e una CA senza copia fuori la segnala `backup_ca`.
-            try:
-                await backup_ca(settings)
-            except Exception as exc:
-                log.warning("sensore.ca_backup_fallito", error=str(exc))
-        return esito
+        finally:
+            if args.sensore_command in _CAMBIANO_LA_CA:
+                # Qualunque sia l'esito: la firma può riuscire e la mail no, la
+                # revoca riuscire e il database no, e la CA è cambiata comunque
+                # (Codex, #311). Salvarne una uguale costa pochi KB. Il backup
+                # non decide l'esito del comando.
+                try:
+                    await backup_ca(settings)
+                except Exception as exc:
+                    log.warning("sensore.ca_backup_fallito", error=str(exc))

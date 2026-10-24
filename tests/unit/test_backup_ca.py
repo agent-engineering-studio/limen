@@ -68,3 +68,42 @@ async def test_senza_passphrase_non_esce_niente(tmp_path: Path) -> None:
     settings = _settings(tmp_path, passphrase=None)
     assert await sensore.backup_ca(settings) == 1
     assert await FilesystemObjectStore(tmp_path / "store").list() == []
+
+
+@pytest.mark.parametrize(
+    ("comando", "esito", "salva"),
+    [("approva", 1, True), ("revoca", 0, True), ("richieste", 0, False)],
+    ids=["firma_ok_mail_no", "revoca", "non_tocca_la_ca"],
+)
+async def test_la_ca_si_salva_anche_se_il_comando_fallisce_dopo(
+    monkeypatch: pytest.MonkeyPatch, comando: str, esito: int, salva: bool
+) -> None:
+    """Codex su #311: la firma può riuscire e la mail no; la CA è cambiata."""
+    import argparse
+    import contextlib
+    from collections.abc import AsyncIterator
+
+    salvate: list[str] = []
+
+    @contextlib.asynccontextmanager
+    async def pool() -> AsyncIterator[None]:
+        yield
+
+    async def niente() -> None:
+        return None
+
+    async def fatto(*_a: object, **_k: object) -> int:
+        return esito
+
+    async def salvala(_settings: object) -> int:
+        salvate.append(comando)
+        return 0
+
+    monkeypatch.setattr(sensore, "lifespan_pool", pool)
+    monkeypatch.setattr(sensore, "run_migrations", niente)
+    monkeypatch.setattr(sensore, "backup_ca", salvala)
+    for nome in ("approva", "revoca", "richieste"):
+        monkeypatch.setattr(sensore, nome, fatto)
+    args = argparse.Namespace(sensore_command=comando, richiesta=1, id="pluvio-01")
+    assert await sensore.run(args, ca=sensore.CaSensori("/non/esiste")) == esito
+    assert salvate == ([comando] if salva else [])
