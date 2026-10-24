@@ -235,8 +235,9 @@ Prossima: **#252**, l'ingestore del protocollo v2 (SenML su `limen/v2/{id}/obs`)
 - Lo **stato del database** si salva ogni notte sullo stesso bucket (#304):
   README, «Backup and restore». Senza `BACKUP__BUCKET` nel `.env` il notturno
   lo salta, e dopo 36 ore lo sweep logga `integration.degraded label=backup.stale`.
-- La CRL si rinnova con un cron mensile nel crontab dell'utente
-  (`make sensori-crl`). Se la CRL scade, il broker rifiuta tutti i dispositivi.
+- La CRL dalla #306 vale dieci anni e si rigenera a ogni revoca: niente più
+  cron mensile. Una volta dopo il deploy `make sensori-crl`, poi si toglie la
+  riga dal crontab. Se la CRL scade, il broker rifiuta tutti i dispositivi.
 - nginx: `/etc/nginx/mqtt-sensori.stream.conf` è incluso in fondo a
   `nginx.conf`, fuori da `http {}`. La porta 8883 è aperta su ufw.
   **L'inoltro sul router manca ancora.** Si può rimandare finché non esiste

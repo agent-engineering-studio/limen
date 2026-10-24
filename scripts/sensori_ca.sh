@@ -34,9 +34,13 @@ HOST="${LIMEN_SENSORI_HOST:-limen.agentengineering.it}"
 CA="$DIR/ca"
 BROKER="$DIR/broker"
 CLIENT="$DIR/client"
-# Una CRL scaduta fa rifiutare a Mosquitto TUTTI i client. 90 giorni lasciano
-# margine a un rinnovo mensile; `stato` avvisa sotto i 30.
-CRL_GIORNI=90
+# Una CRL scaduta fa rifiutare a Mosquitto TUTTI i client. Si firma per dieci
+# anni e si rigenera a ogni revoca (`revoca` chiama `crl`): così non scade da
+# sola e non serve un cron mensile sull'host (#306). La scadenza breve serve
+# a chi riceve la CRL da terzi; qui l'unico che la legge è il nostro broker, e
+# rinnovarla da un container vorrebbe dire metterci la chiave della CA.
+# `stato` avvisa ancora sotto i 30 giorni (una CRL firmata prima della #306).
+CRL_GIORNI=3650
 RISERVATI="limen-ingestore limen-salute"
 
 log() { echo "sensori-ca: $*" >&2; }

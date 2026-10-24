@@ -324,9 +324,12 @@ dinamico della fibra, l'inoltro della 8883 sul router.
 
 Operazioni ricorrenti:
 
-- **Ogni mese: `make sensori-crl`.** La CRL vale 90 giorni, e una CRL
-  scaduta fa rifiutare a Mosquitto *tutti* i dispositivi, non solo i
-  revocati. `make sensori-check` avvisa sotto i 30 giorni. Va in un cron.
+- **La CRL non ha più bisogno di un cron (#306).** Si firma per dieci anni e
+  si rigenera a ogni revoca: una CRL scaduta farebbe rifiutare a Mosquitto
+  *tutti* i dispositivi, e rinnovarla da un container vorrebbe dire metterci
+  la chiave della CA. Dopo il deploy della #306, una volta: `make
+  sensori-crl` (la CRL ancora in uso è da 90 giorni), poi togliere la riga
+  dal crontab. `make sensori-check` avvisa ancora sotto i 30 giorni.
 - **Revocare un dispositivo**: `./scripts/sensori_ca.sh revoca <id>`. Rigenera
   la CRL e manda un SIGHUP al broker, che la rilegge senza staccare gli
   altri. Una sessione **già aperta** del revocato resta in piedi fino alla
