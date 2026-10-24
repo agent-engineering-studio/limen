@@ -150,6 +150,13 @@ if [ "$MODO" = "--ripristina" ]; then
   # applica le migrazioni più nuove del backup e dà le password ai ruoli.
   say "ripristino dal backup (#304)"
   [ -n "${BACKUP__BUCKET:-}${BACKUP__ROOT:-}" ] || stop "manca BACKUP__BUCKET nel .env"
+  if [ -n "${LIMEN_SENSORI_DIR:-}" ]; then
+    # Prima del worker del ripristino, che monta sensori/client: se manca,
+    # Docker la crea come root, e poi né ripristina-ca né sensori-ca-init ci
+    # possono scrivere (Codex, #314). `ripristina-ca` accetta una ca/ vuota.
+    mkdir -p "$LIMEN_SENSORI_DIR"/{ca,broker,client,data}
+    ok "cartelle dei sensori in $LIMEN_SENSORI_DIR, dell'operatore"
+  fi
   make --no-print-directory db-up
   make --no-print-directory restore CONFERMA=1
   ok "stato ripristinato"
