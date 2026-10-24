@@ -93,7 +93,15 @@ docker volume create limen-prova-fsync >/dev/null
 trap 'docker volume rm -f limen-prova-fsync >/dev/null 2>&1 || true' EXIT
 # pg_test_fsync, dall'immagine che lo stack usa comunque: fdatasync è il
 # metodo di default di PostgreSQL su Linux.
-us=$(docker run --rm -v limen-prova-fsync:/p "${POSTGIS_BASE:-postgis/postgis:16-3.5}" \
+# La stessa immagine che sceglie il Makefile: postgis/postgis non ha la
+# variante arm64 (Codex, #314).
+if [ -z "${POSTGIS_BASE:-}" ]; then
+  case "$(uname -m)" in
+    arm64 | aarch64) POSTGIS_BASE=imresamu/postgis:16-3.5 ;;
+    *) POSTGIS_BASE=postgis/postgis:16-3.5 ;;
+  esac
+fi
+us=$(docker run --rm -v limen-prova-fsync:/p "$POSTGIS_BASE" \
   pg_test_fsync -f /p/t -s 1 2>/dev/null | awk '$1 == "fdatasync" && !v {v = $(NF-1)} END {print v}')
 docker volume rm -f limen-prova-fsync >/dev/null
 trap - EXIT
