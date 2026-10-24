@@ -50,3 +50,14 @@ def test_esperimento_mlflow_con_radice_artefatti(
     )
     train.prepara_esperimento("limen-landslide", radice)
     assert chiamate == ([("limen-landslide", radice)] if creato else [])
+
+
+def test_radice_dati(monkeypatch: pytest.MonkeyPatch) -> None:
+    from limen.config.percorsi import radice_dati
+
+    monkeypatch.delenv("LIMEN_DATA_ROOT", raising=False)
+    assert radice_dati() == Path("data")
+    monkeypatch.setenv("LIMEN_DATA_ROOT", "")
+    assert radice_dati() == Path("data")
+    monkeypatch.setenv("LIMEN_DATA_ROOT", "/opt/limen")
+    assert radice_dati() == Path("/opt/limen")
