@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from limen.api.dependencies import AppDependencies
 from limen.api.jobs._tracking import tracked
-from limen.api.jobs.ids import JOB_HOURLY_MONITORING
+from limen.api.jobs.ids import JOB_HOURLY_MONITORING, JOB_NIGHTLY
+from limen.config.settings import BackupSettings
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
@@ -171,8 +172,27 @@ async def _score_one_aoi(
             return aoi_id, cells
 
 
+async def avvisa_backup_vecchio(cfg: BackupSettings) -> None:
+    """Il backup notturno (#304) che non riesce da più di
+    ``BACKUP__ETA_MASSIMA_ORE``: lo dice l'orario, perché il notturno fermo non
+    può dirlo da sé. Spento il backup, tace: lo dice già il notturno."""
+    from limen.data.repos import job_runs_repo
+
+    if not cfg.attivo:
+        return
+    ultimo = await job_runs_repo.ultimo_riuscito(JOB_NIGHTLY, scope="backup")
+    if ultimo is None or datetime.now(UTC) - ultimo > timedelta(hours=cfg.eta_massima_ore):
+        log.warning(
+            "integration.degraded",
+            label="backup.stale",
+            ultimo_ok=None if ultimo is None else ultimo.isoformat(),
+            eta_massima_ore=cfg.eta_massima_ore,
+        )
+
+
 async def run_hourly_monitoring(deps: AppDependencies) -> dict[str, int]:
     """Run the workflow over every AOI; return per-AOI cell counts."""
+    await avvisa_backup_vecchio(deps.settings.backup)
     if _sweep_lock.locked():
         log.info("job.hourly_monitoring.skip", reason="previous sweep still running")
         # Il salto si registra, e non come errore: è voluto. Non registrarlo

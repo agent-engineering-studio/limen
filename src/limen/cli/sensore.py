@@ -8,6 +8,8 @@
     limen sensore quarantena --registrante <mail> tutti i dispositivi di un registrante
     limen sensore cancella-registrante <mail>     GDPR: revoca, quarantena, cancella la mail
     limen sensore ttn-segreto <applicazione>      nuovo segreto del webhook TTN, per mail
+    limen sensore backup-ca                       la CA, cifrata, sullo store del backup
+    limen sensore ripristina-ca --dove <cartella> [--chiave ca-sensori/…]
 
 Gira **sull'host**, dalla radice del repo: firmare e revocare passano da
 ``scripts/sensori_ca.sh``, perché la chiave della CA vive in
@@ -16,6 +18,10 @@ Gira **sull'host**, dalla radice del repo: firmare e revocare passano da
 Tutti idempotenti: ``approva`` su una richiesta già approvata rimanda la
 mail con lo stesso certificato invece di firmarne un altro; revocare,
 mettere in quarantena o cancellare due volte non cambia niente.
+
+Dopo ogni firma e ogni revoca la CA si salva da sola, cifrata con
+``BACKUP__PASSPHRASE_CA``, sullo store del backup (#304): era l'unica cosa
+della rete senza copia fuori dal server. Senza store o passphrase, lo dice.
 
 Un sensore LoRaWAN (#266) non ha certificato: approvarlo crea, se manca,
 l'applicazione TTN del registrante con un segreto per il webhook, che parte
@@ -29,9 +35,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import os
 import secrets
 import tempfile
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
 
@@ -40,8 +48,16 @@ import asyncpg
 from limen.config.settings import Settings, get_settings
 from limen.core.logging import get_logger
 from limen.core.sensori_registrazione import TIPO_IT, leggi_csr
+from limen.data.backup import (
+    BackupError,
+    archivio_cartella,
+    cifra,
+    decifra,
+    estrai_archivio,
+)
 from limen.data.db import lifespan_pool
 from limen.data.migrate import run_migrations
+from limen.data.object_store import build_backup_store
 from limen.data.repos import sensor_devices_repo
 from limen.data.repos import sensori_registrazioni_repo as repo
 from limen.notifications.email import invia_testo
@@ -399,6 +415,66 @@ async def richieste() -> int:
     return 0
 
 
+_PREFISSO_CA = "ca-sensori/"
+#: I comandi che cambiano la CA: dopo, la si salva.
+_CAMBIANO_LA_CA = frozenset({"approva", "revoca", "cancella-registrante"})
+
+
+def _cartella_ca(settings: Settings) -> Path | None:
+    if settings.backup.cartella_ca is not None:
+        return settings.backup.cartella_ca
+    radice = os.getenv("LIMEN_SENSORI_DIR")
+    return Path(radice) / "ca" if radice else None
+
+
+async def backup_ca(settings: Settings) -> int:
+    """La CA dei sensori, cifrata, sullo store del backup (#304)."""
+    cfg = settings.backup
+    store = build_backup_store(cfg)
+    cartella = _cartella_ca(settings)
+    if store is None or cfg.passphrase_ca is None or cartella is None:
+        log.warning(
+            "sensore.ca_senza_backup",
+            hint="BACKUP__BUCKET, BACKUP__PASSPHRASE_CA e LIMEN_SENSORI_DIR: "
+            "senza, la CA ha solo la copia su questo server",
+        )
+        return 1
+    if not (cartella / "ca.key").exists():
+        log.error("sensore.ca_assente", cartella=str(cartella))
+        return 1
+    blob = cifra(archivio_cartella(cartella), cfg.passphrase_ca.get_secret_value())
+    chiave = f"{_PREFISSO_CA}{datetime.now(UTC).strftime('%Y-%m-%dT%H-%M-%SZ')}.tar.gz.enc"
+    await store.put(chiave, blob, content_type="application/octet-stream")
+    log.info("sensore.ca_salvata", chiave=chiave, byte=len(blob))
+    return 0
+
+
+async def ripristina_ca(settings: Settings, *, dove: Path, chiave: str | None) -> int:
+    """Rimette la CA in ``dove/ca``. Non sovrascrive una CA che c'è già."""
+    cfg = settings.backup
+    store = build_backup_store(cfg)
+    if store is None or cfg.passphrase_ca is None:
+        log.error("sensore.ca_senza_backup", hint="BACKUP__BUCKET e BACKUP__PASSPHRASE_CA")
+        return 1
+    if (dove / "ca").exists() and any((dove / "ca").iterdir()):
+        log.error("sensore.ca_esiste", cartella=str(dove / "ca"), hint="scegli un'altra --dove")
+        return 1
+    if chiave is None:
+        salvate = await store.list(_PREFISSO_CA)
+        if not salvate:
+            log.error("sensore.ca_nessun_backup")
+            return 1
+        chiave = salvate[-1]
+    try:
+        dati = decifra(await store.get(chiave), cfg.passphrase_ca.get_secret_value())
+    except BackupError as exc:
+        log.error("sensore.ca_illeggibile", chiave=chiave, error=str(exc))
+        return 1
+    estrai_archivio(dati, dove)
+    log.info("sensore.ca_ripristinata", chiave=chiave, cartella=str(dove / "ca"))
+    return 0
+
+
 def build_subparser(top: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = top.add_parser("sensore", help="registro dei sensori dei cittadini: approva, revoca (#253)")
     sub = p.add_subparsers(dest="sensore_command", required=True)
@@ -418,6 +494,10 @@ def build_subparser(top: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     sub.add_parser(
         "ttn-segreto", help="nuovo segreto del webhook di un'applicazione TTN (#266)"
     ).add_argument("applicazione")
+    sub.add_parser("backup-ca", help="la CA, cifrata, sullo store del backup (#304)")
+    rc = sub.add_parser("ripristina-ca", help="la CA da un backup cifrato (#304)")
+    rc.add_argument("--dove", type=Path, required=True, help="cartella in cui ricreare ca/")
+    rc.add_argument("--chiave", help="ca-sensori/<istante>.tar.gz.enc (default: l'ultimo)")
 
 
 async def run(args: argparse.Namespace, *, ca: CaSensori | None = None) -> int:
@@ -441,9 +521,26 @@ async def run(args: argparse.Namespace, *, ca: CaSensori | None = None) -> int:
             "ttn-segreto": partial(
                 ttn_segreto, getattr(args, "applicazione", ""), settings=settings
             ),
+            "backup-ca": partial(backup_ca, settings),
+            "ripristina-ca": partial(
+                ripristina_ca,
+                settings,
+                dove=getattr(args, "dove", Path()),
+                chiave=getattr(args, "chiave", None),
+            ),
         }
         try:
             return await comando[args.sensore_command]()
         except CaError as exc:
             log.error("sensore.ca", error=str(exc))
             return 1
+        finally:
+            if args.sensore_command in _CAMBIANO_LA_CA:
+                # Qualunque sia l'esito: la firma può riuscire e la mail no, la
+                # revoca riuscire e il database no, e la CA è cambiata comunque
+                # (Codex, #311). Salvarne una uguale costa pochi KB. Il backup
+                # non decide l'esito del comando.
+                try:
+                    await backup_ca(settings)
+                except Exception as exc:
+                    log.warning("sensore.ca_backup_fallito", error=str(exc))

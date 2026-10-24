@@ -65,6 +65,12 @@ async def tracked(
         raise
     metrics["duration_s"] = round(time.perf_counter() - t0, 3)
     status = str(metrics.pop("status", "ok"))
+    if status == "warn":
+        # Il CHECK di `job_runs` (046) non ha `warn`: scriverlo faceva fallire
+        # l'UPDATE, e la riga restava `running` per sempre (#304). Un lavoro
+        # fatto con un avviso è un `ok` con l'avviso nelle metriche.
+        metrics["avviso"] = True
+        status = "ok"
     await job_runs_repo.finish(run_id, status=status, metrics=metrics)
     log.info("job.done", job=job_id, scope=scope, status=status, **metrics)
 

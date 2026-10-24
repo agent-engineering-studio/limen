@@ -7,6 +7,7 @@ configurable root directory. Path traversal (``..``) is rejected.
 from __future__ import annotations
 
 import asyncio
+import shutil
 from pathlib import Path
 
 from limen.data.object_store.base import ObjectStore
@@ -55,3 +56,31 @@ class FilesystemObjectStore(ObjectStore):
         target = self._resolve(key)
         if target.exists():
             await asyncio.to_thread(target.unlink)
+
+    async def put_file(
+        self,
+        key: str,
+        path: Path,
+        *,
+        content_type: str | None = None,  # noqa: ARG002 — filesystem has no MIME concept
+    ) -> str:
+        target = self._resolve(key)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(shutil.copyfile, path, target)
+        return str(target)
+
+    async def get_file(self, key: str, path: Path) -> None:
+        source = self._resolve(key)
+        if not source.exists():
+            raise FileNotFoundError(key)
+        await asyncio.to_thread(shutil.copyfile, source, path)
+
+    async def list(self, prefix: str = "") -> list[str]:
+        def _keys() -> list[str]:
+            return sorted(
+                str(p.relative_to(self._root))
+                for p in self._root.rglob("*")
+                if p.is_file() and str(p.relative_to(self._root)).startswith(prefix)
+            )
+
+        return await asyncio.to_thread(_keys)

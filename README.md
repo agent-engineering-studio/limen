@@ -249,6 +249,97 @@ a bind to `0.0.0.0`.
 
 ---
 
+## Backup and restore
+
+Limen backs up its **state** every night, off the server (#304). The
+database is about 31 GB, but almost all of it can be rebuilt: the
+`risk_assessments` partitions (15 GB, a few days of retention), the ISPRA
+layers that reload from their sources (~12 GB), and the outputs of the sweep
+and the forecast. What cannot be rebuilt fits in about 2 GB: verified events,
+landslide truth, training samples, sensor readings and registrations,
+narratives, alert dispatches, `job_runs`, plus the FWI chain and the GloFAS
+references, which cost weeks of quota to fill again. Measured on 2026-10-24
+against the production data: a **202 MB** dump in **41 s**, restored and
+verified on an empty database in **62 s**.
+
+**What is saved.** The `backup` step of the nightly job (`limen-nightly`, one
+`job_runs` row with `scope=backup`) writes `backup/<UTC time>/` to a dedicated
+S3-compatible bucket (`BACKUP__*` in `.env`, separate from the app's
+`OBJECT_STORE__*`):
+
+| File | Content |
+|---|---|
+| `limen.dump` | `pg_dump --format=custom`: the schema of **every** table, and the data of all of them except `BACKUP__SOLO_SCHEMA` (hot, derived or reloadable tables, which come back empty) |
+| `mlflow.dump` | the MLflow registry, when `SCORING__MLFLOW_TRACKING_URI` points at a PostgreSQL database on the same server |
+| `ruoli.sql` | `pg_dumpall --roles-only`, without passwords: the restricted roles get theirs from `DB__*_PASSWORD` when the app starts |
+| `mlruns.tar.gz` | the folders listed in `BACKUP__CARTELLE` (the MLflow artifacts) |
+| `manifest.json` | written last, with sizes, sha256 and the **row count of every saved table**, taken in the same snapshot as the dump: a backup without it was interrupted, and restore ignores it |
+
+Backups older than `BACKUP__RETENTION_GIORNI` (30) are deleted, but the last
+`BACKUP__TIENI_ALMENO` (3) complete ones always stay, and a backup with less
+than half the state rows of the previous one suspends the deletion (an empty
+volume must not push the good backups out of the bucket). If the last successful
+backup is older than `BACKUP__ETA_MASSIMA_ORE` (36), the hourly sweep logs
+`integration.degraded label=backup.stale`. With no bucket configured the step
+is skipped and says so.
+
+The **sensors CA** (`$LIMEN_SENSORI_DIR/ca`) never reaches a container. The
+host CLI saves it encrypted (scrypt + AES-256-GCM, passphrase in
+`BACKUP__PASSPHRASE_CA`) under `ca-sensori/`, after every `limen sensore
+approva`, `revoca` and `cancella-registrante`, or on demand with `limen
+sensore backup-ca`. **Keep a copy of the passphrase off the server**: without
+it the CA backup cannot be opened, and a lost CA means re-issuing every
+sensor certificate.
+
+**Commands**
+
+```sh
+make backup                      # a backup now, from the worker
+make backup-elenco               # the complete backups on the bucket
+make restore CONFERMA=1          # restore the latest one (API and worker stopped)
+make restore CONFERMA=1 CHIAVE=backup/2026-10-24T02-05-00Z/
+uv run limen sensore ripristina-ca --dove "$LIMEN_SENSORI_DIR"   # on the host
+```
+
+**What restore refuses.** A restore that does not find every row the
+manifest promises exits with an error, never with "done": `pg_restore` calls
+any SQL failure an "ignored error", so only the two known-harmless errors of
+`--clean` are accepted (an inherited partition constraint, an extension other
+extensions depend on). It also refuses a database with other clients
+connected (`make restore` stops API, worker, MCP and the tile server first)
+and a database at a different migration than the backup. `--forza` overrides
+the last two. The reloadable layers' entries in `dataset_versions` are
+forgotten, so their loaders fill them again instead of answering "already
+loaded".
+
+**Two things a backup keeps.** The local radar archive
+(`RADAR_ARCHIVE__CARTELLA`, ~51 GB) is **not** included: the DPC keeps about
+150 days, so add it to `BACKUP__CARTELLE` if the older months matter to you.
+And a registrant deleted with `limen sensore cancella-registrante` stays in
+the backups until they leave the retention window: a restore older than the
+deletion brings the e-mail back, and the deletion must be repeated.
+
+**Restoring on a new server**, in this order:
+
+1. Docker, the repository and the `.env`, with the `BACKUP__*` variables and
+   the CA passphrase.
+2. Start only the database: `docker compose $(...) up -d postgres` (an empty
+   `limen` database, as the image creates it).
+3. `make restore CONFERMA=1`: roles first, then `pg_restore --clean
+   --if-exists`, then the partitions for the coming days and the map view.
+   Running it twice is safe.
+4. If the server runs the sensors network: `uv run limen sensore
+   ripristina-ca --dove "$LIMEN_SENSORI_DIR"`, then `make sensori-ca-init`
+   (it keeps the restored CA and rebuilds, signed by it, the broker and
+   ingestor credentials, the ACL and the CRL, which are not in the backup),
+   then `make sensori-up`.
+5. `make up`: migrations newer than the backup are applied, the restricted
+   roles get their passwords.
+6. Wait for the data that refills by itself: the hourly sweep fills
+   `latest_risk` within the hour; the ISPRA layers come back with `make
+   static-data` / `limen geoserver-sync`, OSM with `make osm-data`.
+7. Check: `uv run limen data-status`, `uv run limen jobs`, and the map.
+
 ## Database schema (highlights)
 
 `aoi`, `grid_cells`, `cell_static_factors`, `iffi_landslides`,
@@ -321,7 +412,8 @@ Recently completed:
   per-sample antecedent rainfall): **AUC-PR 0.60 vs 0.28 for the
   deterministic engine** on the same spatial partition and the same rainfall
   (`limen train`; MLflow registry; manual promotion only). Backup/restore of
-  dataset and model: `make dump-training` / `make restore-training`.
+  dataset and model: `make dump-training` / `make restore-training`. The
+  nightly backup above covers them too.
 - **Shadow mode active**: the ML challenger runs alongside the champion every
   night (`SCORING__MODE=shadow`) and writes its probabilities to
   `model_runs`; the deterministic engine stays the only authoritative one.

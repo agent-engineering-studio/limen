@@ -11,6 +11,8 @@ Usage:
     limen registra-verifica  Fact check: un evento verificato entra nel registro (074).
     limen verifiche-report   Eventi verificati contro le previsioni, col tasso di base.
     limen sensore            Registro dei sensori dei cittadini: approva, revoca (#253).
+    limen backup             Backup dello stato fuori dal server; `elenco` li elenca (#304).
+    limen restore            Ripristina un backup (`--conferma`: sovrascrive il database).
     limen radar-archivio     Salva il radar DPC «Merging» prima che il DPC lo perda.
     limen fwi-pioggia        Rifà la catena FWI con la pioggia misurata dal DPC.
     limen ingest-fire-history  FIRMS country archive (2000+), fire_density + truth set.
@@ -43,6 +45,8 @@ from limen import __version__
 from limen.cli.backtest import run as _run_backtest
 from limen.cli.backtest_flood import run as _run_backtest_flood
 from limen.cli.backtest_wildfire import run as _run_backtest_wildfire
+from limen.cli.backup import build_subparser as _build_backup_subparser
+from limen.cli.backup import run as _run_backup
 from limen.cli.bootstrap_static import FORCE_ENV as BOOTSTRAP_FORCE_ENV
 from limen.cli.bootstrap_static import run as _run_bootstrap_static
 from limen.cli.calibrate import run as _run_calibrate
@@ -342,6 +346,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # optional deps stay out of the main CLI's runtime.
     _build_geodata_subparser(sub)
     _build_sensore_subparser(sub)
+    _build_backup_subparser(sub)
     return parser
 
 
@@ -413,6 +418,11 @@ def main(argv: list[str] | None = None) -> int:
         "verify": _run_verify,
         "forecast-history": _run_forecast_history,
     }
+    if args.command in ("backup", "restore"):
+        try:
+            return asyncio.run(_run_backup(args))
+        except KeyboardInterrupt:  # pragma: no cover
+            return 130
     if args.command == "sensore":
         try:
             return asyncio.run(_run_sensore(args))
