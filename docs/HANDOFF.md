@@ -227,7 +227,9 @@ Prossima: **#252**, l'ingestore del protocollo v2 (SenML su `limen/v2/{id}/obs`)
   sensore backup-ca`, passphrase in `BACKUP__PASSPHRASE_CA`, da tenere anche
   fuori dal server); la copia locale `/srv/backup/limen-sensori/ca` resta un di
   più. Su un server nuovo: `limen sensore ripristina-ca --dove
-  "$LIMEN_SENSORI_DIR"`. Se la perdi devi ricertificare tutti i dispositivi.
+  "$LIMEN_SENSORI_DIR"`, poi `make sensori-ca-init` (tiene la CA e rifà con
+  lei le credenziali di broker e ingestore, l'ACL e la CRL) e `make
+  sensori-up`. Se la perdi devi ricertificare tutti i dispositivi.
 - Lo **stato del database** si salva ogni notte sullo stesso bucket (#304):
   README, «Backup and restore». Senza `BACKUP__BUCKET` nel `.env` il notturno
   lo salta, e dopo 36 ore lo sweep logga `integration.degraded label=backup.stale`.

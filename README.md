@@ -328,8 +328,11 @@ deletion brings the e-mail back, and the deletion must be repeated.
 3. `make restore CONFERMA=1`: roles first, then `pg_restore --clean
    --if-exists`, then the partitions for the coming days and the map view.
    Running it twice is safe.
-4. `uv run limen sensore ripristina-ca --dove "$LIMEN_SENSORI_DIR"`, then
-   `make sensori-crl` if the CRL is close to expiry.
+4. If the server runs the sensors network: `uv run limen sensore
+   ripristina-ca --dove "$LIMEN_SENSORI_DIR"`, then `make sensori-ca-init`
+   (it keeps the restored CA and rebuilds, signed by it, the broker and
+   ingestor credentials, the ACL and the CRL, which are not in the backup),
+   then `make sensori-up`.
 5. `make up`: migrations newer than the backup are applied, the restricted
    roles get their passwords.
 6. Wait for the data that refills by itself: the hourly sweep fills
