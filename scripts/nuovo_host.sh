@@ -131,8 +131,14 @@ ok "volumi esterni di GeoServer"
 # lo fa un container, così sull'host non serve sudo.
 say "proprietario delle cartelle scritte dai container"
 make --no-print-directory immagine
-uid=$(docker run --rm --entrypoint id limen/api:0.1 -u)
-gid=$(docker run --rm --entrypoint id limen/api:0.1 -g)
+# Il nome dell'immagine come lo scrive il compose: con le immagini di GHCR
+# (#303) `limen/api:0.1` non esiste, e il primo server nuovo si fermava qui
+# (prova su host pulito, #307).
+prefisso="$(dotenv LIMEN_IMAGE_PREFIX)"
+tag="$(dotenv LIMEN_IMAGE_TAG)"
+immagine_api="${prefisso:-limen/}api:${tag:-0.1}"
+uid=$(docker run --rm --entrypoint id "$immagine_api" -u)
+gid=$(docker run --rm --entrypoint id "$immagine_api" -g)
 scritte=(
   "${LIMEN_DATASETS_DIR:-$RADICE/datasets}"
   "${LIMEN_REPORTS_HOST_DIR:-$RADICE/reports}"
