@@ -72,10 +72,21 @@ class Snapshot:
 
 
 async def _griglia(conn: asyncpg.Connection) -> dict[str, dict[str, Any]]:
-    """Per AOI: quante celle e un'impronta dei loro id, nell'ordine degli id."""
+    """Per AOI: quante celle e un'impronta di id **e posizione**.
+
+    Gli id dicono solo AOI, riga e colonna, e la griglia parte dall'angolo
+    dell'AOI: un confine ridisegnato sposta ogni cella lasciando gli stessi
+    id, e i fattori finirebbero nel posto sbagliato (Codex, #333). L'angolo di
+    ogni cella entra nell'impronta, arrotondato a 1e-6 gradi (~10 cm): il
+    rumore di virgola mobile fra due macchine non deve contare, un metro sì.
+    """
     righe = await conn.fetch(
         """
-        SELECT aoi_id, count(*) AS celle, md5(string_agg(id, ',' ORDER BY id)) AS impronta
+        SELECT aoi_id, count(*) AS celle,
+               md5(string_agg(
+                   id || ':' || round(ST_XMin(geom)::numeric, 6)
+                      || ':' || round(ST_YMin(geom)::numeric, 6),
+                   ',' ORDER BY id)) AS impronta
           FROM grid_cells GROUP BY aoi_id
         """
     )

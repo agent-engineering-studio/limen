@@ -308,8 +308,10 @@ fetch-static:
 	  $(UV) run limen fetch-static; \
 	else \
 	  r=$$(realpath -m "$(LIMEN_DATA_ROOT)"); mkdir -p "$$r"; \
+	  u=$${LIMEN_OSM_PBF_URL:-$$(grep -s '^LIMEN_OSM_PBF_URL=' .env | cut -d= -f2-)}; \
 	  env -i PATH="$$PATH" HOME="$$HOME" docker compose $(COMPOSE_ALL) run --rm --no-deps -T \
-	    --user "$$(id -u):$$(id -g)" -v "$$r:$$r" -e LIMEN_DATA_ROOT="$$r" worker limen fetch-static; \
+	    --user "$$(id -u):$$(id -g)" -v "$$r:$$r" -e LIMEN_DATA_ROOT="$$r" \
+	    $${u:+-e LIMEN_OSM_PBF_URL="$$u"} worker limen fetch-static; \
 	fi
 
 imperviousness-data:

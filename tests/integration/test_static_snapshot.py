@@ -209,3 +209,17 @@ async def test_una_migrazione_diversa_si_rifiuta(
     finally:
         async with acquire() as conn:
             await conn.execute("DELETE FROM schema_migrations WHERE name = '999_futuro.sql'")
+
+
+async def test_stessi_id_ma_celle_spostate_si_rifiuta(
+    strato: None, postgres_container: str, tmp_path: Path
+) -> None:
+    """Codex su #333: un confine ridisegnato sposta le celle e lascia gli id."""
+    cfg, store = _cfg(_container(postgres_container), tmp_path)
+    await _esporta(cfg, store, tmp_path)
+    async with acquire() as conn:
+        await conn.execute("TRUNCATE cell_static_factors")
+        # ~100 m verso est, stessi id e stesso numero di celle.
+        await conn.execute("UPDATE grid_cells SET geom = ST_Translate(geom, 0.0013, 0)")
+    with pytest.raises(BackupError, match="griglia diversa"):
+        await _importa(cfg, store, tmp_path)
