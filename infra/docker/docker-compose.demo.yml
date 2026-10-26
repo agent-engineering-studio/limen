@@ -662,6 +662,11 @@ configs:
 
         handle /api/* {
           reverse_proxy api:8080 {
+            # Contributi e registrazione sensori fanno il limite per IP su
+            # X-Real-IP: Caddy di suo lo inoltra com'è, e un client che lo
+            # cambia a ogni richiesta aggirerebbe il limite (Codex, #330).
+            # Come nginx: lo scrive il proxy, con l'indirizzo vero.
+            header_up X-Real-IP {remote_host}
             flush_interval -1
             transport http {
               read_timeout 900s
@@ -670,7 +675,9 @@ configs:
         }
         @api_docs path /health /openapi.json /docs /redoc
         handle @api_docs {
-          reverse_proxy api:8080
+          reverse_proxy api:8080 {
+            header_up X-Real-IP {remote_host}
+          }
         }
 
         # pg_tileserv vuole i percorsi senza /tiles.
@@ -695,13 +702,17 @@ configs:
           request_body {
             max_size 64KB
           }
-          reverse_proxy worker:8087
+          reverse_proxy worker:8087 {
+            header_up X-Real-IP {remote_host}
+          }
         }
         handle /sensori/v2/* {
           request_body {
             max_size 4KB
           }
-          reverse_proxy worker:8087
+          reverse_proxy worker:8087 {
+            header_up X-Real-IP {remote_host}
+          }
         }
 
         handle {
