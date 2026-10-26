@@ -234,11 +234,19 @@ le stesse porte e gli stessi nomi di modello:
 ```bash
 cp infra/inference/secrets.env.example infra/inference/secrets.env  # chiavi, mai nel repo
 make inference-up            # gateway + llama-swap + embedding
+make inference-up-cpu        # senza GPU: gateway + embedding, fast/chat/extract su Claude
 make inference-up-colibri    # anche colibrì (compila l'immagine, ~400 GB di modello)
 make inference-check         # i nomi di modello che il gateway espone
 ```
 
-Servono Docker con NVIDIA Container Toolkit e i modelli in
+**Senza GPU** (#306): `make inference-up-cpu` avvia solo il gateway e
+l'embedding (llama.cpp su CPU) con `infra/inference/litellm.cpu.yaml`: stessi
+nomi di modello, quindi `LLM__MODELS__*` non cambia, ma `fast`, `chat` ed
+`extract` vanno a Claude. Senza `ANTHROPIC_API_KEY` le chiamate falliscono e
+Limen pubblica il testo deterministico; i ruoli su `quality-local` degradano
+allo stesso modo. llama-swap sta nel profilo `gpu`, che `inference-up` attiva.
+
+Con la GPU servono Docker con NVIDIA Container Toolkit e i modelli in
 `LIMEN_MODELS_DIR` (default `/srv/models`): nessun peso entra nelle immagini.
 Il gateway si aggancia anche alla rete `limen_default`, quindi dal container
 API basta `LLM__LLAMACPP_BASE_URL=http://litellm:4000`. Su questo server le

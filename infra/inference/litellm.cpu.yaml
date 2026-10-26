@@ -1,0 +1,51 @@
+# LiteLLM su un host senza GPU (#306): `make inference-up-cpu`.
+#
+# Stessi nomi di litellm.yaml — sono il contratto con Limen (LLM__MODELS__*),
+# quindi un deployment passa da GPU a CPU senza toccare il .env — ma `fast`,
+# `chat` ed `extract` vanno a Claude invece che a llama-swap, che qui non c'è.
+# L'embedding resta locale: llama.cpp su CPU, ~600 MB di modello in
+# LIMEN_MODELS_DIR/gguf.
+#
+# Senza ANTHROPIC_API_KEY nel file dei segreti le chiamate falliscono, e
+# Limen pubblica il testo deterministico: la mappa e le allerte non dipendono
+# da un LLM. `quality-local`/`glm52` (colibrì) non ci sono: un ruolo mappato lì
+# riceve un errore e degrada allo stesso modo.
+
+model_list:
+  - model_name: fast
+    litellm_params:
+      model: anthropic/claude-haiku-5-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: chat
+    litellm_params:
+      model: anthropic/claude-sonnet-5-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: extract
+    litellm_params:
+      model: anthropic/claude-haiku-5-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: embed
+    litellm_params:
+      model: openai/embed
+      api_base: http://llama-embed:8080/v1
+      api_key: none
+
+  - model_name: quality-cloud
+    litellm_params:
+      model: anthropic/claude-sonnet-5-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: fast-cloud
+    litellm_params:
+      model: anthropic/claude-haiku-5-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+litellm_settings:
+  # Lo stesso tetto di spesa del gateway con la GPU: qui ogni ruolo è a
+  # pagamento, quindi conta di più.
+  max_budget: 50
+  budget_duration: 30d
+  drop_params: true

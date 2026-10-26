@@ -7,12 +7,14 @@
 # unità: le porte di default sono le stesse.
 #
 #   cp infra/inference/secrets.env.example infra/inference/secrets.env   # e valorizza
-#   make inference-up
+#   make inference-up          # con la GPU: llama-swap + embedding + gateway
+#   make inference-up-cpu      # senza GPU: gateway (ruoli su Claude) + embedding
 #   make inference-check
 #
 # Requisiti della macchina:
 #   * Docker con NVIDIA Container Toolkit (runtime `nvidia`) per llama-swap e
-#     colibrì; l'embedding è su CPU.
+#     colibrì (profili `gpu` e `colibri`); l'embedding è su CPU. Senza GPU il
+#     gateway usa infra/inference/litellm.cpu.yaml (LIMEN_LITELLM_CONFIG).
 #   * I modelli in LIMEN_MODELS_DIR (default ${LIMEN_DATA_ROOT}/models): `gguf/` per
 #     llama.cpp (~8 GB) e `colibri/glm52_i4` per colibrì (~400 GB, su NVMe:
 #     colibrì legge gli esperti da disco). Nessun modello entra nelle immagini.
@@ -45,12 +47,17 @@ services:
     env_file:
       - ../inference/secrets.env
     volumes:
-      - ../inference/litellm.yaml:/etc/litellm/config.yaml:ro
+      - ${LIMEN_LITELLM_CONFIG:-../inference/litellm.yaml}:/etc/litellm/config.yaml:ro
     ports:
       - "${LIMEN_LITELLM_BIND:-127.0.0.1}:${LIMEN_LITELLM_PORT:-8091}:4000"
     depends_on:
-      - llama-swap
-      - llama-embed
+      # Facoltativo: senza GPU llama-swap non parte (profilo `gpu`) e il
+      # gateway gira lo stesso, con i ruoli locali spostati su Claude.
+      llama-swap:
+        condition: service_started
+        required: false
+      llama-embed:
+        condition: service_started
     networks: [inferenza, limen]
     mem_limit: 2g
 
@@ -58,6 +65,8 @@ services:
     image: ghcr.io/mostlygeek/llama-swap:v259-cuda-b11176
     container_name: limen-llama-swap
     restart: unless-stopped
+    # Solo con la GPU: `make inference-up` attiva il profilo, inference-up-cpu no.
+    profiles: ["gpu"]
     command: ["--config", "/config/config.yaml", "--listen", "0.0.0.0:8080"]
     volumes:
       - ../inference/llama-swap.yaml:/config/config.yaml:ro

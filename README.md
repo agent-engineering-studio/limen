@@ -316,10 +316,16 @@ images are pinned to a version (pg_tileserv `20250131`, Open-Meteo `1.6.0`,
 mcp-geo-server at its commit), because `latest` on a new host is not what
 runs here.
 
+**LLM gateway without a GPU.** `make inference-up-cpu` starts LiteLLM and
+the CPU embedding from `infra/docker/docker-compose.inference.yml`, with the
+same model names as the GPU stack (`fast`, `chat` and `extract` go to Claude).
+Without a cloud key the narrative falls back to the deterministic text; the
+map and the alerts never depend on an LLM. Point the API at it with
+`LLM__LLAMACPP_BASE_URL=http://litellm:4000` (shared Docker network).
+
 **Not yet in Docker** (#306, still open): the static data loader
-(`make static-data` needs `uv` and GDAL on the host), the reverse proxy and
-certificates, and the LLM gateway (`infra/docker/docker-compose.inference.yml`
-exists, but the gateway-only profile without a GPU does not yet).
+(`make static-data` needs `uv` and GDAL on the host) and the reverse proxy
+with certificates.
 
 ## Backup and restore
 
