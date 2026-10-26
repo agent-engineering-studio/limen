@@ -306,10 +306,12 @@ api image, so one tag covers api, worker and mcp; Postgres has the same tag,
 so changing it restarts the database container too (the data is in the
 volume).
 
-The published SPA calls the API and the tiles **on its own origin** (`/`
-and `/tiles`, behind the reverse proxy, as in production): Vite writes those
-URLs into the bundle, so a different layout keeps building its own image
-(leave `LIMEN_IMAGE_PREFIX` empty). Images are `linux/amd64` only. Third-party
+The published SPA calls everything **on its own origin**, so the reverse
+proxy in front of it routes `/api/` to the API (`:8080`), `/tiles/` to
+pg_tileserv (`:7800`, prefix stripped) and `/geoserver/ispra/wms` to GeoServer
+(`:8081`, the WMS path only: the rest of `/geoserver/` is the admin UI). Vite
+writes those URLs into the bundle, so a different layout keeps building its
+own image (leave `LIMEN_IMAGE_PREFIX` empty). Images are `linux/amd64` only. Third-party
 images are pinned to a version (pg_tileserv `20250131`, Open-Meteo `1.6.0`,
 mcp-geo-server at its commit), because `latest` on a new host is not what
 runs here.

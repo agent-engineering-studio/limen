@@ -11,7 +11,13 @@ FROM ${POSTGIS_BASE}
 
 ARG PG_MAJOR=16
 
-RUN apt-get update \
+# PGDG ha tolto bullseye (la base di postgis/postgis:16-3.5) dal repository
+# principale: senza cache la build moriva con un 404 sul Release (#303). I
+# pacchetti restano nell'archivio. Restare su bullseye e non passare a bookworm
+# è voluto: un'altra glibc sotto un database esistente cambia le collation.
+RUN sed -i 's#//apt.postgresql.org/pub/repos/apt/\? bullseye-pgdg#//apt-archive.postgresql.org/pub/repos/apt/ bullseye-pgdg#' \
+        /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
     && apt-get install -y --no-install-recommends \
         "postgresql-${PG_MAJOR}-cron" \
         "postgresql-${PG_MAJOR}-pgvector" \

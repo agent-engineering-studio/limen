@@ -166,9 +166,9 @@ jobs:
             context: infra/postgres
             file: infra/postgres/Dockerfile.db
             build-args: ""
-          # La SPA pubblicata serve API e tile dalla stessa origine (`/` e
-          # `/tiles` dietro il reverse proxy, come in produzione): Vite scrive
-          # gli URL nel bundle, quindi un'altra disposizione costruisce la sua.
+          # La SPA pubblicata chiama API, tile e WMS sulla stessa origine (`/`,
+          # `/tiles`, `/geoserver/ispra/wms` dietro il reverse proxy): Vite
+          # scrive gli URL nel bundle, un'altra disposizione costruisce la sua.
           - immagine: web
             context: frontend
             file: frontend/Dockerfile
@@ -176,6 +176,7 @@ jobs:
               BASE_PATH=/
               VITE_API_URL=/
               VITE_TILESERV_URL=/tiles
+              VITE_GEOSERVER_WMS_URL=/geoserver/ispra/wms
               VITE_DEFAULT_LON=12.6
               VITE_DEFAULT_LAT=41.9
               VITE_DEFAULT_ZOOM=5.3
