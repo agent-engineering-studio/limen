@@ -323,9 +323,14 @@ mounted read-only **at the same path** so the `.env` paths hold inside too,
 and with your uid so files you downloaded stay readable. `LIMEN_STATICI=host`
 or `docker` forces the choice.
 
-**Not yet in Docker** (#306, still open): the reverse proxy and certificates,
-and the LLM gateway (`infra/docker/docker-compose.inference.yml` exists, but
-the gateway-only profile without a GPU does not yet).
+**LLM gateway without a GPU.** `make inference-up-cpu` starts LiteLLM and
+the CPU embedding from `infra/docker/docker-compose.inference.yml`, with the
+same model names as the GPU stack (`fast`, `chat` and `extract` go to Claude).
+Without a cloud key the narrative falls back to the deterministic text; the
+map and the alerts never depend on an LLM. Point the API at it with
+`LLM__LLAMACPP_BASE_URL=http://litellm:4000` (shared Docker network).
+
+**Not yet in Docker** (#306, still open): the reverse proxy and certificates.
 
 ## Backup and restore
 
