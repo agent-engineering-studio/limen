@@ -268,3 +268,27 @@ async def test_fire_enrichment_asks_a_year_at_a_time_and_drops_a_broken_chain(
     assert {1, 2, 3} == set(conn.updates) and 4 not in conn.updates
     # La catena è una sola dal 2021: due anni dopo i giorni di catena lo dicono.
     assert json.loads(conn.updates[2][0])["chain_days"] > 700
+
+
+def test_mezzogiorno_per_giorno_uguale_alla_serie_intera() -> None:
+    """#327: raggruppare le ore per giorno non cambia l'osservazione, pioggia
+    delle 24 ore a cavallo della mezzanotte compresa."""
+    from datetime import date
+
+    from limen.integrations.openmeteo.dtos import MeteoSnapshot
+
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    end = datetime(2024, 3, 31, 23, tzinfo=UTC)
+    snap = MeteoSnapshot(
+        centroid_lon=16.0,
+        centroid_lat=40.0,
+        window_start=start,
+        window_end=end,
+        samples=_weather(start, end),
+    )
+    per_giorno = fire_features._PerGiorno(snap)
+    giorni = [date(2024, 1, 1) + timedelta(days=i) for i in range(91)]
+    for noon in (11, 12):
+        assert [per_giorno.noon_observation(d, noon_hour=noon) for d in giorni] == [
+            snap.noon_observation(d, noon_hour=noon) for d in giorni
+        ]
