@@ -285,6 +285,37 @@ chain needs a month of spin-up after `fwi-backfill` before wildfire numbers
 settle; a restore brings it back already settled. The GloFAS references: a
 share of nodes every night, weeks for all of them.
 
+### Images: built here or pulled from GHCR
+
+By default the compose files **build** Limen's images on the host
+(`limen/api:0.1`, `limen/postgres:16-3.5`, `limen/web:0.1`,
+`limen/geodata:0.1`): fifteen minutes, and nothing to say which version is
+running. Every push to `main` and every `vX.Y.Z` tag also publishes them on
+GHCR (#303), tagged `sha-<commit>`, `main`/`latest` and the version:
+
+```sh
+# in .env
+LIMEN_IMAGE_PREFIX=ghcr.io/agent-engineering-studio/limen-
+LIMEN_IMAGE_TAG=sha-7a8dd95       # or 0.7.0; never latest on a server
+```
+
+With the prefix set, `make up` pulls instead of building (`make pull` does
+only that), and starts the static SPA instead of the Vite dev server. A
+rollback is the previous tag in `.env` and `make up` again. `mcp` runs the
+api image, so one tag covers api, worker and mcp; Postgres has the same tag,
+so changing it restarts the database container too (the data is in the
+volume).
+
+The published SPA calls everything **on its own origin**, so the reverse
+proxy in front of it routes `/api/` to the API (`:8080`), `/tiles/` to
+pg_tileserv (`:7800`, prefix stripped) and `/geoserver/ispra/wms` to GeoServer
+(`:8081`, the WMS path only: the rest of `/geoserver/` is the admin UI). Vite
+writes those URLs into the bundle, so a different layout keeps building its
+own image (leave `LIMEN_IMAGE_PREFIX` empty). Images are `linux/amd64` only. Third-party
+images are pinned to a version (pg_tileserv `20250131`, Open-Meteo `1.6.0`,
+mcp-geo-server at its commit), because `latest` on a new host is not what
+runs here.
+
 **Not yet in Docker** (#306, still open): the static data loader
 (`make static-data` needs `uv` and GDAL on the host), the reverse proxy and
 certificates, and the LLM gateway (`infra/docker/docker-compose.inference.yml`
@@ -467,7 +498,7 @@ Recently completed:
   V1 always drives the alerts.
 - **MCP `limen-ops`** (`limen mcp-serve`): risk, alerts and workflow runs
   exposed as tools for agent gateways (OpenClaw, Claude Desktop). In compose
-  it is the `mcp` service (image `limen/mcp:0.1`, HTTP on `127.0.0.1:8766`;
+  it is the `mcp` service (image `limen/api:0.1`, the api one, HTTP on `127.0.0.1:8766`;
   `LIMEN_MCP_BIND=0.0.0.0` only behind TLS when the gateway is on another
   machine). OpenClaw hook-up:
   `openclaw mcp set limen-ops '{"url":"http://127.0.0.1:8766/mcp","transport":"streamable-http"}'`.

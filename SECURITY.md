@@ -25,7 +25,7 @@ In scope:
 
 * The Limen backend (FastAPI + workflow + scoring engine + DB layer).
 * The Limen frontend SPA (`frontend/`).
-* The container images we publish (`ghcr.io/agent-engineering-studio/limen-api`).
+* The container images we publish (`ghcr.io/agent-engineering-studio/limen-api`, `-postgres`, `-web`, `-geodata`).
 * The CI workflows under `.github/workflows/`.
 
 Out of scope:

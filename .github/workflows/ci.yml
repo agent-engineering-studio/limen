@@ -4,6 +4,8 @@ on:
   pull_request:
   push:
     branches: [main]
+    # Un tag vX.Y.Z pubblica le immagini anche con la versione (#303).
+    tags: ["v*"]
 
 # Cancel superseded runs on the same branch so PR pushes don't pile up.
 concurrency:
@@ -140,31 +142,61 @@ jobs:
         run: npm run build
 
   # ---------------------------------------------------------------------------
-  # API Docker image — buildx + GHCR push on main + tags.
+  # Immagini del progetto — buildx, push su GHCR su main e sui tag (#303).
+  # Un server nuovo le tira con LIMEN_IMAGE_PREFIX + LIMEN_IMAGE_TAG invece di
+  # costruirle: api (anche worker e mcp), postgres, web, geodata.
   # ---------------------------------------------------------------------------
   docker:
-    name: docker (Dockerfile.api)
+    name: docker (${{ matrix.immagine }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 40
     needs: [backend, integration, frontend]
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - immagine: api
+            context: .
+            file: infra/docker/Dockerfile.api
+            build-args: ""
+          - immagine: postgres
+            context: infra/postgres
+            file: infra/postgres/Dockerfile.db
+            build-args: ""
+          # La SPA pubblicata chiama API, tile e WMS sulla stessa origine (`/`,
+          # `/tiles`, `/geoserver/ispra/wms` dietro il reverse proxy): Vite
+          # scrive gli URL nel bundle, un'altra disposizione costruisce la sua.
+          - immagine: web
+            context: frontend
+            file: frontend/Dockerfile
+            build-args: |
+              BASE_PATH=/
+              VITE_API_URL=/
+              VITE_TILESERV_URL=/tiles
+              VITE_GEOSERVER_WMS_URL=/geoserver/ispra/wms
+              VITE_DEFAULT_LON=12.6
+              VITE_DEFAULT_LAT=41.9
+              VITE_DEFAULT_ZOOM=5.3
+          - immagine: geodata
+            context: .
+            file: geodata/Dockerfile
+            build-args: ""
     steps:
       - uses: actions/checkout@v4
 
-      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
       - name: Compute tags
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/limen-api
+          images: ghcr.io/${{ github.repository_owner }}/limen-${{ matrix.immagine }}
           tags: |
             type=sha,prefix=sha-
             type=ref,event=branch
-            type=ref,event=tag
             type=semver,pattern={{version}}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
@@ -176,25 +208,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build (+ push on main)
+      - name: Build (+ push on main and tags)
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: infra/docker/Dockerfile.api
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          build-args: ${{ matrix.build-args }}
           platforms: linux/amd64
           push: ${{ github.event_name == 'push' }}
+          load: ${{ github.event_name != 'push' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.immagine }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.immagine }}
 
-      - name: Smoke test — `limen serve` is the default CMD
-        if: github.event_name != 'push'
-        # Sanity-check the locally-built image: it should print the help.
-        run: |
-          docker buildx build \
-            --file infra/docker/Dockerfile.api \
-            --tag limen-api:ci \
-            --load \
-            .
-          docker run --rm limen-api:ci limen --version
+      - name: Smoke test — `limen` is on the PATH
+        if: github.event_name != 'push' && matrix.immagine == 'api'
+        run: docker run --rm "${{ fromJSON(steps.meta.outputs.json).tags[0] }}" limen --version

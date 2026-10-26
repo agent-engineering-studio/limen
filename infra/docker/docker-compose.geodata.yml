@@ -30,7 +30,7 @@ services:
     build:
       context: ../postgres
       dockerfile: Dockerfile.db
-    image: limen/postgres:16-3.5
+    image: ${LIMEN_IMAGE_PREFIX:-limen/}postgres:${LIMEN_IMAGE_TAG:-16-3.5}
     container_name: limen-geodata-db
     restart: unless-stopped
     profiles: ["geodata"]
@@ -60,7 +60,7 @@ services:
     build:
       context: ../..
       dockerfile: geodata/Dockerfile
-    image: limen/geodata:0.1
+    image: ${LIMEN_IMAGE_PREFIX:-limen/}geodata:${LIMEN_IMAGE_TAG:-0.1}
     container_name: limen-geodata-init
     restart: "no"
     profiles: ["geodata"]
@@ -85,7 +85,7 @@ services:
     build:
       context: ../..
       dockerfile: geodata/Dockerfile
-    image: limen/geodata:0.1
+    image: ${LIMEN_IMAGE_PREFIX:-limen/}geodata:${LIMEN_IMAGE_TAG:-0.1}
     container_name: limen-ispra-geo-mcp
     restart: unless-stopped
     profiles: ["geodata"]

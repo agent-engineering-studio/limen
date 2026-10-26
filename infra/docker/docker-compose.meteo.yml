@@ -39,7 +39,9 @@ name: limen-meteo
 services:
 
   openmeteo:
-    image: ghcr.io/open-meteo/open-meteo:latest
+    # Una versione, non `latest` (#303): l'istanza e i sidecar di sync devono
+    # parlare lo stesso formato, e un host nuovo deve avere quella di qui.
+    image: ghcr.io/open-meteo/open-meteo:1.6.0
     container_name: limen-openmeteo
     restart: unless-stopped
     profiles: ["meteo"]
@@ -84,7 +86,7 @@ services:
   # nel volume che l'istanza legge. Un servizio per modello, come lo script:
   # IFS porta l'umidità del suolo in stile ERA5, ICON-EU la pioggia più fine.
   openmeteo-sync-ifs: &openmeteo-sync
-    image: ghcr.io/open-meteo/open-meteo:latest
+    image: ghcr.io/open-meteo/open-meteo:1.6.0
     container_name: limen-openmeteo-sync-ifs
     restart: unless-stopped
     profiles: ["meteo"]

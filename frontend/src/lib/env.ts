@@ -70,8 +70,11 @@ export const config = {
   // come stringa **vuota**, e `??` la considererebbe un valore valido. Con i
   // glifi il risultato e' uno stile senza caratteri, cioe' di nuovo la mappa
   // bianca — verificato sul bundle prodotto, che non conteneva l'URL.
-  geoserverWmsUrl:
+  // Un percorso (`/geoserver/ispra/wms`, l'immagine di GHCR) diventa assoluto
+  // come per API e tile: le sorgenti raster le carica il worker di MapLibre.
+  geoserverWmsUrl: sullOrigine(
     env.VITE_GEOSERVER_WMS_URL || "http://localhost:8081/geoserver/ispra/wms",
+  ),
   // Da dove MapLibre prende i caratteri per le etichette. Senza questa voce
   // lo stile non e' valido: un livello `symbol` con `text-field` la pretende,
   // e MapLibre rifiuta lo stile **intero** — mappa completamente bianca,
