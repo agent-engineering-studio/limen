@@ -48,7 +48,9 @@ ok "Compose $(docker compose version --short)"
 AMBIENTE="$(docker compose --env-file .env -f infra/docker/docker-compose.demo.yml config --environment)" ||
   stop "compose non riesce a leggere il .env: docker compose --env-file .env -f infra/docker/docker-compose.demo.yml config"
 dotenv() {  # dotenv NOME: il valore che compose userà
-  printf '%s' "$AMBIENTE" | grep -E "^$1=" | tail -n 1 | cut -d= -f2-
+  # Una chiave assente è «usa il default», non un errore: con pipefail il
+  # grep a vuoto fermerebbe lo script (Codex, #335).
+  printf '%s' "$AMBIENTE" | { grep -E "^$1=" || true; } | tail -n 1 | cut -d= -f2-
 }
 for nome in LIMEN_DATA_ROOT LIMEN_DATASETS_DIR LIMEN_REPORTS_HOST_DIR LIMEN_MLRUNS_DIR \
   LIMEN_SENSORI_DIR BACKUP__BUCKET BACKUP__ROOT SCHEDULER__NIGHTLY_HOUR_UTC POSTGIS_BASE; do
@@ -131,8 +133,14 @@ ok "volumi esterni di GeoServer"
 # lo fa un container, così sull'host non serve sudo.
 say "proprietario delle cartelle scritte dai container"
 make --no-print-directory immagine
-uid=$(docker run --rm --entrypoint id limen/api:0.1 -u)
-gid=$(docker run --rm --entrypoint id limen/api:0.1 -g)
+# Il nome dell'immagine come lo scrive il compose: con le immagini di GHCR
+# (#303) `limen/api:0.1` non esiste, e il primo server nuovo si fermava qui
+# (prova su host pulito, #307).
+prefisso="$(dotenv LIMEN_IMAGE_PREFIX)"
+tag="$(dotenv LIMEN_IMAGE_TAG)"
+immagine_api="${prefisso:-limen/}api:${tag:-0.1}"
+uid=$(docker run --rm --entrypoint id "$immagine_api" -u)
+gid=$(docker run --rm --entrypoint id "$immagine_api" -g)
 scritte=(
   "${LIMEN_DATASETS_DIR:-$RADICE/datasets}"
   "${LIMEN_REPORTS_HOST_DIR:-$RADICE/reports}"
