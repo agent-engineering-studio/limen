@@ -122,8 +122,10 @@ dataset di addestramento e MLflow (sotto).
 
 ### ObjectStore
 
-* Backend `filesystem`: rsync del volume montato fuori dalla macchina
-  via cron.
+* Backend `filesystem`: niente cron (#306). Il volume è montato nel worker
+  in `/var/lib/limen/objects`, quindi lo porta via il backup notturno:
+  `BACKUP__CARTELLE=/var/lib/limen/mlruns,/var/lib/limen/objects` nel `.env`
+  (vedi «Backup e ripristino»).
 * Backend `s3`-compatibile: usare le primitive di
   snapshot/replicazione del fornitore (R2, B2, MinIO espongono tutti
   regole di lifecycle).
