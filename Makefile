@@ -57,7 +57,10 @@ export GEO_INIT_GID := $(shell id -g)
 # quindi la SPA è quella statica e non il dev server di Vite.
 REGISTRO := $(shell grep -s '^LIMEN_IMAGE_PREFIX=.' .env)
 UP_BUILD := $(if $(REGISTRO),--no-build,--build)
-UP_PROFILES  := --profile geoserver --profile $(if $(REGISTRO),frontend-static,frontend)
+# Con LIMEN_DOMINIO nel .env il reverse proxy è in compose (Caddy, #306): serve
+# la SPA statica, perché è quella che il proxy inoltra.
+DOMINIO := $(shell grep -s '^LIMEN_DOMINIO=.' .env)
+UP_PROFILES  := --profile geoserver --profile $(if $(or $(REGISTRO),$(DOMINIO)),frontend-static,frontend)$(if $(DOMINIO), --profile proxy)
 
 # `make build` spans EVERY compose file, not just the ones `make up` starts:
 # a build target that silently skips half the stack is worse than no target.
