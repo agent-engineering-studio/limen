@@ -48,7 +48,9 @@ ok "Compose $(docker compose version --short)"
 AMBIENTE="$(docker compose --env-file .env -f infra/docker/docker-compose.demo.yml config --environment)" ||
   stop "compose non riesce a leggere il .env: docker compose --env-file .env -f infra/docker/docker-compose.demo.yml config"
 dotenv() {  # dotenv NOME: il valore che compose userà
-  printf '%s' "$AMBIENTE" | grep -E "^$1=" | tail -n 1 | cut -d= -f2-
+  # Una chiave assente è «usa il default», non un errore: con pipefail il
+  # grep a vuoto fermerebbe lo script (Codex, #335).
+  printf '%s' "$AMBIENTE" | { grep -E "^$1=" || true; } | tail -n 1 | cut -d= -f2-
 }
 for nome in LIMEN_DATA_ROOT LIMEN_DATASETS_DIR LIMEN_REPORTS_HOST_DIR LIMEN_MLRUNS_DIR \
   LIMEN_SENSORI_DIR BACKUP__BUCKET BACKUP__ROOT SCHEDULER__NIGHTLY_HOUR_UTC POSTGIS_BASE; do
