@@ -173,3 +173,98 @@ async def test_fire_enrichment_writes_the_chain_and_leaves_unobserved_days_pendi
 def test_node_key_is_the_nearest_global_lattice_point() -> None:
     assert fire_features._node_key(16.21, 40.63, spacing=0.1) == (162, 406)
     assert fire_features._node_key(16.26, 40.64, spacing=0.1) == (163, 406)
+
+
+def _weather(start: datetime, end: datetime) -> list[WeatherSample]:
+    """Ore vere fra `start` e `end`, con la pioggia che cambia ogni giorno: la
+    catena e la finestra dei trenta giorni hanno qualcosa da portarsi dietro."""
+    out = []
+    t = start
+    while t <= end:
+        out.append(
+            WeatherSample(
+                timestamp=t,
+                precipitation_mm=float(t.toordinal() % 7 == 0) * 0.4,
+                temperature_c=20.0 + (t.toordinal() % 50) / 5,
+                relative_humidity_pct=30.0 + (t.toordinal() % 9),
+                wind_speed_kmh=12.0,
+            )
+        )
+        t += timedelta(hours=1)
+    return out
+
+
+def test_walking_the_chain_in_pieces_gives_the_same_numbers() -> None:
+    """#327: l'anno dopo riparte dallo stato dell'anno prima, non dal seme."""
+    from datetime import date
+
+    from limen.core.models.hazard import HazardType
+    from limen.core.scoring.regional_thresholds import load_hazard_thresholds
+    from limen.integrations.openmeteo.dtos import MeteoSnapshot
+
+    thresholds = load_hazard_thresholds(HazardType.WILDFIRE)
+    days = [date(2023, 11, 1) + timedelta(days=i) for i in range(120)]
+
+    def snap(part: list[Any]) -> MeteoSnapshot:
+        start = datetime.combine(part[0], datetime.min.time(), UTC)
+        end = datetime.combine(part[-1], datetime.max.time(), UTC)
+        return MeteoSnapshot(
+            centroid_lon=16.0,
+            centroid_lat=40.0,
+            window_start=start,
+            window_end=end,
+            samples=_weather(start - timedelta(days=1), end),
+        )
+
+    whole = fire_features.chain_for_days(
+        snapshot=snap(days),
+        days=days,
+        thresholds=thresholds,  # type: ignore[arg-type]
+    )
+    chain = fire_features.NodeChain(thresholds)  # type: ignore[arg-type]
+    pieces: dict[Any, dict[str, float]] = {}
+    for part in (days[:45], days[45:46], days[46:]):
+        pieces |= chain.walk(snapshot=snap(part), days=part)
+    assert pieces == whole
+
+
+async def test_fire_enrichment_asks_a_year_at_a_time_and_drops_a_broken_chain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#327: ventiquattro anni in una richiesta andavano in timeout e ogni nodo
+    degradava. Ora nessuna finestra supera l'anno; un nodo che smette di
+    rispondere tiene quello che ha già scritto e non viene più chiesto."""
+    early = datetime(2021, 7, 1, 12, tzinfo=UTC)
+    late = datetime(2023, 7, 1, 12, tzinfo=UTC)
+    conn = _Conn(
+        [
+            {"id": 1, "cell_id": "a", "valuation_time": early, "lon": 16.2, "lat": 40.6},
+            {"id": 2, "cell_id": "a", "valuation_time": late, "lon": 16.2, "lat": 40.6},
+            {"id": 3, "cell_id": "b", "valuation_time": early, "lon": 9.1, "lat": 39.2},
+            {"id": 4, "cell_id": "b", "valuation_time": late, "lon": 9.1, "lat": 39.2},
+        ]
+    )
+    _use(monkeypatch, fire_features, conn)
+    windows: list[tuple[datetime, datetime, int]] = []
+
+    class _Client:
+        async def get_fire_weather_grid(
+            self, *, nodes: list[Any], window_start: datetime, window_end: datetime, **kw: Any
+        ):
+            windows.append((window_start, window_end, len(nodes)))
+            # Il nodo sardo risponde solo nel primo blocco.
+            return [
+                [] if lon < 10 and len(windows) > 1 else _weather(window_start, window_end)
+                for lon, _lat in nodes
+            ]
+
+    monkeypatch.setattr(fire_features, "OpenMeteoHttpClient", _Client)
+
+    assert await fire_features.enrich_fire_features(batch_pause_s=0) == 3
+    assert len(windows) >= 3
+    assert all((end - start).days <= fire_features._CHUNK_DAYS + 1 for start, end, _ in windows)
+    # Dal terzo blocco in poi si chiede solo il nodo ancora vivo.
+    assert [n for *_, n in windows[2:]] == [1] * len(windows[2:])
+    assert {1, 2, 3} == set(conn.updates) and 4 not in conn.updates
+    # La catena è una sola dal 2021: due anni dopo i giorni di catena lo dicono.
+    assert json.loads(conn.updates[2][0])["chain_days"] > 700
