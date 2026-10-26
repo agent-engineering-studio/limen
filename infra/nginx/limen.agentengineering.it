@@ -3,6 +3,7 @@
 #   /            -> limen-frontend-static (127.0.0.1:5173)
 #   /api/        -> limen-api             (127.0.0.1:8080)  rotte gia' sotto /api
 #   /tiles/      -> limen-pg-tileserv     (127.0.0.1:7800)  prefisso rimosso
+#   /geoserver/ispra/wms -> GeoServer     (127.0.0.1:8081)  solo il WMS, per PAI e IFFI
 #   /sensori/v2/ -> limen-worker          (127.0.0.1:8087)  ingresso HTTP firmato dei sensori (#265)
 #                                                           e webhook di The Things Network (#266)
 #
@@ -113,6 +114,17 @@ server {
         include /etc/nginx/snippets/office-gdc-proxy.conf;
         proxy_read_timeout 60s;
         proxy_buffering on;
+    }
+
+    # Le sovrapposizioni PAI e IFFI della mappa. Solo il WMS e solo in
+    # lettura: il resto di /geoserver/ è il pannello di amministrazione, che
+    # resta sul loopback. Senza questa rotta la SPA chiedeva localhost:8081,
+    # cioè il computer di chi guarda (#303).
+    location = /geoserver/ispra/wms {
+        limit_except GET { deny all; }
+        proxy_pass http://127.0.0.1:8081;
+        include /etc/nginx/snippets/office-gdc-proxy.conf;
+        proxy_read_timeout 60s;
     }
 
     location / {
