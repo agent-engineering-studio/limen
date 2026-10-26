@@ -88,7 +88,7 @@ COMPOSE_BUILD := $(if $(wildcard .env),--env-file .env) \
 # here — it runs from its own repo (see the note in docker-compose.demo.yml).
 BUILD_PROFILES ?= --profile geoserver --profile frontend --profile geodata
 
-.PHONY: inference-up inference-up-colibri inference-down inference-logs inference-check help install docs-links docs-bundle \
+.PHONY: inference-up inference-up-cpu inference-up-colibri inference-down inference-logs inference-check help install docs-links docs-bundle \
         up down build rebuild pull up-host-ollama \
         up-dev down-dev logs migrate seed immagine db-up up-stack backup backup-elenco restore bootstrap-static calibrate backtest serve \
         data-status static-data flood-data flood-events backtest-flood fire-history \
@@ -186,7 +186,7 @@ up: up-stack
 	@echo "     cambiata. La PRIMA esecuzione però paga tutto — misurato sul DTM 5 m,"
 	@echo "     ~2m45s ogni 11k celle, cioè ~1.5-2h sulle 312k delle 20 regioni."
 	@echo "     Forzare il ricalcolo:  LIMEN_BOOTSTRAP_FORCE=1 make bootstrap-static"
-	@bash scripts/load_static_data.sh
+	@LIMEN_COMPOSE="$(COMPOSE_ALL)" bash scripts/load_static_data.sh
 
 # Lo stack senza i dati statici: avvio, attesa dell'API, seed. È la parte
 # obbligatoria per nuovo_host.sh (#306), che i dati statici li tratta a parte.
@@ -288,12 +288,12 @@ data-status:
 # non lo sono e perché. Non scarica i dataset che richiedono registrazione
 # (TINITALY, CORINE, CLMS): li nomina, con dove prenderli.
 static-data:
-	@bash scripts/load_static_data.sh
+	@LIMEN_COMPOSE="$(COMPOSE_ALL)" bash scripts/load_static_data.sh
 
 # Stesso percorso, con la nota sul layer che per l'alluvione è decisivo: senza
 # il mosaico idraulico ISPRA la mappa alluvione resta uniforme.
 flood-data:
-	@bash scripts/load_static_data.sh flood
+	@LIMEN_COMPOSE="$(COMPOSE_ALL)" bash scripts/load_static_data.sh flood
 
 # Suolo sigillato per l'amplificazione del ramo pluviale. Il prodotto è quello
 # di Copernicus Land, che chiede un account; l'EEA serve lo stesso layer su un
@@ -391,7 +391,7 @@ init:
 	$(UV) run limen migrate
 	$(UV) run limen seed
 	$(UV) run limen ingest-events
-	@bash scripts/load_static_data.sh
+	@LIMEN_COMPOSE="$(COMPOSE_ALL)" bash scripts/load_static_data.sh
 	$(UV) run limen calibrate
 
 serve:
@@ -434,21 +434,27 @@ observability-down:
 # Inference stack in containers (LiteLLM, llama-swap, embedding, colibrì)
 # ---------------------------------------------------------------------------
 # Sull'host attuale gira come unità systemd: questo serve a replicarlo.
-COMPOSE_INF = docker compose -f infra/docker/docker-compose.inference.yml
+# Con il .env, come gli altri compose: senza, LIMEN_MODELS_DIR e le porte
+# del .env non arrivavano e i modelli si cercavano nel percorso di default.
+COMPOSE_INF = docker compose $(if $(wildcard .env),--env-file .env) -f infra/docker/docker-compose.inference.yml
 
 inference-up:  ## Avvia LiteLLM, llama-swap ed embedding (colibrì: inference-up-colibri)
 	@test -f infra/inference/secrets.env || { echo "Manca infra/inference/secrets.env: copia secrets.env.example e valorizza"; exit 1; }
-	$(COMPOSE_INF) up -d
+	$(COMPOSE_INF) --profile gpu up -d
+
+inference-up-cpu:  ## Senza GPU: gateway con fast/chat/extract su Claude, embedding su CPU (#306)
+	@test -f infra/inference/secrets.env || { echo "Manca infra/inference/secrets.env: copia secrets.env.example e valorizza"; exit 1; }
+	LIMEN_LITELLM_CONFIG=../inference/litellm.cpu.yaml $(COMPOSE_INF) up -d
 
 inference-up-colibri:  ## Compila e avvia anche colibrì (GLM-5.2, ~400 GB di modello)
 	@test -f infra/inference/secrets.env || { echo "Manca infra/inference/secrets.env: copia secrets.env.example e valorizza"; exit 1; }
-	$(COMPOSE_INF) --profile colibri up -d --build
+	$(COMPOSE_INF) --profile gpu --profile colibri up -d --build
 
 inference-down:  ## Ferma lo stack d'inferenza in container
-	$(COMPOSE_INF) --profile colibri down
+	$(COMPOSE_INF) --profile gpu --profile colibri down
 
 inference-logs:  ## Log dello stack d'inferenza
-	$(COMPOSE_INF) --profile colibri logs -f --tail=100
+	$(COMPOSE_INF) --profile gpu --profile colibri logs -f --tail=100
 
 inference-check:  ## Quali modelli risponde il gateway in container
 	@curl -sf http://127.0.0.1:$${LIMEN_LITELLM_PORT:-8091}/v1/models | python3 -c 'import json,sys; print([m["id"] for m in json.load(sys.stdin)["data"]])'
