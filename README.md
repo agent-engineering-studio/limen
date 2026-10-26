@@ -316,6 +316,13 @@ images are pinned to a version (pg_tileserv `20250131`, Open-Meteo `1.6.0`,
 mcp-geo-server at its commit), because `latest` on a new host is not what
 runs here.
 
+**Static data without `uv` on the host.** `make static-data` runs the same
+`limen` commands on the host when `uv` is there, otherwise in a throwaway
+worker container (`docker compose run --rm`), with every configured source
+mounted read-only **at the same path** so the `.env` paths hold inside too,
+and with your uid so files you downloaded stay readable. `LIMEN_STATICI=host`
+or `docker` forces the choice.
+
 **LLM gateway without a GPU.** `make inference-up-cpu` starts LiteLLM and
 the CPU embedding from `infra/docker/docker-compose.inference.yml`, with the
 same model names as the GPU stack (`fast`, `chat` and `extract` go to Claude).
@@ -323,9 +330,7 @@ Without a cloud key the narrative falls back to the deterministic text; the
 map and the alerts never depend on an LLM. Point the API at it with
 `LLM__LLAMACPP_BASE_URL=http://litellm:4000` (shared Docker network).
 
-**Not yet in Docker** (#306, still open): the static data loader
-(`make static-data` needs `uv` and GDAL on the host) and the reverse proxy
-with certificates.
+**Not yet in Docker** (#306, still open): the reverse proxy and certificates.
 
 ## Backup and restore
 

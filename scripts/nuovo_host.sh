@@ -173,17 +173,13 @@ if [ "$MODO" = "--ripristina" ]; then
 fi
 
 # Lo stack è obbligatorio: se non parte, lo script si ferma (Codex, #314).
-# I dati statici no: girano ancora sull'host (uv e GDAL, #306), e senza i
-# fattori per cella restano quelli del backup o vuoti, che è un degrado.
+# I dati statici no: senza i fattori per cella restano quelli del backup o
+# vuoti, che è un degrado. Senza uv sull'host girano nel container del worker.
 say "stack (make up-stack)"
 make --no-print-directory up-stack || stop "lo stack non è partito: guarda sopra"
 ok "API pronta, seed fatto"
 say "dati statici (make static-data)"
-if command -v uv >/dev/null; then
-  make --no-print-directory static-data || no "dati statici incompleti: guarda sopra, poi make static-data"
-else
-  no "senza uv sull'host i dati statici non si caricano: i fattori per cella restano quelli del backup o vuoti"
-fi
+make --no-print-directory static-data || no "dati statici incompleti: guarda sopra, poi make static-data"
 
 limen() { docker exec limen-worker limen "$@"; }
 

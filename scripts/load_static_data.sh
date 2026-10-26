@@ -9,6 +9,10 @@
 #
 # Uso:  make static-data          tutti i layer configurati
 #       make flood-data           come sopra, con il focus sull'alluvione
+#
+# I comandi `limen` girano sull'host con uv se c'è, altrimenti in un container
+# usa e getta dell'immagine del worker (#306: sull'host basta Docker).
+# LIMEN_STATICI=host|docker sceglie a mano.
 set -uo pipefail
 
 UV="${UV:-uv}"
@@ -43,11 +47,55 @@ predefinito LIMEN_OSM_ROADS "$RADICE/osm/osm_roads.gpkg"
 predefinito LIMEN_OSM_RAILWAYS "$RADICE/osm/osm_rails.gpkg"
 predefinito LIMEN_IMPERVIOUSNESS_RASTER "$RADICE/sealing/clms_imd_2018/imd_2018_100m.tif"
 
+# Nel container le sorgenti si montano **allo stesso percorso**, in sola
+# lettura: così le variabili del .env valgono dentro come fuori, e non serve
+# una seconda serie di percorsi «visti dal container». Solo i percorsi: il DSN
+# di GeoServer il worker ce l'ha già, nella rete di Docker.
+MODO="${LIMEN_STATICI:-}"
+if [ -z "$MODO" ]; then
+  if command -v "$UV" >/dev/null 2>&1; then MODO=host; else MODO=docker; fi
+fi
+if [ "$MODO" = docker ]; then
+  : "${LIMEN_COMPOSE:?lancialo da make (make static-data): serve LIMEN_COMPOSE}"
+  CONTAINER=()
+  declare -A MONTATE=()
+  for v in LIMEN_DEM_RASTER LIMEN_CORINE_RASTER LIMEN_GEOLOGICAL_SHAPEFILE \
+    LIMEN_OSM_ROADS LIMEN_OSM_RAILWAYS LIMEN_IMPERVIOUSNESS_RASTER; do
+    [ -n "${!v:-}" ] && [ -e "${!v}" ] || continue
+    assoluto="$(cd "$(dirname "${!v}")" && pwd)/$(basename "${!v}")"
+    cartella="$(dirname "$assoluto")"
+    if [ -z "${MONTATE[$cartella]:-}" ]; then
+      CONTAINER+=(-v "$cartella:$cartella:ro")
+      MONTATE[$cartella]=1
+    fi
+    CONTAINER+=(-e "$v=$assoluto")
+  done
+  # Le manopole dei comandi passano anche loro (Codex, #329): con l'ambiente
+  # pulito un LIMEN_BOOTSTRAP_FORCE=1 o un LIMEN_EFFIS_GIORNI chiesti
+  # dall'operatore sparirebbero in silenzio. Sono scalari, non JSON.
+  for v in LIMEN_BOOTSTRAP_FORCE LIMEN_EFFIS_GIORNI; do
+    [ -n "${!v:-}" ] && CONTAINER+=(-e "$v=${!v}")
+  done
+  # Con il proprio uid: le sorgenti sono di chi le ha scaricate, e l'utente
+  # dell'immagine (999) non le leggerebbe. E con un ambiente pulito: il .env
+  # caricato qui sopra come shell ha perso le virgolette dei valori JSON, e
+  # compose preferisce l'ambiente al --env-file — il worker partirebbe con
+  # impostazioni rotte.
+  limen() {
+    # shellcheck disable=SC2086 # LIMEN_COMPOSE sono opzioni da dividere
+    env -i PATH="$PATH" HOME="$HOME" ${DOCKER_HOST:+DOCKER_HOST="$DOCKER_HOST"} \
+      docker compose $LIMEN_COMPOSE run --rm --no-deps -T --user "$(id -u):$(id -g)" \
+      "${CONTAINER[@]}" worker limen "$@"
+  }
+else
+  limen() { $UV run limen "$@"; }
+fi
+
 say()  { printf '\n\033[1m%s\033[0m\n' "$*"; }
 ok()   { printf '  [ok]      %s\n' "$*"; }
 skip() { printf '  [manca]   %s\n' "$*"; }
 
-say "1/5  Cosa è configurato in questo ambiente"
+say "1/5  Cosa è configurato in questo ambiente (comandi: $MODO)"
 
 have_geoserver=0; have_dem=0; have_imperv=0; have_corine=0
 if [ -n "${GEOSERVER_SOURCE__DB_DSN:-}" ]; then
@@ -106,11 +154,11 @@ if [ "$FOCUS" = "flood" ] && [ "$have_geoserver" -eq 0 ]; then
 fi
 
 say "2/5  Migrazioni"
-$UV run limen migrate || exit 1
+limen migrate || exit 1
 
 say "3/5  Sorgenti"
 if [ "$have_geoserver" -eq 1 ]; then
-  $UV run limen geoserver-sync || exit 1
+  limen geoserver-sync || exit 1
 else
   echo "  saltato: GEOSERVER_SOURCE__DB_DSN non impostata"
 fi
@@ -119,13 +167,13 @@ say "4/5  Perimetri EFFIS (truth set del backtest incendio)"
 # Comando a se' e non un passo del bootstrap: e' un dataset di verita', non un
 # fattore per cella, e il bootstrap per cella non fa chiamate HTTP. Sta pero'
 # in questa sequenza, che e' cio' che la #101 chiedeva.
-$UV run limen effis-sync || echo "  (EFFIS non raggiungibile: si prosegue)"
+limen effis-sync || echo "  (EFFIS non raggiungibile: si prosegue)"
 
 say "5/5  Fattori per cella"
 # bootstrap-static esegue da sé i passi la cui sorgente è configurata e
 # registra `static_bootstrap.skip` per gli altri: una sola chiamata copre
 # DTM, CORINE, imperviousness, WUI, distanze OSM e litologia.
-$UV run limen bootstrap-static || exit 1
+limen bootstrap-static || exit 1
 
 say "Risultato"
-$UV run limen data-status
+limen data-status
