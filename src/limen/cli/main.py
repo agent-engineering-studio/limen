@@ -13,6 +13,7 @@ Usage:
     limen sensore            Registro dei sensori dei cittadini: approva, revoca (#253).
     limen backup             Backup dello stato fuori dal server; `elenco` li elenca (#304).
     limen restore            Ripristina un backup (`--conferma`: sovrascrive il database).
+    limen static-snapshot    Fattori per cella senza i raster: export | import | elenco (#305).
     limen radar-archivio     Salva il radar DPC «Merging» prima che il DPC lo perda.
     limen fwi-pioggia        Rifà la catena FWI con la pioggia misurata dal DPC.
     limen ingest-fire-history  FIRMS country archive (2000+), fire_density + truth set.
@@ -21,6 +22,7 @@ Usage:
     limen forecast           Predictive run at now+H hours (forecast rain, no persistence).
     limen firms-sync         Ingest NASA FIRMS active-fire hotspots (FIRMS__MAP_KEY).
     limen imperviousness-fetch  Download the CLMS sealed-soil raster (public EEA service).
+    limen fetch-static       Sorgenti statiche pubbliche, verificate con il manifest (#305).
     limen review-alerts      Sampled manual-review checklist for the alert FAR protocol.
     limen fedelta-racconti   Revisore serale: le spiegazioni dell'AI sono fedeli ai dati?
     limen serve              Start the FastAPI HTTP server (uvicorn on :8080).
@@ -54,6 +56,7 @@ from limen.cli.data_status import run as _run_data_status
 from limen.cli.dpc_bollettini import run as _run_dpc_bollettini
 from limen.cli.effis_sync import run as _run_effis_sync
 from limen.cli.fedelta_racconti import run as _run_fedelta_racconti
+from limen.cli.fetch_static import run as _run_fetch_static
 from limen.cli.firms_sync import run as _run_firms_sync
 from limen.cli.forecast import run as _run_forecast
 from limen.cli.forecast_history import run as _run_forecast_history
@@ -90,6 +93,8 @@ from limen.cli.sensore import build_subparser as _build_sensore_subparser
 from limen.cli.sensore import run as _run_sensore
 from limen.cli.server import run as _run_server
 from limen.cli.shadow_report import run as _run_shadow_report
+from limen.cli.static_snapshot import build_subparser as _build_static_snapshot_subparser
+from limen.cli.static_snapshot import run as _run_static_snapshot
 from limen.cli.sync_egms import run as _run_sync_egms
 from limen.cli.train import run as _run_train
 from limen.cli.verifiche_report import run as _run_verifiche_report
@@ -125,6 +130,10 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "imperviousness-fetch",
         help="scarica il raster CLMS del suolo sigillato dal servizio pubblico EEA",
+    )
+    sub.add_parser(
+        "fetch-static",
+        help="scarica le sorgenti statiche pubbliche e le verifica con il manifest (#305)",
     )
     sub.add_parser(
         "glofas-riferimenti",
@@ -347,6 +356,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _build_geodata_subparser(sub)
     _build_sensore_subparser(sub)
     _build_backup_subparser(sub)
+    _build_static_snapshot_subparser(sub)
     return parser
 
 
@@ -377,6 +387,7 @@ def main(argv: list[str] | None = None) -> int:
         "data-status": _run_data_status,
         "jobs": _run_jobs,
         "imperviousness-fetch": _run_imperviousness_fetch,
+        "fetch-static": _run_fetch_static,
         "review-alerts": _run_review_alerts,
         "glofas-riferimenti": _run_glofas_riferimenti,
         "glofas-ewds": _run_glofas_ewds,
@@ -421,6 +432,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command in ("backup", "restore"):
         try:
             return asyncio.run(_run_backup(args))
+        except KeyboardInterrupt:  # pragma: no cover
+            return 130
+    if args.command == "static-snapshot":
+        try:
+            return asyncio.run(_run_static_snapshot(args))
         except KeyboardInterrupt:  # pragma: no cover
             return 130
     if args.command == "sensore":

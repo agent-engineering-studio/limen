@@ -316,6 +316,31 @@ images are pinned to a version (pg_tileserv `20250131`, Open-Meteo `1.6.0`,
 mcp-geo-server at its commit), because `latest` on a new host is not what
 runs here.
 
+**Static snapshot: the per-cell factors without the rasters** (#305). The
+running system reads `cell_static_factors`, not the ~47 GB of DTM, CORINE and
+geology the bootstrap derives it from in 1.5–2 hours. `limen static-snapshot
+export` dumps the result — `cell_static_factors`, the ISPRA flood mosaic the
+map draws (`flood_hazard_subdiv`), the FIRMS history behind the fire density
+(`fire_events`) and the bootstrap fingerprints — to the
+backup store under `statico/`; `limen static-snapshot import` loads the latest
+on a new instance after `migrate` and `seed`, and `nuovo_host.sh --da-zero`
+tries it before the static data. It refuses a different migration, a
+different grid (checked per AOI) or factors already computed (`--forza`), and
+loads everything in one transaction: a failed import leaves the old data.
+Then `limen calibrate`: the per-AOI statistics are not in the snapshot. With
+the fingerprints, a host that later puts the same sources at the same paths
+with `rsync -a` does not recompute them. For a copy of *this* instance use the
+nightly backup instead.
+
+**Public static sources: `make fetch-static`** (#305). Downloads what needs
+no account under `LIMEN_DATA_ROOT` — the CLMS sealed-soil raster from the EEA
+ImageServer and the OSM main roads and railways (Geofabrik PBF, extracted with
+pyogrio, no GDAL on the host; `LIMEN_OSM_PBF_URL` for another country) — and
+keeps `static-manifest.json` with size and sha256 of each file. A file already
+there is verified, not downloaded again; one that no longer matches stops the
+command. DTM, CORINE and geology still need registration with their
+publishers; on a new server the static snapshot makes them unnecessary.
+
 **Static data without `uv` on the host.** `make static-data` runs the same
 `limen` commands on the host when `uv` is there, otherwise in a throwaway
 worker container (`docker compose run --rm`), with every configured source
