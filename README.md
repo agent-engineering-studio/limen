@@ -330,7 +330,20 @@ Without a cloud key the narrative falls back to the deterministic text; the
 map and the alerts never depend on an LLM. Point the API at it with
 `LLM__LLAMACPP_BASE_URL=http://litellm:4000` (shared Docker network).
 
-**Not yet in Docker** (#306, still open): the reverse proxy and certificates.
+**Reverse proxy and certificates in compose.** Set `LIMEN_DOMINIO` in `.env`
+and `make up` adds the `proxy` profile: Caddy on 80 and 443, certificates from
+Let's Encrypt on its own (the DNS must already point at the host), the same
+routes as `infra/nginx/limen.agentengineering.it` — `/api/`, `/tiles/`, only
+the GeoServer WMS (`/geoserver/ispra/wms`, GET), `/sensori/v2/` and the static
+SPA. The Caddyfile lives inside the compose file, so a host with only the
+compose files and `.env` gets it too; a locally built SPA gets `/`, `/tiles`
+and `/geoserver/ispra/wms` unless `.env` says otherwise, and the proxy writes
+`X-Real-IP` itself, as nginx does. One difference from nginx: no per-IP
+rate limit on `/sensori/v2/` (stock Caddy has none); the body-size caps are
+the same. The MQTT broker for sensors publishes its own TLS port
+(`LIMEN_MQTT_SENSORI_BIND=0.0.0.0` with `LIMEN_MQTT_SENSORI_PORT=8883`) and
+needs no proxy. Without `LIMEN_DOMINIO`, the host's nginx keeps working as
+before.
 
 ## Backup and restore
 

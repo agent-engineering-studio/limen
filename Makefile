@@ -57,7 +57,24 @@ export GEO_INIT_GID := $(shell id -g)
 # quindi la SPA è quella statica e non il dev server di Vite.
 REGISTRO := $(shell grep -s '^LIMEN_IMAGE_PREFIX=.' .env)
 UP_BUILD := $(if $(REGISTRO),--no-build,--build)
-UP_PROFILES  := --profile geoserver --profile $(if $(REGISTRO),frontend-static,frontend)
+# Con LIMEN_DOMINIO nel .env il reverse proxy è in compose (Caddy, #306): serve
+# la SPA statica, perché è quella che il proxy inoltra.
+DOMINIO := $(shell grep -s '^LIMEN_DOMINIO=.' .env)
+UP_PROFILES  := --profile geoserver --profile $(if $(or $(REGISTRO),$(DOMINIO)),frontend-static,frontend)$(if $(DOMINIO), --profile proxy)
+# Dietro il proxy la SPA chiama API, tile e WMS sulla propria origine (Codex,
+# #330): costruita qui con i default del compose chiederebbe localhost:8080,
+# cioè il computer di chi guarda. Un valore nel .env vince sempre.
+ifneq ($(DOMINIO),)
+ifeq ($(shell grep -s '^VITE_API_URL=' .env),)
+export VITE_API_URL := /
+endif
+ifeq ($(shell grep -s '^VITE_TILESERV_URL=' .env),)
+export VITE_TILESERV_URL := /tiles
+endif
+ifeq ($(shell grep -s '^VITE_GEOSERVER_WMS_URL=' .env),)
+export VITE_GEOSERVER_WMS_URL := /geoserver/ispra/wms
+endif
+endif
 
 # `make build` spans EVERY compose file, not just the ones `make up` starts:
 # a build target that silently skips half the stack is worse than no target.

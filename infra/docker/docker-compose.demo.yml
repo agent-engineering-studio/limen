@@ -619,6 +619,107 @@ services:
   # contiene il provider llama.cpp/OpenAI, nonostante il codice sia su main.
   # Vedi knowledge-graph#7 (blocco CI) e #6 (provider openai).
 
+  proxy:
+    # Il reverse proxy in compose (#306), al posto dell'nginx dell'host: Caddy
+    # prende e rinnova da sé i certificati di LIMEN_DOMINIO (Let's Encrypt,
+    # porte 80 e 443 raggiungibili da fuori). Le rotte sono quelle di
+    # infra/nginx/limen.agentengineering.it, e la configurazione sta qui sotto
+    # (`configs`), non in un file del repo: su un host che ha solo i compose e
+    # il .env (#303) il proxy funziona lo stesso.
+    #
+    # È l'unico servizio che pubblica su tutte le interfacce per default:
+    # esiste per essere l'ingresso pubblico. LIMEN_PROXY_BIND lo restringe.
+    image: caddy:2.8.4
+    container_name: limen-proxy
+    restart: unless-stopped
+    profiles: ["proxy"]
+    ports:
+      - "${LIMEN_PROXY_BIND:-0.0.0.0}:80:80"
+      - "${LIMEN_PROXY_BIND:-0.0.0.0}:443:443"
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    volumes:
+      - limen-caddy-data:/data
+      - limen-caddy-config:/config
+
+configs:
+  caddyfile:
+    # `$$` è un `$` per Caddy: compose interpola il resto. Un dominio non
+    # impostato dà `localhost`, con un certificato interno di Caddy.
+    content: |
+      ${LIMEN_DOMINIO:-localhost} {
+        encode zstd gzip
+        header {
+          Strict-Transport-Security "max-age=31536000"
+          X-Content-Type-Options nosniff
+          X-Frame-Options SAMEORIGIN
+          Referrer-Policy strict-origin-when-cross-origin
+        }
+        request_body {
+          max_size 10MB
+        }
+
+        handle /api/* {
+          reverse_proxy api:8080 {
+            # Contributi e registrazione sensori fanno il limite per IP su
+            # X-Real-IP: Caddy di suo lo inoltra com'è, e un client che lo
+            # cambia a ogni richiesta aggirerebbe il limite (Codex, #330).
+            # Come nginx: lo scrive il proxy, con l'indirizzo vero.
+            header_up X-Real-IP {remote_host}
+            flush_interval -1
+            transport http {
+              read_timeout 900s
+            }
+          }
+        }
+        @api_docs path /health /openapi.json /docs /redoc
+        handle @api_docs {
+          reverse_proxy api:8080 {
+            header_up X-Real-IP {remote_host}
+          }
+        }
+
+        # pg_tileserv vuole i percorsi senza /tiles.
+        handle_path /tiles/* {
+          reverse_proxy pg_tileserv:7800
+        }
+
+        # Solo il WMS, in lettura: il resto di /geoserver/ è il pannello di
+        # amministrazione e resta dentro la rete di Docker.
+        @wms {
+          path /geoserver/ispra/wms
+          method GET
+        }
+        handle @wms {
+          reverse_proxy geoserver:8080
+        }
+
+        # Ingresso HTTP dei sensori (#265) e webhook TTN (#266): risponde solo
+        # con docker-compose.sensori-worker.yml. Gli stessi tetti di corpo di
+        # nginx; il limite di richieste per IP no — Caddy di serie non ce l'ha.
+        handle /sensori/v2/ttn {
+          request_body {
+            max_size 64KB
+          }
+          reverse_proxy worker:8087 {
+            header_up X-Real-IP {remote_host}
+          }
+        }
+        handle /sensori/v2/* {
+          request_body {
+            max_size 4KB
+          }
+          reverse_proxy worker:8087 {
+            header_up X-Real-IP {remote_host}
+          }
+        }
+
+        handle {
+          reverse_proxy frontend-static:80
+        }
+      }
+
 volumes:
   limen-pgdata:
     name: limen-pgdata
@@ -626,3 +727,7 @@ volumes:
     name: limen-objects
   frontend-node-modules:
     name: limen-frontend-node-modules
+  limen-caddy-data:
+    name: limen-caddy-data
+  limen-caddy-config:
+    name: limen-caddy-config
