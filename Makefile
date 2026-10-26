@@ -169,7 +169,7 @@ up: up-stack
 	@echo "     cambiata. La PRIMA esecuzione però paga tutto — misurato sul DTM 5 m,"
 	@echo "     ~2m45s ogni 11k celle, cioè ~1.5-2h sulle 312k delle 20 regioni."
 	@echo "     Forzare il ricalcolo:  LIMEN_BOOTSTRAP_FORCE=1 make bootstrap-static"
-	@bash scripts/load_static_data.sh
+	@LIMEN_COMPOSE="$(COMPOSE_ALL)" bash scripts/load_static_data.sh
 
 # Lo stack senza i dati statici: avvio, attesa dell'API, seed. È la parte
 # obbligatoria per nuovo_host.sh (#306), che i dati statici li tratta a parte.
@@ -271,12 +271,12 @@ data-status:
 # non lo sono e perché. Non scarica i dataset che richiedono registrazione
 # (TINITALY, CORINE, CLMS): li nomina, con dove prenderli.
 static-data:
-	@bash scripts/load_static_data.sh
+	@LIMEN_COMPOSE="$(COMPOSE_ALL)" bash scripts/load_static_data.sh
 
 # Stesso percorso, con la nota sul layer che per l'alluvione è decisivo: senza
 # il mosaico idraulico ISPRA la mappa alluvione resta uniforme.
 flood-data:
-	@bash scripts/load_static_data.sh flood
+	@LIMEN_COMPOSE="$(COMPOSE_ALL)" bash scripts/load_static_data.sh flood
 
 # Suolo sigillato per l'amplificazione del ramo pluviale. Il prodotto è quello
 # di Copernicus Land, che chiede un account; l'EEA serve lo stesso layer su un
@@ -374,7 +374,7 @@ init:
 	$(UV) run limen migrate
 	$(UV) run limen seed
 	$(UV) run limen ingest-events
-	@bash scripts/load_static_data.sh
+	@LIMEN_COMPOSE="$(COMPOSE_ALL)" bash scripts/load_static_data.sh
 	$(UV) run limen calibrate
 
 serve:
