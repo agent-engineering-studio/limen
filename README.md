@@ -320,11 +320,13 @@ runs here.
 running system reads `cell_static_factors`, not the ~47 GB of DTM, CORINE and
 geology the bootstrap derives it from in 1.5–2 hours. `limen static-snapshot
 export` dumps the result — `cell_static_factors`, the ISPRA flood mosaic the
-map draws (`flood_hazard_subdiv`) and the bootstrap fingerprints — to the
+map draws (`flood_hazard_subdiv`), the FIRMS history behind the fire density
+(`fire_events`) and the bootstrap fingerprints — to the
 backup store under `statico/`; `limen static-snapshot import` loads the latest
 on a new instance after `migrate` and `seed`, and `nuovo_host.sh --da-zero`
 tries it before the static data. It refuses a different migration, a
-different grid (checked per AOI) or factors already computed (`--forza`).
+different grid (checked per AOI) or factors already computed (`--forza`), and
+loads everything in one transaction: a failed import leaves the old data.
 Then `limen calibrate`: the per-AOI statistics are not in the snapshot. With
 the fingerprints, a host that later puts the same sources at the same paths
 with `rsync -a` does not recompute them. For a copy of *this* instance use the

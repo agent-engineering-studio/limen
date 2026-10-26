@@ -12,6 +12,7 @@ Cosa porta:
 * ``flood_hazard_subdiv`` — il mosaico idraulico ISPRA, che la mappa disegna
   come strato a sé (pg_tileserv). PAI e IFFI no: servono solo al bootstrap, e
   la mappa li prende dal WMS di GeoServer;
+* ``fire_events`` — lo storico FIRMS da cui viene la densità degli incendi;
 * le impronte del bootstrap (``dataset_versions`` di ``static_bootstrap``).
   Un server che poi mette le sorgenti allo stesso percorso con ``rsync -a``
   (stesso mtime, stessa dimensione) ritrova le stesse impronte e non ricalcola.
@@ -25,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -37,9 +39,9 @@ from limen.core.logging import get_logger
 from limen.data.backup import (
     BackupError,
     _conta,
-    _errori_non_ammessi,
     _esegui,
     _livello,
+    _Pg,
     _pg,
     _sha256,
 )
@@ -49,7 +51,15 @@ from limen.integrations.static_bootstrap.fingerprint import SOURCE as BOOTSTRAP_
 log = get_logger(__name__)
 
 PREFISSO = "statico/"
-TABELLE = ("public.cell_static_factors", "public.flood_hazard_subdiv")
+TABELLE = (
+    "public.cell_static_factors",
+    "public.flood_hazard_subdiv",
+    # Lo storico degli incendi (FIRMS) da cui viene la densità per cella:
+    # senza, il passo `fire_density` del bootstrap — che accetta una tabella
+    # vuota come risposta legittima — la ricalcolerebbe a zero subito dopo
+    # l'import (Codex, #333). 83 MB.
+    "public.fire_events",
+)
 _DUMP = "statico.dump"
 _FORMATO_ISTANTE = "%Y-%m-%dT%H-%M-%SZ"
 
@@ -145,6 +155,104 @@ async def snapshot_completi(store: ObjectStore) -> list[str]:
     return sorted(k.removesuffix("manifest.json") for k in chiavi if k.endswith("/manifest.json"))
 
 
+def _letterale(valore: str) -> str:
+    return "'" + valore.replace("'", "''") + "'"
+
+
+def _preludio(tabelle: list[str]) -> str:
+    # Le impronte del bootstrap di qui descrivono i fattori che si stanno per
+    # sostituire: lasciate, il bootstrap salterebbe un ricalcolo dovuto (Codex,
+    # #333). Vanno via nella stessa transazione dei dati.
+    return (
+        f"TRUNCATE {', '.join(tabelle)};\n"
+        f"DELETE FROM public.dataset_versions WHERE source = {_letterale(BOOTSTRAP_SOURCE)};\n"
+    )
+
+
+def _epilogo(attese: dict[str, int], impronte: list[dict[str, str]]) -> str:
+    """Il controllo delle righe e le impronte dello snapshot, dentro la stessa
+    transazione: righe diverse fanno fallire tutto, impronte comprese."""
+    righe = [
+        f"IF (SELECT count(*) FROM {t}) <> {int(n)} THEN "
+        f"RAISE EXCEPTION 'righe diverse dallo snapshot in {t}'; END IF;"
+        for t, n in attese.items()
+    ]
+    valori = ",\n".join(
+        f"({_letterale(BOOTSTRAP_SOURCE)}, {_letterale(i['dataset'])}, "
+        f"{_letterale(i['version'])}, {_letterale(i['metadata'])}::jsonb)"
+        for i in impronte
+    )
+    insert = (
+        "INSERT INTO public.dataset_versions (source, dataset, version, metadata) VALUES\n"
+        f"{valori};\n"
+        if impronte
+        else ""
+    )
+    return "DO $$ BEGIN\n" + "\n".join(righe) + "\nEND $$;\n" + insert
+
+
+async def _carica(pg: _Pg, dump: Path, *, prima: str, dopo: str) -> None:
+    """Preludio, dati di ``pg_restore`` e epilogo in **una** transazione di psql.
+
+    Con il ``TRUNCATE`` su una connessione a parte, un caricamento fallito
+    lasciava le tabelle vuote (Codex, #333). Qui ``pg_restore`` scrive l'SQL e
+    psql lo esegue in streaming con ``--single-transaction`` e
+    ``ON_ERROR_STOP``: o tutto, o i dati di prima. Se ``pg_restore`` stesso
+    fallisce, psql viene ucciso prima della fine dell'input, così la
+    transazione non arriva al COMMIT.
+    """
+    psql = await asyncio.create_subprocess_exec(
+        *pg(
+            "psql",
+            "--no-password",
+            "--quiet",
+            "--single-transaction",
+            "--set=ON_ERROR_STOP=1",
+            f"--dbname={pg.dsn}",
+        ),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        env=pg.env,
+    )
+    assert psql.stdin is not None and psql.stderr is not None
+    errori_psql = asyncio.create_task(psql.stderr.read())
+    with dump.open("rb") as sorgente:
+        restore = await asyncio.create_subprocess_exec(
+            *pg("pg_restore", "--data-only", "--no-owner", "--file=-"),
+            stdin=sorgente,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=pg.env,
+        )
+        assert restore.stdout is not None and restore.stderr is not None
+        errori_restore = asyncio.create_task(restore.stderr.read())
+        interrotto = False
+        try:
+            psql.stdin.write(prima.encode())
+            while blocco := await restore.stdout.read(1 << 20):
+                psql.stdin.write(blocco)
+                await psql.stdin.drain()
+            if await restore.wait() != 0:
+                interrotto = True
+                psql.kill()
+            else:
+                psql.stdin.write(dopo.encode())
+                await psql.stdin.drain()
+                psql.stdin.close()
+        except (BrokenPipeError, ConnectionResetError):
+            # psql si è fermato su un errore: lo dice il suo stderr.
+            restore.kill()
+            await restore.wait()
+    codice = await psql.wait()
+    err_psql = (await errori_psql).decode(errors="replace")
+    err_restore = (await errori_restore).decode(errors="replace")
+    if interrotto:
+        raise BackupError(f"pg_restore: {err_restore[-2000:]} — nessun dato toccato")
+    if codice != 0:
+        raise BackupError(f"psql uscito con {codice}: {err_psql[-2000:]} — nessun dato toccato")
+
+
 async def importa(
     *,
     cfg: BackupSettings,
@@ -197,45 +305,14 @@ async def importa(
     if await asyncio.to_thread(_sha256, dump) != manifest["file"][_DUMP]["sha256"]:
         raise BackupError(f"{_DUMP}: lo sha256 non è quello del manifest")
 
-    await conn.execute(f"TRUNCATE {', '.join(TABELLE)}")
-    pg = _pg(cfg, dsn)
-    _, err = await _esegui(
-        pg(
-            "pg_restore",
-            "--data-only",
-            "--single-transaction",
-            "--no-owner",
-            "--no-password",
-            f"--dbname={pg.dsn}",
-        ),
-        env=pg.env,
-        stdin=dump,
-        errori_sql=True,
-    )
-    if cattivi := _errori_non_ammessi(err):
-        raise BackupError(
-            f"pg_restore: {'; '.join(cattivi[:5])} — le tabelle sono vuote, rilancia l'import"
-        )
-    trovate = await _conta(conn, list(TABELLE))
     attese: dict[str, int] = manifest["righe"]
-    if trovate != attese:
-        raise BackupError(f"righe diverse dallo snapshot: attese {attese}, trovate {trovate}")
-
-    # Le impronte per ultime: registrate prima di avere i dati, un import
-    # fallito lascerebbe il bootstrap convinto di non dover ricalcolare.
-    await conn.executemany(
-        """
-        INSERT INTO dataset_versions (source, dataset, version, metadata)
-        SELECT $1, $2, $3, $4::jsonb
-         WHERE NOT EXISTS (
-               SELECT 1 FROM dataset_versions
-                WHERE source = $1 AND dataset = $2 AND version = $3)
-        """,
-        [
-            (BOOTSTRAP_SOURCE, i["dataset"], i["version"], i["metadata"])
-            for i in manifest["impronte"]
-        ],
+    await _carica(
+        _pg(cfg, dsn),
+        dump,
+        prima=_preludio(list(attese)),
+        dopo=_epilogo(attese, manifest["impronte"]),
     )
+    trovate = await _conta(conn, list(attese))
     log.info(
         "static_snapshot.importato",
         chiave=chiave,
