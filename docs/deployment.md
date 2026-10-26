@@ -129,10 +129,18 @@ Servizi esposti:
 
 ### Deploy da CI
 
-Non c'è un workflow di deploy verso il server self-hosted: la CI pubblica
-l'immagine `ghcr.io/agent-engineering-studio/limen-api` e l'aggiornamento
-sull'host è `docker compose pull && docker compose up -d`. Portabilità e
-ripristino su un altro server: epic #308.
+Non c'è un workflow di deploy verso il server self-hosted. La CI pubblica
+`ghcr.io/agent-engineering-studio/limen-api`, ma il compose non la usa ancora
+(costruisce `limen/api:0.1` sull'host; il passaggio alle immagini GHCR è
+#303): l'aggiornamento è un `git pull` nella cartella del deploy seguito da
+
+```bash
+make up    # ricostruisce le immagini e ricrea i container
+```
+
+che usa `infra/docker/docker-compose.demo.yml` e il `.env` della stessa
+cartella. Portabilità e ripristino su un altro server: [Un server
+nuovo](#un-server-nuovo) ed epic #308.
 
 ## LLM in produzione
 
