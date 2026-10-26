@@ -7,17 +7,19 @@
 # Va avviata DOPO lo stack operativo: si attacca alla rete `limen_default`,
 # che e' `make up` a creare.
 #
-#   make meteo-up        avvia
+#   make meteo-up        avvia l'istanza e i due sync continui (#306)
 #   make meteo-check     quali variabili rispondono davvero
-#   make meteo-sync      scarica in anticipo (facoltativo, vedi sotto)
+#   make meteo-sync      un sync a mano (con --archive anche ERA5-Land)
 #
 # Non serve sincronizzare per cominciare: con REMOTE_DATA_DIRECTORY l'istanza
 # legge dal bucket alla richiesta e tiene una cache locale. Misurato a volume
 # appena creato, senza alcun sync: tutte e otto le variabili che il codice
 # chiede rispondono 24 ore su 24, con numeri plausibili (Bari, 29 set 2026:
 # 17,8 -> 23,6 gradi, umidita' 93 -> 64 %, umidita' del suolo 0,033-0,039).
-# `make meteo-sync` scarica in anticipo: serve a togliere la latenza della
-# prima lettura e a funzionare senza rete, non ad accendere il servizio.
+# I due servizi `openmeteo-sync-*` scaricano in anticipo, e ricontrollano
+# ogni OPENMETEO_SYNC_MINUTI (60): servono a togliere la latenza della prima
+# lettura e a funzionare senza rete, non ad accendere il servizio. Prima era
+# un cron dell'host che nessuno aveva installato (#306).
 #
 # Perché esiste. Ogni tick orario chiedeva a Open-Meteo circa diecimila
 # località — 1446 nodi FWI per quattro variabili, più 8538 nodi alluvione su
@@ -77,6 +79,39 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+
+  # Il sync continuo: la stessa immagine, `sync … --repeat-interval`. Scrive
+  # nel volume che l'istanza legge. Un servizio per modello, come lo script:
+  # IFS porta l'umidità del suolo in stile ERA5, ICON-EU la pioggia più fine.
+  openmeteo-sync-ifs: &openmeteo-sync
+    image: ghcr.io/open-meteo/open-meteo:latest
+    container_name: limen-openmeteo-sync-ifs
+    restart: unless-stopped
+    profiles: ["meteo"]
+    environment:
+      REMOTE_DATA_DIRECTORY: https://openmeteo.s3.amazonaws.com/data/
+    volumes:
+      - openmeteo-data:/app/data
+    command:
+      - sync
+      - ${OPENMETEO_FORECAST_MODEL:-ecmwf_ifs025}
+      - ${OPENMETEO_FORECAST_VARS:-precipitation,temperature_2m,relative_humidity_2m,wind_u_component_10m,wind_v_component_10m,snow_depth,snowfall_water_equivalent,soil_moisture_0_to_7cm,soil_moisture_7_to_28cm}
+      - --past-days
+      - "${OPENMETEO_PAST_DAYS:-7}"
+      - --repeat-interval
+      - "${OPENMETEO_SYNC_MINUTI:-60}"
+
+  openmeteo-sync-icon:
+    <<: *openmeteo-sync
+    container_name: limen-openmeteo-sync-icon
+    command:
+      - sync
+      - ${OPENMETEO_ICON_MODEL:-dwd_icon_eu}
+      - ${OPENMETEO_ICON_VARS:-precipitation,temperature_2m,relative_humidity_2m,wind_u_component_10m,wind_v_component_10m,snow_depth}
+      - --past-days
+      - "${OPENMETEO_PAST_DAYS:-7}"
+      - --repeat-interval
+      - "${OPENMETEO_SYNC_MINUTI:-60}"
 
 networks:
   limen:

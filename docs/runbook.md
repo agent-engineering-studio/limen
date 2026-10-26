@@ -63,31 +63,62 @@ PostGIS custodisce la source of truth. L'ObjectStore contiene solo i
 byte dei raster referenziati da `raster_refs` — il DB ha i checksum,
 quindi un re-pull è verificabile.
 
-### Dump logico (AOI piccola / dev)
+### Backup notturno automatico (#304)
+
+Lo fa il passo `backup` del notturno (`limen-nightly`, riga `job_runs` con
+`scope=backup`), sul bucket `BACKUP__*`, fuori dal server: schema di tutto,
+dati dello stato (~2 GB su 31), ruoli senza password, cartelle di
+`BACKUP__CARTELLE`, manifest con sha256. Retention `BACKUP__RETENTION_GIORNI`,
+tenendo sempre gli ultimi `BACKUP__TIENI_ALMENO`. Dettagli e procedura da
+zero: README, «Backup and restore».
+
+Controlli:
 
 ```bash
-docker compose -f infra/docker/docker-compose.demo.yml exec postgres \
-  pg_dump -U limen -d limen --format=custom --no-owner \
-          --file=/var/lib/postgresql/data/limen.dump
+uv run limen jobs                 # la riga `limen-nightly / backup`
+make backup-elenco                # i backup completi sul bucket
 ```
 
-### Base backup fisico (prod, VPS self-hosted)
+Se nei log compare `integration.degraded label=backup.stale`, l'ultimo backup
+riuscito ha più di `BACKUP__ETA_MASSIMA_ORE` ore: guardare l'errore della riga
+`backup` in `limen jobs` (credenziali del bucket, spazio, `pg_dump`).
 
-Configurare `wal_level=replica` e usare `pg_basebackup` verso un volume
-esterno. Documentare qui sotto nel runbook la procedura di restore.
+### Backup a mano
+
+```bash
+make backup                       # dal worker, come il notturno
+```
+
+Dall'host, dove `pg_dump` non c'è, i comandi passano dal container del
+database: `BACKUP__COMANDO_PG="docker exec -i limen-postgres"` e
+`BACKUP__DSN=postgresql://limen:limen@localhost:5432/limen`, poi
+`uv run limen backup`.
 
 ### Restore
 
 ```bash
-docker compose -f infra/docker/docker-compose.demo.yml exec postgres \
-  pg_restore -U limen -d limen --clean --if-exists /var/lib/postgresql/data/limen.dump
+make restore CONFERMA=1                                   # l'ultimo backup completo
+make restore CONFERMA=1 CHIAVE=backup/2026-10-24T02-05-00Z/
 ```
 
-Dopo un restore, **rieseguire il refresh della matview**:
+`make restore` ferma prima API, worker, MCP e pg_tileserv: il ripristino si
+rifiuta se altri client sono connessi, o se il database è a una migrazione
+diversa da quella del backup (`--forza` per farlo comunque). Sovrascrive il
+database (`pg_restore --clean --if-exists`): prima i ruoli, poi le tabelle,
+poi riconta le righe di ogni tabella salvata contro il manifest, e se non
+tornano esce con 1. Poi dimentica in `dataset_versions` le versioni degli
+strati vuoti, crea le partizioni dei prossimi giorni e fa
+`refresh_mv_latest_risk()`. Rilanciarlo è innocuo. Misurato sui dati di
+produzione il 2026-10-24: backup di 202 MB in 41 s, ripristino verificato in
+62 s. Le tabelle di
+`BACKUP__SOLO_SCHEMA` tornano vuote: le riempiono lo sweep orario
+(`latest_risk`, `risk_assessments`), `make static-data` / `limen
+geoserver-sync` (strati ISPRA) e `make osm-data`.
 
-```sql
-SELECT refresh_mv_latest_risk();
-```
+### Training a parte
+
+`make dump-training` / `make restore-training` restano per spostare solo il
+dataset di addestramento e MLflow (sotto).
 
 ### ObjectStore
 
@@ -293,9 +324,12 @@ dinamico della fibra, l'inoltro della 8883 sul router.
 
 Operazioni ricorrenti:
 
-- **Ogni mese: `make sensori-crl`.** La CRL vale 90 giorni, e una CRL
-  scaduta fa rifiutare a Mosquitto *tutti* i dispositivi, non solo i
-  revocati. `make sensori-check` avvisa sotto i 30 giorni. Va in un cron.
+- **La CRL non ha più bisogno di un cron (#306).** Si firma per dieci anni e
+  si rigenera a ogni revoca: una CRL scaduta farebbe rifiutare a Mosquitto
+  *tutti* i dispositivi, e rinnovarla da un container vorrebbe dire metterci
+  la chiave della CA. Dopo il deploy della #306, una volta: `make
+  sensori-crl` (la CRL ancora in uso è da 90 giorni), poi togliere la riga
+  dal crontab. `make sensori-check` avvisa ancora sotto i 30 giorni.
 - **Revocare un dispositivo**: `./scripts/sensori_ca.sh revoca <id>`. Rigenera
   la CRL e manda un SIGHUP al broker, che la rilegge senza staccare gli
   altri. Una sessione **già aperta** del revocato resta in piedi fino alla
@@ -388,7 +422,10 @@ uv run limen sensore cancella-registrante maker@example.org   # GDPR
   Il certificato si salva appena firmato, quindi anche un `approva` fallito a
   metà, rilanciato, non ne firma un secondo. Un dispositivo in quarantena non
   riceve più niente.
-- Dopo ogni `approva` o `revoca` la CA è cambiata: rifare il backup
+- Dopo ogni `approva`, `revoca` o `cancella-registrante` la CA è cambiata, e
+  la CLI la salva da sola, cifrata, sul bucket del backup (#304). Se nei log
+  compare `sensore.ca_senza_backup`, mancano `BACKUP__BUCKET` o
+  `BACKUP__PASSPHRASE_CA`: allora resta la copia a mano
   (`cp -a $LIMEN_SENSORI_DIR/ca /srv/backup/limen-sensori/`).
 - `cancella-registrante` revoca e mette in quarantena i dispositivi, poi
   cancella la mail e le richieste: i dispositivi restano senza registrante,

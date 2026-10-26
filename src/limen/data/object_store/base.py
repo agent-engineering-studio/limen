@@ -7,6 +7,7 @@ imports this Protocol; the concrete backend is decided by configuration via
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 
@@ -32,3 +33,13 @@ class ObjectStore(Protocol):
 
     async def delete(self, key: str) -> None:
         """Delete ``key``. No-op if absent."""
+
+    async def put_file(self, key: str, path: Path, *, content_type: str | None = None) -> str:
+        """Store the file at ``path`` without loading it in memory (a dump of
+        a few GB). Returns the same as :meth:`put`."""
+
+    async def get_file(self, key: str, path: Path) -> None:
+        """Write the object at ``key`` to ``path``. Raises ``FileNotFoundError``."""
+
+    async def list(self, prefix: str = "") -> list[str]:
+        """Every key starting with ``prefix``, sorted."""

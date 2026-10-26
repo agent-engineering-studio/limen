@@ -6,6 +6,6 @@ to the app, Aruba Cloud Object Storage, R2, B2 — via
 """
 
 from limen.data.object_store.base import ObjectStore
-from limen.data.object_store.factory import build_object_store
+from limen.data.object_store.factory import build_backup_store, build_object_store
 
-__all__ = ["ObjectStore", "build_object_store"]
+__all__ = ["ObjectStore", "build_backup_store", "build_object_store"]

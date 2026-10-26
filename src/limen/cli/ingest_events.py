@@ -32,6 +32,7 @@ from pathlib import Path
 
 from shapely.geometry import Point
 
+from limen.config.percorsi import radice_dati
 from limen.core.logging import get_logger
 from limen.data.db import lifespan_pool
 from limen.data.migrate import run_migrations
@@ -177,7 +178,8 @@ def _flood_categories() -> tuple[str, ...]:
 
 
 async def _run_flood() -> int:
-    cache = Path(os.getenv("LIMEN_FLOOD_EVENTS_CACHE", "./data/flood_events")).expanduser()
+    dove = os.getenv("LIMEN_FLOOD_EVENTS_CACHE")
+    cache = Path(dove).expanduser() if dove else radice_dati() / "flood_events"
     country = os.getenv("LIMEN_FLOOD_EVENTS_COUNTRY", "Italy")
 
     try:

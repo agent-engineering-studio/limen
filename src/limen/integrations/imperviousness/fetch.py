@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from limen.config.percorsi import radice_dati
 from limen.core.logging import get_logger
 from limen.data.db import acquire
 
@@ -199,7 +200,10 @@ def _resolve_dest(dest: Path | str | None) -> Path:
     if dest is not None:
         return Path(dest)
     env_value = os.environ.get(DEST_ENV)
-    return Path(env_value) if env_value else DEFAULT_DEST
+    if env_value:
+        return Path(env_value)
+    # Sotto la radice dati del deployment (#302).
+    return radice_dati() / DEFAULT_DEST.relative_to("data")
 
 
 async def fetch_imperviousness(

@@ -13,7 +13,7 @@
 # Requisiti della macchina:
 #   * Docker con NVIDIA Container Toolkit (runtime `nvidia`) per llama-swap e
 #     colibrì; l'embedding è su CPU.
-#   * I modelli in LIMEN_MODELS_DIR (default /srv/models): `gguf/` per
+#   * I modelli in LIMEN_MODELS_DIR (default ${LIMEN_DATA_ROOT}/models): `gguf/` per
 #     llama.cpp (~8 GB) e `colibri/glm52_i4` per colibrì (~400 GB, su NVMe:
 #     colibrì legge gli esperti da disco). Nessun modello entra nelle immagini.
 #   * Per colibrì, COLIBRI_CUDA_ARCH della GPU di destinazione (sm_75 per la
@@ -61,7 +61,7 @@ services:
     command: ["--config", "/config/config.yaml", "--listen", "0.0.0.0:8080"]
     volumes:
       - ../inference/llama-swap.yaml:/config/config.yaml:ro
-      - ${LIMEN_MODELS_DIR:-/srv/models}/gguf:/models/gguf:ro
+      - ${LIMEN_MODELS_DIR:-${LIMEN_DATA_ROOT:-../../data}/models}/gguf:/models/gguf:ro
     ports:
       - "${LIMEN_LLAMASWAP_BIND:-127.0.0.1}:${LIMEN_LLAMASWAP_PORT:-8083}:8080"
     networks: [inferenza]
@@ -93,7 +93,7 @@ services:
       - -t
       - "6"
     volumes:
-      - ${LIMEN_MODELS_DIR:-/srv/models}/gguf:/models/gguf:ro
+      - ${LIMEN_MODELS_DIR:-${LIMEN_DATA_ROOT:-../../data}/models}/gguf:/models/gguf:ro
     ports:
       - "${LIMEN_EMBED_BIND:-127.0.0.1}:${LIMEN_EMBED_PORT:-8082}:8080"
     networks: [inferenza]
@@ -137,7 +137,7 @@ services:
       - --policy
       - balanced
     volumes:
-      - ${LIMEN_MODELS_DIR:-/srv/models}/colibri/glm52_i4:/model:ro
+      - ${LIMEN_MODELS_DIR:-${LIMEN_DATA_ROOT:-../../data}/models}/colibri/glm52_i4:/model:ro
     ports:
       - "${LIMEN_COLIBRI_BIND:-127.0.0.1}:${LIMEN_COLIBRI_PORT:-8070}:5000"
     # Lo streaming degli esperti tocca molta page cache.

@@ -51,6 +51,7 @@ STEPS = (
     "partitions_maintain",
     "retention",
     "storage",
+    "backup",
     "egms_release",
     "radar_archivio",
     "effis_perimetri",
@@ -214,6 +215,9 @@ async def run_nightly_pipeline(deps: AppDependencies) -> dict[str, Any]:
     out["partitions_maintain"] = await _step("partitions_maintain", lambda: _partitions(deps))
     out["retention"] = await _step("retention", lambda: _retention(deps))
     out["storage"] = await _step("storage", lambda: _storage(deps))
+    # Dopo la retention, così il dump non porta ciò che sta per sparire; prima
+    # dei passi lunghi, così un backup non aspetta il radar o GloFAS.
+    out["backup"] = await _step("backup", lambda: _backup(deps))
     out["egms_release"] = await _step("egms_release", lambda: _egms_release(deps))
     out["radar_archivio"] = await _step("radar_archivio", lambda: _radar_archivio(deps))
     out["effis_perimetri"] = await _step("effis_perimetri", _effis_perimetri)
@@ -292,6 +296,47 @@ async def _radar_archivio(deps: AppDependencies) -> dict[str, Any]:
     if not cfg.attivo:
         return {"status": "skipped", "reason": "RADAR_ARCHIVE__CARTELLA non impostata"}
     return dict(await archivia(Path(cfg.cartella), giorni=cfg.giorni, massimo=cfg.file_per_notte))
+
+
+async def _backup(deps: AppDependencies) -> dict[str, Any]:
+    """Lo stato fuori dal server (#304): un guasto del disco di Postgres oggi
+    sarebbe una perdita definitiva di verifiche, eventi, training e sensori."""
+    import tempfile
+    from pathlib import Path
+
+    from limen.data.backup import esegui_backup, mlflow_database
+    from limen.data.object_store import build_backup_store
+
+    cfg = deps.settings.backup
+    store = build_backup_store(cfg)
+    if store is None:
+        log.warning("backup.non_configurato", hint="BACKUP__BUCKET")
+        return {"status": "skipped", "reason": "BACKUP__BUCKET non impostato: nessun backup"}
+    dsn = cfg.dsn.get_secret_value() if cfg.dsn else deps.settings.db.connection_string
+    with tempfile.TemporaryDirectory(prefix="limen-backup-") as d:
+        async with acquire() as conn:
+            esito = await esegui_backup(
+                cfg=cfg,
+                dsn=dsn,
+                conn=conn,
+                store=store,
+                adesso=datetime.now(UTC),
+                lavoro=Path(d),
+                mlflow=mlflow_database(
+                    deps.settings.scoring.mlflow_tracking_uri, deps.settings.db.connection_string
+                ),
+            )
+    out: dict[str, Any] = {
+        "chiave": esito.chiave,
+        "byte": esito.byte,
+        "file": list(esito.file),
+        "cancellati": len(esito.cancellati),
+    }
+    if esito.avvisi:
+        # Fatto, con qualcosa da guardare: `ok` con l'avviso nelle metriche.
+        out["avvisi"] = list(esito.avvisi)
+        out["status"] = "warn"
+    return out
 
 
 async def _effis_perimetri() -> dict[str, Any]:

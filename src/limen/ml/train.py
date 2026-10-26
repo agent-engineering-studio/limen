@@ -357,6 +357,7 @@ async def run_training(
     folds = spatial_block_folds(blocks, k=s.training.spatial_cv_folds, rng_seed=s.training.seed)
 
     mlflow.set_tracking_uri(s.scoring.mlflow_tracking_uri)
+    prepara_esperimento(s.scoring.mlflow_experiment, s.scoring.mlflow_artifact_root)
     mlflow.set_experiment(s.scoring.mlflow_experiment)
     optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -573,6 +574,16 @@ def _build_shap_explainer(model: Any, matrix: TrainingMatrix) -> Any | None:  # 
     except Exception as exc:  # pragma: no cover
         _log.debug("training.shap.skip", error=str(exc))
         return None
+
+
+def prepara_esperimento(nome: str, radice_artefatti: str) -> None:
+    """Crea l'esperimento con gli artefatti in ``radice_artefatti`` se non
+    esiste ancora (#302). Uno che esiste resta dov'è: spostarlo vorrebbe dire
+    riscrivere gli URI già registrati."""
+    import mlflow
+
+    if radice_artefatti and mlflow.get_experiment_by_name(nome) is None:
+        mlflow.create_experiment(nome, artifact_location=radice_artefatti)
 
 
 __all__ = ["TrainResult", "run_training"]

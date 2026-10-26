@@ -9,15 +9,21 @@
 
 ## 0. La prima cosa da fare sul nuovo server
 
-1. **Correggere i path assoluti in `.env`** (oggi puntano al Mac dell'autore):
-   ```
-   LIMEN_DEM_RASTER=/Users/gzileni/Git/mcp-geoserver/data/HRDTM5m.tif
-   LIMEN_CORINE_RASTER=/Users/gzileni/Git/mcp-geoserver/data/clc2018_it/clc2018_it_100m.tif
-   LIMEN_GEOLOGICAL_SHAPEFILE=/Users/gzileni/Git/mcp-geoserver/data/carta_geolitologica/carta_geolitologica.shp
-   ```
-   Ripuntarli alla posizione dei dataset sul nuovo host (o lasciarli vuoti: gli
-   slot mancanti degradano e il bootstrap logga `static_bootstrap.skip`).
-   Anche `GEOSERVER_SOURCE__DB_DSN` va aggiornato all'host del DB GeoServer.
+`./scripts/nuovo_host.sh --controlla`, poi `--ripristina` (dal backup
+notturno, #304) o `--da-zero` (#306): fa da solo i passi sotto che riguardano
+cartelle, volumi, ripristino e avvio. README, «Installing on a new server».
+
+1. **Una sola radice per i dati (#302)**: `LIMEN_DATA_ROOT` nel `.env`
+   (assoluta), con sotto `datasets/ reports/ mlruns/ models/ geoserver/ osm/
+   sealing/ radar/` — l'albero completo è in testa a `.env.example`. Copiare
+   la cartella e cambiare quella riga basta: compose, Makefile e
+   `make static-data` ricavano i path da lì (DTM, CORINE e geolitologia li
+   cercano in `GEOSERVER_SHAPEFILE_DIR`, o in `$LIMEN_DATA_ROOT/geoserver`).
+   Le variabili specifiche (`LIMEN_DEM_RASTER`, `LIMEN_DATASETS_DIR`, …)
+   restano override; vuote, gli slot mancanti degradano e il bootstrap logga
+   `static_bootstrap.skip`. Il server attuale le ha ancora esplicite nel
+   `.env`. Anche `GEOSERVER_SOURCE__DB_DSN` va aggiornato all'host del DB
+   GeoServer.
 2. **Docker su Linux x86**: usare l'immagine PostGIS ufficiale `postgis/postgis:16-3.5`
    (su Apple Silicon serviva `imresamu/postgis-arm64` via `LIMEN_TEST_POSTGIS_IMAGE`
    / `POSTGIS_BASE`; sul server dedicato x86 non serve l'override).
@@ -222,11 +228,20 @@ Prossima: **#252**, l'ingestore del protocollo v2 (SenML su `limen/v2/{id}/obs`)
 **Il broker gira fuori dal repo, e un trasloco di server deve portarselo:**
 
 - CA e certificati stanno in `LIMEN_SENSORI_DIR=/srv/data/limen-sensori`. La
-  chiave della CA (`ca/ca.key`) **non è nel repo** e non ha altre copie oltre al
-  backup `/srv/backup/limen-sensori/ca`, che va rifatto a mano dopo ogni firma o
-  revoca. Se la perdi devi ricertificare tutti i dispositivi.
-- La CRL si rinnova con un cron mensile nel crontab dell'utente
-  (`make sensori-crl`). Se la CRL scade, il broker rifiuta tutti i dispositivi.
+  chiave della CA (`ca/ca.key`) **non è nel repo**. Dalla #304 la CLI dell'host
+  la salva cifrata sul bucket del backup dopo ogni firma e revoca (`limen
+  sensore backup-ca`, passphrase in `BACKUP__PASSPHRASE_CA`, da tenere anche
+  fuori dal server); la copia locale `/srv/backup/limen-sensori/ca` resta un di
+  più. Su un server nuovo: `limen sensore ripristina-ca --dove
+  "$LIMEN_SENSORI_DIR"`, poi `make sensori-ca-init` (tiene la CA e rifà con
+  lei le credenziali di broker e ingestore, l'ACL e la CRL) e `make
+  sensori-up`. Se la perdi devi ricertificare tutti i dispositivi.
+- Lo **stato del database** si salva ogni notte sullo stesso bucket (#304):
+  README, «Backup and restore». Senza `BACKUP__BUCKET` nel `.env` il notturno
+  lo salta, e dopo 36 ore lo sweep logga `integration.degraded label=backup.stale`.
+- La CRL dalla #306 vale dieci anni e si rigenera a ogni revoca: niente più
+  cron mensile. Una volta dopo il deploy `make sensori-crl`, poi si toglie la
+  riga dal crontab. Se la CRL scade, il broker rifiuta tutti i dispositivi.
 - nginx: `/etc/nginx/mqtt-sensori.stream.conf` è incluso in fondo a
   `nginx.conf`, fuori da `http {}`. La porta 8883 è aperta su ufw.
   **L'inoltro sul router manca ancora.** Si può rimandare finché non esiste

@@ -8,20 +8,29 @@ d'Italia, con una PGA ricavata dalla sola magnitudo.
 
 Un evento senza ShakeMap non arriva qui: nessuna legge di attenuazione
 inventata al posto di quella di INGV.
+
+Nessuna riga vuol dire «nessuna scossa» solo se il job gira: acceso ma fermo,
+lo sweep lo dice con ``integration.degraded label=ingv.stale`` (#287).
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from limen.agents.workflow_runtime.executor import Executor, handler
+from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
 from limen.core.models.risk import SeismicHistoryEvent
 from limen.core.scoring.regional_thresholds import load_regional_thresholds
+from limen.data.repos import job_runs_repo
 from limen.data.repos.seismic_repo import scosse_per_cella
 
 log = get_logger(__name__)
+
+#: `limen.api.jobs.ids.JOB_INGV_SYNC`, scritto qui perché `api` importa gli
+#: agenti; un test tiene allineati i due.
+JOB_INGV_SYNC = "limen-ingv-sync"
 
 
 class SeismicCheckExecutor(Executor):
@@ -38,6 +47,7 @@ class SeismicCheckExecutor(Executor):
         end: datetime = ctx.valuation_time
         start = end - timedelta(days=lookback)
 
+        await _avvisa_se_fermo()
         scosse = await scosse_per_cella(
             list(ctx.cell_ids), start, end, min_magnitude=cfg.min_magnitude
         )
@@ -63,4 +73,19 @@ class SeismicCheckExecutor(Executor):
         )
         return ctx.with_update(
             seismic_per_cella={cella: tuple(eventi) for cella, eventi in per_cella.items()}
+        )
+
+
+async def _avvisa_se_fermo() -> None:
+    sched = get_settings().scheduler
+    if not sched.enable_ingv_sync:
+        return
+    ultimo = await job_runs_repo.ultimo_riuscito(JOB_INGV_SYNC)
+    limite = timedelta(minutes=sched.ingv_sync_ritardo_massimo_minuti)
+    if ultimo is None or datetime.now(UTC) - ultimo > limite:
+        log.warning(
+            "integration.degraded",
+            label="ingv.stale",
+            ultimo_ok=None if ultimo is None else ultimo.isoformat(),
+            ritardo_massimo_minuti=sched.ingv_sync_ritardo_massimo_minuti,
         )

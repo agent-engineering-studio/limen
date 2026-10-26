@@ -363,9 +363,15 @@ class SchedulerSettings(BaseSettings):
     dpc_bollettini_minutes: int = Field(default=60, ge=10)
     # Terremoti INGV e scuotimento per cella dalle ShakeMap (#284). Spento:
     # accenderlo porta in vita la componente E delle frane (peso 0,15), che
-    # finora valeva zero ovunque, e sposta il campione V1. Prima il backtest.
+    # finora valeva zero ovunque, e sposta il campione V1. Il backtest della
+    # #287 dice di non farlo: sulla sequenza 2016-17 nessuna frana in più, e
+    # fino a ventitré volte le ore-cella in allerta.
     enable_ingv_sync: bool = False
     ingv_sync_minutes: int = Field(default=60, ge=10)
+    # Acceso ma fermo da più di così, lo sweep lo dice (#287): E additiva
+    # sbaglia al più di 0,15, ma tornare a zero in silenzio in piena sequenza
+    # sismica è lo stesso guasto rassicurante della #143.
+    ingv_sync_ritardo_massimo_minuti: int = Field(default=180, ge=30)
     #: Ovest, sud, est, nord: il riquadro del portale ShakeMap INGV.
     ingv_bbox: tuple[float, float, float, float] = (5.0, 35.0, 20.0, 49.0)
     # Run the ISPRA IdroGEO sync every N hours.
@@ -690,6 +696,12 @@ class ScoringSettings(BaseSettings):
     # (the project's Postgres can host the MLflow backend, avoiding a
     # separate database). Artifacts go to the ObjectStore root by default.
     mlflow_tracking_uri: str = "sqlite:///mlflow.db"
+    # Dove un esperimento NUOVO tiene gli artefatti (#302). Vuoto = il default
+    # di MLflow, `./mlruns` della cartella di lavoro: nel container è /app,
+    # che non è montato, e gli artefatti sparirebbero al primo rebuild. Il
+    # compose lo punta a file:///var/lib/limen/mlruns, montato dalla radice
+    # dati. Un esperimento che esiste già resta dov'è.
+    mlflow_artifact_root: str = ""
     mlflow_experiment: str = "limen-landslide"
     mlflow_registered_model: str = "limen-landslide-ml"
     # Shadow rows older than this are purged by the cleanup job — the
@@ -862,6 +874,93 @@ class RadarArchiveSettings(BaseSettings):
     @property
     def attivo(self) -> bool:
         return bool(self.cartella)
+
+
+class BackupSettings(BaseSettings):
+    """Il backup notturno dello stato, fuori dal server (#304).
+
+    Ha il suo object store, separato da quello dell'app: il backup deve
+    sopravvivere al server, e un errore di configurazione dell'app non deve
+    poterlo cancellare. Vuoti ``BACKUP__BUCKET`` e ``BACKUP__ROOT`` = il passo
+    notturno si salta, e lo dice.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    backend: ObjectStoreBackend = ObjectStoreBackend.S3
+    #: Solo per ``backend=filesystem``: utile in prova, non protegge da un
+    #: guasto della macchina.
+    root: Path | None = None
+    bucket: str | None = None
+    prefix: str = "limen"
+    region: str | None = None
+    endpoint_url: str | None = None
+    access_key_id: SecretStr | None = None
+    secret_access_key: SecretStr | None = None
+
+    #: I backup più vecchi si cancellano, ma gli ultimi ``tieni_almeno``
+    #: restano sempre: un notturno fermo per un mese non deve svuotare il bucket.
+    retention_giorni: int = Field(default=30, ge=1)
+    tieni_almeno: int = Field(default=3, ge=1)
+    #: Oltre questa età dell'ultimo backup riuscito lo sweep orario avvisa.
+    eta_massima_ore: int = Field(default=36, ge=1)
+    #: Tabelle di cui si salva solo lo schema (pattern di ``pg_dump``): calde,
+    #: derivate o ricaricabili dalle sorgenti. Misurate il 2026-10-24: ~29 GB
+    #: di 31, contro ~2 GB di stato.
+    solo_schema: tuple[str, ...] = (
+        "public.risk_assessments*",
+        "public.model_runs*",
+        "public.latest_risk",
+        "public.latest_forecast*",
+        "public.rain_ens_forecast",
+        "public.app_cache",
+        "public.pai_hazard*",
+        "public.flood_hazard*",
+        "public.iffi_landslides",
+        "public.osm_infrastructure",
+    )
+    #: Tabelle escluse del tutto (pattern di ``pg_dump``), schema compreso.
+    escluse: tuple[str, ...] = ("public.tmp_*",)
+    #: Cartelle salvate come tar.gz accanto al dump (per esempio ``mlruns``),
+    #: separate da virgola.
+    cartelle: str = ""
+    #: Prefisso dei comandi PostgreSQL. Vuoto nel worker, che ha il client;
+    #: ``docker exec -i limen-postgres`` dall'host, dove pg_dump non c'è.
+    comando_pg: str = ""
+    #: La connessione vista da ``pg_dump``: vuota = ``DB__CONNECTION_STRING``.
+    #: Con ``comando_pg`` dentro un container serve quella del container.
+    dsn: SecretStr | None = None
+    #: La passphrase che cifra la CA dei sensori (#304). Sta nel .env
+    #: dell'host, e una copia fuori dal server: senza, il backup non si apre.
+    passphrase_ca: SecretStr | None = None
+    #: La CA da salvare: vuota = ``$LIMEN_SENSORI_DIR/ca``.
+    cartella_ca: Path | None = None
+    #: Le versioni di ``dataset_versions`` (``sorgente:dataset``, LIKE) delle
+    #: tabelle solo schema: dopo un ripristino si dimenticano, o il loader
+    #: direbbe «già caricato» e le lascerebbe vuote.
+    versioni_da_dimenticare: tuple[str, ...] = ("geoserver:flood:%", "osm:%", "ispra:idrogeo")
+    #: Un backup con meno di questa frazione delle righe di stato del
+    #: precedente sospende la retention: un volume ricreato vuoto non deve
+    #: far uscire dal bucket i backup buoni.
+    soglia_crollo: float = Field(default=0.5, gt=0.0, le=1.0)
+
+    @field_validator("passphrase_ca", mode="before")
+    @classmethod
+    def _passphrase_vera(cls, v: object) -> object:
+        # `BACKUP__PASSPHRASE_CA=` scommentata vuota cifrerebbe la CA con la
+        # stringa vuota, cioè in chiaro su un bucket di terzi.
+        testo = v.get_secret_value() if isinstance(v, SecretStr) else v
+        if testo in (None, ""):
+            return None
+        if isinstance(testo, str) and len(testo) < 20:
+            raise ValueError("BACKUP__PASSPHRASE_CA: almeno 20 caratteri")
+        return v
+
+    @property
+    def attivo(self) -> bool:
+        if self.backend is ObjectStoreBackend.FILESYSTEM:
+            return self.root is not None
+        return bool(self.bucket)
 
 
 class OpenMeteoSettings(BaseSettings):
@@ -1182,6 +1281,7 @@ class Settings(BaseSettings):
     egms: EgmsSettings = Field(default_factory=EgmsSettings)
     copernicus: CopernicusSettings = Field(default_factory=CopernicusSettings)
     radar_archive: RadarArchiveSettings = Field(default_factory=RadarArchiveSettings)
+    backup: BackupSettings = Field(default_factory=BackupSettings)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
     openmeteo: OpenMeteoSettings = Field(default_factory=OpenMeteoSettings)
     kg: KgSettings = Field(default_factory=KgSettings)

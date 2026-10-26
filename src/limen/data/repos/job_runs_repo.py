@@ -164,6 +164,24 @@ async def latest_global(job_id: str) -> JobRun | None:
     return _to_run(row) if row is not None else None
 
 
+async def ultimo_riuscito(job_id: str, *, scope: str | None = None) -> datetime | None:
+    """Quando è finito l'ultimo run ``ok`` di un job (o di un suo passo, con
+    ``scope``); ``None`` se mai, o se la tabella non risponde (chi chiede lo
+    tratta come un job fermo)."""
+    try:
+        async with acquire() as conn:
+            fine: datetime | None = await conn.fetchval(
+                "SELECT max(finished_at) FROM job_runs WHERE job_id = $1 AND status = 'ok' "
+                "AND ($2::text IS NULL OR scope = $2)",
+                job_id,
+                scope,
+            )
+    except Exception as exc:
+        log.warning("job_runs.degraded", phase="ultimo_riuscito", error=str(exc))
+        return None
+    return fine
+
+
 async def recent(job_id: str | None = None, *, limit: int = 20) -> list[JobRun]:
     """Gli ultimi run, di un job o di tutti."""
     try:

@@ -45,16 +45,26 @@ Configuration knobs (env vars, kept off the dispatcher for parity with
   stesso con l'archivio locale del «Merging» DPC (radar più pluviometri,
   ``limen radar-archivio``, cartella ``RADAR_ARCHIVE__CARTELLA``): esiste solo
   da quando lo si archivia, ma è la pioggia che la produzione usa davvero.
+* ``LIMEN_BACKTEST_SISMICA``     — ``no`` (default) o ``shakemap``: la componente
+  E dalle ShakeMap storiche INGV (#287). Per ogni terremoto della finestra,
+  più ``seismic.lookback_days`` prima, con ``M ≥ seismic.min_magnitude``, la
+  PGA che la ShakeMap stima al centroide di ogni cella, se supera
+  ``seismic.pga_min_g``: lo stesso conto del job ``limen-ingv-sync``, senza
+  scrivere niente. ``LIMEN_BACKTEST_SHAKEMAP_CACHE`` è una cartella dove
+  tenere le griglie già scaricate, per rigiocare la finestra con e senza E.
 """
 
 from __future__ import annotations
 
+import asyncio
+import math
 import os
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from limen.config.percorsi import radice_dati
 from limen.core.logging import get_logger
 from limen.core.models.risk import (
     CellFeatureBundle,
@@ -62,10 +72,11 @@ from limen.core.models.risk import (
     RainfallSample,
     RainfallSeries,
     RiskLevel,
+    SeismicHistoryEvent,
     StaticFactors,
 )
 from limen.core.scoring.engine import MultiFactorScoringEngine
-from limen.core.scoring.regional_thresholds import load_regional_thresholds
+from limen.core.scoring.regional_thresholds import SeismicBlock, load_regional_thresholds
 from limen.data.db import acquire, lifespan_pool
 from limen.data.migrate import run_migrations
 from limen.data.repos.aoi_repo import get_aoi, list_aoi_ids
@@ -83,7 +94,8 @@ log = get_logger(__name__)
 #: Dove finisce il report. Configurabile con `LIMEN_REPORTS_DIR` perche'
 #: dentro un container la directory di lavoro non e' scrivibile.
 REPORTS_DIR = Path(os.getenv("LIMEN_REPORTS_DIR", "reports"))
-_RADAR_ZARR = "./data/radar/it_dpc_sri/italian-radar-dpc-sri.zarr"
+# Sotto la radice dati, dove lo scarica `make radar-data` (#302).
+_RADAR_ZARR = Path("radar/it_dpc_sri/italian-radar-dpc-sri.zarr")
 # March 2009 Southern-Italy storm — 23 ITALICA events in Puglia/Basilicata
 # cluster on the 7th, so the default window has a real truth set.
 _DEFAULT_START = datetime(2009, 3, 4, 0, 0, tzinfo=UTC)
@@ -319,6 +331,7 @@ def _evaluate(
     lead_max_hours: float,
     antecedenti: list[Antecedenti | None] | None = None,
     configurazione: str = "tutto il catalogo",
+    scosse: dict[str, tuple[SeismicHistoryEvent, ...]] | None = None,
 ) -> _BacktestMetrics:
     """``antecedenti`` è allineato ai nodi (modalità `nodo`) o lungo 1 (modalità
     `regione`, un valore per tutta l'area come in produzione); ``None`` lascia
@@ -358,6 +371,7 @@ def _evaluate(
                     rainfall=node_slice[cell_node[i]],
                     api_30_mm=api_mm,
                     soil_moisture_0_7=suolo,
+                    seismic_history=(scosse or {}).get(sf.cell_id, ()),
                 ),
             )
             scored = engine.score(bundle)
@@ -521,6 +535,89 @@ async def _fetch_rainfall_grid(
 # ---------------------------------------------------------------------------
 # CLI runner
 # ---------------------------------------------------------------------------
+def _distanza_km(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    a = (
+        math.sin((p2 - p1) / 2) ** 2
+        + math.cos(p1) * math.cos(p2) * math.sin(math.radians(lon2 - lon1) / 2) ** 2
+    )
+    return 2 * 6371.0 * math.asin(math.sqrt(a))
+
+
+async def scosse_storiche(
+    cells: list[tuple[StaticFactors, float, float]],
+    *,
+    bbox: tuple[float, float, float, float],
+    start: datetime,
+    end: datetime,
+    seismic: SeismicBlock,
+    cache: Path | None = None,
+) -> dict[str, tuple[SeismicHistoryEvent, ...]]:
+    """Per cella, i terremoti della finestra che l'hanno scossa oltre
+    ``seismic.pga_min_g`` secondo la ShakeMap INGV (#287).
+
+    Un evento senza ShakeMap (404), o con una griglia illeggibile, non scuote
+    nessuna cella: come in produzione, nessuna attenuazione inventata. Un
+    INGV che non risponde invece solleva :class:`IngvNonDisponibileError`:
+    un report «con E» senza i terremoti sarebbe il riferimento con
+    un'etichetta sbagliata (Codex, #310).
+    Il riquadro si allarga di un grado: un M 5 appena fuori dall'AOI la
+    scuote eccome.
+    """
+    from limen.integrations.ingv.shakemap_client import IngvHttpClient
+    from limen.integrations.ingv.shakemap_grid import GrigliaNonValidaError, leggi_griglia
+    from limen.integrations.ingv.sync_job import _parse_feature
+
+    client = IngvHttpClient()
+    w, s, e, n = bbox
+    eventi = [
+        ev
+        for f in await client.fetch_events(
+            bbox=(w - 1.0, s - 1.0, e + 1.0, n + 1.0),
+            start=start - timedelta(days=seismic.lookback_days),
+            end=end,
+            min_magnitude=seismic.min_magnitude,
+            solleva=True,
+        )
+        if (ev := _parse_feature(f)) is not None
+    ]
+    per_cella: dict[str, list[SeismicHistoryEvent]] = {}
+    for ev in eventi:
+        file = None if cache is None else cache / f"{ev.id}.xml"
+        if file is not None and file.exists():
+            grezzo: bytes | None = file.read_bytes()
+        else:
+            grezzo = await client.fetch_shakemap_grid(ev.id, solleva=True)
+            if grezzo is not None and file is not None:
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_bytes(grezzo)
+        if grezzo is None:
+            log.info("backtest.sismica.senza_shakemap", event_id=ev.id, magnitudo=ev.magnitude)
+            continue
+        try:
+            griglia = await asyncio.to_thread(leggi_griglia, grezzo)
+        except GrigliaNonValidaError as exc:
+            log.warning("backtest.sismica.griglia", event_id=ev.id, error=str(exc))
+            continue
+        scosse = 0
+        for sf, lon, lat in cells:
+            pga = griglia.pga_in(lon, lat)
+            if pga is None or pga < seismic.pga_min_g:
+                continue
+            scosse += 1
+            per_cella.setdefault(sf.cell_id, []).append(
+                SeismicHistoryEvent(
+                    event_id=ev.id,
+                    origin_time=ev.origin_time,
+                    magnitude=ev.magnitude,
+                    distance_km=_distanza_km(lon, lat, ev.geom.x, ev.geom.y),
+                    pga_g=pga,
+                )
+            )
+        log.info("backtest.sismica.evento", event_id=ev.id, magnitudo=ev.magnitude, celle=scosse)
+    return {cella: tuple(lista) for cella, lista in per_cella.items()}
+
+
 def _parse_dt(env_name: str, default: datetime) -> datetime:
     raw = os.getenv(env_name)
     if not raw:
@@ -626,6 +723,12 @@ async def run() -> int:
     sorgenti = [
         x.strip() for x in os.getenv("LIMEN_BACKTEST_SORGENTI", "").split(",") if x.strip()
     ] or None
+    sismica = os.getenv("LIMEN_BACKTEST_SISMICA", "no").strip() or "no"
+    if sismica not in ("no", "shakemap"):
+        log.error("backtest.bad_sismica", value=sismica)
+        return 1
+    cache_env = os.getenv("LIMEN_BACKTEST_SHAKEMAP_CACHE", "").strip()
+    cache_shakemap = Path(cache_env) if cache_env else None
     pioggia = os.getenv("LIMEN_BACKTEST_PIOGGIA", "modello").strip() or "modello"
     if pioggia not in ("modello", "radar", "merging") or (
         pioggia != "modello" and modo == "neutro"
@@ -636,7 +739,8 @@ async def run() -> int:
     if pioggia == "radar":
         from limen.integrations.dpc.sri_archive import SriArchive
 
-        archivio = SriArchive(Path(os.getenv("LIMEN_BACKTEST_RADAR_ZARR", _RADAR_ZARR)))
+        zarr = os.getenv("LIMEN_BACKTEST_RADAR_ZARR")
+        archivio = SriArchive(Path(zarr) if zarr else radice_dati() / _RADAR_ZARR)
     elif pioggia == "merging":
         from limen.config.settings import get_settings
         from limen.integrations.dpc.merging_archive import MergingArchive
@@ -647,8 +751,11 @@ async def run() -> int:
             return 1
         archivio = MergingArchive(Path(cfg.cartella))
     configurazione = (
-        f"verità {descrivi_verita(precisioni, sorgenti)}; pioggia {pioggia}; antecedenti {modo}"
+        f"verità {descrivi_verita(precisioni, sorgenti)}; pioggia {pioggia}; antecedenti {modo}; "
+        f"sismica {'ShakeMap INGV' if sismica == 'shakemap' else 'spenta'}"
     )
+
+    from limen.integrations.ingv.shakemap_client import IngvNonDisponibileError
 
     try:
         async with lifespan_pool():
@@ -735,6 +842,18 @@ async def run() -> int:
                     rain_samples=sum(len(s) for s in node_rainfall),
                 )
 
+                scosse = (
+                    await scosse_storiche(
+                        cells,
+                        bbox=(bbox[0], bbox[1], bbox[2], bbox[3]),
+                        start=start,
+                        end=end,
+                        seismic=load_regional_thresholds().seismic,
+                        cache=cache_shakemap,
+                    )
+                    if sismica == "shakemap"
+                    else None
+                )
                 metrics = _evaluate(
                     aoi_id=aoi_id,
                     cells=cells,
@@ -747,6 +866,7 @@ async def run() -> int:
                     lead_max_hours=lead_max,
                     antecedenti=antecedenti,
                     configurazione=configurazione,
+                    scosse=scosse,
                 )
                 log.info(
                     "backtest.aoi.done",
@@ -756,6 +876,9 @@ async def run() -> int:
                     mean_lead_hours=metrics.mean_lead_hours,
                     report=str(metrics.report_path),
                 )
+    except IngvNonDisponibileError as exc:
+        log.error("backtest.sismica.non_disponibile", error=str(exc))
+        return 1
     finally:
         await SharedHttpClient.aclose()
     return 0

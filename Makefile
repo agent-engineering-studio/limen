@@ -10,6 +10,14 @@ else
 POSTGIS_BASE ?= postgis/postgis:16-3.5
 endif
 export POSTGIS_BASE
+# Una sola radice per i dati del deployment (#302): dataset, report, modelli,
+# mlruns, sorgenti statiche, sensori. Dal .env, o la cartella `data/` del repo
+# (la stessa che i compose risolvono come `../../data`). Se la imposti, assoluta.
+LIMEN_DATA_ROOT ?= $(or $(shell grep -s '^LIMEN_DATA_ROOT=' .env | cut -d= -f2-),$(CURDIR)/data)
+# I dati condivisi con GeoServer (DTM, CORINE, geolitologia): dove li monta
+# il compose, cioè GEOSERVER_SHAPEFILE_DIR o la radice.
+GEOSERVER_SHAPEFILE_DIR ?= $(or $(shell grep -s '^GEOSERVER_SHAPEFILE_DIR=' .env | cut -d= -f2-),$(LIMEN_DATA_ROOT)/geoserver)
+
 COMPOSE_DEV  := infra/docker/docker-compose.dev.yml
 COMPOSE_DEMO := infra/docker/docker-compose.demo.yml
 COMPOSE_OBS  := infra/docker/docker-compose.observability.yml
@@ -60,7 +68,7 @@ BUILD_PROFILES ?= --profile geoserver --profile frontend --profile geodata
 
 .PHONY: inference-up inference-up-colibri inference-down inference-logs inference-check help install docs-links docs-bundle \
         up down build rebuild up-host-ollama \
-        up-dev down-dev logs migrate seed bootstrap-static calibrate backtest serve \
+        up-dev down-dev logs migrate seed immagine db-up up-stack backup backup-elenco restore bootstrap-static calibrate backtest serve \
         data-status static-data flood-data flood-events backtest-flood fire-history \
         logs-worker \
         demo demo-down demo-walkthrough \
@@ -114,12 +122,12 @@ help:
 	@echo ""
 	@echo "GeoServer vector-data layer (opt-in, mcp-geo-server)"
 	@echo "  make meteo-up           istanza Open-Meteo propria (profilo meteo, opt-in)"
-	@echo "  make meteo-sync         scarica i modelli (primo avvio e cron giornaliero)"
+	@echo "  make meteo-sync         un sync a mano (quello continuo gira in meteo-up)"
 	@echo "  make meteo-check        quali variabili rispondono davvero"
 	@echo "  make sensori-ca-init    CA dei sensori + certificati di server e ingestore (#260)"
 	@echo "  make sensori-up         broker MQTT dei sensori (profilo sensori, opt-in)"
 	@echo "  make sensori-check      anonimo, CA estranea, ACL, revoca: tutto rifiutato?"
-	@echo "  make sensori-crl        rigenera la CRL (mensile: scaduta, rifiuta TUTTI)"
+	@echo "  make sensori-crl        rigenera la CRL (dieci anni; la rifà anche ogni revoca)"
 	@echo "  make geoserver-up       GeoServer + PostGIS + web UI + MCP agent + bootstrap"
 	@echo "  make geoserver-init     (re)load shapefiles into PostGIS + publish + style"
 	@echo "  make geoserver-logs     tail the GeoServer stack logs"
@@ -146,7 +154,20 @@ gs-volumes:
 	@docker volume create limen-geoserver-pgdata >/dev/null
 	@docker volume create limen-geoserver-gsdata >/dev/null
 
-up: gs-volumes
+up: up-stack
+	@echo ""
+	@echo "[up] sorgenti + fattori statici, sull'HOST (che legge i raster e .env)."
+	@echo "     geoserver-sync sta qui e non nel container: lo script e' l'unica"
+	@echo "     descrizione della sequenza, e farlo due volte costava due volte."
+	@echo "     Idempotente sul COSTO (#101): salta i passi la cui sorgente non è"
+	@echo "     cambiata. La PRIMA esecuzione però paga tutto — misurato sul DTM 5 m,"
+	@echo "     ~2m45s ogni 11k celle, cioè ~1.5-2h sulle 312k delle 20 regioni."
+	@echo "     Forzare il ricalcolo:  LIMEN_BOOTSTRAP_FORCE=1 make bootstrap-static"
+	@bash scripts/load_static_data.sh
+
+# Lo stack senza i dati statici: avvio, attesa dell'API, seed. È la parte
+# obbligatoria per nuovo_host.sh (#306), che i dati statici li tratta a parte.
+up-stack: gs-volumes
 	@grep -qs '^DB__TILES_PASSWORD=[0-9a-f]\{32,\}$$' .env || { \
 	  echo "[up] manca DB__TILES_PASSWORD nel .env: senza, pg_tileserv non entra e la mappa resta senza tile (#269)."; \
 	  echo "     echo DB__TILES_PASSWORD=\$$(openssl rand -hex 24) >> .env"; exit 1; }
@@ -164,15 +185,6 @@ up: gs-volumes
 	@echo "[up] Stack ready:"
 	@echo "   API      http://localhost:8080/docs      Frontend  http://localhost:5173"
 	@echo "   GeoServer http://localhost:8081/geoserver Web UI    http://localhost:8000"
-	@echo ""
-	@echo "[up] sorgenti + fattori statici, sull'HOST (che legge i raster e .env)."
-	@echo "     geoserver-sync sta qui e non nel container: lo script e' l'unica"
-	@echo "     descrizione della sequenza, e farlo due volte costava due volte."
-	@echo "     Idempotente sul COSTO (#101): salta i passi la cui sorgente non è"
-	@echo "     cambiata. La PRIMA esecuzione però paga tutto — misurato sul DTM 5 m,"
-	@echo "     ~2m45s ogni 11k celle, cioè ~1.5-2h sulle 312k delle 20 regioni."
-	@echo "     Forzare il ricalcolo:  LIMEN_BOOTSTRAP_FORCE=1 make bootstrap-static"
-	@bash scripts/load_static_data.sh
 
 down:
 	docker compose $(COMPOSE_ALL) $(UP_PROFILES) down
@@ -270,7 +282,7 @@ imperviousness-data:
 	$(UV) run limen imperviousness-fetch
 	@echo
 	@echo "  Ora punta la variabile al file e riempi le celle:"
-	@echo "    LIMEN_IMPERVIOUSNESS_RASTER=$(CURDIR)/data/sealing/clms_imd_2018/imd_2018_100m.tif"
+	@echo "    LIMEN_IMPERVIOUSNESS_RASTER=$(LIMEN_DATA_ROOT)/sealing/clms_imd_2018/imd_2018_100m.tif"
 	@echo "    make bootstrap-static"
 
 # Storia del fuoco: archivio FIRMS per paese, 2000-2024. Nessuna credenziale
@@ -311,6 +323,28 @@ dump-training:
 	docker exec limen-postgres pg_dump -U limen -d limen -t training_samples --data-only -Fc > data/backups/training_samples_$$(date +%F).dump
 	tar czf data/backups/mlflow_$$(date +%F).tgz mlflow.db mlruns
 	@ls -lah data/backups/
+
+immagine:                    # costruisce l'immagine di api e worker (limen/api), senza avviare niente
+	docker compose $(COMPOSE_ALL) build api
+
+db-up:                       # solo Postgres, e aspetta che sia sano (ripristino da zero, #306)
+	docker compose $(COMPOSE_ALL) up -d postgres
+	@for i in $$(seq 1 60); do \
+	  [ "$$(docker inspect -f '{{.State.Health.Status}}' limen-postgres 2>/dev/null)" = healthy ] && exit 0; \
+	  sleep 3; \
+	done; echo "[db-up] Postgres non è diventato sano in 3 minuti"; exit 1
+
+backup:                      # backup dello stato sullo store BACKUP__* (#304), dal worker
+	docker exec limen-worker limen backup
+
+backup-elenco:
+	docker exec limen-worker limen backup elenco
+
+restore:                     # usage: make restore CONFERMA=1 [CHIAVE=backup/<istante>/] — ferma API e worker, sovrascrive il DB
+	@test "$(CONFERMA)" = "1" || { echo "sovrascrive il database: make restore CONFERMA=1, con API e worker fermi"; exit 1; }
+	docker compose $(COMPOSE_ALL) stop api worker mcp pg_tileserv
+	docker compose $(COMPOSE_ALL) run --rm --no-deps worker limen restore --conferma $(if $(CHIAVE),--chiave $(CHIAVE))
+	@echo "[restore] fatto: riavvia con make up"
 
 restore-training:            # usage: make restore-training DUMP=data/backups/training_samples_YYYY-MM-DD.dump [MLTGZ=data/backups/mlflow_YYYY-MM-DD.tgz]
 	@test -n "$(DUMP)" || { echo "usa: make restore-training DUMP=data/backups/training_samples_YYYY-MM-DD.dump"; ls data/backups/ 2>/dev/null; exit 1; }
@@ -447,7 +481,7 @@ geoserver-down:
 	docker compose $(COMPOSE_GS) --profile geoserver down
 
 # DTM tiles live in the /data folder shared with the GeoServer container.
-GEOSERVER_DTM_DIR ?= ../mcp-geoserver/data/dtm
+GEOSERVER_DTM_DIR ?= $(GEOSERVER_SHAPEFILE_DIR)/dtm
 
 geoserver-sync:                # load IFFI + PAI from GeoServer PostGIS into the operational DB
 	$(UV) run limen geoserver-sync
@@ -458,13 +492,13 @@ dtm-vrt:                       # build a virtual mosaic over the 5 m DTM tiles (
 
 # OSM road/rail network for the alert-exposure factor (© OpenStreetMap, ODbL).
 # Country-agnostic: override OSM_PBF_URL with another Geofabrik extract.
-OSM_DIR     ?= ./data/osm
+OSM_DIR     ?= $(LIMEN_DATA_ROOT)/osm
 OSM_PBF_URL ?= https://download.geofabrik.de/europe/italy-latest.osm.pbf
 OSM_PBF      = $(OSM_DIR)/$(notdir $(OSM_PBF_URL))
 
 radar-data:                    # IT-DPC-SRI 2010-2025 (~51 GB) dall'object store ECMWF, riprendibile; solo per il backtest
-	$(UV) run python scripts/mirror_it_dpc_sri.py data/radar/it_dpc_sri/italian-radar-dpc-sri.zarr 32 179087
-	$(UV) run python scripts/mirror_it_dpc_sri.py data/radar/it_dpc_sri/italian-radar-dpc-sri.zarr 32 0 179087
+	$(UV) run python scripts/mirror_it_dpc_sri.py $(LIMEN_DATA_ROOT)/radar/it_dpc_sri/italian-radar-dpc-sri.zarr 32 179087
+	$(UV) run python scripts/mirror_it_dpc_sri.py $(LIMEN_DATA_ROOT)/radar/it_dpc_sri/italian-radar-dpc-sri.zarr 32 0 179087
 
 osm-data:                      # download the Geofabrik PBF + extract road/rail GPKGs (needs host GDAL)
 	mkdir -p $(OSM_DIR)
