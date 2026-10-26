@@ -70,6 +70,12 @@ if [ "$MODO" = docker ]; then
     fi
     CONTAINER+=(-e "$v=$assoluto")
   done
+  # Le manopole dei comandi passano anche loro (Codex, #329): con l'ambiente
+  # pulito un LIMEN_BOOTSTRAP_FORCE=1 o un LIMEN_EFFIS_GIORNI chiesti
+  # dall'operatore sparirebbero in silenzio. Sono scalari, non JSON.
+  for v in LIMEN_BOOTSTRAP_FORCE LIMEN_EFFIS_GIORNI; do
+    [ -n "${!v:-}" ] && CONTAINER+=(-e "$v=${!v}")
+  done
   # Con il proprio uid: le sorgenti sono di chi le ha scaricate, e l'utente
   # dell'immagine (999) non le leggerebbe. E con un ambiente pulito: il .env
   # caricato qui sopra come shell ha perso le virgolette dei valori JSON, e
