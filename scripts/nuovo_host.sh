@@ -178,10 +178,23 @@ fi
 say "stack (make up-stack)"
 make --no-print-directory up-stack || stop "lo stack non è partito: guarda sopra"
 ok "API pronta, seed fatto"
+limen() { docker exec limen-worker limen "$@"; }
+
+# Da zero, i fattori per cella vengono prima dallo snapshot statico (#305):
+# minuti invece di ore, e senza i raster. Senza snapshot, o con uno di
+# un'altra migrazione o griglia, si prosegue con il bootstrap; con le impronte
+# dello snapshot il bootstrap salta i passi le cui sorgenti sono le stesse.
+if [ "$MODO" = "--da-zero" ]; then
+  say "snapshot statico (limen static-snapshot import)"
+  if limen static-snapshot import; then
+    ok "fattori per cella dallo snapshot"
+  else
+    no "snapshot statico non importato (guarda sopra): restano i dati statici"
+  fi
+fi
+
 say "dati statici (make static-data)"
 make --no-print-directory static-data || no "dati statici incompleti: guarda sopra, poi make static-data"
-
-limen() { docker exec limen-worker limen "$@"; }
 
 if [ "$MODO" = "--da-zero" ]; then
   say "eventi, calibrazione e catena FWI (nel worker)"

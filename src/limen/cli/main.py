@@ -13,6 +13,7 @@ Usage:
     limen sensore            Registro dei sensori dei cittadini: approva, revoca (#253).
     limen backup             Backup dello stato fuori dal server; `elenco` li elenca (#304).
     limen restore            Ripristina un backup (`--conferma`: sovrascrive il database).
+    limen static-snapshot    Fattori per cella senza i raster: export | import | elenco (#305).
     limen radar-archivio     Salva il radar DPC «Merging» prima che il DPC lo perda.
     limen fwi-pioggia        Rifà la catena FWI con la pioggia misurata dal DPC.
     limen ingest-fire-history  FIRMS country archive (2000+), fire_density + truth set.
@@ -90,6 +91,8 @@ from limen.cli.sensore import build_subparser as _build_sensore_subparser
 from limen.cli.sensore import run as _run_sensore
 from limen.cli.server import run as _run_server
 from limen.cli.shadow_report import run as _run_shadow_report
+from limen.cli.static_snapshot import build_subparser as _build_static_snapshot_subparser
+from limen.cli.static_snapshot import run as _run_static_snapshot
 from limen.cli.sync_egms import run as _run_sync_egms
 from limen.cli.train import run as _run_train
 from limen.cli.verifiche_report import run as _run_verifiche_report
@@ -347,6 +350,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _build_geodata_subparser(sub)
     _build_sensore_subparser(sub)
     _build_backup_subparser(sub)
+    _build_static_snapshot_subparser(sub)
     return parser
 
 
@@ -421,6 +425,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command in ("backup", "restore"):
         try:
             return asyncio.run(_run_backup(args))
+        except KeyboardInterrupt:  # pragma: no cover
+            return 130
+    if args.command == "static-snapshot":
+        try:
+            return asyncio.run(_run_static_snapshot(args))
         except KeyboardInterrupt:  # pragma: no cover
             return 130
     if args.command == "sensore":
