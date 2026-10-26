@@ -52,7 +52,12 @@ COMPOSE_SN   := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_SENSORI)
 # uid: l'immagine gira come 10001 e una directory a 700 le sarebbe illeggibile.
 export GEO_INIT_UID := $(shell id -u)
 export GEO_INIT_GID := $(shell id -g)
-UP_PROFILES  := --profile geoserver --profile frontend
+# Immagini tirate da GHCR invece che costruite qui (#303): basta
+# LIMEN_IMAGE_PREFIX (con LIMEN_IMAGE_TAG) nel .env. È il modo di produzione,
+# quindi la SPA è quella statica e non il dev server di Vite.
+REGISTRO := $(shell grep -s '^LIMEN_IMAGE_PREFIX=.' .env)
+UP_BUILD := $(if $(REGISTRO),--no-build,--build)
+UP_PROFILES  := --profile geoserver --profile $(if $(REGISTRO),frontend-static,frontend)
 
 # `make build` spans EVERY compose file, not just the ones `make up` starts:
 # a build target that silently skips half the stack is worse than no target.
@@ -67,7 +72,7 @@ COMPOSE_BUILD := $(if $(wildcard .env),--env-file .env) \
 BUILD_PROFILES ?= --profile geoserver --profile frontend --profile geodata
 
 .PHONY: inference-up inference-up-colibri inference-down inference-logs inference-check help install docs-links docs-bundle \
-        up down build rebuild up-host-ollama \
+        up down build rebuild pull up-host-ollama \
         up-dev down-dev logs migrate seed immagine db-up up-stack backup backup-elenco restore bootstrap-static calibrate backtest serve \
         data-status static-data flood-data flood-events backtest-flood fire-history \
         logs-worker \
@@ -87,6 +92,7 @@ help:
 	@echo "  make down               tear down the full stack"
 	@echo "  make build              build owned + pull third-party images, ALL compose files (NOCACHE=1)"
 	@echo "  make rebuild            down + build + up (full local refresh)"
+	@echo "  make pull               pull LIMEN_IMAGE_TAG from GHCR (LIMEN_IMAGE_PREFIX in .env, #303)"
 	@echo "  make up-host-ollama     alias of 'make up' (host Ollama is the default)"
 	@echo ""
 	@echo "Backend setup"
@@ -171,7 +177,8 @@ up-stack: gs-volumes
 	@grep -qs '^DB__TILES_PASSWORD=[0-9a-f]\{32,\}$$' .env || { \
 	  echo "[up] manca DB__TILES_PASSWORD nel .env: senza, pg_tileserv non entra e la mappa resta senza tile (#269)."; \
 	  echo "     echo DB__TILES_PASSWORD=\$$(openssl rand -hex 24) >> .env"; exit 1; }
-	docker compose $(COMPOSE_ALL) $(UP_PROFILES) up -d --build
+	$(if $(REGISTRO),@$(MAKE) --no-print-directory pull)
+	docker compose $(COMPOSE_ALL) $(UP_PROFILES) up -d $(UP_BUILD)
 	@echo "[up] waiting for the API to become ready…"
 	@for i in $$(seq 1 40); do \
 	  docker compose $(COMPOSE_ALL) exec -T api python -c \
@@ -221,12 +228,9 @@ PLATFORM ?= linux/amd64
 build-images:
 	docker build --platform $(PLATFORM) -f infra/postgres/Dockerfile.db -t limen/postgres:16-3.5 infra/postgres
 	docker build --platform $(PLATFORM) -f infra/docker/Dockerfile.api  -t limen/api:0.1 .
-	# limen-ops MCP ships in the api image (same code, `limen mcp-serve`
-	# entrypoint); the alias tag makes it a first-class deployable artifact.
-	docker tag limen/api:0.1 limen/mcp:0.1
 	docker build --platform $(PLATFORM) -f geodata/Dockerfile           -t limen/geodata:0.1 .
 	( cd frontend && npm ci && npm run build )
-	@echo "[build-images] built limen/postgres:16-3.5, limen/api:0.1, limen/mcp:0.1, limen/geodata:0.1 ($(PLATFORM)) + frontend dist/"
+	@echo "[build-images] built limen/postgres:16-3.5, limen/api:0.1 (also mcp), limen/geodata:0.1 ($(PLATFORM)) + frontend dist/"
 
 # ---------------------------------------------------------------------------
 # Backend
@@ -324,11 +328,18 @@ dump-training:
 	tar czf data/backups/mlflow_$$(date +%F).tgz mlflow.db mlruns
 	@ls -lah data/backups/
 
-immagine:                    # costruisce l'immagine di api e worker (limen/api), senza avviare niente
-	docker compose $(COMPOSE_ALL) build api
+immagine:                    # l'immagine di api, worker e mcp (costruita, o tirata da GHCR), senza avviare niente
+	$(if $(REGISTRO),@$(MAKE) --no-print-directory pull,docker compose $(COMPOSE_ALL) build api)
+
+# Senza LIMEN_IMAGE_PREFIX tira solo le immagini di terzi: `limen/api` senza
+# registro sarebbe Docker Hub, cioè l'immagine di qualcun altro.
+pull:                        # tira le immagini di LIMEN_IMAGE_TAG da GHCR (#303), senza avviare niente
+	$(if $(REGISTRO),@grep -qs '^LIMEN_IMAGE_TAG=.' .env || { echo "[pull] con LIMEN_IMAGE_PREFIX serve LIMEN_IMAGE_TAG (es. sha-7a8dd95 o 0.7.0)"; exit 1; })
+	docker compose $(COMPOSE_ALL) $(UP_PROFILES) pull $(if $(REGISTRO),,--ignore-buildable)
 
 db-up:                       # solo Postgres, e aspetta che sia sano (ripristino da zero, #306)
-	docker compose $(COMPOSE_ALL) up -d postgres
+	$(if $(REGISTRO),docker compose $(COMPOSE_ALL) pull postgres)
+	docker compose $(COMPOSE_ALL) up -d $(if $(REGISTRO),--no-build) postgres
 	@for i in $$(seq 1 60); do \
 	  [ "$$(docker inspect -f '{{.State.Health.Status}}' limen-postgres 2>/dev/null)" = healthy ] && exit 0; \
 	  sleep 3; \

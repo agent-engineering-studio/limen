@@ -330,7 +330,7 @@ Completati di recente:
   (`LIMEN_FORECAST_AOI` / `_HOURS` / `_CELL_LIMIT`).
 - **MCP `limen-ops`** (`limen mcp-serve`): rischio, allerte e run del
   workflow esposti come tool per gateway agentici (OpenClaw, Claude Desktop).
-  Nel compose è il servizio `mcp` (immagine `limen/mcp:0.1`, HTTP su
+  Nel compose è il servizio `mcp` (immagine `limen/api:0.1`, la stessa dell'api, HTTP su
   `127.0.0.1:8766`; `LIMEN_MCP_BIND=0.0.0.0` solo dietro TLS quando il
   gateway sta su un'altra macchina). Aggancio OpenClaw:
   `openclaw mcp set limen-ops '{"url":"http://127.0.0.1:8766/mcp","transport":"streamable-http"}'`.

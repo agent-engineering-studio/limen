@@ -39,10 +39,12 @@
 
 name: limen-geoserver
 
+# Fissate al commit di mcp-geo-server che gira oggi (era `latest`/`bootstrap`,
+# #303); per aggiornarle si cambia qui o in GEOSERVER_*_IMAGE.
 x-geoserver-app-image: &geoserver-app-image
-  image: ${GEOSERVER_APP_IMAGE:-ghcr.io/agent-engineering-studio/mcp-geo-server:latest}
+  image: ${GEOSERVER_APP_IMAGE:-ghcr.io/agent-engineering-studio/mcp-geo-server:sha-7ad6189}
 x-geoserver-bootstrap-image: &geoserver-bootstrap-image
-  image: ${GEOSERVER_BOOTSTRAP_IMAGE:-ghcr.io/agent-engineering-studio/mcp-geo-server:bootstrap}
+  image: ${GEOSERVER_BOOTSTRAP_IMAGE:-ghcr.io/agent-engineering-studio/mcp-geo-server:bootstrap-7ad6189fc43b4f8939e13cd78d518481f3b1a8dd}
 
 services:
 

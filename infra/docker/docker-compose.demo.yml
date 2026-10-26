@@ -22,7 +22,9 @@ services:
         # Upstream postgis/postgis has no arm64 manifest; the Makefile passes
         # the multi-arch imresamu image on Apple Silicon. Default keeps amd64.
         POSTGIS_BASE: ${POSTGIS_BASE:-postgis/postgis:16-3.5}
-    image: limen/postgres:16-3.5
+    # Costruita qui, oppure tirata da GHCR con LIMEN_IMAGE_PREFIX e
+    # LIMEN_IMAGE_TAG (#303): vedi «Immagini» nel README.
+    image: ${LIMEN_IMAGE_PREFIX:-limen/}postgres:${LIMEN_IMAGE_TAG:-16-3.5}
     container_name: limen-postgres
     restart: unless-stopped
     # SIGINT = "fast shutdown": Postgres chiude le connessioni, fa un
@@ -72,7 +74,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.api
-    image: limen/api:0.1
+    image: ${LIMEN_IMAGE_PREFIX:-limen/}api:${LIMEN_IMAGE_TAG:-0.1}
     container_name: limen-api
     restart: unless-stopped
     depends_on:
@@ -313,7 +315,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.api
-    image: limen/api:0.1
+    image: ${LIMEN_IMAGE_PREFIX:-limen/}api:${LIMEN_IMAGE_TAG:-0.1}
     container_name: limen-worker
     restart: unless-stopped
     command: ["limen", "worker"]
@@ -377,13 +379,13 @@ services:
 
   mcp:
     # limen-ops MCP server for agent gateways (OpenClaw & co.). Same image
-    # as the api; HTTP transport on :8766. The host bind defaults to
+    # as the api (same tag, so a deploy cannot mix versions); HTTP transport on :8766. The host bind defaults to
     # loopback (same-host OpenClaw); set LIMEN_MCP_BIND=0.0.0.0 only when
     # the gateway lives on another machine — and put TLS in front.
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.api
-    image: limen/mcp:0.1
+    image: ${LIMEN_IMAGE_PREFIX:-limen/}api:${LIMEN_IMAGE_TAG:-0.1}
     container_name: limen-mcp
     restart: unless-stopped
     depends_on:
@@ -462,7 +464,9 @@ services:
     # La SPA lo chiama da nginx su `/tiles/` (VITE_TILESERV_URL); `/api/tiles`
     # dell'API inoltra i byte allo stesso server.
     # Official community image (the GHCR CrunchyData ref is no longer public).
-    image: docker.io/pramsey/pg_tileserv:latest
+    # Una versione, non `latest`: su un host nuovo `latest` non è quella che
+    # gira qui (#303). 20250131 è il `latest` di gennaio 2025.
+    image: docker.io/pramsey/pg_tileserv:20250131
     container_name: limen-pg-tileserv
     restart: unless-stopped
     depends_on:
@@ -565,7 +569,7 @@ services:
         VITE_DEFAULT_LON: ${VITE_DEFAULT_LON:-}
         VITE_DEFAULT_LAT: ${VITE_DEFAULT_LAT:-}
         VITE_DEFAULT_ZOOM: ${VITE_DEFAULT_ZOOM:-}
-    image: limen/web:0.1
+    image: ${LIMEN_IMAGE_PREFIX:-limen/}web:${LIMEN_IMAGE_TAG:-0.1}
     container_name: limen-frontend-static
     restart: unless-stopped
     depends_on:

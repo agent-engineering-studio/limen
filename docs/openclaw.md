@@ -19,7 +19,7 @@ VPS dedicato domani — cambia solo un URL):
 ```
 
 1. **Pull — MCP `limen-ops`**: l'agente interroga Limen on-demand.
-   Il servizio compose `mcp` (immagine `limen/mcp:0.1`) espone HTTP
+   Il servizio compose `mcp` (immagine `limen/api:0.1`, la stessa dell'api) espone HTTP
    streamable su `127.0.0.1:8766/mcp`. Tool disponibili:
 
    | Tool | Cosa restituisce |
