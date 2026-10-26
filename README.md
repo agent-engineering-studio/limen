@@ -330,6 +330,15 @@ the fingerprints, a host that later puts the same sources at the same paths
 with `rsync -a` does not recompute them. For a copy of *this* instance use the
 nightly backup instead.
 
+**Public static sources: `make fetch-static`** (#305). Downloads what needs
+no account under `LIMEN_DATA_ROOT` — the CLMS sealed-soil raster from the EEA
+ImageServer and the OSM main roads and railways (Geofabrik PBF, extracted with
+pyogrio, no GDAL on the host; `LIMEN_OSM_PBF_URL` for another country) — and
+keeps `static-manifest.json` with size and sha256 of each file. A file already
+there is verified, not downloaded again; one that no longer matches stops the
+command. DTM, CORINE and geology still need registration with their
+publishers; on a new server the static snapshot makes them unnecessary.
+
 **Static data without `uv` on the host.** `make static-data` runs the same
 `limen` commands on the host when `uv` is there, otherwise in a throwaway
 worker container (`docker compose run --rm`), with every configured source

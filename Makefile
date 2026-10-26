@@ -88,7 +88,7 @@ COMPOSE_BUILD := $(if $(wildcard .env),--env-file .env) \
 # here — it runs from its own repo (see the note in docker-compose.demo.yml).
 BUILD_PROFILES ?= --profile geoserver --profile frontend --profile geodata
 
-.PHONY: inference-up inference-up-cpu inference-up-colibri inference-down inference-logs inference-check help install docs-links docs-bundle \
+.PHONY: fetch-static inference-up inference-up-cpu inference-up-colibri inference-down inference-logs inference-check help install docs-links docs-bundle \
         up down build rebuild pull up-host-ollama \
         up-dev down-dev logs migrate seed immagine db-up up-stack backup backup-elenco restore bootstrap-static calibrate backtest serve \
         data-status static-data flood-data flood-events backtest-flood fire-history \
@@ -299,6 +299,19 @@ flood-data:
 # di Copernicus Land, che chiede un account; l'EEA serve lo stesso layer su un
 # ImageServer aperto, quindi qui non serve nessuna credenziale.
 # Idempotente: con il file già presente non scarica niente.
+# Le sorgenti statiche che si scaricano senza account (#305), sotto
+# LIMEN_DATA_ROOT, con static-manifest.json: un file che non è più quello
+# scaricato ferma il comando. Con uv sull'host gira lì, altrimenti nel worker
+# con la radice montata allo stesso percorso (come make static-data).
+fetch-static:
+	@if [ "$${LIMEN_STATICI:-}" != docker ] && command -v $(UV) >/dev/null 2>&1; then \
+	  $(UV) run limen fetch-static; \
+	else \
+	  r=$$(realpath -m "$(LIMEN_DATA_ROOT)"); mkdir -p "$$r"; \
+	  env -i PATH="$$PATH" HOME="$$HOME" docker compose $(COMPOSE_ALL) run --rm --no-deps -T \
+	    --user "$$(id -u):$$(id -g)" -v "$$r:$$r" -e LIMEN_DATA_ROOT="$$r" worker limen fetch-static; \
+	fi
+
 imperviousness-data:
 	$(UV) run limen imperviousness-fetch
 	@echo
