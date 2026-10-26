@@ -48,7 +48,11 @@ from limen.core.scoring.regional_thresholds import (
 from limen.core.scoring.wildfire.fwi import FwiState, advance
 from limen.data.db import acquire
 from limen.integrations.openmeteo.client import OpenMeteoHttpClient
-from limen.integrations.openmeteo.dtos import MeteoSnapshot
+from limen.integrations.openmeteo.dtos import (
+    FireWeatherObservation,
+    MeteoSnapshot,
+    WeatherSample,
+)
 from limen.integrations.openmeteo.grid import build_snapped_nodes
 
 log = get_logger(__name__)
@@ -101,6 +105,31 @@ def _node_key(lon: float, lat: float, *, spacing: float) -> tuple[int, int]:
     return (round(lon / spacing), round(lat / spacing))
 
 
+class _PerGiorno:
+    """`noon_observation` senza riscorrere la serie a ogni giorno (#327).
+
+    Quella di `MeteoSnapshot` filtra tutti i campioni per ogni giorno chiesto:
+    sui pochi giorni della catena operativa non si vede, su un anno orario
+    (~8.800 campioni per 366 giorni per 25 nodi) era il grosso del tempo — 16
+    minuti a lotto. Qui le ore si raggruppano una volta per giorno, e a ogni
+    giorno si passano solo quelle del giorno e del precedente: è tutto ciò che
+    la funzione guarda, pioggia delle 24 ore comprese. Stessa funzione, stesso
+    risultato.
+    """
+
+    def __init__(self, snapshot: MeteoSnapshot) -> None:
+        self._base = snapshot
+        self._giorni: dict[date, list[WeatherSample]] = defaultdict(list)
+        for s in snapshot.samples:
+            self._giorni[s.timestamp.date()].append(s)
+
+    def noon_observation(self, day: date, *, noon_hour: int) -> FireWeatherObservation | None:
+        vicini = self._giorni.get(day - timedelta(days=1), []) + self._giorni.get(day, [])
+        return self._base.model_copy(update={"samples": vicini}).noon_observation(
+            day, noon_hour=noon_hour
+        )
+
+
 class NodeChain:
     """La catena di un nodo, che si può camminare a pezzi.
 
@@ -131,10 +160,9 @@ class NodeChain:
 
     def walk(self, *, snapshot: MeteoSnapshot, days: list[date]) -> dict[date, dict[str, float]]:
         out: dict[date, dict[str, float]] = {}
+        fonte = _PerGiorno(snapshot) if isinstance(snapshot, MeteoSnapshot) else snapshot
         for day in days:
-            obs = snapshot.noon_observation(
-                day, noon_hour=self._thresholds.fwi.ora_osservazione_utc
-            )
+            obs = fonte.noon_observation(day, noon_hour=self._thresholds.fwi.ora_osservazione_utc)
             if obs is None:
                 continue
             self._rain_by_day[day] = obs.rain_24h_mm
