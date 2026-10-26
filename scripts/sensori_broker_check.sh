@@ -48,7 +48,10 @@ dispositivo() {
   local id=$1
   openssl ecparam -name prime256v1 -genkey -noout -out "$TMP/$id.key"
   openssl req -new -key "$TMP/$id.key" -subj "/CN=$id" -out "$TMP/$id.csr"
-  "$CA_SH" firma "$TMP/$id.csr" 1 >"$TMP/$id.crt" 2>/dev/null
+  # Gli id di prova si rifirmano a ogni giro: il certificato di ieri vale
+  # ancora qualche ora, e senza il rinnovo due verifiche nello stesso giorno
+  # si fermavano qui.
+  SENSORI_RINNOVO=1 "$CA_SH" firma "$TMP/$id.csr" 1 >"$TMP/$id.crt" 2>/dev/null
   chmod 644 "$TMP/$id.key"
 }
 
@@ -60,16 +63,19 @@ pubblica() {
 }
 
 consegnato() {
-  # Pubblica mentre l'ingestore e' in ascolto: vale solo quello che arriva.
+  # Una sessione persistente QoS 1 dell'ingestore: ci si iscrive (-E esce al
+  # SUBACK), il dispositivo pubblica, ci si riconnette a ritirare la coda. Con
+  # un sottoscrittore in ascolto e un'attesa fissa, un `docker run` lento
+  # faceva pubblicare prima dell'iscrizione.
   local id=$1 topic=$2 ricevuto
-  # shellcheck disable=SC2046
-  mq mosquitto_sub $(tls) --cert /client/ingestore.crt --key /client/ingestore.key \
-    -t 'limen/v2/#' -C 1 -W 6 >"$TMP/ricevuto" 2>/dev/null &
-  local sub=$!
-  sleep 2
+  # shellcheck disable=SC2207 # tls stampa opzioni da dividere
+  local ingestore=($(tls) --cert /client/ingestore.crt --key /client/ingestore.key
+    -i limen-verifica-ingestore -t 'limen/v2/#' -q 1)
+  mq mosquitto_sub "${ingestore[@]}" -c -E >/dev/null 2>&1 || return 1
   pubblica "$id" "$topic" || true
-  wait "$sub" || true
-  ricevuto=$(cat "$TMP/ricevuto")
+  ricevuto=$(mq mosquitto_sub "${ingestore[@]}" -c -C 1 -W 5 2>/dev/null || true)
+  # Senza -c la sessione si chiude con la connessione: niente coda lasciata.
+  mq mosquitto_sub "${ingestore[@]}" -E >/dev/null 2>&1 || true
   [ -n "$ricevuto" ]
 }
 

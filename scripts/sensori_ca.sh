@@ -154,7 +154,11 @@ cmd_firma() {
   # come uno: quello di un cittadino potrebbe ereditare il livello di uno
   # istituzionale. Per un rinnovo voluto: SENSORI_RINNOVO=1.
   if [ "${SENSORI_RINNOVO:-0}" != 1 ] &&
-    awk -F'\t' -v s="/CN=$cn" '$1 == "V" && $6 == s {f=1} END {exit !f}' "$CA/index.txt"; then
+    # Un certificato scaduto resta «V» nell'indice finché nessuno lancia
+    # `openssl ca -updatedb`: non è un secondo dispositivo, e senza questo
+    # confronto l'id di `sensori-check` restava bloccato dal giorno dopo.
+    awk -F'\t' -v s="/CN=$cn" -v ora="$(date -u +%y%m%d%H%M%SZ)" \
+      '$1 == "V" && $6 == s && $2 > ora {f=1} END {exit !f}' "$CA/index.txt"; then
     log "'$cn' ha gia' un certificato valido (rinnovo: SENSORI_RINNOVO=1)"
     exit 2
   fi
