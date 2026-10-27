@@ -226,7 +226,7 @@ accendono alle 20:50 e lo spengono alle 02:05 UTC (la finestra
 `LLM__SLOW_MODELS_WINDOW_UTC`); si avvia in ~15 s perché il modello è mappato
 dal disco. Fuori finestra il revisore lascia il verdetto a `null`, come per
 qualunque revisore che non risponde. Installazione:
-`sudo infra/inference/systemd/installa.sh`. Se la finestra cambia nel `.env`,
+`sudo bash infra/inference/systemd/installa.sh`. Se la finestra cambia nel `.env`,
 cambiano le due ore nei timer.
 
 Un revisore più piccolo non lo sostituisce: Qwen3-8B (`chat`) su 27 spiegazioni

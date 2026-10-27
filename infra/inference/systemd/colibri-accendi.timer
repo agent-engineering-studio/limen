@@ -7,8 +7,10 @@
 Description=Accende colibrì per la finestra serale dei modelli lenti
 
 [Timer]
+# Niente Persistent=: dopo un riavvio di giorno farebbe partire subito colibrì,
+# acceso fino alle 02:05 della notte dopo. Una sera persa lascia i verdetti
+# a null, che il revisore già gestisce.
 OnCalendar=*-*-* 20:50:00 UTC
-Persistent=true
 Unit=colibri.service
 
 [Install]
