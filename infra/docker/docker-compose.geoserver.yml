@@ -90,6 +90,10 @@ services:
     container_name: limen-geoserver
     restart: unless-stopped
     profiles: ["geoserver"]
+    # L'entrypoint di kartoza fa `exec` di Tomcat: la JVM è PID 1 e non
+    # raccoglie gli orfani. Ogni healthcheck scaduto lasciava un `curl` zombie
+    # (17 in 22 ore in produzione); tini come PID 1 li raccoglie.
+    init: true
     depends_on:
       geoserver-postgis:
         condition: service_healthy
@@ -105,7 +109,9 @@ services:
     volumes:
       - limen-geoserver-gsdata:${GEOSERVER_DATA_DIR:-/opt/geoserver/data_dir}
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf -o /dev/null http://localhost:8080/geoserver/web/ || exit 1"]
+      # -m sotto il timeout: curl si chiude da solo invece di essere ucciso
+      # da Docker a metà risposta.
+      test: ["CMD-SHELL", "curl -sf -m 4 -o /dev/null http://localhost:8080/geoserver/web/ || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 20
