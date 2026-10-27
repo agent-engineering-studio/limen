@@ -15,6 +15,7 @@ finché il modello non sembra bravo per il motivo sbagliato:
 from __future__ import annotations
 
 import datetime as dt
+import json
 
 import pytest
 
@@ -192,3 +193,33 @@ async def test_only_enriched_samples_reach_the_training_set(
     ready = await fetch_wildfire_ready_samples()
 
     assert [s.cell_id for s in ready] == [f"{AOI}|0|1"]
+
+
+async def test_reextraction_keeps_the_fire_weather_enrichment(
+    reset_db: None, pg_pool: object
+) -> None:
+    """#327: ogni `limen train` riestrae i campioni, e l'upsert sovrascriveva
+    il blocco `fire`: due ore di arricchimento FWI rifatte a ogni corsa."""
+    await _seed()
+
+    def campione(fire: dict[str, float]) -> TrainingSample:
+        return TrainingSample(
+            cell_id=f"{AOI}|0|0",
+            valuation_time=dt.datetime(2024, 7, 10, 12, tzinfo=dt.UTC),
+            label=1,
+            label_source="firms",
+            features={"fire": fire},
+            split_block="b1",
+            hazard_type=HazardType.WILDFIRE,
+        )
+
+    await insert_many([campione({"fuel_class_norm": 0.6})])
+    async with acquire() as conn:
+        await conn.execute(
+            "UPDATE training_samples SET features = jsonb_set(features, '{fire,fwi}', '35.0')"
+        )
+    await insert_many([campione({"fuel_class_norm": 0.8})])
+
+    async with acquire() as conn:
+        fire = await conn.fetchval("SELECT features -> 'fire' FROM training_samples")
+    assert json.loads(fire) == {"fuel_class_norm": 0.8, "fwi": 35.0}
