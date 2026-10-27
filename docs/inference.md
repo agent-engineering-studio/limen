@@ -217,6 +217,23 @@ Sempre `warning`, mai `info`, ed emesso da un solo punto per agente
 `briefing.py`) così che un grep li trovi tutti. Un ciclo che lo emette ha
 prodotto un'analisi *degradata* pur sembrando normale.
 
+## colibrì solo di sera
+
+L'unico ruolo su colibrì è il revisore di fedeltà, alle 21:00 UTC, su quattro
+spiegazioni: circa cento minuti di lavoro a sera. Acceso tutto il giorno teneva
+~5 GB di RAM e ~13 GB di swap. Due timer in `infra/inference/systemd/` lo
+accendono alle 20:50 e lo spengono alle 02:05 UTC (la finestra
+`LLM__SLOW_MODELS_WINDOW_UTC`); si avvia in ~15 s perché il modello è mappato
+dal disco. Fuori finestra il revisore lascia il verdetto a `null`, come per
+qualunque revisore che non risponde. Installazione:
+`sudo infra/inference/systemd/installa.sh`. Se la finestra cambia nel `.env`,
+cambiano le due ore nei timer.
+
+Un revisore più piccolo non lo sostituisce: Qwen3-8B (`chat`) su 27 spiegazioni
+ne ha date per non fedeli 19, quasi tutte per frasi condizionali lette come
+certezze o per fatti che coincidono con i dati, e ha mancato la causa sbagliata
+che GLM-5.2 aveva trovato (Trentino, 22/10/2026).
+
 ## Replicare lo stack su un'altra macchina
 
 Su questo server il gateway, llama-swap, l'embedding e colibrì girano come

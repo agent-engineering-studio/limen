@@ -1,0 +1,15 @@
+# colibrì solo nella finestra dei modelli lenti (LLM__SLOW_MODELS_WINDOW_UTC,
+# default 20-2 UTC). Il revisore di fedeltà gira alle 21:00 UTC; acceso tutto
+# il giorno, colibrì teneva ~5 GB di RAM e ~13 GB di swap per ~100 minuti di
+# lavoro a sera. Si avvia in ~15 s: il modello è mappato dal disco.
+# Se la finestra cambia nel .env, cambiano queste due ore.
+[Unit]
+Description=Accende colibrì per la finestra serale dei modelli lenti
+
+[Timer]
+OnCalendar=*-*-* 20:50:00 UTC
+Persistent=true
+Unit=colibri.service
+
+[Install]
+WantedBy=timers.target
