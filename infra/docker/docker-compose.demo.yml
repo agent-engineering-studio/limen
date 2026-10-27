@@ -262,7 +262,7 @@ services:
       # Registry su Postgres, non su SQLite (#78): il file store è deprecato e
       # il registry dei modelli non ci funziona, quindi il cancello di
       # promozione non avrebbe dove scrivere. Il database `mlflow` lo crea
-      # `infra/postgres/initdb/01-mlflow-db.sql` al primo boot del cluster.
+      # l'API all'avvio se manca (anche su un cluster ripristinato, #327).
       # sqlite resta il default solo per lo sviluppo locale.
       SCORING__MLFLOW_TRACKING_URI: ${SCORING__MLFLOW_TRACKING_URI:-postgresql://limen:limen@postgres:5432/mlflow}
       # Gli artefatti degli esperimenti nuovi, nel volume ${LIMEN_DATA_ROOT}/mlruns

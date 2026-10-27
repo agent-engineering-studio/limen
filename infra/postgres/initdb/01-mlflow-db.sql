@@ -11,7 +11,7 @@
 -- stesso search_path.
 --
 -- Gli script di initdb girano **solo alla prima creazione del cluster**. Su un
--- deployment già avviato serve una volta a mano:
---     docker compose exec postgres psql -U limen -c 'CREATE DATABASE mlflow'
+-- cluster già avviato o ripristinato lo crea `crea_database_mlflow`, all'avvio
+-- dell'API e con `limen migrate` (#327).
 SELECT 'CREATE DATABASE mlflow'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'mlflow')\gexec
