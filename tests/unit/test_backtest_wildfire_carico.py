@@ -20,16 +20,22 @@ from limen.core.models.risk import (
     RiskLevel,
     StaticFactors,
 )
-from limen.core.scoring.regional_thresholds import WildfireThresholds, load_hazard_thresholds
+from limen.core.scoring.regional_thresholds import (
+    VeryHighGate,
+    WildfireThresholds,
+    load_hazard_thresholds,
+)
 from limen.core.scoring.wildfire import WildfireScoringEngine
 
 INIZIO = date(2025, 7, 1)
 NODI = [(16.0, 40.0), (17.0, 40.0)]
 
 
-def _soglie() -> WildfireThresholds:
+def _soglie(rosso: bool = False) -> WildfireThresholds:
     t = load_hazard_thresholds(HazardType.WILDFIRE)
     assert isinstance(t, WildfireThresholds)
+    if rosso:
+        return t.model_copy(update={"very_high": VeryHighGate(fwi_min=38.0, terrain_min=0.4)})
     return t
 
 
@@ -68,9 +74,10 @@ CELLE = [
 CATENE = [_catena([5, 20, 30, 45, 60, 25]), _catena([70, 80, 10, 50, 40, 22])]
 
 
+@pytest.mark.parametrize("rosso", [False, True])
 @pytest.mark.parametrize("livello", [RiskLevel.Moderate, RiskLevel.High, RiskLevel.VeryHigh])
-def test_uguale_al_motore_cella_per_cella(livello: RiskLevel) -> None:
-    t = _soglie()
+def test_uguale_al_motore_cella_per_cella(livello: RiskLevel, rosso: bool) -> None:
+    t = _soglie(rosso)
     engine = WildfireScoringEngine(t)
     ordine = list(RiskLevel)
     giornate = in_allerta = 0
@@ -100,7 +107,7 @@ def test_uguale_al_motore_cella_per_cella(livello: RiskLevel) -> None:
         end=INIZIO + timedelta(days=5),
         thresholds=t,
         alert_level=livello,
-    ) == pytest.approx(atteso)
+    ).quota == pytest.approx(atteso)
 
 
 def test_fuori_stagione_non_conta() -> None:
@@ -114,7 +121,8 @@ def test_fuori_stagione_non_conta() -> None:
         thresholds=t,
         alert_level=RiskLevel.High,
     )
-    assert carico == 0.0
+    assert carico.quota == 0.0
+    assert carico.giorno_picco is None
 
 
 def test_un_peso_piu_alto_accende_piu_territorio() -> None:
@@ -132,6 +140,23 @@ def test_un_peso_piu_alto_accende_piu_territorio() -> None:
             end=INIZIO + timedelta(days=5),
             thresholds=soglie,
             alert_level=RiskLevel.High,
-        )
+        ).quota
 
     assert carico(alzato) > carico(t)
+
+
+def test_il_giorno_peggiore() -> None:
+    """La media stagionale diluisce il giorno in cui il rosso copre l'AOI."""
+    t = _soglie(rosso=True)
+    carico = carico_celle(
+        CELLE,
+        nodes=NODI,
+        chains=CATENE,
+        start=INIZIO,
+        end=INIZIO + timedelta(days=5),
+        thresholds=t,
+        alert_level=RiskLevel.VeryHigh,
+    )
+    assert carico.giorno_picco is not None
+    assert carico.picco > carico.quota
+    assert 0 < carico.picco <= 1
