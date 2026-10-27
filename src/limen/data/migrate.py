@@ -170,6 +170,30 @@ async def imposta_password(
         log.warning("migrate.password_fallita", ruolo=ruolo, error_type=type(exc).__name__)
 
 
+async def crea_database_mlflow(settings: Settings) -> None:
+    """Il database del registry MLflow, se manca e sta su questo server.
+
+    ``initdb/01-mlflow-db.sql`` gira solo alla prima creazione del cluster: un
+    volume già avviato o ripristinato restava senza, e il retrain lo scopriva
+    dopo ore di arricchimento (#327). Le tabelle le crea MLflow al primo uso.
+    """
+    from limen.data.backup import mlflow_database
+
+    nome = mlflow_database(settings.scoring.mlflow_tracking_uri, settings.db.connection_string)
+    if nome is None:
+        return
+    try:
+        async with acquire() as conn:
+            if await conn.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", nome):
+                return
+            quotato = await conn.fetchval("SELECT quote_ident($1)", nome)
+            await conn.execute(f"CREATE DATABASE {quotato}")
+    except asyncpg.PostgresError as exc:
+        log.warning("migrate.mlflow_db_fallito", database=nome, error_type=type(exc).__name__)
+        return
+    log.info("migrate.mlflow_db_creato", database=nome)
+
+
 async def imposta_password_dei_ruoli(settings: Settings) -> None:
     """Le password di tutti i ruoli ristretti, dall'API all'avvio e da ``limen migrate``."""
     await imposta_password(
