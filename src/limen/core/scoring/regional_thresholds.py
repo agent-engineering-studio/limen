@@ -705,6 +705,23 @@ class SlopeBlock(_StrictModel):
     saturation_deg: float = Field(..., gt=0.0, le=90.0)
 
 
+class VeryHighGate(_StrictModel):
+    """«Molto alto» dalla banda EFFIS, non dalla scala del combustibile (#301).
+
+    Con il solo prodotto il rosso arriva a FWI 38 solo dove il terreno vale 1,
+    cioè dove sta la classe più alta della tabella dei combustibili: riscalare
+    quella tabella sposta il rosso. Con questo blocco il rosso è la banda
+    «very high» del FWI su ogni terreno che può bruciare; sotto il rosso il
+    terreno continua a ordinare le celle.
+    """
+
+    #: FWI da cui scatta il rosso: la soglia EFFIS «very high».
+    fwi_min: float = Field(..., gt=0.0)
+    #: Terreno minimo (``base + fuel·f + slope·s``): sotto, roccia, acqua e
+    #: città densa restano fuori dal rosso anche col FWI estremo.
+    terrain_min: float = Field(..., ge=0.0, le=1.0)
+
+
 class WildfireThresholds(HazardThresholds):
     """Wildfire configuration (#61).
 
@@ -717,10 +734,12 @@ class WildfireThresholds(HazardThresholds):
     fwi: FwiBlock
     fuel: FuelBlock
     slope: SlopeBlock
+    very_high: VeryHighGate | None = None
     calibration: CalibrationBlock | None = None
 
     def model_card(self) -> dict[str, Any]:
         return {
+            "very_high": None if self.very_high is None else self.very_high.model_dump(),
             "weights": {
                 "base": self.weights.base,
                 "fuel": self.weights.fuel,

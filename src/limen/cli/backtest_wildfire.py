@@ -134,6 +134,8 @@ class WildfireBacktestMetrics:
     #: Quota di giornate-cella della stagione in allerta, su tutte le celle
     #: dell'AOI: quanto territorio il modello accende, bruciato o no.
     carico_celle: float = 0.0
+    picco_celle: float = 0.0
+    giorno_picco: date | None = None
 
 
 def _at_least(level: RiskLevel, threshold: RiskLevel) -> bool:
@@ -439,6 +441,17 @@ def _soglia(level: RiskLevel, thresholds: WildfireThresholds) -> float:
     }[level]
 
 
+@dataclass(frozen=True, slots=True)
+class CaricoCelle:
+    #: Quota di giornate-cella della stagione in allerta, su tutta l'AOI.
+    quota: float
+    #: La quota più alta di celle dell'AOI in allerta nello stesso giorno, e
+    #: quel giorno. La media stagionale non vede il giorno in cui il rosso
+    #: copre mezza regione: chi riceve le notifiche sì (#301).
+    picco: float
+    giorno_picco: date | None
+
+
 def carico_celle(
     celle: list[CellaAoi],
     *,
@@ -448,16 +461,20 @@ def carico_celle(
     end: date,
     thresholds: WildfireThresholds,
     alert_level: RiskLevel,
-) -> float:
-    """Quota di giornate-cella in ``[start, end]`` con la cella in ``alert_level``
-    o oltre, su tutte le celle dell'AOI.
+) -> CaricoCelle:
+    """Le giornate-cella in ``[start, end]`` con la cella in ``alert_level``
+    o oltre, su tutte le celle dell'AOI: in media e nel giorno peggiore.
 
     Il punteggio è ``min(fwi_norm * terreno, 1)``: il terreno di una cella si
     chiede al motore una volta sola, con il meteo al massimo (``fwi_norm`` = 1),
     e poi si moltiplica per i giorni del suo nodo. Stesso conto del motore,
-    senza i milioni di valutazioni di un replay cella per cella.
+    senza i milioni di valutazioni di un replay cella per cella. Il rosso dalla
+    banda FWI (``very_high``) dipende dal FWI del giorno, quindi il terreno si
+    chiede senza e la soglia si applica qui, giorno per giorno.
     """
-    engine = WildfireScoringEngine(thresholds)
+    engine = WildfireScoringEngine(thresholds.model_copy(update={"very_high": None}))
+    gate = thresholds.very_high
+    rosso = thresholds.classes.very_high.lo
     pieno = thresholds.fwi.normalisation_max
     soglia = _soglia(alert_level, thresholds)
     per_nodo: dict[int, list[float]] = defaultdict(list)
@@ -478,16 +495,30 @@ def carico_celle(
         per_nodo[nearest_node(cella.lon, cella.lat, nodes)].append(terreno)
     giornate = 0
     in_allerta = 0
+    per_giorno: dict[date, int] = defaultdict(int)
     for k, terreni in per_nodo.items():
-        fwi_norm = np.array(
-            [min(s.fwi / pieno, 1.0) for d, s in chains[k].items() if start <= d <= end]
-        )
-        if fwi_norm.size == 0:
+        stati = [(d, s.fwi) for d, s in chains[k].items() if start <= d <= end]
+        if not stati:
             continue
-        punteggi = np.minimum(np.outer(np.array(terreni), fwi_norm), 1.0)
+        fwi = np.array([v for _, v in stati])
+        t = np.array(terreni)
+        punteggi = np.minimum(np.outer(t, np.minimum(fwi / pieno, 1.0)), 1.0)
+        if gate is not None:
+            accesa = np.outer(t >= gate.terrain_min, fwi >= gate.fwi_min)
+            punteggi = np.where(accesa, np.maximum(punteggi, rosso), punteggi)
+        allerte = np.count_nonzero(punteggi >= soglia, axis=0)
         giornate += punteggi.size
-        in_allerta += int(np.count_nonzero(punteggi >= soglia))
-    return in_allerta / giornate if giornate else 0.0
+        in_allerta += int(allerte.sum())
+        for (d, _), n in zip(stati, allerte, strict=True):
+            per_giorno[d] += int(n)
+    if not giornate:
+        return CaricoCelle(quota=0.0, picco=0.0, giorno_picco=None)
+    giorno, n = max(per_giorno.items(), key=lambda kv: (kv[1], kv[0]))
+    return CaricoCelle(
+        quota=in_allerta / giornate,
+        picco=n / sum(len(t) for t in per_nodo.values()),
+        giorno_picco=giorno if n else None,
+    )
 
 
 def _lift(metrics: WildfireBacktestMetrics) -> float:
@@ -530,6 +561,8 @@ def write_report(
         f"- **Carico per cella**: {metrics.carico_celle:.2%} delle giornate-cella della "
         "stagione in allerta, su tutte le celle dell'AOI",
         f"- **Discriminazione spaziale**: {_lift_spaziale(metrics):.2f} volte il carico per cella",
+        f"- **Giorno peggiore**: {metrics.picco_celle:.2%} delle celle dell'AOI in allerta "
+        f"insieme ({metrics.giorno_picco or 'nessuno'})",
         "- **FAR**: non misurato (vedi nota)",
         f"- **Preavviso medio**: {metrics.mean_lead_hours:.1f} h",
         "",
@@ -634,18 +667,21 @@ async def backtest_aoi(
         alert_level=alert_level,
         season=(start, end),
     )
+    carico = carico_celle(
+        await celle_aoi(aoi_id),
+        nodes=nodes,
+        chains=chains,
+        start=start,
+        end=end,
+        thresholds=thresholds,
+        alert_level=alert_level,
+    )
     metrics = replace(
         metrics,
         carico_meteo=carico_meteo(chains, start=start, end=end, thresholds=thresholds),
-        carico_celle=carico_celle(
-            await celle_aoi(aoi_id),
-            nodes=nodes,
-            chains=chains,
-            start=start,
-            end=end,
-            thresholds=thresholds,
-            alert_level=alert_level,
-        ),
+        carico_celle=carico.quota,
+        picco_celle=carico.picco,
+        giorno_picco=carico.giorno_picco,
         pioggia="osservata" if fonte is not None else "modello",
     )
     path = write_report(metrics, start=start, end=end, alert_level=alert_level)
@@ -660,6 +696,7 @@ async def backtest_aoi(
         lift=round(_lift(metrics), 2),
         carico_meteo=round(metrics.carico_meteo, 4),
         carico_celle=round(metrics.carico_celle, 4),
+        picco_celle=round(metrics.picco_celle, 4),
         lift_spaziale=round(_lift_spaziale(metrics), 2),
         pioggia=metrics.pioggia,
         report=str(path),
@@ -728,6 +765,7 @@ async def run() -> int:
 
 
 __all__ = [
+    "CaricoCelle",
     "CellaAoi",
     "WildfireBacktestMetrics",
     "backtest_aoi",

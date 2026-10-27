@@ -25,6 +25,7 @@ from limen.core.models.risk import (
 from limen.core.scoring import registry
 from limen.core.scoring.regional_thresholds import (
     RegionalThresholds,
+    VeryHighGate,
     WildfireThresholds,
     load_hazard_thresholds,
 )
@@ -319,3 +320,43 @@ def test_a_landslide_breakdown_still_round_trips_unchanged() -> None:
         through_postgres["meteo_terms"]["measured_overrides"]
     )
     assert breakdown_from_factors(HazardType.LANDSLIDE, through_postgres) == original
+
+
+# ---------------------------------------------------------------------------
+# «Molto alto» dalla banda EFFIS (#301)
+# ---------------------------------------------------------------------------
+
+
+def _con_soglia(fwi_min: float = 38.0, terrain_min: float = 0.4) -> WildfireThresholds:
+    return _thresholds().model_copy(
+        update={"very_high": VeryHighGate(fwi_min=fwi_min, terrain_min=terrain_min)}
+    )
+
+
+def test_the_red_band_follows_the_fwi_not_the_fuel_table() -> None:
+    """Macchia in piano a FWI 40: senza la regola il prodotto la tiene in
+    «Alto», con la regola è la banda EFFIS «very high»."""
+    bundle = _bundle(fwi=40.0, landuse="323", slope_deg=0.0)
+    oggi = WildfireScoringEngine(_thresholds()).score(bundle)
+    regola = WildfireScoringEngine(_con_soglia()).score(bundle)
+    assert oggi.level is RiskLevel.High
+    assert regola.level is RiskLevel.VeryHigh
+    # Il punteggio sale al cutoff, così tile e classe dicono la stessa cosa.
+    assert regola.score == _thresholds().classes.very_high.lo
+
+
+def test_rock_stays_out_of_the_red_band() -> None:
+    bundle = _bundle(fwi=50.0, landuse="332", slope_deg=0.0)
+    assert WildfireScoringEngine(_con_soglia()).score(bundle).level is not RiskLevel.VeryHigh
+
+
+def test_below_the_band_the_terrain_still_orders_the_cells() -> None:
+    engine = WildfireScoringEngine(_con_soglia())
+    pineta = engine.score(_bundle(fwi=30.0, landuse="312"))
+    seminativo = engine.score(_bundle(fwi=30.0, landuse="211"))
+    assert pineta.score > seminativo.score
+    assert pineta.level is not RiskLevel.VeryHigh
+
+
+def test_without_a_chain_the_rule_does_not_fire() -> None:
+    assert WildfireScoringEngine(_con_soglia()).score(_bundle(fwi=None)).score == 0.0
