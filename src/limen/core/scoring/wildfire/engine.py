@@ -58,6 +58,16 @@ class WildfireScoringEngine(ScoringEngine[WildfireBreakdown]):
 
         terrain = t.weights.base + t.weights.fuel * fuel + t.weights.slope * slope
         score = min(fwi_norm * terrain, 1.0)
+        # Il rosso è la banda EFFIS: il punteggio sale al cutoff, così classe,
+        # tile e rollup per comune leggono la stessa cosa (#301).
+        gate = t.very_high
+        if (
+            gate is not None
+            and fw is not None
+            and fw.fwi >= gate.fwi_min
+            and terrain >= gate.terrain_min
+        ):
+            score = max(score, t.classes.very_high.lo)
         return RiskScore[WildfireBreakdown](
             score=score,
             level=classify_score(score, t.classes),
