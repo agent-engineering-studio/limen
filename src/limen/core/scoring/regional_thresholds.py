@@ -272,6 +272,25 @@ class SoilBlock(_StrictModel):
     sigmoid_steepness: float = Field(..., gt=0.0)
 
 
+class CumulataBlock(_StrictModel):
+    """Innesco dalla cumulata relativa al nodo, al posto di Caine o accanto (#243).
+
+    La curva di Caine è tarata sul pluviometro e il motore legge pioggia di
+    modello, che ne vede circa un terzo; una soglia in millimetri, d'altra
+    parte, non vale in tutte le regioni (60 mm sono ordinari in Liguria e
+    rari in Sardegna). La cumulata delle ultime ``window_hours`` ore si divide
+    quindi per un quantile climatologico della stessa cumulata **al suo
+    nodo** (``StaticFactors.pioggia_riferimento_mm``, da ``limen
+    clima-pioggia``), e il termine vale 1 a ``saturazione`` volte quel
+    riferimento. ``sostituisce`` prende il posto di Caine, ``massimo`` tiene il
+    più alto dei due. Una cella senza riferimento resta su Caine.
+    """
+
+    window_hours: int = Field(..., gt=0, le=48)
+    saturazione: float = Field(..., gt=0.0)
+    modo: Literal["sostituisce", "massimo"]
+
+
 class SnowBlock(_StrictModel):
     """Rain-on-snow amplification of M (additive, baseline-preserving).
 
@@ -475,6 +494,8 @@ class RegionalThresholds(HazardThresholds):
     # Optional: older YAMLs without a `snow` block validate; rain-on-snow
     # amplification simply stays inactive everywhere.
     snow: SnowBlock | None = None
+    # Opzionale (#243): senza il blocco l'innesco è Caine, come prima.
+    cumulata: CumulataBlock | None = None
     seismic: SeismicBlock
     post_fire: PostFireBlock
     # V1.5: optional. Older YAMLs without a `kinematic` block still

@@ -52,6 +52,10 @@ Configuration knobs (env vars, kept off the dispatcher for parity with
   ``seismic.pga_min_g``: lo stesso conto del job ``limen-ingv-sync``, senza
   scrivere niente. ``LIMEN_BACKTEST_SHAKEMAP_CACHE`` è una cartella dove
   tenere le griglie già scaricate, per rigiocare la finestra con e senza E.
+* ``LIMEN_BACKTEST_CLIMA``       — il file di ``limen clima-pioggia``. Con un
+  blocco ``cumulata`` in ``landslide.yaml`` dà a ogni cella il riferimento del
+  suo nodo, e l'innesco diventa la cumulata relativa (#243). Senza il file, o
+  senza l'AOI nel file, le celle restano su Caine.
 """
 
 from __future__ import annotations
@@ -64,6 +68,8 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from limen.cli.clima_pioggia import leggi as leggi_clima
+from limen.cli.clima_pioggia import riferimenti_aoi
 from limen.config.percorsi import radice_dati
 from limen.core.logging import get_logger
 from limen.core.models.risk import (
@@ -216,6 +222,24 @@ async def _fetch_static_factors(aoi_id: str) -> list[tuple[StaticFactors, float,
 # ---------------------------------------------------------------------------
 # Bundle assembly + metrics
 # ---------------------------------------------------------------------------
+def con_riferimento(
+    cells: list[tuple[StaticFactors, float, float]],
+    riferimenti: list[tuple[float, float, float | None]],
+) -> list[tuple[StaticFactors, float, float]]:
+    """Ogni cella con il riferimento di pioggia del nodo più vicino."""
+    nodi = [(lon, lat) for lon, lat, _ in riferimenti]
+    return [
+        (
+            sf.model_copy(
+                update={"pioggia_riferimento_mm": riferimenti[nearest_node(lon, lat, nodi)][2]}
+            ),
+            lon,
+            lat,
+        )
+        for sf, lon, lat in cells
+    ]
+
+
 def _level_at_least(level: RiskLevel, threshold: RiskLevel) -> bool:
     return _ALERT_LEVELS_ORDERED.index(level) >= _ALERT_LEVELS_ORDERED.index(threshold)
 
@@ -750,10 +774,18 @@ async def run() -> int:
             log.error("backtest.merging_non_configurato", hint="RADAR_ARCHIVE__CARTELLA")
             return 1
         archivio = MergingArchive(Path(cfg.cartella))
+    cumulata = load_regional_thresholds().cumulata
+    clima_env = os.getenv("LIMEN_BACKTEST_CLIMA", "").strip()
+    clima = leggi_clima(Path(clima_env)) if clima_env and cumulata is not None else {}
     configurazione = (
         f"verità {descrivi_verita(precisioni, sorgenti)}; pioggia {pioggia}; antecedenti {modo}; "
         f"sismica {'ShakeMap INGV' if sismica == 'shakemap' else 'spenta'}"
     )
+    if cumulata is not None and clima:
+        configurazione += (
+            f"; innesco cumulata {cumulata.window_hours} h / q{clima.get('quantile')} del nodo "
+            f"({cumulata.modo}, saturazione {cumulata.saturazione})"
+        )
 
     from limen.integrations.ingv.shakemap_client import IngvNonDisponibileError
 
@@ -774,6 +806,12 @@ async def run() -> int:
                 assert len(bbox) == 4
 
                 cells = await _fetch_static_factors(aoi_id)
+                if cumulata is not None and clima:
+                    riferimenti = riferimenti_aoi(clima, aoi_id, ore=cumulata.window_hours)
+                    if riferimenti is None:
+                        log.warning("backtest.clima_mancante", aoi_id=aoi_id)
+                    else:
+                        cells = con_riferimento(cells, riferimenti)
                 truth = await _fetch_truth_events(
                     aoi_id, start=start, end=end, precisioni=precisioni, sorgenti=sorgenti
                 )

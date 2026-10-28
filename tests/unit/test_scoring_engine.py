@@ -347,3 +347,71 @@ def test_flood_forecast_absent_keeps_h_static() -> None:
     # No flood signals ⇒ H equals the pure static hazard (byte-identical to V1).
     b = _bundle(static=StaticFactors(cell_id="c", flood_hazard_norm=0.8))
     assert score(b).breakdown.h == pytest.approx(0.8)
+
+
+# ---------------------------------------------------------------------------
+# Innesco dalla cumulata relativa al nodo (#243)
+# ---------------------------------------------------------------------------
+_CON_RIFERIMENTO = StaticFactors(cell_id="c-test", pioggia_riferimento_mm=40.0)
+
+
+def _con_cumulata(tmp_path: Path, modo: str) -> MultiFactorScoringEngine:
+    cfg = yaml.safe_load(DEFAULT_THRESHOLDS_PATH.read_text(encoding="utf-8"))
+    cfg["cumulata"] = {"window_hours": 24, "saturazione": 1.0, "modo": modo}
+    out = tmp_path / f"cumulata_{modo}.yaml"
+    out.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    return MultiFactorScoringEngine(load_regional_thresholds(out))
+
+
+def test_senza_blocco_cumulata_il_riferimento_non_conta() -> None:
+    engine = MultiFactorScoringEngine()
+    pioggia = [2.0] * 30
+    con = engine.score(_bundle(static=_CON_RIFERIMENTO, rainfall_hourly=pioggia, soil=0.4))
+    senza = engine.score(_bundle(rainfall_hourly=pioggia, soil=0.4))
+    assert con.score == senza.score
+    assert con.breakdown.meteo_terms.cumulata_norm is None
+    assert "cumulata_norm" not in con.breakdown.factors_payload()["meteo_terms"]
+
+
+def test_sostituisce_legge_solo_le_ultime_ore_della_finestra(tmp_path: Path) -> None:
+    engine = _con_cumulata(tmp_path, "sostituisce")
+    # 20 mm fra 30 e 25 ore fa (fuori dalle 24 h), poi 20 mm nelle ultime 24.
+    pioggia = [4.0] * 5 + [0.0] * 5 + [1.0] * 20
+    b = engine.score(_bundle(static=_CON_RIFERIMENTO, rainfall_hourly=pioggia, soil=0.4))
+    assert b.breakdown.meteo_terms.cumulata_norm == pytest.approx(20.0 / 40.0)
+    assert "cumulata_norm" in b.breakdown.factors_payload()["meteo_terms"]
+
+
+def test_sostituisce_satura_al_riferimento(tmp_path: Path) -> None:
+    engine = _con_cumulata(tmp_path, "sostituisce")
+    b = engine.score(_bundle(static=_CON_RIFERIMENTO, rainfall_hourly=[5.0] * 24, soil=0.4))
+    assert b.breakdown.meteo_terms.cumulata_norm == 1.0
+    w = load_regional_thresholds().meteo.weights
+    m = b.breakdown.meteo_terms
+    assert b.breakdown.m == pytest.approx(
+        w.caine * 1.0 + w.api * m.api_factor + w.soil * m.soil_factor
+    )
+
+
+def test_massimo_non_scende_sotto_caine(tmp_path: Path) -> None:
+    pioggia = [0.0] * 20 + [8.0] * 4
+    caine = MultiFactorScoringEngine().score(
+        _bundle(static=_CON_RIFERIMENTO, rainfall_hourly=pioggia, soil=0.4)
+    )
+    massimo = _con_cumulata(tmp_path, "massimo").score(
+        _bundle(
+            static=StaticFactors(cell_id="c-test", pioggia_riferimento_mm=4000.0),
+            rainfall_hourly=pioggia,
+            soil=0.4,
+        )
+    )
+    assert massimo.breakdown.m == pytest.approx(caine.breakdown.m)
+
+
+def test_senza_riferimento_resta_caine(tmp_path: Path) -> None:
+    pioggia = [3.0] * 24
+    caine = MultiFactorScoringEngine().score(_bundle(rainfall_hourly=pioggia, soil=0.4))
+    cumulata = _con_cumulata(tmp_path, "sostituisce").score(
+        _bundle(rainfall_hourly=pioggia, soil=0.4)
+    )
+    assert cumulata.score == caine.score

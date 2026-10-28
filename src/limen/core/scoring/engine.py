@@ -198,6 +198,20 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
             macroregion=self._macroregion(bundle),
         )
         caine_norm = _norm_caine(caine_excess_val)
+        innesco = caine_norm
+        cumulata_norm: float | None = None
+        cum = self._t.cumulata
+        riferimento = bundle.static.pioggia_riferimento_mm
+        if cum is not None and riferimento is not None:
+            fine = bundle.dynamic.valuation_time
+            inizio = fine - timedelta(hours=cum.window_hours)
+            mm = sum(
+                s.precipitation_mm
+                for s in bundle.dynamic.rainfall.samples
+                if inizio < s.timestamp <= fine
+            )
+            cumulata_norm = _clamp01(mm / (cum.saturazione * riferimento))
+            innesco = cumulata_norm if cum.modo == "sostituisce" else max(caine_norm, cumulata_norm)
 
         api_f = api_factor(
             bundle.dynamic.api_30_mm,
@@ -214,7 +228,7 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
         sensor = bundle.dynamic.sensor_features
         if sensor is not None:
             if sensor.rainfall_mm is not None:
-                caine_norm = _clamp01(
+                caine_norm = innesco = _clamp01(
                     sensor.rainfall_mm / max(self._t.caine.event_reconstruction.min_event_mm, 1e-6)
                 )
                 overrides.append("caine")
@@ -232,7 +246,7 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
         # Rain-on-snow is an additive, capped bonus (not a reweighting) so a
         # bundle without snowpack scores byte-identical to the pre-snow engine.
         snow_weight = self._t.snow.weight if self._t.snow is not None else 0.0
-        m = w.caine * caine_norm + w.api * api_f + w.soil * soil_f + snow_weight * snow_f
+        m = w.caine * innesco + w.api * api_f + w.soil * soil_f + snow_weight * snow_f
         return _MeteoAggregate(
             m=_clamp01(m),
             breakdown=MeteoBreakdown(
@@ -241,6 +255,7 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
                 api_factor=api_f,
                 soil_factor=soil_f,
                 snow_factor=snow_f,
+                cumulata_norm=cumulata_norm,
                 measured_overrides=tuple(overrides),
             ),
         )
