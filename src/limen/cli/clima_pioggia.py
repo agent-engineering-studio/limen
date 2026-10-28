@@ -52,6 +52,7 @@ log = get_logger(__name__)
 #: Il passo del reticolo di pioggia di `limen backtest` (`_RAIN_NODE_DEG`).
 _PASSO_NODI = 0.1
 _CAMPIONE_ORE = 6
+_NODI_PER_GRUPPO = 50
 
 CLIMA_ENV = "LIMEN_CLIMA_PIOGGIA"
 CLIMA_DEFAULT = "data/clima_pioggia.json"
@@ -100,23 +101,30 @@ async def clima_aoi(
     client: OpenMeteoHttpClient,
 ) -> list[tuple[float, float, float | None]]:
     nodes = build_rain_nodes(bbox, spacing=_PASSO_NODI)
-    orarie: list[list[np.ndarray]] = [[] for _ in nodes]
-    for anno in anni:
-        grid = await client.get_rainfall_grid(
-            nodes=nodes,
-            window_start=datetime(anno, 1, 1, tzinfo=UTC),
-            window_end=datetime(anno, 12, 31, 23, tzinfo=UTC),
-            # Un anno orario per nodo pesa ~9.000 valori: a 100 nodi per
-            # richiesta la risposta supera le decine di MB.
-            batch_size=25,
+    out: list[tuple[float, float, float | None]] = []
+    # A gruppi di nodi, e i quantili di un gruppo prima del successivo: un
+    # anno orario è ~9.000 campioni per nodo, e la Lombardia intera (800 nodi)
+    # tenuta in memoria per un anno ha superato 6 GB ed è stata uccisa.
+    for k in range(0, len(nodes), _NODI_PER_GRUPPO):
+        gruppo = nodes[k : k + _NODI_PER_GRUPPO]
+        orarie: list[list[np.ndarray]] = [[] for _ in gruppo]
+        for anno in anni:
+            grid = await client.get_rainfall_grid(
+                nodes=gruppo,
+                window_start=datetime(anno, 1, 1, tzinfo=UTC),
+                window_end=datetime(anno, 12, 31, 23, tzinfo=UTC),
+                # Un anno orario per nodo pesa ~9.000 valori: a 100 nodi per
+                # richiesta la risposta supera le decine di MB.
+                batch_size=25,
+            )
+            for i, serie in enumerate(grid[: len(gruppo)]):
+                orarie[i].append(np.array([s.precipitation_mm for s in serie]))
+        out.extend(
+            (lon, lat, quantile_cumulata(o, ore=ore, quantile=quantile))
+            for (lon, lat), o in zip(gruppo, orarie, strict=True)
         )
-        for i, serie in enumerate(grid[: len(nodes)]):
-            orarie[i].append(np.array([s.precipitation_mm for s in serie]))
-        log.info("clima_pioggia.anno", aoi_id=aoi_id, anno=anno, nodi=len(nodes))
-    return [
-        (lon, lat, quantile_cumulata(o, ore=ore, quantile=quantile))
-        for (lon, lat), o in zip(nodes, orarie, strict=True)
-    ]
+        log.info("clima_pioggia.gruppo", aoi_id=aoi_id, fatti=len(out), nodi=len(nodes))
+    return out
 
 
 async def run() -> int:
