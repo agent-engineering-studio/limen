@@ -67,6 +67,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
 from limen.cli.clima_pioggia import leggi as leggi_clima
 from limen.cli.clima_pioggia import riferimenti_aoi
@@ -82,7 +83,11 @@ from limen.core.models.risk import (
     StaticFactors,
 )
 from limen.core.scoring.engine import MultiFactorScoringEngine
-from limen.core.scoring.regional_thresholds import SeismicBlock, load_regional_thresholds
+from limen.core.scoring.regional_thresholds import (
+    MetricaComuni,
+    SeismicBlock,
+    load_regional_thresholds,
+)
 from limen.data.db import acquire, lifespan_pool
 from limen.data.migrate import run_migrations
 from limen.data.repos.aoi_repo import get_aoi, list_aoi_ids
@@ -122,6 +127,7 @@ _DEFAULT_RAIN_MODEL = ""
 # as a hit. Generous by design — antecedent-driven landslides warn days ahead.
 _DEFAULT_LEAD_MAX_HOURS = 120.0
 #: Scala di precisione di luogo di ITALICA, dalla più stretta alla più larga.
+_ROMA = ZoneInfo("Europe/Rome")
 PRECISIONI_LUOGO = ("P0", "P1", "P10", "P100")
 _ALERT_LEVELS_ORDERED = (
     RiskLevel.None_,
@@ -342,6 +348,76 @@ def _match_truth(
     return hits, misses, leads
 
 
+def _soglia_a_carico(valori: list[float], carico: float) -> tuple[float, float]:
+    """La soglia che accende la quota ``carico`` di ``valori``, e la quota che
+    accende davvero (a pari merito può superarla; lo zero non si accende)."""
+    ordinati = sorted(valori, reverse=True)
+    k = max(1, round(carico * len(ordinati)))
+    soglia = ordinati[k - 1] if ordinati else 0.0
+    if soglia <= 0.0:
+        soglia = min((x for x in ordinati if x > 0.0), default=math.inf)
+    effettivo = sum(x >= soglia for x in ordinati) / len(ordinati) if ordinati else 0.0
+    return soglia, effettivo
+
+
+@dataclass(frozen=True, slots=True)
+class PerComune:
+    """Il metro dell'epica #345 sul backtest (#352)."""
+
+    eventi: int
+    colti_classe: int
+    carico_classe: float
+    soglia_carico: float
+    colti_carico: int
+    carico_effettivo: float
+
+
+def per_comune(
+    orario: dict[str, list[float]],
+    ore: list[datetime],
+    verita: dict[str, datetime],
+    *,
+    soglia_classe: float,
+    finestra_ore: float,
+    carico: float,
+) -> PerComune:
+    """Eventi colti e carico per comune.
+
+    ``orario`` è, per comune, il punteggio massimo fra le sue celle a ogni ora
+    di ``ore``; ``verita`` l'ora del primo evento per comune. Un evento è
+    colto se il comune è sopra soglia in un'ora qualunque delle
+    ``finestra_ore`` prima; il carico conta i comuni-giorno, col giorno in
+    ora italiana come lo legge chi riceve l'allerta.
+    """
+    giorni: dict[date, list[int]] = {}
+    for h, t in enumerate(ore):
+        giorni.setdefault(t.astimezone(_ROMA).date(), []).append(h)
+    massimi = [max(serie[h] for h in idx) for serie in orario.values() for idx in giorni.values()]
+
+    def quota(soglia: float) -> float:
+        return sum(x >= soglia for x in massimi) / len(massimi) if massimi else 0.0
+
+    def colti(soglia: float) -> int:
+        return sum(
+            any(
+                orario[c][h] >= soglia and 0 < (evento - t).total_seconds() / 3600.0 <= finestra_ore
+                for h, t in enumerate(ore)
+            )
+            for c, evento in verita.items()
+            if c in orario
+        )
+
+    soglia, effettivo = _soglia_a_carico(massimi, carico)
+    return PerComune(
+        eventi=len(verita),
+        colti_classe=colti(soglia_classe),
+        carico_classe=quota(soglia_classe),
+        soglia_carico=soglia,
+        colti_carico=colti(soglia),
+        carico_effettivo=effettivo,
+    )
+
+
 def colte_a_carico(
     punteggi_max: list[float],
     punteggi_verita: dict[str, list[tuple[datetime, float]]],
@@ -360,12 +436,7 @@ def colte_a_carico(
     A pari merito il carico effettivo può superare quello chiesto; le celle
     con punteggio zero non si accendono mai.
     """
-    ordinati = sorted(punteggi_max, reverse=True)
-    k = max(1, round(carico * len(ordinati)))
-    soglia = ordinati[k - 1] if ordinati else 0.0
-    if soglia <= 0.0:
-        soglia = min((x for x in ordinati if x > 0.0), default=math.inf)
-    effettivo = sum(x >= soglia for x in ordinati) / len(ordinati) if ordinati else 0.0
+    soglia, effettivo = _soglia_a_carico(punteggi_max, carico)
     sopra = {c: [t for t, x in serie if x >= soglia] for c, serie in punteggi_verita.items()}
     hits, _, _ = _match_truth(sopra, truth, lead_max_hours=lead_max_hours)
     return soglia, effettivo, hits
@@ -385,6 +456,7 @@ def _evaluate(
     antecedenti: list[Antecedenti | None] | None = None,
     configurazione: str = "tutto il catalogo",
     scosse: dict[str, tuple[SeismicHistoryEvent, ...]] | None = None,
+    cella_comune: dict[str, str] | None = None,
 ) -> _BacktestMetrics:
     """``antecedenti`` è allineato ai nodi (modalità `nodo`) o lungo 1 (modalità
     `regione`, un valore per tutta l'area come in produzione); ``None`` lascia
@@ -404,7 +476,13 @@ def _evaluate(
     punteggi_max = [0.0] * len(cells)
     alerted_cells: set[str] = set()
     alerts_total = 0
-    for t in hours:
+    gate = thresholds.calibration.backtest
+    metro_comuni = gate.comuni if cella_comune else None
+    comune_di = [(cella_comune or {}).get(sf.cell_id) for sf, _, _ in cells]
+    orario: dict[str, list[float]] = (
+        {c: [0.0] * len(hours) for c in comune_di if c is not None} if metro_comuni else {}
+    )
+    for h, t in enumerate(hours):
         # Slice each node's antecedent series once, then reuse across the
         # (many) cells that map to that node.
         node_slice = [
@@ -431,6 +509,9 @@ def _evaluate(
             )
             scored = engine.score(bundle)
             punteggi_max[i] = max(punteggi_max[i], scored.score)
+            if orario and (comune := comune_di[i]) is not None:
+                serie = orario[comune]
+                serie[h] = max(serie[h], scored.score)
             if sf.cell_id in punteggi_verita:
                 punteggi_verita[sf.cell_id].append((t, scored.score))
             if _level_at_least(scored.level, alert_level):
@@ -445,7 +526,6 @@ def _evaluate(
     hit_rate = hits / len(truth) if truth else 0.0
     far = false_alarms / (hits + false_alarms) if (hits + false_alarms) else 0.0
     mean_lead = sum(leads) / len(leads) if leads else 0.0
-    gate = thresholds.calibration.backtest
     a_carico = (
         colte_a_carico(
             punteggi_max,
@@ -457,6 +537,20 @@ def _evaluate(
         if gate.carico_riferimento is not None
         else None
     )
+    comuni = None
+    if metro_comuni is not None and cella_comune is not None:
+        verita_comuni: dict[str, datetime] = {}
+        for cella, evento in truth.items():
+            if (c := cella_comune.get(cella)) is not None:
+                verita_comuni[c] = min(evento, verita_comuni.get(c, evento))
+        comuni = per_comune(
+            orario,
+            hours,
+            verita_comuni,
+            soglia_classe=thresholds.classes.moderate.lo,
+            finestra_ore=metro_comuni.finestra_ore,
+            carico=metro_comuni.carico_massimo,
+        )
 
     report = _write_report(
         aoi_id=aoi_id,
@@ -478,6 +572,8 @@ def _evaluate(
         quota_allertate=len(alerted_cells) / len(cells) if cells else 0.0,
         configurazione=configurazione,
         a_carico=a_carico,
+        comuni=comuni,
+        metro_comuni=metro_comuni,
     )
 
     return _BacktestMetrics(
@@ -515,6 +611,8 @@ def _write_report(
     quota_allertate: float = 0.0,
     configurazione: str = "tutto il catalogo",
     a_carico: tuple[float, float, int] | None = None,
+    comuni: PerComune | None = None,
+    metro_comuni: MetricaComuni | None = None,
 ) -> Path:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     out = REPORTS_DIR / f"backtest_{aoi_id}_{start.date()}_{end.date()}.md"
@@ -533,6 +631,11 @@ def _write_report(
             f"- **Colte a parità di carico**: {quota:.2%} ({colte}) con il {effettivo:.2%} "
             f"di celle in allerta (punteggio ≥ {soglia:.4f}) — il confronto fra varianti",
         ]
+    righe_comuni = (
+        _righe_comuni(comuni, metro_comuni)
+        if comuni is not None and metro_comuni is not None
+        else []
+    )
     discriminazione = hit_rate / quota_allertate if quota_allertate else 0.0
     pass_lead = "PASS" if mean_lead >= thresholds_lead_min else "FAIL"
 
@@ -562,9 +665,44 @@ def _write_report(
         f"- **Mean lead time**: {mean_lead:.1f} h "
         f"(target ≥ {thresholds_lead_min:.0f} h) — **{pass_lead}**",
         "",
+        *righe_comuni,
     ]
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return out
+
+
+def _righe_comuni(c: PerComune, metro: MetricaComuni) -> list[str]:
+    def quota(n: int) -> float:
+        return n / c.eventi if c.eventi else 0.0
+
+    esito = "PASS" if c.eventi and quota(c.colti_carico) >= metro.obiettivo else "FAIL"
+    finestra = f"{metro.finestra_ore:.0f} h"
+    return [
+        "## Per comune (il metro dell'epica #345)",
+        "",
+        f"- Comuni con un evento: **{c.eventi}**",
+        f"- **Colti ≥ Moderato entro {finestra}**: {quota(c.colti_classe):.2%} "
+        f"({c.colti_classe}) con il {c.carico_classe:.2%} di comuni-giorno ≥ Moderato",
+        f"- **Colti con il {metro.carico_massimo:.0%} di comuni-giorno in allerta**: "
+        f"{quota(c.colti_carico):.2%} ({c.colti_carico}), punteggio ≥ {c.soglia_carico:.4f}, "
+        f"carico effettivo {c.carico_effettivo:.2%} "
+        f"(target ≥ {metro.obiettivo:.0%}) — **{esito}**",
+        "",
+    ]
+
+
+async def _fetch_cella_comune(aoi_id: str) -> dict[str, str]:
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT cc.cell_id, cc.istat_code
+            FROM cell_comune cc
+            JOIN grid_cells g ON g.id = cc.cell_id
+            WHERE g.aoi_id = $1
+            """,
+            aoi_id,
+        )
+    return {str(r["cell_id"]): str(r["istat_code"]) for r in rows}
 
 
 # ---------------------------------------------------------------------------
@@ -968,6 +1106,7 @@ async def run() -> int:
                     antecedenti=antecedenti,
                     configurazione=configurazione,
                     scosse=scosse,
+                    cella_comune=await _fetch_cella_comune(aoi_id),
                 )
                 log.info(
                     "backtest.aoi.done",

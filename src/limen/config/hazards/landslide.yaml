@@ -360,3 +360,10 @@ calibration:
     lead_time_hours_min:     18.0
     discriminazione_min:     2.0
     carico_riferimento:      0.05
+    # Il traguardo dell'epica #345, sullo stesso metro delle verifiche: il
+    # comune dell'evento ≥ Moderato nelle 72 h prima, con al più il 10 % dei
+    # comuni-giorno in allerta, sul 90 % degli eventi (#352).
+    comuni:
+      finestra_ore:   72.0
+      carico_massimo: 0.10
+      obiettivo:      0.90
