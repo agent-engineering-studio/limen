@@ -7,6 +7,8 @@ runs with valid creds — they do NOT make any network call.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from pydantic import SecretStr
 
@@ -194,3 +196,34 @@ async def test_llamacpp_client_logs_token_usage(monkeypatch: pytest.MonkeyPatch)
         640,
         90,
     )
+
+
+@pytest.mark.parametrize(
+    "client",
+    [
+        AnthropicChatClient(api_key=SecretStr("ak-test"), model="claude-haiku-5-5"),
+        FoundryAnthropicChatClient(
+            endpoint="https://foundry.test", api_key=SecretStr("ak"), model="claude-haiku-5-5"
+        ),
+    ],
+)
+async def test_anthropic_clients_never_send_temperature(client: Any) -> None:
+    """Dal 21/10/2026 l'API rifiuta `temperature` su ogni modello con un 400."""
+    from types import SimpleNamespace
+
+    from limen.agents.llm_factory.base import ChatMessage
+
+    sent: dict[str, Any] = {}
+
+    async def _create(**kwargs: Any) -> SimpleNamespace:
+        sent.update(kwargs)
+        return SimpleNamespace(content=[SimpleNamespace(text="ok")])
+
+    client._client = SimpleNamespace(messages=SimpleNamespace(create=_create))
+    reply = await client.chat(
+        [ChatMessage(role="system", content="s"), ChatMessage(role="user", content="u")],
+        temperature=0.7,
+    )
+    assert reply == "ok"
+    assert "temperature" not in sent
+    assert sent["system"] == "s"
