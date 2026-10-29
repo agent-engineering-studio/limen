@@ -285,6 +285,8 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   // L'area di un link si legge solo quando la mappa nasce: dopo, la vista
   // la decide chi la muove.
   const areaLink = stato?.link.area ?? null;
+  const areaApplicataRef = useRef(areaLink);
+  const mappaRef = useRef<maplibregl.Map | null>(null);
   // La vista si conserva quando la mappa si ricostruisce (cambio di pericolo
   // o di sorgente): ripartire dal centro di default buttava via il comune
   // che si stava guardando.
@@ -887,6 +889,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       zoom: cameraRef.current?.zoom ?? areaLink?.zoom ?? config.defaultZoom,
     });
 
+    mappaRef.current = map;
     if (props.mapRef) {
       props.mapRef.current = map;
     }
@@ -993,6 +996,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       const c = map.getCenter();
       cameraRef.current = { center: [c.lng, c.lat], zoom: map.getZoom() };
       map.remove();
+      mappaRef.current = null;
       if (props.mapRef) {
         props.mapRef.current = null;
       }
@@ -1010,6 +1014,16 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     src?.setTiles([`${tileserv}/${tileLayer}/{z}/{x}/{y}.pbf${tileQuery}`]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tileQuery]);
+
+  // Un link incollato con la mappa già aperta: il costruttore non lo rivede,
+  // quindi la vista ci va con `jumpTo`. Solo l'area del link, non quella che
+  // la mappa stessa scrive a fine movimento: altrimenti si inseguirebbero.
+  useEffect(() => {
+    if (areaLink === areaApplicataRef.current) return;
+    areaApplicataRef.current = areaLink;
+    if (!areaLink) return;
+    mappaRef.current?.jumpTo({ center: [areaLink.lon, areaLink.lat], zoom: areaLink.zoom });
+  }, [areaLink]);
 
   // I livelli di contesto, senza ricostruire la mappa.
   useEffect(() => {

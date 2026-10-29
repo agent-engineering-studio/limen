@@ -238,4 +238,27 @@ describe("RiskMap dentro MapStateProvider", () => {
     );
     expect(screen.getByTestId("risk-map")).toBe(contenitore);
   });
+
+  it("un link con centro e zoom sposta la mappa già aperta", async () => {
+    window.history.replaceState(null, "", "/#/dashboard");
+    let mappa: maplibregl.Map | null = null;
+    monta(<ConMappa onMappa={(m) => (mappa = m)} />);
+    await pericoliCaricati();
+    fireEvent.click(screen.getByText("leggi"));
+    const prima = mappa as maplibregl.Map | null;
+    expect(prima).not.toBeNull();
+    const salto = vi.spyOn(prima as maplibregl.Map, "jumpTo");
+
+    // Il movimento della mappa stessa scrive l'area ma non la fa saltare.
+    fireEvent.click(screen.getByText("area"));
+    expect(salto).not.toHaveBeenCalled();
+
+    await act(async () => {
+      window.history.replaceState(null, "", "/#/mappa?centro=16.6000,40.6700&z=12.00");
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
+    expect(salto).toHaveBeenCalledWith({ center: [16.6, 40.67], zoom: 12 });
+    fireEvent.click(screen.getByText("leggi"));
+    expect(mappa).toBe(prima);
+  });
 });

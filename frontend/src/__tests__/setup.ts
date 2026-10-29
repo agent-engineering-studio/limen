@@ -30,6 +30,7 @@ vi.mock("maplibre-gl", () => {
     setStyle() {}
     fitBounds() {}
     flyTo() {}
+    jumpTo() {}
     getCanvas() {
       return document.createElement("canvas");
     }
