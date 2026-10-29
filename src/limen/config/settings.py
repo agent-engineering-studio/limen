@@ -11,6 +11,7 @@ environment changes, never code changes.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
@@ -256,6 +257,29 @@ class LLMSettings(BaseSettings):
     # minuti, ma l'API si riserva fino a 24 ore: oltre questo tetto i verdetti
     # restano a null, come per un revisore che non risponde.
     fedelta_attesa_massima_minuti: int = Field(default=120, ge=1)
+
+    # Le chiamate dirette a Claude (il revisore e la raccolta degli eventi, in batch) non
+    # passano dal gateway e quindi nemmeno dal suo `max_budget`. Oltre questo
+    # tetto mensile, in dollari, il revisore non parte. Non sostituisce il
+    # limite di spesa del workspace in Console: quello è l'unico che l'API fa
+    # rispettare anche a un bug di Limen.
+    anthropic_budget_mensile_usd: Decimal = Field(default=Decimal("10"), ge=0)
+    # Dollari per milione di token, (ingresso, uscita), a listino: il batch ne
+    # paga la metà (`anthropic_sconto_batch`). Un modello che qui non c'è non
+    # parte: una spesa che non si sa calcolare non si sa nemmeno fermare.
+    anthropic_prezzi_usd_mtok: dict[str, tuple[Decimal, Decimal]] = Field(
+        default_factory=lambda: {
+            "claude-sonnet-5-5": (Decimal("2"), Decimal("10")),
+            "claude-haiku-5-5": (Decimal("0.10"), Decimal("0.50")),
+            "claude-opus-5-5": (Decimal("4"), Decimal("20")),
+        }
+    )
+    anthropic_sconto_batch: Decimal = Field(default=Decimal("0.5"), gt=0, le=1)
+
+    def costo_batch_usd(self, modello: str, input_tokens: int, output_tokens: int) -> Decimal:
+        ingresso, uscita = self.anthropic_prezzi_usd_mtok[modello]
+        lordo = (input_tokens * ingresso + output_tokens * uscita) / Decimal(1_000_000)
+        return lordo * self.anthropic_sconto_batch
 
     # La raccolta degli eventi dalla stampa (#347): a che ora (UTC), quanti
     # giorni all'indietro — meno dei 14 di retention di risk_assessments, o la

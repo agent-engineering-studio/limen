@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Sequence
+from dataclasses import dataclass
 from functools import cache
 from importlib import resources
 from typing import TYPE_CHECKING, Any
@@ -63,6 +64,16 @@ def controllo_numeri(testo: str, ingresso: str) -> BriefingEval:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class Revisione:
+    """I giudizi, nello stesso ordine delle coppie, e quanto sono costati."""
+
+    giudizi: list[Giudizio | None]
+    batch_id: str | None = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+
 class RevisoreFedelta:
     """Il secondo modello, su tutto il campione in un solo batch."""
 
@@ -81,7 +92,7 @@ class RevisoreFedelta:
         self._attesa_massima_s = attesa_massima_s
         self._intervallo_s = intervallo_s
 
-    async def giudica(self, coppie: Sequence[tuple[str, str]]) -> list[Giudizio | None]:
+    async def giudica(self, coppie: Sequence[tuple[str, str]]) -> Revisione:
         """Un giudizio per ogni ``(testo, ingresso)``, nello stesso ordine.
 
         ``None`` dove il revisore non ne ha dato uno: un batch che non parte,
@@ -92,30 +103,46 @@ class RevisoreFedelta:
         import anthropic
 
         giudizi: list[Giudizio | None] = [None] * len(coppie)
+        batch_id: str | None = None
+        ingresso = uscita = 0
         try:
             batch = await self._client.messages.batches.create(
                 requests=[
-                    {"custom_id": f"s{i}", "params": self._params(testo, ingresso)}
-                    for i, (testo, ingresso) in enumerate(coppie)
+                    {"custom_id": f"s{i}", "params": self._params(testo, ingresso_)}
+                    for i, (testo, ingresso_) in enumerate(coppie)
                 ]
             )
+            batch_id = batch.id
             scadenza = time.monotonic() + self._attesa_massima_s
             while batch.processing_status != "ended":
                 if time.monotonic() >= scadenza:
                     log.warning("fedelta.batch_scaduto", batch_id=batch.id)
+                    # Le richieste già finite si pagano anche annullando: il
+                    # loro costo arriva con i risultati, che qui non si leggono.
                     await self._client.messages.batches.cancel(batch.id)
-                    return giudizi
+                    return Revisione(giudizi, batch_id)
                 await asyncio.sleep(self._intervallo_s)
                 batch = await self._client.messages.batches.retrieve(batch.id)
             async for r in await self._client.messages.batches.results(batch.id):
                 giudizi[int(r.custom_id[1:])] = _giudizio(r)
+                if r.result.type == "succeeded":
+                    ingresso += r.result.message.usage.input_tokens
+                    uscita += r.result.message.usage.output_tokens
+            log.info(
+                "fedelta.usage",
+                batch_id=batch.id,
+                model=self._model,
+                richieste=len(coppie),
+                input_tokens=ingresso,
+                output_tokens=uscita,
+            )
         except anthropic.APIError as exc:
             log.warning(
                 "fedelta.revisore_non_risponde",
                 error=str(exc),
                 error_type=type(exc).__name__,
             )
-        return giudizi
+        return Revisione(giudizi, batch_id, ingresso, uscita)
 
     def _params(self, testo: str, ingresso: str) -> MessageCreateParamsNonStreaming:
         return {
@@ -163,4 +190,4 @@ def _giudizio(r: MessageBatchIndividualResponse) -> Giudizio | None:
         return None
 
 
-__all__ = ["Giudizio", "RevisoreFedelta", "controllo_numeri"]
+__all__ = ["Giudizio", "Revisione", "RevisoreFedelta", "controllo_numeri"]

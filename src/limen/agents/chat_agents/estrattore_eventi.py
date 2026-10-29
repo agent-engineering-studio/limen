@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import date
 from functools import cache
 from importlib import resources
@@ -76,6 +77,13 @@ def elenco(titoli: Sequence[Titolo]) -> str:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class Consumo:
+    batch_id: str
+    input_tokens: int
+    output_tokens: int
+
+
 class EstrattoreEventi:
     def __init__(
         self,
@@ -91,6 +99,8 @@ class EstrattoreEventi:
         self._model = model
         self._attesa_massima_s = attesa_massima_s
         self._intervallo_s = intervallo_s
+        #: Un consumo per batch finito: il job li scrive in `spesa_llm`.
+        self.consumi: list[Consumo] = []
 
     async def estrai(
         self, titoli: Mapping[HazardType, Sequence[Titolo]]
@@ -164,10 +174,21 @@ class EstrattoreEventi:
                     return testi
                 await asyncio.sleep(self._intervallo_s)
                 batch = await self._client.messages.batches.retrieve(batch.id)
+            ingresso = uscita = 0
             async for r in await self._client.messages.batches.results(batch.id):
+                if r.result.type == "succeeded":
+                    ingresso += r.result.message.usage.input_tokens
+                    uscita += r.result.message.usage.output_tokens
                 testo = _testo(r)
                 if testo is not None:
                     testi[r.custom_id] = testo
+            self.consumi.append(Consumo(batch.id, ingresso, uscita))
+            log.info(
+                "estrattore_eventi.usage",
+                batch_id=batch.id,
+                input_tokens=ingresso,
+                output_tokens=uscita,
+            )
         except anthropic.APIError as exc:
             log.warning(
                 "estrattore_eventi.non_risponde", error=str(exc), error_type=type(exc).__name__

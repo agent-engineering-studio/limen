@@ -217,3 +217,27 @@ async def test_un_fact_check_a_mano_non_si_sovrascrive(monkeypatch: pytest.Monke
     assert segnati == [
         {"stato": "verificato", "comuni": ["064041"], "slug": "2026-10-28-frana-lacedonia"}
     ]
+
+
+async def test_oltre_il_budget_del_mese_la_raccolta_non_parte(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from decimal import Decimal
+
+    from limen.api.jobs import raccolta_eventi as job
+
+    async def spesa() -> Decimal:
+        return Decimal("10.5")
+
+    async def vietato(**kw: object) -> object:
+        raise AssertionError("oltre il budget non si cerca né si chiama Claude")
+
+    monkeypatch.setattr(job.spesa_llm_repo, "spesa_del_mese", spesa)
+    monkeypatch.setattr(job, "titoli_per_pericolo", vietato)
+    impostazioni = cast(Any, Settings)(
+        _env_file=None,
+        llm=LLMSettings(models={"eventi": "claude-sonnet-5-5"}, anthropic_budget_mensile_usd=10),
+        anthropic_api_key="sk-prova",
+    )
+    out = await raccogli(impostazioni)
+    assert out["reason"] == "budget mensile superato"

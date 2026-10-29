@@ -245,6 +245,7 @@ services:
       LLM__FEDELTA_CAMPIONE: ${LLM__FEDELTA_CAMPIONE:-4}
       LLM__FEDELTA_ORA_UTC: ${LLM__FEDELTA_ORA_UTC:-21}
       LLM__FEDELTA_ATTESA_MASSIMA_MINUTI: ${LLM__FEDELTA_ATTESA_MASSIMA_MINUTI:-120}
+      LLM__ANTHROPIC_BUDGET_MENSILE_USD: ${LLM__ANTHROPIC_BUDGET_MENSILE_USD:-10}
       # La raccolta quotidiana degli eventi dalla stampa (#347), anche lei in
       # batch all'API di Claude con ANTHROPIC_API_KEY. Vuota = spenta.
       LLM__MODELS__EVENTI: ${LLM__MODELS__EVENTI:-}

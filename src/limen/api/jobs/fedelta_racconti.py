@@ -22,7 +22,7 @@ from limen.api.jobs._tracking import tracked
 from limen.api.jobs.ids import JOB_FEDELTA_RACCONTI
 from limen.config.settings import Settings
 from limen.core.logging import get_logger
-from limen.data.repos import spiegazioni_repo
+from limen.data.repos import spesa_llm_repo, spiegazioni_repo
 
 log = get_logger(__name__)
 
@@ -57,6 +57,17 @@ async def controlla_fedelta(settings: Settings) -> dict[str, Any]:
     # Anche qui il compose passa `${ANTHROPIC_API_KEY:-}`: vuota è assente.
     if chiave is None or not chiave.get_secret_value().strip():
         return {"status": "skipped", "reason": "ANTHROPIC_API_KEY assente", "model": modello}
+    if modello not in llm.anthropic_prezzi_usd_mtok:
+        log.warning("llm.prezzo_sconosciuto", model=modello)
+        return {"status": "skipped", "reason": "prezzo del modello sconosciuto", "model": modello}
+    spesa = await spesa_llm_repo.spesa_del_mese()
+    if spesa >= llm.anthropic_budget_mensile_usd:
+        log.warning(
+            "llm.budget_superato",
+            spesa_usd=str(spesa),
+            budget_usd=str(llm.anthropic_budget_mensile_usd),
+        )
+        return {"status": "skipped", "reason": "budget mensile superato", "spesa_usd": float(spesa)}
 
     campione = await spiegazioni_repo.da_giudicare(hours=_FINESTRA_ORE, limite=llm.fedelta_campione)
     if not campione:
@@ -68,9 +79,19 @@ async def controlla_fedelta(settings: Settings) -> dict[str, Any]:
         model=modello,
         attesa_massima_s=llm.fedelta_attesa_massima_minuti * 60,
     )
-    giudizi = await revisore.giudica([(s.testo, s.ingresso) for s in campione])
+    revisione = await revisore.giudica([(s.testo, s.ingresso) for s in campione])
+    costo = llm.costo_batch_usd(modello, revisione.input_tokens, revisione.output_tokens)
+    if revisione.batch_id is not None:
+        await spesa_llm_repo.registra(
+            origine=JOB_FEDELTA_RACCONTI,
+            riferimento=revisione.batch_id,
+            modello=modello,
+            input_tokens=revisione.input_tokens,
+            output_tokens=revisione.output_tokens,
+            costo_usd=costo,
+        )
     esiti: dict[str, int] = {"fedeli": 0, "infedeli": 0, "senza_giudizio": 0}
-    for s, giudizio in zip(campione, giudizi, strict=True):
+    for s, giudizio in zip(campione, revisione.giudizi, strict=True):
         async with tracked(JOB_FEDELTA_RACCONTI, scope=s.aoi_id) as metrics:
             metrics["hazard"] = s.hazard.value
             numeri = controllo_numeri(s.testo, s.ingresso)
@@ -112,8 +133,15 @@ async def controlla_fedelta(settings: Settings) -> dict[str, Any]:
                 esiti["senza_giudizio"] += 1
             else:
                 esiti["fedeli"] += 1
-    log.info("job.fedelta_racconti.summary", model=modello, **esiti)
-    return {"giudicate": sum(esiti.values()), **esiti}
+    spesa_mese = float(spesa + costo)
+    log.info(
+        "job.fedelta_racconti.summary",
+        model=modello,
+        costo_usd=float(costo),
+        spesa_mese_usd=spesa_mese,
+        **esiti,
+    )
+    return {"giudicate": sum(esiti.values()), **esiti, "spesa_mese_usd": spesa_mese}
 
 
 async def run_fedelta_racconti(deps: AppDependencies) -> dict[str, Any]:
