@@ -227,8 +227,7 @@ services:
       # 127.0.0.1 from a container — that is the container itself.
       OPENAI_BASE_URL: ${GEO_OPENAI_BASE_URL:-http://host.docker.internal:8091/v1}
       # Gateway routing key. `fast` (the 4B) is the right size for tool
-      # selection and short GeoServer answers. NEVER `quality-local`/`glm52`:
-      # the MCP tool call and the chat UI are both synchronous.
+      # selection and short GeoServer answers.
       OPENAI_LLM_MODEL: ${GEO_OPENAI_MODEL:-fast}
       # The gateway master key (GEO_OPENAI_API_KEY). Not OPENAI_API_KEY in .env:
       # that one makes Limen itself switch provider to OpenAI.

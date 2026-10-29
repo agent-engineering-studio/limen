@@ -75,6 +75,9 @@ dev = [
 storage = [
     "boto3>=1.35",
 ]
+agents = [
+    "anthropic>=0.105",
+]
 mcp = [
     # FastMCP — required to actually run the `ispra-geo` MCP server in
     # `geodata/`. The geodata workspace member also declares this in its

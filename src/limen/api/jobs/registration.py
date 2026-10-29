@@ -328,12 +328,9 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
         interval_minutes=deps.settings.llm.briefing_interval_minutes,
     )
 
-    # Il revisore di fedeltà, una volta per sera, un'ora dopo l'apertura della
-    # finestra dei modelli lenti: all'apertura (20:20 UTC) gira la previsione
-    # per cella, venti minuti di CPU che colibrì non deve contendere.
-    # Registrato sempre, come il briefing: se LLM__MODELS__FEDELTA non è
-    # dichiarato il job lo dice e finisce.
-    ora_revisore = (deps.settings.llm.slow_models_window_utc[0] + 1) % 24
+    # Il revisore di fedeltà, una volta per sera. Registrato sempre, come il
+    # briefing: se LLM__MODELS__FEDELTA non è dichiarato il job lo dice e finisce.
+    ora_revisore = deps.settings.llm.fedelta_ora_utc
     await scheduler.add_schedule(
         track_job(JOB_FEDELTA_RACCONTI)(run_fedelta_racconti),
         args=(deps,),

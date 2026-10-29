@@ -1,6 +1,0 @@
-[Unit]
-Description=Spegne colibrì fuori dalla finestra dei modelli lenti
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/systemctl stop colibri.service

@@ -42,7 +42,6 @@ _ROLE_FIELDS: dict[str, str] = {
     "Orchestrator": "orchestrator",
     "Scorer": "scorer",
     "Summarizer": "summarizer",
-    "Fedelta": "fedelta",
 }
 
 
@@ -50,15 +49,6 @@ _ROLE_FIELDS: dict[str, str] = {
 # `limen llm-check` command can probe every one without reaching into
 # ``_ROLE_FIELDS``; :func:`role_models` is public for the same reason.
 AGENT_ROLES: tuple[str, ...] = tuple(_ROLE_FIELDS)
-
-
-def role_field(role: str) -> str:
-    """Il campo di :class:`LLMModels` (la variabile LLM__MODELS__*) di un ruolo.
-
-    Un'etichetta che non è un ruolo noto si restituisce com'è: `llm-check` la
-    usa per decidere se saltare una sonda, e lì un ruolo ignoto è sincrono.
-    """
-    return _ROLE_FIELDS.get(role, role)
 
 
 def role_models(settings: Settings) -> dict[str, str]:

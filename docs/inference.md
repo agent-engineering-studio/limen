@@ -3,7 +3,8 @@
 Limen non ospita modelli. Parla a **un solo endpoint**: il gateway LiteLLM
 sull'host, che fa routing per nome di modello, applica il tetto di spesa e
 gestisce il fallback locale→cloud. Puntare i client direttamente a llama-swap
-o a colibrì aggira tutte e tre le cose.
+aggira tutte e tre le cose. L'unica eccezione è il revisore di fedeltà, che
+manda il suo campione all'API Message Batches di Claude (sotto).
 
 ```
 limen-api (container, rete limen_default 172.19.0.0/16)
@@ -11,7 +12,7 @@ limen-api (container, rete limen_default 172.19.0.0/16)
    ▼
 LiteLLM gateway :8091  ──┬── llama-swap :8083   (modelli piccoli, GPU)
                          ├── llama-embed :8082  (embedding)
-                         └── colibrì :8070      (GLM-5.2, 400 GB su NVMe)
+                         └── API Anthropic      (fast-cloud, quality-cloud)
 ```
 
 `host.docker.internal` è mappato via `extra_hosts: host-gateway` nei compose.
@@ -34,20 +35,8 @@ toccare Limen.
 | `chat` | 8B, GPU-resident | prosa italiana (briefing) |
 | `extract` | profilo JSON (grammar-constrained) | output JSON stretto |
 | `embed` | embedding | sidecar KG |
-| `quality-local` | colibrì / GLM-5.2, **con** fallback su `quality-cloud` | solo `briefing` — vedi sotto |
-| `quality-cloud` | Claude Sonnet 5.5 via API, fallback di `quality-local` | — |
+| `quality-cloud` | Claude Sonnet 5.5 via API | — |
 | `fast-cloud` | Claude Haiku 5.5 via API: 0,10 $ / 0,50 $ per milione di token, venti volte meno di Sonnet | `briefing` e `risk_analyst` in produzione |
-| `glm52` | colibrì per nome proprio, **senza** fallback | solo `briefing` — vedi sotto |
-
-La differenza fra `quality-local` e `glm52` non è il modello — è la semantica
-del guasto. Se colibrì non risponde, `quality-local` restituisce Claude senza
-dirtelo; `glm52` restituisce un errore. Serve a chi vuole *quel* modello: un
-confronto fra modelli, una valutazione, un test di regressione, dove ricevere
-in silenzio le risposte di un altro modello invalida il risultato. È
-l'omissione da `router_settings.fallbacks` a implementarlo.
-
-Entrambi in denylist: il fallback riguarda *quale* modello risponde, non
-quanto ci mette, e la lentezza è la ragione del divieto.
 
 ## Mappa ruolo → modello
 
@@ -70,78 +59,13 @@ environment**. Un ruolo non dichiarato ripiega su `LLM__LLAMACPP_MODEL` /
 `LLM__OLLAMA_MODEL`, perché i default del codice sono id Claude che il gateway
 rifiuterebbe con un 400. I provider cloud ricevono invece la mappa intera.
 
-## Il vincolo: `quality-local` mai su percorsi sincroni
-
-**Misura reale, non stima: una richiesta a colibrì con 3 token di output ha
-richiesto 40 secondi** (≈ 0,08 tok/s a cache fredda). Poche centinaia di token
-sono decine di minuti.
-
-Ogni ruolo di `LLM__MODELS__*` è invocato su un percorso sincrono:
-
-| Punto d'ingresso | File:riga | Intervallo / attesa |
-|---|---|---|
-| `POST /api/monitor/{aoi_id}` | `api/endpoints/monitor.py:33-40` | il client HTTP resta appeso |
-| tool MCP `run_monitor` | `mcp/tools.py:188-190` | l'agente resta appeso |
-| `limen monitor-once` | `cli/monitor_once.py:60` | foreground |
-
-Il caso peggiore **era** la sweep oraria: il loop era sequenziale su tutte le
-AOI e `run_hourly_monitoring` è protetta da `_sweep_lock`, che **scarta** i
-tick successivi. Con un briefing da decine di minuti la prima sweep non
-chiudeva entro l'ora, ogni tick seguente logava `job.hourly_monitoring.skip`, e
-il monitoraggio nazionale si fermava. Nessun errore, nessun alert: un sistema
-che sembra vivo e non sta più valutando niente.
-
-Dalla #78 la sweep oraria **non chiama più l'LLM**: gira con
-`profile="hourly"`, che toglie `RiskAnalystNode` e `BriefingNode`. Non è una
-mitigazione del vincolo, è la rimozione del percorso — sulla Basilicata i due
-nodi costavano 140,3 s dei 156 di sweep contro 0,88 s di scoring. Con lei sono
-usciti dalla tabella i due trigger event-driven, **nowcast radar** (15 min) e
-**FIRMS** (45 min): usano lo stesso profilo, e i loro sweep vengono raccolti
-da `briefing_enrichment` come quelli orari.
-
-Per questo il vincolo è **imposto per costruzione, non per convenzione**:
-`limen.config.settings.SLOW_GENERATION_MODELS` elenca i modelli lenti e un
-`model_validator` su `LLMSettings` **rifiuta di far partire il processo** se un
-ruolo *sincrono* ci è mappato. Copre anche le chiavi non previste (`LLMModels`
-ha `extra="allow"`), quindi un futuro `LLM__MODELS__REPORT=quality-local` non
-passa di straforo. È lo stesso principio per cui colibrì rifiuta di ascoltare
-su `0.0.0.0` senza chiave: meglio un errore chiaro che un degrado silenzioso.
-
-### L'eccezione: `briefing`
-
-`ASYNC_GENERATION_ROLES` elenca i ruoli **non** sincroni, e dalla #78 ne
-conteneva uno: `briefing`. Oggi sono due, con `fedelta` (sotto). Il percorso batch che questa pagina descriveva come
-proposta esiste:
-
-* `api/jobs/briefing_enrichment.py` passa ogni
-  `LLM__BRIEFING_INTERVAL_MINUTES` (default 10), prende dagli sweep recenti le
-  regioni uscite senza narrativa e ne racconta **una alla volta**;
-* l'esito è persistito — `explanation.briefing_it` sulle righe di
-  `risk_assessments` — e le API lo leggono da lì, rispondendo subito con il
-  testo deterministico finché non arriva;
-* nessun client resta appeso: mappa, allerte e punteggi non lo aspettano.
-
-Quindi:
-
-```bash
-LLM__MODELS__BRIEFING=quality-local
-LLM__LLAMACPP_ROLE_TIMEOUT_SECONDS='{"Briefing": 5400}'
-```
-
-è una configurazione ammessa, e il tetto per-ruolo è la parte da non
-dimenticare: il default globale di 120 s taglierebbe la generazione a metà.
-
-`risk_analyst` resta vietato anche se lo stesso job lo invoca subito prima del
-briefing — è lo stesso ruolo che MCP e i percorsi HTTP chiamano, e la
-configurazione è per ruolo, non per chiamante.
-
-### Il secondo ruolo asincrono: `fedelta`
+## Il revisore di fedeltà: `fedelta`
 
 Il revisore serale (`api/jobs/fedelta_racconti.py`, CLI `limen
-fedelta-racconti`). Una volta per sera, un'ora dopo l'apertura di
-`LLM__SLOW_MODELS_WINDOW_UTC` (all'apertura gira la previsione per cella), rilegge un campione casuale delle spiegazioni
-dell'AI delle ultime 24 ore e ne giudica la fedeltà ai dati da cui sono nate
-(`spiegazioni_regione.ingresso`, migrazione 069):
+fedelta-racconti`). Una volta per sera, a `LLM__FEDELTA_ORA_UTC` (default 21,
+dopo la previsione per cella delle 20:20), rilegge un campione casuale delle
+spiegazioni dell'AI delle ultime 24 ore e ne giudica la fedeltà ai dati da cui
+sono nate (`spiegazioni_regione.ingresso`, migrazione 069):
 
 * **i numeri**, in modo deterministico (`briefing_eval`): ogni numero del testo
   deve stare nel messaggio che il modello ha ricevuto;
@@ -153,14 +77,31 @@ Il verdetto va in `spiegazioni_regione.fedelta` e, se negativo, in un warning
 lascia il giudizio a `null`, mai «fedele».
 
 ```bash
-LLM__MODELS__FEDELTA=glm52
-LLM__LLAMACPP_ROLE_TIMEOUT_SECONDS='{"Fedelta": 3600}'
+LLM__MODELS__FEDELTA=claude-sonnet-5-5
+LLM__FEDELTA_CAMPIONE=4
+LLM__FEDELTA_ATTESA_MASSIMA_MINUTI=120
 ```
 
-`glm52` e non `quality-local`: un revisore che in silenzio diventasse Claude
-rileggerebbe Claude con Claude, e il punto è avere un modello di un'altra
-famiglia, con punti ciechi diversi da chi scrive. Senza `LLM__MODELS__FEDELTA`
-il job non gira.
+Non passa dal gateway: tutto il campione va in **un solo Message Batch**
+(metà prezzo, nessuno aspetta il verdetto) con l'SDK `anthropic` (gruppo
+`agents`, nell'immagine) e `ANTHROPIC_API_KEY`. Il job aspetta che il batch
+finisca; oltre l'attesa massima lo annulla e i verdetti restano a `null`. Il
+JSON del giudizio è vincolato da uno schema (output strutturati), quindi una
+risposta malformata non c'è più — un rifiuto o un `max_tokens` sì, e valgono
+`null`.
+
+Sonnet e non Haiku: le spiegazioni le scrive `fast-cloud` (Haiku 5.5), e un
+revisore che rilegge sé stesso ha i suoi stessi punti ciechi. Un revisore più
+piccolo non basta: Qwen3-8B (`chat`) su 27 spiegazioni ne ha date per non
+fedeli 19, quasi tutte per frasi condizionali lette come certezze, e ha
+mancato la causa sbagliata che GLM-5.2 aveva trovato (Trentino, 22/10/2026).
+
+Prima girava su GLM-5.2 in locale (colibrì), acceso dalle 20:50 alle 02:05:
+venti minuti di prefill per giudizio, 21 GB di RAM di picco, e il 28/10/2026,
+acceso di giorno da un timer `Persistent=true` dopo un riavvio, ha mandato
+la macchina in OOM e trascinato via `limen`. Sonnet in batch, sui quattro
+giudizi a sera, costa circa un dollaro e mezzo al mese. Senza `LLM__MODELS__FEDELTA`
+o senza `ANTHROPIC_API_KEY` il job non gira.
 
 ## Timeout
 
@@ -217,26 +158,9 @@ Sempre `warning`, mai `info`, ed emesso da un solo punto per agente
 `briefing.py`) così che un grep li trovi tutti. Un ciclo che lo emette ha
 prodotto un'analisi *degradata* pur sembrando normale.
 
-## colibrì solo di sera
-
-L'unico ruolo su colibrì è il revisore di fedeltà, alle 21:00 UTC, su quattro
-spiegazioni: circa cento minuti di lavoro a sera. Acceso tutto il giorno teneva
-~5 GB di RAM e ~13 GB di swap. Due timer in `infra/inference/systemd/` lo
-accendono alle 20:50 e lo spengono alle 02:05 UTC (la finestra
-`LLM__SLOW_MODELS_WINDOW_UTC`); si avvia in ~15 s perché il modello è mappato
-dal disco. Fuori finestra il revisore lascia il verdetto a `null`, come per
-qualunque revisore che non risponde. Installazione:
-`sudo bash infra/inference/systemd/installa.sh`. Se la finestra cambia nel `.env`,
-cambiano le due ore nei timer.
-
-Un revisore più piccolo non lo sostituisce: Qwen3-8B (`chat`) su 27 spiegazioni
-ne ha date per non fedeli 19, quasi tutte per frasi condizionali lette come
-certezze o per fatti che coincidono con i dati, e ha mancato la causa sbagliata
-che GLM-5.2 aveva trovato (Trentino, 22/10/2026).
-
 ## Replicare lo stack su un'altra macchina
 
-Su questo server il gateway, llama-swap, l'embedding e colibrì girano come
+Su questo server il gateway, llama-swap e l'embedding girano come
 unità systemd sull'host. Per portarli altrove c'è un Compose a sé,
 `infra/docker/docker-compose.inference.yml` (progetto `limen-inference`), con
 le stesse porte e gli stessi nomi di modello:
@@ -246,13 +170,11 @@ le stesse porte e gli stessi nomi di modello:
 | `litellm` | `ghcr.io/berriai/litellm` | 8091 | config `infra/inference/litellm.yaml` |
 | `llama-swap` | `ghcr.io/mostlygeek/llama-swap` (CUDA) | 8083 | config `infra/inference/llama-swap.yaml`, modelli in `$LIMEN_MODELS_DIR/gguf` |
 | `llama-embed` | `ghcr.io/ggml-org/llama.cpp:server` | 8082 | CPU |
-| `colibri` | costruita da `infra/inference/colibri/Dockerfile.cuda` | 8070 | profilo `colibri`; `COLIBRI_CUDA_ARCH` della GPU di destinazione |
 
 ```bash
 cp infra/inference/secrets.env.example infra/inference/secrets.env  # chiavi, mai nel repo
 make inference-up            # gateway + llama-swap + embedding
 make inference-up-cpu        # senza GPU: gateway + embedding, fast/chat/extract su Claude
-make inference-up-colibri    # anche colibrì (compila l'immagine, ~400 GB di modello)
 make inference-check         # i nomi di modello che il gateway espone
 ```
 
@@ -260,8 +182,7 @@ make inference-check         # i nomi di modello che il gateway espone
 l'embedding (llama.cpp su CPU) con `infra/inference/litellm.cpu.yaml`: stessi
 nomi di modello, quindi `LLM__MODELS__*` non cambia, ma `fast`, `chat` ed
 `extract` vanno a Claude. Senza `ANTHROPIC_API_KEY` le chiamate falliscono e
-Limen pubblica il testo deterministico; i ruoli su `quality-local` degradano
-allo stesso modo. llama-swap sta nel profilo `gpu`, che `inference-up` attiva.
+Limen pubblica il testo deterministico. llama-swap sta nel profilo `gpu`, che `inference-up` attiva.
 
 Con la GPU servono Docker con NVIDIA Container Toolkit e i modelli in
 `LIMEN_MODELS_DIR` (default `/srv/models`): nessun peso entra nelle immagini.

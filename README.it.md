@@ -205,7 +205,7 @@ delimitatore.
 | `SCHEDULER__CACHE_CLEANUP` | `apscheduler` | `pg_cron` o `apscheduler`. **Usa APScheduler su Neon.** |
 | `LLM__PROVIDER` | _vuoto_ | Override: `anthropic` / `openai` / `foundry` / `ollama` / `llamacpp`. Vuoto ⇒ llama.cpp se non c'è una chiave cloud. |
 | `LLM__LLAMACPP_BASE_URL` | `http://127.0.0.1:8091` | Gateway di inferenza self-hosted (forma OpenAI). **Non** `:8081`, che è GeoServer. Da container: `host.docker.internal`. |
-| `LLM__MODELS__<RUOLO>` | id Claude | Mappa ruolo → modello. I motori locali onorano solo i ruoli dichiarati. Mai `quality-local`/`glm52`: il processo rifiuta di partire. Vedi [`docs/inference.md`](./docs/inference.md). |
+| `LLM__MODELS__<RUOLO>` | id Claude | Mappa ruolo → modello. I motori locali onorano solo i ruoli dichiarati. `LLM__MODELS__FEDELTA` è un id Claude mandato in Message Batch, non al gateway. Vedi [`docs/inference.md`](./docs/inference.md). |
 | `LLM__LLAMACPP_TIMEOUT_SECONDS` | `120` | Tetto per i ruoli senza override; `LLM__LLAMACPP_ROLE_TIMEOUT_SECONDS` (JSON) per-ruolo. |
 | `LLM__OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama host (da container: `host.docker.internal`). |
 | `LLM__OLLAMA_MODEL` | `qwen3.6:latest` | Modello Ollama unico per tutti i ruoli agente. |

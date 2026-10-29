@@ -7,7 +7,6 @@ from typing import Any, cast
 import pytest
 
 from limen.config.settings import (
-    SLOW_GENERATION_MODELS,
     LLMProvider,
     ObjectStoreBackend,
     SchedulerBackend,
@@ -68,35 +67,6 @@ def test_llm_resolver_ollama_still_selectable_explicitly() -> None:
     """The fallback moved to llama.cpp, so Ollama now needs to be declared."""
     s = _make_settings(llm={"provider": "ollama"})
     assert resolve_provider(s).provider is LLMProvider.OLLAMA
-
-
-@pytest.mark.parametrize("slow_model", sorted(SLOW_GENERATION_MODELS))
-def test_slow_model_on_a_sync_role_refuses_to_start(slow_model: str) -> None:
-    """Un ruolo sincrono puntato su un modello che genera in decine di minuti
-    deve essere un rifiuto all'avvio, non un timeout del chiamante che degrada
-    in silenzio al testo deterministico.
-
-    Il ruolo qui è `risk_analyst` e non più `briefing`: dopo #78 il briefing è
-    l'unico consumatore asincrono, mentre il RiskAnalyst resta su MCP e sui
-    percorsi HTTP."""
-    with pytest.raises(ValueError, match=r"synchronous"):
-        _make_settings(llm={"models": {"risk_analyst": slow_model}})
-
-
-@pytest.mark.parametrize("slow_model", sorted(SLOW_GENERATION_MODELS))
-def test_slow_model_is_allowed_on_the_briefing_role(slow_model: str) -> None:
-    """Dopo #78 il briefing non gira più dentro il tick orario: lo scrive
-    `briefing_enrichment` su righe già persistite, una regione alla volta, e
-    nessuno lo aspetta — la mappa mostra il testo deterministico finché non
-    arriva. Lì un modello lento è lento, non rotto."""
-    s = _make_settings(llm={"models": {"briefing": slow_model}})
-    assert s.llm.models.briefing == slow_model
-
-
-def test_slow_model_check_covers_undeclared_roles_too() -> None:
-    """LLMModels allows extra keys, so a future role name must not slip past."""
-    with pytest.raises(ValueError, match=r"LLM__MODELS__REPORT"):
-        _make_settings(llm={"models": {"report": "quality-local"}})
 
 
 def test_fast_gateway_models_are_accepted_on_sync_roles() -> None:

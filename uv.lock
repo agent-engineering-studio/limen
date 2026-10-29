@@ -2170,6 +2170,9 @@ dependencies = [
 ]
 
 [package.dev-dependencies]
+agents = [
+    { name = "anthropic" },
+]
 copernicus = [
     { name = "cdsapi" },
     { name = "netcdf4" },
@@ -2246,6 +2249,7 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
+agents = [{ name = "anthropic", specifier = ">=0.105" }]
 copernicus = [
     { name = "cdsapi", specifier = ">=0.7.7" },
     { name = "netcdf4", specifier = ">=1.7" },

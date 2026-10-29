@@ -8,8 +8,7 @@
 #
 # Senza ANTHROPIC_API_KEY nel file dei segreti le chiamate falliscono, e
 # Limen pubblica il testo deterministico: la mappa e le allerte non dipendono
-# da un LLM. `quality-local`/`glm52` (colibrì) non ci sono: un ruolo mappato lì
-# riceve un errore e degrada allo stesso modo.
+# da un LLM.
 
 model_list:
   - model_name: fast
