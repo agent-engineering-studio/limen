@@ -48,7 +48,7 @@ from limen.config.settings import Settings
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
 from limen.core.verifiche.esito import esito
-from limen.data.db import acquire
+from limen.data.db import connessione_dedicata
 from limen.data.repos import (
     anticipo_repo,
     candidati_eventi_repo,
@@ -278,7 +278,7 @@ async def raccogli(settings: Settings) -> dict[str, Any]:
         await budget.verifica(modello)
     except budget.BudgetSuperatoError as exc:
         return {"status": "skipped", "reason": str(exc), "model": modello}
-    async with acquire() as conn:
+    async with connessione_dedicata() as conn:
         if not await conn.fetchval("SELECT pg_try_advisory_lock($1)", _UNA_ALLA_VOLTA):
             return {"status": "skipped", "reason": "un'altra raccolta è in corso"}
         try:

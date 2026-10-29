@@ -32,7 +32,7 @@ RSS = """<?xml version="1.0"?><rss><channel>
 
 
 def _lock(libero: bool) -> Any:
-    """Un `acquire` finto il cui lock della raccolta è libero o già preso."""
+    """Una connessione finta il cui lock della raccolta è libero o già preso."""
     from contextlib import asynccontextmanager
 
     class _Conn:
@@ -474,7 +474,7 @@ async def test_se_l_estrazione_finisce_il_tetto_la_conferma_non_parte(
     monkeypatch.setattr(job, "_registra", registra_evento)
     monkeypatch.setattr(EstrattoreEventi, "estrai", estrai)
     monkeypatch.setattr(EstrattoreEventi, "conferma", conferma)
-    monkeypatch.setattr(job, "acquire", _lock(True))
+    monkeypatch.setattr(job, "connessione_dedicata", _lock(True))
 
     await raccogli(impostazioni)
     # L'estrazione è registrata prima di decidere, e la conferma parte vuota.
@@ -603,6 +603,6 @@ async def test_due_raccolte_insieme_la_seconda_non_parte(monkeypatch: pytest.Mon
     monkeypatch.setattr(job.budget, "get_settings", lambda: impostazioni)
     monkeypatch.setattr(job.budget, "spesa_del_mese", spesa)
     monkeypatch.setattr(job, "titoli_per_pericolo", vietato)
-    monkeypatch.setattr(job, "acquire", _lock(False))
+    monkeypatch.setattr(job, "connessione_dedicata", _lock(False))
     out = await raccogli(impostazioni)
     assert out == {"status": "skipped", "reason": "un'altra raccolta è in corso"}

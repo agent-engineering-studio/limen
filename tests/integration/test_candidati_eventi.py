@@ -89,3 +89,17 @@ async def test_gli_omonimi_si_sciolgono_con_la_regione(reset_db: None, pg_pool: 
         await conn.execute("DELETE FROM comuni WHERE istat_code = '075001'")
     assert await risolvi_comuni(("Castro",), "Puglia") == []
     assert await risolvi_comuni(("Castro",), None) == ["016001"]
+
+
+async def test_il_lock_della_raccolta_sta_fuori_dal_pool(reset_db: None, pg_pool: object) -> None:
+    from limen.api.jobs.raccolta_eventi import _UNA_ALLA_VOLTA
+    from limen.data.db import connessione_dedicata
+
+    async with connessione_dedicata() as prima:
+        assert await prima.fetchval("SELECT pg_try_advisory_lock($1)", _UNA_ALLA_VOLTA)
+        # Il pool resta libero per il lavoro che il lock protegge...
+        async with acquire() as conn:
+            assert await conn.fetchval("SELECT 1") == 1
+        # ...e una seconda raccolta trova il lock preso.
+        async with connessione_dedicata() as seconda:
+            assert not await seconda.fetchval("SELECT pg_try_advisory_lock($1)", _UNA_ALLA_VOLTA)

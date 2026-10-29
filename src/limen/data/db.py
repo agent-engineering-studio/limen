@@ -160,6 +160,21 @@ async def acquire() -> AsyncIterator[asyncpg.Connection]:
         yield conn
 
 
+@asynccontextmanager
+async def connessione_dedicata() -> AsyncIterator[asyncpg.Connection]:
+    """Una connessione fuori dal pool, per chi la tiene a lungo (un lock di
+    sessione): presa dal pool, con un pool da una connessione bloccherebbe
+    ogni ``acquire`` del lavoro che protegge."""
+    cfg = get_settings().db
+    conn = await asyncpg.connect(
+        dsn=cfg.connection_string, statement_cache_size=cfg.statement_cache_size
+    )
+    try:
+        yield conn
+    finally:
+        await conn.close()
+
+
 @contextmanager
 def usa_pool(pool: asyncpg.Pool) -> Iterator[None]:
     """Fa passare da ``pool`` ogni :func:`acquire` del task corrente."""
