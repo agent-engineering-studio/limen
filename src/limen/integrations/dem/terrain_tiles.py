@@ -56,8 +56,9 @@ def codifica(quota: NDArray[np.floating[Any]]) -> NDArray[np.uint8]:
 
 
 def decodifica(rgb: NDArray[np.uint8]) -> NDArray[np.float64]:
-    r, g, b = (rgb[i].astype(np.float64) for i in range(3))
-    return -10000.0 + (r * 65536 + g * 256 + b) / 10.0
+    v = rgb.astype(np.float64)
+    quote: NDArray[np.float64] = -10000.0 + (v[0] * 65536 + v[1] * 256 + v[2]) / 10.0
+    return quote
 
 
 def limiti_tile(z: int, x: int, y: int) -> tuple[float, float, float, float]:
@@ -86,8 +87,13 @@ def tile_del_riquadro(z: int, riquadro: tuple[float, float, float, float]) -> li
 
 
 def impronta(
-    sorgente: Path, riquadro: tuple[float, float, float, float], zoom: tuple[int, int]
+    sorgente: Path,
+    riquadro: tuple[float, float, float, float],
+    zoom: tuple[int, int],
+    attribuzione: str,
 ) -> dict[str, Any]:
+    """Cosa, se cambia, obbliga a rifare il file. L'attribuzione c'è perché
+    sta nei metadati: correggerla deve arrivare sulla mappa."""
     st = sorgente.stat()
     return {
         "sorgente": str(sorgente),
@@ -95,6 +101,7 @@ def impronta(
         "dimensione": st.st_size,
         "riquadro": [round(c, 6) for c in riquadro],
         "zoom": list(zoom),
+        "attribuzione": attribuzione,
         "versione": VERSIONE,
     }
 
@@ -135,6 +142,10 @@ def _sorgente_per_zoom(sorgente: Path, z: int) -> Any:
     with rasterio.open(sorgente) as src:
         fattori = src.overviews(1)
         pixel = abs(src.res[0])
+        if src.crs is not None and src.crs.is_geographic:
+            # Un DTM in gradi: il pixel in metri alla sua latitudine.
+            centro = (src.bounds.bottom + src.bounds.top) / 2
+            pixel *= 111_320.0 * math.cos(math.radians(centro))
     pixel_tile = 2 * _MERCATORE / (_LATO * (1 << z)) * math.cos(math.radians(42.0))
     livello = max((i for i, f in enumerate(fattori) if pixel * f <= pixel_tile), default=None)
     if livello is None:
@@ -157,7 +168,7 @@ def genera(
     from rasterio.transform import from_bounds
     from rasterio.vrt import WarpedVRT
 
-    voluta = impronta(sorgente, riquadro, zoom)
+    voluta = impronta(sorgente, riquadro, zoom, attribuzione)
     if uscita.exists() and _impronta_esistente(uscita) == voluta:
         log.info("dem_tiles.skip", uscita=str(uscita))
         return Esito(uscita, 0, uscita.stat().st_size, saltato=True)

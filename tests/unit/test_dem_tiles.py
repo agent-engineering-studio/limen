@@ -79,5 +79,19 @@ def test_genera_scrive_le_tile_e_non_rifa_una_sorgente_invariata(tmp_path: Path)
     assert 800 < cima <= 1000
 
     assert genera(dtm, uscita, riquadro=riquadro, zoom=(8, 10), attribuzione="prova").saltato
-    # Un altro zoom è un'altra impronta: si rifà.
+    # Un altro zoom è un'altra impronta: si rifà. Anche un'altra attribuzione,
+    # che sta nei metadati e deve arrivare sulla mappa.
     assert not genera(dtm, uscita, riquadro=riquadro, zoom=(8, 9), attribuzione="prova").saltato
+    assert not genera(dtm, uscita, riquadro=riquadro, zoom=(8, 9), attribuzione="altra").saltato
+
+
+def test_un_dtm_in_gradi_sceglie_l_overview_in_metri(tmp_path: Path) -> None:
+    from limen.integrations.dem.terrain_tiles import _sorgente_per_zoom
+
+    dtm = tmp_path / "dtm.tif"
+    _dtm(dtm)
+    # Pixel di 0,0005° ≈ 42 m a 41°: a zoom 11 (≈ 57 m) va bene il pieno o
+    # l'overview da 2 al massimo, a zoom 5 (≈ 3,7 km) la più grossa (da 16).
+    with _sorgente_per_zoom(dtm, 11) as fine, _sorgente_per_zoom(dtm, 5) as grosso:
+        assert fine.width >= 200
+        assert grosso.width == 25

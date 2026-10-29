@@ -222,6 +222,12 @@ module = [
 ]
 ignore_missing_imports = true
 
+# pmtiles (lo scrittore ufficiale Protomaps) non ha annotazioni: le sue
+# chiamate stanno solo nel generatore delle tile del rilievo (#318).
+[[tool.mypy.overrides]]
+module = "limen.integrations.dem.terrain_tiles"
+disallow_untyped_calls = false
+
 # The MCP server binds FastMCP decorators. FastMCP ships in the optional
 # `[mcp]` extra and supplies its own types at runtime — we run a separate
 # type-check job there. Locally the strict decorator rule is relaxed.
