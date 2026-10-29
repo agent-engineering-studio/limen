@@ -48,6 +48,16 @@ async def test_il_giorno_dopo_una_seconda_testata_si_unisce(
     # Un altro pericolo, o un altro comune, è un altro candidato.
     assert (await fondi(replace(_BASE, hazard=HazardType.FLOOD))).id != primo.id
     assert (await fondi(replace(_BASE, nomi_comuni=("Bisaccia",)))).id != primo.id
+    # Un'altra frana nello stesso comune, su un'altra strada, con un altro
+    # giornale: non conferma la prima.
+    altra = await fondi(
+        replace(
+            _BASE,
+            luogo="via Roma a Lacedonia",
+            fonti=({"testata": "Irpinia News", "titolo": "Frana in via Roma", "url": "u9"},),
+        )
+    )
+    assert altra.id != primo.id and altra.testate == 1
     # Una regione che mancava arriva con la notizia dopo.
     senza = await fondi(replace(_BASE, nomi_comuni=("Castro",), regione=None))
     con = await fondi(replace(_BASE, nomi_comuni=("Castro",), regione="Puglia"))

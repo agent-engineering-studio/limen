@@ -75,27 +75,60 @@ async def risolvi_comuni(nomi: tuple[str, ...], regione: str | None) -> list[str
     return codici
 
 
+def _norma(testo: str) -> str:
+    ascii_ = unicodedata.normalize("NFKD", testo).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", " ", ascii_.lower()).strip()
+
+
+def stesso_evento(
+    c: Candidato, *, luogo: str, nomi_comuni: tuple[str, ...], fonti: list[dict[str, Any]]
+) -> bool:
+    """Due candidati dello stesso comune sono lo stesso evento solo se lo dice
+    qualcosa di più del comune: un articolo in comune, lo stesso luogo, o un
+    luogo che è solo il nome del comune. Due frane su due strade dello stesso
+    paese, con un giornale ciascuna, non si confermano a vicenda; le seconde
+    fonti di un evento arrivano dalla conferma del modello."""
+    if {f["url"] for f in fonti} & {f["url"] for f in c.fonti}:
+        return True
+    generici = {_norma(n) for n in (*nomi_comuni, *c.nomi_comuni)}
+    a, b = _norma(luogo), _norma(c.luogo)
+    return a == b or a in generici or b in generici
+
+
 async def fondi(c: Candidato) -> Salvato:
     """Inserisce il candidato o lo unisce a quello già visto: stesso pericolo,
-    un comune in comune, giorno entro ±1. Le fonti si uniscono per URL."""
+    un comune in comune, giorno entro ±1, stessa regione, e lo stesso evento
+    (``stesso_evento``). Le fonti si uniscono per URL."""
     nomi = [n.casefold() for n in c.nomi_comuni]
     async with acquire() as conn, conn.transaction():
-        riga = await conn.fetchrow(
+        righe = await conn.fetch(
             """
-            SELECT id, fonti FROM candidati_eventi
+            SELECT id, fonti, luogo, nomi_comuni FROM candidati_eventi
             WHERE hazard_type = $1::hazard_type
               AND giorno BETWEEN $2::date - 1 AND $2::date + 1
               AND (SELECT array_agg(lower(n)) FROM unnest(nomi_comuni) n) && $3::text[]
               -- Castro in Lombardia e Castro in Puglia non sono lo stesso evento.
               AND (regione IS NULL OR $4::text IS NULL OR lower(regione) = lower($4::text))
             ORDER BY visto_ultimo DESC
-            LIMIT 1
             FOR UPDATE
             """,
             c.hazard.value,
             c.giorno,
             nomi,
             c.regione,
+        )
+        riga = next(
+            (
+                r
+                for r in righe
+                if stesso_evento(
+                    c,
+                    luogo=r["luogo"],
+                    nomi_comuni=tuple(r["nomi_comuni"]),
+                    fonti=json.loads(r["fonti"]),
+                )
+            ),
+            None,
         )
         fonti = list(c.fonti)
         if riga is not None:
