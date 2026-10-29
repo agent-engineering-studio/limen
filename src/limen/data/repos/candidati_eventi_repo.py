@@ -33,6 +33,9 @@ class Salvato:
     fonti: tuple[dict[str, Any], ...]
     testate: int
     slug: str | None
+    #: ``verificato`` solo a registrazione finita: con uno slug e un altro
+    #: stato, la registrazione si è interrotta a metà e va ripresa.
+    stato: str
     giorno: date
     parte: str
     luogo: str
@@ -147,7 +150,7 @@ async def fondi(c: Candidato) -> Salvato:
                 INSERT INTO candidati_eventi
                     (hazard_type, giorno, parte, luogo, regione, nomi_comuni, fonti, testate, stato)
                 VALUES ($1::hazard_type, $2, $3, $4, $5, $6, $7::jsonb, $8, 'una_testata')
-                RETURNING id, slug, giorno, parte, luogo, regione, nomi_comuni
+                RETURNING id, slug, stato, giorno, parte, luogo, regione, nomi_comuni
                 """,
                 c.hazard.value,
                 c.giorno,
@@ -170,7 +173,7 @@ async def fondi(c: Candidato) -> Salvato:
                     -- Una regione arrivata dopo scioglie un omonimo rimasto in sospeso.
                     regione = COALESCE(regione, $6)
                 WHERE id = $1
-                RETURNING id, slug, giorno, parte, luogo, regione, nomi_comuni
+                RETURNING id, slug, stato, giorno, parte, luogo, regione, nomi_comuni
                 """,
                 riga["id"],
                 json.dumps(fonti),
@@ -185,6 +188,7 @@ async def fondi(c: Candidato) -> Salvato:
         fonti=tuple(fonti),
         testate=testate,
         slug=salvato["slug"],
+        stato=salvato["stato"],
         giorno=salvato["giorno"],
         parte=salvato["parte"],
         luogo=salvato["luogo"],
@@ -208,6 +212,17 @@ async def ha_omonimi(nome: str) -> bool:
     async with acquire() as conn:
         n = await conn.fetchval("SELECT count(*) FROM comuni WHERE lower(name) = lower($1)", nome)
     return bool(n and n > 1)
+
+
+async def prenota(id_: int, *, comuni: list[str], slug: str) -> None:
+    """Lo slug al candidato prima di scrivere la verifica, senza cambiarne lo
+    stato: se una scrittura dopo fallisce, il giro seguente riconosce la
+    verifica come propria e riprende, invece di scambiarla per un fact check
+    a mano."""
+    async with acquire() as conn:
+        await conn.execute(
+            "UPDATE candidati_eventi SET comuni = $2, slug = $3 WHERE id = $1", id_, comuni, slug
+        )
 
 
 async def segna(id_: int, *, stato: str, comuni: list[str], slug: str | None) -> None:

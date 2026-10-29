@@ -213,6 +213,7 @@ async def test_un_fact_check_a_mano_non_si_sovrascrive(monkeypatch: pytest.Monke
             fonti=({"testata": "A"}, {"testata": "B"}),
             testate=2,
             slug=None,
+            stato="una_testata",
             giorno=date(2026, 10, 28),
             parte="ignota",
             luogo="Lacedonia",
@@ -287,6 +288,7 @@ async def test_un_evento_gia_verificato_non_si_rimisura(monkeypatch: pytest.Monk
             fonti=({"testata": "A"}, {"testata": "B"}),
             testate=2,
             slug="2026-10-28-frana-lacedonia",
+            stato="verificato",
             giorno=date(2026, 10, 28),
             parte="ignota",
             luogo="Lacedonia",
@@ -323,6 +325,7 @@ async def test_un_secondo_incidente_lo_stesso_giorno_ha_il_suo_slug(
             fonti=({"testata": "A"}, {"testata": "B"}),
             testate=2,
             slug=None,
+            stato="una_testata",
             giorno=date(2026, 10, 28),
             parte="ignota",
             luogo="via Roma a Lacedonia",
@@ -356,6 +359,7 @@ async def test_un_secondo_incidente_lo_stesso_giorno_ha_il_suo_slug(
     monkeypatch.setattr(job.candidati_eventi_repo, "ha_omonimi", no)
     monkeypatch.setattr(job.candidati_eventi_repo, "slug_di_un_altro", di_un_altro)
     monkeypatch.setattr(job.candidati_eventi_repo, "segna", niente)
+    monkeypatch.setattr(job.candidati_eventi_repo, "prenota", niente)
     monkeypatch.setattr(job.verifiche_eventi_repo, "esiste", esiste)
     monkeypatch.setattr(job.verifiche_eventi_repo, "upsert", upsert)
     monkeypatch.setattr(job.anticipo_repo, "misura", misura)
@@ -476,3 +480,64 @@ def test_le_regioni_ammesse_sono_le_aoi_regionali() -> None:
     )
     aoi = {f["properties"]["id"] for f in seme["features"]}
     assert {aoi_della_regione(r) for r in REGIONI} == aoi
+
+
+async def test_una_registrazione_interrotta_si_riprende_con_lo_stesso_slug(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from limen.api.jobs import raccolta_eventi as job
+    from limen.data.repos.candidati_eventi_repo import Salvato
+
+    # Il giro prima ha prenotato lo slug e scritto la verifica, poi è caduto
+    # prima della frana: la verifica esiste, ma è nostra, non un fact check.
+    scritte: list[str] = []
+    frane: list[object] = []
+    segnati: list[dict[str, object]] = []
+
+    async def fondi(c: object) -> Salvato:
+        return Salvato(
+            id=9,
+            fonti=({"testata": "A"}, {"testata": "B"}),
+            testate=2,
+            slug="2026-10-28-frana-lacedonia",
+            stato="una_testata",
+            giorno=date(2026, 10, 28),
+            parte="ignota",
+            luogo="Lacedonia",
+            regione="Campania",
+            nomi_comuni=("Lacedonia",),
+        )
+
+    async def risolvi(nomi: object, regione: object) -> list[str]:
+        return ["064041"]
+
+    async def vietato(*a: object, **kw: object) -> None:
+        raise AssertionError("lo slug prenotato non si ricerca")
+
+    async def misura(**kw: object) -> dict[str, object]:
+        return _misura()
+
+    async def upsert(v: Any) -> tuple[object, str]:
+        scritte.append(v.slug)
+        return (object(), "P10")
+
+    async def landslide(righe: list[object]) -> None:
+        frane.extend(righe)
+
+    async def segna(id_: int, **kw: object) -> None:
+        segnati.append(kw)
+
+    monkeypatch.setattr(job.candidati_eventi_repo, "fondi", fondi)
+    monkeypatch.setattr(job.candidati_eventi_repo, "risolvi_comuni", risolvi)
+    monkeypatch.setattr(job.candidati_eventi_repo, "segna", segna)
+    monkeypatch.setattr(job.candidati_eventi_repo, "prenota", vietato)
+    monkeypatch.setattr(job.verifiche_eventi_repo, "esiste", vietato)
+    monkeypatch.setattr(job.verifiche_eventi_repo, "upsert", upsert)
+    monkeypatch.setattr(job.anticipo_repo, "misura", misura)
+    monkeypatch.setattr(job, "landslide_upsert", landslide)
+    monkeypatch.setattr(job, "frana_da_verifica", lambda v, *a: v.slug)
+    esiti: Counter[str] = Counter()
+    await job._registra(HazardType.LANDSLIDE, _evento(), [], esiti)
+    assert scritte == ["2026-10-28-frana-lacedonia"]
+    assert frane == ["2026-10-28-frana-lacedonia"]
+    assert segnati[-1]["stato"] == "verificato"
