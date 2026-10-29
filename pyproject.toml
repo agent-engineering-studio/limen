@@ -43,6 +43,7 @@ dependencies = [
     "aiomqtt>=2.3",
     "aiosmtplib>=3.0",
     "cbor2>=6.1",
+    "pmtiles>=3.4",
 ]
 
 [project.scripts]
