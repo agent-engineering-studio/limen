@@ -107,8 +107,22 @@ class RevisoreFedelta:
                     return giudizi
                 await asyncio.sleep(self._intervallo_s)
                 batch = await self._client.messages.batches.retrieve(batch.id)
+            ingresso = uscita = 0
             async for r in await self._client.messages.batches.results(batch.id):
                 giudizi[int(r.custom_id[1:])] = _giudizio(r)
+                if r.result.type == "succeeded":
+                    ingresso += r.result.message.usage.input_tokens
+                    uscita += r.result.message.usage.output_tokens
+            # Il batch non passa dal gateway, quindi nemmeno dal suo tetto di
+            # spesa: questo è l'unico posto in cui Limen vede quanto consuma.
+            log.info(
+                "fedelta.usage",
+                batch_id=batch.id,
+                model=self._model,
+                richieste=len(coppie),
+                input_tokens=ingresso,
+                output_tokens=uscita,
+            )
         except anthropic.APIError as exc:
             log.warning(
                 "fedelta.revisore_non_risponde",

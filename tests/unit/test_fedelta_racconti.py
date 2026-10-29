@@ -52,7 +52,8 @@ def _risposta(custom_id: str, testo: str | None, *, stop: str = "end_turn") -> A
     content = [SimpleNamespace(type="thinking", thinking="")]
     if testo is not None:
         content.append(SimpleNamespace(type="text", text=testo))
-    message = SimpleNamespace(content=content, stop_reason=stop)
+    usage = SimpleNamespace(input_tokens=1500, output_tokens=300)
+    message = SimpleNamespace(content=content, stop_reason=stop, usage=usage)
     return SimpleNamespace(
         custom_id=custom_id, result=SimpleNamespace(type="succeeded", message=message)
     )
@@ -119,6 +120,19 @@ async def test_il_revisore_legge_il_suo_json_nell_ordine_giusto() -> None:
     assert params["model"] == "claude-sonnet-5-5"
     assert params["output_config"]["format"]["type"] == "json_schema"
     assert "temperature" not in params
+
+
+async def test_il_revisore_dice_quanto_ha_consumato(capsys: Any) -> None:
+    batches = _Batches(
+        [
+            _risposta("s0", '{"fedele": true, "problemi": []}'),
+            _risposta("s1", '{"fedele": true, "problemi": []}'),
+            SimpleNamespace(custom_id="s2", result=SimpleNamespace(type="errored")),
+        ]
+    )
+    await _revisore(batches).giudica([("a", INGRESSO), ("b", INGRESSO), ("c", INGRESSO)])
+    riga = next(r for r in capsys.readouterr().out.splitlines() if "fedelta.usage" in r)
+    assert "input_tokens=3000" in riga and "output_tokens=600" in riga and "richieste=3" in riga
 
 
 @pytest.mark.parametrize(
