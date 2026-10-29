@@ -17,7 +17,6 @@ import {
   useEffect,
   useMemo,
   useReducer,
-  useRef,
   useState,
   type JSX,
   type ReactNode,
@@ -257,14 +256,17 @@ export function pericoloDaHash(hash: string): HazardView | undefined {
 }
 
 export function MapStateProvider({ children }: { children: ReactNode }): JSX.Element {
-  const { view, select } = useHazard();
+  const { view, select, available } = useHazard();
   const [stato, dispatch] = useReducer(riduci, undefined, statoIniziale);
   const [link, setLink] = useState<LinkPosto>(() => linkDaHash(window.location.hash));
   // Un hash che riporta sulla mappa va riscritto anche se lo stato non
   // cambia: il link della testata è `#/dashboard`, senza parametri.
   const [arrivi, setArrivi] = useState(0);
-  const viewRef = useRef(view);
-  viewRef.current = view;
+  // Il pericolo di un link arrivato a mappa aperta. Si applica solo se il
+  // deployment lo offre, come per il link d'apertura (`HazardProvider`):
+  // altrimenti mappa e pannelli chiederebbero dati che non esistono, e con
+  // un pericolo solo non ci sarebbe nemmeno il selettore per tornare indietro.
+  const [pericoloChiesto, setPericoloChiesto] = useState<HazardView | null>(null);
 
   useEffect(() => {
     const onHash = (): void => {
@@ -273,12 +275,24 @@ export function MapStateProvider({ children }: { children: ReactNode }): JSX.Ele
       if (!rottaMappa(hash)) return;
       const l = statoDaHash(hash);
       dispatch({ tipo: "link", link: l });
-      if (l.pericolo && l.pericolo !== viewRef.current) select(l.pericolo);
+      if (l.pericolo) setPericoloChiesto(l.pericolo);
       setArrivi((n) => n + 1);
     };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
-  }, [select]);
+  }, []);
+
+  useEffect(() => {
+    // Finché `/api/hazards` non risponde non si sa cosa c'è: si aspetta.
+    if (!pericoloChiesto || available.length === 0) return;
+    setPericoloChiesto(null);
+    if (pericoloChiesto === view) return;
+    const offerto =
+      pericoloChiesto === "multi"
+        ? available.length >= 2
+        : available.some((h) => h.hazard === pericoloChiesto);
+    if (offerto) select(pericoloChiesto);
+  }, [pericoloChiesto, available, view, select]);
 
   useEffect(() => {
     const hash = window.location.hash;

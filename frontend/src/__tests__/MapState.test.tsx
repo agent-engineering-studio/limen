@@ -183,6 +183,64 @@ describe("MapStateProvider", () => {
     expect(window.location.hash).toBe("#/mappa?hazard=flood&h=24&livelli=bruciate");
   });
 
+  it("un link a un pericolo che il deployment non offre non lo seleziona", async () => {
+    vi.mocked(defaultApiClient.getHazards).mockResolvedValue({
+      items: [
+        { hazard: "landslide", label_it: "Frana" },
+        { hazard: "flood", label_it: "Allagamento" },
+      ],
+      default: "landslide",
+    });
+    window.history.replaceState(null, "", "/#/dashboard?hazard=flood");
+    monta(<Sonda />);
+    await pericoliCaricati();
+    expect(letto()["pericolo"]).toBe("flood");
+    await act(async () => {
+      window.history.replaceState(null, "", "/#/mappa?hazard=wildfire&h=24");
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
+    // Il resto del link vale; il pericolo resta uno che esiste.
+    expect(letto()).toMatchObject({ pericolo: "flood", orizzonte: 24 });
+    expect(window.location.hash).toBe("#/mappa?hazard=flood&h=24");
+  });
+
+  it("con un pericolo solo un link alla vista d'insieme non la apre", async () => {
+    vi.mocked(defaultApiClient.getHazards).mockResolvedValue({
+      items: [{ hazard: "landslide", label_it: "Frana" }],
+      default: "landslide",
+    });
+    window.history.replaceState(null, "", "/#/dashboard");
+    monta(<Sonda />);
+    await pericoliCaricati();
+    expect(letto()["pericolo"]).toBe("landslide");
+    await act(async () => {
+      window.history.replaceState(null, "", "/#/mappa?hazard=multi");
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
+    expect(letto()["pericolo"]).toBe("landslide");
+  });
+
+  it("un link arrivato prima di /api/hazards aspetta la risposta", async () => {
+    let rispondi: (r: HazardsResponse) => void = () => {};
+    vi.mocked(defaultApiClient.getHazards).mockReturnValue(
+      new Promise<HazardsResponse>((r) => {
+        rispondi = r;
+      }),
+    );
+    window.history.replaceState(null, "", "/#/dashboard");
+    monta(<Sonda />);
+    await act(async () => {
+      window.history.replaceState(null, "", "/#/mappa?hazard=wildfire");
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
+    expect(letto()["pericolo"]).toBe("multi");
+    await act(async () => {
+      rispondi(TRE);
+      await new Promise((fatto) => setTimeout(fatto, 0));
+    });
+    expect(letto()["pericolo"]).toBe("wildfire");
+  });
+
   it("fuori dalla mappa non riscrive l'URL", async () => {
     window.history.replaceState(null, "", "/#/regioni");
     monta(<Sonda />);
