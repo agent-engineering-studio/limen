@@ -160,8 +160,16 @@ async def _slug_libero(
     omonimo = comuni[0] if await candidati_eventi_repo.ha_omonimi(primo) else None
     base = slug(hazard, salvato.giorno, primo, omonimo)
     nome, n = base, 1
-    while await verifiche_eventi_repo.esiste(nome):
-        if not await candidati_eventi_repo.slug_di_un_altro(nome, salvato.id):
+    while True:
+        if await candidati_eventi_repo.slug_di_un_altro(nome, salvato.id):
+            # Un altro incidente lo stesso giorno nello stesso comune (due
+            # frane su due strade) l'ha già scritto o prenotato: stesso slug
+            # con un numero in coda. Anche prenotato e basta: la sua
+            # registrazione si riprende al giro dopo e lo riscriverebbe.
+            n += 1
+            nome = f"{base}-{n}"
+            continue
+        if await verifiche_eventi_repo.esiste(nome):
             # Lo slug c'è già e non è di un altro candidato: è un fact check a
             # mano, con ora, punto e fonti più precisi dei titoli. Si collega
             # il candidato e la riga resta com'è.
@@ -170,11 +178,7 @@ async def _slug_libero(
             )
             esiti["gia_verificato"] += 1
             return None
-        # Un altro incidente lo stesso giorno nello stesso comune (due frane su
-        # due strade): stesso slug con un numero in coda.
-        n += 1
-        nome = f"{base}-{n}"
-    return nome
+        return nome
 
 
 async def _registra(
@@ -214,9 +218,10 @@ async def _registra(
         # c'è, è nostra, e si riscrive con tutto quello che mancava.
         nome = salvato.slug
     else:
-        nome = await _slug_libero(hazard, salvato, comuni, esiti)
-        if nome is None:
+        libero = await _slug_libero(hazard, salvato, comuni, esiti)
+        if libero is None:
             return
+        nome = libero
         await candidati_eventi_repo.prenota(salvato.id, comuni=comuni, slug=nome)
     evento_at, precisione = quando(salvato.giorno, salvato.parte)
     misura = await anticipo_repo.misura(

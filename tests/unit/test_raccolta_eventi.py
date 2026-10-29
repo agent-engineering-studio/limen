@@ -343,7 +343,7 @@ async def test_un_secondo_incidente_lo_stesso_giorno_ha_il_suo_slug(
         return slug == "2026-10-28-frana-lacedonia"
 
     async def di_un_altro(slug: str, id_: int) -> bool:
-        return True
+        return slug == "2026-10-28-frana-lacedonia"
 
     async def misura(**kw: object) -> dict[str, object]:
         return _misura()
@@ -364,6 +364,15 @@ async def test_un_secondo_incidente_lo_stesso_giorno_ha_il_suo_slug(
     monkeypatch.setattr(job.verifiche_eventi_repo, "upsert", upsert)
     monkeypatch.setattr(job.anticipo_repo, "misura", misura)
     esiti: Counter[str] = Counter()
+    await job._registra(HazardType.LANDSLIDE, _evento(), [], esiti)
+    assert scritte == ["2026-10-28-frana-lacedonia-2"]
+
+    # Prenotato da un altro candidato ma non ancora scritto: occupato lo stesso.
+    async def nessuna(slug: str) -> bool:
+        return False
+
+    monkeypatch.setattr(job.verifiche_eventi_repo, "esiste", nessuna)
+    scritte.clear()
     await job._registra(HazardType.LANDSLIDE, _evento(), [], esiti)
     assert scritte == ["2026-10-28-frana-lacedonia-2"]
 
