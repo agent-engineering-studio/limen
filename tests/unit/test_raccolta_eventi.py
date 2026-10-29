@@ -374,3 +374,64 @@ def test_l_elenco_data_i_titoli_in_ora_italiana() -> None:
         "Frana a Lacedonia", "Ottopagine", "https://x/1", datetime(2026, 10, 27, 23, 30, tzinfo=UTC)
     )
     assert "2026-10-28" in elenco([t])
+
+
+async def test_se_l_estrazione_finisce_il_tetto_la_conferma_non_parte(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dataclasses import replace
+    from decimal import Decimal
+
+    from limen.agents.chat_agents.estrattore_eventi import Consumo
+    from limen.api.jobs import raccolta_eventi as job
+
+    titolo = Titolo(
+        "Frana a Lacedonia", "Ottopagine", "https://x/1", datetime(2026, 10, 28, tzinfo=UTC)
+    )
+    spesa = {"usd": Decimal("9")}
+    registrati: list[str] = []
+    richieste_di_conferma: list[int] = []
+
+    async def spesa_del_mese() -> Decimal:
+        return spesa["usd"]
+
+    async def registra(**kw: Any) -> Decimal:
+        registrati.append(kw["riferimento"])
+        spesa["usd"] += Decimal("2")
+        return Decimal("2")
+
+    async def titoli_per_pericolo(**kw: object) -> dict[HazardType, list[Titolo]]:
+        return {HazardType.LANDSLIDE: [titolo]}
+
+    async def estrai(self: Any, titoli: object) -> dict[HazardType, list[EventoEstratto]]:
+        self.consumi.append(Consumo("estrazione", 1000, 100))
+        return {HazardType.LANDSLIDE: [_evento()]}
+
+    async def conferma(self: Any, casi: list[object]) -> list[list[int]]:
+        richieste_di_conferma.append(len(casi))
+        return [[] for _ in casi]
+
+    async def cerca_conferme(*a: object) -> list[Titolo]:
+        return [replace(titolo, testata="Il Mattino", url="https://x/2")]
+
+    async def registra_evento(*a: object) -> None:
+        return None
+
+    impostazioni = cast(Any, Settings)(
+        _env_file=None,
+        llm=LLMSettings(models={"eventi": "claude-sonnet-5-5"}, anthropic_budget_mensile_usd=10),
+        anthropic_api_key="sk-prova",
+    )
+    monkeypatch.setattr(job.budget, "get_settings", lambda: impostazioni)
+    monkeypatch.setattr(job.budget, "spesa_del_mese", spesa_del_mese)
+    monkeypatch.setattr(job.budget, "registra", registra)
+    monkeypatch.setattr(job, "titoli_per_pericolo", titoli_per_pericolo)
+    monkeypatch.setattr(job, "cerca_conferme", cerca_conferme)
+    monkeypatch.setattr(job, "_registra", registra_evento)
+    monkeypatch.setattr(EstrattoreEventi, "estrai", estrai)
+    monkeypatch.setattr(EstrattoreEventi, "conferma", conferma)
+
+    await raccogli(impostazioni)
+    # L'estrazione è registrata prima di decidere, e la conferma parte vuota.
+    assert registrati == ["estrazione"]
+    assert richieste_di_conferma == [0]

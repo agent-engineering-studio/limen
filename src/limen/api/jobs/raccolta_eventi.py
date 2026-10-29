@@ -249,6 +249,22 @@ async def raccogli(settings: Settings) -> dict[str, Any]:
         api_key=chiave, model=modello, attesa_massima_s=llm.eventi_attesa_massima_minuti * 60
     )
     estratti = await estrattore.estrai(titoli)
+    registrati = 0
+
+    async def registra_consumi() -> None:
+        nonlocal registrati
+        for c in estrattore.consumi[registrati:]:
+            await budget.registra(
+                origine=JOB_RACCOLTA_EVENTI,
+                riferimento=c.batch_id,
+                modello=modello,
+                input_tokens=c.input_tokens,
+                output_tokens=c.output_tokens,
+                batch=True,
+            )
+        registrati = len(estrattore.consumi)
+
+    await registra_consumi()
 
     casi = [(h, e, [titoli[h][i] for i in e.titoli]) for h, ev in estratti.items() for e in ev]
     # Una testata sola: ricerca mirata per comune, e il modello dice quali dei
@@ -260,20 +276,18 @@ async def raccogli(settings: Settings) -> dict[str, Any]:
             trovati = await cerca_conferme(h, e, propri)
             if trovati:
                 da_confermare.append((k, trovati))
+    # L'estrazione può aver finito il tetto, o un altro job durante la sua
+    # attesa: allora i candidati restano a una testata, senza comprare conferme.
+    try:
+        await budget.verifica(modello)
+    except budget.BudgetSuperatoError:
+        da_confermare = []
     confermati = await estrattore.conferma(
         [(casi[k][0], casi[k][1], trovati) for k, trovati in da_confermare]
     )
+    await registra_consumi()
     for (k, trovati), scelti in zip(da_confermare, confermati, strict=True):
         casi[k][2].extend(trovati[j] for j in scelti)
-    for c in estrattore.consumi:
-        await budget.registra(
-            origine=JOB_RACCOLTA_EVENTI,
-            riferimento=c.batch_id,
-            modello=modello,
-            input_tokens=c.input_tokens,
-            output_tokens=c.output_tokens,
-            batch=True,
-        )
 
     esiti: Counter[str] = Counter()
     for h, e, propri in casi:
