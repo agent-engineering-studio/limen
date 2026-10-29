@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from limen.cli.dem_tiles import cartella_tile
 from limen.core.logging import get_logger
 from limen.data.db import acquire, lifespan_pool
 
@@ -104,6 +105,13 @@ async def run() -> int:
         gate = layer.gate or f"deriva da {layer.derived_from}"
         print(f"  {layer.label:34s} {n:>10,}  {_bar(pct)}  {gate}".replace(",", "."))
     print(f"\n  {'perimetri EFFIS (truth set incendio)':34s} {perimeters:>10,}".replace(",", "."))
+    # Le tile del rilievo non sono un fattore per cella: servono alla vista
+    # «Rilievo» della mappa, e mancano senza che lo score se ne accorga.
+    rilievo = sorted(p.name for p in cartella_tile().glob("rilievo-*.pmtiles"))
+    print(
+        f"  {'tile del rilievo (vista «Rilievo»)':34s} {len(rilievo):>10}  "
+        + (", ".join(rilievo) if rilievo else "nessuna   → limen dem-tiles")
+    )
 
     print("\nCosa manca a ciascun pericolo\n")
     for hazard, needed in HAZARD_NEEDS.items():
