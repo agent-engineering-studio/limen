@@ -42,6 +42,10 @@ def esito(misura: dict[str, Any]) -> tuple[str, str]:
         return "non_verificabile", "evento prima dello storico delle previsioni"
     if not misura.get("celle"):
         return "non_verificabile", "comune senza celle valutate"
+    # `is False`: una misura congelata prima che la query lo dicesse non ha la
+    # chiave, e non si declassa.
+    if misura.get("pericolo_valutato") is False:
+        return "non_verificabile", "il pericolo non è stato valutato nei giorni prima"
     # Un buco del dato meteo rende l'evento non verificabile solo se non c'è
     # nient'altro: né una corsa sopra soglia, né un'ora misurata dello sweep.
     if (

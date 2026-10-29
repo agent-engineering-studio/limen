@@ -120,6 +120,9 @@ def _misura(**kw: object) -> dict[str, object]:
 def test_esito_come_il_paragrafo_5_della_skill() -> None:
     assert esito(_misura(storico_dal="2026-10-12T00:00:00+00:00"))[0] == "non_verificabile"
     assert esito(_misura(celle=0))[0] == "non_verificabile"
+    # Job fermi nei giorni prima: non valutato, non mancato.
+    assert esito(_misura(pericolo_valutato=False))[0] == "non_verificabile"
+    assert esito(_misura(pericolo_valutato=True))[0] == "mancata"
 
     def corsa(ore_prima: int, classe: str) -> dict[str, str]:
         evento = datetime(2026, 10, 10, 10, tzinfo=UTC)

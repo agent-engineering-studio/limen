@@ -101,6 +101,14 @@ SELECT json_build_object(
         SELECT o.class FROM osservate o JOIN ordine r USING (class)
         WHERE o.computed_at <= (SELECT t FROM ev)
         ORDER BY r.rango DESC, o.score DESC LIMIT 1),
+    -- Il pericolo ha girato davvero nei giorni prima? Lo storico più vecchio
+    -- (`storico_dal`) non lo dice: un job fermo da tre giorni lascia l'evento
+    -- senza valutazione, e «non valutato» non è «mancato».
+    'pericolo_valutato', EXISTS (
+        SELECT 1 FROM risk_assessments ra, ev
+        WHERE ra.hazard_type = $2::hazard_type
+          AND ra.computed_at BETWEEN ev.t - interval '80 hours' AND ev.t
+    ),
     'adesso_misurato', (
         SELECT count(*) FROM osservate WHERE measured IS NOT FALSE),
     'adesso_non_misurato', (
