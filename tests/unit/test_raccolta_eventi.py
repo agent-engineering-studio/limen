@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
 from limen.agents.chat_agents.estrattore_eventi import EventoEstratto, _eventi
 from limen.api.jobs.raccolta_eventi import conferme, quando, raccogli, slug
-from limen.config.settings import Settings
+from limen.config.settings import LLMSettings, Settings
 from limen.core.models.hazard import HazardType
 from limen.core.verifiche.esito import esito
 from limen.data.repos.candidati_eventi_repo import aoi_della_regione, conta_testate
@@ -140,6 +141,12 @@ def test_un_titolo_inventato_non_e_una_fonte() -> None:
     assert _eventi(_risposta(raw, stop="max_tokens"), n_titoli=3) is None  # type: ignore[arg-type]
 
 
-async def test_senza_modello_dichiarato_la_raccolta_non_parte() -> None:
-    out = await raccogli(Settings())
-    assert out["status"] == "skipped"
+async def test_senza_modello_o_chiave_la_raccolta_non_parte() -> None:
+    # `_env_file=None`: il .env di una macchina con LLM__MODELS__EVENTI
+    # dichiarato farebbe partire una raccolta vera dal test.
+    def impostazioni(**llm: object) -> Settings:
+        return cast(Any, Settings)(_env_file=None, llm=LLMSettings(**llm), anthropic_api_key=None)
+
+    assert (await raccogli(impostazioni()))["status"] == "skipped"
+    senza_chiave = await raccogli(impostazioni(models={"eventi": "claude-sonnet-5-5"}))
+    assert senza_chiave["reason"] == "ANTHROPIC_API_KEY assente"
