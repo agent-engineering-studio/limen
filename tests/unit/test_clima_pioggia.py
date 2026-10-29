@@ -42,3 +42,40 @@ def test_ogni_cella_prende_il_nodo_piu_vicino() -> None:
     celle = [(StaticFactors(cell_id="a"), 16.01, 40.0), (StaticFactors(cell_id="b"), 16.09, 40.0)]
     out = con_riferimento(celle, [(16.0, 40.0, 30.0), (16.1, 40.0, None)])
     assert [sf.pioggia_riferimento_mm for sf, _, _ in out] == [30.0, None]
+
+
+def test_un_anno_non_scaricato_non_diventa_un_riferimento() -> None:
+    import asyncio
+    from datetime import timedelta
+
+    from limen.cli.clima_pioggia import clima_aoi
+    from limen.core.models.risk import RainfallSample
+
+    class _Client:
+        async def get_rainfall_grid(self, *, nodes, window_start, window_end, batch_size):  # type: ignore[no-untyped-def]
+            if window_start.year == 2001:
+                return [[] for _ in nodes]
+            return [
+                [
+                    RainfallSample(
+                        timestamp=window_start + timedelta(hours=h), precipitation_mm=1.0
+                    )
+                    for h in range(48)
+                ]
+                for _ in nodes
+            ]
+
+    def gira(anni: range):  # type: ignore[no-untyped-def]
+        return asyncio.run(
+            clima_aoi(
+                aoi_id="x",
+                bbox=(10.0, 44.0, 10.15, 44.1),
+                anni=anni,
+                ore=24,
+                quantile=0.999,
+                client=_Client(),  # type: ignore[arg-type]
+            )
+        )
+
+    assert gira(range(2000, 2001)) is not None
+    assert gira(range(2000, 2002)) is None

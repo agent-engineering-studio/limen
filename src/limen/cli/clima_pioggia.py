@@ -99,7 +99,13 @@ async def clima_aoi(
     ore: int,
     quantile: float,
     client: OpenMeteoHttpClient,
-) -> list[tuple[float, float, float | None]]:
+) -> list[tuple[float, float, float | None]] | None:
+    """I riferimenti dei nodi, o ``None`` se l'archivio non ha dato ogni anno.
+
+    Una serie vuota è una richiesta fallita (l'archivio ERA5 copre anche il
+    mare): accettarla calcolerebbe il quantile su meno anni, e l'AOI salvata
+    come fatta non verrebbe più riscaricata.
+    """
     nodes = build_rain_nodes(bbox, spacing=_PASSO_NODI)
     out: list[tuple[float, float, float | None]] = []
     # A gruppi di nodi, e i quantili di un gruppo prima del successivo: un
@@ -117,7 +123,11 @@ async def clima_aoi(
                 # richiesta la risposta supera le decine di MB.
                 batch_size=25,
             )
-            for i, serie in enumerate(grid[: len(gruppo)]):
+            serie_anno = grid[: len(gruppo)]
+            if len(serie_anno) < len(gruppo) or not all(serie_anno):
+                log.warning("clima_pioggia.incompleto", aoi_id=aoi_id, anno=anno, da_nodo=k)
+                return None
+            for i, serie in enumerate(serie_anno):
                 orarie[i].append(np.array([s.precipitation_mm for s in serie]))
         out.extend(
             (lon, lat, quantile_cumulata(o, ore=ore, quantile=quantile))
@@ -142,6 +152,7 @@ async def run() -> int:
         clima = {**parametri, "aoi": {}}
 
     client = OpenMeteoHttpClient()
+    esito = 0
     async with lifespan_pool():
         one = os.getenv("LIMEN_CLIMA_AOI")
         aoi_ids = [one] if one else await list_aoi_ids()
@@ -162,6 +173,9 @@ async def run() -> int:
                 quantile=quantile,
                 client=client,
             )
+            if nodi is None:
+                esito = 1
+                continue
             clima["aoi"][aoi_id] = [[lon, lat, mm] for lon, lat, mm in nodi]
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(clima), encoding="utf-8")
@@ -175,7 +189,7 @@ async def run() -> int:
                 file=str(path),
             )
     await SharedHttpClient.aclose()
-    return 0
+    return esito
 
 
 __all__ = ["CLIMA_DEFAULT", "CLIMA_ENV", "quantile_cumulata", "riferimenti_aoi", "run"]
