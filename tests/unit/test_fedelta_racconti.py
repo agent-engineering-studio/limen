@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -12,7 +13,12 @@ import pytest
 from pydantic import SecretStr
 
 from limen.agents.chat_agents.briefing_eval import allowed_numbers_from_text
-from limen.agents.chat_agents.fedelta import Giudizio, RevisoreFedelta, controllo_numeri
+from limen.agents.chat_agents.fedelta import (
+    Giudizio,
+    Revisione,
+    RevisoreFedelta,
+    controllo_numeri,
+)
 from limen.api.jobs import fedelta_racconti as fr
 from limen.config.settings import LLMSettings, Settings
 from limen.core.models.hazard import HazardType
@@ -113,7 +119,9 @@ async def test_il_revisore_legge_il_suo_json_nell_ordine_giusto() -> None:
         ],
         giri=2,
     )
-    g = await _revisore(batches).giudica([("t0", INGRESSO), ("t1", INGRESSO)])
+    r = await _revisore(batches).giudica([("t0", INGRESSO), ("t1", INGRESSO)])
+    g = r.giudizi
+    assert (r.batch_id, r.input_tokens, r.output_tokens) == ("b1", 3000, 600)
     assert g[0] is not None and g[0].fedele is False and g[0].problemi == ["la pioggia"]
     assert g[1] is not None and g[1].fedele is True
     params = batches.richieste[0]["params"]
@@ -146,7 +154,7 @@ async def test_il_revisore_dice_quanto_ha_consumato(capsys: Any) -> None:
     ],
 )
 async def test_un_revisore_che_non_risponde_non_assolve(risultato: Any) -> None:
-    assert await _revisore(_Batches([risultato])).giudica([("t", INGRESSO)]) == [None]
+    assert (await _revisore(_Batches([risultato])).giudica([("t", INGRESSO)])).giudizi == [None]
 
 
 async def test_un_batch_che_non_parte_non_assolve() -> None:
@@ -154,12 +162,14 @@ async def test_un_batch_che_non_parte_non_assolve() -> None:
 
     errore = anthropic.APIConnectionError(request=httpx.Request("POST", "https://x"))
     batches = _Batches([], errore=errore)
-    assert await _revisore(batches).giudica([("a", INGRESSO), ("b", INGRESSO)]) == [None, None]
+    r = await _revisore(batches).giudica([("a", INGRESSO), ("b", INGRESSO)])
+    assert r == Revisione([None, None])
 
 
 async def test_un_batch_che_non_finisce_si_annulla() -> None:
     batches = _Batches([_risposta("s0", '{"fedele": true, "problemi": []}')], giri=10**6)
-    assert await _revisore(batches, attesa_s=0.0).giudica([("t", INGRESSO)]) == [None]
+    r = await _revisore(batches, attesa_s=0.0).giudica([("t", INGRESSO)])
+    assert r == Revisione([None], "b1")
     assert batches.annullato
 
 
@@ -197,8 +207,9 @@ def _revisore_fisso(risposta: str) -> type:
         def __init__(self, **_kw: Any) -> None:
             pass
 
-        async def giudica(self, coppie: list[tuple[str, str]]) -> list[Giudizio | None]:
-            return [Giudizio.model_validate_json(risposta) for _ in coppie]
+        async def giudica(self, coppie: list[tuple[str, str]]) -> Revisione:
+            g = Giudizio.model_validate_json(risposta)
+            return Revisione([g for _ in coppie], "b1", 1_000_000, 100_000)
 
     return _Revisore
 
@@ -233,9 +244,16 @@ async def test_il_verdetto_va_accanto_alla_spiegazione(monkeypatch: pytest.Monke
     monkeypatch.setattr(fr.spiegazioni_repo, "scrivi_fedelta", _scrivi)
     monkeypatch.setattr(fr, "tracked", lambda *_a, **_k: _Tracked())
     monkeypatch.setattr(fr, "RevisoreFedelta", _revisore_fisso('{"fedele": true, "problemi": []}'))
+    _spesa(monkeypatch)
 
     out = await fr.controlla_fedelta(settings)
-    assert out == {"giudicate": 1, "fedeli": 0, "infedeli": 1, "senza_giudizio": 0}
+    assert out == {
+        "giudicate": 1,
+        "fedeli": 0,
+        "infedeli": 1,
+        "senza_giudizio": 0,
+        "spesa_mese_usd": 1.5,
+    }
     # Il revisore ha assolto, ma il 57 non c'è nei dati: vince il controllo dei numeri.
     assert scritti[0]["fedelta"]["fedele"] is False
     assert scritti[0]["fedelta"]["numeri_sconosciuti"] == ["57"]
@@ -274,7 +292,94 @@ async def test_un_giudizio_su_un_testo_riscritto_non_conta(
     monkeypatch.setattr(fr.spiegazioni_repo, "scrivi_fedelta", _scrivi)
     monkeypatch.setattr(fr, "tracked", lambda *_a, **_k: _Tracked())
     monkeypatch.setattr(fr, "RevisoreFedelta", _revisore_fisso('{"fedele": true, "problemi": []}'))
+    _spesa(monkeypatch)
 
     out = await fr.controlla_fedelta(settings)
-    assert out == {"giudicate": 0, "fedeli": 0, "infedeli": 0, "senza_giudizio": 0}
+    assert out == {
+        "giudicate": 0,
+        "fedeli": 0,
+        "infedeli": 0,
+        "senza_giudizio": 0,
+        "spesa_mese_usd": 1.5,
+    }
     assert "racconto.infedele" not in capsys.readouterr().out
+
+
+def _candidata() -> DaGiudicare:
+    return DaGiudicare(
+        aoi_id="it-basilicata",
+        hazard=HazardType.LANDSLIDE,
+        scritta=datetime(2026, 10, 11, 8, tzinfo=UTC),
+        modello="fast-cloud",
+        testo=f"Su 23.214 aree, 41 sono in classe alta. {_parole(160)}",
+        ingresso=INGRESSO,
+    )
+
+
+def _spesa(monkeypatch: pytest.MonkeyPatch, *, gia: str = "0") -> list[dict[str, Any]]:
+    registrate: list[dict[str, Any]] = []
+
+    async def _del_mese() -> Decimal:
+        return Decimal(gia)
+
+    async def _registra(**kw: Any) -> None:
+        registrate.append(kw)
+
+    monkeypatch.setattr(fr.spesa_llm_repo, "spesa_del_mese", _del_mese)
+    monkeypatch.setattr(fr.spesa_llm_repo, "registra", _registra)
+    return registrate
+
+
+async def test_oltre_il_budget_il_revisore_non_parte(monkeypatch: pytest.MonkeyPatch) -> None:
+    _spesa(monkeypatch, gia="10.01")
+    settings = _settings(models={"fedelta": "claude-sonnet-5-5"}, chiave="sk-test")
+    out = await fr.controlla_fedelta(settings)
+    assert out == {"status": "skipped", "reason": "budget mensile superato", "spesa_usd": 10.01}
+
+
+async def test_un_modello_senza_prezzo_non_parte(monkeypatch: pytest.MonkeyPatch) -> None:
+    _spesa(monkeypatch)
+    settings = _settings(models={"fedelta": "claude-ignoto"}, chiave="sk-test")
+    out = await fr.controlla_fedelta(settings)
+    assert out["reason"] == "prezzo del modello sconosciuto"
+
+
+async def test_la_spesa_del_batch_si_registra(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _da_giudicare(**_kw: Any) -> list[DaGiudicare]:
+        return [_candidata()]
+
+    async def _scrivi(**_kw: Any) -> bool:
+        return True
+
+    class _Tracked:
+        async def __aenter__(self) -> dict[str, Any]:
+            return {}
+
+        async def __aexit__(self, *_a: Any) -> None:
+            return None
+
+    monkeypatch.setattr(fr.spiegazioni_repo, "da_giudicare", _da_giudicare)
+    monkeypatch.setattr(fr.spiegazioni_repo, "scrivi_fedelta", _scrivi)
+    monkeypatch.setattr(fr, "tracked", lambda *_a, **_k: _Tracked())
+    monkeypatch.setattr(fr, "RevisoreFedelta", _revisore_fisso('{"fedele": true, "problemi": []}'))
+    registrate = _spesa(monkeypatch, gia="1.5")
+
+    settings = _settings(models={"fedelta": "claude-sonnet-5-5"}, chiave="sk-test")
+    out = await fr.controlla_fedelta(settings)
+    # 1M token d'ingresso a 2 $ e 100k d'uscita a 10 $, metà prezzo in batch.
+    assert registrate == [
+        {
+            "origine": "limen-fedelta-racconti",
+            "riferimento": "b1",
+            "modello": "claude-sonnet-5-5",
+            "input_tokens": 1_000_000,
+            "output_tokens": 100_000,
+            "costo_usd": Decimal("1.5"),
+        }
+    ]
+    assert out["spesa_mese_usd"] == 3.0
+
+
+def test_il_costo_del_batch_e_a_meta_listino() -> None:
+    llm = LLMSettings()
+    assert llm.costo_batch_usd("claude-sonnet-5-5", 2_000_000, 0) == Decimal("2")
