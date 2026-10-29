@@ -10,6 +10,8 @@ Usage:
     limen ingest-events      Dated event catalogue: --hazard landslide|flood.
     limen registra-verifica  Fact check: un evento verificato entra nel registro (074).
     limen verifiche-report   Eventi verificati contro le previsioni, col tasso di base.
+    limen raccolta-eventi    Gli eventi della stampa, dai titoli al registro (#347).
+    limen anticipo           Quanto prima Limen ha visto un evento, in JSON.
     limen sensore            Registro dei sensori dei cittadini: approva, revoca (#253).
     limen backup             Backup dello stato fuori dal server; `elenco` li elenca (#304).
     limen restore            Ripristina un backup (`--conferma`: sovrascrive il database).
@@ -44,6 +46,7 @@ from collections.abc import Callable, Coroutine
 from typing import Any
 
 from limen import __version__
+from limen.cli.anticipo import run as _run_anticipo
 from limen.cli.backtest import run as _run_backtest
 from limen.cli.backtest_flood import run as _run_backtest_flood
 from limen.cli.backtest_wildfire import run as _run_backtest_wildfire
@@ -81,6 +84,7 @@ from limen.cli.mcp_serve import run as _run_mcp_serve
 from limen.cli.migrate import run as _run_migrate
 from limen.cli.monitor_once import run as _run_monitor_once
 from limen.cli.partitions import run as _run_partitions
+from limen.cli.raccolta_eventi import run as _run_raccolta_eventi
 from limen.cli.radar_archivio import run as _run_radar_archivio
 from limen.cli.rain_climatology import run as _run_rain_climatology
 from limen.cli.rain_ensemble import run_fetch as _run_rain_ens_fetch
@@ -102,6 +106,7 @@ from limen.cli.verifiche_report import run as _run_verifiche_report
 from limen.cli.worker import run as _run_worker
 from limen.config.settings import get_settings
 from limen.core.logging import configure_logging
+from limen.core.models.hazard import HazardType
 from limen.report.verify import run as _run_verify
 
 Runner = Callable[[], Coroutine[Any, Any, int]]
@@ -322,6 +327,17 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     registra.add_argument("files", nargs="+", help="file JSON scritti dalla skill limen-fact-check")
     sub.add_parser(
+        "raccolta-eventi",
+        help="gli eventi della stampa: Google News, estrattore Claude, due testate (#347)",
+    )
+    anticipo = sub.add_parser(
+        "anticipo", help="quanto prima Limen ha visto un evento (JSON su stdout, sola lettura)"
+    )
+    anticipo.add_argument("istat", help="codici ISTAT dei comuni, separati da virgola")
+    anticipo.add_argument("pericolo", choices=[h.value for h in HazardType])
+    anticipo.add_argument("quando", help="ora dell'evento con il fuso, 2026-10-10T15:00+02:00")
+    anticipo.add_argument("--tolleranza", type=int, default=12, help="ore attorno all'evento")
+    sub.add_parser(
         "ingest-fire-history",
         help=(
             "load the FIRMS country archive (MODIS 2000+, VIIRS 2012+) — no credentials "
@@ -400,6 +416,7 @@ def main(argv: list[str] | None = None) -> int:
         "glofas-riferimenti": _run_glofas_riferimenti,
         "glofas-ewds": _run_glofas_ewds,
         "fedelta-racconti": _run_fedelta_racconti,
+        "raccolta-eventi": _run_raccolta_eventi,
         "partitions": _run_partitions,
         "seed": _run_seed,
         "seed-comuni": _run_seed_comuni,
@@ -474,6 +491,8 @@ def main(argv: list[str] | None = None) -> int:
             return asyncio.run(_run_ingest_events(args.hazard))
         except KeyboardInterrupt:  # pragma: no cover
             return 130
+    if args.command == "anticipo":
+        return asyncio.run(_run_anticipo(args.istat, args.pericolo, args.quando, args.tolleranza))
     if args.command == "registra-verifica":
         try:
             return asyncio.run(_run_registra_verifica(args.files))

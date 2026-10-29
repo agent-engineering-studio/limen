@@ -1,25 +1,21 @@
--- Quanto prima Limen ha visto un evento: una riga JSON.
+-- Quanto prima Limen ha visto un evento: un oggetto JSON (`anticipo_repo.misura`,
+-- `limen anticipo`).
 --
---   docker exec -i limen-postgres psql -U limen -d limen -At \
---     -v istat=077014 -v hazard=wildfire -v event_at='2026-10-08 15:00+02' -v tol=12 \
---     < .claude/skills/limen-fact-check/scripts/anticipo.sql
---
--- istat:    uno o più codici ISTAT separati da virgola (i comuni dell'evento)
--- hazard:   landslide | flood | wildfire
--- event_at: quando è successo, con il fuso (la notizia dice l'ora locale)
--- tol:      ore di tolleranza attorno all'evento per dire «la previsione
---           puntava lì» (12 = la stessa mezza giornata)
+-- $1 istat:    i codici ISTAT dei comuni dell'evento
+-- $2 hazard:   landslide | flood | wildfire
+-- $3 event_at: quando è successo
+-- $4 tol:      ore di tolleranza attorno all'evento per dire «la previsione
+--              puntava lì» (12 = la stessa mezza giornata)
 --
 -- Ogni filtro su risk_assessments porta computed_at: è partizionata per
 -- giorno, e senza la finestra la query attraversa tutte le partizioni (su
 -- questo disco: minuti invece di secondi).
-\set ON_ERROR_STOP on
 WITH ev AS (
-    SELECT :'event_at'::timestamptz AS t, make_interval(hours => :tol) AS tol
+    SELECT $3::timestamptz AS t, make_interval(hours => $4::int) AS tol
 ),
 celle AS (
     SELECT DISTINCT cell_id FROM cell_comune_tutte
-    WHERE istat_code = ANY (string_to_array(:'istat', ','))
+    WHERE istat_code = ANY ($1::text[])
 ),
 -- Le corse previsionali (+24/+48/+72 h) il cui momento-obiettivo cade
 -- nell'intorno dell'evento. Lo storico tiene solo le celle ≥ Moderato:
@@ -29,7 +25,7 @@ previste AS (
            ltrim(rtrim(ra.horizon, 'h'), '+')::int AS horizon_h,
            ra.cell_id, ra.score, ra.class, ra.factors
     FROM risk_assessments ra, ev
-    WHERE ra.hazard_type = :'hazard'
+    WHERE ra.hazard_type = $2::hazard_type
       AND ra.horizon LIKE '+%'
       AND ra.computed_at BETWEEN ev.t - interval '80 hours' - ev.tol AND ev.t
       AND ra.cell_id IN (SELECT cell_id FROM celle)
@@ -48,7 +44,7 @@ corse AS (
 osservate AS (
     SELECT ra.computed_at, ra.cell_id, ra.score, ra.class, ra.measured, ra.factors
     FROM risk_assessments ra, ev
-    WHERE ra.hazard_type = :'hazard'
+    WHERE ra.hazard_type = $2::hazard_type
       AND ra.horizon = '24h'
       AND ra.computed_at BETWEEN ev.t - interval '72 hours' AND ev.t + interval '6 hours'
       AND ra.cell_id IN (SELECT cell_id FROM celle)
@@ -59,7 +55,7 @@ osservate AS (
 fondo AS (
     SELECT ra.computed_at, ra.class, ra.score
     FROM risk_assessments ra, ev
-    WHERE ra.hazard_type = :'hazard'
+    WHERE ra.hazard_type = $2::hazard_type
       AND ra.horizon = '24h'
       AND ra.computed_at BETWEEN ev.t - interval '10 days' AND ev.t - interval '4 days'
       AND ra.cell_id IN (SELECT cell_id FROM celle)
@@ -73,7 +69,7 @@ SELECT json_build_object(
     -- Oltre la retention (ASSESSMENTS_RETENTION_DAYS, 14 giorni) lo storico
     -- non c'è più: «nessuna riga» lì vuol dire «non verificabile».
     'storico_dal', (SELECT min(computed_at) FROM risk_assessments
-                    WHERE hazard_type = :'hazard' AND horizon = '+24h'),
+                    WHERE hazard_type = $2::hazard_type AND horizon = '+24h'),
     'anticipo_ore_moderato', (
         SELECT round(extract(epoch FROM (SELECT t FROM ev) - min(run_at)) / 3600)
         FROM corse),
@@ -118,8 +114,8 @@ SELECT json_build_object(
         SELECT json_build_object('prima', min(dispatched_at), 'celle', count(DISTINCT cell_id),
                                  'livelli', array_agg(DISTINCT level))
         FROM alert_dispatches ad, ev
-        WHERE ad.hazard_type = :'hazard'
+        WHERE ad.hazard_type = $2::hazard_type
           AND ad.cell_id IN (SELECT cell_id FROM celle)
           AND ad.dispatched_at BETWEEN ev.t - interval '72 hours' AND ev.t + interval '6 hours'
         HAVING count(*) > 0)
-);
+)

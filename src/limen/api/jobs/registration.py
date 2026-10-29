@@ -32,6 +32,7 @@ from limen.api.jobs.iot_rollup import run_iot_rollup_job
 from limen.api.jobs.nightly import run_nightly_pipeline
 from limen.api.jobs.nowcast_monitoring import run_nowcast_monitoring
 from limen.api.jobs.partitions import run_partitions_job
+from limen.api.jobs.raccolta_eventi import run_raccolta_eventi
 from limen.api.jobs.weekly_idrogeo_sync import run_weekly_idrogeo_sync
 from limen.core.logging import get_logger
 
@@ -57,6 +58,7 @@ from limen.api.jobs.ids import (  # noqa: E402
     JOB_NIGHTLY,
     JOB_NOWCAST_MONITORING,
     JOB_PARTITIONS,
+    JOB_RACCOLTA_EVENTI,
     JOB_WEEKLY_IDROGEO,
 )
 
@@ -340,6 +342,19 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
     )
     registered.append(JOB_FEDELTA_RACCONTI)
     log.info("scheduler.registered", job=JOB_FEDELTA_RACCONTI, hour_utc=ora_revisore)
+
+    # La raccolta degli eventi dalla stampa (#347), una volta al giorno.
+    # Registrata sempre: senza LLM__MODELS__EVENTI il job lo dice e finisce.
+    ora_raccolta = deps.settings.llm.eventi_ora_utc
+    await scheduler.add_schedule(
+        track_job(JOB_RACCOLTA_EVENTI)(run_raccolta_eventi),
+        args=(deps,),
+        trigger=CronTrigger(hour=ora_raccolta, minute=10),
+        id=JOB_RACCOLTA_EVENTI,
+        conflict_policy=ConflictPolicy.replace,
+    )
+    registered.append(JOB_RACCOLTA_EVENTI)
+    log.info("scheduler.registered", job=JOB_RACCOLTA_EVENTI, hour_utc=ora_raccolta)
 
     # La notte in un job solo: shadow, drift, retrain, forecast history,
     # partizioni, retention. Gli schedule autonomi dei primi quattro non

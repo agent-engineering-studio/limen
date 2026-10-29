@@ -225,6 +225,8 @@ uv run --group copernicus limen fwi-confronto  # our FWI chain vs the official C
 uv run limen data-status        # which per-cell static layers are loaded, and what gates the rest
 uv run limen registra-verifica F # fact-check event → verifiche_eventi (+ landslide_events if a landslide)
 uv run limen verifiche-report   # verified events vs forecasts per hazard, with the base rate
+uv run limen raccolta-eventi    # news → Claude extractor → two outlets → verifiche_eventi (#347; daily job too)
+uv run limen anticipo 077014 wildfire 2026-10-10T15:00+02:00   # how early Limen saw an event (JSON)
 
 make data-status            # the same report
 make static-data            # load every configured layer, then report

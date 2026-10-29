@@ -28,6 +28,7 @@ JOB_NIGHTLY = "limen-nightly"
 JOB_DPC_BOLLETTINI = "limen-dpc-bollettini"
 JOB_INGV_SYNC = "limen-ingv-sync"
 JOB_FEDELTA_RACCONTI = "limen-fedelta-racconti"
+JOB_RACCOLTA_EVENTI = "limen-raccolta-eventi"
 
 
 __all__ = [
@@ -50,5 +51,6 @@ __all__ = [
     "JOB_NIGHTLY",
     "JOB_NOWCAST_MONITORING",
     "JOB_PARTITIONS",
+    "JOB_RACCOLTA_EVENTI",
     "JOB_WEEKLY_IDROGEO",
 ]

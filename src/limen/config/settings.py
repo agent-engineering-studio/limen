@@ -136,6 +136,9 @@ class LLMModels(BaseSettings):
     # è dichiarato. Va sempre all'API di Claude in batch, mai al gateway: è un
     # id Claude, e non lo stesso modello che scrive le spiegazioni (Haiku).
     fedelta: str = "claude-sonnet-5-5"
+    # L'estrattore degli eventi dalla stampa (#347). Opt-in come il revisore:
+    # il job gira solo se LLM__MODELS__EVENTI è dichiarato, in batch all'API.
+    eventi: str = "claude-sonnet-5-5"
 
 
 class LLMSettings(BaseSettings):
@@ -253,6 +256,15 @@ class LLMSettings(BaseSettings):
     # minuti, ma l'API si riserva fino a 24 ore: oltre questo tetto i verdetti
     # restano a null, come per un revisore che non risponde.
     fedelta_attesa_massima_minuti: int = Field(default=120, ge=1)
+
+    # La raccolta degli eventi dalla stampa (#347): a che ora (UTC), quanti
+    # giorni all'indietro — meno dei 14 di retention di risk_assessments, o la
+    # misura dell'anticipo non c'è più — e quanti titoli al massimo per
+    # pericolo, i più recenti.
+    eventi_ora_utc: int = Field(default=6, ge=0, le=23)
+    eventi_giorni: int = Field(default=3, ge=1, le=7)
+    eventi_titoli_massimi: int = Field(default=150, ge=1)
+    eventi_attesa_massima_minuti: int = Field(default=120, ge=1)
 
     @field_validator("llamacpp_role_timeout_seconds")
     @classmethod
