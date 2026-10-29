@@ -463,3 +463,16 @@ async def test_un_batch_scaduto_e_annullato_conta_i_token_delle_richieste_riusci
     assert batches.annullato
     assert testi == {"c0": '{"titoli": [1]}'}
     assert [(c.batch_id, c.input_tokens) for c in e.consumi] == [("b1", 1500)]
+
+
+def test_le_regioni_ammesse_sono_le_aoi_regionali() -> None:
+    import json
+    from importlib import resources
+
+    from limen.agents.chat_agents.estrattore_eventi import REGIONI
+
+    seme = json.loads(
+        resources.files("limen.data.seed").joinpath("italy_regions_aoi.geojson").read_text()
+    )
+    aoi = {f["properties"]["id"] for f in seme["features"]}
+    assert {aoi_della_regione(r) for r in REGIONI} == aoi

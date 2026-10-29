@@ -58,7 +58,9 @@ async def risolvi_comuni(nomi: tuple[str, ...], regione: str | None) -> list[str
 
     Gli omonimi esistono (Castro, Peglio, Samone): con più comuni dello
     stesso nome vince quello della regione dell'evento, e senza regione il
-    nome resta irrisolto. Meglio un candidato in sospeso che una verità nel
+    nome resta irrisolto. Con la regione, anche un nome unico deve starci: un
+    deploy con poche regioni può avere solo il Castro lombardo, e un evento
+    pugliese non è suo. Meglio un candidato in sospeso che una verità nel
     comune sbagliato.
     """
     aoi = aoi_della_regione(regione)
@@ -68,7 +70,11 @@ async def risolvi_comuni(nomi: tuple[str, ...], regione: str | None) -> list[str
             righe = await conn.fetch(
                 "SELECT istat_code, aoi_id FROM comuni WHERE lower(name) = lower($1)", nome.strip()
             )
-            scelti = [r["istat_code"] for r in righe if len(righe) == 1 or r["aoi_id"] == aoi]
+            scelti = [
+                r["istat_code"]
+                for r in righe
+                if (r["aoi_id"] == aoi if aoi is not None else len(righe) == 1)
+            ]
             if len(scelti) != 1:
                 return []
             codici.append(scelti[0])

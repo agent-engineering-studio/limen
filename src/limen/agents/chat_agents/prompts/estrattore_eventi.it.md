@@ -23,7 +23,7 @@ Per ogni evento:
 - `parte`: `mattina`, `pomeriggio`, `sera`, `notte` se un titolo lo dice, altrimenti `ignota`;
 - `luogo`: la località come la scrivono i titoli («SS106 a Melito di Porto Salvo»);
 - `comuni`: i nomi dei comuni italiani coinvolti, come nell'elenco ufficiale dei comuni (il comune, non la frazione: «San Lorenzo», non «San Lorenzo Marina»); se il titolo nomina solo una frazione e sai con certezza di quale comune è, usa il comune, altrimenti lascia fuori l'evento;
-- `regione`: la regione italiana del comune;
+- `regione`: la regione italiana del comune, con uno dei nomi dell'elenco ammesso;
 - `titoli`: i numeri dei titoli che raccontano l'evento.
 
 Non inventare: se un titolo non permette di dire in quale comune è successo, l'evento non va elencato. Un elenco vuoto è una risposta corretta.

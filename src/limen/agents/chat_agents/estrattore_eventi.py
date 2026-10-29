@@ -220,6 +220,29 @@ class EstrattoreEventi:
         }
 
 
+REGIONI = (
+    "Abruzzo",
+    "Basilicata",
+    "Calabria",
+    "Campania",
+    "Emilia-Romagna",
+    "Friuli Venezia Giulia",
+    "Lazio",
+    "Liguria",
+    "Lombardia",
+    "Marche",
+    "Molise",
+    "Piemonte",
+    "Puglia",
+    "Sardegna",
+    "Sicilia",
+    "Toscana",
+    "Trentino-Alto Adige",
+    "Umbria",
+    "Valle d'Aosta",
+    "Veneto",
+)
+
 _SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -235,7 +258,9 @@ _SCHEMA: dict[str, Any] = {
                     },
                     "luogo": {"type": "string"},
                     "comuni": {"type": "array", "items": {"type": "string"}},
-                    "regione": {"type": "string"},
+                    # I nomi delle AOI regionali: `risolvi_comuni` ci trova
+                    # l'omonimo giusto, e «Alto Adige» non troverebbe niente.
+                    "regione": {"type": "string", "enum": list(REGIONI)},
                     "titoli": {"type": "array", "items": {"type": "integer"}},
                 },
                 "required": ["giorno", "parte", "luogo", "comuni", "regione", "titoli"],

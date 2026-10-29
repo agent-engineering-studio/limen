@@ -84,3 +84,8 @@ async def test_gli_omonimi_si_sciolgono_con_la_regione(reset_db: None, pg_pool: 
     assert await risolvi_comuni(("Castro",), "Puglia") == ["075001"]
     assert await risolvi_comuni(("castro",), None) == []
     assert await risolvi_comuni(("Castro", "Nessuno"), "Puglia") == []
+    # Il solo Castro in archivio è lombardo: un evento pugliese resta irrisolto.
+    async with acquire() as conn:
+        await conn.execute("DELETE FROM comuni WHERE istat_code = '075001'")
+    assert await risolvi_comuni(("Castro",), "Puglia") == []
+    assert await risolvi_comuni(("Castro",), None) == ["016001"]
