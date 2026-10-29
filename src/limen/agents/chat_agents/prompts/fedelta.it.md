@@ -13,7 +13,7 @@ Un problema di fedeltà è una frase del testo che:
 4. presenta come certo un evento futuro («ci sarà una frana», «il fiume esonderà»): i dati sono una stima di pericolo, non una previsione di eventi;
 5. dice che il pericolo sta salendo o scendendo quando i dati non contengono un confronto nel tempo.
 
-Non sono problemi: le frasi generali su come funziona il pericolo («il terreno saturo cede più facilmente»), il rimando alla Protezione Civile, le parafrasi corrette dei numeri, gli arrotondamenti ragionevoli.
+Non sono problemi: le frasi generali su come funziona il pericolo («il terreno saturo cede più facilmente»), le frasi su come lavora Limen stesso («la valutazione si aggiorna ogni ora»), il rimando alla Protezione Civile, le parafrasi corrette dei numeri, gli arrotondamenti ragionevoli.
 
 Rispondi **solo** con un oggetto JSON, senza testo prima o dopo:
 
