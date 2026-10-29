@@ -24,6 +24,7 @@ import type {
   HazardType,
   HazardsResponse,
   JobStatusResponse,
+  LlmStatusResponse,
   HealthResponse,
   LatestAssessmentResponse,
   ProvenienzaResponse,
@@ -320,6 +321,10 @@ export class ApiClient {
 
   getJobStatus(signal?: AbortSignal): Promise<JobStatusResponse> {
     return this.request<JobStatusResponse>("/api/status/jobs", {}, signal);
+  }
+
+  getLlmStatus(signal?: AbortSignal): Promise<LlmStatusResponse> {
+    return this.request<LlmStatusResponse>("/api/status/llm", {}, signal);
   }
 
   getTopComuni(

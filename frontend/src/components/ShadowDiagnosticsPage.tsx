@@ -12,6 +12,7 @@ import { RISK_CLASSES, useEtichetteRischio } from "../lib/risk-colors";
 import { defaultApiClient } from "../lib/api-client";
 import { testi, useLocale, useTesti } from "../lib/i18n";
 import type { ReliabilityResponse, ShadowSummaryResponse } from "../types";
+import ConsumiAi from "./ConsumiAi";
 import { ChapterFooter, CourseHeader } from "./Course";
 import DivergenceMap from "./DivergenceMap";
 import ReliabilityChart from "./ReliabilityChart";
@@ -392,6 +393,8 @@ export default function ShadowDiagnosticsPage(): JSX.Element {
         </ul>
 
         <LiveDiagnostics />
+
+        <ConsumiAi />
 
         <ChapterFooter current={3} />
       </article>

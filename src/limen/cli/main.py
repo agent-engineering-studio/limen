@@ -28,6 +28,7 @@ Usage:
     limen serve              Start the FastAPI HTTP server (uvicorn on :8080).
     limen worker             Batch process: scheduler + IoT, no HTTP.
     limen llm-check          Probe the inference engine: model + latency per agent role.
+    limen llm-spesa          Token e spesa su Claude del mese, contro il tetto mensile.
     limen train              Extract training samples and train the V2 ML model (MLflow).
     limen shadow-report      Champion vs ML-challenger comparison over the shadow window.
     limen report build       Generate the static HTML risk report once (idempotent).
@@ -77,6 +78,7 @@ from limen.cli.ingest_kb import run as _run_ingest_kb
 from limen.cli.ingv_sync import run as _run_ingv_sync
 from limen.cli.jobs import run as _run_jobs
 from limen.cli.llm_check import run as _run_llm_check
+from limen.cli.llm_spesa import run as _run_llm_spesa
 from limen.cli.mcp_serve import run as _run_mcp_serve
 from limen.cli.migrate import run as _run_migrate
 from limen.cli.monitor_once import run as _run_monitor_once
@@ -265,6 +267,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="probe the inference engine per agent role (model, timeout, latency)",
     )
     sub.add_parser(
+        "llm-spesa",
+        help="token e spesa su Claude del mese in corso, contro LLM__ANTHROPIC_BUDGET_MENSILE_USD",
+    )
+    sub.add_parser(
         "train",
         help="extract training samples and train the V2 ML model (LightGBM + MLflow)",
     )
@@ -422,6 +428,7 @@ def main(argv: list[str] | None = None) -> int:
         "forecast": _run_forecast,
         "serve": _run_server,
         "llm-check": _run_llm_check,
+        "llm-spesa": _run_llm_spesa,
         "train": _run_train,
         "shadow-report": _run_shadow_report,
         "verifiche-report": _run_verifiche_report,

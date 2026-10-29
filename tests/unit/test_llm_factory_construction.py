@@ -40,6 +40,22 @@ ROLE_MODELS = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _budget_aperto(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Questi test guardano la costruzione e la forma delle chiamate, non il
+    tetto di spesa: quello ha i suoi test in `test_llm_budget.py`."""
+    from limen.agents.llm_factory import budget
+
+    async def _verifica(_modello: str) -> None:
+        return None
+
+    async def _registra(**_kw: Any) -> int:
+        return 0
+
+    monkeypatch.setattr(budget, "verifica", _verifica)
+    monkeypatch.setattr(budget, "registra", _registra)
+
+
 def test_anthropic_factory_create_returns_client() -> None:
     factory = AnthropicFactory(api_key=SecretStr("ak-test"), role_models=ROLE_MODELS)
     client = factory.create("RiskAnalyst")
@@ -217,7 +233,10 @@ async def test_anthropic_clients_never_send_temperature(client: Any) -> None:
 
     async def _create(**kwargs: Any) -> SimpleNamespace:
         sent.update(kwargs)
-        return SimpleNamespace(content=[SimpleNamespace(text="ok")])
+        return SimpleNamespace(
+            content=[SimpleNamespace(text="ok")],
+            usage=SimpleNamespace(input_tokens=1, output_tokens=1),
+        )
 
     client._client = SimpleNamespace(messages=SimpleNamespace(create=_create))
     reply = await client.chat(

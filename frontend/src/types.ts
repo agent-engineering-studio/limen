@@ -520,6 +520,27 @@ export interface JobStatusResponse {
   per_aoi: JobRunStatus[];
 }
 
+/** Token e richieste di un giorno (`YYYY-MM-DD`) o di un modello. */
+export interface ConsumoLlm {
+  chiave: string;
+  richieste: number;
+  input_tokens: number;
+  output_tokens: number;
+}
+
+/** `GET /api/status/llm`: i token del mese, e se il tetto di spesa ha messo
+ *  in pausa l'AI. Nessun importo: la spesa non è pubblica. */
+export interface LlmStatusResponse {
+  mese: string;
+  in_pausa: boolean;
+  ripresa: string | null;
+  richieste: number;
+  input_tokens: number;
+  output_tokens: number;
+  per_giorno: ConsumoLlm[];
+  per_modello: ConsumoLlm[];
+}
+
 /** `GET /api/cell/{id}/rain-outlook` (#159): `outlook` nullo se la fonte
  *  meteo non risponde — «non lo so», non «niente pioggia». */
 export interface CellRainOutlookResponse {

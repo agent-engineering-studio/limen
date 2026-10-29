@@ -18,6 +18,7 @@ import type {
   ComuneRisk,
   RiskLevel,
 } from "./types";
+import AvvisoAi from "./components/AvvisoAi";
 import FreshnessBadge from "./components/FreshnessBadge";
 import HomePage from "./components/HomePage";
 import FontiPage from "./components/FontiPage";
@@ -593,6 +594,7 @@ export function App(): JSX.Element {
           onInvio={cercaEVai}
         />
         <FreshnessBadge />
+        <AvvisoAi />
         <SelettoreLingua />
       </header>
 
