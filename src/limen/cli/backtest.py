@@ -52,6 +52,10 @@ Configuration knobs (env vars, kept off the dispatcher for parity with
   ``seismic.pga_min_g``: lo stesso conto del job ``limen-ingv-sync``, senza
   scrivere niente. ``LIMEN_BACKTEST_SHAKEMAP_CACHE`` è una cartella dove
   tenere le griglie già scaricate, per rigiocare la finestra con e senza E.
+* ``LIMEN_BACKTEST_CLIMA``       — il file di ``limen clima-pioggia``. Con un
+  blocco ``cumulata`` in ``landslide.yaml`` dà a ogni cella il riferimento del
+  suo nodo, e l'innesco diventa la cumulata relativa (#243). Senza il file, o
+  senza l'AOI nel file, le celle restano su Caine.
 """
 
 from __future__ import annotations
@@ -64,6 +68,8 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from limen.cli.clima_pioggia import leggi as leggi_clima
+from limen.cli.clima_pioggia import riferimenti_aoi
 from limen.config.percorsi import radice_dati
 from limen.core.logging import get_logger
 from limen.core.models.risk import (
@@ -216,6 +222,24 @@ async def _fetch_static_factors(aoi_id: str) -> list[tuple[StaticFactors, float,
 # ---------------------------------------------------------------------------
 # Bundle assembly + metrics
 # ---------------------------------------------------------------------------
+def con_riferimento(
+    cells: list[tuple[StaticFactors, float, float]],
+    riferimenti: list[tuple[float, float, float | None]],
+) -> list[tuple[StaticFactors, float, float]]:
+    """Ogni cella con il riferimento di pioggia del nodo più vicino."""
+    nodi = [(lon, lat) for lon, lat, _ in riferimenti]
+    return [
+        (
+            sf.model_copy(
+                update={"pioggia_riferimento_mm": riferimenti[nearest_node(lon, lat, nodi)][2]}
+            ),
+            lon,
+            lat,
+        )
+        for sf, lon, lat in cells
+    ]
+
+
 def _level_at_least(level: RiskLevel, threshold: RiskLevel) -> bool:
     return _ALERT_LEVELS_ORDERED.index(level) >= _ALERT_LEVELS_ORDERED.index(threshold)
 
@@ -318,6 +342,35 @@ def _match_truth(
     return hits, misses, leads
 
 
+def colte_a_carico(
+    punteggi_max: list[float],
+    punteggi_verita: dict[str, list[tuple[datetime, float]]],
+    truth: dict[str, datetime],
+    *,
+    carico: float,
+    lead_max_hours: float,
+) -> tuple[float, float, int]:
+    """Soglia, carico effettivo e frane colte con ``carico`` delle celle in allerta.
+
+    Il gate a parità di carico (#243): due varianti si confrontano sulle frane
+    che colgono accendendo la stessa quota di celle, scelta sul punteggio
+    massimo di ogni cella nella finestra. Contare le colte alla soglia di
+    classe premia la variante che accende di più: sulle dodici finestre della
+    #122 la saturazione 1,5 raddoppiava le colte e quadruplicava il carico.
+    A pari merito il carico effettivo può superare quello chiesto; le celle
+    con punteggio zero non si accendono mai.
+    """
+    ordinati = sorted(punteggi_max, reverse=True)
+    k = max(1, round(carico * len(ordinati)))
+    soglia = ordinati[k - 1] if ordinati else 0.0
+    if soglia <= 0.0:
+        soglia = min((x for x in ordinati if x > 0.0), default=math.inf)
+    effettivo = sum(x >= soglia for x in ordinati) / len(ordinati) if ordinati else 0.0
+    sopra = {c: [t for t, x in serie if x >= soglia] for c, serie in punteggi_verita.items()}
+    hits, _, _ = _match_truth(sopra, truth, lead_max_hours=lead_max_hours)
+    return soglia, effettivo, hits
+
+
 def _evaluate(
     *,
     aoi_id: str,
@@ -347,6 +400,8 @@ def _evaluate(
     # serve sapere se la cella era in allerta **nelle ore prima dell'evento**,
     # non se lo era stata una volta a inizio finestra.
     alert_times: dict[str, list[datetime]] = {cell_id: [] for cell_id in truth}
+    punteggi_verita: dict[str, list[tuple[datetime, float]]] = {cell_id: [] for cell_id in truth}
+    punteggi_max = [0.0] * len(cells)
     alerted_cells: set[str] = set()
     alerts_total = 0
     for t in hours:
@@ -375,6 +430,9 @@ def _evaluate(
                 ),
             )
             scored = engine.score(bundle)
+            punteggi_max[i] = max(punteggi_max[i], scored.score)
+            if sf.cell_id in punteggi_verita:
+                punteggi_verita[sf.cell_id].append((t, scored.score))
             if _level_at_least(scored.level, alert_level):
                 alerts_total += 1
                 alerted_cells.add(sf.cell_id)
@@ -387,6 +445,18 @@ def _evaluate(
     hit_rate = hits / len(truth) if truth else 0.0
     far = false_alarms / (hits + false_alarms) if (hits + false_alarms) else 0.0
     mean_lead = sum(leads) / len(leads) if leads else 0.0
+    gate = thresholds.calibration.backtest
+    a_carico = (
+        colte_a_carico(
+            punteggi_max,
+            punteggi_verita,
+            truth,
+            carico=gate.carico_riferimento,
+            lead_max_hours=lead_max_hours,
+        )
+        if gate.carico_riferimento is not None
+        else None
+    )
 
     report = _write_report(
         aoi_id=aoi_id,
@@ -401,12 +471,13 @@ def _evaluate(
         hit_rate=hit_rate,
         far=far,
         mean_lead=mean_lead,
-        thresholds_hit_min=thresholds.calibration.backtest.hit_rate_min,
-        thresholds_far_max=thresholds.calibration.backtest.far_max,
-        thresholds_lead_min=thresholds.calibration.backtest.lead_time_hours_min,
-        thresholds_discriminazione_min=thresholds.calibration.backtest.discriminazione_min,
+        thresholds_hit_min=gate.hit_rate_min,
+        thresholds_far_max=gate.far_max,
+        thresholds_lead_min=gate.lead_time_hours_min,
+        thresholds_discriminazione_min=gate.discriminazione_min,
         quota_allertate=len(alerted_cells) / len(cells) if cells else 0.0,
         configurazione=configurazione,
+        a_carico=a_carico,
     )
 
     return _BacktestMetrics(
@@ -437,16 +508,31 @@ def _write_report(
     hit_rate: float,
     far: float,
     mean_lead: float,
-    thresholds_hit_min: float,
+    thresholds_hit_min: float | None,
     thresholds_far_max: float | None,
     thresholds_lead_min: float,
     thresholds_discriminazione_min: float | None = None,
     quota_allertate: float = 0.0,
     configurazione: str = "tutto il catalogo",
+    a_carico: tuple[float, float, int] | None = None,
 ) -> Path:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     out = REPORTS_DIR / f"backtest_{aoi_id}_{start.date()}_{end.date()}.md"
-    pass_hit = "PASS" if hit_rate >= thresholds_hit_min else "FAIL"
+    if thresholds_hit_min is None:
+        riga_hit = f"- **Hit rate**: {hit_rate:.2%} (non è un gate, vedi #243)"
+    else:
+        esito_hit = "PASS" if hit_rate >= thresholds_hit_min else "FAIL"
+        riga_hit = (
+            f"- **Hit rate**: {hit_rate:.2%} (target ≥ {thresholds_hit_min:.0%}) — **{esito_hit}**"
+        )
+    righe_carico = []
+    if a_carico is not None:
+        soglia, effettivo, colte = a_carico
+        quota = colte / truth_events if truth_events else 0.0
+        righe_carico = [
+            f"- **Colte a parità di carico**: {quota:.2%} ({colte}) con il {effettivo:.2%} "
+            f"di celle in allerta (punteggio ≥ {soglia:.4f}) — il confronto fra varianti",
+        ]
     discriminazione = hit_rate / quota_allertate if quota_allertate else 0.0
     pass_lead = "PASS" if mean_lead >= thresholds_lead_min else "FAIL"
 
@@ -464,7 +550,8 @@ def _write_report(
         "",
         "## §2.5 metrics",
         "",
-        f"- **Hit rate**: {hit_rate:.2%} (target ≥ {thresholds_hit_min:.0%}) — **{pass_hit}**",
+        riga_hit,
+        *righe_carico,
         *_righe_gate_far_e_discriminazione(
             far=far,
             far_max=thresholds_far_max,
@@ -750,10 +837,18 @@ async def run() -> int:
             log.error("backtest.merging_non_configurato", hint="RADAR_ARCHIVE__CARTELLA")
             return 1
         archivio = MergingArchive(Path(cfg.cartella))
+    cumulata = load_regional_thresholds().cumulata
+    clima_env = os.getenv("LIMEN_BACKTEST_CLIMA", "").strip()
+    clima = leggi_clima(Path(clima_env)) if clima_env and cumulata is not None else {}
     configurazione = (
         f"verità {descrivi_verita(precisioni, sorgenti)}; pioggia {pioggia}; antecedenti {modo}; "
         f"sismica {'ShakeMap INGV' if sismica == 'shakemap' else 'spenta'}"
     )
+    if cumulata is not None and clima:
+        configurazione += (
+            f"; innesco cumulata {cumulata.window_hours} h / q{clima.get('quantile')} del nodo "
+            f"({cumulata.modo}, saturazione {cumulata.saturazione})"
+        )
 
     from limen.integrations.ingv.shakemap_client import IngvNonDisponibileError
 
@@ -774,6 +869,12 @@ async def run() -> int:
                 assert len(bbox) == 4
 
                 cells = await _fetch_static_factors(aoi_id)
+                if cumulata is not None and clima:
+                    riferimenti = riferimenti_aoi(clima, aoi_id, ore=cumulata.window_hours)
+                    if riferimenti is None:
+                        log.warning("backtest.clima_mancante", aoi_id=aoi_id)
+                    else:
+                        cells = con_riferimento(cells, riferimenti)
                 truth = await _fetch_truth_events(
                     aoi_id, start=start, end=end, precisioni=precisioni, sorgenti=sorgenti
                 )

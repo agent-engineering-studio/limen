@@ -78,6 +78,10 @@ class StaticFactors(_Frozen):
     # crescere un fiume, fa scorrere la stessa pioggia invece di lasciarla
     # infiltrare. NULL = ignoto, che non è 0 (= suolo tutto permeabile).
     imperviousness_norm: float | None = Field(default=None, ge=0.0, le=1.0)
+    # #243 — quantile climatologico della cumulata di pioggia al nodo della
+    # cella (`limen clima-pioggia`): il metro dell'innesco `cumulata`. NULL =
+    # nessun riferimento, e l'innesco resta su Caine.
+    pioggia_riferimento_mm: float | None = Field(default=None, gt=0.0)
 
 
 class RainfallSample(_Frozen):
@@ -193,6 +197,8 @@ class MeteoBreakdown(_Frozen):
     soil_factor: float = Field(..., ge=0.0, le=1.0)
     # Rain-on-snow amplification (0 when no snowpack / no snow block).
     snow_factor: float = Field(default=0.0, ge=0.0, le=1.0)
+    # #243: l'innesco dalla cumulata relativa al nodo; None quando non è attivo.
+    cumulata_norm: float | None = Field(default=None, ge=0.0, le=1.0)
     # V1.5: which inputs came from in-situ sensors (vs Open-Meteo).
     # Empty tuple on the pure V1 path.
     measured_overrides: tuple[str, ...] = ()
@@ -349,7 +355,10 @@ class ComponentBreakdown(HazardBreakdown):
             "f": self.f,
             "h": self.h,
             "static_terms": self.static_terms.model_dump(),
-            "meteo_terms": self.meteo_terms.model_dump(),
+            # Senza l'innesco `cumulata` le chiavi restano quelle di prima.
+            "meteo_terms": self.meteo_terms.model_dump(
+                exclude={"cumulata_norm"} if self.meteo_terms.cumulata_norm is None else None
+            ),
         }
 
     def predisposition(self) -> float:

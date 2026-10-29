@@ -52,6 +52,7 @@ from limen.cli.backup import run as _run_backup
 from limen.cli.bootstrap_static import FORCE_ENV as BOOTSTRAP_FORCE_ENV
 from limen.cli.bootstrap_static import run as _run_bootstrap_static
 from limen.cli.calibrate import run as _run_calibrate
+from limen.cli.clima_pioggia import run as _run_clima_pioggia
 from limen.cli.data_status import run as _run_data_status
 from limen.cli.dpc_bollettini import run as _run_dpc_bollettini
 from limen.cli.effis_sync import run as _run_effis_sync
@@ -234,6 +235,13 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     sub.add_parser(
+        "clima-pioggia",
+        help=(
+            "per-node climatology of the rolling rain accumulation, for the landslide "
+            "backtest (env: LIMEN_CLIMA_AOI / _PIOGGIA / _DA / _A / _ORE / _QUANTILE)"
+        ),
+    )
+    sub.add_parser(
         "fwi-backfill",
         help=(
             "rebuild the recursive FWI chain from the ERA5 archive "
@@ -401,6 +409,7 @@ def main(argv: list[str] | None = None) -> int:
         "backtest": _run_backtest,
         "backtest-flood": _run_backtest_flood,
         "backtest-wildfire": _run_backtest_wildfire,
+        "clima-pioggia": _run_clima_pioggia,
         "fwi-backfill": _run_fwi_backfill,
         "fwi-confronto": _run_fwi_confronto,
         "fwi-climatology": _run_fwi_climatology,
