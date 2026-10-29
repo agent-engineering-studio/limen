@@ -100,3 +100,6 @@ def test_il_report_per_comune_dice_il_traguardo() -> None:
     assert any("90.00% (9)" in r and r.endswith("**PASS**") for r in righe)
     righe = _righe_comuni(PerComune(10, 4, 0.3, 0.52, 3, 0.1), metro)
     assert righe[-2].endswith("**FAIL**")
+    # Colto tutto, ma con tutti i comuni-giorno accesi a pari merito: FAIL.
+    righe = _righe_comuni(PerComune(10, 10, 1.0, 0.5, 10, 1.0), metro)
+    assert righe[-2].endswith("**FAIL**")

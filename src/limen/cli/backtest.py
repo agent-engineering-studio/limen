@@ -675,7 +675,15 @@ def _righe_comuni(c: PerComune, metro: MetricaComuni) -> list[str]:
     def quota(n: int) -> float:
         return n / c.eventi if c.eventi else 0.0
 
-    esito = "PASS" if c.eventi and quota(c.colti_carico) >= metro.obiettivo else "FAIL"
+    # A pari merito la soglia può accendere più del carico chiesto: allora il
+    # traguardo non è raggiunto, qualunque sia la quota colta.
+    esito = (
+        "PASS"
+        if c.eventi
+        and quota(c.colti_carico) >= metro.obiettivo
+        and c.carico_effettivo <= metro.carico_massimo + 1e-9
+        else "FAIL"
+    )
     finestra = f"{metro.finestra_ore:.0f} h"
     return [
         "## Per comune (il metro dell'epica #345)",
