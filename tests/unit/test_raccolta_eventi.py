@@ -270,3 +270,35 @@ async def test_oltre_il_budget_del_mese_la_raccolta_non_parte(
     )
     out = await raccogli(impostazioni)
     assert out["reason"] == "budget mensile superato"
+
+
+async def test_un_evento_gia_verificato_non_si_rimisura(monkeypatch: pytest.MonkeyPatch) -> None:
+    from limen.api.jobs import raccolta_eventi as job
+    from limen.data.repos.candidati_eventi_repo import Salvato
+
+    async def fondi(c: object) -> Salvato:
+        return Salvato(
+            id=7,
+            fonti=({"testata": "A"}, {"testata": "B"}),
+            testate=2,
+            slug="2026-10-28-frana-lacedonia",
+            giorno=date(2026, 10, 28),
+            parte="ignota",
+            luogo="Lacedonia",
+            regione="Campania",
+            nomi_comuni=("Lacedonia",),
+        )
+
+    async def risolvi(nomi: object, regione: object) -> list[str]:
+        return ["064041"]
+
+    async def vietato(*a: object, **kw: object) -> None:
+        raise AssertionError("la misura congelata non si rifà")
+
+    monkeypatch.setattr(job.candidati_eventi_repo, "fondi", fondi)
+    monkeypatch.setattr(job.candidati_eventi_repo, "risolvi_comuni", risolvi)
+    monkeypatch.setattr(job.anticipo_repo, "misura", vietato)
+    monkeypatch.setattr(job.verifiche_eventi_repo, "upsert", vietato)
+    esiti: Counter[str] = Counter()
+    await job._registra(HazardType.LANDSLIDE, _evento(), [], esiti)
+    assert esiti == Counter({"gia_verificato": 1})

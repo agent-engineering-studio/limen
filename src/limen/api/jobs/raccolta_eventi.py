@@ -173,10 +173,17 @@ async def _registra(
         esiti["comune_ignoto"] += 1
         return
 
+    if salvato.slug is not None:
+        # Già verificato da una raccolta precedente: la misura resta quella
+        # congelata allora. Rimisurarla giorni dopo leggerebbe un fondo già
+        # in parte cancellato dalla retention (14 giorni) e potrebbe cambiare
+        # l'esito senza che sia cambiato niente. Le nuove fonti stanno nel candidato.
+        esiti["gia_verificato"] += 1
+        return
     primo = salvato.nomi_comuni[0]
     omonimo = comuni[0] if await candidati_eventi_repo.ha_omonimi(primo) else None
-    nome = salvato.slug or slug(hazard, salvato.giorno, primo, omonimo)
-    if salvato.slug is None and await verifiche_eventi_repo.esiste(nome):
+    nome = slug(hazard, salvato.giorno, primo, omonimo)
+    if await verifiche_eventi_repo.esiste(nome):
         # Lo slug c'è già ma non l'ha scritto la raccolta: è un fact check a
         # mano, con ora, punto e fonti più precisi dei titoli. Si collega il
         # candidato e la riga resta com'è.

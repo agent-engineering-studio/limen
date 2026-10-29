@@ -127,7 +127,9 @@ async def fondi(c: Candidato) -> Salvato:
                     -- Il giorno resta quello della prima notizia: un titolo
                     -- del giorno dopo spesso data l'evento alla sua uscita.
                     -- La parte del giorno si prende solo se mancava.
-                    parte = CASE WHEN parte = 'ignota' AND giorno = $4 THEN $5 ELSE parte END
+                    parte = CASE WHEN parte = 'ignota' AND giorno = $4 THEN $5 ELSE parte END,
+                    -- Una regione arrivata dopo scioglie un omonimo rimasto in sospeso.
+                    regione = COALESCE(regione, $6)
                 WHERE id = $1
                 RETURNING id, slug, giorno, parte, luogo, regione, nomi_comuni
                 """,
@@ -136,6 +138,7 @@ async def fondi(c: Candidato) -> Salvato:
                 testate,
                 c.giorno,
                 c.parte,
+                c.regione,
             )
     assert salvato is not None
     return Salvato(
