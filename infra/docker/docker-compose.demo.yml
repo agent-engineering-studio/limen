@@ -245,6 +245,7 @@ services:
       LLM__FEDELTA_CAMPIONE: ${LLM__FEDELTA_CAMPIONE:-4}
       LLM__FEDELTA_ORA_UTC: ${LLM__FEDELTA_ORA_UTC:-21}
       LLM__FEDELTA_ATTESA_MASSIMA_MINUTI: ${LLM__FEDELTA_ATTESA_MASSIMA_MINUTI:-120}
+      LLM__ANTHROPIC_BUDGET_MENSILE_USD: ${LLM__ANTHROPIC_BUDGET_MENSILE_USD:-10}
       # Champion/challenger: shadow runs the ML model in parallel (writes
       # model_runs only; alerts stay with the deterministic champion).
       SCORING__MODE: ${SCORING__MODE:-champion_only}

@@ -90,6 +90,17 @@ JSON del giudizio è vincolato da uno schema (output strutturati), quindi una
 risposta malformata non c'è più — un rifiuto o un `max_tokens` sì, e valgono
 `null`.
 
+**La spesa.** Il batch non passa dal gateway, quindi nemmeno dal suo
+`max_budget`. Ogni batch scrive una riga in `spesa_llm` (migrazione 083):
+token d'ingresso e d'uscita come li riporta l'API e il costo calcolato con
+`LLM__ANTHROPIC_PREZZI_USD_MTOK` (dollari per milione di token, a listino) e
+`LLM__ANTHROPIC_SCONTO_BATCH` (0,5). Prima di partire il job somma il mese
+solare in UTC: oltre `LLM__ANTHROPIC_BUDGET_MENSILE_USD` (default 10) non
+parte e scrive un warning `llm.budget_superato`; un modello senza prezzo non
+parte nemmeno lui (`llm.prezzo_sconosciuto`). Il tetto è morbido: il batch che
+lo supera finisce. Quello rigido è il limite di spesa del workspace nella
+Console Anthropic, l'unico che l'API fa rispettare anche a un bug di Limen.
+
 Sonnet e non Haiku: le spiegazioni le scrive `fast-cloud` (Haiku 5.5), e un
 revisore che rilegge sé stesso ha i suoi stessi punti ciechi. Un revisore più
 piccolo non basta: Qwen3-8B (`chat`) su 27 spiegazioni ne ha date per non
