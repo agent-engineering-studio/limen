@@ -31,6 +31,24 @@ RSS = """<?xml version="1.0"?><rss><channel>
 </channel></rss>"""
 
 
+def _lock(libero: bool) -> Any:
+    """Un `acquire` finto il cui lock della raccolta è libero o già preso."""
+    from contextlib import asynccontextmanager
+
+    class _Conn:
+        async def fetchval(self, *a: object) -> bool:
+            return libero
+
+        async def execute(self, *a: object) -> None:
+            return None
+
+    @asynccontextmanager
+    async def acquire() -> Any:
+        yield _Conn()
+
+    return acquire
+
+
 def _evento(**kw: object) -> EventoEstratto:
     base: dict[str, object] = {
         "giorno": date(2026, 10, 28),
@@ -456,6 +474,7 @@ async def test_se_l_estrazione_finisce_il_tetto_la_conferma_non_parte(
     monkeypatch.setattr(job, "_registra", registra_evento)
     monkeypatch.setattr(EstrattoreEventi, "estrai", estrai)
     monkeypatch.setattr(EstrattoreEventi, "conferma", conferma)
+    monkeypatch.setattr(job, "acquire", _lock(True))
 
     await raccogli(impostazioni)
     # L'estrazione è registrata prima di decidere, e la conferma parte vuota.
@@ -563,3 +582,27 @@ async def test_una_registrazione_interrotta_si_riprende_con_lo_stesso_slug(
     assert scritte == ["2026-10-28-frana-lacedonia"]
     assert frane == ["2026-10-28-frana-lacedonia"]
     assert segnati[-1]["stato"] == "verificato"
+
+
+async def test_due_raccolte_insieme_la_seconda_non_parte(monkeypatch: pytest.MonkeyPatch) -> None:
+    from decimal import Decimal
+
+    from limen.api.jobs import raccolta_eventi as job
+
+    async def spesa() -> Decimal:
+        return Decimal("0")
+
+    async def vietato(**kw: object) -> object:
+        raise AssertionError("con un'altra raccolta in corso non si cerca né si paga")
+
+    impostazioni = cast(Any, Settings)(
+        _env_file=None,
+        llm=LLMSettings(models={"eventi": "claude-sonnet-5-5"}, anthropic_budget_mensile_usd=10),
+        anthropic_api_key="sk-prova",
+    )
+    monkeypatch.setattr(job.budget, "get_settings", lambda: impostazioni)
+    monkeypatch.setattr(job.budget, "spesa_del_mese", spesa)
+    monkeypatch.setattr(job, "titoli_per_pericolo", vietato)
+    monkeypatch.setattr(job, "acquire", _lock(False))
+    out = await raccogli(impostazioni)
+    assert out == {"status": "skipped", "reason": "un'altra raccolta è in corso"}

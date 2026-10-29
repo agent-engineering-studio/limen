@@ -33,6 +33,8 @@ from datetime import date, datetime, time
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from pydantic import SecretStr
+
 from limen.agents.chat_agents.estrattore_eventi import (
     NOME_PERICOLO,
     EstrattoreEventi,
@@ -46,6 +48,7 @@ from limen.config.settings import Settings
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
 from limen.core.verifiche.esito import esito
+from limen.data.db import acquire
 from limen.data.repos import (
     anticipo_repo,
     candidati_eventi_repo,
@@ -252,6 +255,13 @@ async def _registra(
     log.info("raccolta_eventi.verificato", slug=nome, esito=risultato, motivo=motivo)
 
 
+#: Una raccolta alla volta, fra il job e `limen raccolta-eventi` a mano: due
+#: insieme scelgono lo stesso slug libero per due incidenti diversi prima che
+#: l'una prenoti, e pagano due volte gli stessi batch. Il lock di sessione
+#: cade da solo se il processo muore.
+_UNA_ALLA_VOLTA = 347_084
+
+
 async def raccogli(settings: Settings) -> dict[str, Any]:
     llm = settings.llm
     modello = llm.models.eventi.strip()
@@ -268,7 +278,17 @@ async def raccogli(settings: Settings) -> dict[str, Any]:
         await budget.verifica(modello)
     except budget.BudgetSuperatoError as exc:
         return {"status": "skipped", "reason": str(exc), "model": modello}
+    async with acquire() as conn:
+        if not await conn.fetchval("SELECT pg_try_advisory_lock($1)", _UNA_ALLA_VOLTA):
+            return {"status": "skipped", "reason": "un'altra raccolta è in corso"}
+        try:
+            return await _raccolta(settings, chiave, modello)
+        finally:
+            await conn.execute("SELECT pg_advisory_unlock($1)", _UNA_ALLA_VOLTA)
 
+
+async def _raccolta(settings: Settings, chiave: SecretStr, modello: str) -> dict[str, Any]:
+    llm = settings.llm
     titoli = await titoli_per_pericolo(giorni=llm.eventi_giorni, massimi=llm.eventi_titoli_massimi)
     estrattore = EstrattoreEventi(
         api_key=chiave, model=modello, attesa_massima_s=llm.eventi_attesa_massima_minuti * 60
