@@ -5,7 +5,7 @@ import { defaultApiClient } from "../lib/api-client";
 import { useHazard, useNomePericolo } from "../lib/hazard";
 import { testi, useLocale, useTesti } from "../lib/i18n";
 import { useMapStateOpzionale } from "../lib/map-state";
-import { ESAGERAZIONE_RILIEVO, useMotivoSenzaRilievo } from "../lib/rilievo";
+import { useMotivoSenzaRilievo } from "../lib/rilievo";
 import {
   HAZARD_HUE,
   COLORE_IGNOTO,
@@ -161,10 +161,10 @@ function RigaNonMisurato(): JSX.Element {
 function NotaRilievo(): JSX.Element | null {
   const t = useTesti(T);
   const loc = useLocale();
-  const vista = useMapStateOpzionale()?.vista;
+  const stato = useMapStateOpzionale();
   const disponibile = useMotivoSenzaRilievo() === null;
-  if (vista !== "rilievo" || !disponibile || ESAGERAZIONE_RILIEVO === 1) return null;
-  return <p className="legend-note">{t.esagerato(ESAGERAZIONE_RILIEVO.toLocaleString(loc))}</p>;
+  if (!stato || stato.vista !== "rilievo" || !disponibile || stato.esagerazione === 1) return null;
+  return <p className="legend-note">{t.esagerato(stato.esagerazione.toLocaleString(loc))}</p>;
 }
 
 export function LegendPanel(): JSX.Element {
@@ -237,8 +237,8 @@ export function LegendPanel(): JSX.Element {
           ))}
         </ul>
         <RigaNonMisurato />
-        <NotaRilievo />
         <p className="legend-note">{t.notaNonMisurato}</p>
+        <NotaRilievo />
         <p className="legend-note">{t.notaColore}</p>
         <ul className="legend-hazards">
           {available.map((h) => (
@@ -286,8 +286,8 @@ export function LegendPanel(): JSX.Element {
         ))}
       </ul>
       <RigaNonMisurato />
-      <NotaRilievo />
       <p className="legend-note">{t.notaNonMisurato}</p>
+      <NotaRilievo />
       <p className="legend-note">
         {t.notaListe}
         <a href="#/come-funziona/i-tre-motori">{t.comeSiCalcola}</a>

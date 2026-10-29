@@ -13,20 +13,28 @@ import { testi, useLingua, type Lingua } from "./i18n";
 export const DEM_SOURCE_ID = "limen-dem";
 export const HILLSHADE_LAYER_ID = "limen-rilievo-ombre";
 
-/** Una sola esagerazione, dichiarata in legenda quando non è 1. */
+/** Le esagerazioni che si possono scegliere: ×1 è il rilievo vero, e deve
+ *  esserci sempre (#322). Quella di partenza è dichiarata in legenda. */
+export const ESAGERAZIONI: readonly number[] = [1, 1.5];
 export const ESAGERAZIONE_RILIEVO: number = 1.5;
 
 /** Inclinazione della camera in «Rilievo»: il massimo di MapLibre è 60°. */
 export const INCLINAZIONE_RILIEVO = 60;
 
-/** I colori dell'ombreggiatura. Il rilievo lo disegnano le ombre: la luce
- *  resta appena sopra il fondo (#10161d) perché schiarire il fondo avvicina
- *  «nessuno» e «basso» — a #1a222b la coppia scende a 1,496:1 per un
- *  deuteranope, sotto la soglia di `risk-colors.test.ts`. */
+/** I colori dell'ombreggiatura, quasi uguali al fondo piatto (#10161d).
+ *
+ *  Le celle sono trasparenti al 30 %, e due celle vicine su un crinale
+ *  stanno una in luce e l'altra in ombra: la scala va distinta anche fra
+ *  fondi diversi, non solo sullo stesso. Sul fondo piatto la coppia più
+ *  stretta vale 1,511:1 (protanopia, «basso» e «molto alto»), quindi resta
+ *  pochissimo margine: con l'ombra a #0b1118 e la luce uguale al fondo il
+ *  minimo fra fondi è 1,503:1; con l'ombra a #06090d e la luce a #141b23
+ *  scendeva a 1,469:1. Il rilievo lo dà soprattutto il terreno inclinato,
+ *  non l'ombreggiatura. */
 export const OMBREGGIATURA = {
-  ombra: "#06090d",
-  luce: "#141b23",
-  accento: "#0b1016",
+  ombra: "#0b1118",
+  luce: "#10161d",
+  accento: "#0d131a",
 } as const;
 
 const T = testi(

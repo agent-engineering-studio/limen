@@ -28,6 +28,7 @@ import type { CellSelection, ComuneGeometry, HazardView, RiskLevel } from "../ty
 import { useHazard } from "./hazard";
 import { cellaDaHash } from "./link-cella";
 import { OVERLAYS } from "./overlays";
+import { ESAGERAZIONE_RILIEVO, ESAGERAZIONI } from "./rilievo";
 
 export type Vista = "2d" | "rilievo" | "3d";
 const VISTE: readonly Vista[] = ["2d", "rilievo", "3d"];
@@ -54,6 +55,8 @@ export type CellaScelta = CellSelection & { previsto?: CellaPrevista };
 
 export interface StatoMappa {
   vista: Vista;
+  /** Esagerazione verticale del rilievo: 1 è il terreno vero. */
+  esagerazione: number;
   /** Ore nel futuro: 0 è adesso, 24/48/72 la previsione per cella. */
   orizzonte: number;
   soloSoglia: boolean;
@@ -66,6 +69,7 @@ export interface StatoMappa {
 
 export const STATO_INIZIALE: StatoMappa = {
   vista: "2d",
+  esagerazione: ESAGERAZIONE_RILIEVO,
   orizzonte: 0,
   // Acceso di default, come nel design: con un quarto d'Italia in classe
   // bassa la mappa era una coperta, e si cercava il moderato sotto di essa.
@@ -79,6 +83,7 @@ export const STATO_INIZIALE: StatoMappa = {
 /** Ciò che un link dice dello stato. Un campo assente non dice niente. */
 export interface StatoDaLink {
   vista?: Vista;
+  esagerazione?: number;
   pericolo?: HazardView;
   orizzonte?: number;
   soloSoglia?: boolean;
@@ -97,6 +102,8 @@ export function statoDaHash(hash: string): StatoDaLink {
   const out: StatoDaLink = { area: null };
   const vista = p.get("vista");
   if (VISTE.includes(vista as Vista)) out.vista = vista as Vista;
+  const esag = Number(p.get("esag") ?? "");
+  if (p.get("esag") && ESAGERAZIONI.includes(esag)) out.esagerazione = esag;
   const pericolo = p.get("hazard");
   if (PERICOLI.includes(pericolo as HazardView)) out.pericolo = pericolo as HazardView;
   const h = Number(p.get("h") ?? "");
@@ -116,7 +123,7 @@ export function statoDaHash(hash: string): StatoDaLink {
   return out;
 }
 
-const CHIAVI = ["vista", "hazard", "h", "soglia", "livelli", "centro", "z"];
+const CHIAVI = ["vista", "esag", "hazard", "h", "soglia", "livelli", "centro", "z"];
 
 /** L'hash con lo stato dentro. Solo i campi lontani dal default, così la
  *  mappa di chi non tocca niente resta `#/dashboard`; gli altri parametri
@@ -126,6 +133,7 @@ export function hashDaStato(hash: string, stato: StatoMappa, pericolo: HazardVie
   const p = new URLSearchParams(query);
   for (const k of CHIAVI) p.delete(k);
   if (stato.vista !== STATO_INIZIALE.vista) p.set("vista", stato.vista);
+  if (stato.esagerazione !== STATO_INIZIALE.esagerazione) p.set("esag", String(stato.esagerazione));
   if (pericolo !== "multi") p.set("hazard", pericolo);
   if (stato.orizzonte !== 0) p.set("h", String(stato.orizzonte));
   if (stato.soloSoglia !== STATO_INIZIALE.soloSoglia) p.set("soglia", stato.soloSoglia ? "1" : "0");
@@ -143,6 +151,7 @@ export function hashDaStato(hash: string, stato: StatoMappa, pericolo: HazardVie
 
 type Azione =
   | { tipo: "vista"; vista: Vista }
+  | { tipo: "esagerazione"; valore: number }
   | { tipo: "orizzonte"; orizzonte: number }
   | { tipo: "soloSoglia"; valore: boolean }
   | { tipo: "overlay"; id: string }
@@ -156,6 +165,8 @@ export function riduci(stato: StatoMappa, a: Azione): StatoMappa {
   switch (a.tipo) {
     case "vista":
       return { ...stato, vista: a.vista };
+    case "esagerazione":
+      return { ...stato, esagerazione: a.valore };
     case "orizzonte":
       return { ...stato, orizzonte: a.orizzonte };
     case "soloSoglia":
@@ -200,6 +211,7 @@ export function riduci(stato: StatoMappa, a: Azione): StatoMappa {
       return {
         ...stato,
         vista: l.vista ?? stato.vista,
+        esagerazione: l.esagerazione ?? stato.esagerazione,
         orizzonte: l.orizzonte ?? stato.orizzonte,
         soloSoglia: l.soloSoglia ?? stato.soloSoglia,
         overlayAttivi: l.overlayAttivi ?? stato.overlayAttivi,
@@ -230,6 +242,7 @@ export interface MapStateValue extends StatoMappa {
    *  che un link non abbia già un posto da mostrare. */
   geolocalizza: boolean;
   impostaVista: (v: Vista) => void;
+  impostaEsagerazione: (x: number) => void;
   impostaPericolo: (v: HazardView) => void;
   impostaOrizzonte: (h: number) => void;
   impostaSoloSoglia: (v: boolean) => void;
@@ -292,6 +305,7 @@ export function MapStateProvider({ children }: { children: ReactNode }): JSX.Ele
   const azioni = useMemo(
     () => ({
       impostaVista: (vista: Vista) => dispatch({ tipo: "vista", vista }),
+      impostaEsagerazione: (valore: number) => dispatch({ tipo: "esagerazione", valore }),
       impostaOrizzonte: (orizzonte: number) => dispatch({ tipo: "orizzonte", orizzonte }),
       impostaSoloSoglia: (valore: boolean) => dispatch({ tipo: "soloSoglia", valore }),
       commutaOverlay: (id: string) => dispatch({ tipo: "overlay", id }),

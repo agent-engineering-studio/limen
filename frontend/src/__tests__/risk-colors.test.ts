@@ -96,3 +96,35 @@ describe("la scala del rischio sul fondo scuro", () => {
     }
   });
 });
+
+describe("la scala del rischio sul rilievo", () => {
+  it("due celle vicine, una in ombra e una in luce, restano distinguibili", () => {
+    // L'hillshade sta sotto le celle: su un crinale una cella è in luce e la
+    // vicina in ombra. Ogni coppia di classi va distinta anche così (#322).
+    const fondi = ["#10161d", OMBREGGIATURA.ombra, OMBREGGIATURA.luce, OMBREGGIATURA.accento];
+    const viste: [string, number[][] | null][] = [["normale", null], ...Object.entries(CVD)];
+    const vedi = (v: number[], m: number[][] | null): number[] =>
+      m === null
+        ? v
+        : m.map((riga) => Math.min(1, Math.max(0, riga[0]! * v[0]! + riga[1]! * v[1]! + riga[2]! * v[2]!)));
+    const dipinta = (colore: string, fondo: string): number[] => {
+      const b = lineare(fondo);
+      return lineare(colore).map((v, i) => 0.7 * v + 0.3 * b[i]!);
+    };
+    for (const [nome, m] of viste) {
+      for (let i = 0; i < RISK_CLASSES.length; i++) {
+        for (let j = i + 1; j < RISK_CLASSES.length; j++) {
+          for (const fa of fondi) {
+            for (const fb of fondi) {
+              const c = contrasto(
+                vedi(dipinta(RISK_CLASSES[i]!.color, fa), m),
+                vedi(dipinta(RISK_CLASSES[j]!.color, fb), m),
+              );
+              expect(c, `${nome}: ${i} su ${fa} vs ${j} su ${fb}`).toBeGreaterThanOrEqual(1.5);
+            }
+          }
+        }
+      }
+    }
+  });
+});

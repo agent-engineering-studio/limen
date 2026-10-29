@@ -313,6 +313,9 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   const rilievo = stato?.vista === "rilievo" && motivoSenzaRilievo === null;
   const rilievoRef = useRef(rilievo);
   rilievoRef.current = rilievo;
+  const esagerazione = stato?.esagerazione ?? ESAGERAZIONE_RILIEVO;
+  const esagerazioneRef = useRef(esagerazione);
+  esagerazioneRef.current = esagerazione;
   const rilievoApplicatoRef = useRef(rilievo);
   // La vista della prima apertura, finché la posizione del browser non ha
   // risposto: un ref e non la vista della mappa corrente perché la mappa si
@@ -934,7 +937,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         sources,
         layers,
         ...(rilievoRef.current
-          ? { terrain: { source: DEM_SOURCE_ID, exaggeration: ESAGERAZIONE_RILIEVO } }
+          ? { terrain: { source: DEM_SOURCE_ID, exaggeration: esagerazioneRef.current } }
           : {}),
       },
       pitch: rilievoRef.current ? INCLINAZIONE_RILIEVO : 0,
@@ -1088,11 +1091,15 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     rilievoApplicatoRef.current = rilievo;
     const map = mappaRef.current;
     if (!map) return;
+    // La vista si rilegge quando `apply` gira, non quando la si accoda: uno
+    // stile ancora in caricamento rimanda all'`idle`, e un ritorno a 2D nel
+    // frattempo non deve vedersi riaccendere il terreno.
     const apply = (): void => {
       if (!map.getSource(DEM_SOURCE_ID)) return;
-      map.setTerrain(rilievo ? { source: DEM_SOURCE_ID, exaggeration: ESAGERAZIONE_RILIEVO } : null);
+      const acceso = rilievoRef.current;
+      map.setTerrain(acceso ? { source: DEM_SOURCE_ID, exaggeration: esagerazioneRef.current } : null);
       if (map.getLayer(HILLSHADE_LAYER_ID)) {
-        map.setLayoutProperty(HILLSHADE_LAYER_ID, "visibility", rilievo ? "visible" : "none");
+        map.setLayoutProperty(HILLSHADE_LAYER_ID, "visibility", acceso ? "visible" : "none");
       }
     };
     if (map.isStyleLoaded()) apply();
@@ -1102,7 +1109,28 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       bearing: rilievo ? map.getBearing() : 0,
       duration: durataCamera(800),
     });
+    return () => {
+      map.off("idle", apply);
+    };
   }, [rilievo]);
+
+  // ×1 o esagerato, sulla mappa che c'è: solo il terreno cambia.
+  const esagerazioneApplicataRef = useRef(esagerazione);
+  useEffect(() => {
+    if (esagerazione === esagerazioneApplicataRef.current) return;
+    esagerazioneApplicataRef.current = esagerazione;
+    const map = mappaRef.current;
+    if (!map || !rilievoRef.current) return;
+    const apply = (): void => {
+      if (!map.getSource(DEM_SOURCE_ID) || !rilievoRef.current) return;
+      map.setTerrain({ source: DEM_SOURCE_ID, exaggeration: esagerazioneRef.current });
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("idle", apply);
+    return () => {
+      map.off("idle", apply);
+    };
+  }, [esagerazione]);
 
   // I livelli di contesto, senza ricostruire la mappa.
   useEffect(() => {

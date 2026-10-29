@@ -208,4 +208,75 @@ describe("«Rilievo» sulla mappa", () => {
     expect(mappa).toBe(prima);
     expect(screen.getByTestId("risk-map")).toBe(contenitore);
   });
+
+  it("×1 mostra il terreno vero, senza rimontare e senza nota in legenda", async () => {
+    dem.url = "https://dati.test/dem.pmtiles";
+    webgl2(true);
+    window.history.replaceState(null, "", "/#/dashboard");
+    let mappa: maplibregl.Map | null = null;
+    monta(
+      <>
+        <ConMappa onMappa={(m) => (mappa = m)} />
+        <LegendPanel />
+      </>,
+    );
+    await caricato();
+    // Fuori da «Rilievo» l'esagerazione non c'entra, e non si mostra.
+    expect(screen.queryByRole("radio", { name: "×1" })).toBeNull();
+    fireEvent.click(screen.getByText("leggi"));
+    const prima = mappa as unknown as maplibregl.Map;
+    vi.spyOn(prima, "isStyleLoaded").mockReturnValue(true);
+    vi.spyOn(prima, "getSource").mockReturnValue({} as never);
+    const terreno = vi.spyOn(prima, "setTerrain");
+
+    fireEvent.click(screen.getByRole("radio", { name: "Rilievo" }));
+    expect(screen.getByRole("radio", { name: "×1,5" })).toBeChecked();
+    expect(screen.getByText(/Rilievo esagerato ×1,5/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: "×1" }));
+    expect(terreno).toHaveBeenLastCalledWith({ source: DEM_SOURCE_ID, exaggeration: 1 });
+    expect(screen.queryByText(/Rilievo esagerato/)).toBeNull();
+    await waitFor(() => expect(window.location.hash).toBe("#/dashboard?vista=rilievo&esag=1"));
+    fireEvent.click(screen.getByText("leggi"));
+    expect(mappa).toBe(prima);
+  });
+
+  it("un link con esag=1 apre il rilievo vero", async () => {
+    dem.url = "https://dati.test/dem.pmtiles";
+    webgl2(true);
+    window.history.replaceState(null, "", "/#/mappa?vista=rilievo&esag=1");
+    monta(<ConMappa onMappa={() => {}} />);
+    await caricato();
+    expect(ultimoStile().style.terrain).toEqual({ source: DEM_SOURCE_ID, exaggeration: 1 });
+    expect(screen.getByRole("radio", { name: "×1" })).toBeChecked();
+  });
+
+  it("un ritorno a 2D prima che lo stile sia pronto non riaccende il terreno", async () => {
+    dem.url = "https://dati.test/dem.pmtiles";
+    webgl2(true);
+    window.history.replaceState(null, "", "/#/dashboard");
+    let mappa: maplibregl.Map | null = null;
+    monta(<ConMappa onMappa={(m) => (mappa = m)} />);
+    await caricato();
+    fireEvent.click(screen.getByText("leggi"));
+    const m = mappa as unknown as maplibregl.Map;
+    // Lo stile non è pronto: `apply` va in coda sull'`idle`.
+    const coda: (() => void)[] = [];
+    vi.spyOn(m, "once").mockImplementation(((_: string, f: () => void) => {
+      coda.push(f);
+      return m;
+    }) as never);
+    vi.spyOn(m, "off").mockImplementation(((_: string, f: () => void) => {
+      const i = coda.indexOf(f);
+      if (i >= 0) coda.splice(i, 1);
+      return m;
+    }) as never);
+    vi.spyOn(m, "getSource").mockReturnValue({} as never);
+    const terreno = vi.spyOn(m, "setTerrain");
+
+    fireEvent.click(screen.getByRole("radio", { name: "Rilievo" }));
+    fireEvent.click(screen.getByRole("radio", { name: "2D" }));
+    for (const f of [...coda]) f();
+    expect(terreno).not.toHaveBeenCalledWith(expect.objectContaining({ source: DEM_SOURCE_ID }));
+  });
 });
