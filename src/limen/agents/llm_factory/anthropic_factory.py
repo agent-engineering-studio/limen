@@ -44,7 +44,9 @@ class AnthropicChatClient:  # Implements the ChatClient Protocol structurally
         self,
         messages: Sequence[ChatMessage],
         *,
-        temperature: float = 0.0,
+        # Accepted for Protocol parity, never sent: since 2026-10-21 the
+        # Messages API rejects `temperature` on every model with a 400.
+        temperature: float = 0.0,  # noqa: ARG002
         max_tokens: int | None = None,
         response_format: str = "text",  # noqa: ARG002 — Anthropic uses tool-use for JSON
     ) -> str:
@@ -60,7 +62,6 @@ class AnthropicChatClient:  # Implements the ChatClient Protocol structurally
         kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": body,
-            "temperature": temperature,
             "max_tokens": max_tokens or 1024,
         }
         if system_parts:
