@@ -6,6 +6,7 @@ import { MantineProvider } from "@mantine/core";
 import App from "./App";
 import { HazardProvider } from "./lib/hazard";
 import { LinguaProvider } from "./lib/i18n";
+import { MapStateProvider, pericoloDaHash } from "./lib/map-state";
 import { theme } from "./lib/theme";
 // L'ordine conta: gli stili di Mantine per primi, i nostri dopo, così una
 // regola del progetto vince su quella del componente e non viceversa.
@@ -21,8 +22,10 @@ ReactDOM.createRoot(root).render(
     <React.StrictMode>
         <LinguaProvider>
             <MantineProvider theme={theme} forceColorScheme="dark">
-                <HazardProvider>
-                    <App />
+                <HazardProvider iniziale={pericoloDaHash(window.location.hash)}>
+                    <MapStateProvider>
+                        <App />
+                    </MapStateProvider>
                 </HazardProvider>
             </MantineProvider>
         </LinguaProvider>

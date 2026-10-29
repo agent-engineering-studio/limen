@@ -11,13 +11,7 @@ import RegioniPage from "./components/RegioniPage";
 import { defaultApiClient } from "./lib/api-client";
 import { RISK_TEXT_BY_LEVEL, useEtichetteRischio } from "./lib/risk-colors";
 import { LINGUE, testi, useLingua, useLocale, useTesti } from "./lib/i18n";
-import type {
-  CellSelection,
-  ComuneCell,
-  ComuneGeometry,
-  ComuneRisk,
-  RiskLevel,
-} from "./types";
+import type { ComuneCell, ComuneRisk } from "./types";
 import AvvisoAi from "./components/AvvisoAi";
 import FreshnessBadge from "./components/FreshnessBadge";
 import HomePage from "./components/HomePage";
@@ -37,7 +31,7 @@ import ShadowPanel from "./components/ShadowPanel";
 import VerifichePage from "./components/VerifichePage";
 import { useForecastSchedule } from "./lib/forecast-schedule";
 import { useBuyMeACoffee } from "./lib/buymeacoffee";
-import { cellaDaHash } from "./lib/link-cella";
+import { rottaMappa, useMapState, type CellaPrevista } from "./lib/map-state";
 import { useHazard, useNomePericolo } from "./lib/hazard";
 import { OVERLAYS, testoOverlay } from "./lib/overlays";
 
@@ -77,10 +71,11 @@ function pageFromHash(): Page {
   if (hash.startsWith("#/fonti")) {
     return "fonti";
   }
+  // `#/italia` è un vecchio deep-link: il quadro nazionale vive in dashboard.
+  if (rottaMappa(hash)) {
+    return "dashboard";
+  }
   switch (hash) {
-    case "#/dashboard":
-    case "#/italia": // vecchio deep-link: il quadro nazionale vive in dashboard
-      return "dashboard";
     case "#/modello":
       return "science";
     case "#/diagnostica-ml":
@@ -268,15 +263,6 @@ export function posizioneIspettore(
   return { left, top, maxHeight: mappa.height - top - margine };
 }
 
-/** Ciò che la tile della previsione dice della cella cliccata. */
-interface CellaPrevista {
-  orizzonte: number;
-  score: number;
-  level: RiskLevel;
-  hazard: string;
-  target: string | null;
-}
-
 /** In testa all'ispettore quando si guarda il futuro: il valore previsto
  *  della cella, e la dichiarazione che il resto sotto è di adesso. Senza,
  *  una cella alta a +48 h apriva i numeri bassi di oggi senza dirlo. */
@@ -307,27 +293,23 @@ export function App(): JSX.Element {
   const t = useTesti(T);
   const { lingua } = useLingua();
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const [selected, setSelected] = useState<(CellSelection & { previsto?: CellaPrevista }) | null>(
-    null,
-  );
-  const [evidenziato, setEvidenziato] = useState<ComuneGeometry | null>(null);
-  // Qui e non nel pannello: la mappa si ricostruisce a ogni cambio di
-  // pericolo, e deve poter riaccendere i livelli che erano accesi.
-  const [overlayAttivi, setOverlayAttivi] = useState<ReadonlySet<string>>(() => new Set());
-  const toggleOverlay = useCallback((id: string) => {
-    setOverlayAttivi((prima) => {
-      const dopo = new Set(prima);
-      if (dopo.has(id)) dopo.delete(id);
-      else dopo.add(id);
-      return dopo;
-    });
-  }, []);
+  // Nello stato condiviso e non qui (#317): la mappa si ricostruisce a ogni
+  // cambio di pericolo, e una seconda vista deve leggere le stesse scelte.
+  const {
+    cella: selected,
+    selezionaCella: setSelected,
+    comune: evidenziato,
+    evidenziaComune: setEvidenziato,
+    overlayAttivi,
+    commutaOverlay: toggleOverlay,
+    soloSoglia,
+    impostaSoloSoglia,
+    orizzonte,
+    impostaOrizzonte: setOrizzonte,
+    link,
+  } = useMapState();
   const [page, setPage] = useState<Page>(pageFromHash);
   const [cerca, setCerca] = useState("");
-  // Acceso di default, come nel design: con un quarto d'Italia in classe
-  // bassa la mappa era una coperta, e si cercava il moderato sotto di essa.
-  const [soloSoglia, setSoloSoglia] = useState(true);
-  const [orizzonte, setOrizzonte] = useState(0);
   const [puntoIspettore, setPuntoIspettore] = useState<{
     left: number;
     top: number;
@@ -336,35 +318,15 @@ export function App(): JSX.Element {
 
   useBuyMeACoffee(page !== "dashboard");
 
-  const [cellaLink, setCellaLink] = useState(() => cellaDaHash(window.location.hash));
+  const cellaLink = link.cella;
 
   useEffect(() => {
     const onHash = (): void => {
       setPage(pageFromHash());
-      setCellaLink(cellaDaHash(window.location.hash));
     };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
-
-  const onMapClick = useCallback(
-    (cellId: string, lngLat?: { lng: number; lat: number }, p?: Record<string, unknown>) => {
-      // Il punto cliccato, non il centro della cella: l'ispettore si apre lì
-      // accanto, dove l'occhio già sta.
-      const previsto: CellaPrevista | undefined =
-        orizzonte > 0 && p && typeof p["risk_score"] === "number"
-          ? {
-              orizzonte,
-              score: p["risk_score"],
-              level: p["risk_level"] as RiskLevel,
-              hazard: String(p["worst_hazard"] ?? ""),
-              target: typeof p["target_at"] === "string" ? p["target_at"] : null,
-            }
-          : undefined;
-      setSelected({ cellId, lon: lngLat?.lng ?? null, lat: lngLat?.lat ?? null, previsto });
-    },
-    [orizzonte],
-  );
 
   // L'ispettore segue la cella mentre la mappa si muove: aperto in un
   // angolo fisso, il numero restava lontano dal posto di cui parlava.
@@ -390,7 +352,6 @@ export function App(): JSX.Element {
     // l'ascoltatore resterebbe attaccato a quella vecchia. L'effetto della
     // mappa, che è un figlio, gira prima di questo: mapRef è già la nuova.
   }, [selected?.lon, selected?.lat, view, orizzonte]);
-
 
   // Dalla colonna alla mappa. Una classifica geografica su cui si clicca e
   // non succede niente è una lista di nomi: il posto è metà dell'informazione.
@@ -419,7 +380,7 @@ export function App(): JSX.Element {
       .catch(() => {
         // Senza confine resta il volo verso il centro: meno chiaro, non rotto.
       });
-  }, []);
+  }, [setSelected, setEvidenziato]);
 
   // Invio nella ricerca: la mappa va sul primo comune trovato.
   const cercaEVai = useCallback(
@@ -441,13 +402,13 @@ export function App(): JSX.Element {
   const vaiAllaCella = useCallback((c: ComuneCell) => {
     mapRef.current?.flyTo({ center: [c.lon, c.lat], zoom: 13, duration: 700 });
     setSelected({ cellId: c.cell_id, lon: c.lon, lat: c.lat });
-  }, []);
+  }, [setSelected]);
 
   useEffect(() => {
     if (page !== "dashboard" || !cellaLink) return;
     mapRef.current?.flyTo({ center: [cellaLink.lon, cellaLink.lat], zoom: 13, duration: 700 });
     setSelected({ cellId: cellaLink.cellId, lon: cellaLink.lon, lat: cellaLink.lat });
-  }, [page, cellaLink]);
+  }, [page, cellaLink, setSelected]);
 
   const attiviNomi = OVERLAYS.filter((o) => overlayAttivi.has(o.id)).map(
     (o) => testoOverlay(o, lingua).label,
@@ -462,22 +423,13 @@ export function App(): JSX.Element {
         <ShadowPanel />
       </aside>
       <div className="map-area">
-        <RiskMap
-          mapRef={mapRef}
-          onCellClick={onMapClick}
-          selectedCellId={selected?.cellId ?? null}
-          comuneEvidenziato={evidenziato}
-          overlayAttivi={overlayAttivi}
-          soloSopraSoglia={soloSoglia}
-          orizzonte={orizzonte}
-          geolocalizza={!cellaLink}
-        />
+        <RiskMap mapRef={mapRef} />
         <LivelloAttivo orizzonte={orizzonte} />
         <Timeline orizzonte={orizzonte} onCambia={setOrizzonte} />
         <div className="map-strumenti">
           <UnstyledButton
             className="map-bottone"
-            onClick={() => setSoloSoglia((v) => !v)}
+            onClick={() => impostaSoloSoglia(!soloSoglia)}
             aria-pressed={soloSoglia}
           >
             <Switch

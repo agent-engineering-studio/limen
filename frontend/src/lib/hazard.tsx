@@ -71,17 +71,26 @@ const FALLBACK: HazardType = "landslide";
 
 const HazardContext = createContext<HazardContextValue | null>(null);
 
-export function HazardProvider({ children }: { children: ReactNode }): JSX.Element {
+export function HazardProvider({
+  children,
+  iniziale,
+}: {
+  children: ReactNode;
+  /** La vista di un link (`#/mappa?hazard=…`), che vince sul default del
+   *  backend se il pericolo è fra quelli disponibili. */
+  iniziale?: HazardView;
+}): JSX.Element {
+  const richiesto = iniziale === "multi" ? undefined : iniziale;
   const [available, setAvailable] = useState<Hazard[]>([]);
   // I consumatori partono subito con il ripiego invece di aspettare
   // `/api/hazards`: la mappa pubblica si disegna senza attendere una lista
   // che oggi ha un solo elemento. Se il backend annuncia un default diverso,
   // l'effetto si ri-esegue con quello — una richiesta in più, non un errore.
-  const [selected, setSelected] = useState<HazardType>(FALLBACK);
+  const [selected, setSelected] = useState<HazardType>(richiesto ?? FALLBACK);
   // Si apre su tutti i pericoli (#155): la domanda con cui si arriva è «dove
   // va male», non «dove va male per le frane». Il pericolo singolo è un
   // filtro che si sceglie dal quadro nazionale.
-  const [multi, setMulti] = useState(true);
+  const [multi, setMulti] = useState(richiesto === undefined);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -97,6 +106,9 @@ export function HazardProvider({ children }: { children: ReactNode }): JSX.Eleme
         // primo disponibile invece di selezionare qualcosa di inesistente.
         const first = res.items[0];
         if (first) {
+          if (richiesto && res.items.some((h) => h.hazard === richiesto)) return;
+          // Un link a un pericolo che qui non c'è riapre la vista di default.
+          if (richiesto && res.items.length >= 2) setMulti(true);
           setSelected(
             res.items.some((h) => h.hazard === res.default) ? res.default : first.hazard,
           );
@@ -106,7 +118,7 @@ export function HazardProvider({ children }: { children: ReactNode }): JSX.Eleme
         // Backend giù: si resta sul default e la dashboard funziona.
       });
     return () => controller.abort();
-  }, []);
+  }, [richiesto]);
 
   // Passando a "multi" il pericolo scelto **non** si azzera: è quello che i
   // pannelli per pericolo continuano a leggere, e tornare indietro dalla

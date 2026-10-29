@@ -9,6 +9,7 @@ import { BASEMAP_LAYER, BASEMAP_SOURCE } from "../lib/basemap";
 import { config } from "../lib/env";
 import { NOMI_PERICOLO, useHazard } from "../lib/hazard";
 import { testi, useLingua, useTesti } from "../lib/i18n";
+import { useMapStateOpzionale } from "../lib/map-state";
 import { COLORE_ALLERTA, OVERLAYS } from "../lib/overlays";
 import { posizioneInItalia, ZOOM_POSIZIONE } from "../lib/posizione";
 import { COLORE_LIVELLO, popupStazione, RAGGIO_LIVELLO } from "../lib/stazioni";
@@ -186,6 +187,9 @@ const T = testi(
   },
 );
 
+/** Le props sono override: senza, la mappa legge lo stato condiviso
+ *  (`MapStateProvider`, #317). Restano per i test e per chi monta la mappa
+ *  fuori dalla dashboard. */
 export interface RiskMapProps {
   /** Override the pg_tileserv base URL; useful in tests. */
   readonly tileservUrl?: string;
@@ -218,6 +222,8 @@ export interface RiskMapProps {
 /** Da questo zoom in su le celle previste: a 6 una tile pesava 2,4 MB e
  *  3,6 s, a 7 1 MB e mezzo secondo. */
 const CELL_MIN_ZOOM_PREVISIONE = 7;
+
+const NESSUN_OVERLAY: ReadonlySet<string> = new Set();
 
 /** Le classi che restano con «solo sopra soglia». */
 const SOPRA_SOGLIA = ["Moderate", "High", "VeryHigh"];
@@ -260,9 +266,25 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   // palesemente rotto: questo stato serve a impedirlo.
   const [livelloAssente, setLivelloAssente] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const evidenziatoRef = useRef<GeoJSON.Feature | null>(props.comuneEvidenziato ?? null);
-  const overlayRef = useRef<ReadonlySet<string>>(props.overlayAttivi ?? new Set());
-  const sogliaRef = useRef(props.soloSopraSoglia ?? false);
+  const stato = useMapStateOpzionale();
+  const comuneEvidenziato =
+    props.comuneEvidenziato !== undefined ? props.comuneEvidenziato : (stato?.comune ?? null);
+  const overlayAttivi = props.overlayAttivi ?? stato?.overlayAttivi ?? NESSUN_OVERLAY;
+  const soloSopraSoglia = props.soloSopraSoglia ?? stato?.soloSoglia ?? false;
+  const selectedCellId =
+    props.selectedCellId !== undefined ? props.selectedCellId : (stato?.cella?.cellId ?? null);
+  const geolocalizza = props.geolocalizza ?? stato?.geolocalizza ?? false;
+  const onCellClick = props.onCellClick ?? stato?.cliccaCella;
+  const evidenziatoRef = useRef<GeoJSON.Feature | null>(comuneEvidenziato);
+  const overlayRef = useRef<ReadonlySet<string>>(overlayAttivi);
+  const sogliaRef = useRef(soloSopraSoglia);
+  // La mappa scrive l'area inquadrata nello stato a ogni fine movimento: un
+  // ref, perché il gestore registrato alla creazione vive più del render.
+  const impostaAreaRef = useRef(stato?.impostaArea);
+  impostaAreaRef.current = stato?.impostaArea;
+  // L'area di un link si legge solo quando la mappa nasce: dopo, la vista
+  // la decide chi la muove.
+  const areaLink = stato?.link.area ?? null;
   // La vista si conserva quando la mappa si ricostruisce (cambio di pericolo
   // o di sorgente): ripartire dal centro di default buttava via il comune
   // che si stava guardando.
@@ -300,7 +322,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   const isDefaultHazard = hazard === "landslide";
   // Le rollup regionali e comunali sono fissate sulle frane: quando il
   // selettore dice altro, le celle sono l'unica cosa che lo rispetta.
-  const orizzonte = props.orizzonte ?? 0;
+  const orizzonte = props.orizzonte ?? stato?.orizzonte ?? 0;
   const futuro = orizzonte > 0;
   const cellMinZoom = futuro
     ? CELL_MIN_ZOOM_PREVISIONE
@@ -363,11 +385,11 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   // Un ref e non il valore: la mappa non si ricostruisce fra una scadenza e
   // l'altra, e il gestore registrato alla creazione leggerebbe la callback
   // di allora — con l'orizzonte di allora.
-  const onCellClickRef = useRef(props.onCellClick);
+  const onCellClickRef = useRef(onCellClick);
   useEffect(() => {
-    onCellClickRef.current = props.onCellClick;
-  }, [props.onCellClick]);
-  const haClick = props.onCellClick !== undefined;
+    onCellClickRef.current = onCellClick;
+  }, [onCellClick]);
+  const haClick = onCellClick !== undefined;
   // L'attributo che porta la classe, per livello. Le regioni non ci sono:
   // `v_region_tiles` non espone `measured`, e filtrarle toglierebbe proprio
   // le regioni senza dato insieme a quelle tranquille.
@@ -860,8 +882,9 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         sources,
         layers,
       },
-      center: cameraRef.current?.center ?? [config.defaultLon, config.defaultLat],
-      zoom: cameraRef.current?.zoom ?? config.defaultZoom,
+      center: cameraRef.current?.center ??
+        (areaLink ? [areaLink.lon, areaLink.lat] : [config.defaultLon, config.defaultLat]),
+      zoom: cameraRef.current?.zoom ?? areaLink?.zoom ?? config.defaultZoom,
     });
 
     if (props.mapRef) {
@@ -873,7 +896,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     // vista si è mossa (un trascinamento, un link, un comune dalla colonna) la
     // si lascia stare: strappare la mappa a chi la sta usando è peggio di Roma.
     let annullaPosizione = (): void => {};
-    if (props.geolocalizza && !posizioneFattaRef.current) {
+    if (geolocalizza && !posizioneFattaRef.current) {
       if (!partenzaRef.current) {
         const c = map.getCenter();
         partenzaRef.current = { lng: c.lng, lat: c.lat, zoom: map.getZoom() };
@@ -925,6 +948,10 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     });
 
     map.once("load", () => caricaStazioni(map, overlayRef.current, urlStazioniRef.current));
+    map.on("moveend", () => {
+      const c = map.getCenter();
+      impostaAreaRef.current?.({ lon: c.lng, lat: c.lat, zoom: map.getZoom() });
+    });
 
     // Click su una regione a zoom nazionale → zoom fino alle celle.
     map.on("click", REGION_LAYER_ID, (e: maplibregl.MapMouseEvent) => {
@@ -986,7 +1013,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
 
   // I livelli di contesto, senza ricostruire la mappa.
   useEffect(() => {
-    overlayRef.current = props.overlayAttivi ?? new Set();
+    overlayRef.current = overlayAttivi;
     const map = props.mapRef?.current;
     if (!map) return;
     const apply = (): void => {
@@ -999,11 +1026,11 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     };
     if (map.isStyleLoaded()) apply();
     else map.once("idle", apply);
-  }, [props.overlayAttivi, props.mapRef]);
+  }, [overlayAttivi, props.mapRef]);
 
   // «Solo sopra soglia», senza ricostruire la mappa.
   useEffect(() => {
-    sogliaRef.current = props.soloSopraSoglia ?? false;
+    sogliaRef.current = soloSopraSoglia;
     const map = props.mapRef?.current;
     if (!map) return;
     const apply = (): void => {
@@ -1014,11 +1041,11 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     if (map.isStyleLoaded()) apply();
     else map.once("idle", apply);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.soloSopraSoglia, props.mapRef]);
+  }, [soloSopraSoglia, props.mapRef]);
 
   // Il confine del comune, senza ricostruire la mappa.
   useEffect(() => {
-    evidenziatoRef.current = props.comuneEvidenziato ?? null;
+    evidenziatoRef.current = comuneEvidenziato;
     const map = props.mapRef?.current;
     if (!map) return;
     const apply = (): void => {
@@ -1027,7 +1054,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     };
     if (map.isStyleLoaded()) apply();
     else map.once("idle", apply);
-  }, [props.comuneEvidenziato, props.mapRef]);
+  }, [comuneEvidenziato, props.mapRef]);
 
   // Update the selection outline without rebuilding the map.
   useEffect(() => {
@@ -1038,12 +1065,12 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       map.setFilter(SELECTED_LAYER_ID, [
         "==",
         ["get", "cell_id"],
-        props.selectedCellId ?? "__none__",
+        selectedCellId ?? "__none__",
       ]);
     };
     if (map.isStyleLoaded()) apply();
     else map.once("idle", apply);
-  }, [props.selectedCellId, props.mapRef]);
+  }, [selectedCellId, props.mapRef]);
 
   return (
     <div className="map-wrap">
