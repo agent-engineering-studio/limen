@@ -6,6 +6,7 @@ passano da ``docker exec -i``; senza la CLI di Docker il test si salta.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -179,6 +180,32 @@ async def test_un_import_fallito_lascia_i_dati_di_prima(
             "SELECT version FROM dataset_versions WHERE source = 'static_bootstrap'"
         )
         assert versione == "v-dem"
+
+
+async def test_un_dump_troncato_non_conferma_il_truncate(
+    strato: None, postgres_container: str, tmp_path: Path
+) -> None:
+    """Ultrareview: con ``docker exec -i`` uccidere psql uccideva il client
+    sull'host, e il psql nel container confermava il TRUNCATE a metà."""
+    cfg, store = _cfg(_container(postgres_container), tmp_path)
+    chiave = await _esporta(cfg, store, tmp_path)
+    dump = tmp_path / "troncato.dump"
+    await store.get_file(chiave + "statico.dump", dump)
+    dump.write_bytes(dump.read_bytes()[: dump.stat().st_size * 2 // 3])
+    await store.put_file(chiave + "statico.dump", dump)
+    manifest = json.loads(await store.get(chiave + "manifest.json"))
+    manifest["file"]["statico.dump"]["sha256"] = hashlib.sha256(dump.read_bytes()).hexdigest()
+    await store.put(chiave + "manifest.json", json.dumps(manifest).encode())
+    async with acquire() as conn:
+        await conn.execute("UPDATE cell_static_factors SET slope_deg = 7.0")
+    with pytest.raises(BackupError, match="pg_restore"):
+        await _importa(cfg, store, tmp_path, forza=True)
+    async with acquire() as conn:
+        rimasti = await conn.fetchval(
+            "SELECT count(*) FROM cell_static_factors WHERE slope_deg = 7.0"
+        )
+        assert rimasti == 50
+        assert await conn.fetchval("SELECT count(*) FROM fire_events") == 2
 
 
 async def test_una_griglia_diversa_si_rifiuta(

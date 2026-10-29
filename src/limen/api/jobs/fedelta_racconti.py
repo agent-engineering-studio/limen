@@ -6,24 +6,21 @@ secondo modello. Il verdetto va accanto alla spiegazione
 (`spiegazioni_regione.fedelta`, migrazione 069) e, se è negativo, in un
 warning `racconto.infedele`: il revisore non corregge niente, segnala.
 
-Gira **di sera, una volta**, dentro `LLM__SLOW_MODELS_WINDOW_UTC`: il modello
-utile qui è GLM-5.2 su colibrì, che a regime scrive un token e mezzo al
-secondo e di giorno toglierebbe risorse alla mappa. Non sta nella pipeline
-notturna delle 02:00 perché quella è fuori dalla finestra, e il revisore non
-deve competere con shadow e retrain per la stessa macchina.
+Gira **di sera, una volta**, a `LLM__FEDELTA_ORA_UTC`: tutto il campione va
+in un solo Message Batch di Claude, e il job aspetta che finisca. Sulla
+macchina non pesa niente; prima girava su GLM-5.2 in locale (colibrì), che
+chiedeva 21 GB di RAM e venti minuti per giudizio.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any
 
 from limen.agents.chat_agents.fedelta import RevisoreFedelta, controllo_numeri
-from limen.agents.llm_factory.base import LlmClientFactory
 from limen.api.dependencies import AppDependencies
 from limen.api.jobs._tracking import tracked
 from limen.api.jobs.ids import JOB_FEDELTA_RACCONTI
-from limen.config.settings import SLOW_GENERATION_MODELS, Settings
+from limen.config.settings import Settings
 from limen.core.logging import get_logger
 from limen.data.repos import spiegazioni_repo
 
@@ -49,35 +46,35 @@ def verdetto(*, numeri_sconosciuti: list[str], giudizio: dict[str, Any] | None) 
     return bool(giudizio["fedele"])
 
 
-async def controlla_fedelta(settings: Settings, factory: LlmClientFactory) -> dict[str, Any]:
+async def controlla_fedelta(settings: Settings) -> dict[str, Any]:
     llm = settings.llm
     modello = llm.models.fedelta.strip()
     # Vuota conta come assente: il compose passa `${LLM__MODELS__FEDELTA:-}`,
     # e una variabile vuota è comunque «dichiarata» per pydantic.
     if "fedelta" not in llm.models.model_fields_set or not modello:
         return {"status": "skipped", "reason": "LLM__MODELS__FEDELTA non dichiarato"}
-    lento = modello in SLOW_GENERATION_MODELS
-    if lento and not llm.slow_models_allowed(datetime.now(UTC).hour):
-        return {"status": "skipped", "reason": "modello lento fuori finestra", "model": modello}
+    chiave = settings.anthropic_api_key
+    # Anche qui il compose passa `${ANTHROPIC_API_KEY:-}`: vuota è assente.
+    if chiave is None or not chiave.get_secret_value().strip():
+        return {"status": "skipped", "reason": "ANTHROPIC_API_KEY assente", "model": modello}
 
     campione = await spiegazioni_repo.da_giudicare(hours=_FINESTRA_ORE, limite=llm.fedelta_campione)
     if not campione:
         log.info("job.fedelta_racconti.nothing")
         return {"giudicate": 0}
 
-    revisore = RevisoreFedelta(factory.create(RevisoreFedelta.role_name))
+    revisore = RevisoreFedelta(
+        api_key=chiave,
+        model=modello,
+        attesa_massima_s=llm.fedelta_attesa_massima_minuti * 60,
+    )
+    giudizi = await revisore.giudica([(s.testo, s.ingresso) for s in campione])
     esiti: dict[str, int] = {"fedeli": 0, "infedeli": 0, "senza_giudizio": 0}
-    for s in campione:
-        if lento and not llm.slow_models_allowed(datetime.now(UTC).hour):
-            # La finestra si è chiusa a metà campione: il resto aspetta la
-            # sera dopo, invece di occupare la macchina nelle ore della mappa.
-            log.info("job.fedelta_racconti.window_closed", remaining=len(campione))
-            break
+    for s, giudizio in zip(campione, giudizi, strict=True):
         async with tracked(JOB_FEDELTA_RACCONTI, scope=s.aoi_id) as metrics:
             metrics["hazard"] = s.hazard.value
             numeri = controllo_numeri(s.testo, s.ingresso)
             stile = [v for v in numeri.violations if not v.startswith("numeri non presenti")]
-            giudizio = await revisore.giudica(s.testo, s.ingresso)
             giudizio_dict = giudizio.model_dump() if giudizio is not None else None
             fedele = verdetto(numeri_sconosciuti=numeri.unknown_numbers, giudizio=giudizio_dict)
             scritto = await spiegazioni_repo.scrivi_fedelta(
@@ -120,4 +117,4 @@ async def controlla_fedelta(settings: Settings, factory: LlmClientFactory) -> di
 
 
 async def run_fedelta_racconti(deps: AppDependencies) -> dict[str, Any]:
-    return await controlla_fedelta(deps.settings, deps.llm_factory)
+    return await controlla_fedelta(deps.settings)

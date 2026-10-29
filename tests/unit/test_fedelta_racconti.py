@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any, cast
 
+import httpx
 import pytest
+from pydantic import SecretStr
 
 from limen.agents.chat_agents.briefing_eval import allowed_numbers_from_text
-from limen.agents.chat_agents.fedelta import RevisoreFedelta, controllo_numeri
-from limen.agents.llm_factory.stub import StubLlmClientFactory
+from limen.agents.chat_agents.fedelta import Giudizio, RevisoreFedelta, controllo_numeri
 from limen.api.jobs import fedelta_racconti as fr
 from limen.config.settings import LLMSettings, Settings
 from limen.core.models.hazard import HazardType
@@ -45,27 +48,105 @@ def test_le_citazioni_non_contano() -> None:
     assert controllo_numeri(testo, INGRESSO).unknown_numbers == []
 
 
-class _Client:
-    def __init__(self, risposta: str | Exception) -> None:
-        self.risposta = risposta
-        self.model = "glm52"
-
-    async def chat(self, _messages: Any, **_kw: Any) -> str:
-        if isinstance(self.risposta, Exception):
-            raise self.risposta
-        return self.risposta
-
-
-async def test_il_revisore_legge_il_suo_json() -> None:
-    g = await RevisoreFedelta(_Client('{"fedele": false, "problemi": ["la pioggia"]}')).giudica(
-        "t", INGRESSO
+def _risposta(custom_id: str, testo: str | None, *, stop: str = "end_turn") -> Any:
+    content = [SimpleNamespace(type="thinking", thinking="")]
+    if testo is not None:
+        content.append(SimpleNamespace(type="text", text=testo))
+    message = SimpleNamespace(content=content, stop_reason=stop)
+    return SimpleNamespace(
+        custom_id=custom_id, result=SimpleNamespace(type="succeeded", message=message)
     )
-    assert g is not None and g.fedele is False and g.problemi == ["la pioggia"]
 
 
-@pytest.mark.parametrize("risposta", ["non è json", TimeoutError("colibrì")])
-async def test_un_revisore_che_non_risponde_non_assolve(risposta: Any) -> None:
-    assert await RevisoreFedelta(_Client(risposta)).giudica("t", INGRESSO) is None
+class _Batches:
+    """Il pezzo di `client.messages.batches` che il revisore usa."""
+
+    def __init__(self, risultati: list[Any], *, giri: int = 0, errore: Exception | None = None):
+        self.risultati = risultati
+        self.giri = giri
+        self.errore = errore
+        self.richieste: list[Any] = []
+        self.annullato = False
+
+    def _batch(self) -> SimpleNamespace:
+        return SimpleNamespace(
+            id="b1", processing_status="ended" if self.giri <= 0 else "in_progress"
+        )
+
+    async def create(self, *, requests: list[Any]) -> SimpleNamespace:
+        if self.errore is not None:
+            raise self.errore
+        self.richieste = requests
+        return self._batch()
+
+    async def retrieve(self, _id: str) -> SimpleNamespace:
+        self.giri -= 1
+        return self._batch()
+
+    async def cancel(self, _id: str) -> None:
+        self.annullato = True
+
+    async def results(self, _id: str) -> AsyncIterator[Any]:
+        async def _gen() -> AsyncIterator[Any]:
+            for r in self.risultati:
+                yield r
+
+        return _gen()
+
+
+def _revisore(batches: _Batches, *, attesa_s: float = 60.0) -> RevisoreFedelta:
+    r = RevisoreFedelta(
+        api_key=SecretStr("sk-test"), model="claude-sonnet-5-5", attesa_massima_s=attesa_s
+    )
+    r._intervallo_s = 0.0
+    r._client = cast(Any, SimpleNamespace(messages=SimpleNamespace(batches=batches)))
+    return r
+
+
+async def test_il_revisore_legge_il_suo_json_nell_ordine_giusto() -> None:
+    # I risultati di un batch arrivano in qualunque ordine: contano i custom_id.
+    batches = _Batches(
+        [
+            _risposta("s1", '{"fedele": true, "problemi": []}'),
+            _risposta("s0", '{"fedele": false, "problemi": ["la pioggia"]}'),
+        ],
+        giri=2,
+    )
+    g = await _revisore(batches).giudica([("t0", INGRESSO), ("t1", INGRESSO)])
+    assert g[0] is not None and g[0].fedele is False and g[0].problemi == ["la pioggia"]
+    assert g[1] is not None and g[1].fedele is True
+    params = batches.richieste[0]["params"]
+    assert params["model"] == "claude-sonnet-5-5"
+    assert params["output_config"]["format"]["type"] == "json_schema"
+    assert "temperature" not in params
+
+
+@pytest.mark.parametrize(
+    "risultato",
+    [
+        _risposta("s0", "non è json"),
+        _risposta("s0", '{"fedele": true, "problemi": ["1", "2", "3", "4", "5", "6"]}'),
+        _risposta("s0", None, stop="refusal"),
+        _risposta("s0", '{"fedele": tr', stop="max_tokens"),
+        SimpleNamespace(custom_id="s0", result=SimpleNamespace(type="errored")),
+    ],
+)
+async def test_un_revisore_che_non_risponde_non_assolve(risultato: Any) -> None:
+    assert await _revisore(_Batches([risultato])).giudica([("t", INGRESSO)]) == [None]
+
+
+async def test_un_batch_che_non_parte_non_assolve() -> None:
+    import anthropic
+
+    errore = anthropic.APIConnectionError(request=httpx.Request("POST", "https://x"))
+    batches = _Batches([], errore=errore)
+    assert await _revisore(batches).giudica([("a", INGRESSO), ("b", INGRESSO)]) == [None, None]
+
+
+async def test_un_batch_che_non_finisce_si_annulla() -> None:
+    batches = _Batches([_risposta("s0", '{"fedele": true, "problemi": []}')], giri=10**6)
+    assert await _revisore(batches, attesa_s=0.0).giudica([("t", INGRESSO)]) == [None]
+    assert batches.annullato
 
 
 def test_il_verdetto() -> None:
@@ -75,32 +156,41 @@ def test_il_verdetto() -> None:
     assert fr.verdetto(numeri_sconosciuti=[], giudizio={"fedele": False}) is False
 
 
-def _settings(**llm: Any) -> Settings:
-    return cast(Settings, cast(Any, Settings)(_env_file=None, llm=LLMSettings(**llm)))
+def _settings(*, chiave: str | None = None, **llm: Any) -> Settings:
+    return cast(
+        Settings,
+        cast(Any, Settings)(_env_file=None, llm=LLMSettings(**llm), anthropic_api_key=chiave),
+    )
 
 
 async def test_senza_ruolo_dichiarato_non_gira() -> None:
-    out = await fr.controlla_fedelta(_settings(), StubLlmClientFactory())
+    out = await fr.controlla_fedelta(_settings())
     assert out["status"] == "skipped"
 
 
 async def test_una_variabile_vuota_non_accende_il_revisore() -> None:
-    out = await fr.controlla_fedelta(_settings(models={"fedelta": ""}), StubLlmClientFactory())
+    out = await fr.controlla_fedelta(_settings(models={"fedelta": ""}))
     assert out["status"] == "skipped"
 
 
-async def test_il_modello_lento_aspetta_la_sera() -> None:
-    # Una finestra che comincia fra un'ora: adesso è fuori, qualunque ora sia.
-    ora = datetime.now(UTC).hour
-    settings = _settings(
-        models={"fedelta": "glm52"}, slow_models_window_utc=((ora + 1) % 24, (ora + 2) % 24)
-    )
-    out = await fr.controlla_fedelta(settings, StubLlmClientFactory())
-    assert out == {"status": "skipped", "reason": "modello lento fuori finestra", "model": "glm52"}
+async def test_senza_chiave_anthropic_non_gira() -> None:
+    out = await fr.controlla_fedelta(_settings(models={"fedelta": "claude-sonnet-5-5"}))
+    assert out["status"] == "skipped" and out["reason"] == "ANTHROPIC_API_KEY assente"
+
+
+def _revisore_fisso(risposta: str) -> type:
+    class _Revisore:
+        def __init__(self, **_kw: Any) -> None:
+            pass
+
+        async def giudica(self, coppie: list[tuple[str, str]]) -> list[Giudizio | None]:
+            return [Giudizio.model_validate_json(risposta) for _ in coppie]
+
+    return _Revisore
 
 
 async def test_il_verdetto_va_accanto_alla_spiegazione(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = _settings(models={"fedelta": "fast"})
+    settings = _settings(models={"fedelta": "claude-sonnet-5-5"}, chiave="sk-test")
     candidata = DaGiudicare(
         aoi_id="it-basilicata",
         hazard=HazardType.LANDSLIDE,
@@ -118,12 +208,6 @@ async def test_il_verdetto_va_accanto_alla_spiegazione(monkeypatch: pytest.Monke
         scritti.append(kw)
         return True
 
-    class _Factory:
-        provider = "test"
-
-        def create(self, _role: str) -> _Client:
-            return _Client('{"fedele": true, "problemi": []}')
-
     class _Tracked:
         async def __aenter__(self) -> dict[str, Any]:
             return {}
@@ -134,8 +218,9 @@ async def test_il_verdetto_va_accanto_alla_spiegazione(monkeypatch: pytest.Monke
     monkeypatch.setattr(fr.spiegazioni_repo, "da_giudicare", _da_giudicare)
     monkeypatch.setattr(fr.spiegazioni_repo, "scrivi_fedelta", _scrivi)
     monkeypatch.setattr(fr, "tracked", lambda *_a, **_k: _Tracked())
+    monkeypatch.setattr(fr, "RevisoreFedelta", _revisore_fisso('{"fedele": true, "problemi": []}'))
 
-    out = await fr.controlla_fedelta(settings, _Factory())
+    out = await fr.controlla_fedelta(settings)
     assert out == {"giudicate": 1, "fedeli": 0, "infedeli": 1, "senza_giudizio": 0}
     # Il revisore ha assolto, ma il 57 non c'è nei dati: vince il controllo dei numeri.
     assert scritti[0]["fedelta"]["fedele"] is False
@@ -143,18 +228,12 @@ async def test_il_verdetto_va_accanto_alla_spiegazione(monkeypatch: pytest.Monke
     assert scritti[0]["fedelta"]["autore"] == "fast-cloud"
 
 
-def test_fedelta_e_un_ruolo_asincrono() -> None:
-    LLMSettings(models={"fedelta": "glm52"})
-    with pytest.raises(ValueError, match="RISK_ANALYST"):
-        LLMSettings(models={"risk_analyst": "glm52"})
-
-
 async def test_un_giudizio_su_un_testo_riscritto_non_conta(
     monkeypatch: pytest.MonkeyPatch, capsys: Any
 ) -> None:
     """Il briefing ha riscritto la spiegazione durante la revisione: il
     verdetto non si salva, quindi niente allarme e niente conteggio (#206)."""
-    settings = _settings(models={"fedelta": "fast"})
+    settings = _settings(models={"fedelta": "claude-sonnet-5-5"}, chiave="sk-test")
     candidata = DaGiudicare(
         aoi_id="it-basilicata",
         hazard=HazardType.LANDSLIDE,
@@ -170,12 +249,6 @@ async def test_un_giudizio_su_un_testo_riscritto_non_conta(
     async def _scrivi(**_kw: Any) -> bool:
         return False
 
-    class _Factory:
-        provider = "test"
-
-        def create(self, _role: str) -> _Client:
-            return _Client('{"fedele": true, "problemi": []}')
-
     class _Tracked:
         async def __aenter__(self) -> dict[str, Any]:
             return {}
@@ -186,7 +259,8 @@ async def test_un_giudizio_su_un_testo_riscritto_non_conta(
     monkeypatch.setattr(fr.spiegazioni_repo, "da_giudicare", _da_giudicare)
     monkeypatch.setattr(fr.spiegazioni_repo, "scrivi_fedelta", _scrivi)
     monkeypatch.setattr(fr, "tracked", lambda *_a, **_k: _Tracked())
+    monkeypatch.setattr(fr, "RevisoreFedelta", _revisore_fisso('{"fedele": true, "problemi": []}'))
 
-    out = await fr.controlla_fedelta(settings, _Factory())
+    out = await fr.controlla_fedelta(settings)
     assert out == {"giudicate": 0, "fedeli": 0, "infedeli": 0, "senza_giudizio": 0}
     assert "racconto.infedele" not in capsys.readouterr().out

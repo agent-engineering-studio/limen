@@ -1,9 +1,0 @@
-[Unit]
-Description=Spegne colibrì alla chiusura della finestra dei modelli lenti
-
-[Timer]
-OnCalendar=*-*-* 02:05:00 UTC
-Unit=colibri-spegni.service
-
-[Install]
-WantedBy=timers.target

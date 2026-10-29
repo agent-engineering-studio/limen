@@ -215,7 +215,7 @@ Loaded from environment variables (and an optional `.env`) via
 | `EGMS__SERVICE_KEY` | _empty_ | CLMS service key (single-line JSON) for EGMS downloads and the release check. |
 | `LLM__PROVIDER` | _empty_ | Override: `anthropic` / `openai` / `foundry` / `ollama` / `llamacpp`. Empty ⇒ llama.cpp unless a cloud key is set. |
 | `LLM__LLAMACPP_BASE_URL` | `http://127.0.0.1:8091` | Self-hosted inference gateway (OpenAI shape). **Not** `:8081`, which is GeoServer. From a container: `host.docker.internal`. |
-| `LLM__MODELS__<ROLE>` | Claude id | Role → model map. Local engines honour only the roles they declare. Never `quality-local`/`glm52` on a synchronous role: the process refuses to start. See [`docs/inference.md`](./docs/inference.md). |
+| `LLM__MODELS__<ROLE>` | Claude id | Role → model map. Local engines honour only the roles they declare. `LLM__MODELS__FEDELTA` is a Claude id sent as a Message Batch, not through the gateway. See [`docs/inference.md`](./docs/inference.md). |
 | `LLM__LLAMACPP_TIMEOUT_SECONDS` | `120` | Ceiling for roles without an override; `LLM__LLAMACPP_ROLE_TIMEOUT_SECONDS` (JSON) per role. |
 | `LLM__OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama host (from a container: `host.docker.internal`). |
 | `LLM__OLLAMA_MODEL` | `qwen3.6:latest` | Single Ollama model for every agent role. |

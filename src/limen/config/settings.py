@@ -41,31 +41,6 @@ class LLMProvider(StrEnum):
     LLAMACPP = "llamacpp"
 
 
-# Gateway model names whose *generation* speed is measured in tens of minutes
-# per response (measured on the reference host: colibri/GLM-5.2 at ~0.08 tok/s
-# cold — 40 s for 3 output tokens). Every role in :class:`LLMModels` is
-# consumed on a synchronous path: an HTTP request, an MCP tool call, or a
-# scheduler tick shorter than the response time. Mapping one of these there
-# does not make Limen slow, it makes the monitoring stop — the caller times out
-# into its deterministic fallback, and the hourly sweep lock then skips every
-# later tick, so the system looks healthy while it has stopped scoring. Long
-# jobs need their own role driven by an asynchronous, persisted worker (see
-# docs/inference.md); until that exists, refuse to start.
-SLOW_GENERATION_MODELS: frozenset[str] = frozenset({"quality-local", "glm52"})
-
-# I ruoli **non** consumati su un percorso sincrono, e quindi gli unici a cui è
-# lecito assegnare un modello di :data:`SLOW_GENERATION_MODELS`. Dopo #78 il
-# briefing non gira più dentro il tick orario: lo scrive `briefing_enrichment`
-# su righe già persistite, un AOI alla volta, e nessuno lo aspetta — né la
-# mappa (che mostra il testo deterministico finché non arriva) né le allerte
-# (deterministiche per invariante). Un briefing che impiega mezz'ora è quindi
-# lento, non rotto. `risk_analyst` resta fuori: lo stesso job lo invoca prima
-# del briefing, ma è anche il ruolo che MCP e i percorsi HTTP chiamano.
-# Il secondo è `fedelta`, il revisore serale: rilegge spiegazioni già scritte,
-# una alla volta, e nessuno aspetta il suo verdetto.
-ASYNC_GENERATION_ROLES: frozenset[str] = frozenset({"briefing", "fedelta"})
-
-
 class ScoringEngineKind(StrEnum):
     """Which scoring engine drives the workflow's authoritative numbers.
 
@@ -158,9 +133,9 @@ class LLMModels(BaseSettings):
     risk_analyst: str = "claude-haiku-4-5"
     briefing: str = "claude-sonnet-4-6"
     # Il revisore di fedeltà. Opt-in: il job gira solo se LLM__MODELS__FEDELTA
-    # è dichiarato, e il valore utile su questo server è `glm52` — un modello
-    # di un'altra famiglia rispetto a chi scrive, senza fallback silenzioso.
-    fedelta: str = "claude-haiku-4-5"
+    # è dichiarato. Va sempre all'API di Claude in batch, mai al gateway: è un
+    # id Claude, e non lo stesso modello che scrive le spiegazioni (Haiku).
+    fedelta: str = "claude-sonnet-5-5"
 
 
 class LLMSettings(BaseSettings):
@@ -270,23 +245,14 @@ class LLMSettings(BaseSettings):
     # parlerebbe di giorni già passati.
     briefing_min_hours: int = Field(default=24, ge=1)
 
-    # Le ore UTC in cui un modello lento (colibrì/GLM-5.2) può girare:
-    # [inizio, fine), a cavallo della mezzanotte se inizio > fine. Il server
-    # è uno solo, con 30 GB di RAM condivisi con Postgres e Open-Meteo, e
-    # colibrì legge 400 GB da disco: di giorno toglierebbe risorse alla mappa
-    # e agli sweep. Default 20→2 UTC (22-4 ora italiana d'estate): chiude
-    # prima del lavoro notturno delle 02:00, che è il più pesante del giorno.
-    slow_models_window_utc: tuple[int, int] = (20, 2)
-    # Quante spiegazioni il revisore rilegge per sera. Poche: sul modello
-    # lento una revisione sono minuti, e la finestra serale è di sei ore.
+    # Quante spiegazioni il revisore rilegge per sera, e a che ora (UTC). Le
+    # 21: dopo la previsione per cella delle 20:20, prima della notte.
     fedelta_campione: int = Field(default=4, ge=1)
-
-    def slow_models_allowed(self, hour_utc: int) -> bool:
-        """Se a quest'ora un modello di :data:`SLOW_GENERATION_MODELS` può girare."""
-        inizio, fine = self.slow_models_window_utc
-        if inizio <= fine:
-            return inizio <= hour_utc < fine
-        return hour_utc >= inizio or hour_utc < fine
+    fedelta_ora_utc: int = Field(default=21, ge=0, le=23)
+    # Quanto il job aspetta il batch prima di annullarlo. Di solito finisce in
+    # minuti, ma l'API si riserva fino a 24 ore: oltre questo tetto i verdetti
+    # restano a null, come per un revisore che non risponde.
+    fedelta_attesa_massima_minuti: int = Field(default=120, ge=1)
 
     @field_validator("llamacpp_role_timeout_seconds")
     @classmethod
@@ -298,38 +264,6 @@ class LLMSettings(BaseSettings):
                 f"for every role; got <= 0 for: {', '.join(bad)}"
             )
         return v
-
-    @model_validator(mode="after")
-    def _reject_slow_models_on_sync_roles(self) -> LLMSettings:
-        """Fail closed when a synchronous role is pointed at a slow model.
-
-        See :data:`SLOW_GENERATION_MODELS`. Refusing to boot is the only
-        outcome here that is not a silent degradation.
-        """
-        offenders = {
-            field: value.strip()
-            for field, value in self.models.model_dump().items()
-            if field not in ASYNC_GENERATION_ROLES
-            and isinstance(value, str)
-            and value.strip() in SLOW_GENERATION_MODELS
-        }
-        if not offenders:
-            return self
-        listed = ", ".join(
-            f"LLM__MODELS__{field.upper()}={model}" for field, model in sorted(offenders.items())
-        )
-        raise ValueError(
-            f"{listed}: every LLM__MODELS__* role is invoked on a synchronous "
-            "path (HTTP request, MCP tool call, or a scheduler tick shorter "
-            "than the response), and these gateway models generate in tens of "
-            "minutes. The caller would time out into its deterministic "
-            "fallback and the monitoring sweep would stall silently. Use "
-            "'fast' / 'chat' / 'extract' here. L'unico ruolo asincrono è "
-            f"{', '.join(sorted(ASYNC_GENERATION_ROLES))}: dopo #78 il briefing "
-            "lo scrive `briefing_enrichment` su righe già persistite, quindi lì "
-            "un modello lento è ammesso (dàgli un tetto in "
-            "LLM__LLAMACPP_ROLE_TIMEOUT_SECONDS)."
-        )
 
 
 class SchedulerSettings(BaseSettings):

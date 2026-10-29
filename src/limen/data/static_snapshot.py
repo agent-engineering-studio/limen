@@ -202,6 +202,11 @@ def _epilogo(attese: dict[str, int], impronte: list[dict[str, str]]) -> str:
     return "DO $$ BEGIN\n" + "\n".join(righe) + "\nEND $$;\n" + insert
 
 
+#: Chiude un COPY rimasto a metà (fuori da un COPY ``\.`` è esso stesso un
+#: errore) e poi fallisce di sicuro: con ON_ERROR_STOP psql fa ROLLBACK ed esce.
+_ANNULLA = "\n\\.\nDO $$ BEGIN RAISE EXCEPTION 'pg_restore fallito'; END $$;\n"
+
+
 async def _carica(pg: _Pg, dump: Path, *, prima: str, dopo: str) -> None:
     """Preludio, dati di ``pg_restore`` e epilogo in **una** transazione di psql.
 
@@ -209,8 +214,10 @@ async def _carica(pg: _Pg, dump: Path, *, prima: str, dopo: str) -> None:
     lasciava le tabelle vuote (Codex, #333). Qui ``pg_restore`` scrive l'SQL e
     psql lo esegue in streaming con ``--single-transaction`` e
     ``ON_ERROR_STOP``: o tutto, o i dati di prima. Se ``pg_restore`` stesso
-    fallisce, psql viene ucciso prima della fine dell'input, così la
-    transazione non arriva al COMMIT.
+    fallisce, psql riceve un errore voluto prima della fine dell'input, così
+    la transazione non arriva al COMMIT. Ucciderlo non bastava: con
+    ``docker exec -i`` muore il client sull'host, mentre il psql nel container
+    legge la fine dell'input e conferma il TRUNCATE con metà dei dati.
     """
     psql = await asyncio.create_subprocess_exec(
         *pg(
@@ -246,7 +253,9 @@ async def _carica(pg: _Pg, dump: Path, *, prima: str, dopo: str) -> None:
                 await psql.stdin.drain()
             if await restore.wait() != 0:
                 interrotto = True
-                psql.kill()
+                psql.stdin.write(_ANNULLA.encode())
+                await psql.stdin.drain()
+                psql.stdin.close()
             else:
                 psql.stdin.write(dopo.encode())
                 await psql.stdin.drain()

@@ -44,11 +44,14 @@ COPY pyproject.toml uv.lock README.md ./
 # `--group copernicus` ships cdsapi+netCDF4 for the GloFAS forecast from EWDS.
 # `--group storage` ships boto3: the nightly backup goes to an S3-compatible
 # bucket off the server (#304).
+# `--group agents` ships the anthropic SDK for the evening faithfulness
+# reviewer, which sends its sample as a Message Batch. LLM__PROVIDER stays
+# pinned in the compose, so the SDK being there does not switch providers.
 RUN uv sync --frozen --no-dev --no-editable --no-install-project \
-    --group ml --group mcp --group report --group copernicus --group storage
+    --group ml --group mcp --group report --group copernicus --group storage --group agents
 COPY src ./src
 RUN uv sync --frozen --no-dev --no-editable \
-    --group ml --group mcp --group report --group copernicus --group storage
+    --group ml --group mcp --group report --group copernicus --group storage --group agents
 
 # ---------------------------------------------------------------------------
 # Stage 2 — runtime

@@ -96,8 +96,8 @@ async def test_every_role_answers(monkeypatch: pytest.MonkeyPatch, capsys: Any) 
 async def test_a_failing_role_exits_non_zero_and_is_flagged(
     monkeypatch: pytest.MonkeyPatch, capsys: Any
 ) -> None:
-    """Un modello che il gateway non conosce, e un modello lento su un ruolo
-    sincrono: due guasti che a runtime sarebbero solo testo deterministico."""
+    """Un modello che il gateway non conosce e che non risponde: a runtime
+    sarebbe solo testo deterministico."""
     respx.get(f"{_GATEWAY}/v1/models").mock(
         return_value=httpx.Response(200, json={"data": [{"id": "fast-local"}]})
     )
@@ -105,7 +105,7 @@ async def test_a_failing_role_exits_non_zero_and_is_flagged(
         monkeypatch,
         provider=LLMProvider.LLAMACPP,
         clients={
-            "risk_analyst": _Client("quality-local", TimeoutError("nessuna risposta")),
+            "risk_analyst": _Client("quality-big", TimeoutError("nessuna risposta")),
             "briefing": _Client("fast-local", "ok"),
         },
         declared=set(),
@@ -116,7 +116,7 @@ async def test_a_failing_role_exits_non_zero_and_is_flagged(
     out = capsys.readouterr().out
     assert "FAIL  risk_analyst" in out
     assert "TimeoutError: nessuna risposta" in out
-    assert "NOT IN GATEWAY CATALOGUE; SLOW MODEL ON A SYNCHRONOUS ROLE" in out
+    assert "NOT IN GATEWAY CATALOGUE" in out
     assert "1/2 roles unreachable" in out
 
 
@@ -234,24 +234,3 @@ def test_bar_is_proportional() -> None:
     assert data_status._bar(0.0) == "." * 20
     assert data_status._bar(0.5) == "#" * 10 + "." * 10
     assert data_status._bar(1.0, width=4) == "####"
-
-
-@respx.mock
-async def test_a_slow_async_model_missing_from_the_gateway_still_fails(
-    monkeypatch: pytest.MonkeyPatch, capsys: Any
-) -> None:
-    """Il modello lento su ruolo asincrono salta la sonda, non il catalogo: un
-    `glm52` scritto male o senza rotta non girerebbe mai (revisione #206)."""
-    respx.get(f"{_GATEWAY}/v1/models").mock(
-        return_value=httpx.Response(200, json={"data": [{"id": "fast-local"}]})
-    )
-    _llm(
-        monkeypatch,
-        provider=LLMProvider.LLAMACPP,
-        clients={"briefing": _Client("glm52", AssertionError("la sonda non deve partire"))},
-        declared={"briefing"},
-    )
-    assert await llm_check.run() == 1
-    out = capsys.readouterr().out
-    assert "FAIL  briefing" in out
-    assert "NOT IN GATEWAY CATALOGUE" in out

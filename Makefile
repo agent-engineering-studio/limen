@@ -88,7 +88,7 @@ COMPOSE_BUILD := $(if $(wildcard .env),--env-file .env) \
 # here — it runs from its own repo (see the note in docker-compose.demo.yml).
 BUILD_PROFILES ?= --profile geoserver --profile frontend --profile geodata
 
-.PHONY: fetch-static inference-up inference-up-cpu inference-up-colibri inference-down inference-logs inference-check help install docs-links docs-bundle \
+.PHONY: fetch-static inference-up inference-up-cpu inference-down inference-logs inference-check help install docs-links docs-bundle \
         up down build rebuild pull up-host-ollama \
         up-dev down-dev logs migrate seed immagine db-up up-stack backup backup-elenco restore bootstrap-static calibrate backtest serve \
         data-status static-data flood-data flood-events backtest-flood fire-history \
@@ -446,14 +446,14 @@ observability-down:
 	docker compose -f $(COMPOSE_DEMO) -f $(COMPOSE_OBS) down
 
 # ---------------------------------------------------------------------------
-# Inference stack in containers (LiteLLM, llama-swap, embedding, colibrì)
+# Inference stack in containers (LiteLLM, llama-swap, embedding)
 # ---------------------------------------------------------------------------
 # Sull'host attuale gira come unità systemd: questo serve a replicarlo.
 # Con il .env, come gli altri compose: senza, LIMEN_MODELS_DIR e le porte
 # del .env non arrivavano e i modelli si cercavano nel percorso di default.
 COMPOSE_INF = docker compose $(if $(wildcard .env),--env-file .env) -f infra/docker/docker-compose.inference.yml
 
-inference-up:  ## Avvia LiteLLM, llama-swap ed embedding (colibrì: inference-up-colibri)
+inference-up:  ## Avvia LiteLLM, llama-swap ed embedding
 	@test -f infra/inference/secrets.env || { echo "Manca infra/inference/secrets.env: copia secrets.env.example e valorizza"; exit 1; }
 	$(COMPOSE_INF) --profile gpu up -d
 
@@ -461,15 +461,11 @@ inference-up-cpu:  ## Senza GPU: gateway con fast/chat/extract su Claude, embedd
 	@test -f infra/inference/secrets.env || { echo "Manca infra/inference/secrets.env: copia secrets.env.example e valorizza"; exit 1; }
 	LIMEN_LITELLM_CONFIG=../inference/litellm.cpu.yaml $(COMPOSE_INF) up -d
 
-inference-up-colibri:  ## Compila e avvia anche colibrì (GLM-5.2, ~400 GB di modello)
-	@test -f infra/inference/secrets.env || { echo "Manca infra/inference/secrets.env: copia secrets.env.example e valorizza"; exit 1; }
-	$(COMPOSE_INF) --profile gpu --profile colibri up -d --build
-
 inference-down:  ## Ferma lo stack d'inferenza in container
-	$(COMPOSE_INF) --profile gpu --profile colibri down
+	$(COMPOSE_INF) --profile gpu down
 
 inference-logs:  ## Log dello stack d'inferenza
-	$(COMPOSE_INF) --profile gpu --profile colibri logs -f --tail=100
+	$(COMPOSE_INF) --profile gpu logs -f --tail=100
 
 inference-check:  ## Quali modelli risponde il gateway in container
 	@curl -sf http://127.0.0.1:$${LIMEN_LITELLM_PORT:-8091}/v1/models | python3 -c 'import json,sys; print([m["id"] for m in json.load(sys.stdin)["data"]])'

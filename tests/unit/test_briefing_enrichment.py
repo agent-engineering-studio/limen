@@ -221,7 +221,6 @@ class _Settings:
         briefing_min_level = "Moderate"
         briefing_min_hours = 12
         models = LLMSettings().models
-        slow_models_allowed = LLMSettings().slow_models_allowed
 
 
 class _Factory:
