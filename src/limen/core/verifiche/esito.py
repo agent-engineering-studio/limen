@@ -17,10 +17,11 @@ _RANGO = {None: 0, "None": 0, "Low": 1, "Moderate": 2, "High": 3, "VeryHigh": 4}
 ANTICIPO_MINIMO_ORE = 6
 
 
-def anticipo_sopra_fondo(misura: dict[str, Any]) -> tuple[int, str] | None:
+def anticipo_sopra_fondo(misura: dict[str, Any]) -> tuple[float, str] | None:
     """Le ore fra la prima corsa con una classe **sopra** il fondo e
     l'evento, e la classe più alta fra quelle corse; ``None`` se nessuna lo
-    supera. È l'anticipo che conta: con un fondo Alto, un Alto previsto 72 h
+    supera, in ore non arrotondate (si arrotonda solo per mostrarle). È
+    l'anticipo che conta: con un fondo Alto, un Alto previsto 72 h
     prima e un Molto alto arrivato 20 h prima sono un anticipo di 20 ore, non
     di 72 — ``anticipo_ore_moderato`` e ``_alto`` restano le soglie grezze."""
     fondo = misura.get("fondo_classe_max")
@@ -30,7 +31,7 @@ def anticipo_sopra_fondo(misura: dict[str, Any]) -> tuple[int, str] | None:
     evento = datetime.fromisoformat(misura["evento"])
     prima = min(datetime.fromisoformat(c["run_at"]) for c in sopra)
     classe = max((c["classe"] for c in sopra), key=lambda k: _RANGO[k])
-    return round((evento - prima).total_seconds() / 3600), classe
+    return (evento - prima).total_seconds() / 3600, classe
 
 
 def esito(misura: dict[str, Any]) -> tuple[str, str]:
@@ -60,7 +61,7 @@ def esito(misura: dict[str, Any]) -> tuple[str, str]:
     sopra = anticipo_sopra_fondo(misura)
     if sopra is not None and sopra[0] >= ANTICIPO_MINIMO_ORE:
         ore, classe = sopra
-        return "anticipata", f"{classe} previsto {ore} h prima, sopra un fondo {fondo}"
+        return "anticipata", f"{classe} previsto {ore:.0f} h prima, sopra un fondo {fondo}"
 
     adesso = misura.get("adesso_classe_max")
     primo = misura.get("adesso_primo_moderato")

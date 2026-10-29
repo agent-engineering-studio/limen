@@ -173,11 +173,18 @@ class EstrattoreEventi:
                 requests=[{"custom_id": k, "params": p} for k, p in richieste.items()]
             )
             scadenza = time.monotonic() + self._attesa_massima_s
+            annullato = False
             while batch.processing_status != "ended":
                 if time.monotonic() >= scadenza:
+                    if annullato:
+                        log.warning("estrattore_eventi.batch_non_chiuso", batch_id=batch.id)
+                        return testi
+                    # Le richieste già riuscite restano pagate anche annullando
+                    # il resto: si aspetta la chiusura e se ne leggono i token.
                     log.warning("estrattore_eventi.batch_scaduto", batch_id=batch.id)
                     await self._client.messages.batches.cancel(batch.id)
-                    return testi
+                    annullato = True
+                    scadenza = time.monotonic() + self._attesa_massima_s
                 await asyncio.sleep(self._intervallo_s)
                 batch = await self._client.messages.batches.retrieve(batch.id)
             ingresso = uscita = 0

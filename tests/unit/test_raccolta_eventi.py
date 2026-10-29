@@ -435,3 +435,31 @@ async def test_se_l_estrazione_finisce_il_tetto_la_conferma_non_parte(
     # L'estrazione è registrata prima di decidere, e la conferma parte vuota.
     assert registrati == ["estrazione"]
     assert richieste_di_conferma == [0]
+
+
+def test_l_anticipo_minimo_si_confronta_prima_di_arrotondare() -> None:
+    evento = datetime(2026, 10, 10, 10, tzinfo=UTC)
+    # 5 h 40': arrotondate sarebbero 6, il minimo.
+    corsa = {"run_at": (evento - timedelta(hours=5, minutes=40)).isoformat(), "classe": "High"}
+    assert esito(_misura(classe_prevista_max="High", corse=[corsa]))[0] != "anticipata"
+
+
+async def test_un_batch_scaduto_e_annullato_conta_i_token_delle_richieste_riuscite() -> None:
+    from pydantic import SecretStr
+
+    from tests.unit.test_fedelta_racconti import _Batches, _risposta
+
+    # Il batch resta in corso oltre l'attesa: si annulla, si aspetta la
+    # chiusura, e la richiesta già riuscita resta pagata e letta.
+    batches = _Batches([_risposta("c0", '{"titoli": [1]}')], giri=1)
+    e = EstrattoreEventi(
+        api_key=SecretStr("sk-test"),
+        model="claude-sonnet-5-5",
+        attesa_massima_s=0.0,
+        intervallo_s=0.0,
+    )
+    e._client = cast(Any, SimpleNamespace(messages=SimpleNamespace(batches=batches)))
+    testi = await e._esegui({"c0": cast(Any, {})})
+    assert batches.annullato
+    assert testi == {"c0": '{"titoli": [1]}'}
+    assert [(c.batch_id, c.input_tokens) for c in e.consumi] == [("b1", 1500)]

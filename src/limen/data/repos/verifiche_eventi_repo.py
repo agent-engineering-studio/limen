@@ -145,7 +145,7 @@ def _sopra(misura: dict[str, Any]) -> int | None:
     if "evento" not in misura:
         return None
     sopra = anticipo_sopra_fondo(misura)
-    return sopra[0] if sopra else None
+    return round(sopra[0]) if sopra else None
 
 
 async def elenca(*, dal: datetime | None = None, al: datetime | None = None) -> list[RigaVerifica]:
