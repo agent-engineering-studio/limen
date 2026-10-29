@@ -6,6 +6,7 @@
 -- $3 event_at: quando è successo
 -- $4 tol:      ore di tolleranza attorno all'evento per dire «la previsione
 --              puntava lì» (12 = la stessa mezza giornata)
+-- $5 job:      l'id del job orario in `job_runs` (`JOB_HOURLY_MONITORING`)
 --
 -- Ogni filtro su risk_assessments porta computed_at: è partizionata per
 -- giorno, e senza la finestra la query attraversa tutte le partizioni (su
@@ -112,9 +113,23 @@ SELECT json_build_object(
     -- Il pericolo ha girato davvero nei giorni prima? Lo storico più vecchio
     -- (`storico_dal`) non lo dice: un job fermo da tre giorni lascia l'evento
     -- senza valutazione, e «non valutato» non è «mancato».
+    -- Si guarda la regione dell'evento, non l'Italia: lo sweep valuta le
+    -- regioni una per una, e una che fallisce non è coperta dalle altre. E non
+    -- le righe delle celle: uno sweep calmo non ne scrive (#135), e il comune
+    -- tranquillo sembrerebbe non valutato. Basta una corsa riuscita della sua
+    -- regione, o una riga delle sue celle.
     'pericolo_valutato', EXISTS (
+        SELECT 1 FROM job_runs jr, ev
+        WHERE jr.job_id = $5::text
+          AND jr.status = 'ok'
+          AND jr.metrics->>'hazard' = $2::text
+          AND jr.scope IN (SELECT DISTINCT g.aoi_id FROM grid_cells g
+                           WHERE g.id IN (SELECT cell_id FROM celle))
+          AND jr.started_at BETWEEN ev.t - interval '80 hours' AND ev.t
+    ) OR EXISTS (
         SELECT 1 FROM risk_assessments ra, ev
         WHERE ra.hazard_type = $2::hazard_type
+          AND ra.cell_id IN (SELECT cell_id FROM celle)
           AND ra.computed_at BETWEEN ev.t - interval '80 hours' AND ev.t
     ),
     -- Solo le ore prima dell'evento: un dato tornato dopo non dice niente su

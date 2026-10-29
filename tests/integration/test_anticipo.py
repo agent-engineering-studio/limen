@@ -27,3 +27,61 @@ async def test_la_misura_dice_da_quando_ci_sono_le_partizioni(
     )
     assert misura["celle"] == 0
     assert date.fromisoformat(misura["partizioni_dal"]) <= oggi
+
+
+async def test_il_pericolo_e_valutato_se_ha_girato_la_regione_dell_evento(
+    reset_db: None, pg_pool: object
+) -> None:
+    from limen.api.jobs.ids import JOB_HOURLY_MONITORING
+
+    evento = datetime.now(UTC) - timedelta(hours=2)
+    async with acquire() as conn:
+        await conn.execute("SELECT ensure_partitions('risk_assessments', 3)")
+        for aoi in ("it-prova", "it-altra"):
+            await conn.execute(
+                "INSERT INTO aoi (id, name, kind, geom) VALUES ($1, $1, 'region',"
+                " ST_Multi(ST_MakeEnvelope(15, 41, 15.1, 41.1, 4326)))",
+                aoi,
+            )
+        await conn.execute(
+            "INSERT INTO comuni (istat_code, name, aoi_id, geom) VALUES ('099001', 'Prova',"
+            " 'it-prova', ST_Multi(ST_MakeEnvelope(15, 41, 15.1, 41.1, 4326)))"
+        )
+        await conn.execute(
+            "INSERT INTO grid_cells (id, aoi_id, row_idx, col_idx, geom, area_km2) VALUES"
+            " ('c-prova', 'it-prova', 0, 0, ST_MakeEnvelope(15, 41, 15.01, 41.01, 4326), 1)"
+        )
+        await conn.execute(
+            "INSERT INTO cell_comune (cell_id, istat_code) VALUES ('c-prova', '099001')"
+        )
+
+    async def valutato() -> bool:
+        m = await anticipo_repo.misura(
+            comuni=["099001"], hazard=HazardType.LANDSLIDE, evento_at=evento, tolleranza_ore=12
+        )
+        return bool(m["pericolo_valutato"])
+
+    async def corsa(scope: str, stato: str) -> None:
+        async with acquire() as conn:
+            await conn.execute(
+                "INSERT INTO job_runs (job_id, scope, host, status, started_at, metrics)"
+                " VALUES ($1, $2, 'test', $3, $4, '{\"hazard\": \"landslide\"}')",
+                JOB_HOURLY_MONITORING,
+                scope,
+                stato,
+                evento - timedelta(hours=5),
+            )
+
+    assert not await valutato()
+    # Un'altra regione che gira non copre questa; una corsa fallita neppure.
+    await corsa("it-altra", "ok")
+    await corsa("it-prova", "error")
+    assert not await valutato()
+    # La sua regione è girata, anche se lo sweep calmo non ha scritto righe.
+    await corsa("it-prova", "ok")
+    try:
+        assert await valutato()
+    finally:
+        # `job_runs` non è fra le tabelle di `reset_db`.
+        async with acquire() as conn:
+            await conn.execute("DELETE FROM job_runs WHERE host = 'test'")
