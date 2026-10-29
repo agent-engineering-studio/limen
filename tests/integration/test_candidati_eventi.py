@@ -103,3 +103,21 @@ async def test_il_lock_della_raccolta_sta_fuori_dal_pool(reset_db: None, pg_pool
         # ...e una seconda raccolta trova il lock preso.
         async with connessione_dedicata() as seconda:
             assert not await seconda.fetchval("SELECT pg_try_advisory_lock($1)", _UNA_ALLA_VOLTA)
+
+
+async def test_i_candidati_prenotati_e_non_finiti_si_ritrovano(
+    reset_db: None, pg_pool: object
+) -> None:
+    from limen.data.repos.candidati_eventi_repo import in_sospeso, prenota, segna
+
+    salvato = await fondi(_BASE)
+    assert await in_sospeso() == []
+    await prenota(salvato.id, comuni=["064041"], slug="2026-10-28-frana-lacedonia")
+    sospesi = await in_sospeso()
+    assert [(h, s.slug) for h, s in sospesi] == [
+        (HazardType.LANDSLIDE, "2026-10-28-frana-lacedonia")
+    ]
+    await segna(
+        salvato.id, stato="verificato", comuni=["064041"], slug="2026-10-28-frana-lacedonia"
+    )
+    assert await in_sospeso() == []

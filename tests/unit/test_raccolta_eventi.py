@@ -461,6 +461,16 @@ async def test_se_l_estrazione_finisce_il_tetto_la_conferma_non_parte(
     async def registra_evento(*a: object) -> None:
         return None
 
+    ripresi: list[int] = []
+
+    async def in_sospeso() -> list[tuple[HazardType, Any]]:
+        return [(HazardType.LANDSLIDE, SimpleNamespace(id=42))]
+
+    async def verifica(h: object, salvato: Any, esiti: object) -> None:
+        ripresi.append(salvato.id)
+
+    monkeypatch.setattr(job, "_verifica", verifica)
+
     impostazioni = cast(Any, Settings)(
         _env_file=None,
         llm=LLMSettings(models={"eventi": "claude-sonnet-5-5"}, anthropic_budget_mensile_usd=10),
@@ -475,11 +485,14 @@ async def test_se_l_estrazione_finisce_il_tetto_la_conferma_non_parte(
     monkeypatch.setattr(EstrattoreEventi, "estrai", estrai)
     monkeypatch.setattr(EstrattoreEventi, "conferma", conferma)
     monkeypatch.setattr(job, "connessione_dedicata", _lock(True))
+    monkeypatch.setattr(job.candidati_eventi_repo, "in_sospeso", in_sospeso)
 
     await raccogli(impostazioni)
     # L'estrazione è registrata prima di decidere, e la conferma parte vuota.
     assert registrati == ["estrazione"]
     assert richieste_di_conferma == [0]
+    # La registrazione interrotta di un giro prima si riprende comunque.
+    assert ripresi == [42]
 
 
 def test_l_anticipo_minimo_si_confronta_prima_di_arrotondare() -> None:

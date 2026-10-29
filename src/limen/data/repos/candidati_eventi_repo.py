@@ -214,6 +214,40 @@ async def ha_omonimi(nome: str) -> bool:
     return bool(n and n > 1)
 
 
+async def in_sospeso() -> list[tuple[HazardType, Salvato]]:
+    """I candidati con uno slug prenotato e la registrazione non finita: si
+    riprendono a ogni raccolta, anche se i loro titoli sono usciti dalla
+    finestra delle notizie."""
+    async with acquire() as conn:
+        righe = await conn.fetch(
+            """
+            SELECT hazard_type::text AS hazard, id, fonti, testate, slug, stato, giorno,
+                   parte, luogo, regione, nomi_comuni
+            FROM candidati_eventi
+            WHERE slug IS NOT NULL AND stato <> 'verificato'
+            ORDER BY id
+            """
+        )
+    return [
+        (
+            HazardType(r["hazard"]),
+            Salvato(
+                id=r["id"],
+                fonti=tuple(json.loads(r["fonti"])),
+                testate=r["testate"],
+                slug=r["slug"],
+                stato=r["stato"],
+                giorno=r["giorno"],
+                parte=r["parte"],
+                luogo=r["luogo"],
+                regione=r["regione"],
+                nomi_comuni=tuple(r["nomi_comuni"]),
+            ),
+        )
+        for r in righe
+    ]
+
+
 async def prenota(id_: int, *, comuni: list[str], slug: str) -> None:
     """Lo slug al candidato prima di scrivere la verifica, senza cambiarne lo
     stato: se una scrittura dopo fallisce, il giro seguente riconosce la

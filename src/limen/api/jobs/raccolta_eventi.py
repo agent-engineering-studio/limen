@@ -199,6 +199,12 @@ async def _registra(
             fonti=fonti,
         )
     )
+    await _verifica(hazard, salvato, esiti)
+
+
+async def _verifica(
+    hazard: HazardType, salvato: candidati_eventi_repo.Salvato, esiti: Counter[str]
+) -> None:
     if salvato.testate < 2:
         await candidati_eventi_repo.segna(salvato.id, stato="una_testata", comuni=[], slug=None)
         esiti["una_testata"] += 1
@@ -289,6 +295,11 @@ async def raccogli(settings: Settings) -> dict[str, Any]:
 
 async def _raccolta(settings: Settings, chiave: SecretStr, modello: str) -> dict[str, Any]:
     llm = settings.llm
+    esiti: Counter[str] = Counter()
+    # Prima le registrazioni interrotte: i loro titoli possono essere già
+    # usciti dalla finestra delle notizie, e non tornerebbero più.
+    for h, salvato in await candidati_eventi_repo.in_sospeso():
+        await _verifica(h, salvato, esiti)
     titoli = await titoli_per_pericolo(giorni=llm.eventi_giorni, massimi=llm.eventi_titoli_massimi)
     estrattore = EstrattoreEventi(
         api_key=chiave, model=modello, attesa_massima_s=llm.eventi_attesa_massima_minuti * 60
@@ -334,7 +345,6 @@ async def _raccolta(settings: Settings, chiave: SecretStr, modello: str) -> dict
     for (k, trovati), scelti in zip(da_confermare, confermati, strict=True):
         casi[k][2].extend(trovati[j] for j in scelti)
 
-    esiti: Counter[str] = Counter()
     for h, e, propri in casi:
         await _registra(h, e, propri, esiti)
     out: dict[str, Any] = {

@@ -142,7 +142,7 @@ class EstrattoreEventi:
                 f"c{i}": self._params(
                     "conferma_eventi.it.md",
                     f"EVENTO: {NOME_PERICOLO[h]} del {e.giorno.isoformat()} a {e.luogo} "
-                    f"({', '.join(e.comuni)})\n\nTITOLI:\n{elenco(t)}",
+                    f"({', '.join(e.comuni)}; regione {e.regione})\n\nTITOLI:\n{elenco(t)}",
                     _SCHEMA_CONFERMA,
                 )
                 for i, (h, e, t) in enumerate(casi)
