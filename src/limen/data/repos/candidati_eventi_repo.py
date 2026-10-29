@@ -26,10 +26,18 @@ class Candidato:
 
 @dataclass(frozen=True, slots=True)
 class Salvato:
+    """Il candidato come sta nel database: giorno, parte e luogo sono quelli
+    della prima volta che è stato visto, non dell'ultimo titolo unito."""
+
     id: int
     fonti: tuple[dict[str, Any], ...]
     testate: int
     slug: str | None
+    giorno: date
+    parte: str
+    luogo: str
+    regione: str | None
+    nomi_comuni: tuple[str, ...]
 
 
 def aoi_della_regione(regione: str | None) -> str | None:
@@ -100,7 +108,7 @@ async def fondi(c: Candidato) -> Salvato:
                 INSERT INTO candidati_eventi
                     (hazard_type, giorno, parte, luogo, regione, nomi_comuni, fonti, testate, stato)
                 VALUES ($1::hazard_type, $2, $3, $4, $5, $6, $7::jsonb, $8, 'una_testata')
-                RETURNING id, slug
+                RETURNING id, slug, giorno, parte, luogo, regione, nomi_comuni
                 """,
                 c.hazard.value,
                 c.giorno,
@@ -115,16 +123,38 @@ async def fondi(c: Candidato) -> Salvato:
             salvato = await conn.fetchrow(
                 """
                 UPDATE candidati_eventi
-                SET fonti = $2::jsonb, testate = $3, visto_ultimo = now()
+                SET fonti = $2::jsonb, testate = $3, visto_ultimo = now(),
+                    -- Il giorno resta quello della prima notizia: un titolo
+                    -- del giorno dopo spesso data l'evento alla sua uscita.
+                    -- La parte del giorno si prende solo se mancava.
+                    parte = CASE WHEN parte = 'ignota' AND giorno = $4 THEN $5 ELSE parte END
                 WHERE id = $1
-                RETURNING id, slug
+                RETURNING id, slug, giorno, parte, luogo, regione, nomi_comuni
                 """,
                 riga["id"],
                 json.dumps(fonti),
                 testate,
+                c.giorno,
+                c.parte,
             )
     assert salvato is not None
-    return Salvato(id=salvato["id"], fonti=tuple(fonti), testate=testate, slug=salvato["slug"])
+    return Salvato(
+        id=salvato["id"],
+        fonti=tuple(fonti),
+        testate=testate,
+        slug=salvato["slug"],
+        giorno=salvato["giorno"],
+        parte=salvato["parte"],
+        luogo=salvato["luogo"],
+        regione=salvato["regione"],
+        nomi_comuni=tuple(salvato["nomi_comuni"]),
+    )
+
+
+async def ha_omonimi(nome: str) -> bool:
+    async with acquire() as conn:
+        n = await conn.fetchval("SELECT count(*) FROM comuni WHERE lower(name) = lower($1)", nome)
+    return bool(n and n > 1)
 
 
 async def segna(id_: int, *, stato: str, comuni: list[str], slug: str | None) -> None:

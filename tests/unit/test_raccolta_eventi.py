@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -70,11 +70,18 @@ def test_la_regione_diventa_l_aoi(regione: str, aoi: str | None) -> None:
 
 
 def test_slug_e_ora_come_la_skill() -> None:
-    e = _evento(comuni=["Vietri sul Mare"], parte="sera")
-    assert slug(HazardType.LANDSLIDE, e) == "2026-10-28-frana-vietri-sul-mare"
-    t, precisione = quando(e)
+    giorno = date(2026, 10, 28)
+    assert (
+        slug(HazardType.LANDSLIDE, giorno, "Vietri sul Mare") == "2026-10-28-frana-vietri-sul-mare"
+    )
+    # Un comune con omonimi porta il codice ISTAT: Castro (BG) e Castro (LE)
+    # lo stesso giorno sono due verifiche, non una.
+    assert (
+        slug(HazardType.LANDSLIDE, giorno, "Castro", "075017") == "2026-10-28-frana-castro-075017"
+    )
+    t, precisione = quando(giorno, "sera")
     assert (t.hour, t.utcoffset().total_seconds(), precisione) == (20, 3600, "T2")
-    assert quando(_evento())[1] == "T3"
+    assert quando(giorno, "ignota")[1] == "T3"
 
 
 def test_la_conferma_viene_da_un_altra_testata_sullo_stesso_comune_e_giorni() -> None:
@@ -113,15 +120,22 @@ def _misura(**kw: object) -> dict[str, object]:
 def test_esito_come_il_paragrafo_5_della_skill() -> None:
     assert esito(_misura(storico_dal="2026-10-12T00:00:00+00:00"))[0] == "non_verificabile"
     assert esito(_misura(celle=0))[0] == "non_verificabile"
-    previsto = _misura(anticipo_ore_moderato=40, classe_prevista_max="Moderate", corse=[{}])
+
+    def corsa(ore_prima: int, classe: str) -> dict[str, str]:
+        evento = datetime(2026, 10, 10, 10, tzinfo=UTC)
+        return {"run_at": (evento - timedelta(hours=ore_prima)).isoformat(), "classe": classe}
+
+    previsto = _misura(classe_prevista_max="Moderate", corse=[corsa(40, "Moderate")])
     assert esito(previsto)[0] == "anticipata"
     # Melito: Moderato previsto 71 h prima, ma Moderato era anche il fondo.
-    melito = previsto | {"anticipo_ore_moderato": 71, "fondo_classe_max": "Moderate"}
+    melito = _misura(fondo_classe_max="Moderate", corse=[corsa(71, "Moderate")])
     assert esito(melito)[0] == "mancata"
-    assert (
-        esito(melito | {"classe_prevista_max": "High", "anticipo_ore_alto": 20})[0] == "anticipata"
-    )
-    assert esito(previsto | {"anticipo_ore_moderato": 3})[0] == "mancata"
+    alto = melito | {"corse": [corsa(71, "Moderate"), corsa(20, "High")]}
+    assert esito(alto) == ("anticipata", "High previsto 20 h prima, sopra un fondo Moderate")
+    assert esito(_misura(corse=[corsa(3, "Moderate")]))[0] == "mancata"
+    # Fondo Alto: l'Alto di 72 h prima è il fondo; il Molto alto arriva 2 h prima.
+    tardi = _misura(fondo_classe_max="High", corse=[corsa(72, "High"), corsa(2, "VeryHigh")])
+    assert esito(tardi)[0] == "mancata"
     sweep = _misura(adesso_classe_max="High", adesso_primo_moderato="2026-10-10T06:00:00+00:00")
     assert esito(sweep)[0] == "contemporanea"
 
@@ -191,7 +205,17 @@ async def test_un_fact_check_a_mano_non_si_sovrascrive(monkeypatch: pytest.Monke
     segnati: list[dict[str, object]] = []
 
     async def fondi(c: object) -> Salvato:
-        return Salvato(id=7, fonti=({"testata": "A"}, {"testata": "B"}), testate=2, slug=None)
+        return Salvato(
+            id=7,
+            fonti=({"testata": "A"}, {"testata": "B"}),
+            testate=2,
+            slug=None,
+            giorno=date(2026, 10, 28),
+            parte="ignota",
+            luogo="Lacedonia",
+            regione="Campania",
+            nomi_comuni=("Lacedonia",),
+        )
 
     async def risolvi(nomi: object, regione: object) -> list[str]:
         return ["064041"]
@@ -208,6 +232,11 @@ async def test_un_fact_check_a_mano_non_si_sovrascrive(monkeypatch: pytest.Monke
     monkeypatch.setattr(job.candidati_eventi_repo, "fondi", fondi)
     monkeypatch.setattr(job.candidati_eventi_repo, "risolvi_comuni", risolvi)
     monkeypatch.setattr(job.candidati_eventi_repo, "segna", segna)
+
+    async def senza_omonimi(nome: str) -> bool:
+        return False
+
+    monkeypatch.setattr(job.candidati_eventi_repo, "ha_omonimi", senza_omonimi)
     monkeypatch.setattr(job.verifiche_eventi_repo, "esiste", esiste)
     monkeypatch.setattr(job.verifiche_eventi_repo, "upsert", vietato)
     monkeypatch.setattr(job.anticipo_repo, "misura", vietato)

@@ -29,7 +29,7 @@ import asyncio
 import re
 import unicodedata
 from collections import Counter
-from datetime import datetime, time
+from datetime import date, datetime, time
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -122,16 +122,18 @@ async def cerca_conferme(
     return list(trovati.values())
 
 
-def slug(hazard: HazardType, e: EventoEstratto) -> str:
-    """Lo slug della skill: ``AAAA-MM-GG-<pericolo>-<comune>``."""
-    ascii_ = unicodedata.normalize("NFKD", e.comuni[0]).encode("ascii", "ignore").decode()
-    comune = re.sub(r"[^a-z0-9]+", "-", ascii_.lower()).strip("-")
-    return f"{e.giorno.isoformat()}-{NOME_PERICOLO[hazard]}-{comune}"
+def slug(hazard: HazardType, giorno: date, comune: str, istat: str | None = None) -> str:
+    """Lo slug della skill: ``AAAA-MM-GG-<pericolo>-<comune>``, con il codice
+    ISTAT in coda per un comune che ha omonimi (Castro, Peglio, Samone)."""
+    ascii_ = unicodedata.normalize("NFKD", comune).encode("ascii", "ignore").decode()
+    nome = re.sub(r"[^a-z0-9]+", "-", ascii_.lower()).strip("-")
+    coda = f"-{istat}" if istat else ""
+    return f"{giorno.isoformat()}-{NOME_PERICOLO[hazard]}-{nome}{coda}"
 
 
-def quando(e: EventoEstratto) -> tuple[datetime, str]:
-    ora, precisione = _ORA[e.parte]
-    return datetime.combine(e.giorno, ora, tzinfo=_ROMA), precisione
+def quando(giorno: date, parte: str) -> tuple[datetime, str]:
+    ora, precisione = _ORA[parte]
+    return datetime.combine(giorno, ora, tzinfo=_ROMA), precisione
 
 
 def _fonti(titoli: list[Titolo]) -> tuple[dict[str, Any], ...]:
@@ -165,13 +167,15 @@ async def _registra(
         await candidati_eventi_repo.segna(salvato.id, stato="una_testata", comuni=[], slug=None)
         esiti["una_testata"] += 1
         return
-    comuni = await candidati_eventi_repo.risolvi_comuni(tuple(e.comuni), e.regione or None)
+    comuni = await candidati_eventi_repo.risolvi_comuni(salvato.nomi_comuni, salvato.regione)
     if not comuni:
         await candidati_eventi_repo.segna(salvato.id, stato="comune_ignoto", comuni=[], slug=None)
         esiti["comune_ignoto"] += 1
         return
 
-    nome = salvato.slug or slug(hazard, e)
+    primo = salvato.nomi_comuni[0]
+    omonimo = comuni[0] if await candidati_eventi_repo.ha_omonimi(primo) else None
+    nome = salvato.slug or slug(hazard, salvato.giorno, primo, omonimo)
     if salvato.slug is None and await verifiche_eventi_repo.esiste(nome):
         # Lo slug c'è già ma non l'ha scritto la raccolta: è un fact check a
         # mano, con ora, punto e fonti più precisi dei titoli. Si collega il
@@ -179,7 +183,7 @@ async def _registra(
         await candidati_eventi_repo.segna(salvato.id, stato="verificato", comuni=comuni, slug=nome)
         esiti["gia_verificato"] += 1
         return
-    evento_at, precisione = quando(e)
+    evento_at, precisione = quando(salvato.giorno, salvato.parte)
     misura = await anticipo_repo.misura(
         comuni=comuni,
         hazard=hazard,
@@ -194,8 +198,8 @@ async def _registra(
         motivo=motivo,
         evento_at=evento_at,
         precisione_ora=precisione,
-        luogo=e.luogo,
-        regione=e.regione or None,
+        luogo=salvato.luogo,
+        regione=salvato.regione,
         comuni=tuple(comuni),
         fonti=salvato.fonti,
         misura=misura,

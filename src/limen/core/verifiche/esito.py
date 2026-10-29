@@ -37,17 +37,16 @@ def esito(misura: dict[str, Any]) -> tuple[str, str]:
 
     fondo = misura.get("fondo_classe_max")
     prevista = misura.get("classe_prevista_max")
-    # Sopra un fondo Moderato il segnale è l'Alto, non un altro Moderato.
-    if _RANGO[fondo] < _RANGO["Moderate"]:
-        anticipo = misura.get("anticipo_ore_moderato")
-    else:
-        anticipo = misura.get("anticipo_ore_alto")
-    if (
-        anticipo is not None
-        and anticipo >= ANTICIPO_MINIMO_ORE
-        and _RANGO[prevista] > _RANGO[fondo]
-    ):
-        return "anticipata", f"{prevista} previsto {anticipo} h prima, sopra un fondo {fondo}"
+    # L'anticipo si conta dalla prima corsa *sopra* il fondo, non da una che
+    # lo eguagliava: con un fondo Alto, un Alto previsto 72 h prima e un Molto
+    # alto arrivato 2 h prima non sono un anticipo di 72 ore.
+    sopra = [c for c in misura.get("corse") or [] if _RANGO.get(c.get("classe"), 0) > _RANGO[fondo]]
+    if sopra:
+        prima = min(datetime.fromisoformat(c["run_at"]) for c in sopra)
+        anticipo = round((evento - prima).total_seconds() / 3600)
+        if anticipo >= ANTICIPO_MINIMO_ORE:
+            classe = max((c["classe"] for c in sopra), key=lambda k: _RANGO[k])
+            return "anticipata", f"{classe} previsto {anticipo} h prima, sopra un fondo {fondo}"
 
     adesso = misura.get("adesso_classe_max")
     primo = misura.get("adesso_primo_moderato")

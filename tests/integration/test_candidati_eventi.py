@@ -41,6 +41,8 @@ async def test_il_giorno_dopo_una_seconda_testata_si_unisce(
         )
     )
     assert secondo.id == primo.id
+    # Il giorno resta quello della prima notizia, non del titolo uscito dopo.
+    assert secondo.giorno == date(2026, 10, 28)
     assert [f["url"] for f in secondo.fonti] == ["u1", "u2"]
     assert secondo.testate == 2
     # Un altro pericolo, o un altro comune, è un altro candidato.
