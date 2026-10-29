@@ -101,6 +101,8 @@ SELECT json_build_object(
         SELECT o.class FROM osservate o JOIN ordine r USING (class)
         WHERE o.computed_at <= (SELECT t FROM ev)
         ORDER BY r.rango DESC, o.score DESC LIMIT 1),
+    'adesso_misurato', (
+        SELECT count(*) FROM osservate WHERE measured IS NOT FALSE),
     'adesso_non_misurato', (
         SELECT count(*) FROM osservate WHERE measured IS FALSE),
     'adesso_picco', (

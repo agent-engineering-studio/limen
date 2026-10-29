@@ -78,6 +78,8 @@ async def fondi(c: Candidato) -> Salvato:
             WHERE hazard_type = $1::hazard_type
               AND giorno BETWEEN $2::date - 1 AND $2::date + 1
               AND (SELECT array_agg(lower(n)) FROM unnest(nomi_comuni) n) && $3::text[]
+              -- Castro in Lombardia e Castro in Puglia non sono lo stesso evento.
+              AND (regione IS NULL OR $4::text IS NULL OR lower(regione) = lower($4::text))
             ORDER BY visto_ultimo DESC
             LIMIT 1
             FOR UPDATE
@@ -85,6 +87,7 @@ async def fondi(c: Candidato) -> Salvato:
             c.hazard.value,
             c.giorno,
             nomi,
+            c.regione,
         )
         fonti = list(c.fonti)
         if riga is not None:

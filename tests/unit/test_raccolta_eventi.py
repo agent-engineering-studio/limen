@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
 
-from limen.agents.chat_agents.estrattore_eventi import EventoEstratto, _eventi
+from limen.agents.chat_agents.estrattore_eventi import (
+    EstrattoreEventi,
+    EventoEstratto,
+    _eventi,
+    _testo,
+)
 from limen.api.jobs.raccolta_eventi import conferme, quando, raccogli, slug
 from limen.config.settings import LLMSettings, Settings
 from limen.core.models.hazard import HazardType
@@ -135,10 +141,10 @@ def test_un_titolo_inventato_non_e_una_fonte() -> None:
         '{"giorno": "2026-10-28", "parte": "ignota", "luogo": "B", "comuni": ["B"],'
         ' "regione": "Lazio", "titoli": [9]}]}'
     )
-    eventi = _eventi(_risposta(raw), n_titoli=3)  # type: ignore[arg-type]
+    eventi = _eventi(_testo(_risposta(raw)), n_titoli=3)  # type: ignore[arg-type]
     assert eventi is not None
     assert [(e.luogo, e.titoli) for e in eventi] == [("A", [0])]
-    assert _eventi(_risposta(raw, stop="max_tokens"), n_titoli=3) is None  # type: ignore[arg-type]
+    assert _testo(_risposta(raw, stop="max_tokens")) is None  # type: ignore[arg-type]
 
 
 async def test_senza_modello_o_chiave_la_raccolta_non_parte() -> None:
@@ -150,3 +156,64 @@ async def test_senza_modello_o_chiave_la_raccolta_non_parte() -> None:
     assert (await raccogli(impostazioni()))["status"] == "skipped"
     senza_chiave = await raccogli(impostazioni(models={"eventi": "claude-sonnet-5-5"}))
     assert senza_chiave["reason"] == "ANTHROPIC_API_KEY assente"
+
+
+async def test_la_conferma_tiene_solo_i_titoli_esistenti_e_senza_risposta_nessuno(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    estrattore = object.__new__(EstrattoreEventi)
+    estrattore._model = "m"  # type: ignore[attr-defined]
+
+    async def esegui(richieste: dict[str, object]) -> dict[str, str]:
+        return {"c0": '{"titoli": [1, 5]}'}
+
+    monkeypatch.setattr(estrattore, "_esegui", esegui)
+    t = Titolo("x", "y", "u", datetime(2026, 10, 28, tzinfo=UTC))
+    casi = [(HazardType.LANDSLIDE, _evento(), [t, t]), (HazardType.LANDSLIDE, _evento(), [t])]
+    assert await estrattore.conferma(casi) == [[1], []]
+
+
+def test_un_buco_del_dato_non_cancella_le_ore_misurate() -> None:
+    buco = _misura(adesso_non_misurato=3)
+    assert esito(buco)[0] == "non_verificabile"
+    salita = buco | {
+        "adesso_misurato": 20,
+        "adesso_classe_max": "High",
+        "adesso_primo_moderato": "2026-10-10T06:00:00+00:00",
+    }
+    assert esito(salita)[0] == "contemporanea"
+
+
+async def test_un_fact_check_a_mano_non_si_sovrascrive(monkeypatch: pytest.MonkeyPatch) -> None:
+    from limen.api.jobs import raccolta_eventi as job
+    from limen.data.repos.candidati_eventi_repo import Salvato
+
+    segnati: list[dict[str, object]] = []
+
+    async def fondi(c: object) -> Salvato:
+        return Salvato(id=7, fonti=({"testata": "A"}, {"testata": "B"}), testate=2, slug=None)
+
+    async def risolvi(nomi: object, regione: object) -> list[str]:
+        return ["064041"]
+
+    async def esiste(slug: str) -> bool:
+        return True
+
+    async def segna(id_: int, **kw: object) -> None:
+        segnati.append(kw)
+
+    async def vietato(*a: object, **kw: object) -> None:
+        raise AssertionError("la riga a mano non va riscritta né rimisurata")
+
+    monkeypatch.setattr(job.candidati_eventi_repo, "fondi", fondi)
+    monkeypatch.setattr(job.candidati_eventi_repo, "risolvi_comuni", risolvi)
+    monkeypatch.setattr(job.candidati_eventi_repo, "segna", segna)
+    monkeypatch.setattr(job.verifiche_eventi_repo, "esiste", esiste)
+    monkeypatch.setattr(job.verifiche_eventi_repo, "upsert", vietato)
+    monkeypatch.setattr(job.anticipo_repo, "misura", vietato)
+    esiti: Counter[str] = Counter()
+    await job._registra(HazardType.LANDSLIDE, _evento(), [], esiti)
+    assert esiti == Counter({"gia_verificato": 1})
+    assert segnati == [
+        {"stato": "verificato", "comuni": ["064041"], "slug": "2026-10-28-frana-lacedonia"}
+    ]

@@ -26,7 +26,13 @@ def esito(misura: dict[str, Any]) -> tuple[str, str]:
         return "non_verificabile", "evento prima dello storico delle previsioni"
     if not misura.get("celle"):
         return "non_verificabile", "comune senza celle valutate"
-    if misura.get("adesso_non_misurato") and not misura.get("corse"):
+    # Un buco del dato meteo rende l'evento non verificabile solo se non c'è
+    # nient'altro: né una corsa sopra soglia, né un'ora misurata dello sweep.
+    if (
+        misura.get("adesso_non_misurato")
+        and not misura.get("adesso_misurato")
+        and not misura.get("corse")
+    ):
         return "non_verificabile", "dato meteo mancante nelle ore prima"
 
     fondo = misura.get("fondo_classe_max")

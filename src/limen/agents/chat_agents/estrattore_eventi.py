@@ -42,12 +42,8 @@ NOME_PERICOLO = {
 
 
 @cache
-def _load_system_prompt() -> str:
-    return (
-        resources.files(PROMPT_PACKAGE)
-        .joinpath("estrattore_eventi.it.md")
-        .read_text(encoding="utf-8")
-    )
+def _prompt(nome: str) -> str:
+    return resources.files(PROMPT_PACKAGE).joinpath(nome).read_text(encoding="utf-8")
 
 
 class EventoEstratto(BaseModel):
@@ -65,6 +61,12 @@ class _Risposta(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     eventi: list[EventoEstratto]
+
+
+class _Conferma(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    titoli: list[int]
 
 
 def elenco(titoli: Sequence[Titolo]) -> str:
@@ -95,50 +97,92 @@ class EstrattoreEventi:
     ) -> dict[HazardType, list[EventoEstratto]]:
         """Gli eventi di ogni pericolo; un pericolo senza risposta valida non
         ha voce nel risultato, che non è «nessun evento»."""
+        pericoli = [h for h, t in titoli.items() if t]
+        risposte = await self._esegui(
+            {
+                h.value: self._params(
+                    "estrattore_eventi.it.md",
+                    f"PERICOLO: {NOME_PERICOLO[h]}\n\nTITOLI:\n{elenco(titoli[h])}",
+                    _SCHEMA,
+                )
+                for h in pericoli
+            }
+        )
+        out: dict[HazardType, list[EventoEstratto]] = {}
+        for h in pericoli:
+            eventi = _eventi(risposte.get(h.value), len(titoli[h]))
+            if eventi is not None:
+                out[h] = eventi
+        return out
+
+    async def conferma(
+        self, casi: Sequence[tuple[HazardType, EventoEstratto, Sequence[Titolo]]]
+    ) -> list[list[int]]:
+        """Per ogni evento, quali dei titoli trovati con la ricerca mirata
+        raccontano proprio quello: il *Verify* di Step-DeepResearch. Nessuna
+        risposta vale «nessuna conferma», mai «tutte»."""
+        risposte = await self._esegui(
+            {
+                f"c{i}": self._params(
+                    "conferma_eventi.it.md",
+                    f"EVENTO: {NOME_PERICOLO[h]} del {e.giorno.isoformat()} a {e.luogo} "
+                    f"({', '.join(e.comuni)})\n\nTITOLI:\n{elenco(t)}",
+                    _SCHEMA_CONFERMA,
+                )
+                for i, (h, e, t) in enumerate(casi)
+            }
+        )
+        out: list[list[int]] = []
+        for i, (_, _, t) in enumerate(casi):
+            raw = risposte.get(f"c{i}")
+            try:
+                scelti = _Conferma.model_validate_json(raw).titoli if raw else []
+            except ValidationError as exc:
+                log.warning("estrattore_eventi.conferma_non_valida", error=str(exc))
+                scelti = []
+            out.append(sorted({j for j in scelti if 0 <= j < len(t)}))
+        return out
+
+    async def _esegui(
+        self, richieste: dict[str, MessageCreateParamsNonStreaming]
+    ) -> dict[str, str]:
+        """Un Message Batch; il testo di ogni risposta riuscita, per custom_id."""
         import anthropic
 
-        pericoli = [h for h, t in titoli.items() if t]
-        out: dict[HazardType, list[EventoEstratto]] = {}
-        if not pericoli:
-            return out
+        testi: dict[str, str] = {}
+        if not richieste:
+            return testi
         try:
             batch = await self._client.messages.batches.create(
-                requests=[
-                    {"custom_id": h.value, "params": self._params(h, titoli[h])} for h in pericoli
-                ]
+                requests=[{"custom_id": k, "params": p} for k, p in richieste.items()]
             )
             scadenza = time.monotonic() + self._attesa_massima_s
             while batch.processing_status != "ended":
                 if time.monotonic() >= scadenza:
                     log.warning("estrattore_eventi.batch_scaduto", batch_id=batch.id)
                     await self._client.messages.batches.cancel(batch.id)
-                    return out
+                    return testi
                 await asyncio.sleep(self._intervallo_s)
                 batch = await self._client.messages.batches.retrieve(batch.id)
             async for r in await self._client.messages.batches.results(batch.id):
-                eventi = _eventi(r, len(titoli[HazardType(r.custom_id)]))
-                if eventi is not None:
-                    out[HazardType(r.custom_id)] = eventi
+                testo = _testo(r)
+                if testo is not None:
+                    testi[r.custom_id] = testo
         except anthropic.APIError as exc:
             log.warning(
                 "estrattore_eventi.non_risponde", error=str(exc), error_type=type(exc).__name__
             )
-        return out
+        return testi
 
     def _params(
-        self, hazard: HazardType, titoli: Sequence[Titolo]
+        self, prompt: str, contenuto: str, schema: dict[str, Any]
     ) -> MessageCreateParamsNonStreaming:
         return {
             "model": self._model,
             "max_tokens": 16000,
-            "system": _load_system_prompt(),
-            "messages": [
-                {
-                    "role": "user",
-                    "content": f"PERICOLO: {NOME_PERICOLO[hazard]}\n\nTITOLI:\n{elenco(titoli)}",
-                }
-            ],
-            "output_config": {"format": {"type": "json_schema", "schema": _SCHEMA}},
+            "system": _prompt(prompt),
+            "messages": [{"role": "user", "content": contenuto}],
+            "output_config": {"format": {"type": "json_schema", "schema": schema}},
         }
 
 
@@ -170,14 +214,30 @@ _SCHEMA: dict[str, Any] = {
 }
 
 
-def _eventi(r: MessageBatchIndividualResponse, n_titoli: int) -> list[EventoEstratto] | None:
+_SCHEMA_CONFERMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {"titoli": {"type": "array", "items": {"type": "integer"}}},
+    "required": ["titoli"],
+    "additionalProperties": False,
+}
+
+
+def _testo(r: MessageBatchIndividualResponse) -> str | None:
     if r.result.type != "succeeded":
-        log.warning("estrattore_eventi.richiesta_fallita", hazard=r.custom_id, esito=r.result.type)
+        log.warning(
+            "estrattore_eventi.richiesta_fallita", custom_id=r.custom_id, esito=r.result.type
+        )
         return None
     msg = r.result.message
     raw = next((b.text for b in msg.content if b.type == "text"), None)
     if msg.stop_reason != "end_turn" or raw is None:
         log.warning("estrattore_eventi.risposta_mancante", stop_reason=msg.stop_reason)
+        return None
+    return raw
+
+
+def _eventi(raw: str | None, n_titoli: int) -> list[EventoEstratto] | None:
+    if raw is None:
         return None
     try:
         eventi = _Risposta.model_validate_json(raw).eventi

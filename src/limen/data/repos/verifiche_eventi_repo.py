@@ -109,6 +109,11 @@ async def upsert(v: VerificaEvento) -> tuple[Point, str] | None:
     return row["geom"], str(row["precisione_luogo"])
 
 
+async def esiste(slug: str) -> bool:
+    async with acquire() as conn:
+        return bool(await conn.fetchval("SELECT 1 FROM verifiche_eventi WHERE slug = $1", slug))
+
+
 async def count_by_esito() -> dict[str, int]:
     async with acquire() as conn:
         rows = await conn.fetch("SELECT esito, count(*)::int AS n FROM verifiche_eventi GROUP BY 1")

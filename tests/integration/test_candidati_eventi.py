@@ -46,6 +46,8 @@ async def test_il_giorno_dopo_una_seconda_testata_si_unisce(
     # Un altro pericolo, o un altro comune, è un altro candidato.
     assert (await fondi(replace(_BASE, hazard=HazardType.FLOOD))).id != primo.id
     assert (await fondi(replace(_BASE, nomi_comuni=("Bisaccia",)))).id != primo.id
+    # Castro in un'altra regione: un omonimo, non una seconda fonte.
+    assert (await fondi(replace(_BASE, regione="Lombardia"))).id != primo.id
 
 
 async def test_gli_omonimi_si_sciolgono_con_la_regione(reset_db: None, pg_pool: object) -> None:

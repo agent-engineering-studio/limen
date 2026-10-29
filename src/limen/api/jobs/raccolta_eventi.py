@@ -141,11 +141,8 @@ def _fonti(titoli: list[Titolo]) -> tuple[dict[str, Any], ...]:
 
 
 async def _registra(
-    hazard: HazardType, e: EventoEstratto, titoli: list[Titolo], esiti: Counter[str]
+    hazard: HazardType, e: EventoEstratto, propri: list[Titolo], esiti: Counter[str]
 ) -> None:
-    propri = [titoli[i] for i in e.titoli]
-    if candidati_eventi_repo.conta_testate(_fonti(propri)) < 2:
-        propri += await cerca_conferme(hazard, e, propri)
     fonti = _fonti(propri)
     salvato = await candidati_eventi_repo.fondi(
         Candidato(
@@ -168,6 +165,14 @@ async def _registra(
         esiti["comune_ignoto"] += 1
         return
 
+    nome = salvato.slug or slug(hazard, e)
+    if salvato.slug is None and await verifiche_eventi_repo.esiste(nome):
+        # Lo slug c'è già ma non l'ha scritto la raccolta: è un fact check a
+        # mano, con ora, punto e fonti più precisi dei titoli. Si collega il
+        # candidato e la riga resta com'è.
+        await candidati_eventi_repo.segna(salvato.id, stato="verificato", comuni=comuni, slug=nome)
+        esiti["gia_verificato"] += 1
+        return
     evento_at, precisione = quando(e)
     misura = await anticipo_repo.misura(
         comuni=comuni,
@@ -176,7 +181,6 @@ async def _registra(
         tolleranza_ore=24 if precisione == "T3" else 12,
     )
     risultato, motivo = esito(misura)
-    nome = salvato.slug or slug(hazard, e)
     v = VerificaEvento(
         slug=nome,
         hazard=hazard,
@@ -209,13 +213,30 @@ async def raccogli(settings: Settings) -> dict[str, Any]:
         return {"status": "skipped", "reason": "ANTHROPIC_API_KEY assente", "model": modello}
 
     titoli = await titoli_per_pericolo(giorni=llm.eventi_giorni, massimi=llm.eventi_titoli_massimi)
-    estratti = await EstrattoreEventi(
+    estrattore = EstrattoreEventi(
         api_key=chiave, model=modello, attesa_massima_s=llm.eventi_attesa_massima_minuti * 60
-    ).estrai(titoli)
+    )
+    estratti = await estrattore.estrai(titoli)
+
+    casi = [(h, e, [titoli[h][i] for i in e.titoli]) for h, ev in estratti.items() for e in ev]
+    # Una testata sola: ricerca mirata per comune, e il modello dice quali dei
+    # titoli trovati raccontano proprio quell'evento — un «lavori contro la
+    # frana» nello stesso comune non è una seconda fonte.
+    da_confermare: list[tuple[int, list[Titolo]]] = []
+    for k, (h, e, propri) in enumerate(casi):
+        if candidati_eventi_repo.conta_testate(_fonti(propri)) < 2:
+            trovati = await cerca_conferme(h, e, propri)
+            if trovati:
+                da_confermare.append((k, trovati))
+    confermati = await estrattore.conferma(
+        [(casi[k][0], casi[k][1], trovati) for k, trovati in da_confermare]
+    )
+    for (k, trovati), scelti in zip(da_confermare, confermati, strict=True):
+        casi[k][2].extend(trovati[j] for j in scelti)
+
     esiti: Counter[str] = Counter()
-    for hazard, eventi in estratti.items():
-        for e in eventi:
-            await _registra(hazard, e, titoli[hazard], esiti)
+    for h, e, propri in casi:
+        await _registra(h, e, propri, esiti)
     out: dict[str, Any] = {
         "titoli": {h.value: len(t) for h, t in titoli.items()},
         "estratti": {h.value: len(e) for h, e in estratti.items()},
