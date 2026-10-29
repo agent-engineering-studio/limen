@@ -9,12 +9,16 @@ ore di «anticipo» che erano solo il terreno).
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 _RANGO = {None: 0, "None": 0, "Low": 1, "Moderate": 2, "High": 3, "VeryHigh": 4}
 #: Sotto queste ore un'allerta non dà il tempo di fare niente.
 ANTICIPO_MINIMO_ORE = 6
+#: Il fondo di `anticipo.sql` parte 10 giorni prima dell'evento: con uno
+#: storico più corto la classe di fondo è letta su un pezzo solo, e un fondo
+#: sottostimato fa passare per anticipo lo sfondo.
+INIZIO_FONDO = timedelta(days=10)
 
 
 def anticipo_sopra_fondo(misura: dict[str, Any]) -> tuple[float, str] | None:
@@ -41,6 +45,8 @@ def esito(misura: dict[str, Any]) -> tuple[str, str]:
     storico = misura.get("storico_dal")
     if storico is None or datetime.fromisoformat(storico) > evento:
         return "non_verificabile", "evento prima dello storico delle previsioni"
+    if datetime.fromisoformat(storico) > evento - INIZIO_FONDO:
+        return "non_verificabile", "il fondo dei giorni prima non è più nello storico"
     if not misura.get("celle"):
         return "non_verificabile", "comune senza celle valutate"
     # `is False`: una misura congelata prima che la query lo dicesse non ha la

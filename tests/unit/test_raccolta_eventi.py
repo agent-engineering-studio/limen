@@ -103,7 +103,7 @@ def test_la_conferma_viene_da_un_altra_testata_sullo_stesso_comune_e_giorni() ->
 def _misura(**kw: object) -> dict[str, object]:
     base: dict[str, object] = {
         "evento": "2026-10-10T10:00:00+00:00",
-        "storico_dal": "2026-10-01T02:00:00+00:00",
+        "storico_dal": "2026-09-25T02:00:00+00:00",
         "celle": 40,
         "anticipo_ore_moderato": None,
         "anticipo_ore_alto": None,
@@ -119,6 +119,12 @@ def _misura(**kw: object) -> dict[str, object]:
 
 def test_esito_come_il_paragrafo_5_della_skill() -> None:
     assert esito(_misura(storico_dal="2026-10-12T00:00:00+00:00"))[0] == "non_verificabile"
+    # Lo storico c'è dall'evento, ma non dal fondo (10 giorni prima): la
+    # retention l'ha in parte cancellato, e un fondo a metà gonfia gli anticipi.
+    assert esito(_misura(storico_dal="2026-10-03T00:00:00+00:00")) == (
+        "non_verificabile",
+        "il fondo dei giorni prima non è più nello storico",
+    )
     assert esito(_misura(celle=0))[0] == "non_verificabile"
     # Job fermi nei giorni prima: non valutato, non mancato.
     assert esito(_misura(pericolo_valutato=False))[0] == "non_verificabile"
