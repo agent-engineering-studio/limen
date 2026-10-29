@@ -109,10 +109,14 @@ SELECT json_build_object(
         WHERE ra.hazard_type = $2::hazard_type
           AND ra.computed_at BETWEEN ev.t - interval '80 hours' AND ev.t
     ),
+    -- Solo le ore prima dell'evento: un dato tornato dopo non dice niente su
+    -- quello che Limen vedeva prima.
     'adesso_misurato', (
-        SELECT count(*) FROM osservate WHERE measured IS NOT FALSE),
+        SELECT count(*) FROM osservate
+        WHERE measured IS NOT FALSE AND computed_at <= (SELECT t FROM ev)),
     'adesso_non_misurato', (
-        SELECT count(*) FROM osservate WHERE measured IS FALSE),
+        SELECT count(*) FROM osservate
+        WHERE measured IS FALSE AND computed_at <= (SELECT t FROM ev)),
     'adesso_picco', (
         SELECT json_build_object('t', computed_at, 'classe', class,
                                  'score', round(score::numeric, 3),
