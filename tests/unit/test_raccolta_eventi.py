@@ -362,3 +362,15 @@ async def test_un_secondo_incidente_lo_stesso_giorno_ha_il_suo_slug(
     esiti: Counter[str] = Counter()
     await job._registra(HazardType.LANDSLIDE, _evento(), [], esiti)
     assert scritte == ["2026-10-28-frana-lacedonia-2"]
+
+
+def test_l_elenco_data_i_titoli_in_ora_italiana() -> None:
+    from datetime import UTC, datetime
+
+    from limen.agents.chat_agents.estrattore_eventi import elenco
+    from limen.integrations.notizie.google_news import Titolo
+
+    t = Titolo(
+        "Frana a Lacedonia", "Ottopagine", "https://x/1", datetime(2026, 10, 27, 23, 30, tzinfo=UTC)
+    )
+    assert "2026-10-28" in elenco([t])

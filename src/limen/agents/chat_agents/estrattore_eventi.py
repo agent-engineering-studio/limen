@@ -21,6 +21,7 @@ from datetime import date
 from functools import cache
 from importlib import resources
 from typing import TYPE_CHECKING, Any, Literal
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, SecretStr, ValidationError
 
@@ -70,9 +71,14 @@ class _Conferma(BaseModel):
     titoli: list[int]
 
 
+_ROMA = ZoneInfo("Europe/Rome")
+
+
 def elenco(titoli: Sequence[Titolo]) -> str:
+    # Il giorno di uscita in ora italiana: il modello ci data «ieri» e i
+    # titoli senza data, e `quando` legge il giorno come ora di Roma.
     return "\n".join(
-        f"[{i}] ({t.testata}, {t.pubblicato.date().isoformat()}) {t.titolo}"
+        f"[{i}] ({t.testata}, {t.pubblicato.astimezone(_ROMA).date().isoformat()}) {t.titolo}"
         for i, t in enumerate(titoli)
     )
 
