@@ -45,7 +45,12 @@ def esito(misura: dict[str, Any]) -> tuple[str, str]:
     storico = misura.get("storico_dal")
     if storico is None or datetime.fromisoformat(storico) > evento:
         return "non_verificabile", "evento prima dello storico delle previsioni"
-    if datetime.fromisoformat(storico) > evento - INIZIO_FONDO:
+    # Una misura congelata prima che la query lo dicesse non ha la chiave.
+    partizioni = misura.get("partizioni_dal")
+    if (
+        partizioni is not None
+        and datetime.fromisoformat(partizioni).replace(tzinfo=evento.tzinfo) > evento - INIZIO_FONDO
+    ):
         return "non_verificabile", "il fondo dei giorni prima non è più nello storico"
     if not misura.get("celle"):
         return "non_verificabile", "comune senza celle valutate"

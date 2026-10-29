@@ -119,11 +119,18 @@ def _misura(**kw: object) -> dict[str, object]:
 
 def test_esito_come_il_paragrafo_5_della_skill() -> None:
     assert esito(_misura(storico_dal="2026-10-12T00:00:00+00:00"))[0] == "non_verificabile"
-    # Lo storico c'è dall'evento, ma non dal fondo (10 giorni prima): la
-    # retention l'ha in parte cancellato, e un fondo a metà gonfia gli anticipi.
-    assert esito(_misura(storico_dal="2026-10-03T00:00:00+00:00")) == (
+    # La partizione più vecchia rimasta è dopo l'inizio del fondo (10 giorni
+    # prima): la retention l'ha in parte cancellato, e un fondo a metà gonfia
+    # gli anticipi.
+    assert esito(_misura(partizioni_dal="2026-10-03")) == (
         "non_verificabile",
         "il fondo dei giorni prima non è più nello storico",
+    )
+    # Le previsioni `+24h` partono da poco (si scrivono solo da Moderato), ma
+    # le partizioni coprono il fondo: si classifica.
+    assert (
+        esito(_misura(storico_dal="2026-10-08T00:00:00+00:00", partizioni_dal="2026-09-20"))[0]
+        == "mancata"
     )
     assert esito(_misura(celle=0))[0] == "non_verificabile"
     # Job fermi nei giorni prima: non valutato, non mancato.

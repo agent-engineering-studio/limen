@@ -70,6 +70,14 @@ SELECT json_build_object(
     -- non c'è più: «nessuna riga» lì vuol dire «non verificabile».
     'storico_dal', (SELECT min(computed_at) FROM risk_assessments
                     WHERE hazard_type = $2::hazard_type AND horizon = '+24h'),
+    -- La retention cancella per partizione (un giorno UTC): la più vecchia
+    -- rimasta dice da quando c'è ancora tutto, righe del fondo comprese. Le
+    -- righe `+24h` no: si scrivono solo da Moderato in su, e la loro assenza
+    -- è un fondo basso, non uno storico cancellato.
+    'partizioni_dal', (SELECT min(to_date(right(c.relname, 8), 'YYYYMMDD'))
+                       FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid
+                       WHERE i.inhparent = 'public.risk_assessments'::regclass
+                         AND c.relname ~ '^risk_assessments_[0-9]{8}$'),
     'anticipo_ore_moderato', (
         SELECT round(extract(epoch FROM (SELECT t FROM ev) - min(run_at)) / 3600)
         FROM corse),
