@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from limen.agents.llm_factory import budget
 from limen.agents.llm_factory.base import (
     ChatClient,
     ChatMessage,
@@ -29,6 +30,8 @@ log = get_logger(__name__)
 class AnthropicChatClient:  # Implements the ChatClient Protocol structurally
     api_key: SecretStr
     model: str
+    # Il ruolo che chiama: è l'origine della riga in `spesa_llm`.
+    ruolo: str = "?"
 
     def __post_init__(self) -> None:
         try:
@@ -67,7 +70,14 @@ class AnthropicChatClient:  # Implements the ChatClient Protocol structurally
         if system_parts:
             kwargs["system"] = "\n\n".join(system_parts)
         log.debug("anthropic.chat", model=self.model, n_messages=len(messages))
+        await budget.verifica(self.model)
         response = await self._client.messages.create(**kwargs)
+        await budget.registra(
+            origine=self.ruolo,
+            modello=self.model,
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+        )
         # response.content is a list of blocks; concatenate text blocks only.
         parts: list[str] = []
         for block in response.content:
@@ -86,4 +96,4 @@ class AnthropicFactory:  # Implements the LlmClientFactory Protocol structurally
 
     def create(self, agent_role: str) -> ChatClient:
         model = self.role_models.get(agent_role, self.default_model)
-        return AnthropicChatClient(api_key=self.api_key, model=model)
+        return AnthropicChatClient(api_key=self.api_key, model=model, ruolo=agent_role)

@@ -280,3 +280,26 @@ class JobRunStatus(BaseModel):
 class JobStatusResponse(BaseModel):
     sweep: SweepStatus | None = None
     per_aoi: list[JobRunStatus] = Field(default_factory=list)
+
+
+class ConsumoLlm(BaseModel):
+    """Token e richieste di un giorno o di un modello. Niente dollari: la
+    spesa non è pubblica (`limen llm-spesa`)."""
+
+    chiave: str
+    richieste: int
+    input_tokens: int
+    output_tokens: int
+
+
+class LlmStatusResponse(BaseModel):
+    """`GET /api/status/llm`: i token del mese, e se l'AI è in pausa."""
+
+    mese: str
+    in_pausa: bool
+    ripresa: date | None = None
+    richieste: int
+    input_tokens: int
+    output_tokens: int
+    per_giorno: list[ConsumoLlm] = Field(default_factory=list)
+    per_modello: list[ConsumoLlm] = Field(default_factory=list)

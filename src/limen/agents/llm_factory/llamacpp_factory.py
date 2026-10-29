@@ -15,7 +15,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
+from limen.agents.llm_factory import budget
 from limen.agents.llm_factory.base import ChatClient, ChatMessage
+from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.integrations._http import SharedHttpClient, fetch_with_retry
 
@@ -46,6 +48,8 @@ class LlamaCppChatClient:  # Implements the ChatClient Protocol structurally
     # needs no auth. Same request shape either way.
     api_key: str | None = None
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
+    # Il ruolo che chiama: è l'origine della riga in `spesa_llm`.
+    ruolo: str = "?"
 
     async def chat(
         self,
@@ -70,6 +74,8 @@ class LlamaCppChatClient:  # Implements the ChatClient Protocol structurally
             # by the model's good behaviour.
             payload["response_format"] = {"type": "json_object"}
 
+        if self.model in get_settings().llm.anthropic_modelli_gateway:
+            await budget.verifica(self.model)
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else None
         client = await SharedHttpClient.get()
         log.debug("llamacpp.chat", model=self.model, url=url, n_messages=len(messages))
@@ -95,12 +101,24 @@ class LlamaCppChatClient:  # Implements the ChatClient Protocol structurally
         # pagamento invece di stimarlo: il gateway li riporta nella forma
         # OpenAI anche quando dietro c'è Anthropic.
         usage = data.get("usage") or {}
+        # Il modello che ha risposto davvero, non quello chiesto: con un
+        # fallback del gateway `fast-cloud` può essere il `chat` locale, e la
+        # spesa va contata su chi ha generato.
+        effettivo = resp.headers.get("x-litellm-model-name") or str(data.get("model") or "")
+        effettivo = effettivo.rsplit("/", 1)[-1] or self.model
         log.info(
             "llm.usage",
             model=self.model,
+            effective_model=effettivo,
             prompt_tokens=usage.get("prompt_tokens"),
             completion_tokens=usage.get("completion_tokens"),
             reasoning_tokens=(usage.get("completion_tokens_details") or {}).get("reasoning_tokens"),
+        )
+        await budget.registra(
+            origine=self.ruolo,
+            modello=effettivo,
+            input_tokens=int(usage.get("prompt_tokens") or 0),
+            output_tokens=int(usage.get("completion_tokens") or 0),
         )
         try:
             return str(data["choices"][0]["message"]["content"])
@@ -129,4 +147,5 @@ class LlamaCppFactory:  # Implements the LlmClientFactory Protocol structurally
             model=model,
             api_key=self.api_key,
             timeout_seconds=self.role_timeouts.get(agent_role, self.timeout_seconds),
+            ruolo=agent_role,
         )

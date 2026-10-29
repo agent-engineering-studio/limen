@@ -46,3 +46,30 @@ async def test_la_spesa_del_mese_esclude_il_mese_prima(pg_pool: object) -> None:
         )
     assert await spesa_llm_repo.spesa_del_mese() == Decimal("1.512345")
     await _pulisci()
+
+
+async def test_i_consumi_si_raggruppano_per_modello_e_per_giorno(pg_pool: object) -> None:
+    await _pulisci()
+    for modello, ingresso, uscita, costo in (
+        ("claude-haiku-5-5", 1000, 200, Decimal("0.0002")),
+        ("claude-haiku-5-5", 3000, 100, Decimal("0.00035")),
+        ("chat-8b", 500, 50, Decimal(0)),
+    ):
+        await spesa_llm_repo.registra(
+            origine="Briefing",
+            riferimento=None,
+            modello=modello,
+            input_tokens=ingresso,
+            output_tokens=uscita,
+            costo_usd=costo,
+        )
+    per_modello = {c.chiave: c for c in await spesa_llm_repo.consumi_del_mese("modello")}
+    assert per_modello["claude-haiku-5-5"].richieste == 2
+    assert per_modello["claude-haiku-5-5"].input_tokens == 4000
+    assert per_modello["claude-haiku-5-5"].costo_usd == Decimal("0.00055")
+    assert per_modello["chat-8b"].costo_usd == 0
+    [giorno] = await spesa_llm_repo.consumi_del_mese("giorno")
+    assert giorno.richieste == 3 and len(giorno.chiave) == 10
+    [origine] = await spesa_llm_repo.consumi_del_mese("origine")
+    assert origine.chiave == "Briefing"
+    await _pulisci()

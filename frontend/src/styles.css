@@ -2469,6 +2469,8 @@ html[lang="en"] .app-nav a { white-space: nowrap; }
   white-space: nowrap;
 }
 .live-label { color: var(--ink); }
+/* Discreto: stesso grigio dell'ora, nessun colore d'allarme (vedi AvvisoAi). */
+.avviso-ai { cursor: help; text-decoration: underline dotted; }
 .live-dot {
   width: 8px;
   height: 8px;

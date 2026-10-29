@@ -4,8 +4,11 @@ Prints, for every agent role, the model it resolves to, its per-role timeout,
 and the latency of a real round trip. Exits non-zero if any role
 fails, so it works as a deploy gate as well as a diagnostic.
 
-Runs entirely on ``Settings`` + the resolved factory: no database, no
-ObjectStore. That is deliberate — the point is to be runnable from inside the
+Runs on ``Settings`` + the resolved factory, plus the database for one
+reason only: a probe to a role that can reach Claude passes the monthly spend
+cap (``agents/llm_factory/budget.py``), which reads ``spesa_llm`` — without it
+the cap stays shut and the probe fails. No ObjectStore. The point is to be
+runnable from inside the
 container (``docker compose exec api limen llm-check``), where ``127.0.0.1``
 is the container itself and the gateway is only reachable through
 ``host.docker.internal``, so a check performed from the host proves nothing
@@ -30,6 +33,7 @@ from limen.config.settings import (
     get_settings,
 )
 from limen.core.logging import get_logger
+from limen.data.db import lifespan_pool
 from limen.integrations._http import SharedHttpClient
 
 log = get_logger(__name__)
@@ -73,6 +77,11 @@ async def _catalogue(base_url: str, api_key: str | None) -> list[str] | None:
 
 
 async def run() -> int:
+    async with lifespan_pool():
+        return await _run()
+
+
+async def _run() -> int:
     settings = get_settings()
     factory = resolve_llm_factory(settings)
     configured = role_models(settings)

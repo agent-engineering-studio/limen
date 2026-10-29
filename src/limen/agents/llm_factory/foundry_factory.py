@@ -18,6 +18,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from limen.agents.llm_factory import budget
 from limen.agents.llm_factory.base import (
     ChatClient,
     ChatMessage,
@@ -80,6 +81,8 @@ class FoundryAnthropicChatClient:  # Implements the ChatClient Protocol structur
     endpoint: str
     api_key: SecretStr
     model: str
+    # Il ruolo che chiama: è l'origine della riga in `spesa_llm`.
+    ruolo: str = "?"
 
     def __post_init__(self) -> None:
         try:
@@ -120,7 +123,14 @@ class FoundryAnthropicChatClient:  # Implements the ChatClient Protocol structur
         if system_parts:
             kwargs["system"] = "\n\n".join(system_parts)
         log.debug("foundry.anthropic.chat", model=self.model, n_messages=len(messages))
+        await budget.verifica(self.model)
         response = await self._client.messages.create(**kwargs)
+        await budget.registra(
+            origine=self.ruolo,
+            modello=self.model,
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+        )
         parts: list[str] = []
         for block in response.content:
             text = getattr(block, "text", None)
@@ -152,6 +162,7 @@ class FoundryFactory:  # Implements the LlmClientFactory Protocol structurally
                 endpoint=self.anthropic_endpoint,
                 api_key=self.anthropic_api_key,
                 model=model,
+                ruolo=agent_role,
             )
         if self.azure_endpoint and self.azure_api_key:
             return FoundryAzureOpenAIChatClient(
