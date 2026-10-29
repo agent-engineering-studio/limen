@@ -258,15 +258,20 @@ class LLMSettings(BaseSettings):
     # restano a null, come per un revisore che non risponde.
     fedelta_attesa_massima_minuti: int = Field(default=120, ge=1)
 
-    # Le chiamate dirette a Claude (il revisore e la raccolta degli eventi, in batch) non
-    # passano dal gateway e quindi nemmeno dal suo `max_budget`. Oltre questo
-    # tetto mensile, in dollari, il revisore non parte. Non sostituisce il
-    # limite di spesa del workspace in Console: quello è l'unico che l'API fa
-    # rispettare anche a un bug di Limen.
+    # Il tetto mensile, in dollari, di **tutto** quello che Limen spende su
+    # Claude: le chiamate dal gateway e quelle dirette (il revisore e la
+    # raccolta degli eventi, in batch).
+    # Ogni chiamata scrive token e costo in `spesa_llm` (migrazione 083); a
+    # tetto raggiunto ogni chiamata a Claude si ferma prima di partire fino al
+    # primo del mese, e i chiamanti ripiegano sul testo deterministico. Il
+    # `max_budget` di LiteLLM non lo fa: senza un database collegato al
+    # gateway non viene applicato. Il limite del workspace in Console resta
+    # l'unico che l'API fa rispettare anche a un bug di Limen.
     anthropic_budget_mensile_usd: Decimal = Field(default=Decimal("10"), ge=0)
     # Dollari per milione di token, (ingresso, uscita), a listino: il batch ne
-    # paga la metà (`anthropic_sconto_batch`). Un modello che qui non c'è non
-    # parte: una spesa che non si sa calcolare non si sa nemmeno fermare.
+    # paga la metà (`anthropic_sconto_batch`). Un modello che qui non c'è è
+    # locale, e costa zero; il revisore, che va solo a Claude, con un modello
+    # senza prezzo non parte: una spesa che non si sa calcolare non si ferma.
     anthropic_prezzi_usd_mtok: dict[str, tuple[Decimal, Decimal]] = Field(
         default_factory=lambda: {
             "claude-sonnet-5-5": (Decimal("2"), Decimal("10")),
@@ -275,11 +280,24 @@ class LLMSettings(BaseSettings):
         }
     )
     anthropic_sconto_batch: Decimal = Field(default=Decimal("0.5"), gt=0, le=1)
+    # I nomi del gateway che possono finire su Claude: a tetto raggiunto sono
+    # questi a fermarsi. Gli altri (`fast`, `chat`, `extract`) sono locali.
+    anthropic_modelli_gateway: frozenset[str] = frozenset({"fast-cloud", "quality-cloud"})
 
-    def costo_batch_usd(self, modello: str, input_tokens: int, output_tokens: int) -> Decimal:
-        ingresso, uscita = self.anthropic_prezzi_usd_mtok[modello]
+    def costo_usd(
+        self, modello: str, input_tokens: int, output_tokens: int, *, batch: bool = False
+    ) -> Decimal | None:
+        """Il costo di una chiamata, o ``None`` se il modello non ha prezzo.
+
+        ``modello`` può arrivare con il prefisso del provider, come lo riporta
+        il gateway (`anthropic/claude-haiku-5-5`).
+        """
+        prezzi = self.anthropic_prezzi_usd_mtok.get(modello.rsplit("/", 1)[-1])
+        if prezzi is None:
+            return None
+        ingresso, uscita = prezzi
         lordo = (input_tokens * ingresso + output_tokens * uscita) / Decimal(1_000_000)
-        return lordo * self.anthropic_sconto_batch
+        return lordo * self.anthropic_sconto_batch if batch else lordo
 
     # La raccolta degli eventi dalla stampa (#347): a che ora (UTC), quanti
     # giorni all'indietro — meno dei 14 di retention di risk_assessments, o la

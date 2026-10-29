@@ -325,8 +325,9 @@ def _spesa(monkeypatch: pytest.MonkeyPatch, *, gia: str = "0") -> list[dict[str,
     async def _registra(**kw: Any) -> None:
         registrate.append(kw)
 
-    monkeypatch.setattr(fr.spesa_llm_repo, "spesa_del_mese", _del_mese)
-    monkeypatch.setattr(fr.spesa_llm_repo, "registra", _registra)
+    monkeypatch.setattr(fr.budget, "_cache", None)
+    monkeypatch.setattr(fr.budget.spesa_llm_repo, "spesa_del_mese", _del_mese)
+    monkeypatch.setattr(fr.budget.spesa_llm_repo, "registra", _registra)
     return registrate
 
 
@@ -334,7 +335,8 @@ async def test_oltre_il_budget_il_revisore_non_parte(monkeypatch: pytest.MonkeyP
     _spesa(monkeypatch, gia="10.01")
     settings = _settings(models={"fedelta": "claude-sonnet-5-5"}, chiave="sk-test")
     out = await fr.controlla_fedelta(settings)
-    assert out == {"status": "skipped", "reason": "budget mensile superato", "spesa_usd": 10.01}
+    assert out["status"] == "skipped"
+    assert out["reason"].startswith("tetto mensile di 10 $ raggiunto")
 
 
 async def test_un_modello_senza_prezzo_non_parte(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -382,4 +384,6 @@ async def test_la_spesa_del_batch_si_registra(monkeypatch: pytest.MonkeyPatch) -
 
 def test_il_costo_del_batch_e_a_meta_listino() -> None:
     llm = LLMSettings()
-    assert llm.costo_batch_usd("claude-sonnet-5-5", 2_000_000, 0) == Decimal("2")
+    assert llm.costo_usd("claude-sonnet-5-5", 2_000_000, 0, batch=True) == Decimal("2")
+    assert llm.costo_usd("anthropic/claude-sonnet-5-5", 2_000_000, 0) == Decimal("4")
+    assert llm.costo_usd("chat-8b", 2_000_000, 0) is None

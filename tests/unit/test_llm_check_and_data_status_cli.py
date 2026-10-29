@@ -9,6 +9,7 @@ a "perché la mappa è uniforme?".
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any
@@ -65,6 +66,11 @@ def _llm(
     monkeypatch.setattr(llm_check, "resolve_llm_factory", lambda _s: factory)
     monkeypatch.setattr(llm_check, "role_models", lambda _s: dict.fromkeys(clients, "?"))
     monkeypatch.setattr(llm_check, "AGENT_ROLES", tuple(clients))
+    monkeypatch.setattr(llm_check, "lifespan_pool", asynccontextmanager(_senza_db))
+
+
+async def _senza_db() -> AsyncIterator[None]:
+    yield
 
 
 @respx.mock

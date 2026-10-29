@@ -265,15 +265,16 @@ async def test_oltre_il_budget_del_mese_la_raccolta_non_parte(
     async def vietato(**kw: object) -> object:
         raise AssertionError("oltre il budget non si cerca né si chiama Claude")
 
-    monkeypatch.setattr(job.spesa_llm_repo, "spesa_del_mese", spesa)
+    monkeypatch.setattr(job.budget, "spesa_del_mese", spesa)
     monkeypatch.setattr(job, "titoli_per_pericolo", vietato)
     impostazioni = cast(Any, Settings)(
         _env_file=None,
         llm=LLMSettings(models={"eventi": "claude-sonnet-5-5"}, anthropic_budget_mensile_usd=10),
         anthropic_api_key="sk-prova",
     )
+    monkeypatch.setattr(job.budget, "get_settings", lambda: impostazioni)
     out = await raccogli(impostazioni)
-    assert out["reason"] == "budget mensile superato"
+    assert "tetto mensile" in out["reason"]
 
 
 async def test_un_evento_gia_verificato_non_si_rimisura(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -38,6 +38,7 @@ from limen.agents.chat_agents.estrattore_eventi import (
     EstrattoreEventi,
     EventoEstratto,
 )
+from limen.agents.llm_factory import budget
 from limen.api.dependencies import AppDependencies
 from limen.api.jobs.ids import JOB_RACCOLTA_EVENTI
 from limen.cli.registra_verifica import frana_da_verifica
@@ -48,7 +49,6 @@ from limen.core.verifiche.esito import esito
 from limen.data.repos import (
     anticipo_repo,
     candidati_eventi_repo,
-    spesa_llm_repo,
     verifiche_eventi_repo,
 )
 from limen.data.repos.candidati_eventi_repo import Candidato
@@ -236,19 +236,13 @@ async def raccogli(settings: Settings) -> dict[str, Any]:
     chiave = settings.anthropic_api_key
     if chiave is None or not chiave.get_secret_value().strip():
         return {"status": "skipped", "reason": "ANTHROPIC_API_KEY assente", "model": modello}
-    # Lo stesso tetto mensile del revisore di fedeltà: le chiamate dirette a
-    # Claude non passano dal gateway e dal suo max_budget.
     if modello not in llm.anthropic_prezzi_usd_mtok:
         log.warning("llm.prezzo_sconosciuto", model=modello)
         return {"status": "skipped", "reason": "prezzo del modello sconosciuto", "model": modello}
-    spesa = await spesa_llm_repo.spesa_del_mese()
-    if spesa >= llm.anthropic_budget_mensile_usd:
-        log.warning(
-            "llm.budget_superato",
-            spesa_usd=str(spesa),
-            budget_usd=str(llm.anthropic_budget_mensile_usd),
-        )
-        return {"status": "skipped", "reason": "budget mensile superato", "spesa_usd": float(spesa)}
+    try:
+        await budget.verifica(modello)
+    except budget.BudgetSuperatoError as exc:
+        return {"status": "skipped", "reason": str(exc), "model": modello}
 
     titoli = await titoli_per_pericolo(giorni=llm.eventi_giorni, massimi=llm.eventi_titoli_massimi)
     estrattore = EstrattoreEventi(
@@ -272,13 +266,13 @@ async def raccogli(settings: Settings) -> dict[str, Any]:
     for (k, trovati), scelti in zip(da_confermare, confermati, strict=True):
         casi[k][2].extend(trovati[j] for j in scelti)
     for c in estrattore.consumi:
-        await spesa_llm_repo.registra(
+        await budget.registra(
             origine=JOB_RACCOLTA_EVENTI,
             riferimento=c.batch_id,
             modello=modello,
             input_tokens=c.input_tokens,
             output_tokens=c.output_tokens,
-            costo_usd=llm.costo_batch_usd(modello, c.input_tokens, c.output_tokens),
+            batch=True,
         )
 
     esiti: Counter[str] = Counter()

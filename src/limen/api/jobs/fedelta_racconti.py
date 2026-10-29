@@ -14,15 +14,17 @@ chiedeva 21 GB di RAM e venti minuti per giudizio.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 from limen.agents.chat_agents.fedelta import RevisoreFedelta, controllo_numeri
+from limen.agents.llm_factory import budget
 from limen.api.dependencies import AppDependencies
 from limen.api.jobs._tracking import tracked
 from limen.api.jobs.ids import JOB_FEDELTA_RACCONTI
 from limen.config.settings import Settings
 from limen.core.logging import get_logger
-from limen.data.repos import spesa_llm_repo, spiegazioni_repo
+from limen.data.repos import spiegazioni_repo
 
 log = get_logger(__name__)
 
@@ -60,14 +62,10 @@ async def controlla_fedelta(settings: Settings) -> dict[str, Any]:
     if modello not in llm.anthropic_prezzi_usd_mtok:
         log.warning("llm.prezzo_sconosciuto", model=modello)
         return {"status": "skipped", "reason": "prezzo del modello sconosciuto", "model": modello}
-    spesa = await spesa_llm_repo.spesa_del_mese()
-    if spesa >= llm.anthropic_budget_mensile_usd:
-        log.warning(
-            "llm.budget_superato",
-            spesa_usd=str(spesa),
-            budget_usd=str(llm.anthropic_budget_mensile_usd),
-        )
-        return {"status": "skipped", "reason": "budget mensile superato", "spesa_usd": float(spesa)}
+    try:
+        await budget.verifica(modello)
+    except budget.BudgetSuperatoError as exc:
+        return {"status": "skipped", "reason": str(exc), "model": modello}
 
     campione = await spiegazioni_repo.da_giudicare(hours=_FINESTRA_ORE, limite=llm.fedelta_campione)
     if not campione:
@@ -80,15 +78,15 @@ async def controlla_fedelta(settings: Settings) -> dict[str, Any]:
         attesa_massima_s=llm.fedelta_attesa_massima_minuti * 60,
     )
     revisione = await revisore.giudica([(s.testo, s.ingresso) for s in campione])
-    costo = llm.costo_batch_usd(modello, revisione.input_tokens, revisione.output_tokens)
+    costo = Decimal(0)
     if revisione.batch_id is not None:
-        await spesa_llm_repo.registra(
+        costo = await budget.registra(
             origine=JOB_FEDELTA_RACCONTI,
             riferimento=revisione.batch_id,
             modello=modello,
             input_tokens=revisione.input_tokens,
             output_tokens=revisione.output_tokens,
-            costo_usd=costo,
+            batch=True,
         )
     esiti: dict[str, int] = {"fedeli": 0, "infedeli": 0, "senza_giudizio": 0}
     for s, giudizio in zip(campione, revisione.giudizi, strict=True):
@@ -133,7 +131,7 @@ async def controlla_fedelta(settings: Settings) -> dict[str, Any]:
                 esiti["senza_giudizio"] += 1
             else:
                 esiti["fedeli"] += 1
-    spesa_mese = float(spesa + costo)
+    spesa_mese = float(await budget.spesa_del_mese())
     log.info(
         "job.fedelta_racconti.summary",
         model=modello,

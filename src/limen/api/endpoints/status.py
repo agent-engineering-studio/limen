@@ -11,11 +11,20 @@ protezione civile è la differenza fra un'informazione e un'illusione.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Response
 
+from limen.agents.llm_factory import budget
 from limen.api.jobs.ids import JOB_HOURLY_MONITORING
-from limen.api.schemas import JobRunStatus, JobStatusResponse, SweepStatus
-from limen.data.repos import job_runs_repo
+from limen.api.schemas import (
+    ConsumoLlm,
+    JobRunStatus,
+    JobStatusResponse,
+    LlmStatusResponse,
+    SweepStatus,
+)
+from limen.data.repos import job_runs_repo, spesa_llm_repo
 
 router = APIRouter(prefix="/api/status", tags=["status"])
 
@@ -60,3 +69,36 @@ async def job_status(response: Response) -> JobStatusResponse:
 
 
 __all__ = ["router"]
+
+
+@router.get("/llm", response_model=LlmStatusResponse)
+async def llm_status(response: Response) -> LlmStatusResponse:
+    """I token consumati questo mese dalle spiegazioni dell'AI, e se il tetto
+    di spesa le ha messe in pausa. I token sì, i dollari no."""
+    response.headers["Cache-Control"] = f"public, max-age={_CACHE_SECONDS}"
+    oggi = datetime.now(UTC).date()
+    per_giorno = await spesa_llm_repo.consumi_del_mese("giorno")
+    per_modello = await spesa_llm_repo.consumi_del_mese("modello")
+    in_pausa = await budget.superato()
+
+    def _pubblico(righe: list[spesa_llm_repo.Consumo]) -> list[ConsumoLlm]:
+        return [
+            ConsumoLlm(
+                chiave=r.chiave,
+                richieste=r.richieste,
+                input_tokens=r.input_tokens,
+                output_tokens=r.output_tokens,
+            )
+            for r in righe
+        ]
+
+    return LlmStatusResponse(
+        mese=oggi.strftime("%Y-%m"),
+        in_pausa=in_pausa,
+        ripresa=spesa_llm_repo.primo_del_mese_prossimo(oggi) if in_pausa else None,
+        richieste=sum(r.richieste for r in per_modello),
+        input_tokens=sum(r.input_tokens for r in per_modello),
+        output_tokens=sum(r.output_tokens for r in per_modello),
+        per_giorno=_pubblico(per_giorno),
+        per_modello=_pubblico(per_modello),
+    )

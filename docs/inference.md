@@ -90,16 +90,9 @@ JSON del giudizio è vincolato da uno schema (output strutturati), quindi una
 risposta malformata non c'è più — un rifiuto o un `max_tokens` sì, e valgono
 `null`.
 
-**La spesa.** Il batch non passa dal gateway, quindi nemmeno dal suo
-`max_budget`. Ogni batch scrive una riga in `spesa_llm` (migrazione 083):
-token d'ingresso e d'uscita come li riporta l'API e il costo calcolato con
-`LLM__ANTHROPIC_PREZZI_USD_MTOK` (dollari per milione di token, a listino) e
-`LLM__ANTHROPIC_SCONTO_BATCH` (0,5). Prima di partire il job somma il mese
-solare in UTC: oltre `LLM__ANTHROPIC_BUDGET_MENSILE_USD` (default 10) non
-parte e scrive un warning `llm.budget_superato`; un modello senza prezzo non
-parte nemmeno lui (`llm.prezzo_sconosciuto`). Il tetto è morbido: il batch che
-lo supera finisce. Quello rigido è il limite di spesa del workspace nella
-Console Anthropic, l'unico che l'API fa rispettare anche a un bug di Limen.
+**La spesa.** Vedi «Il tetto di spesa su Claude», sotto: il revisore passa
+dallo stesso controllo di ogni altra chiamata, con il costo a metà listino
+perché è in batch.
 
 Sonnet e non Haiku: le spiegazioni le scrive `fast-cloud` (Haiku 5.5), e un
 revisore che rilegge sé stesso ha i suoi stessi punti ciechi. Un revisore più
@@ -113,6 +106,39 @@ acceso di giorno da un timer `Persistent=true` dopo un riavvio, ha mandato
 la macchina in OOM e trascinato via `limen`. Sonnet in batch, sui quattro
 giudizi a sera, costa circa un dollaro e mezzo al mese. Senza `LLM__MODELS__FEDELTA`
 o senza `ANTHROPIC_API_KEY` il job non gira.
+
+## Il tetto di spesa su Claude
+
+Un solo tetto mensile, `LLM__ANTHROPIC_BUDGET_MENSILE_USD` (default **10 $**),
+per **tutto** quello che Limen spende su Claude: briefing e analisi dal gateway
+(`fast-cloud`, `quality-cloud`) e il revisore in batch. Il `max_budget` di
+LiteLLM non serve a questo: senza un database collegato al gateway non viene
+applicato, e LiteLLM lo dice all'avvio.
+
+* **Ogni chiamata, locale o no, scrive una riga in `spesa_llm`** (migrazione
+  083): ruolo, modello che ha risposto davvero — con un fallback del gateway
+  `fast-cloud` può essere il `chat` locale, e l'intestazione
+  `x-litellm-model-name` lo dice —, token d'ingresso e d'uscita, costo da
+  `LLM__ANTHROPIC_PREZZI_USD_MTOK` (un modello senza prezzo è locale e costa
+  zero; il batch paga `LLM__ANTHROPIC_SCONTO_BATCH`).
+* **Prima di ogni chiamata che può finire su Claude** —
+  `LLM__ANTHROPIC_MODELLI_GATEWAY` dal gateway, ogni chiamata dei client
+  Anthropic diretti, il revisore — `agents/llm_factory/budget.py` somma il
+  mese solare in UTC (al più ogni 30 s). A tetto raggiunto solleva
+  `BudgetSuperatoError` e scrive `llm.budget_superato`: i chiamanti ripiegano
+  sul testo deterministico come per qualunque guasto del modello, fino al
+  primo del mese. I modelli locali continuano.
+* **Se la spesa non si può leggere la chiamata non parte**
+  (`llm.budget_non_verificabile`): un tetto che si apre quando il database non
+  risponde non è un tetto. Per questo `limen llm-check` apre una connessione.
+* Il tetto è **morbido** sulla chiamata che lo supera — quella finisce —, e
+  il limite del workspace nella Console Anthropic resta l'unico che l'API fa
+  rispettare anche a un bug di Limen.
+
+Cosa si vede: `GET /api/status/llm` (pubblico) dà i token del mese per giorno
+e per modello e se l'AI è in pausa, **senza importi**; la pagina «Diagnostica»
+li mostra, e nell'header compare «AI in pausa» solo a tetto raggiunto. La
+spesa in dollari sta in `limen llm-spesa` e nei log.
 
 ## Timeout
 
