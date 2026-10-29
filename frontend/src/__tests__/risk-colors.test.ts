@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { COLORE_IGNOTO, RISK_CLASSES, maplibreColorMatch } from "../lib/risk-colors";
+import { OMBREGGIATURA } from "../lib/rilievo";
 
 /** L'espressione di classe, dentro il `case` che la protegge. */
 function scala(expr: unknown[]): unknown[] {
@@ -66,11 +67,19 @@ function contrasto(a: number[], b: number[]): number {
 }
 
 describe("la scala del rischio sul fondo scuro", () => {
-  it("ogni coppia di classi resta distinguibile anche per chi non vede i colori", () => {
+  // Il fondo piatto, e in «Rilievo» i tre estremi dell'ombreggiatura (#319,
+  // #322): un pixel in piena ombra o in piena luce è il caso peggiore, perché
+  // l'hillshade sta sotto le celle e le celle sono trasparenti al 30 %.
+  it.each([
+    ["piatto", "#10161d"],
+    ["ombra", OMBREGGIATURA.ombra],
+    ["luce", OMBREGGIATURA.luce],
+    ["accento", OMBREGGIATURA.accento],
+  ])("ogni coppia di classi resta distinguibile anche per chi non vede i colori (fondo %s)", (_, fondo) => {
     // La scala del design aveva alta e molto alta a 1,36:1, 1,25:1 per un
     // deuteranope (#155). Le celle sono dipinte al 70 % sopra la base: è lì
     // che vanno distinte, non sul campione pieno della legenda.
-    const base = lineare("#10161d");
+    const base = lineare(fondo);
     const dipinte = RISK_CLASSES.map((c) => lineare(c.color).map((v, i) => 0.7 * v + 0.3 * base[i]!));
     const viste: Record<string, number[][]> = { normale: dipinte };
     for (const [nome, m] of Object.entries(CVD)) {

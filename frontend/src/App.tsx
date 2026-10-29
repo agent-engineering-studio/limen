@@ -24,6 +24,7 @@ import OverlayControl from "./components/OverlayControl";
 import PrevisioneTesta from "./components/PrevisioneTesta";
 import RicercaComune from "./components/RicercaComune";
 import RiskMap from "./components/RiskMap";
+import SelettoreVista from "./components/SelettoreVista";
 import Timeline from "./components/Timeline";
 import SciencePage from "./components/SciencePage";
 import ShadowDiagnosticsPage from "./components/ShadowDiagnosticsPage";
@@ -427,6 +428,7 @@ export function App(): JSX.Element {
         <LivelloAttivo orizzonte={orizzonte} />
         <Timeline orizzonte={orizzonte} onCambia={setOrizzonte} />
         <div className="map-strumenti">
+          <SelettoreVista />
           <UnstyledButton
             className="map-bottone"
             onClick={() => impostaSoloSoglia(!soloSoglia)}

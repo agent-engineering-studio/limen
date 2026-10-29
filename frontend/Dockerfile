@@ -36,6 +36,7 @@ ARG VITE_API_URL
 ARG VITE_TILESERV_URL
 ARG VITE_PAI_PMTILES_URL
 ARG VITE_IFFI_PMTILES_URL
+ARG VITE_DEM_PMTILES_URL
 # Le variabili di Vite vengono sostituite **al momento della build**: una non
 # dichiarata qui non si puo' piu' cambiare dopo, e l'override resterebbe
 # scritto nella documentazione senza avere effetto.
@@ -50,6 +51,7 @@ ENV VITE_API_URL=$VITE_API_URL \
     VITE_TILESERV_URL=$VITE_TILESERV_URL \
     VITE_PAI_PMTILES_URL=$VITE_PAI_PMTILES_URL \
     VITE_IFFI_PMTILES_URL=$VITE_IFFI_PMTILES_URL \
+    VITE_DEM_PMTILES_URL=$VITE_DEM_PMTILES_URL \
     VITE_GEOSERVER_WMS_URL=$VITE_GEOSERVER_WMS_URL \
     VITE_MAP_GLYPHS_URL=$VITE_MAP_GLYPHS_URL \
     VITE_DEFAULT_LON=$VITE_DEFAULT_LON \

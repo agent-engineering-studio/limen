@@ -10,6 +10,15 @@ import { config } from "../lib/env";
 import { NOMI_PERICOLO, useHazard } from "../lib/hazard";
 import { testi, useLingua, useTesti } from "../lib/i18n";
 import { useMapStateOpzionale } from "../lib/map-state";
+import {
+  DEM_SOURCE_ID,
+  durataCamera,
+  ESAGERAZIONE_RILIEVO,
+  HILLSHADE_LAYER_ID,
+  INCLINAZIONE_RILIEVO,
+  OMBREGGIATURA,
+  useMotivoSenzaRilievo,
+} from "../lib/rilievo";
 import { COLORE_ALLERTA, OVERLAYS } from "../lib/overlays";
 import { posizioneInItalia, ZOOM_POSIZIONE } from "../lib/posizione";
 import { COLORE_LIVELLO, popupStazione, RAGGIO_LIVELLO } from "../lib/stazioni";
@@ -138,7 +147,10 @@ const IFFI_LAYER_ID = "limen-iffi-circle";
 let pmtilesProtocolRegistered = false;
 function ensurePmtilesProtocol(): void {
   if (pmtilesProtocolRegistered) return;
-  const protocol = new Protocol();
+  // `metadata`: la TileJSON porta l'attribuzione scritta nell'archivio, che
+  // per il DEM la imposta `limen dem-tiles`. Un'attribuzione scritta nella
+  // sorgente (PAI, IFFI) vince comunque su quella della TileJSON.
+  const protocol = new Protocol({ metadata: true });
   maplibregl.addProtocol("pmtiles", protocol.tile);
   pmtilesProtocolRegistered = true;
 }
@@ -290,7 +302,18 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   // La vista si conserva quando la mappa si ricostruisce (cambio di pericolo
   // o di sorgente): ripartire dal centro di default buttava via il comune
   // che si stava guardando.
-  const cameraRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
+  const cameraRef = useRef<{
+    center: [number, number];
+    zoom: number;
+    bearing: number;
+  } | null>(null);
+  // «Rilievo» (#319): sulla stessa mappa, quindi un cambio di vista non la
+  // ricostruisce. La «3D» non è ancora una vista di questa mappa (#321).
+  const motivoSenzaRilievo = useMotivoSenzaRilievo();
+  const rilievo = stato?.vista === "rilievo" && motivoSenzaRilievo === null;
+  const rilievoRef = useRef(rilievo);
+  rilievoRef.current = rilievo;
+  const rilievoApplicatoRef = useRef(rilievo);
   // La vista della prima apertura, finché la posizione del browser non ha
   // risposto: un ref e non la vista della mappa corrente perché la mappa si
   // ricostruisce (e StrictMode la monta due volte) prima che la risposta arrivi.
@@ -405,7 +428,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
 
     // Register the `pmtiles://` protocol once — required only when the
     // PAI / IFFI overlays are configured, but cheap to do unconditionally.
-    if (config.paiPmtilesUrl || config.iffiPmtilesUrl) {
+    if (config.paiPmtilesUrl || config.iffiPmtilesUrl || config.demPmtilesUrl) {
       ensurePmtilesProtocol();
     }
 
@@ -496,8 +519,35 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         attribution: "ISPRA IFFI (CC-BY-4.0)",
       },
     };
+    if (config.demPmtilesUrl) {
+      sources[DEM_SOURCE_ID] = {
+        type: "raster-dem",
+        url: `pmtiles://${config.demPmtilesUrl}`,
+        encoding: "mapbox",
+        tileSize: 256,
+        maxzoom: 11,
+      };
+    }
     const layers: maplibregl.StyleSpecification["layers"] = [
       BASEMAP_LAYER,
+      // Subito sopra la base e sotto tutto il resto: il rischio si dipinge
+      // sopra il rilievo, mai il contrario. Spento fuori da «Rilievo», e un
+      // livello spento non scarica tile.
+      ...(config.demPmtilesUrl
+        ? [
+            {
+              id: HILLSHADE_LAYER_ID,
+              type: "hillshade" as const,
+              source: DEM_SOURCE_ID,
+              layout: { visibility: rilievoRef.current ? ("visible" as const) : ("none" as const) },
+              paint: {
+                "hillshade-shadow-color": OMBREGGIATURA.ombra,
+                "hillshade-highlight-color": OMBREGGIATURA.luce,
+                "hillshade-accent-color": OMBREGGIATURA.accento,
+              },
+            },
+          ]
+        : []),
       {
         id: "wms-pai-layer",
         type: "raster",
@@ -883,7 +933,12 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         glyphs: config.mapGlyphsUrl,
         sources,
         layers,
+        ...(rilievoRef.current
+          ? { terrain: { source: DEM_SOURCE_ID, exaggeration: ESAGERAZIONE_RILIEVO } }
+          : {}),
       },
+      pitch: rilievoRef.current ? INCLINAZIONE_RILIEVO : 0,
+      bearing: rilievoRef.current ? (cameraRef.current?.bearing ?? 0) : 0,
       center: cameraRef.current?.center ??
         (areaLink ? [areaLink.lon, areaLink.lat] : [config.defaultLon, config.defaultLat]),
       zoom: cameraRef.current?.zoom ?? areaLink?.zoom ?? config.defaultZoom,
@@ -994,7 +1049,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     return () => {
       annullaPosizione();
       const c = map.getCenter();
-      cameraRef.current = { center: [c.lng, c.lat], zoom: map.getZoom() };
+      cameraRef.current = { center: [c.lng, c.lat], zoom: map.getZoom(), bearing: map.getBearing() };
       map.remove();
       mappaRef.current = null;
       if (props.mapRef) {
@@ -1024,6 +1079,30 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     if (!areaLink) return;
     mappaRef.current?.jumpTo({ center: [areaLink.lon, areaLink.lat], zoom: areaLink.zoom });
   }, [areaLink]);
+
+  // «Rilievo» acceso o spento sulla mappa che c'è: terreno, ombre e camera.
+  // Tornando a 2D niente si ricarica, e inclinazione e rotazione tornano a 0
+  // perché una mappa ruotata in 2D si legge male e non lo dice.
+  useEffect(() => {
+    if (rilievo === rilievoApplicatoRef.current) return;
+    rilievoApplicatoRef.current = rilievo;
+    const map = mappaRef.current;
+    if (!map) return;
+    const apply = (): void => {
+      if (!map.getSource(DEM_SOURCE_ID)) return;
+      map.setTerrain(rilievo ? { source: DEM_SOURCE_ID, exaggeration: ESAGERAZIONE_RILIEVO } : null);
+      if (map.getLayer(HILLSHADE_LAYER_ID)) {
+        map.setLayoutProperty(HILLSHADE_LAYER_ID, "visibility", rilievo ? "visible" : "none");
+      }
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("idle", apply);
+    map.easeTo({
+      pitch: rilievo ? INCLINAZIONE_RILIEVO : 0,
+      bearing: rilievo ? map.getBearing() : 0,
+      duration: durataCamera(800),
+    });
+  }, [rilievo]);
 
   // I livelli di contesto, senza ricostruire la mappa.
   useEffect(() => {

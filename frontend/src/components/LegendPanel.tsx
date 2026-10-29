@@ -3,7 +3,9 @@ import type { JSX } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
 import { useHazard, useNomePericolo } from "../lib/hazard";
-import { testi, useTesti } from "../lib/i18n";
+import { testi, useLocale, useTesti } from "../lib/i18n";
+import { useMapStateOpzionale } from "../lib/map-state";
+import { ESAGERAZIONE_RILIEVO, useMotivoSenzaRilievo } from "../lib/rilievo";
 import {
   HAZARD_HUE,
   COLORE_IGNOTO,
@@ -51,6 +53,7 @@ const T = testi(
     notaListe:
       "Le liste mettono prima le celle vicine a centri abitati e strade (🏠 🛣): stesso rischio, più conseguenze. Colori e numeri seguono sempre la scala qui sopra. ",
     comeSiCalcola: "Come si calcola il rischio",
+    esagerato: (x: string) => `Rilievo esagerato ×${x}: i versanti sembrano più ripidi di quanto sono.`,
   },
   {
     legenda: "Risk class legend",
@@ -87,6 +90,7 @@ const T = testi(
     notaListe:
       "Lists put first the cells near towns and roads (🏠 🛣): same risk, more consequences. Colours and numbers always follow the scale above. ",
     comeSiCalcola: "How the risk is computed",
+    esagerato: (x: string) => `Relief exaggerated ×${x}: slopes look steeper than they are.`,
   },
 );
 
@@ -150,6 +154,17 @@ function RigaNonMisurato(): JSX.Element {
       </li>
     </ul>
   );
+}
+
+/** In «Rilievo» l'altezza è un canale in più, e se è esagerata va detto
+ *  (#322): un versante ×1,5 sembra più pericoloso di quanto è. */
+function NotaRilievo(): JSX.Element | null {
+  const t = useTesti(T);
+  const loc = useLocale();
+  const vista = useMapStateOpzionale()?.vista;
+  const disponibile = useMotivoSenzaRilievo() === null;
+  if (vista !== "rilievo" || !disponibile || ESAGERAZIONE_RILIEVO === 1) return null;
+  return <p className="legend-note">{t.esagerato(ESAGERAZIONE_RILIEVO.toLocaleString(loc))}</p>;
 }
 
 export function LegendPanel(): JSX.Element {
@@ -222,6 +237,7 @@ export function LegendPanel(): JSX.Element {
           ))}
         </ul>
         <RigaNonMisurato />
+        <NotaRilievo />
         <p className="legend-note">{t.notaNonMisurato}</p>
         <p className="legend-note">{t.notaColore}</p>
         <ul className="legend-hazards">
@@ -270,6 +286,7 @@ export function LegendPanel(): JSX.Element {
         ))}
       </ul>
       <RigaNonMisurato />
+      <NotaRilievo />
       <p className="legend-note">{t.notaNonMisurato}</p>
       <p className="legend-note">
         {t.notaListe}

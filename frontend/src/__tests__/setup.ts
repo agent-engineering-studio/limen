@@ -31,6 +31,14 @@ vi.mock("maplibre-gl", () => {
     fitBounds() {}
     flyTo() {}
     jumpTo() {}
+    easeTo() {}
+    setTerrain() {}
+    getLayer() {
+      return undefined;
+    }
+    getBearing() {
+      return 0;
+    }
     getCanvas() {
       return document.createElement("canvas");
     }
@@ -55,7 +63,7 @@ vi.mock("maplibre-gl", () => {
     }
   }
   return {
-    default: { Map: FakeMap, NavigationControl: class {}, Popup: class {} },
+    default: { Map: FakeMap, NavigationControl: class {}, Popup: class {}, addProtocol: () => {} },
     Map: FakeMap,
     NavigationControl: class {},
     Popup: class {},
