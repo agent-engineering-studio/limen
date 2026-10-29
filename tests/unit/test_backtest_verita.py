@@ -37,3 +37,25 @@ def test_senza_far_max_il_far_e_informazione_e_decide_la_discriminazione() -> No
     )
     assert fallita[0].endswith("**FAIL**")
     assert fallita[1].endswith("**FAIL**")
+
+
+def test_a_parita_di_carico_si_accende_la_quota_chiesta_e_non_la_classe() -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from limen.cli.backtest import colte_a_carico
+
+    t0 = datetime(2019, 11, 1, tzinfo=UTC)
+    frana = t0 + timedelta(hours=10)
+    truth = {"a": frana, "b": frana}
+    verita = {"a": [(t0, 0.6)], "b": [(t0, 0.2)]}
+    massimi = [0.6, 0.2] + [0.1] * 8 + [0.0] * 10
+
+    soglia, effettivo, colte = colte_a_carico(
+        massimi, verita, truth, carico=0.05, lead_max_hours=72
+    )
+    assert (soglia, effettivo, colte) == (0.6, 0.05, 1)
+    _, effettivo, colte = colte_a_carico(massimi, verita, truth, carico=0.10, lead_max_hours=72)
+    assert (effettivo, colte) == (0.10, 2)
+    # Le celle a zero non si accendono: chiedere il 90 % ne accende il 50 %.
+    soglia, effettivo, _ = colte_a_carico(massimi, verita, truth, carico=0.9, lead_max_hours=72)
+    assert (soglia, effettivo) == (0.1, 0.5)

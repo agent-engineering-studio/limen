@@ -930,7 +930,12 @@ def _write_report(
                 continue
             verifiable = run.true_days + run.false_days
             checks = [
-                ("hit rate", run.hit_rate, gate.hit_rate_min, run.hit_rate >= gate.hit_rate_min),
+                (
+                    "hit rate",
+                    run.hit_rate,
+                    gate.hit_rate_min,
+                    run.hit_rate >= gate.hit_rate_min if gate.hit_rate_min is not None else None,
+                ),
                 # Il FAR si giudica solo se c'è un denominatore osservato:
                 # senza, "0%" sarebbe un gate superato per assenza di prove.
                 (

@@ -350,8 +350,13 @@ calibration:
   # del 95-99 % (Liguria 95,0 %, Marche 96,8 %, Piemonte 98,4 %). Il FAR resta
   # nel report; il gate diventa la discriminazione, come per alluvione e
   # incendio: le frane colte rispetto alla quota di celle in allerta.
+  # Anche l'hit rate ≥ 70 % alla soglia di classe esce dal gate (#243): sulle
+  # dodici finestre non lo passa nessuna variante, il motore di oggi compreso,
+  # e premia chi accende di più. Una variante si confronta col campione sulle
+  # frane colte con la stessa quota di celle in allerta, `carico_riferimento`.
   backtest:
-    hit_rate_min:            0.70
+    hit_rate_min:            null
     far_max:                 null
     lead_time_hours_min:     18.0
     discriminazione_min:     2.0
+    carico_riferimento:      0.05
