@@ -233,10 +233,11 @@ async def test_un_fact_check_a_mano_non_si_sovrascrive(monkeypatch: pytest.Monke
     monkeypatch.setattr(job.candidati_eventi_repo, "risolvi_comuni", risolvi)
     monkeypatch.setattr(job.candidati_eventi_repo, "segna", segna)
 
-    async def senza_omonimi(nome: str) -> bool:
+    async def senza_omonimi(*a: object) -> bool:
         return False
 
     monkeypatch.setattr(job.candidati_eventi_repo, "ha_omonimi", senza_omonimi)
+    monkeypatch.setattr(job.candidati_eventi_repo, "slug_di_un_altro", senza_omonimi)
     monkeypatch.setattr(job.verifiche_eventi_repo, "esiste", esiste)
     monkeypatch.setattr(job.verifiche_eventi_repo, "upsert", vietato)
     monkeypatch.setattr(job.anticipo_repo, "misura", vietato)
@@ -302,3 +303,58 @@ async def test_un_evento_gia_verificato_non_si_rimisura(monkeypatch: pytest.Monk
     esiti: Counter[str] = Counter()
     await job._registra(HazardType.LANDSLIDE, _evento(), [], esiti)
     assert esiti == Counter({"gia_verificato": 1})
+
+
+async def test_un_secondo_incidente_lo_stesso_giorno_ha_il_suo_slug(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from limen.api.jobs import raccolta_eventi as job
+    from limen.data.repos.candidati_eventi_repo import Salvato
+
+    scritte: list[str] = []
+
+    async def fondi(c: object) -> Salvato:
+        return Salvato(
+            id=8,
+            fonti=({"testata": "A"}, {"testata": "B"}),
+            testate=2,
+            slug=None,
+            giorno=date(2026, 10, 28),
+            parte="ignota",
+            luogo="via Roma a Lacedonia",
+            regione="Campania",
+            nomi_comuni=("Lacedonia",),
+        )
+
+    async def risolvi(nomi: object, regione: object) -> list[str]:
+        return ["064041"]
+
+    async def no(*a: object) -> bool:
+        return False
+
+    async def esiste(slug: str) -> bool:
+        return slug == "2026-10-28-frana-lacedonia"
+
+    async def di_un_altro(slug: str, id_: int) -> bool:
+        return True
+
+    async def misura(**kw: object) -> dict[str, object]:
+        return _misura()
+
+    async def upsert(v: object) -> None:
+        scritte.append(v.slug)  # type: ignore[attr-defined]
+
+    async def niente(*a: object, **kw: object) -> None:
+        return None
+
+    monkeypatch.setattr(job.candidati_eventi_repo, "fondi", fondi)
+    monkeypatch.setattr(job.candidati_eventi_repo, "risolvi_comuni", risolvi)
+    monkeypatch.setattr(job.candidati_eventi_repo, "ha_omonimi", no)
+    monkeypatch.setattr(job.candidati_eventi_repo, "slug_di_un_altro", di_un_altro)
+    monkeypatch.setattr(job.candidati_eventi_repo, "segna", niente)
+    monkeypatch.setattr(job.verifiche_eventi_repo, "esiste", esiste)
+    monkeypatch.setattr(job.verifiche_eventi_repo, "upsert", upsert)
+    monkeypatch.setattr(job.anticipo_repo, "misura", misura)
+    esiti: Counter[str] = Counter()
+    await job._registra(HazardType.LANDSLIDE, _evento(), [], esiti)
+    assert scritte == ["2026-10-28-frana-lacedonia-2"]

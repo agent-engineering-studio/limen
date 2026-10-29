@@ -187,6 +187,17 @@ async def fondi(c: Candidato) -> Salvato:
     )
 
 
+async def slug_di_un_altro(slug: str, id_: int) -> bool:
+    """Lo slug l'ha già preso un altro candidato: un altro incidente lo stesso
+    giorno nello stesso comune, non un fact check a mano."""
+    async with acquire() as conn:
+        return bool(
+            await conn.fetchval(
+                "SELECT 1 FROM candidati_eventi WHERE slug = $1 AND id <> $2", slug, id_
+            )
+        )
+
+
 async def ha_omonimi(nome: str) -> bool:
     async with acquire() as conn:
         n = await conn.fetchval("SELECT count(*) FROM comuni WHERE lower(name) = lower($1)", nome)

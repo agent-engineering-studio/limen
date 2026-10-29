@@ -17,6 +17,22 @@ _RANGO = {None: 0, "None": 0, "Low": 1, "Moderate": 2, "High": 3, "VeryHigh": 4}
 ANTICIPO_MINIMO_ORE = 6
 
 
+def anticipo_sopra_fondo(misura: dict[str, Any]) -> tuple[int, str] | None:
+    """Le ore fra la prima corsa con una classe **sopra** il fondo e
+    l'evento, e la classe più alta fra quelle corse; ``None`` se nessuna lo
+    supera. È l'anticipo che conta: con un fondo Alto, un Alto previsto 72 h
+    prima e un Molto alto arrivato 20 h prima sono un anticipo di 20 ore, non
+    di 72 — ``anticipo_ore_moderato`` e ``_alto`` restano le soglie grezze."""
+    fondo = misura.get("fondo_classe_max")
+    sopra = [c for c in misura.get("corse") or [] if _RANGO.get(c.get("classe"), 0) > _RANGO[fondo]]
+    if not sopra:
+        return None
+    evento = datetime.fromisoformat(misura["evento"])
+    prima = min(datetime.fromisoformat(c["run_at"]) for c in sopra)
+    classe = max((c["classe"] for c in sopra), key=lambda k: _RANGO[k])
+    return round((evento - prima).total_seconds() / 3600), classe
+
+
 def esito(misura: dict[str, Any]) -> tuple[str, str]:
     """``(esito, motivo)``: ``non_verificabile``, ``anticipata``,
     ``contemporanea`` o ``mancata``, nell'ordine del §5."""
@@ -37,16 +53,10 @@ def esito(misura: dict[str, Any]) -> tuple[str, str]:
 
     fondo = misura.get("fondo_classe_max")
     prevista = misura.get("classe_prevista_max")
-    # L'anticipo si conta dalla prima corsa *sopra* il fondo, non da una che
-    # lo eguagliava: con un fondo Alto, un Alto previsto 72 h prima e un Molto
-    # alto arrivato 2 h prima non sono un anticipo di 72 ore.
-    sopra = [c for c in misura.get("corse") or [] if _RANGO.get(c.get("classe"), 0) > _RANGO[fondo]]
-    if sopra:
-        prima = min(datetime.fromisoformat(c["run_at"]) for c in sopra)
-        anticipo = round((evento - prima).total_seconds() / 3600)
-        if anticipo >= ANTICIPO_MINIMO_ORE:
-            classe = max((c["classe"] for c in sopra), key=lambda k: _RANGO[k])
-            return "anticipata", f"{classe} previsto {anticipo} h prima, sopra un fondo {fondo}"
+    sopra = anticipo_sopra_fondo(misura)
+    if sopra is not None and sopra[0] >= ANTICIPO_MINIMO_ORE:
+        ore, classe = sopra
+        return "anticipata", f"{classe} previsto {ore} h prima, sopra un fondo {fondo}"
 
     adesso = misura.get("adesso_classe_max")
     primo = misura.get("adesso_primo_moderato")

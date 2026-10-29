@@ -11,6 +11,7 @@ from typing import Any
 from shapely.geometry import Point
 
 from limen.core.models.hazard import HazardType
+from limen.core.verifiche.esito import anticipo_sopra_fondo
 from limen.data.db import acquire
 
 
@@ -134,6 +135,17 @@ class RigaVerifica:
     classe_prevista_max: str | None
     fondo_classe_max: str | None
     fondo_giorni_moderato: int | None
+    #: Dalla prima corsa sopra il fondo (`anticipo_sopra_fondo`): l'anticipo
+    #: del report, che le soglie grezze sopra gonfierebbero.
+    anticipo_sopra_fondo_ore: int | None = None
+
+
+def _sopra(misura: dict[str, Any]) -> int | None:
+    # Una misura di una verifica vecchia può non avere `evento`: niente anticipo.
+    if "evento" not in misura:
+        return None
+    sopra = anticipo_sopra_fondo(misura)
+    return sopra[0] if sopra else None
 
 
 async def elenca(*, dal: datetime | None = None, al: datetime | None = None) -> list[RigaVerifica]:
@@ -142,7 +154,8 @@ async def elenca(*, dal: datetime | None = None, al: datetime | None = None) -> 
             """
             SELECT slug, hazard_type::text AS hazard, esito, evento_at, luogo,
                    anticipo_ore_moderato, anticipo_ore_alto, classe_prevista_max,
-                   fondo_classe_max, (misura->>'fondo_giorni_moderato')::int AS fondo_giorni
+                   fondo_classe_max, (misura->>'fondo_giorni_moderato')::int AS fondo_giorni,
+                   misura
             FROM verifiche_eventi
             WHERE ($1::timestamptz IS NULL OR evento_at >= $1)
               AND ($2::timestamptz IS NULL OR evento_at <= $2)
@@ -163,6 +176,7 @@ async def elenca(*, dal: datetime | None = None, al: datetime | None = None) -> 
             classe_prevista_max=r["classe_prevista_max"],
             fondo_classe_max=r["fondo_classe_max"],
             fondo_giorni_moderato=r["fondo_giorni"],
+            anticipo_sopra_fondo_ore=_sopra(json.loads(r["misura"])),
         )
         for r in rows
     ]

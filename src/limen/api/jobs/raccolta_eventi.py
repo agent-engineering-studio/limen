@@ -182,14 +182,22 @@ async def _registra(
         return
     primo = salvato.nomi_comuni[0]
     omonimo = comuni[0] if await candidati_eventi_repo.ha_omonimi(primo) else None
-    nome = slug(hazard, salvato.giorno, primo, omonimo)
-    if await verifiche_eventi_repo.esiste(nome):
-        # Lo slug c'è già ma non l'ha scritto la raccolta: è un fact check a
-        # mano, con ora, punto e fonti più precisi dei titoli. Si collega il
-        # candidato e la riga resta com'è.
-        await candidati_eventi_repo.segna(salvato.id, stato="verificato", comuni=comuni, slug=nome)
-        esiti["gia_verificato"] += 1
-        return
+    base = slug(hazard, salvato.giorno, primo, omonimo)
+    nome, n = base, 1
+    while await verifiche_eventi_repo.esiste(nome):
+        if not await candidati_eventi_repo.slug_di_un_altro(nome, salvato.id):
+            # Lo slug c'è già e non è di un altro candidato: è un fact check a
+            # mano, con ora, punto e fonti più precisi dei titoli. Si collega
+            # il candidato e la riga resta com'è.
+            await candidati_eventi_repo.segna(
+                salvato.id, stato="verificato", comuni=comuni, slug=nome
+            )
+            esiti["gia_verificato"] += 1
+            return
+        # Un altro incidente lo stesso giorno nello stesso comune (due frane su
+        # due strade): stesso slug con un numero in coda.
+        n += 1
+        nome = f"{base}-{n}"
     evento_at, precisione = quando(salvato.giorno, salvato.parte)
     misura = await anticipo_repo.misura(
         comuni=comuni,
