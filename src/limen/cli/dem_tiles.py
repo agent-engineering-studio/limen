@@ -34,7 +34,12 @@ def run(aoi_id: str | None, *, zoom_max: int = ZOOM_MAX) -> int:
     if not raster:
         log.error("dem_tiles.no_raster", env=DEM_RASTER_ENV)
         return 1
-    attribuzione = os.environ.get("LIMEN_DEM_ATTRIBUZIONE", "").strip() or "DTM"
+    # Niente dicitura di ripiego: la licenza del DTM chiede la sua, e una
+    # mappa che scrive «DTM» la pubblica senza.
+    attribuzione = os.environ.get("LIMEN_DEM_ATTRIBUZIONE", "").strip()
+    if not attribuzione:
+        log.error("dem_tiles.no_attribuzione", env="LIMEN_DEM_ATTRIBUZIONE")
+        return 1
     nome = (aoi_id or "italia").removeprefix("it-")
     esito = genera(
         Path(raster),

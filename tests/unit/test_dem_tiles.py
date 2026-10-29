@@ -95,3 +95,15 @@ def test_un_dtm_in_gradi_sceglie_l_overview_in_metri(tmp_path: Path) -> None:
     with _sorgente_per_zoom(dtm, 11) as fine, _sorgente_per_zoom(dtm, 5) as grosso:
         assert fine.width >= 200
         assert grosso.width == 25
+
+
+def test_senza_attribuzione_non_si_scrive_niente(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from limen.cli.dem_tiles import run
+
+    monkeypatch.setenv("LIMEN_DEM_RASTER", str(tmp_path / "dtm.tif"))
+    monkeypatch.setenv("LIMEN_DEM_TILES_DIR", str(tmp_path))
+    monkeypatch.delenv("LIMEN_DEM_ATTRIBUZIONE", raising=False)
+    assert run("it-puglia") == 1
+    assert not list(tmp_path.glob("*.pmtiles"))
