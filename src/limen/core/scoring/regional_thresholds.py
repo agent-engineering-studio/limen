@@ -415,6 +415,16 @@ class TargetDistribution(_StrictModel):
     very_high: float = Field(..., ge=0.0, le=1.0)
 
 
+class MetricaComuni(_StrictModel):
+    """Il metro dell'epica #345, per comune invece che per cella: un evento è
+    colto se il suo comune è stato ≥ Moderato nelle ``finestra_ore`` prima,
+    e il carico è la quota di comuni-giorno ≥ Moderato."""
+
+    finestra_ore: float = Field(..., gt=0.0)
+    carico_massimo: float = Field(..., gt=0.0, lt=1.0)
+    obiettivo: float = Field(..., gt=0.0, le=1.0)
+
+
 class BacktestTargets(_StrictModel):
     #: ``None`` = l'hit rate si riporta ma non è un gate. Alla soglia di
     #: classe non lo passa nessuna variante, il motore di oggi compreso (#243).
@@ -431,6 +441,7 @@ class BacktestTargets(_StrictModel):
     #: La quota di celle a cui si contano le frane colte, per confrontare due
     #: varianti a parità di carico invece che alla soglia di classe (#243).
     carico_riferimento: float | None = Field(default=None, gt=0.0, lt=1.0)
+    comuni: MetricaComuni | None = None
 
 
 class CalibrationBlock(_StrictModel):
