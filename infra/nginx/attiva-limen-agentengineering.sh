@@ -29,6 +29,9 @@ if [ ! -f "/etc/letsencrypt/live/$DOMINIO/fullchain.pem" ]; then
     --register-unsafely-without-email
 fi
 
+# La cartella delle tile del rilievo, scritta da `limen dem-tiles` come
+# utente normale (LIMEN_DEM_TILES_DIR) e letta da nginx.
+install -d -m 755 -o "${SUDO_USER:-root}" /srv/data/limen-tiles
 cp "$QUI/$DOMINIO" "$VHOST"
 ln -sfn "$VHOST" "/etc/nginx/sites-enabled/$DOMINIO"
 nginx -t && systemctl reload nginx
