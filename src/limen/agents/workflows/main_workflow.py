@@ -21,6 +21,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import timedelta
+from pathlib import Path
 from typing import Literal
 
 from limen.agents.chat_agents.briefing import BriefingAgent
@@ -57,6 +58,7 @@ from limen.core.scoring.resolver import (
     resolve_challenger,
     resolve_scoring_engine,
 )
+from limen.integrations.dpc.merging_archive import MergingArchive
 from limen.notifications.dispatcher import NotificationDispatcher
 
 log = get_logger(__name__)
@@ -272,7 +274,12 @@ def build_hazard_workflow(
         WorkflowBuilder(name)
         .add(AreaResolverExecutor(cell_limit=cell_limit))
         .add(StaticFactorsExecutor(hazard=hazard))
-        .add(MeteoFetchExecutor(rain_node_deg=settings.meteo_rain_node_deg))
+        .add(
+            MeteoFetchExecutor(
+                rain_node_deg=settings.meteo_rain_node_deg,
+                merging=_merging_per_frane(hazard, settings),
+            )
+        )
         .add(SeismicCheckExecutor())
         .add(FireCheckExecutor(min_hotspots=settings.firms.min_hotspots))
     )
@@ -395,6 +402,17 @@ def _flood_signals_step(hazard: HazardType) -> FloodForecastFetchExecutor:
         reference_window_days=loaded.fluvial.reference_window_days,
         observed_hours=observed.hours if observed is not None else 0,
     )
+
+
+def _merging_per_frane(hazard: HazardType, settings: Settings) -> MergingArchive | None:
+    """L'archivio «Merging» per le ore passate delle frane (#360), se acceso.
+
+    Solo le frane: alluvione e incendio leggono la pioggia per altre vie, e
+    la serie per nodo non entra nei loro motori.
+    """
+    if hazard is not HazardType.LANDSLIDE or not settings.radar_archive.per_frane:
+        return None
+    return MergingArchive(Path(settings.radar_archive.cartella))
 
 
 def _observed_rain_step() -> ObservedRainExecutor | None:
