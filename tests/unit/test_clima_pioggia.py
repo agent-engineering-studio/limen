@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from limen.cli.backtest import con_riferimento
-from limen.cli.clima_pioggia import quantile_cumulata, riferimenti_aoi
+from limen.cli.clima_pioggia import clima_api, quantile_cumulata, riferimenti_aoi, riferimenti_api
 from limen.core.models.risk import StaticFactors
 
 
@@ -73,9 +73,35 @@ def test_un_anno_non_scaricato_non_diventa_un_riferimento() -> None:
                 anni=anni,
                 ore=24,
                 quantile=0.999,
+                giorni_api=1,
                 client=_Client(),  # type: ignore[arg-type]
             )
         )
 
     assert gira(range(2000, 2001)) is not None
     assert gira(range(2000, 2002)) is None
+
+
+def test_la_pioggia_antecedente_ha_media_e_sigma_per_mese_e_scavalca_il_capodanno() -> None:
+    # Due anni contigui: 1 mm/h a dicembre del primo, asciutto il resto.
+    def anno(y: int, dicembre: float) -> np.ndarray:
+        ore = (366 if y % 4 == 0 else 365) * 24
+        h = np.zeros(ore)
+        h[(ore // 24 - 31) * 24 :] = dicembre
+        return h
+
+    mesi = clima_api([anno(2001, 1.0), anno(2002, 0.0)], primo_anno=2001, giorni=30)
+    gennaio, dicembre = mesi[0], mesi[11]
+    assert gennaio is not None and dicembre is not None
+    # Gennaio 2001 ha meno di 30 giorni alle spalle e non conta; gennaio
+    # 2002 sì, e si porta dietro il dicembre bagnato.
+    assert gennaio[0] > 0
+    assert dicembre[1] > 0
+    assert mesi[6] == (0.0, 0.0)
+
+
+def test_i_riferimenti_mensili_si_leggono_solo_con_la_stessa_finestra() -> None:
+    clima = {"api_giorni": 30, "api": {"x": [[10.0, 44.0, [[50.0, 20.0]] + [None] * 11]]}}
+    assert riferimenti_api(clima, "x", giorni=30) == [(10.0, 44.0, ((50.0, 20.0),) + (None,) * 11)]
+    assert riferimenti_api(clima, "x", giorni=20) is None
+    assert riferimenti_api(clima, "y", giorni=30) is None

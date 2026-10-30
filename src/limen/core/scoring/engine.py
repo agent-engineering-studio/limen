@@ -217,6 +217,7 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
             bundle.dynamic.api_30_mm,
             api=self._t.api,
             baseline_mm=bundle.dynamic.api_baseline_mm,
+            sigma_mm=bundle.dynamic.api_sigma_mm,
         )
         soil_f = _soil_sigmoid(bundle.dynamic.soil_moisture_0_7, soil=self._t.soil)
 

@@ -56,6 +56,11 @@ Configuration knobs (env vars, kept off the dispatcher for parity with
   blocco ``cumulata`` in ``landslide.yaml`` dà a ogni cella il riferimento del
   suo nodo, e l'innesco diventa la cumulata relativa (#243). Senza il file, o
   senza l'AOI nel file, le celle restano su Caine.
+* ``LIMEN_BACKTEST_API_RIFERIMENTO`` — ``nazionale`` (default, come lo
+  sweep) o ``nodo``: la pioggia antecedente si legge contro media e deviazione del
+  nodo della cella nel mese, dal file di ``LIMEN_BACKTEST_CLIMA`` (#357).
+  Un'AOI che non è nel file ferma il backtest invece di misurarla col
+  nazionale.
 """
 
 from __future__ import annotations
@@ -69,8 +74,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
+from limen.cli.clima_pioggia import Mensile, riferimenti_aoi, riferimenti_api
 from limen.cli.clima_pioggia import leggi as leggi_clima
-from limen.cli.clima_pioggia import riferimenti_aoi
 from limen.config.percorsi import radice_dati
 from limen.core.logging import get_logger
 from limen.core.models.risk import (
@@ -244,6 +249,15 @@ def con_riferimento(
         )
         for sf, lon, lat in cells
     ]
+
+
+def api_per_cella(
+    cells: list[tuple[StaticFactors, float, float]],
+    riferimenti: list[tuple[float, float, Mensile]],
+) -> list[Mensile]:
+    """Ogni cella con media e deviazione mensili della pioggia antecedente del nodo più vicino."""
+    nodi = [(lon, lat) for lon, lat, _ in riferimenti]
+    return [riferimenti[nearest_node(lon, lat, nodi)][2] for _, lon, lat in cells]
 
 
 def _level_at_least(level: RiskLevel, threshold: RiskLevel) -> bool:
@@ -457,6 +471,7 @@ def _evaluate(
     configurazione: str = "tutto il catalogo",
     scosse: dict[str, tuple[SeismicHistoryEvent, ...]] | None = None,
     cella_comune: dict[str, tuple[str, ...]] | None = None,
+    api_riferimento: list[Mensile] | None = None,
 ) -> _BacktestMetrics:
     """``antecedenti`` è allineato ai nodi (modalità `nodo`) o lungo 1 (modalità
     `regione`, un valore per tutta l'area come in produzione); ``None`` lascia
@@ -495,6 +510,7 @@ def _evaluate(
             api_mm, suolo = (
                 stato[cell_node[i] if len(stato) == len(nodes) else 0] if stato else (None, None)
             )
+            mese = api_riferimento[i][t.month - 1] if api_riferimento else None
             bundle = CellFeatureBundle(
                 aoi_id=aoi_id,
                 cell_id=sf.cell_id,
@@ -503,6 +519,8 @@ def _evaluate(
                     valuation_time=t,
                     rainfall=node_slice[cell_node[i]],
                     api_30_mm=api_mm,
+                    api_baseline_mm=mese[0] if mese else None,
+                    api_sigma_mm=mese[1] if mese else None,
                     soil_moisture_0_7=suolo,
                     seismic_history=(scosse or {}).get(sf.cell_id, ()),
                 ),
@@ -989,10 +1007,25 @@ async def run() -> int:
             return 1
         archivio = MergingArchive(Path(cfg.cartella))
     cumulata = load_regional_thresholds().cumulata
+    # Il riferimento della pioggia antecedente (#357): `nazionale` come lo
+    # sweep di oggi, o la media e deviazione del nodo nel mese, dal file di
+    # `limen clima-pioggia`.
+    api_rif = os.getenv("LIMEN_BACKTEST_API_RIFERIMENTO", "nazionale").strip() or "nazionale"
     clima_env = os.getenv("LIMEN_BACKTEST_CLIMA", "").strip()
-    clima = leggi_clima(Path(clima_env)) if clima_env and cumulata is not None else {}
+    if api_rif not in ("nazionale", "nodo") or (
+        api_rif == "nodo" and (not clima_env or modo == "neutro")
+    ):
+        log.error("backtest.bad_api_riferimento", value=api_rif, hint="LIMEN_BACKTEST_CLIMA")
+        return 1
+    clima = (
+        leggi_clima(Path(clima_env))
+        if clima_env and (cumulata is not None or api_rif == "nodo")
+        else {}
+    )
+    giorni_api = load_regional_thresholds().api.horizon_days
     configurazione = (
-        f"verità {descrivi_verita(precisioni, sorgenti)}; pioggia {pioggia}; antecedenti {modo}; "
+        f"verità {descrivi_verita(precisioni, sorgenti)}; pioggia {pioggia}; antecedenti {modo} "
+        f"(riferimento {api_rif}); "
         f"sismica {'ShakeMap INGV' if sismica == 'shakemap' else 'spenta'}"
     )
     if cumulata is not None and clima:
@@ -1020,6 +1053,15 @@ async def run() -> int:
                 assert len(bbox) == 4
 
                 cells = await _fetch_static_factors(aoi_id)
+                api_riferimento = None
+                if api_rif == "nodo":
+                    mensili = riferimenti_api(clima, aoi_id, giorni=giorni_api)
+                    if mensili is None:
+                        # Un'AOI senza riferimento misurata col nazionale
+                        # mescolerebbe due varianti nello stesso totale.
+                        log.error("backtest.clima_api_mancante", aoi_id=aoi_id)
+                        return 1
+                    api_riferimento = api_per_cella(cells, mensili)
                 if cumulata is not None and clima:
                     riferimenti = riferimenti_aoi(clima, aoi_id, ore=cumulata.window_hours)
                     if riferimenti is None:
@@ -1120,6 +1162,7 @@ async def run() -> int:
                     configurazione=configurazione,
                     scosse=scosse,
                     cella_comune=await _fetch_cella_comune(aoi_id),
+                    api_riferimento=api_riferimento,
                 )
                 log.info(
                     "backtest.aoi.done",
