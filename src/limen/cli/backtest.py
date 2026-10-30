@@ -456,7 +456,7 @@ def _evaluate(
     antecedenti: list[Antecedenti | None] | None = None,
     configurazione: str = "tutto il catalogo",
     scosse: dict[str, tuple[SeismicHistoryEvent, ...]] | None = None,
-    cella_comune: dict[str, str] | None = None,
+    cella_comune: dict[str, tuple[str, ...]] | None = None,
 ) -> _BacktestMetrics:
     """``antecedenti`` è allineato ai nodi (modalità `nodo`) o lungo 1 (modalità
     `regione`, un valore per tutta l'area come in produzione); ``None`` lascia
@@ -478,9 +478,9 @@ def _evaluate(
     alerts_total = 0
     gate = thresholds.calibration.backtest
     metro_comuni = gate.comuni if cella_comune else None
-    comune_di = [(cella_comune or {}).get(sf.cell_id) for sf, _, _ in cells]
+    comune_di = [(cella_comune or {}).get(sf.cell_id, ()) for sf, _, _ in cells]
     orario: dict[str, list[float]] = (
-        {c: [0.0] * len(hours) for c in comune_di if c is not None} if metro_comuni else {}
+        {c: [0.0] * len(hours) for cc in comune_di for c in cc} if metro_comuni else {}
     )
     for h, t in enumerate(hours):
         # Slice each node's antecedent series once, then reuse across the
@@ -509,7 +509,7 @@ def _evaluate(
             )
             scored = engine.score(bundle)
             punteggi_max[i] = max(punteggi_max[i], scored.score)
-            if orario and (comune := comune_di[i]) is not None:
+            for comune in comune_di[i] if orario else ():
                 serie = orario[comune]
                 serie[h] = max(serie[h], scored.score)
             if sf.cell_id in punteggi_verita:
@@ -541,7 +541,7 @@ def _evaluate(
     if metro_comuni is not None and cella_comune is not None:
         verita_comuni: dict[str, datetime] = {}
         for cella, evento in truth.items():
-            if (c := cella_comune.get(cella)) is not None:
+            for c in cella_comune.get(cella, ()):
                 verita_comuni[c] = min(evento, verita_comuni.get(c, evento))
         comuni = per_comune(
             orario,
@@ -699,18 +699,23 @@ def _righe_comuni(c: PerComune, metro: MetricaComuni) -> list[str]:
     ]
 
 
-async def _fetch_cella_comune(aoi_id: str) -> dict[str, str]:
+async def _fetch_cella_comune(aoi_id: str) -> dict[str, tuple[str, ...]]:
+    """Il comune di ogni cella, più i comuni senza celle proprie che la
+    intersecano (migrazione 067): Atrani conta, come nel rollup operativo."""
     async with acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT cc.cell_id, cc.istat_code
-            FROM cell_comune cc
+            FROM cell_comune_tutte cc
             JOIN grid_cells g ON g.id = cc.cell_id
             WHERE g.aoi_id = $1
             """,
             aoi_id,
         )
-    return {str(r["cell_id"]): str(r["istat_code"]) for r in rows}
+    comuni: dict[str, tuple[str, ...]] = {}
+    for r in rows:
+        comuni[str(r["cell_id"])] = (*comuni.get(str(r["cell_id"]), ()), str(r["istat_code"]))
+    return comuni
 
 
 # ---------------------------------------------------------------------------
