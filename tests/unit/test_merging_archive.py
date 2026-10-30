@@ -50,7 +50,7 @@ def test_la_quota_di_un_ora_nel_blocco(
     assert _disaggrega(merging, radar, j) == atteso
 
 
-async def test_archivia_e_idempotente_e_non_ritenta_i_persi(
+async def test_archivia_e_idempotente_e_ritenta_i_falliti(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     chiesti: list[tuple[str, datetime]] = []
@@ -66,14 +66,52 @@ async def test_archivia_e_idempotente_e_non_ritenta_i_persi(
     monkeypatch.setattr(merging_archive, "scarica_fotogramma", _scarica)
     adesso = _T + timedelta(hours=8)  # ultimo istante: 06:00
     primo = await archivia(tmp_path, giorni=1, massimo=10_000, adesso=adesso)
-    assert primo["persi"] == 2  # CUM3 e SRT1 delle 03
-    assert primo["falliti"] == 1  # SRT1 delle 04
+    # Un 403 di cinque ore fa è un fotogramma non ancora pubblicato (#360).
+    assert primo["persi"] == 0
+    assert primo["falliti"] == 3  # CUM3 e SRT1 delle 03, SRT1 delle 04
     assert percorso(tmp_path, "CUM3", _T).read_bytes() == b"tif"
 
     chiesti.clear()
     secondo = await archivia(tmp_path, giorni=1, massimo=10_000, adesso=adesso)
     assert secondo["scaricati"] == 0
-    assert chiesti == [("SRT1", _T + timedelta(hours=4))], "si ritenta solo il fallito"
+    assert sorted(chiesti) == [
+        ("CUM3", _T + timedelta(hours=3)),
+        ("SRT1", _T + timedelta(hours=3)),
+        ("SRT1", _T + timedelta(hours=4)),
+    ], "si ritenta solo quello che non è sul disco"
+
+
+async def test_un_403_vecchio_e_perso_e_non_si_ritenta(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chiesti: list[datetime] = []
+
+    async def _scarica(prodotto: str, t: datetime) -> bytes | str:
+        chiesti.append(t)
+        return ASSENTE if t == _T else b"tif"
+
+    monkeypatch.setattr(merging_archive, "scarica_fotogramma", _scarica)
+    adesso = _T + timedelta(days=8)
+    primo = await archivia(tmp_path, giorni=9, massimo=10_000, adesso=adesso)
+    assert primo["persi"] == 2  # CUM3 e SRT1 delle 00 di otto giorni fa
+    chiesti.clear()
+    await archivia(tmp_path, giorni=9, massimo=10_000, adesso=adesso)
+    assert chiesti == []
+
+
+async def test_lo_sweep_scarica_prima_le_ore_recenti(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chiesti: list[tuple[str, datetime]] = []
+
+    async def _scarica(prodotto: str, t: datetime) -> bytes:
+        chiesti.append((prodotto, t))
+        return b"tif"
+
+    monkeypatch.setattr(merging_archive, "scarica_fotogramma", _scarica)
+    adesso = _T + timedelta(hours=8)
+    await archivia(tmp_path, giorni=1, massimo=1, adesso=adesso, recenti_prima=True)
+    assert chiesti == [("CUM3", _T + timedelta(hours=6))]
 
 
 async def test_archivia_si_ferma_al_tetto(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -112,5 +150,13 @@ def test_le_ore_del_blocco_sommano_al_merging(tmp_path: Path) -> None:
 
 
 def test_senza_file_l_ora_non_e_misurata(tmp_path: Path) -> None:
+    ore = MergingArchive(tmp_path).oraria([(15.02, 37.98)], _T, _T + timedelta(hours=3))
+    assert {v[0] for v in ore.values()} == {None}
+
+
+def test_un_file_corrotto_e_un_ora_non_misurata(tmp_path: Path) -> None:
+    file = percorso(tmp_path, "CUM3", _T + timedelta(hours=3))
+    file.parent.mkdir(parents=True)
+    file.write_bytes(b"<Error>AccessDenied</Error>")
     ore = MergingArchive(tmp_path).oraria([(15.02, 37.98)], _T, _T + timedelta(hours=3))
     assert {v[0] for v in ore.values()} == {None}
