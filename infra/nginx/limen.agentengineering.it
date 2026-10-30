@@ -127,6 +127,15 @@ server {
         proxy_read_timeout 60s;
     }
 
+    # Le tile del rilievo (#318): un file PMTiles letto a pezzi con le Range
+    # request, servito dal disco senza passare dall'API. `expires` e non
+    # `add_header`, che qui dentro cancellerebbe gli header del server.
+    location /rilievo/ {
+        limit_except GET { deny all; }
+        alias /srv/data/limen-tiles/;
+        expires 7d;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:5173;
         include /etc/nginx/snippets/office-gdc-proxy.conf;
