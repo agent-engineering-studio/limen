@@ -224,6 +224,7 @@ uv run --group copernicus limen fwi-confronto  # our FWI chain vs the official C
                                 # (EWDS cems-fire-historical + EFFIS WMS mf010.*; measure only;
                                 #  env: LIMEN_FWI_CONFRONTO_INIZIO / _FINE / _FONTE)
 uv run limen data-status        # which per-cell static layers are loaded, and what gates the rest
+uv run limen dem-tiles [--aoi it-puglia]   # relief tiles (terrain-RGB PMTiles) from LIMEN_DEM_RASTER (#318)
 uv run limen registra-verifica F # fact-check event → verifiche_eventi (+ landslide_events if a landslide)
 uv run limen verifiche-report   # verified events vs forecasts per hazard, with the base rate
 

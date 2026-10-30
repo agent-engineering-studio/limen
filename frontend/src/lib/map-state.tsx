@@ -116,7 +116,15 @@ export function statoDaHash(hash: string): StatoDaLink {
   }
   const [lon, lat] = (p.get("centro") ?? "").split(",").map(Number);
   const zoom = Number(p.get("z") ?? "");
-  if (p.get("centro") && p.get("z") && [lon, lat, zoom].every(Number.isFinite)) {
+  // MapLibre lancia su una latitudine fuori scala, e al primo caricamento
+  // un link sbagliato smonterebbe l'app invece di aprire la vista di default.
+  const valida =
+    [lon, lat, zoom].every(Number.isFinite) &&
+    Math.abs(lat as number) <= 90 &&
+    Math.abs(lon as number) <= 180 &&
+    zoom >= 0 &&
+    zoom <= 24;
+  if (p.get("centro") && p.get("z") && valida) {
     out.area = { lon: lon as number, lat: lat as number, zoom };
   }
   return out;

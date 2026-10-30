@@ -126,6 +126,13 @@ describe("hash ↔ stato", () => {
     });
     expect(pericoloDaHash("#/regioni?hazard=flood")).toBeUndefined();
   });
+
+  it("scarta un centro fuori dal globo", () => {
+    for (const q of ["centro=12,100&z=8", "centro=200,40&z=8", "centro=12,40&z=99"]) {
+      expect(statoDaHash(`#/mappa?${q}`).area).toBeNull();
+    }
+    expect(statoDaHash("#/mappa?centro=12,-90&z=0").area).toEqual({ lon: 12, lat: -90, zoom: 0 });
+  });
 });
 
 describe("MapStateProvider", () => {
