@@ -15,6 +15,9 @@ interface ViteEnv {
   readonly VITE_PAI_PMTILES_URL?: string;
   /** URL of the static `iffi_landslides.pmtiles`. Same opt-in semantics. */
   readonly VITE_IFFI_PMTILES_URL?: string;
+  /** URL of the terrain-RGB `.pmtiles` produced by `limen dem-tiles` (#318).
+   * When unset the «Rilievo» view is disabled, with the reason shown. */
+  readonly VITE_DEM_PMTILES_URL?: string;
   /** GeoServer WMS endpoint for the ISPRA overlays (PAI, IFFI). */
   readonly VITE_GEOSERVER_WMS_URL?: string;
   readonly VITE_MAP_GLYPHS_URL?: string;
@@ -66,6 +69,8 @@ export const config = {
   // `limen geodata make-pmtiles`. When unset the layers are not added.
   paiPmtilesUrl: env.VITE_PAI_PMTILES_URL,
   iffiPmtilesUrl: env.VITE_IFFI_PMTILES_URL,
+  // `||`: vuota da Docker vuol dire non impostata, come per i glifi sotto.
+  demPmtilesUrl: env.VITE_DEM_PMTILES_URL || undefined,
   // `||` e non `??`: passata da Docker una variabile non impostata arriva
   // come stringa **vuota**, e `??` la considererebbe un valore valido. Con i
   // glifi il risultato e' uno stile senza caratteri, cioe' di nuovo la mappa

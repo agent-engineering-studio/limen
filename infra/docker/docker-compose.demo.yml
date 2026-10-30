@@ -530,6 +530,7 @@ services:
       # files behind nginx / Caddy from `$GEODATA_PMTILES_DIR`.
       VITE_PAI_PMTILES_URL: ${VITE_PAI_PMTILES_URL:-}
       VITE_IFFI_PMTILES_URL: ${VITE_IFFI_PMTILES_URL:-}
+      VITE_DEM_PMTILES_URL: ${VITE_DEM_PMTILES_URL:-}
       # Dove MapLibre prende i caratteri delle etichette. Senza, lo stile non
       # e' valido e la mappa resta bianca: il default vive in `lib/env.ts`,
       # questa riga serve a poterlo sostituire con glifi ospitati in casa.
@@ -565,6 +566,7 @@ services:
         VITE_TILESERV_URL: ${VITE_TILESERV_URL:-http://localhost:7800}
         VITE_PAI_PMTILES_URL: ${VITE_PAI_PMTILES_URL:-}
         VITE_IFFI_PMTILES_URL: ${VITE_IFFI_PMTILES_URL:-}
+        VITE_DEM_PMTILES_URL: ${VITE_DEM_PMTILES_URL:-}
         VITE_GEOSERVER_WMS_URL: ${VITE_GEOSERVER_WMS_URL:-}
         VITE_MAP_GLYPHS_URL: ${VITE_MAP_GLYPHS_URL:-}
         VITE_DEFAULT_LON: ${VITE_DEFAULT_LON:-}
