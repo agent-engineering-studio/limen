@@ -58,6 +58,8 @@ def esito(misura: dict[str, Any]) -> tuple[str, str]:
     # chiave, e non si declassa.
     if misura.get("pericolo_valutato") is False:
         return "non_verificabile", "il pericolo non è stato valutato nei giorni prima"
+    if misura.get("fondo_valutato") is False:
+        return "non_verificabile", "il fondo dei giorni prima non è stato valutato"
     # Un buco del dato meteo rende l'evento non verificabile solo se non c'è
     # nient'altro: né una corsa sopra soglia, né un'ora misurata dello sweep.
     if (

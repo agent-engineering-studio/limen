@@ -154,6 +154,10 @@ def test_esito_come_il_paragrafo_5_della_skill() -> None:
     # Job fermi nei giorni prima: non valutato, non mancato.
     assert esito(_misura(pericolo_valutato=False))[0] == "non_verificabile"
     assert esito(_misura(pericolo_valutato=True))[0] == "mancata"
+    assert esito(_misura(fondo_valutato=False)) == (
+        "non_verificabile",
+        "il fondo dei giorni prima non è stato valutato",
+    )
 
     def corsa(ore_prima: int, classe: str) -> dict[str, str]:
         evento = datetime(2026, 10, 10, 10, tzinfo=UTC)

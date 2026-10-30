@@ -55,13 +55,13 @@ async def test_il_pericolo_e_valutato_se_ha_girato_la_regione_dell_evento(
             "INSERT INTO cell_comune (cell_id, istat_code) VALUES ('c-prova', '099001')"
         )
 
-    async def valutato() -> bool:
+    async def valutato() -> tuple[bool, bool]:
         m = await anticipo_repo.misura(
             comuni=["099001"], hazard=HazardType.LANDSLIDE, evento_at=evento, tolleranza_ore=12
         )
-        return bool(m["pericolo_valutato"])
+        return bool(m["pericolo_valutato"]), bool(m["fondo_valutato"])
 
-    async def corsa(scope: str, stato: str) -> None:
+    async def corsa(scope: str, stato: str, prima: timedelta = timedelta(hours=5)) -> None:
         async with acquire() as conn:
             await conn.execute(
                 "INSERT INTO job_runs (job_id, scope, host, status, started_at, metrics)"
@@ -69,18 +69,22 @@ async def test_il_pericolo_e_valutato_se_ha_girato_la_regione_dell_evento(
                 JOB_HOURLY_MONITORING,
                 scope,
                 stato,
-                evento - timedelta(hours=5),
+                evento - prima,
             )
 
-    assert not await valutato()
+    assert await valutato() == (False, False)
     # Un'altra regione che gira non copre questa; una corsa fallita neppure.
     await corsa("it-altra", "ok")
     await corsa("it-prova", "error")
-    assert not await valutato()
+    assert await valutato() == (False, False)
     # La sua regione è girata, anche se lo sweep calmo non ha scritto righe.
     await corsa("it-prova", "ok")
     try:
-        assert await valutato()
+        # Girata nelle ore prima ma non nei giorni del fondo: un pericolo
+        # appena acceso non ha fondo, e non lo si legge come fondo basso.
+        assert await valutato() == (True, False)
+        await corsa("it-prova", "ok", prima=timedelta(days=6))
+        assert await valutato() == (True, True)
     finally:
         # `job_runs` non è fra le tabelle di `reset_db`.
         async with acquire() as conn:

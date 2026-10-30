@@ -61,6 +61,29 @@ fondo AS (
       AND ra.computed_at BETWEEN ev.t - interval '10 days' AND ev.t - interval '4 days'
       AND ra.cell_id IN (SELECT cell_id FROM celle)
 ),
+-- Quando il pericolo ha girato sulla regione dell'evento, nei dieci giorni
+-- prima: dice se c'era una valutazione nelle ore prima (`pericolo_valutato`)
+-- e nella finestra del fondo (`fondo_valutato`). Si guarda la regione, non
+-- l'Italia: lo sweep valuta le regioni una per una, e una che fallisce non è
+-- coperta dalle altre. E non solo le righe delle celle: uno sweep calmo non
+-- ne scrive (#135), e il comune tranquillo sembrerebbe non valutato. Basta
+-- una corsa riuscita della sua regione, o una riga delle sue celle.
+valutato AS (
+    SELECT jr.started_at AS t
+    FROM job_runs jr, ev
+    WHERE jr.job_id = $5::text
+      AND jr.status = 'ok'
+      AND jr.metrics->>'hazard' = $2::text
+      AND jr.scope IN (SELECT DISTINCT g.aoi_id FROM grid_cells g
+                       WHERE g.id IN (SELECT cell_id FROM celle))
+      AND jr.started_at BETWEEN ev.t - interval '10 days' AND ev.t
+    UNION ALL
+    SELECT ra.computed_at
+    FROM risk_assessments ra, ev
+    WHERE ra.hazard_type = $2::hazard_type
+      AND ra.cell_id IN (SELECT cell_id FROM celle)
+      AND ra.computed_at BETWEEN ev.t - interval '10 days' AND ev.t
+),
 ordine(class, rango) AS (
     VALUES ('None', 0), ('Low', 1), ('Moderate', 2), ('High', 3), ('VeryHigh', 4)
 )
@@ -110,28 +133,17 @@ SELECT json_build_object(
         SELECT o.class FROM osservate o JOIN ordine r USING (class)
         WHERE o.computed_at <= (SELECT t FROM ev)
         ORDER BY r.rango DESC, o.score DESC LIMIT 1),
-    -- Il pericolo ha girato davvero nei giorni prima? Lo storico più vecchio
-    -- (`storico_dal`) non lo dice: un job fermo da tre giorni lascia l'evento
-    -- senza valutazione, e «non valutato» non è «mancato».
-    -- Si guarda la regione dell'evento, non l'Italia: lo sweep valuta le
-    -- regioni una per una, e una che fallisce non è coperta dalle altre. E non
-    -- le righe delle celle: uno sweep calmo non ne scrive (#135), e il comune
-    -- tranquillo sembrerebbe non valutato. Basta una corsa riuscita della sua
-    -- regione, o una riga delle sue celle.
+    -- Lo storico più vecchio (`storico_dal`) non dice se il pericolo ha
+    -- girato: un job fermo da tre giorni lascia l'evento senza valutazione, e
+    -- «non valutato» non è «mancato».
     'pericolo_valutato', EXISTS (
-        SELECT 1 FROM job_runs jr, ev
-        WHERE jr.job_id = $5::text
-          AND jr.status = 'ok'
-          AND jr.metrics->>'hazard' = $2::text
-          AND jr.scope IN (SELECT DISTINCT g.aoi_id FROM grid_cells g
-                           WHERE g.id IN (SELECT cell_id FROM celle))
-          AND jr.started_at BETWEEN ev.t - interval '80 hours' AND ev.t
-    ) OR EXISTS (
-        SELECT 1 FROM risk_assessments ra, ev
-        WHERE ra.hazard_type = $2::hazard_type
-          AND ra.cell_id IN (SELECT cell_id FROM celle)
-          AND ra.computed_at BETWEEN ev.t - interval '80 hours' AND ev.t
-    ),
+        SELECT 1 FROM valutato, ev WHERE valutato.t BETWEEN ev.t - interval '80 hours' AND ev.t),
+    -- Né le partizioni (`partizioni_dal`) dicono se il fondo è stato misurato:
+    -- sono di tutti i pericoli. Un pericolo acceso due giorni prima non ha
+    -- fondo, e un fondo mai misurato si leggerebbe come un fondo basso.
+    'fondo_valutato', EXISTS (
+        SELECT 1 FROM valutato, ev
+        WHERE valutato.t BETWEEN ev.t - interval '10 days' AND ev.t - interval '4 days'),
     -- Solo le ore prima dell'evento: un dato tornato dopo non dice niente su
     -- quello che Limen vedeva prima.
     'adesso_misurato', (
