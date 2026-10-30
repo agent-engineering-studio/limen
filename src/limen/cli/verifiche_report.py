@@ -80,9 +80,9 @@ def riepiloga(righe: list[RigaVerifica]) -> list[Riepilogo]:
             continue
         valide = [r for r in tutte if r.esito != "non_verificabile"]
         anticipi = [
-            r.anticipo_ore_moderato
+            r.anticipo_sopra_fondo_ore
             for r in valide
-            if r.esito == "anticipata" and r.anticipo_ore_moderato is not None
+            if r.esito == "anticipata" and r.anticipo_sopra_fondo_ore is not None
         ]
         out.append(
             Riepilogo(

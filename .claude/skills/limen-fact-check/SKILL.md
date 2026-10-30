@@ -22,7 +22,8 @@ Le regole che governano tutto:
 | Le foto della verifica | `frontend/public/verifiche/<slug>/<nome>.jpg` → `src: "/verifiche/<slug>/<nome>.jpg"` |
 | Tipi (lo schema del JSON) | `frontend/src/content/verifiche.ts` (`Verifica`) |
 | Pagina (indice + articolo) | `frontend/src/components/VerifichePage.tsx`, rotta `#/verifiche` e `#/verifiche/<slug>`; la lingua è quella del selettore in testata (`lib/i18n`, anche `?lang=en`): l'italiano dalla radice del JSON, l'inglese dal blocco `en` |
-| Query dell'anticipo | `.claude/skills/limen-fact-check/scripts/anticipo.sql` |
+| Query dell'anticipo | `src/limen/data/repos/anticipo.sql`, lanciata con `uv run limen anticipo` (§4) |
+| Raccolta automatica | job `limen-raccolta-eventi` (#347): ogni mattina Google News → estrattore Claude → due testate → registro; candidati in `candidati_eventi` (084) |
 | Registro degli eventi verificati | tabella `verifiche_eventi` (migrazione 074), scritta da `limen registra-verifica` (`src/limen/cli/registra_verifica.py`) |
 
 Il contenuto della pagina entra nel bundle a build time (`import.meta.glob`): per la pagina **niente migrazioni, niente endpoint**. Se `VerifichePage.tsx` o `verifiche.ts` mancassero (repo vecchio), fermati e dillo: non ricrearli a memoria.
@@ -32,6 +33,10 @@ Il contenuto della pagina entra nel bundle a build time (`import.meta.glob`): pe
 `risk_assessments` tiene **14 giorni** (`ASSESSMENTS_RETENTION_DAYS`), poi la partizione viene cancellata. Un evento più vecchio di ~13 giorni non è più verificabile: lo storico delle previsioni non esiste più. La query restituisce `storico_dal`; se l'evento è precedente, l'esito è `non_verificabile` — non `mancata` — e l'evento **non ha articolo** (resta nel riepilogo all'utente e nel registro, §8b). Per la stessa ragione il registro va scritto **nella stessa passata** del fact check: due settimane dopo, la misura da congelare non esiste più.
 
 ## Procedura
+
+### 0. Prima, cosa ha già raccolto il job
+
+Dal #347 la raccolta gira da sola ogni mattina. Prima di cercare, guarda cosa c'è già: gli eventi verificati in `verifiche_eventi`, e in `candidati_eventi` quelli rimasti con `stato = 'una_testata'` (una fonte sola) o `'comune_ignoto'`. Il lavoro a mano serve soprattutto qui: trovare la seconda fonte o il comune per un candidato, e scrivere gli articoli degli `anticipata`, che il job non pubblica.
 
 ### 1. Trovare le notizie
 
@@ -72,12 +77,11 @@ Gli omonimi esistono (es. *Castro*, *Peglio*, *Samone*): scegli per `aoi_id` (la
 ### 4. Calcolare l'anticipo
 
 ```bash
-docker exec -i limen-postgres psql -U limen -d limen -At \
-  -v istat=077014 -v hazard=wildfire -v event_at='2026-10-10 15:00+02' -v tol=12 \
-  < .claude/skills/limen-fact-check/scripts/anticipo.sql
+DB__CONNECTION_STRING=$(docker exec limen-worker printenv DB__CONNECTION_STRING | sed 's/@postgres:/@127.0.0.1:/') \
+  uv run limen anticipo 077014 wildfire 2026-10-10T15:00+02:00 --tolleranza 12
 ```
 
-`hazard`: `landslide` | `flood` | `wildfire`. `tol` (ore) è l'intorno dell'evento in cui una previsione si considera «puntata lì»: 12 di default; 6 se l'ora è precisa e l'evento breve (una colata), 24 se l'ora è ignota. Su questo disco una chiamata dura 10-60 s: **lanciale in sequenza**, non in parallelo, e non togliere il filtro su `computed_at` (la tabella è partizionata per giorno).
+È la stessa query della raccolta automatica (`anticipo_repo`), e le regole del §5 sono in codice in `limen.core.verifiche.esito`: il fact check a mano e il job decidono allo stesso modo. Il comando non scrive niente e non applica migrazioni. Codici ISTAT separati da virgola; pericolo `landslide` | `flood` | `wildfire`. `--tolleranza` (ore) è l'intorno dell'evento in cui una previsione si considera «puntata lì»: 12 di default; 6 se l'ora è precisa e l'evento breve (una colata), 24 se l'ora è ignota. Su questo disco una chiamata dura 10-60 s: **lanciale in sequenza**, non in parallelo, e non togliere il filtro su `computed_at` (la tabella è partizionata per giorno).
 
 L'output è un oggetto JSON:
 

@@ -246,6 +246,11 @@ services:
       LLM__FEDELTA_ORA_UTC: ${LLM__FEDELTA_ORA_UTC:-21}
       LLM__FEDELTA_ATTESA_MASSIMA_MINUTI: ${LLM__FEDELTA_ATTESA_MASSIMA_MINUTI:-120}
       LLM__ANTHROPIC_BUDGET_MENSILE_USD: ${LLM__ANTHROPIC_BUDGET_MENSILE_USD:-10}
+      # La raccolta quotidiana degli eventi dalla stampa (#347), anche lei in
+      # batch all'API di Claude con ANTHROPIC_API_KEY. Vuota = spenta.
+      LLM__MODELS__EVENTI: ${LLM__MODELS__EVENTI:-}
+      LLM__EVENTI_ORA_UTC: ${LLM__EVENTI_ORA_UTC:-6}
+      LLM__EVENTI_GIORNI: ${LLM__EVENTI_GIORNI:-3}
       # Champion/challenger: shadow runs the ML model in parallel (writes
       # model_runs only; alerts stay with the deterministic champion).
       SCORING__MODE: ${SCORING__MODE:-champion_only}

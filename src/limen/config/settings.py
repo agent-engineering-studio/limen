@@ -137,6 +137,9 @@ class LLMModels(BaseSettings):
     # è dichiarato. Va sempre all'API di Claude in batch, mai al gateway: è un
     # id Claude, e non lo stesso modello che scrive le spiegazioni (Haiku).
     fedelta: str = "claude-sonnet-5-5"
+    # L'estrattore degli eventi dalla stampa (#347). Opt-in come il revisore:
+    # il job gira solo se LLM__MODELS__EVENTI è dichiarato, in batch all'API.
+    eventi: str = "claude-sonnet-5-5"
 
 
 class LLMSettings(BaseSettings):
@@ -256,7 +259,8 @@ class LLMSettings(BaseSettings):
     fedelta_attesa_massima_minuti: int = Field(default=120, ge=1)
 
     # Il tetto mensile, in dollari, di **tutto** quello che Limen spende su
-    # Claude: le chiamate dal gateway e quelle dirette (il revisore in batch).
+    # Claude: le chiamate dal gateway e quelle dirette (il revisore e la
+    # raccolta degli eventi, in batch).
     # Ogni chiamata scrive token e costo in `spesa_llm` (migrazione 083); a
     # tetto raggiunto ogni chiamata a Claude si ferma prima di partire fino al
     # primo del mese, e i chiamanti ripiegano sul testo deterministico. Il
@@ -294,6 +298,15 @@ class LLMSettings(BaseSettings):
         ingresso, uscita = prezzi
         lordo = (input_tokens * ingresso + output_tokens * uscita) / Decimal(1_000_000)
         return lordo * self.anthropic_sconto_batch if batch else lordo
+
+    # La raccolta degli eventi dalla stampa (#347): a che ora (UTC), quanti
+    # giorni all'indietro — meno dei 14 di retention di risk_assessments, o la
+    # misura dell'anticipo non c'è più — e quanti titoli al massimo per
+    # pericolo, i più recenti.
+    eventi_ora_utc: int = Field(default=6, ge=0, le=23)
+    eventi_giorni: int = Field(default=3, ge=1, le=7)
+    eventi_titoli_massimi: int = Field(default=150, ge=1)
+    eventi_attesa_massima_minuti: int = Field(default=120, ge=1)
 
     @field_validator("llamacpp_role_timeout_seconds")
     @classmethod

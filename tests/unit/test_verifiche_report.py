@@ -23,6 +23,7 @@ def _riga(
     moderato: int | None = None,
     alto: int | None = None,
     fondo: str | None = "None",
+    sopra: int | None = None,
 ) -> RigaVerifica:
     return RigaVerifica(
         slug=slug,
@@ -35,6 +36,7 @@ def _riga(
         classe_prevista_max="Moderate" if moderato is not None else None,
         fondo_classe_max=fondo,
         fondo_giorni_moderato=None,
+        anticipo_sopra_fondo_ore=sopra if sopra is not None else moderato,
     )
 
 
@@ -78,3 +80,10 @@ def test_il_report_mette_il_tasso_di_base_accanto(
     testo = scrivi_report(riepiloga(righe), righe, dal=None, al=None).read_text(encoding="utf-8")
     assert "contro un tasso di base di 100%" in testo
     assert "| 2026-10-10 melito | mancata | 74 h | — | Moderate | Moderate |" in testo
+
+
+def test_l_anticipo_mediano_si_conta_sopra_il_fondo() -> None:
+    """Fondo Alto, Alto 72 h prima, Molto alto 20 h prima: 20 ore, non 72."""
+    riga = _riga("a", esito="anticipata", moderato=72, alto=72, fondo="High", sopra=20)
+    (s,) = riepiloga([riga])
+    assert s.anticipo_mediano_ore == 20

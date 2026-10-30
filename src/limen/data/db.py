@@ -77,6 +77,9 @@ async def register_postgis(conn: asyncpg.Connection) -> None:
 
 
 _pool: asyncpg.Pool | None = None
+# Le impostazioni con cui è nato il pool: una connessione dedicata va sullo
+# stesso database, non su quello che il `.env` direbbe a un processo nuovo.
+_impostazioni_pool: DBSettings | None = None
 # Un pool diverso per il task corrente: l'ingestore dei sensori di terzi scrive
 # con un ruolo ristretto (#267) passando dagli stessi repo di tutti gli altri.
 # Una ContextVar e non un parametro: vale solo nel task che la imposta, e i
@@ -90,11 +93,12 @@ async def init_pool(settings: DBSettings | None = None) -> asyncpg.Pool:
     Idempotent: repeated calls return the same pool. The pool registers the
     PostGIS codec on each connection.
     """
-    global _pool
+    global _pool, _impostazioni_pool
     if _pool is not None:
         return _pool
 
     cfg = settings or get_settings().db
+    _impostazioni_pool = cfg
     log.info(
         "db.pool.init",
         dsn_host=_redact_dsn(cfg.connection_string),
@@ -114,11 +118,12 @@ async def init_pool(settings: DBSettings | None = None) -> asyncpg.Pool:
 
 async def close_pool() -> None:
     """Close the global pool if it exists."""
-    global _pool
+    global _pool, _impostazioni_pool
     if _pool is not None:
         log.info("db.pool.close")
         await _pool.close()
         _pool = None
+    _impostazioni_pool = None
 
 
 def get_pool() -> asyncpg.Pool:
@@ -158,6 +163,21 @@ async def acquire() -> AsyncIterator[asyncpg.Connection]:
     pool = _pool_del_task.get() or get_pool()
     async with pool.acquire() as conn:
         yield conn
+
+
+@asynccontextmanager
+async def connessione_dedicata() -> AsyncIterator[asyncpg.Connection]:
+    """Una connessione fuori dal pool, per chi la tiene a lungo (un lock di
+    sessione): presa dal pool, con un pool da una connessione bloccherebbe
+    ogni ``acquire`` del lavoro che protegge."""
+    cfg = _impostazioni_pool or get_settings().db
+    conn = await asyncpg.connect(
+        dsn=cfg.connection_string, statement_cache_size=cfg.statement_cache_size
+    )
+    try:
+        yield conn
+    finally:
+        await conn.close()
 
 
 @contextmanager
