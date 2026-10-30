@@ -54,6 +54,17 @@ def test_api_factor_uses_explicit_baseline(thresholds) -> None:
     assert low_baseline > high_baseline
 
 
+def test_api_factor_uses_the_node_sigma_with_a_floor(thresholds) -> None:
+    """La sigma del nodo sostituisce quella nazionale, ma non scende sotto il minimo."""
+    nazionale = api_factor(100.0, api=thresholds.api, baseline_mm=50.0)
+    stretta = api_factor(100.0, api=thresholds.api, baseline_mm=50.0, sigma_mm=25.0)
+    assert stretta > nazionale
+    minimo = thresholds.api.baseline.sigma_min_mm
+    assert api_factor(100.0, api=thresholds.api, baseline_mm=50.0, sigma_mm=1.0) == (
+        pytest.approx(api_factor(100.0, api=thresholds.api, baseline_mm=50.0, sigma_mm=minimo))
+    )
+
+
 def test_sigmoid_centred_at_zero() -> None:
     assert _sigmoid(0.0) == pytest.approx(0.5)
     assert _sigmoid(100.0) == pytest.approx(1.0)

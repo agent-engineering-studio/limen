@@ -258,6 +258,10 @@ class FloodForecastBlock(_StrictModel):
 
 class ApiBaseline(_StrictModel):
     fallback_mm: float = Field(..., ge=0.0)
+    #: Il minimo della σ di un nodo (#357): a luglio al Sud la pioggia a 30
+    #: giorni varia di pochi millimetri, e diviso per quella un temporale
+    #: qualunque diventerebbe un'anomalia di dieci σ.
+    sigma_min_mm: float = Field(..., gt=0.0)
 
 
 class ApiBlock(_StrictModel):
@@ -563,6 +567,7 @@ class RegionalThresholds(HazardThresholds):
             "api": {
                 "sigmoid_sigma_mm": self.api.sigmoid_sigma_mm,
                 "baseline_fallback_mm": self.api.baseline.fallback_mm,
+                "baseline_sigma_min_mm": self.api.baseline.sigma_min_mm,
             },
             "soil": {
                 "sigmoid_center": self.soil.sigmoid_center,

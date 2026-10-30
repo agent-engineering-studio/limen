@@ -129,10 +129,13 @@ api:
   decay_k:           0.95
   sigmoid_sigma_mm:  60.0    # σ_API for the standardised anomaly
   baseline:
-    # When per-cell baseline isn't available yet (Phase 3 has no
-    # climatology pipeline), fall back to this scalar in mm. Replace
-    # in a later prompt with cell+month climatology.
+    # Without a per-node baseline (api_baseline_mm / api_sigma_mm in the
+    # bundle, #357) the anomaly is read against this national scalar and
+    # sigmoid_sigma_mm.
     fallback_mm:     80.0
+    # Floor on a node's own σ: a southern July varies by a few mm over 30
+    # days, and an ordinary storm would read as a ten-σ anomaly.
+    sigma_min_mm:    20.0
 
 soil:
   # Soil-moisture factor: sigmoid centred at sm_50 with steepness k.

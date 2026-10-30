@@ -118,6 +118,9 @@ class DynamicInputs(_Frozen):
     rainfall: RainfallSeries = RainfallSeries()
     api_30_mm: float | None = Field(default=None, ge=0.0)
     api_baseline_mm: float | None = Field(default=None, ge=0.0)
+    #: La σ della pioggia a 30 giorni del nodo nel mese (#357), con
+    #: ``api_baseline_mm`` la sua media. ``None`` ⇒ la σ nazionale.
+    api_sigma_mm: float | None = Field(default=None, ge=0.0)
     soil_moisture_0_7: float | None = Field(default=None, ge=0.0, le=1.0)
     # Standing snowpack depth over the window (m) — drives the rain-on-snow
     # amplification of M. AOI-level in V1 (like soil moisture).

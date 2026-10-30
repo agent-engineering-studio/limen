@@ -59,17 +59,22 @@ def api_factor(
     *,
     api: ApiBlock,
     baseline_mm: float | None = None,
+    sigma_mm: float | None = None,
 ) -> float:
     """Convert API_30 into a 0..1 wetness factor.
 
     Defaults to **0.5** (the sigmoid centre, "neutral") when no API
     information is available, so a missing input does not bias the
-    score upward or downward.
+    score upward or downward. ``baseline_mm`` / ``sigma_mm`` are the
+    node's own month climatology (#357); without them, the national
+    fallback.
     """
     if api_30_mm is None:
         return 0.5
     baseline = baseline_mm if baseline_mm is not None else api.baseline.fallback_mm
-    sigma = api.sigmoid_sigma_mm
+    sigma = (
+        max(sigma_mm, api.baseline.sigma_min_mm) if sigma_mm is not None else api.sigmoid_sigma_mm
+    )
     if sigma <= 0:
         raise ValueError(f"sigmoid_sigma_mm must be > 0, got {sigma}")
     z = (api_30_mm - baseline) / sigma
