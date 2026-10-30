@@ -195,7 +195,17 @@ def test_un_titolo_inventato_non_e_una_fonte() -> None:
     assert _testo(_risposta(raw, stop="max_tokens")) is None  # type: ignore[arg-type]
 
 
-async def test_senza_modello_o_chiave_la_raccolta_non_parte() -> None:
+async def test_senza_modello_o_chiave_la_raccolta_non_parte(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from limen.api.jobs import raccolta_eventi as job
+
+    async def nessuno() -> list[object]:
+        return []
+
+    monkeypatch.setattr(job, "connessione_dedicata", _lock(True))
+    monkeypatch.setattr(job.candidati_eventi_repo, "in_sospeso", nessuno)
+
     # `_env_file=None`: il .env di una macchina con LLM__MODELS__EVENTI
     # dichiarato farebbe partire una raccolta vera dal test.
     def impostazioni(**llm: object) -> Settings:
@@ -284,7 +294,7 @@ async def test_un_fact_check_a_mano_non_si_sovrascrive(monkeypatch: pytest.Monke
     ]
 
 
-async def test_oltre_il_budget_del_mese_la_raccolta_non_parte(
+async def test_oltre_il_budget_la_raccolta_non_parte_ma_le_interrotte_si_riprendono(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from decimal import Decimal
@@ -297,6 +307,18 @@ async def test_oltre_il_budget_del_mese_la_raccolta_non_parte(
     async def vietato(**kw: object) -> object:
         raise AssertionError("oltre il budget non si cerca né si chiama Claude")
 
+    async def interrotte() -> list[tuple[HazardType, str]]:
+        return [(HazardType.LANDSLIDE, "salvato")]
+
+    ripresi: list[object] = []
+
+    async def verifica(h: object, salvato: object, esiti: Counter[str]) -> None:
+        ripresi.append(salvato)
+        esiti["verificato"] += 1
+
+    monkeypatch.setattr(job, "connessione_dedicata", _lock(True))
+    monkeypatch.setattr(job.candidati_eventi_repo, "in_sospeso", interrotte)
+    monkeypatch.setattr(job, "_verifica", verifica)
     monkeypatch.setattr(job.budget, "spesa_del_mese", spesa)
     monkeypatch.setattr(job, "titoli_per_pericolo", vietato)
     impostazioni = cast(Any, Settings)(
@@ -307,6 +329,8 @@ async def test_oltre_il_budget_del_mese_la_raccolta_non_parte(
     monkeypatch.setattr(job.budget, "get_settings", lambda: impostazioni)
     out = await raccogli(impostazioni)
     assert "tetto mensile" in out["reason"]
+    assert ripresi == ["salvato"]
+    assert out["ripresi"] == {"verificato": 1}
 
 
 async def test_un_evento_gia_verificato_non_si_rimisura(monkeypatch: pytest.MonkeyPatch) -> None:

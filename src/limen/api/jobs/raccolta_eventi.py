@@ -33,8 +33,6 @@ from datetime import date, datetime, time
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from pydantic import SecretStr
-
 from limen.agents.chat_agents.estrattore_eventi import (
     NOME_PERICOLO,
     EstrattoreEventi,
@@ -274,32 +272,45 @@ async def raccogli(settings: Settings) -> dict[str, Any]:
     # Vuota conta come assente, come per il revisore di fedeltà.
     if "eventi" not in llm.models.model_fields_set or not modello:
         return {"status": "skipped", "reason": "LLM__MODELS__EVENTI non dichiarato"}
-    chiave = settings.anthropic_api_key
-    if chiave is None or not chiave.get_secret_value().strip():
-        return {"status": "skipped", "reason": "ANTHROPIC_API_KEY assente", "model": modello}
-    if modello not in llm.anthropic_prezzi_usd_mtok:
-        log.warning("llm.prezzo_sconosciuto", model=modello)
-        return {"status": "skipped", "reason": "prezzo del modello sconosciuto", "model": modello}
-    try:
-        await budget.verifica(modello)
-    except budget.BudgetSuperatoError as exc:
-        return {"status": "skipped", "reason": str(exc), "model": modello}
     async with connessione_dedicata() as conn:
         if not await conn.fetchval("SELECT pg_try_advisory_lock($1)", _UNA_ALLA_VOLTA):
             return {"status": "skipped", "reason": "un'altra raccolta è in corso"}
         try:
-            return await _raccolta(settings, chiave, modello)
+            return await _raccolta(settings, modello)
         finally:
             await conn.execute("SELECT pg_advisory_unlock($1)", _UNA_ALLA_VOLTA)
 
 
-async def _raccolta(settings: Settings, chiave: SecretStr, modello: str) -> dict[str, Any]:
+async def _raccolta(settings: Settings, modello: str) -> dict[str, Any]:
     llm = settings.llm
     esiti: Counter[str] = Counter()
-    # Prima le registrazioni interrotte: i loro titoli possono essere già
-    # usciti dalla finestra delle notizie, e non tornerebbero più.
+    # Prima le registrazioni interrotte, e prima del budget: non chiamano il
+    # modello, e i loro titoli possono essere già usciti dalla finestra delle
+    # notizie. Rimandate al mese dopo, la ritenzione avrebbe già tolto le
+    # valutazioni e la misura diventerebbe «non verificabile».
     for h, salvato in await candidati_eventi_repo.in_sospeso():
         await _verifica(h, salvato, esiti)
+    ripresi = dict(esiti)
+    chiave = settings.anthropic_api_key
+    if chiave is None or not chiave.get_secret_value().strip():
+        return {
+            "status": "skipped",
+            "reason": "ANTHROPIC_API_KEY assente",
+            "model": modello,
+            "ripresi": ripresi,
+        }
+    if modello not in llm.anthropic_prezzi_usd_mtok:
+        log.warning("llm.prezzo_sconosciuto", model=modello)
+        return {
+            "status": "skipped",
+            "reason": "prezzo del modello sconosciuto",
+            "model": modello,
+            "ripresi": ripresi,
+        }
+    try:
+        await budget.verifica(modello)
+    except budget.BudgetSuperatoError as exc:
+        return {"status": "skipped", "reason": str(exc), "model": modello, "ripresi": ripresi}
     titoli = await titoli_per_pericolo(giorni=llm.eventi_giorni, massimi=llm.eventi_titoli_massimi)
     estrattore = EstrattoreEventi(
         api_key=chiave, model=modello, attesa_massima_s=llm.eventi_attesa_massima_minuti * 60

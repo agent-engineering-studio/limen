@@ -327,6 +327,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default="landslide",
         help="landslide: ITALICA CSV (LIMEN_ITALICA_CSV); flood: Copernicus EMS perimeters",
     )
+    dem_tiles = sub.add_parser(
+        "dem-tiles",
+        help="tile del rilievo (terrain-RGB in PMTiles) dal DTM, per la vista «Rilievo»",
+    )
+    dem_tiles.add_argument("--aoi", default=None, help="AOI regionale (default: l'Italia)")
+    dem_tiles.add_argument("--zoom-max", type=int, default=11)
     registra = sub.add_parser(
         "registra-verifica",
         help="salva gli eventi del fact check in verifiche_eventi (e le frane nel truth set)",
@@ -500,6 +506,10 @@ def main(argv: list[str] | None = None) -> int:
             return 130
     if args.command == "anticipo":
         return asyncio.run(_run_anticipo(args.istat, args.pericolo, args.quando, args.tolleranza))
+    if args.command == "dem-tiles":
+        from limen.cli.dem_tiles import run as run_dem_tiles
+
+        return run_dem_tiles(args.aoi, zoom_max=args.zoom_max)
     if args.command == "registra-verifica":
         try:
             return asyncio.run(_run_registra_verifica(args.files))
