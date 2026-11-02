@@ -17,9 +17,10 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+from fwi_chain import FwiOutputs, FwiState
+
 from limen.core.logging import get_logger
 from limen.core.models.risk import FireWeatherState
-from limen.core.scoring.wildfire.fwi import FwiOutputs, FwiState
 from limen.data.db import acquire
 
 log = get_logger(__name__)

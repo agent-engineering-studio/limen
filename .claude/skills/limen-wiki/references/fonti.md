@@ -16,7 +16,7 @@ legenda, home e popup).
 | Come leggere la mappa | `frontend/src/lib/risk-colors.ts`, `LegendPanel.tsx`, `NationalStrip.tsx`, `ComuniBoard.tsx` | `CLAUDE.md` «Risk palette», «Non misurato» |
 | Il territorio in celle | `src/limen/data/seed/`, migrazioni `grid_cells`/`comuni`, `mv_comune_risk` | `docs/data-model.md`, `docs/architecture.md` § Copertura |
 | Il layer dati: gli open data | `src/limen/integrations/*`, `integrations/static_bootstrap/`, `limen data-status` | `docs/divulgazione/04-fonti-dati-open.md`, `README.md` § Componenti e sorgenti / Attribuzione, `docs/geodata.md` |
-| I tre motori | `src/limen/config/hazards/{landslide,flood,wildfire,cascades}.yaml`, `src/limen/core/scoring/`, `core/scoring/wildfire/fwi.py` | `docs/scoring-model.md`, `docs/warning-logic.md`, `docs/divulgazione/02-*`, `CLAUDE.md` «Flood», «Wildfire», «FWI chain» |
+| I tre motori | `src/limen/config/hazards/{landslide,flood,wildfire,cascades}.yaml`, `src/limen/core/scoring/`, il pacchetto `fwi-chain` (repo `agent-engineering-studio/fwi-chain`) | `docs/scoring-model.md`, `docs/warning-logic.md`, `docs/divulgazione/02-*`, `CLAUDE.md` «Flood», «Wildfire», «FWI chain» |
 | La previsione | `src/limen/api/jobs/`, `agents/workflows/`, `SCHEDULER__*` in `config/settings.py` | `CLAUDE.md` «Three cadences», `docs/runbook.md` § Ciclo di una giornata |
 | Il layer machine learning | `src/limen/ml/`, `agents/executors/shadow_challenger.py` | `docs/ml.md`, `docs/divulgazione/03-*`, `docs/iot.md` (sensori in-situ) |
 | Il layer AI | `agents/chat_agents/` (+ `prompts/*.it.md`), `agents/llm_factory/`, `src/limen/knowledge/` | `docs/inference.md`, `docs/grounding.md`, `docs/divulgazione/05-*`, `CLAUDE.md` «LLM is non-authoritative», «quality-local» |

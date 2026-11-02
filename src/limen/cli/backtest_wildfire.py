@@ -56,6 +56,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
 import numpy as np
+from fwi_chain import FwiState, advance
 
 from limen.cli.fwi_backfill import params_from
 from limen.config.settings import get_settings
@@ -73,7 +74,6 @@ from limen.core.scoring.regional_thresholds import (
     load_hazard_thresholds,
 )
 from limen.core.scoring.wildfire import WildfireScoringEngine
-from limen.core.scoring.wildfire.fwi import FwiState, advance
 from limen.data.db import acquire, lifespan_pool
 from limen.data.repos.aoi_repo import list_aoi_ids
 from limen.integrations._http import SharedHttpClient

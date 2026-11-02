@@ -35,10 +35,11 @@ import sys
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 
+from fwi_chain import advance
+
 from limen.cli.fwi_backfill import _observations, params_from
 from limen.core.models.hazard import HazardType
 from limen.core.scoring.regional_thresholds import WildfireThresholds, load_hazard_thresholds
-from limen.core.scoring.wildfire.fwi import advance
 from limen.data.db import acquire, lifespan_pool
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.openmeteo.client import OpenMeteoHttpClient

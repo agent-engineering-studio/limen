@@ -13,11 +13,11 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
+from fwi_chain import FwiState
 
 from limen.agents.executors.fwi_update import FwiUpdateExecutor
 from limen.core.models.context import MonitoringContext
 from limen.core.models.risk import FireWeatherState
-from limen.core.scoring.wildfire.fwi import FwiState
 from limen.data.repos import fwi_state_repo
 from limen.data.repos.fwi_state_repo import StoredChain
 

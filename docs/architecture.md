@@ -172,7 +172,7 @@ non possano ignorarle.
   `score = fwi_norm × (base + fuel·combustibile + slope·pendenza)`. Il terreno
   modula il meteo, non si somma: una somma darebbe a un bosco di conifere un
   fondo indipendente dal tempo, e sotto un acquazzone di gennaio leggerebbe
-  "Moderata". La catena di Van Wagner (1987) in `core/scoring/wildfire/fwi.py`
+  "Moderata". La catena di Van Wagner (1987) nel pacchetto `fwi-chain` (PyPI)
   è pura e verificata sul giorno di riferimento pubblicato a 1e-9. I tre
   codici di umidità sono ricorsivi, quindi lo stato vive in `fwi_state` —
   **per nodo meteo**, non per cella: dipende solo dal tempo, che Open-Meteo dà

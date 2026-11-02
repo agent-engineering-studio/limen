@@ -24,12 +24,13 @@ from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 from itertools import pairwise
 
+from fwi_chain import FwiParams, FwiState, advance
+
 from limen.cli.fwi_backfill import _aoi_bbox, _int_env, _observations, params_from
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
 from limen.core.scoring.regional_thresholds import WildfireThresholds, load_hazard_thresholds
 from limen.core.scoring.wildfire.climatology import quantili
-from limen.core.scoring.wildfire.fwi import FwiParams, FwiState, advance
 from limen.data.db import lifespan_pool
 from limen.data.repos import fwi_climatology_repo
 from limen.data.repos.aoi_repo import list_aoi_ids

@@ -23,10 +23,11 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime, time, timedelta
 
+from fwi_chain import FwiParams, advance
+
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
 from limen.core.scoring.regional_thresholds import WildfireThresholds, load_hazard_thresholds
-from limen.core.scoring.wildfire.fwi import FwiParams, advance
 from limen.data.repos import fwi_state_repo
 from limen.data.repos.fwi_state_repo import NodeDay
 from limen.integrations.dpc.client import CUM_PERIOD, get_cum_at

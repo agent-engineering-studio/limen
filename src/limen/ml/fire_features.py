@@ -38,6 +38,8 @@ from collections import defaultdict
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
+from fwi_chain import FwiState, advance
+
 from limen.cli.fwi_backfill import params_from
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
@@ -45,7 +47,6 @@ from limen.core.scoring.regional_thresholds import (
     WildfireThresholds,
     load_hazard_thresholds,
 )
-from limen.core.scoring.wildfire.fwi import FwiState, advance
 from limen.data.db import acquire
 from limen.integrations.openmeteo.client import OpenMeteoHttpClient
 from limen.integrations.openmeteo.dtos import (
@@ -140,7 +141,7 @@ class NodeChain:
     ``backtest_wildfire.replay_chain`` con un ritorno diverso — un dizionario
     di numeri invece di `FireWeatherState` — e non la riusa per non far
     dipendere il feature store da un modulo CLI. La ricorsione vera sta in
-    `wildfire/fwi.advance`, che è una sola.
+    `fwi_chain.advance`, che è una sola.
     """
 
     def __init__(self, thresholds: WildfireThresholds) -> None:
