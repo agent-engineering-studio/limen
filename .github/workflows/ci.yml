@@ -146,8 +146,35 @@ jobs:
   # Un server nuovo le tira con LIMEN_IMAGE_PREFIX + LIMEN_IMAGE_TAG invece di
   # costruirle: api (anche worker e mcp), postgres, web, geodata.
   # ---------------------------------------------------------------------------
+  # Sulle PR basta sapere che l'immagine dell'API si costruisce e che `limen`
+  # parte: in parallelo ai test, non dopo, così la PR aspetta l'integrazione e
+  # non integrazione + build. Le quattro immagini e il push restano su main.
+  docker-pr:
+    name: docker (api, PR)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: infra/docker/Dockerfile.api
+          platforms: linux/amd64
+          load: true
+          tags: limen-api:pr
+          cache-from: type=gha,scope=api
+
+      - name: Smoke test — `limen` is on the PATH
+        run: docker run --rm limen-api:pr limen --version
+
   docker:
     name: docker (${{ matrix.immagine }})
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     needs: [backend, integration, frontend]
@@ -201,7 +228,6 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Log in to GHCR
-        if: github.event_name == 'push'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -215,13 +241,8 @@ jobs:
           file: ${{ matrix.file }}
           build-args: ${{ matrix.build-args }}
           platforms: linux/amd64
-          push: ${{ github.event_name == 'push' }}
-          load: ${{ github.event_name != 'push' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.immagine }}
           cache-to: type=gha,mode=max,scope=${{ matrix.immagine }}
-
-      - name: Smoke test — `limen` is on the PATH
-        if: github.event_name != 'push' && matrix.immagine == 'api'
-        run: docker run --rm "${{ fromJSON(steps.meta.outputs.json).tags[0] }}" limen --version
