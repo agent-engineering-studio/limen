@@ -75,6 +75,11 @@ I sotto-pesi di default sono `(0.45, 0.30, 0.25)`.
   `norm(caine_excess) = clamp01(caine_excess / 1.0)` — una decade piena
   sopra soglia ⇒ 1.0.
 
+  Legge di potenza e ricostruzione degli eventi stanno nel pacchetto
+  [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/)
+  (estratto da Limen, Apache-2.0); α, β e i parametri degli eventi restano
+  in `landslide.yaml`.
+
   **Ri-taratura della soglia I/D sul catalogo e-ITALICA.** La soglia è
   stata ri-tarata fittando l'inviluppo inferiore T5 (approccio
   Peruccacci-style) sulle coppie intensità-durata misurate dai

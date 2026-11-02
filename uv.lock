@@ -1135,14 +1135,14 @@ wheels = [
 
 [[package]]
 name = "effis-client"
-version = "0.1.0"
+version = "0.1.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f3/d0/a0f7ae41177f7350151c454f6891f880b34582598cccabbdc31ca54a369a/effis_client-0.1.0.tar.gz", hash = "sha256:0a471170282b42e3eb986a7820e6faf38b8798ed925bbc0261de8bbe96d00b7c", size = 12332, upload-time = "2026-11-02T13:31:00.415Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5f/3b/0305afe3bfc649b0b1713504a42d0fe93306867a14962ff7b8daca6ea95b/effis_client-0.1.2.tar.gz", hash = "sha256:af0b5945f2ba461e8466d767bdf87ff21c6f23bbf6786c7b2d2421e544664170", size = 29861, upload-time = "2026-11-02T17:04:28.848Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f5/9a/151807c616209ffb26c594ffda53dba98d70ab853419e91afb907ee446db/effis_client-0.1.0-py3-none-any.whl", hash = "sha256:55a966c3e36c9919535cb3a758620ebdcbbbe551550c3997fdc7fb71f08fc6a9", size = 13586, upload-time = "2026-11-02T13:30:59.193Z" },
+    { url = "https://files.pythonhosted.org/packages/e0/08/266f5c55bb184b2fa9aa08b3bf360986d4cf35c6f8e7c173865de98d882d/effis_client-0.1.2-py3-none-any.whl", hash = "sha256:71e55f6388daae2dff94c7873eec86ae216025924c503ec29618497442783d6e", size = 22034, upload-time = "2026-11-02T17:04:27.528Z" },
 ]
 
 [package.optional-dependencies]
@@ -2192,6 +2192,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pyyaml" },
+    { name = "rainfall-thresholds" },
     { name = "rasterio" },
     { name = "shapely" },
     { name = "structlog" },
@@ -2258,7 +2259,7 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.30" },
     { name = "cbor2", specifier = ">=6.1" },
     { name = "cryptography", specifier = ">=43" },
-    { name = "effis-client", extras = ["raster"], specifier = "~=0.1.0" },
+    { name = "effis-client", extras = ["raster"], specifier = "~=0.1.2" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "fwi-chain", specifier = "~=1.0.0" },
     { name = "geoalchemy2", specifier = ">=0.15" },
@@ -2274,6 +2275,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.5" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "rainfall-thresholds", specifier = "~=0.1.0" },
     { name = "rasterio", specifier = ">=1.3" },
     { name = "shapely", specifier = ">=2.0" },
     { name = "structlog", specifier = ">=24.4" },
@@ -4423,6 +4425,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/da/92/1446574745d74df0c92e6aa4a7b0b3130706a4142b2d1a5869f2eaa423c6/pyyaml-6.0.3-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:16249ee61e95f858e83976573de0f5b2893b3677ba71c9dd36b9cf8be9ac6d65", size = 829923, upload-time = "2025-09-25T21:32:54.537Z" },
     { url = "https://files.pythonhosted.org/packages/f0/7a/1c7270340330e575b92f397352af856a8c06f230aa3e76f86b39d01b416a/pyyaml-6.0.3-cp314-cp314t-win_amd64.whl", hash = "sha256:4ad1906908f2f5ae4e5a8ddfce73c320c2a1429ec52eafd27138b7f1cbe341c9", size = 174062, upload-time = "2025-09-25T21:32:55.767Z" },
     { url = "https://files.pythonhosted.org/packages/f1/12/de94a39c2ef588c7e6455cfbe7343d3b2dc9d6b6b2f40c4c6565744c873d/pyyaml-6.0.3-cp314-cp314t-win_arm64.whl", hash = "sha256:ebc55a14a21cb14062aa4162f906cd962b28e2e9ea38f9b4391244cd8de4ae0b", size = 149341, upload-time = "2025-09-25T21:32:56.828Z" },
+]
+
+[[package]]
+name = "rainfall-thresholds"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ad/04/e5fadcef2b4dd047f7ae2b266c7fd0e60d7651106a70324a6312b9a16acf/rainfall_thresholds-0.1.0.tar.gz", hash = "sha256:43fc31a257b9e3c79b46dd45a589849667cad20166cccf1ad4a2095448ae51aa", size = 12514, upload-time = "2026-11-02T17:04:11.562Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/08/29/c348d8a4c5700d3aa23598e2cc145d83ecb7476a4b5697b9504c2383a647/rainfall_thresholds-0.1.0-py3-none-any.whl", hash = "sha256:06bb77384dc19d85d11e0774971de1a011129c5afe61af9f2d430b2d2340a992", size = 14065, upload-time = "2026-11-02T17:04:10.349Z" },
 ]
 
 [[package]]
