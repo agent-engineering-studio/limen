@@ -86,7 +86,8 @@ def archivio(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str, Any]]:
             return _Risposta(200, {"access_token": "a", "expires_in": 3600})
         assert kw["headers"]["Authorization"] == "Bearer a"
         if url.endswith("/releases"):
-            return _Risposta(200, ["2019-2023", "2020-2024", "2021-2025"])
+            # Dopo la 2020-2024 è uscita la 2020-2025, non la 2021-2025.
+            return _Risposta(200, ["2019-2023", "2020-2024", "2020-2025"])
         if url.endswith("/search"):
             tile = kw["json"]["tileId"]
             if tile == "E40N15":
@@ -125,13 +126,15 @@ async def test_la_ricerca_usa_un_token_solo_e_dice_se_la_tile_c_e(
 async def test_una_release_nuova_si_segnala(archivio: list[tuple[str, str, Any]]) -> None:
     from pydantic import SecretStr
 
-    s = Settings(egms=EgmsSettings(service_key=SecretStr(json.dumps(_chiave()))))
-    esito = await sync_job.controlla_release(s)
-    assert esito == {
+    chiave = SecretStr(json.dumps(_chiave()))
+    vecchia = Settings(egms=EgmsSettings(service_key=chiave, release="2020_2024"))
+    assert await sync_job.controlla_release(vecchia) == {
         "status": "nuova_release",
         "configurata": "2020-2024",
-        "disponibile": "2021-2025",
+        "disponibile": "2020-2025",
     }
+    attuale = Settings(egms=EgmsSettings(service_key=chiave))
+    assert (await sync_job.controlla_release(attuale))["status"] == "ok"
 
 
 async def test_senza_chiave_il_controllo_si_salta() -> None:

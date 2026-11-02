@@ -389,8 +389,8 @@ export const FONTI: readonly Fonte[] = [
     pericoli: ["landslide"],
     cosa: t("Di quanti millimetri all'anno si muove il suolo.", "How many millimetres a year the ground moves."),
     accesso: t(
-      "API dell'archivio CLMS con chiave di servizio, una volta per release (oggi 2020-2024).",
-      "CLMS archive API with a service key, once per release (today 2020-2024).",
+      "API dell'archivio CLMS con chiave di servizio, una volta per release (oggi 2020-2025).",
+      "CLMS archive API with a service key, once per release (today 2020-2025).",
     ),
     interpretazione: t(
       "Velocità per cella (90° percentile) e numero di punti misurati: solo per il modello di apprendimento automatico sfidante, non per la mappa.",
