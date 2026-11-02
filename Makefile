@@ -220,7 +220,9 @@ up-stack: gs-volumes
 # commit non è verde: è quello che si controllava a mano prima di ogni deploy.
 # Il confronto parte dall'ultimo deploy riuscito (refs/deploy/ultimo), non dal
 # HEAD del worktree: una build fallita lo ha già spostato, e il secondo giro
-# perderebbe la SPA (Codex, #368).
+# perderebbe la SPA (Codex, #368). E anche dal HEAD del worktree: un deploy
+# fallito può aver già ricostruito la SPA, e tornare all'ultimo riuscito deve
+# rifarla (Codex, #369).
 #   make deploy                         origin/main
 #   make deploy DEPLOY_REF=3eadcda      un commit preciso (anche per tornare indietro)
 DEPLOY_DIR ?= $(abspath $(CURDIR)/../limen-deploy)
@@ -249,7 +251,9 @@ deploy:
 	mig=$$(git diff --name-only "$$da" "$$a" -- src/limen/data/migrations | wc -l); \
 	[ "$$mig" -eq 0 ] || echo "[deploy] $$mig migrazioni nuove: le applica l'API all'avvio"; \
 	servizi="$(DEPLOY_SERVICES)"; profili=""; \
-	if ! git diff --quiet "$$da" "$$a" -- frontend; then servizi="$$servizi frontend-static"; profili="--profile frontend-static"; fi; \
+	costruito=$$(git -C "$(DEPLOY_DIR)" rev-parse HEAD); \
+	if ! git diff --quiet "$$da" "$$a" -- frontend || ! git diff --quiet "$$costruito" "$$a" -- frontend; then \
+	  servizi="$$servizi frontend-static"; profili="--profile frontend-static"; fi; \
 	git -C "$(DEPLOY_DIR)" checkout -q --detach "$$a"; \
 	cd "$(DEPLOY_DIR)" && docker compose $(COMPOSE_DEPLOY) $$profili up -d --build --no-deps $$servizi; \
 	pronta=0; \
