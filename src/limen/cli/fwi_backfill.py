@@ -32,13 +32,14 @@ import os
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
+from fwi_chain import FwiParams, FwiState, advance
+
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
 from limen.core.scoring.regional_thresholds import (
     WildfireThresholds,
     load_hazard_thresholds,
 )
-from limen.core.scoring.wildfire.fwi import FwiParams, FwiState, advance
 from limen.data.db import acquire, lifespan_pool
 from limen.data.repos import fwi_state_repo
 from limen.data.repos.aoi_repo import list_aoi_ids

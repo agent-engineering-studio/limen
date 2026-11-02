@@ -6,11 +6,11 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import cast
 
 import pytest
+from fwi_chain import FwiParams, FwiState, advance
 
 from limen.cli.fwi_backfill import params_from
 from limen.core.models.hazard import HazardType
 from limen.core.scoring.regional_thresholds import WildfireThresholds, load_hazard_thresholds
-from limen.core.scoring.wildfire.fwi import FwiParams, FwiState, advance
 from limen.data.repos.fwi_state_repo import NodeDay
 from limen.integrations.dpc import fwi_pioggia
 from limen.integrations.dpc.fwi_pioggia import correggi, ricalcola

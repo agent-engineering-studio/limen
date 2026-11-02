@@ -17,7 +17,8 @@ Mappa:
   `post_fire.py`, `flood_forecast.py` per la componente H, `kinematic.py`);
 - alluvione: `core/scoring/flood/` (`susceptibility × max(pluvial, fluvial)`);
 - incendio: `core/scoring/wildfire/` (`fwi_norm × (base + fuel·f + slope·s)`, FWI
-  Van Wagner in `fwi.py`);
+  Van Wagner dal pacchetto `fwi_chain`, parametri dal `wildfire.yaml` via
+  `limen.cli.fwi_backfill.params_from`);
 - bundle: `core/features/assembler.py`; workflow: `agents/workflows/main_workflow.py`
   e gli executor in `agents/executors/`;
 - documentazione: `docs/scoring-model.md`, `docs/warning-logic.md`.

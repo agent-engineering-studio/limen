@@ -1422,6 +1422,15 @@ wheels = [
 ]
 
 [[package]]
+name = "fwi-chain"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/18/24/d994e084411493ed02fdfeb387df0e99dd7589ce54060d03f8f810a06aa2/fwi_chain-1.0.0.tar.gz", hash = "sha256:ac2cfed36a8610dcf2db8a2bd1a507d7a4394f6454f3b4d4f1469473026610ab", size = 11544, upload-time = "2026-11-02T10:50:39.662Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4c/6a/ae8f7185b011ab492eeccaa67ead4356133a1f3749de8126ea7e9426099d/fwi_chain-1.0.0-py3-none-any.whl", hash = "sha256:f1c50647e2f9d6341c9323c0a5087f962983303f3533d1dd1e7e2271a1e3ed77", size = 11978, upload-time = "2026-11-02T10:50:38.439Z" },
+]
+
+[[package]]
 name = "geoalchemy2"
 version = "0.20.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2150,6 +2159,7 @@ dependencies = [
     { name = "cbor2" },
     { name = "cryptography" },
     { name = "fastapi" },
+    { name = "fwi-chain" },
     { name = "geoalchemy2" },
     { name = "geopandas" },
     { name = "httpx" },
@@ -2230,6 +2240,7 @@ requires-dist = [
     { name = "cbor2", specifier = ">=6.1" },
     { name = "cryptography", specifier = ">=43" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "fwi-chain", specifier = "~=1.0.0" },
     { name = "geoalchemy2", specifier = ">=0.15" },
     { name = "geopandas", specifier = ">=1.0" },
     { name = "httpx", specifier = ">=0.27" },
