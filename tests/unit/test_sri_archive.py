@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from pyproj import CRS
 
-from limen.cli.backtest import pioggia_dal_radar
+from limen.integrations.dpc.merging_archive import pioggia_dal_radar
 from limen.integrations.dpc.sri_archive import SriArchive
 from limen.integrations.openmeteo.dtos import WeatherSample
 

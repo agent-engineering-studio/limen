@@ -24,13 +24,16 @@ più ``assenti.txt`` per prodotto con i fotogrammi che il DPC non tiene più.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
 import rasterio
+from rasterio.errors import RasterioIOError
 
 from limen.core.logging import get_logger
 from limen.integrations.dpc.client import ASSENTE, SriGrid, scarica_fotogramma
+from limen.integrations.openmeteo.dtos import WeatherSample
 
 log = get_logger(__name__)
 
@@ -38,6 +41,13 @@ log = get_logger(__name__)
 PRODOTTI = {"CUM3": 3, "SRT1": 1}
 #: Sotto questa somma oraria il radar «non ha visto niente» nel blocco (mm).
 _RADAR_SECCO_MM = 0.1
+#: Le 48 ore dello sweep toccano fino a 51 SRT1 e 17 CUM3, ~6,5 MB l'uno.
+#: Con margine: a cache piena giusta, un fotogramma in più fa girare l'LRU
+#: a vuoto su ogni regione (~530 MB).
+_FOTOGRAMMI_IN_MEMORIA = 80
+#: Prima di questa età un 403 è un fotogramma non ancora pubblicato, non uno
+#: che il DPC non tiene più (~150 giorni): si ritenta invece di annotarlo.
+_ASSENTE_DOPO = timedelta(days=7)
 
 
 def percorso(cartella: Path, prodotto: str, t: datetime) -> Path:
@@ -63,13 +73,20 @@ def _assenti(cartella: Path, prodotto: str) -> Path:
 
 
 async def archivia(
-    cartella: Path, *, giorni: int, massimo: int, adesso: datetime | None = None
+    cartella: Path,
+    *,
+    giorni: int,
+    massimo: int,
+    adesso: datetime | None = None,
+    recenti_prima: bool = False,
 ) -> dict[str, int]:
     """Scarica i fotogrammi che mancano, dal più vecchio: è quello che il DPC
     perderà per primo.
 
     Idempotente: un file già su disco non si riscarica, uno che il DPC non
     tiene più si annota e non si richiede. Si ferma a ``massimo`` download.
+    ``recenti_prima`` è per lo sweep orario (#360): le ore appena cadute
+    prima che il tetto se ne vada su fotogrammi vecchi bloccati.
     """
     adesso = adesso or datetime.now(UTC)
     # L'ultima ora non è ancora pubblicata con certezza.
@@ -80,7 +97,8 @@ async def archivia(
     for prodotto in PRODOTTI:
         assenti_f = _assenti(cartella, prodotto)
         noti = set(assenti_f.read_text().split()) if assenti_f.exists() else set()
-        for t in istanti(prodotto, dal, al):
+        ordine = istanti(prodotto, dal, al)
+        for t in reversed(ordine) if recenti_prima else ordine:
             if conti["scaricati"] + conti["persi"] + conti["falliti"] >= massimo:
                 break
             dest = percorso(cartella, prodotto, t)
@@ -89,7 +107,7 @@ async def archivia(
                 conti["presenti"] += 1
                 continue
             dati = await scarica_fotogramma(prodotto, t)
-            if dati == ASSENTE:
+            if dati == ASSENTE and adesso - t > _ASSENTE_DOPO:
                 assenti_f.parent.mkdir(parents=True, exist_ok=True)
                 with assenti_f.open("a") as f:
                     f.write(chiave + "\n")
@@ -102,6 +120,8 @@ async def archivia(
                 conti["scaricati"] += 1
                 byte += len(dati)
             else:
+                # Anche un ASSENTE troppo giovane: annotarlo lo perderebbe per
+                # sempre, e le sue tre ore cadrebbero sul solo radar.
                 conti["falliti"] += 1
     conti["mb"] = byte // 1_000_000
     log.info("dpc.archivio.done", cartella=str(cartella), giorni=giorni, **conti)
@@ -109,11 +129,35 @@ async def archivia(
 
 
 def _leggi(file: Path, t: datetime) -> SriGrid | None:
-    if not file.exists():
+    try:
+        versione = file.stat().st_mtime_ns
+    except FileNotFoundError:
+        # Fuori dalla cache: un fotogramma che manca adesso può arrivare col
+        # prossimo `archivia`, e un `None` ricordato lo nasconderebbe.
         return None
+    try:
+        return _decodifica(file, versione, t)
+    except RasterioIOError as exc:
+        # Un file salvato da una risposta d'errore: il fotogramma manca, la
+        # regione tiene le altre ore misurate.
+        log.warning(
+            "integration.degraded", source="dpc_merging_archive", file=str(file), error=str(exc)
+        )
+        return None
+
+
+@lru_cache(maxsize=_FOTOGRAMMI_IN_MEMORIA)
+def _decodifica(file: Path, versione: int, t: datetime) -> SriGrid:  # noqa: ARG001 — `versione` è la chiave della cache: un file riscritto non riusa il vecchio
+    """Un fotogramma decodificato, ricordato fra le regioni dello stesso sweep.
+
+    Lo SRT1 è un GeoTIFF LZW non a blocchi: 0,17 s a lettura, e le 48 ore di
+    una regione costavano 16 s. Le venti regioni leggono gli stessi file.
+    """
     with rasterio.open(file) as ds:
         dati = ds.read(1).astype(np.float32)
         dati[~np.isfinite(dati)] = -9999.0
+        # Condiviso fra i thread delle regioni: solo in lettura.
+        dati.setflags(write=False)
         return SriGrid(data=dati, transform=ds.transform, crs=ds.crs, observed_at=t)
 
 
@@ -160,3 +204,23 @@ def _disaggrega(merging: float | None, radar: list[float | None], j: int) -> flo
         return merging / len(radar)
     r = radar[j]
     return merging * max(r, 0.0) / somma if r is not None else None
+
+
+def pioggia_dal_radar(
+    grezzo: list[list[WeatherSample]], radar: dict[datetime, list[float | None]]
+) -> list[list[WeatherSample]]:
+    """La serie oraria di ogni nodo con la pioggia del radar dove c'è.
+
+    Le ore che il radar non ha misurato tengono la pioggia del modello: un
+    buco dell'archivio non è un'ora asciutta, e azzerarla abbasserebbe il
+    punteggio proprio dove non si sa.
+    """
+    out: list[list[WeatherSample]] = []
+    for k, serie in enumerate(grezzo):
+        nuova = []
+        for c in serie:
+            ore = radar.get(c.timestamp)
+            mm = ore[k] if ore is not None else None
+            nuova.append(c if mm is None else c.model_copy(update={"precipitation_mm": mm}))
+        out.append(nuova)
+    return out

@@ -5,12 +5,13 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from limen.api.dependencies import AppDependencies
 from limen.api.jobs._tracking import tracked
 from limen.api.jobs.ids import JOB_HOURLY_MONITORING, JOB_NIGHTLY
-from limen.config.settings import BackupSettings
+from limen.config.settings import BackupSettings, RadarArchiveSettings
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
@@ -23,6 +24,12 @@ log = get_logger(__name__)
 # Il tick che trova il lock occupato salta (il prossimo riparte comunque
 # stale-first, quindi nessuna regione resta indietro).
 _sweep_lock = asyncio.Lock()
+
+#: Le 48 ore che lo step meteo delle frane legge, più il blocco CUM3 a cavallo.
+_GIORNI_MERGING_ORARIO = 3
+#: Il tetto dell'aggiornamento orario: sta davanti allo sweep di ogni
+#: pericolo, e un DPC appeso non deve portarsi via il tick (#78).
+_ATTESA_MERGING_ORARIO_S = 180.0
 
 
 async def _aois_stale_first(hazard: HazardType = DEFAULT_HAZARD) -> list[str]:
@@ -190,6 +197,34 @@ async def avvisa_backup_vecchio(cfg: BackupSettings) -> None:
         )
 
 
+async def aggiorna_merging(cfg: RadarArchiveSettings) -> None:
+    """Le ultime ore del «Merging» nell'archivio, prima che le frane le leggano (#360).
+
+    Il passo notturno arriva fino alla sera prima: senza questo, le ore che
+    contano di più — quelle appena cadute — resterebbero del modello. Un
+    download fallito lascia quelle ore al modello, non ferma lo sweep.
+    """
+    from limen.integrations.dpc.merging_archive import archivia
+
+    try:
+        await asyncio.wait_for(
+            archivia(
+                Path(cfg.cartella),
+                giorni=_GIORNI_MERGING_ORARIO,
+                massimo=cfg.file_per_notte,
+                recenti_prima=True,
+            ),
+            timeout=_ATTESA_MERGING_ORARIO_S,
+        )
+    except Exception as exc:
+        log.warning(
+            "integration.degraded",
+            source="dpc_merging_archive",
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
+
+
 async def run_hourly_monitoring(deps: AppDependencies) -> dict[str, int]:
     """Run the workflow over every AOI; return per-AOI cell counts."""
     await avvisa_backup_vecchio(deps.settings.backup)
@@ -219,6 +254,8 @@ async def _run_sweep(deps: AppDependencies) -> dict[str, int]:
     if not hazards:
         log.warning("job.hourly_monitoring.no_hazards")
         return out
+    if HazardType.LANDSLIDE in hazards and deps.settings.radar_archive.per_frane:
+        await aggiorna_merging(deps.settings.radar_archive)
 
     for hazard in hazards:
         # Stale-first *per hazard*: each one has its own last-assessed time,

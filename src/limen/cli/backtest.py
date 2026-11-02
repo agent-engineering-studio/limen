@@ -917,26 +917,6 @@ def _righe_gate_far_e_discriminazione(
     return [riga_far, riga_disc]
 
 
-def pioggia_dal_radar(
-    grezzo: list[list[WeatherSample]], radar: dict[datetime, list[float | None]]
-) -> list[list[WeatherSample]]:
-    """La serie oraria di ogni nodo con la pioggia del radar dove c'è.
-
-    Le ore che il radar non ha misurato tengono la pioggia del modello: un
-    buco dell'archivio non è un'ora asciutta, e azzerarla abbasserebbe il
-    punteggio proprio dove non si sa.
-    """
-    out: list[list[WeatherSample]] = []
-    for k, serie in enumerate(grezzo):
-        nuova = []
-        for c in serie:
-            ore = radar.get(c.timestamp)
-            mm = ore[k] if ore is not None else None
-            nuova.append(c if mm is None else c.model_copy(update={"precipitation_mm": mm}))
-        out.append(nuova)
-    return out
-
-
 def descrivi_verita(precisioni: list[str] | None, sorgenti: list[str] | None) -> str:
     parti = [
         f"precisione {precisioni[-1]} o migliore" if precisioni else "ogni precisione",
@@ -1095,6 +1075,8 @@ async def run() -> int:
                         )
                         grezzo = (grezzo + [[] for _ in nodes])[: len(nodes)]
                     if archivio is not None:
+                        from limen.integrations.dpc.merging_archive import pioggia_dal_radar
+
                         grezzo = pioggia_dal_radar(
                             grezzo,
                             archivio.oraria(nodes, start - timedelta(days=31), end),

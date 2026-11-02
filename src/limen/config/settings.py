@@ -858,10 +858,18 @@ class RadarArchiveSettings(BaseSettings):
     #: File scaricati al massimo per notte: il primo giro recupera i mesi già
     #: pubblicati in poche notti senza tenere ferma la pipeline.
     file_per_notte: int = Field(default=1500, ge=1)
+    #: Le frane leggono le ore passate dal «Merging» invece che dal modello
+    #: (#360), e lo sweep orario aggiorna l'archivio delle ultime ore. Spento:
+    #: misurato su 4 frane soltanto, sposta il champion V1.
+    frane: bool = False
 
     @property
     def attivo(self) -> bool:
         return bool(self.cartella)
+
+    @property
+    def per_frane(self) -> bool:
+        return self.attivo and self.frane
 
 
 class BackupSettings(BaseSettings):
