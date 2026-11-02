@@ -216,11 +216,14 @@ up-stack: gs-volumes
 # compose di COMPOSE_ALL, overlay dei sensori compreso — ma con il codice di
 # DEPLOY_REF e non del checkout di sviluppo, che resta libero. Ricostruisce
 # sempre (--build) solo DEPLOY_SERVICES, più la SPA statica se frontend/ è
-# cambiato; le migrazioni le applica l'API all'avvio. Si rifiuta se la CI del
-# commit non è verde: è quello che si controllava a mano prima di ogni deploy.
+# cambiato; le migrazioni le applica l'API all'avvio. Si rifiuta se i test del
+# commit (backend, integration, frontend) non sono verdi; non aspetta il push
+# delle immagini su GHCR, che qui non servono perché si costruiscono sul posto.
 # Il confronto parte dall'ultimo deploy riuscito (refs/deploy/ultimo), non dal
 # HEAD del worktree: una build fallita lo ha già spostato, e il secondo giro
-# perderebbe la SPA (Codex, #368).
+# perderebbe la SPA (Codex, #368). E anche dal HEAD del worktree: un deploy
+# fallito può aver già ricostruito la SPA, e tornare all'ultimo riuscito deve
+# rifarla (Codex, #369).
 #   make deploy                         origin/main
 #   make deploy DEPLOY_REF=3eadcda      un commit preciso (anche per tornare indietro)
 DEPLOY_DIR ?= $(abspath $(CURDIR)/../limen-deploy)
@@ -241,15 +244,19 @@ deploy:
 	da=$$(git rev-parse --short refs/deploy/ultimo 2>/dev/null || git -C "$(DEPLOY_DIR)" rev-parse --short HEAD); \
 	a=$$(git rev-parse --short "$(DEPLOY_REF)^{commit}"); \
 	if command -v gh >/dev/null 2>&1; then \
-	  esito=$$(gh run list --commit "$$(git rev-parse $$a)" --workflow ci --json conclusion -q '.[0].conclusion' 2>/dev/null); \
-	  [ "$$esito" = success ] || { echo "[deploy] la CI di $$a non è verde ($${esito:-nessuna corsa}): niente deploy"; exit 1; }; \
+	  corsa=$$(gh run list --commit "$$(git rev-parse $$a)" --workflow ci --json databaseId -q '.[0].databaseId' 2>/dev/null); \
+	  verdi=$$([ -n "$$corsa" ] && gh run view "$$corsa" --json jobs \
+	    -q '[.jobs[] | select(.name | test("^(backend|integration|frontend) ")) | select(.conclusion == "success")] | length' 2>/dev/null || true); \
+	  [ "$$verdi" = 3 ] || { echo "[deploy] i test di $$a non sono verdi ($${verdi:-0}/3 fra backend, integration, frontend): niente deploy"; exit 1; }; \
 	else echo "[deploy] gh non c'è: la CI di $$a non è stata controllata"; fi; \
 	echo "[deploy] $$da → $$a"; \
 	git --no-pager log --oneline "$$da..$$a" | head -20; \
 	mig=$$(git diff --name-only "$$da" "$$a" -- src/limen/data/migrations | wc -l); \
 	[ "$$mig" -eq 0 ] || echo "[deploy] $$mig migrazioni nuove: le applica l'API all'avvio"; \
 	servizi="$(DEPLOY_SERVICES)"; profili=""; \
-	if ! git diff --quiet "$$da" "$$a" -- frontend; then servizi="$$servizi frontend-static"; profili="--profile frontend-static"; fi; \
+	costruito=$$(git -C "$(DEPLOY_DIR)" rev-parse HEAD); \
+	if ! git diff --quiet "$$da" "$$a" -- frontend || ! git diff --quiet "$$costruito" "$$a" -- frontend; then \
+	  servizi="$$servizi frontend-static"; profili="--profile frontend-static"; fi; \
 	git -C "$(DEPLOY_DIR)" checkout -q --detach "$$a"; \
 	cd "$(DEPLOY_DIR)" && docker compose $(COMPOSE_DEPLOY) $$profili up -d --build --no-deps $$servizi; \
 	pronta=0; \
