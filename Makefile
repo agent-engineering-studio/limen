@@ -99,7 +99,7 @@ BUILD_PROFILES ?= --profile geoserver --profile frontend --profile geodata
         meteo-up meteo-down meteo-sync meteo-check meteo-logs \
         sensori-ca-init sensori-up sensori-down sensori-logs sensori-check sensori-crl \
         test test-unit test-integration test-frontend \
-        lint format typecheck check clean
+        lint format typecheck check clean deploy
 
 help:
 	@echo "Limen — common developer targets"
@@ -109,6 +109,7 @@ help:
 	@echo "  make down               tear down the full stack"
 	@echo "  make build              build owned + pull third-party images, ALL compose files (NOCACHE=1)"
 	@echo "  make rebuild            down + build + up (full local refresh)"
+	@echo "  make deploy             produzione da ../limen-deploy a origin/main (DEPLOY_REF=sha), solo con CI verde"
 	@echo "  make pull               pull LIMEN_IMAGE_TAG from GHCR (LIMEN_IMAGE_PREFIX in .env, #303)"
 	@echo "  make up-host-ollama     alias of 'make up' (host Ollama is the default)"
 	@echo ""
@@ -209,6 +210,52 @@ up-stack: gs-volumes
 	@echo "[up] Stack ready:"
 	@echo "   API      http://localhost:8080/docs      Frontend  http://localhost:5173"
 	@echo "   GeoServer http://localhost:8081/geoserver Web UI    http://localhost:8000"
+
+# La produzione gira da un worktree staccato (`limen-deploy`) con lo stesso
+# progetto, lo stesso .env e gli stessi volumi di `make up` — gli stessi file
+# compose di COMPOSE_ALL, overlay dei sensori compreso — ma con il codice di
+# DEPLOY_REF e non del checkout di sviluppo, che resta libero. Ricostruisce
+# sempre (--build) solo DEPLOY_SERVICES, più la SPA statica se frontend/ è
+# cambiato; le migrazioni le applica l'API all'avvio. Si rifiuta se la CI del
+# commit non è verde: è quello che si controllava a mano prima di ogni deploy.
+#   make deploy                         origin/main
+#   make deploy DEPLOY_REF=3eadcda      un commit preciso (anche per tornare indietro)
+DEPLOY_DIR ?= $(abspath $(CURDIR)/../limen-deploy)
+DEPLOY_REF ?= origin/main
+DEPLOY_SERVICES ?= api worker mcp
+# Il fetch passa da HTTPS: su questo host SSH verso GitHub non è autorizzato.
+ORIGIN_HTTPS := $(shell git remote get-url origin 2>/dev/null | sed -E 's#^git@github.com:#https://github.com/#')
+COMPOSE_DEPLOY := --env-file $(CURDIR)/.env -f infra/docker/docker-compose.demo.yml \
+  -f infra/docker/docker-compose.geoserver.yml \
+  $(if $(COMPOSE_SENSORI_WORKER),-f infra/docker/docker-compose.sensori-worker.yml) \
+  $(if $(wildcard $(DEPLOY_DIR)/infra/docker/mlruns-override.yml),-f infra/docker/mlruns-override.yml) -p limen
+
+deploy:
+	@test -e "$(DEPLOY_DIR)/.git" || { echo "[deploy] $(DEPLOY_DIR) non è un checkout: git worktree add --detach $(DEPLOY_DIR) main"; exit 1; }
+	@git -C "$(DEPLOY_DIR)" diff --quiet HEAD || { echo "[deploy] $(DEPLOY_DIR) ha modifiche non committate: non lo tocco"; exit 1; }
+	git fetch -q $(ORIGIN_HTTPS) main:refs/remotes/origin/main
+	@set -e; \
+	da=$$(git -C "$(DEPLOY_DIR)" rev-parse --short HEAD); \
+	a=$$(git rev-parse --short "$(DEPLOY_REF)^{commit}"); \
+	if command -v gh >/dev/null 2>&1; then \
+	  esito=$$(gh run list --commit "$$(git rev-parse $$a)" --workflow ci --json conclusion -q '.[0].conclusion' 2>/dev/null); \
+	  [ "$$esito" = success ] || { echo "[deploy] la CI di $$a non è verde ($${esito:-nessuna corsa}): niente deploy"; exit 1; }; \
+	else echo "[deploy] gh non c'è: la CI di $$a non è stata controllata"; fi; \
+	echo "[deploy] $$da → $$a"; \
+	git --no-pager log --oneline "$$da..$$a" | head -20; \
+	mig=$$(git diff --name-only "$$da" "$$a" -- src/limen/data/migrations | wc -l); \
+	[ "$$mig" -eq 0 ] || echo "[deploy] $$mig migrazioni nuove: le applica l'API all'avvio"; \
+	servizi="$(DEPLOY_SERVICES)"; profili=""; \
+	if ! git diff --quiet "$$da" "$$a" -- frontend; then servizi="$$servizi frontend-static"; profili="--profile frontend-static"; fi; \
+	git -C "$(DEPLOY_DIR)" checkout -q --detach "$$a"; \
+	cd "$(DEPLOY_DIR)" && docker compose $(COMPOSE_DEPLOY) $$profili up -d --build --no-deps $$servizi; \
+	for i in $$(seq 1 40); do \
+	  docker compose $(COMPOSE_DEPLOY) exec -T api python -c \
+	    "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/ready', timeout=2).status==200 else 1)" \
+	    >/dev/null 2>&1 && break; \
+	  sleep 3; \
+	done; \
+	docker compose $(COMPOSE_DEPLOY) $$profili ps $$servizi --format '{{.Service}}\t{{.Status}}'
 
 down:
 	docker compose $(COMPOSE_ALL) $(UP_PROFILES) down
