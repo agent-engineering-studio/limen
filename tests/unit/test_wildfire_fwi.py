@@ -9,7 +9,7 @@ fisici). Qui resta ciò che è di Limen: i parametri che arrivano dal
 from __future__ import annotations
 
 import pytest
-from fwi_chain import STANDARD_PARAMS, FwiParams, advance
+from fwi_chain import STANDARD_PARAMS, FwiParams, FwiState, advance
 
 from limen.cli.fwi_backfill import params_from
 from limen.core.models.hazard import HazardType
@@ -41,6 +41,28 @@ def test_the_yaml_params_reproduce_the_reference_day() -> None:
         params=params,
     )
     assert out.fwi == pytest.approx(10.096371392382, abs=1e-9)
+
+
+def test_a_rainy_july_day_matches_the_pinned_chain() -> None:
+    """Valore di regressione, non pubblicato: il giorno di riferimento è
+    secco e non tocca i rami della pioggia. Un `fwi-chain` che li cambiasse
+    renderebbe incoerenti le catene già scritte in `fwi_state`, quindi
+    l'aggiornamento del pacchetto deve rompere questo test e passare da un
+    backtest prima di essere accettato."""
+    params = _yaml_params()
+    out = advance(
+        FwiState(ffmc=88.0, dmc=40.0, dc=300.0),
+        month=7,
+        temperature_c=24.0,
+        relative_humidity_pct=70.0,
+        wind_speed_kmh=12.0,
+        rain_24h_mm=18.0,
+        params=params,
+    )
+    assert out.state.ffmc == pytest.approx(56.003842304332935, abs=1e-9)
+    assert out.state.dmc == pytest.approx(18.12019817448789, abs=1e-9)
+    assert out.state.dc == pytest.approx(254.76518153656508, abs=1e-9)
+    assert out.fwi == pytest.approx(0.6703361795477724, abs=1e-9)
 
 
 # ---------------------------------------------------------------------------

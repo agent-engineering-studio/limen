@@ -297,7 +297,7 @@ src/limen/
 │   ├── models/          # risk DTOs, hazard.py (HazardType/DEFAULT_HAZARD), context, sensor
 │   ├── scoring/         # landslide V1 engine + caine/api/seismic/post-fire/kinematic/exposure,
 │   │   ├── flood/       #   flood engine + triggers + climatology
-│   │   ├── wildfire/    #   wildfire engine + Van Wagner FWI + climatology
+│   │   ├── wildfire/    #   wildfire engine + climatology (FWI chain: `fwi-chain` package)
 │   │   ├── ml_engine.py #   V2 ML engine (shadow challenger)
 │   │   └── registry.py / resolver.py  # (hazard × implementation) + operational policy
 │   ├── logging.py

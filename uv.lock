@@ -2240,7 +2240,7 @@ requires-dist = [
     { name = "cbor2", specifier = ">=6.1" },
     { name = "cryptography", specifier = ">=43" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "fwi-chain", specifier = ">=1.0,<2" },
+    { name = "fwi-chain", specifier = "~=1.0.0" },
     { name = "geoalchemy2", specifier = ">=0.15" },
     { name = "geopandas", specifier = ">=1.0" },
     { name = "httpx", specifier = ">=0.27" },
