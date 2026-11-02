@@ -18,36 +18,25 @@ Event detection from an hourly rainfall series follows a Melillo et al.
 * keep events whose cumulated precipitation is at least ``min_event_mm``;
 * for each event, report ``(I_event = total_mm / duration_h, D_event)``.
 
-All parameters come from :class:`RegionalThresholds.caine` — no
-hard-coded constants in this module.
+The power law and the event reconstruction come from the
+``rainfall-thresholds`` package (extracted from Limen, Apache-2.0); the
+parameters still come from :class:`RegionalThresholds.caine` — no
+hard-coded constants here, and none taken from the package.
 """
 
 from __future__ import annotations
 
-import math
 from collections.abc import Iterable
-from dataclasses import dataclass
 from datetime import timedelta
+
+from rainfall_thresholds import PowerLawThreshold, RainfallEvent, latest_event
+from rainfall_thresholds import reconstruct_events as _reconstruct
 
 from limen.core.models.risk import RainfallSample, RainfallSeries
 from limen.core.scoring.regional_thresholds import (
     CaineBlock,
     CaineMacroregion,
 )
-
-
-@dataclass(frozen=True, slots=True)
-class RainfallEvent:
-    """One reconstructed rainfall event."""
-
-    start: int
-    end: int
-    duration_hours: float
-    total_mm: float
-
-    @property
-    def intensity_mm_h(self) -> float:
-        return self.total_mm / self.duration_hours if self.duration_hours > 0 else 0.0
 
 
 def _resolve_region(caine: CaineBlock, macroregion: str) -> CaineMacroregion:
@@ -57,6 +46,11 @@ def _resolve_region(caine: CaineBlock, macroregion: str) -> CaineMacroregion:
     return region
 
 
+def _threshold(caine: CaineBlock, macroregion: str) -> PowerLawThreshold:
+    region = _resolve_region(caine, macroregion)
+    return PowerLawThreshold(alpha=region.alpha, beta=region.beta)
+
+
 def threshold_intensity_mm_h(
     duration_hours: float,
     *,
@@ -64,10 +58,7 @@ def threshold_intensity_mm_h(
     macroregion: str = "italy_default",
 ) -> float:
     """Return ``I_threshold(D) = α · D^(−β)`` in mm/h."""
-    if duration_hours <= 0:
-        raise ValueError(f"duration_hours must be > 0, got {duration_hours}")
-    region = _resolve_region(caine, macroregion)
-    return float(region.alpha * (duration_hours ** (-region.beta)))
+    return _threshold(caine, macroregion).intensity(duration_hours)
 
 
 def reconstruct_events(
@@ -77,60 +68,11 @@ def reconstruct_events(
     min_event_mm: float,
 ) -> list[RainfallEvent]:
     """Split an hourly rainfall series into discrete events."""
-    series = sorted(samples, key=lambda s: s.timestamp)
-    if not series:
-        return []
-
-    events: list[RainfallEvent] = []
-    current_start: int | None = None
-    current_total: float = 0.0
-    dry_run: int = 0
-    last_wet_idx: int | None = None
-
-    def _close() -> None:
-        nonlocal current_start, current_total, last_wet_idx
-        if current_start is None or last_wet_idx is None:
-            current_start = None
-            current_total = 0.0
-            last_wet_idx = None
-            return
-        start_ts = series[current_start].timestamp
-        end_ts = series[last_wet_idx].timestamp
-        duration_h = max(1.0, (end_ts - start_ts).total_seconds() / 3600.0 + 1.0)
-        if current_total >= min_event_mm:
-            events.append(
-                RainfallEvent(
-                    start=current_start,
-                    end=last_wet_idx,
-                    duration_hours=duration_h,
-                    total_mm=current_total,
-                )
-            )
-        current_start = None
-        current_total = 0.0
-        last_wet_idx = None
-
-    for i, sample in enumerate(series):
-        if sample.precipitation_mm > 0.0:
-            if current_start is None:
-                current_start = i
-            current_total += sample.precipitation_mm
-            last_wet_idx = i
-            dry_run = 0
-        else:
-            dry_run += 1
-            if dry_run >= no_rain_break_hours and current_start is not None:
-                _close()
-
-    if current_start is not None:
-        _close()
-
-    return events
-
-
-def latest_event(events: list[RainfallEvent]) -> RainfallEvent | None:
-    """Return the most recent (by end index) event, or ``None``."""
-    return max(events, key=lambda e: e.end) if events else None
+    return _reconstruct(
+        ((s.timestamp, s.precipitation_mm) for s in samples),
+        no_rain_break_hours=no_rain_break_hours,
+        min_event_mm=min_event_mm,
+    )
 
 
 def caine_excess(
@@ -145,12 +87,11 @@ def caine_excess(
     the threshold. Using ``log10`` keeps the magnitude human-friendly
     on the order of "fraction of a decade above the threshold".
     """
-    if event is None or event.duration_hours <= 0 or event.intensity_mm_h <= 0:
+    if event is None:
         return 0.0
-    i_thr = threshold_intensity_mm_h(event.duration_hours, caine=caine, macroregion=macroregion)
-    if i_thr <= 0:
-        return 0.0
-    return max(0.0, math.log10(event.intensity_mm_h) - math.log10(i_thr))
+    excess = _threshold(caine, macroregion).exceedance(event.intensity_mm_h, event.duration_hours)
+    # -inf (a dry event) goes to zero; +inf from a corrupt series stays.
+    return excess if excess > 0.0 else 0.0
 
 
 def compute_caine(
@@ -181,3 +122,13 @@ def compute_caine(
     event = latest_event(events)
     excess = caine_excess(event, caine=caine, macroregion=macroregion)
     return excess, event
+
+
+__all__ = [
+    "RainfallEvent",
+    "caine_excess",
+    "compute_caine",
+    "latest_event",
+    "reconstruct_events",
+    "threshold_intensity_mm_h",
+]
