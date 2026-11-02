@@ -218,6 +218,9 @@ up-stack: gs-volumes
 # sempre (--build) solo DEPLOY_SERVICES, più la SPA statica se frontend/ è
 # cambiato; le migrazioni le applica l'API all'avvio. Si rifiuta se la CI del
 # commit non è verde: è quello che si controllava a mano prima di ogni deploy.
+# Il confronto parte dall'ultimo deploy riuscito (refs/deploy/ultimo), non dal
+# HEAD del worktree: una build fallita lo ha già spostato, e il secondo giro
+# perderebbe la SPA (Codex, #368).
 #   make deploy                         origin/main
 #   make deploy DEPLOY_REF=3eadcda      un commit preciso (anche per tornare indietro)
 DEPLOY_DIR ?= $(abspath $(CURDIR)/../limen-deploy)
@@ -235,7 +238,7 @@ deploy:
 	@git -C "$(DEPLOY_DIR)" diff --quiet HEAD || { echo "[deploy] $(DEPLOY_DIR) ha modifiche non committate: non lo tocco"; exit 1; }
 	git fetch -q $(ORIGIN_HTTPS) main:refs/remotes/origin/main
 	@set -e; \
-	da=$$(git -C "$(DEPLOY_DIR)" rev-parse --short HEAD); \
+	da=$$(git rev-parse --short refs/deploy/ultimo 2>/dev/null || git -C "$(DEPLOY_DIR)" rev-parse --short HEAD); \
 	a=$$(git rev-parse --short "$(DEPLOY_REF)^{commit}"); \
 	if command -v gh >/dev/null 2>&1; then \
 	  esito=$$(gh run list --commit "$$(git rev-parse $$a)" --workflow ci --json conclusion -q '.[0].conclusion' 2>/dev/null); \
@@ -249,13 +252,17 @@ deploy:
 	if ! git diff --quiet "$$da" "$$a" -- frontend; then servizi="$$servizi frontend-static"; profili="--profile frontend-static"; fi; \
 	git -C "$(DEPLOY_DIR)" checkout -q --detach "$$a"; \
 	cd "$(DEPLOY_DIR)" && docker compose $(COMPOSE_DEPLOY) $$profili up -d --build --no-deps $$servizi; \
+	pronta=0; \
 	for i in $$(seq 1 40); do \
 	  docker compose $(COMPOSE_DEPLOY) exec -T api python -c \
 	    "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/ready', timeout=2).status==200 else 1)" \
-	    >/dev/null 2>&1 && break; \
+	    >/dev/null 2>&1 && { pronta=1; break; }; \
 	  sleep 3; \
 	done; \
-	docker compose $(COMPOSE_DEPLOY) $$profili ps $$servizi --format '{{.Service}}\t{{.Status}}'
+	docker compose $(COMPOSE_DEPLOY) $$profili ps $$servizi --format '{{.Service}}\t{{.Status}}'; \
+	[ "$$pronta" -eq 1 ] || { echo "[deploy] l'API non è pronta dopo due minuti: deploy NON riuscito"; exit 1; }; \
+	git update-ref refs/deploy/ultimo "$$(git rev-parse $$a)"; \
+	echo "[deploy] $$a in produzione"
 
 down:
 	docker compose $(COMPOSE_ALL) $(UP_PROFILES) down
