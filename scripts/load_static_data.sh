@@ -22,6 +22,11 @@ FOCUS="${1:-tutti}"
 # la shell no. Senza questo il preflight direbbe "manca" per variabili che il
 # lavoro vero trova senza problemi — un modo perfetto per far cercare a
 # qualcuno un dato che è già configurato.
+# La chiave EGMS passata dalla shell va ricordata prima di leggere il .env:
+# quella del .env il container la riceve già dal compose, intatta, mentre
+# quella della shell andrebbe persa con l'ambiente pulito del container
+# (Codex, #367).
+egms_chiave_shell="${EGMS__SERVICE_KEY:-}"
 if [ -f .env ]; then
   set -a
   # shellcheck disable=SC1091
@@ -92,6 +97,7 @@ if [ "$MODO" = docker ]; then
     CONTAINER+=(-v "$EGMS__CARTELLA:$EGMS__CARTELLA" -e "EGMS__CARTELLA=$EGMS__CARTELLA")
     # Il token di ripiego il worker non lo riceve dal compose (la chiave sì).
     [ -n "${EGMS__TOKEN:-}" ] && CONTAINER+=(-e "EGMS__TOKEN=$EGMS__TOKEN")
+    [ -n "$egms_chiave_shell" ] && CONTAINER+=(-e "EGMS__SERVICE_KEY=$egms_chiave_shell")
   fi
   # Con il proprio uid: le sorgenti sono di chi le ha scaricate, e l'utente
   # dell'immagine (999) non le leggerebbe. E con un ambiente pulito: il .env
