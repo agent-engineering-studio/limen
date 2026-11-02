@@ -800,8 +800,9 @@ class EgmsSettings(BaseSettings):
     service_key: SecretStr | None = None
     token: SecretStr | None = None
     archive_url: str = "https://egms.land.copernicus.eu/insar-api/archive"
-    #: La finestra della release: cinque anni, una release all'anno.
-    release: str = "2020_2024"
+    #: La finestra della release, una all'anno. Non è sempre di cinque anni: dopo
+    #: la 2020-2024 è uscita la 2020-2025 (verificato sull'archivio il 2026-11-02).
+    release: str = "2020_2025"
     #: Dove tenere i GeoTIFF delle tile (~4 MB l'uno, due per tile).
     cartella: str = "/tmp/limen-egms"
 
