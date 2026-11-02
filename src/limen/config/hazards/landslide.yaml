@@ -95,8 +95,12 @@ caine:
 # Puglia e Basilicata la produzione pretendeva 45,6 mm/72 h dove la taratura
 # ne chiede 39,9, cioè allertava **meno** del prescritto.
 #
-# Raggruppamento ISTAT (Nord / Centro / Mezzogiorno), non una scelta nostra:
-# è quello con cui sono state fittate le curve sul catalogo e-ITALICA.
+# Il raggruppamento è quello con cui sono state fittate le curve sul catalogo
+# e-ITALICA, e **non** è l'ISTAT: Abruzzo e Molise stanno nel Centro. Rifacendo
+# il fit (pacchetto `rainfall-thresholds`, test `test_italy.py`) i valori di
+# `central_italy` e `southern_italy` tornano solo così; con Abruzzo e Molise
+# nel Sud il Sud darebbe α 8,36 / β 0,639. Fino al 2026-11 qui c'era l'ISTAT, e
+# le due regioni giravano su una curva fittata senza i loro eventi.
 # Un'AOI non elencata — una provincia, un bacino, una regione nuova — ricade
 # su `italy_default`, che è la curva prudente.
 macroregion_by_aoi:
@@ -114,9 +118,9 @@ macroregion_by_aoi:
     - it-umbria
     - it-marche
     - it-lazio
-  southern_italy:
     - it-abruzzo
     - it-molise
+  southern_italy:
     - it-campania
     - it-puglia
     - it-basilicata
