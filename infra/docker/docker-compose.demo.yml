@@ -109,7 +109,8 @@ services:
       # Chiave di servizio CLMS (JSON su una riga): il passo notturno sa
       # quando esce una release EGMS. Vuota ⇒ il passo si salta.
       EGMS__SERVICE_KEY: ${EGMS__SERVICE_KEY:-}
-      EGMS__RELEASE: ${EGMS__RELEASE:-2020_2024}
+      # Lo stesso default di EgmsSettings.release: qui vince su quello del codice.
+      EGMS__RELEASE: ${EGMS__RELEASE:-2020_2025}
       # Archivio del radar DPC «Merging»: deve stare sul volume dei dataset
       # (/var/lib/limen/datasets). Vuota ⇒ il passo notturno si salta.
       RADAR_ARCHIVE__CARTELLA: ${RADAR_ARCHIVE__CARTELLA:-}

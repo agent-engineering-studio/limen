@@ -46,6 +46,15 @@ predefinito LIMEN_GEOLOGICAL_SHAPEFILE "$GEOSERVER_DATI/carta_geolitologica/cart
 predefinito LIMEN_OSM_ROADS "$RADICE/osm/osm_roads.gpkg"
 predefinito LIMEN_OSM_RAILWAYS "$RADICE/osm/osm_rails.gpkg"
 predefinito LIMEN_IMPERVIOUSNESS_RASTER "$RADICE/sealing/clms_imd_2018/imd_2018_100m.tif"
+# Le tile EGMS si tengono sotto la radice e non in /tmp (il default di
+# EgmsSettings): con il container usa e getta qui sotto ogni `make up`
+# riscaricherebbe ~7 GB. Con le tile già lì, un sync ripetuto non va in rete
+# e non scrive niente (dataset_versions).
+export EGMS__CARTELLA="${EGMS__CARTELLA:-$RADICE/egms}"
+have_egms=0
+if [ -n "${EGMS__SERVICE_KEY:-}" ] || [ -n "${EGMS__TOKEN:-}" ]; then
+  have_egms=1
+fi
 
 # Nel container le sorgenti si montano **allo stesso percorso**, in sola
 # lettura: così le variabili del .env valgono dentro come fuori, e non serve
@@ -76,6 +85,14 @@ if [ "$MODO" = docker ]; then
   for v in LIMEN_BOOTSTRAP_FORCE LIMEN_EFFIS_GIORNI; do
     [ -n "${!v:-}" ] && CONTAINER+=(-e "$v=${!v}")
   done
+  # La cartella delle tile EGMS è l'unica in scrittura: il sync ci salva i
+  # GeoTIFF, e deve ritrovarli al prossimo giro.
+  if [ "$have_egms" -eq 1 ]; then
+    mkdir -p "$EGMS__CARTELLA"
+    CONTAINER+=(-v "$EGMS__CARTELLA:$EGMS__CARTELLA" -e "EGMS__CARTELLA=$EGMS__CARTELLA")
+    # Il token di ripiego il worker non lo riceve dal compose (la chiave sì).
+    [ -n "${EGMS__TOKEN:-}" ] && CONTAINER+=(-e "EGMS__TOKEN=$EGMS__TOKEN")
+  fi
   # Con il proprio uid: le sorgenti sono di chi le ha scaricate, e l'utente
   # dell'immagine (999) non le leggerebbe. E con un ambiente pulito: il .env
   # caricato qui sopra come shell ha perso le virgolette dei valori JSON, e
@@ -95,7 +112,7 @@ say()  { printf '\n\033[1m%s\033[0m\n' "$*"; }
 ok()   { printf '  [ok]      %s\n' "$*"; }
 skip() { printf '  [manca]   %s\n' "$*"; }
 
-say "1/5  Cosa è configurato in questo ambiente (comandi: $MODO)"
+say "1/6  Cosa è configurato in questo ambiente (comandi: $MODO)"
 
 have_geoserver=0; have_dem=0; have_imperv=0; have_corine=0
 if [ -n "${GEOSERVER_SOURCE__DB_DSN:-}" ]; then
@@ -147,29 +164,48 @@ else
   skip "LIMEN_CORINE_RASTER non impostata o file assente"
 fi
 
+if [ "$have_egms" -eq 1 ]; then
+  ok "EGMS — velocità del terreno (tile in $EGMS__CARTELLA)"
+else
+  skip "né EGMS__SERVICE_KEY né EGMS__TOKEN"
+  echo "            → chiave di servizio CLMS: land.copernicus.eu, EU Login, profilo"
+  echo "              → «API Tokens». Senza, le feature InSAR del modello ML restano vuote."
+fi
+
 if [ "$FOCUS" = "flood" ] && [ "$have_geoserver" -eq 0 ]; then
   echo
   echo "  Nota: per l'alluvione il layer che conta è il mosaico idraulico."
   echo "  Senza GEOSERVER_SOURCE__DB_DSN questo comando non caricherà nulla di utile."
 fi
 
-say "2/5  Migrazioni"
+say "2/6  Migrazioni"
 limen migrate || exit 1
 
-say "3/5  Sorgenti"
+say "3/6  Sorgenti"
 if [ "$have_geoserver" -eq 1 ]; then
   limen geoserver-sync || exit 1
 else
   echo "  saltato: GEOSERVER_SOURCE__DB_DSN non impostata"
 fi
 
-say "4/5  Perimetri EFFIS (truth set del backtest incendio)"
+say "4/6  Perimetri EFFIS (truth set del backtest incendio)"
 # Comando a se' e non un passo del bootstrap: e' un dataset di verita', non un
 # fattore per cella, e il bootstrap per cella non fa chiamate HTTP. Sta pero'
 # in questa sequenza, che e' cio' che la #101 chiedeva.
 limen effis-sync || echo "  (EFFIS non raggiungibile: si prosegue)"
 
-say "5/5  Fattori per cella"
+say "5/6  Velocità del terreno EGMS (feature InSAR del modello ML)"
+# La prima volta sono ~7 GB e circa un'ora; poi, con le tile già nella
+# cartella, è un controllo senza rete. Una release nuova (il passo notturno
+# `egms_release` la segnala) entra cambiando EGMS__RELEASE e rilanciando questo.
+if [ "$have_egms" -eq 1 ]; then
+  mkdir -p "$EGMS__CARTELLA"
+  limen sync-egms || echo "  (EGMS non completato: si prosegue, il prossimo giro riprende dalle tile già scaricate)"
+else
+  echo "  saltato: né EGMS__SERVICE_KEY né EGMS__TOKEN"
+fi
+
+say "6/6  Fattori per cella"
 # bootstrap-static esegue da sé i passi la cui sorgente è configurata e
 # registra `static_bootstrap.skip` per gli altri: una sola chiamata copre
 # DTM, CORINE, imperviousness, WUI, distanze OSM e litologia.
