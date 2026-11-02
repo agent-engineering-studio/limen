@@ -6,6 +6,7 @@ from datetime import date
 
 import numpy as np
 import pytest
+from effis_client import sample_fwi as campiona
 from rasterio.io import MemoryFile
 from rasterio.transform import from_origin
 
@@ -15,7 +16,7 @@ from limen.core.models.risk import RiskLevel
 from limen.core.scoring.regional_thresholds import WildfireThresholds, load_hazard_thresholds
 from limen.core.scoring.wildfire.confronto import classe_fwi, confronta
 from limen.data.repos.fwi_state_repo import GiornoCatena
-from limen.integrations.effis.fwi_wms import campiona, parametri
+from limen.integrations.effis.fwi_wms import parametri
 
 
 @pytest.fixture
@@ -121,3 +122,19 @@ def test_l_assestamento_e_quello_del_motore(soglie: WildfireThresholds) -> None:
     # Lunga abbastanza ma partita a metà estate: il DC non ha la siccità di
     # stagione (#201).
     assert fwi.in_assestamento(date(2026, 9, 20), fwi.spinup_days + 5)
+
+
+@pytest.mark.asyncio
+async def test_un_tiff_troncato_degrada_invece_di_rompere() -> None:
+    import httpx
+    import respx
+
+    from limen.integrations.effis.fwi_wms import WMS_URL, fwi_ufficiale
+
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get(url__startswith=WMS_URL).mock(
+            return_value=httpx.Response(
+                200, content=b"II*\x00", headers={"content-type": "image/tiff"}
+            )
+        )
+        assert await fwi_ufficiale(date(2026, 10, 19), [(16.5, 40.5)]) is None

@@ -17,6 +17,9 @@ dice o dice sbagliate:
 * il mare è zero anche nei giorni validi: un nodo a terra legge il suo
   pixel, e lo zero di un singolo pixel resta un valore.
 
+Richiesta e campionamento vengono dal pacchetto ``effis-client``; qui resta
+la politica di Limen: il retry condiviso e il degrado neutro.
+
 Pubblico, senza credenziali, CC BY 4.0. Una lettura fallita restituisce
 ``None`` e lo scrive (`integration.degraded`): è una misura, non una scrittura.
 """
@@ -24,9 +27,17 @@ Pubblico, senza credenziali, CC BY 4.0. Una lettura fallita restituisce
 from __future__ import annotations
 
 from datetime import date
-from typing import Literal
 
 import httpx
+from effis_client import (
+    COMPONENTS,
+    WMS_URL,
+    Component,
+    EffisError,
+    check_tiff,
+    fwi_params,
+    sample_fwi,
+)
 from tenacity import RetryError
 
 from limen.core.logging import get_logger
@@ -34,12 +45,12 @@ from limen.integrations._http import fetch_with_retry
 
 log = get_logger(__name__)
 
-WMS_URL = "https://maps.effis.emergency.copernicus.eu/effis"
-Componente = Literal["fwi", "ffmc", "dmc", "dc", "isi", "bui"]
-COMPONENTI: tuple[Componente, ...] = ("fwi", "ffmc", "dmc", "dc", "isi", "bui")
+Componente = Component
+COMPONENTI = COMPONENTS
 
-#: Sud, ovest, nord, est: l'Italia, nell'ordine degli assi di EPSG:4326 in WMS 1.3.0.
-BBOX_ITALIA = (36.0, 6.0, 47.6, 19.0)
+#: Ovest, sud, est, nord: l'Italia. Lo scambio degli assi che WMS 1.3.0 vuole
+#: in EPSG:4326 lo fa ``fwi_params``.
+BBOX_ITALIA = (6.0, 36.0, 19.0, 47.6)
 #: Il passo del raster che si chiede: 0,05°, un quinto del passo dei nodi FWI (0,25°).
 PASSO = 0.05
 
@@ -47,68 +58,32 @@ Nodo = tuple[float, float]
 
 
 def parametri(giorno: date, componente: Componente) -> dict[str, str]:
-    sud, ovest, nord, est = BBOX_ITALIA
-    return {
-        "SERVICE": "WMS",
-        "VERSION": "1.3.0",
-        "REQUEST": "GetMap",
-        "LAYERS": f"mf010.{componente}",
-        "STYLES": "",
-        "CRS": "EPSG:4326",
-        "BBOX": f"{sud},{ovest},{nord},{est}",
-        "WIDTH": str(round((est - ovest) / PASSO)),
-        "HEIGHT": str(round((nord - sud) / PASSO)),
-        "FORMAT": "image/tiff",
-        "TIME": giorno.isoformat(),
-    }
-
-
-def campiona(tiff: bytes, nodi: list[Nodo]) -> dict[Nodo, float] | None:
-    """Il valore del pixel sotto ogni nodo; ``None`` se il raster è vuoto."""
-    import numpy as np
-    from rasterio.io import MemoryFile
-
-    with MemoryFile(tiff) as mem, mem.open() as raster:
-        valori = raster.read(1)
-        if not np.any(valori):
-            return None
-        fuori = raster.height, raster.width
-        out: dict[Nodo, float] = {}
-        for lon, lat in nodi:
-            riga, colonna = raster.index(lon, lat)
-            if 0 <= riga < fuori[0] and 0 <= colonna < fuori[1]:
-                v = float(valori[riga, colonna])
-                if np.isfinite(v):
-                    out[(lon, lat)] = v
-        return out
+    return fwi_params(giorno, BBOX_ITALIA, component=componente, step=PASSO)
 
 
 async def fwi_ufficiale(
     giorno: date, nodi: list[Nodo], componente: Componente = "fwi"
 ) -> dict[Nodo, float] | None:
     """Un componente della catena EFFIS per ``giorno``, campionato sui nodi."""
+    from rasterio.errors import RasterioError
+
     try:
         risposta = await fetch_with_retry("GET", WMS_URL, params=parametri(giorno, componente))
-    except (httpx.HTTPError, RetryError) as exc:
+        tiff = check_tiff(risposta.headers.get("content-type", ""), risposta.content)
+        # Un corpo dichiarato image/tiff ma troncato passa il controllo
+        # dell'intestazione e si rompe solo all'apertura.
+        return sample_fwi(tiff, nodi)
+    except (httpx.HTTPError, RetryError, EffisError, RasterioError) as exc:
+        # MapServer risponde 200 anche agli errori, con un XML: è l'EffisError.
         log.warning(
             "integration.degraded",
             label="effis.fwi",
             giorno=giorno.isoformat(),
             componente=componente,
+            error=str(exc),
             error_type=type(exc).__name__,
         )
         return None
-    if not risposta.headers.get("content-type", "").startswith("image/tiff"):
-        # MapServer risponde 200 anche agli errori, con un XML.
-        log.warning(
-            "integration.degraded",
-            label="effis.fwi",
-            giorno=giorno.isoformat(),
-            componente=componente,
-            content_type=risposta.headers.get("content-type", ""),
-        )
-        return None
-    return campiona(risposta.content, nodi)
 
 
-__all__ = ["COMPONENTI", "WMS_URL", "Componente", "campiona", "fwi_ufficiale", "parametri"]
+__all__ = ["COMPONENTI", "WMS_URL", "Componente", "fwi_ufficiale", "parametri"]

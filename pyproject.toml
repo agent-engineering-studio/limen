@@ -45,6 +45,7 @@ dependencies = [
     "cbor2>=6.1",
     "pmtiles>=3.4",
     "fwi-chain~=1.0.0",
+    "effis-client[raster]~=0.1.0",
 ]
 
 [project.scripts]
