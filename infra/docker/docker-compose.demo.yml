@@ -109,6 +109,10 @@ services:
       # Chiave di servizio CLMS (JSON su una riga): il passo notturno sa
       # quando esce una release EGMS. Vuota ⇒ il passo si salta.
       EGMS__SERVICE_KEY: ${EGMS__SERVICE_KEY:-}
+      # Oppure la chiave come file: EGMS__SERVICE_KEY_FILE è il percorso
+      # (assoluto) sull'host, montato in sola lettura qui sotto; nel container
+      # la variabile punta al mount. Non impostata ⇒ resta vuota e si ignora.
+      EGMS__SERVICE_KEY_FILE: ${EGMS__SERVICE_KEY_FILE:+/run/secrets/clms_service_key}
       # Lo stesso default di EgmsSettings.release: qui vince su quello del codice.
       EGMS__RELEASE: ${EGMS__RELEASE:-2020_2025}
       # Le tile EGMS (~0,5 GB per l'Italia) sul volume qui sotto, non in /tmp:
@@ -297,6 +301,9 @@ services:
       # comandi morivano su "Permission denied" dopo aver lavorato per minuti.
       - ${LIMEN_DATASETS_DIR:-${LIMEN_DATA_ROOT:-../../data}/datasets}:/var/lib/limen/datasets
       - ${LIMEN_EGMS_DIR:-${LIMEN_DATA_ROOT:-../../data}/egms}:/var/lib/limen/egms
+      # La chiave CLMS come file, se data così; altrimenti /dev/null, perché un
+      # percorso che non esiste Docker lo creerebbe come cartella.
+      - ${EGMS__SERVICE_KEY_FILE:-/dev/null}:/run/secrets/clms_service_key:ro
       - ${LIMEN_REPORTS_HOST_DIR:-${LIMEN_DATA_ROOT:-../../data}/reports}:/var/lib/limen/reports
       # DTM / shared vector data (read-only). Same folder GeoServer serves.
       - ${GEOSERVER_SHAPEFILE_DIR:-${LIMEN_DATA_ROOT:-../../data}/geoserver}:/data:ro
@@ -368,6 +375,9 @@ services:
       # comandi morivano su "Permission denied" dopo aver lavorato per minuti.
       - ${LIMEN_DATASETS_DIR:-${LIMEN_DATA_ROOT:-../../data}/datasets}:/var/lib/limen/datasets
       - ${LIMEN_EGMS_DIR:-${LIMEN_DATA_ROOT:-../../data}/egms}:/var/lib/limen/egms
+      # La chiave CLMS come file, se data così; altrimenti /dev/null, perché un
+      # percorso che non esiste Docker lo creerebbe come cartella.
+      - ${EGMS__SERVICE_KEY_FILE:-/dev/null}:/run/secrets/clms_service_key:ro
       - ${LIMEN_REPORTS_HOST_DIR:-${LIMEN_DATA_ROOT:-../../data}/reports}:/var/lib/limen/reports
       - ${GEOSERVER_SHAPEFILE_DIR:-${LIMEN_DATA_ROOT:-../../data}/geoserver}:/data:ro
       # Il registry sta su Postgres (#78): niente più mlflow.db montato. Gli
