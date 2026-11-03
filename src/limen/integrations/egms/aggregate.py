@@ -49,60 +49,16 @@ class Griglia:
     top: float
 
 
-def _e_laea(crs: Any) -> bool:
-    """Vero se ``crs`` è EPSG:3035 nei parametri, qualunque etichetta porti.
-
-    Alcune tile (E42N26, E43N26 nella release 2020-2024) dichiarano
-    ``IGNF:ETRS89LAEA``: la stessa proiezione con il nome dell'IGN francese.
-    Il confronto per nome le rifiuterebbe; quello per parametri no.
-    """
-    from pyproj import CRS
-
-    return bool(CRS.from_wkt(crs.to_wkt()).to_proj4() == CRS.from_epsg(3035).to_proj4())
-
-
 def mosaico(tiff: list[Path], *, minx: float, miny: float, maxx: float, maxy: float) -> Any:
     """Le tile di una componente incollate sul rettangolo, NaN dove mancano.
 
-    I limiti si allargano ai multipli di 100 m: le tile EGMS stanno su quella
-    griglia, e ogni tile si copia al suo posto senza ricampionare.
+    Dal pacchetto ``egms-client``: i limiti si allargano ai multipli di 100 m,
+    ogni tile si copia al suo posto senza ricampionare, e una tile che dichiara
+    ``IGNF:ETRS89LAEA`` (quattro nella release 2020-2025) è EPSG:3035 lo stesso.
     """
-    import warnings
+    from egms_client.mosaic import mosaic
 
-    import rasterio
-
-    x0 = math.floor(minx / PASSO_M) * PASSO_M
-    y0 = math.floor(miny / PASSO_M) * PASSO_M
-    x1 = math.ceil(maxx / PASSO_M) * PASSO_M
-    y1 = math.ceil(maxy / PASSO_M) * PASSO_M
-    righe = round((y1 - y0) / PASSO_M)
-    colonne = round((x1 - x0) / PASSO_M)
-    out = np.full((righe, colonne), np.nan, dtype="float32")
-    for path in tiff:
-        with rasterio.open(path) as r:
-            with warnings.catch_warnings():
-                # pyproj avverte che la stringa PROJ perde informazioni: qui
-                # servono proprio e solo i parametri.
-                warnings.simplefilter("ignore", UserWarning)
-                if not _e_laea(r.crs):
-                    raise ValueError(f"{path.name}: proiezione non LAEA Europa ({r.crs})")
-            banda = r.read(1).astype("float32")
-            if r.nodata is not None:
-                banda[banda == r.nodata] = np.nan
-            # Posizione della tile sulla griglia di uscita, in pixel.
-            c = round((r.bounds.left - x0) / PASSO_M)
-            rr = round((y1 - r.bounds.top) / PASSO_M)
-        sr0, sc0 = max(0, -rr), max(0, -c)
-        dr0, dc0 = max(0, rr), max(0, c)
-        h = min(banda.shape[0] - sr0, righe - dr0)
-        w = min(banda.shape[1] - sc0, colonne - dc0)
-        if h <= 0 or w <= 0:
-            continue
-        pezzo = banda[sr0 : sr0 + h, sc0 : sc0 + w]
-        dest = out[dr0 : dr0 + h, dc0 : dc0 + w]
-        valido = ~np.isnan(pezzo)
-        dest[valido] = pezzo[valido]
-    return out
+    return mosaic(tiff, minx=minx, miny=miny, maxx=maxx, maxy=maxy).values
 
 
 def per_cella(celle: list[Cella], griglia: Griglia) -> list[CellInsarFeatures]:

@@ -7,6 +7,7 @@ import json
 from typing import Any
 
 import pytest
+from egms_client import EgmsError, ServiceKey
 
 from limen.config.settings import EgmsSettings, Settings
 from limen.integrations.egms import clms, sync_job
@@ -41,7 +42,7 @@ def test_il_jwt_e_quello_che_chiede_il_clms() -> None:
     from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
     chiave = _chiave()
-    jwt = clms.asserzione(chiave, adesso=1000)
+    jwt = clms.asserzione(ServiceKey(**chiave), adesso=1000)
     assert _parte(jwt, 0) == {"alg": "RS256", "typ": "JWT"}
     assert _parte(jwt, 1) == {
         "iss": "c",
@@ -71,6 +72,7 @@ class _Risposta:
     def __init__(self, status: int, dati: Any) -> None:
         self.status_code = status
         self._dati = dati
+        self.content = json.dumps(dati).encode()
 
     def json(self) -> Any:
         return self._dati
@@ -94,8 +96,12 @@ def archivio(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str, Any]]:
                 return _Risposta(200, {"status": False, "message": "Invalid tile ID: 'E40N15'"})
             if tile == "E99N99":
                 return _Risposta(200, {"status": False, "message": "Please log in"})
+            trovata = {
+                "filename": "EGMS_L3_E47N19_100km_U_2020_2024_1.zip",
+                "version": "2020_2024_1",
+            }
             return _Risposta(
-                200, {"status": True, "id": "q", "hits": [{}] if tile == "E47N19" else []}
+                200, {"status": True, "id": "q", "hits": [trovata] if tile == "E47N19" else []}
             )
         raise AssertionError(url)
 
@@ -106,11 +112,14 @@ def archivio(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str, Any]]:
 async def test_la_ricerca_usa_un_token_solo_e_dice_se_la_tile_c_e(
     archivio: list[tuple[str, str, Any]],
 ) -> None:
-    s = clms.Sessione(_chiave(), archivio="https://a/archive")
-    assert await s.cerca((47, 19), "U", "2020_2024") == "q"
+    s = clms.Sessione(ServiceKey(**_chiave()), archivio="https://a/archive")
+    trovata = await s.cerca((47, 19), "U", "2020_2024")
+    assert trovata is not None and trovata.id == "q"
+    assert trovata.hits[0].stem == "EGMS_L3_E47N19_100km_U_2020_2024_1"
     assert await s.cerca((40, 15), "E", "2020_2024") is None  # mare: «Invalid tile ID»
-    assert await s.cerca((48, 19), "E", "2020_2024") is None  # nessun risultato
-    with pytest.raises(RuntimeError, match="log in"):
+    vuota = await s.cerca((48, 19), "E", "2020_2024")  # nessun risultato
+    assert vuota is not None and vuota.hits == []
+    with pytest.raises(EgmsError, match="log in"):
         await s.cerca((99, 99), "E", "2020_2024")
     assert [u for _, u, _ in archivio].count("https://land.example/@@oauth2-token") == 1
     corpo = archivio[1][2]

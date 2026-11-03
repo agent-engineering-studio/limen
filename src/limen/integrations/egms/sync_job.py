@@ -15,6 +15,17 @@ from datetime import date
 from functools import partial
 from pathlib import Path
 
+from egms_client import (
+    PRODUCT_TYPES,
+    Component,
+    Hit,
+    Search,
+    api_release,
+    file_release,
+    tile_id,
+    tile_prefix,
+)
+
 from limen.config.settings import EgmsSettings, Settings, get_settings
 from limen.core.logging import get_logger
 from limen.data.db import acquire
@@ -52,7 +63,7 @@ async def _celle(aoi_id: str) -> list[Cella]:
     ]
 
 
-IdRicerca = Callable[[client.Tile, str, str], Awaitable[str | None]]
+IdRicerca = Callable[[client.Tile, Component, str], Awaitable[Search | None]]
 
 
 def _ricerche(s: EgmsSettings) -> IdRicerca | None:
@@ -64,8 +75,23 @@ def _ricerche(s: EgmsSettings) -> IdRicerca | None:
     if s.token is not None and s.token.get_secret_value().strip():
         fisso = s.token.get_secret_value().strip()
 
-        async def _token(_tile: client.Tile, _componente: str, _release: str) -> str:
-            return fisso
+        async def _token(tile: client.Tile, componente: Component, release: str) -> Search:
+            # L'id copiato dall'Explorer non dice il nome del file: si assume
+            # la sotto-release 1, che è l'unica pubblicata finora.
+            nome = f"{tile_prefix(tile, componente, release)}1"
+            return Search(
+                id=fisso,
+                hits=[
+                    Hit(
+                        filename=f"{nome}.zip",
+                        filesize=0,
+                        tile_id=tile_id(tile),
+                        release=api_release(release),
+                        version=f"{file_release(release)}_1",
+                        product_type=PRODUCT_TYPES[componente],
+                    )
+                ],
+            )
 
         return _token
     return None
@@ -167,7 +193,7 @@ async def controlla_release(settings: Settings | None = None) -> dict[str, objec
     if chiave is None:
         return {"status": "skipped", "reason": "EGMS__SERVICE_KEY non impostata"}
     disponibili = await clms.Sessione(chiave, archivio=s.archive_url).release()
-    configurata = clms.release_archivio(s.release)
+    configurata = api_release(s.release)
     ultima = max(disponibili) if disponibili else None
     if ultima is not None and ultima > configurata:
         log.warning(

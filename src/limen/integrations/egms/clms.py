@@ -11,88 +11,65 @@ ogni tile: niente da copiare a mano, a nessuna release.
 Lo stesso token apre `/archive/releases`, che è l'unico modo di sapere che è
 uscita una release nuova: senza login l'archivio risponde «Please log in» a
 tutto (verificato l'11 ottobre 2026).
+
+Firma, ricerca e lettura delle risposte vengono dal pacchetto ``egms-client``
+(estratto da Limen, Apache-2.0); qui resta il traffico, che passa da
+``fetch_with_retry`` come ogni chiamata esterna.
 """
 
 from __future__ import annotations
 
-import base64
-import json
 import time
-from typing import Any
+
+from egms_client import (
+    ARCHIVE_URL,
+    Component,
+    Search,
+    ServiceKey,
+    Token,
+    assertion,
+    parse_releases,
+    parse_search,
+    parse_token,
+    search_body,
+    token_request,
+)
 
 from limen.core.logging import get_logger
 from limen.integrations._http import SharedHttpClient, fetch_with_retry
 
 log = get_logger(__name__)
 
-ARCHIVIO = "https://egms.land.copernicus.eu/insar-api/archive"
-_TIPO = {"U": "ORTHO-UP", "E": "ORTHO-EAST"}
+ARCHIVIO = ARCHIVE_URL
 #: Il token dura un'ora: si rinnova prima, perché un sync d'Italia dura di più.
-_DURATA_S = 3600
 _MARGINE_S = 300
 
 
-def _b64(dati: bytes) -> bytes:
-    return base64.urlsafe_b64encode(dati).rstrip(b"=")
-
-
-def asserzione(chiave: dict[str, Any], *, adesso: int) -> str:
+def asserzione(chiave: ServiceKey, *, adesso: int) -> str:
     """Il JWT RS256 che la chiave di servizio firma per chiedere un token."""
-    from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.primitives.asymmetric import padding, rsa
-
-    testa = _b64(json.dumps({"alg": "RS256", "typ": "JWT"}).encode())
-    corpo = _b64(
-        json.dumps(
-            {
-                "iss": chiave["client_id"],
-                "sub": chiave["user_id"],
-                "aud": chiave["token_uri"],
-                "iat": adesso,
-                "exp": adesso + _DURATA_S,
-            }
-        ).encode()
-    )
-    privata = serialization.load_pem_private_key(chiave["private_key"].encode(), password=None)
-    if not isinstance(privata, rsa.RSAPrivateKey):
-        raise ValueError("la chiave di servizio CLMS non è RSA")
-    firma = _b64(privata.sign(testa + b"." + corpo, padding.PKCS1v15(), hashes.SHA256()))
-    return (testa + b"." + corpo + b"." + firma).decode()
-
-
-def release_archivio(release: str) -> str:
-    """``2020_2024`` (nomi dei file) → ``2020-2024`` (API dell'archivio)."""
-    return release.replace("_", "-")
+    return assertion(chiave, now=adesso)
 
 
 class Sessione:
     """Un token di accesso, rinnovato quando sta per scadere."""
 
-    def __init__(self, chiave: dict[str, Any], *, archivio: str = ARCHIVIO) -> None:
+    def __init__(self, chiave: ServiceKey, *, archivio: str = ARCHIVIO) -> None:
         self._chiave = chiave
         self._archivio = archivio.rstrip("/")
-        self._token: str | None = None
-        self._scade = 0.0
+        self._token: Token | None = None
 
     async def _intestazioni(self) -> dict[str, str]:
         adesso = time.time()
-        if self._token is None or adesso > self._scade - _MARGINE_S:
+        if self._token is None or adesso > self._token.expires_at - _MARGINE_S:
             resp = await fetch_with_retry(
                 "POST",
-                self._chiave["token_uri"],
+                self._chiave.token_uri,
                 client=await SharedHttpClient.get(),
-                data={
-                    "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
-                    "assertion": asserzione(self._chiave, adesso=int(adesso)),
-                },
+                data=token_request(self._chiave, now=int(adesso)),
                 headers={"Accept": "application/json"},
             )
-            if resp.status_code != 200:
-                raise RuntimeError(f"CLMS: token negato (HTTP {resp.status_code})")
-            dati = resp.json()
-            self._token = str(dati["access_token"])
-            self._scade = adesso + float(dati.get("expires_in", _DURATA_S))
-        return {"Authorization": f"Bearer {self._token}", "Accept": "application/json"}
+            self._token = parse_token(resp.status_code, resp.content, now=adesso)
+        return self._token.headers()
 
     async def release(self) -> list[str]:
         resp = await fetch_with_retry(
@@ -101,46 +78,33 @@ class Sessione:
             client=await SharedHttpClient.get(),
             headers=await self._intestazioni(),
         )
-        dati = resp.json()
-        if not isinstance(dati, list):
-            raise RuntimeError(f"EGMS: risposta inattesa da /releases: {str(dati)[:200]}")
-        return [str(r) for r in dati]
+        return parse_releases(resp.content)
 
-    async def cerca(self, tile: tuple[int, int], componente: str, release: str) -> str | None:
-        """L'id di ricerca con cui scaricare la tile, o ``None`` se non esiste."""
-        e, n = tile
+    async def cerca(
+        self, tile: tuple[int, int], componente: Component, release: str
+    ) -> Search | None:
+        """La ricerca con cui scaricare la tile, o ``None`` se la tile non esiste (mare)."""
         resp = await fetch_with_retry(
             "POST",
             f"{self._archivio}/search",
             client=await SharedHttpClient.get(),
             headers=await self._intestazioni(),
-            json={
-                "tileId": f"E{e}N{n}",
-                "releases": [release_archivio(release)],
-                "levels": ["L3"],
-                "productType": _TIPO[componente],
-            },
+            json=search_body(tile, componente, release),
         )
-        dati = resp.json()
-        messaggio = str(dati.get("message") or "")
-        # Una tile in mare o fuori copertura non ha un catalogo: l'archivio
-        # risponde così, non con una ricerca vuota (verificato su E40N15).
-        if not dati.get("status") and messaggio.startswith("Invalid tile ID"):
-            return None
-        if not dati.get("status"):
-            raise RuntimeError(f"EGMS: ricerca rifiutata: {str(dati.get('message'))[:200]}")
-        return str(dati["id"]) if dati.get("hits") else None
+        return parse_search(resp.content)
 
 
-def leggi_chiave(testo: str) -> dict[str, Any] | None:
+def leggi_chiave(testo: str) -> ServiceKey | None:
     """La chiave di servizio dal JSON, ``None`` se vuota o incompleta."""
     if not testo.strip():
         return None
-    chiave = json.loads(testo)
-    campi = ("client_id", "user_id", "private_key", "token_uri")
-    if not isinstance(chiave, dict) or any(not chiave.get(c) for c in campi):
+    try:
+        return ServiceKey.from_json(testo)
+    except ValueError as exc:
+        # Impostata ma illeggibile (PEM troncato, virgolette perse nel .env):
+        # senza questo log il sync direbbe «né chiave né token».
+        log.warning("egms.chiave_non_valida", error=str(exc)[:200])
         return None
-    return chiave
 
 
-__all__ = ["ARCHIVIO", "Sessione", "asserzione", "leggi_chiave", "release_archivio"]
+__all__ = ["ARCHIVIO", "Sessione", "asserzione", "leggi_chiave"]

@@ -9,6 +9,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from egms_client import Hit, Search
 
 from limen.integrations.egms import client
 from limen.integrations.egms.aggregate import Cella, Griglia, mosaico, per_cella
@@ -22,7 +23,6 @@ def test_le_tile_sono_le_centinaia_di_km_dell_angolo() -> None:
         (48, 19),
         (48, 20),
     ]
-    assert client.nome((47, 19), "U", "2020_2024") == "EGMS_L3_E47N19_100km_U_2020_2024_1"
 
 
 def _griglia(verticale: list[list[float]], est: list[list[float]]) -> Griglia:
@@ -108,6 +108,18 @@ def _zip(base: str) -> bytes:
     return buf.getvalue()
 
 
+def _cerca(id_: str) -> Search:
+    hit = Hit(
+        filename="EGMS_L3_E47N19_100km_U_2020_2024_1.zip",
+        filesize=1,
+        tile_id="E47N19",
+        release="2020-2024",
+        version="2020_2024_1",
+        product_type="ORTHO-UP",
+    )
+    return Search(id=id_, hits=[hit])
+
+
 async def test_scarica_tiene_solo_il_tiff_e_ricorda_le_tile_assenti(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -121,9 +133,9 @@ async def test_scarica_tiene_solo_il_tiff_e_ricorda_le_tile_assenti(
         return _Risposta(200, _zip(url.split("/")[-1][:-4]))
 
     def _ricerca(trovata: bool) -> Any:
-        async def _id() -> str | None:
+        async def _id() -> Search | None:
             ricerche.append("x")
-            return "q1" if trovata else None
+            return _cerca("q1") if trovata else None
 
         return _id
 
@@ -149,8 +161,8 @@ async def test_un_id_scaduto_alza(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     async def _fetch(_m: str, _url: str, **_kw: Any) -> _Risposta:
         return _Risposta(401)
 
-    async def _id() -> str:
-        return "vecchio"
+    async def _id() -> Search:
+        return _cerca("vecchio")
 
     monkeypatch.setattr(client, "fetch_with_retry", _fetch)
     with pytest.raises(RuntimeError, match="401"):
@@ -204,3 +216,32 @@ def test_una_tile_in_un_altra_proiezione_alza(tmp_path: Path) -> None:
         dst.write(np.array([[1.0]], dtype="float32"), 1)
     with pytest.raises(ValueError, match="LAEA"):
         mosaico([path], minx=0.0, miny=0.0, maxx=100.0, maxy=100.0)
+
+
+async def test_il_segnaposto_vecchio_del_mare_vale_ancora(tmp_path: Path) -> None:
+    (tmp_path / "EGMS_L3_E40N15_100km_U_2020_2025_1.assente").touch()
+
+    async def _mai() -> Search | None:
+        raise AssertionError("nessuna ricerca per una tile già nota come assente")
+
+    assert (
+        await client.scarica_tile(
+            tmp_path, (40, 15), "U", release="2020_2025", archivio="x", id_ricerca=_mai
+        )
+        is None
+    )
+
+
+async def test_un_nome_che_non_corrisponde_alla_tile_alza(tmp_path: Path) -> None:
+    async def _altro() -> Search:
+        return _cerca("q")  # E47N19, chiesta come E48N19
+
+    with pytest.raises(RuntimeError, match="nome inatteso"):
+        await client.scarica_tile(
+            tmp_path, (48, 19), "U", release="2020_2024", archivio="x", id_ricerca=_altro
+        )
+
+
+def test_vince_la_sotto_release_piu_alta() -> None:
+    assert client._sotto_release(Path("EGMS_L3_E47N19_100km_U_2020_2025_10.tiff")) == 10
+    assert client._sotto_release(Path("strano.tiff")) == 0
