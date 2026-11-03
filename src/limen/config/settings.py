@@ -816,7 +816,7 @@ class EgmsSettings(BaseSettings):
     #: Tile scaricate insieme (~60 MB l'una). Non più di 2: l'archivio
     #: risponde 429 «At most 2 downloads may be performed simultaneously» al
     #: terzo download in corso dello stesso account (verificato il 2026-11-03).
-    concorrenza: int = 2
+    concorrenza: int = Field(default=2, ge=1, le=2)
 
     @property
     def attivo(self) -> bool:

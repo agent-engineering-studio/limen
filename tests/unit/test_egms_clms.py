@@ -186,3 +186,13 @@ async def test_le_tile_in_parallelo_usano_un_token_solo(
     assert [p is not None for p in trovate] == [True, False, False, False]
     token = [r for r in archivio.richieste if r.url.path.endswith("oauth2-token")]
     assert len(token) == 1
+
+
+@pytest.mark.parametrize("valore", [0, 3])
+def test_la_concorrenza_resta_fra_1_e_2(valore: int) -> None:
+    # 0 bloccherebbe il sync per sempre; oltre 2 l'archivio risponde 429.
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        EgmsSettings(concorrenza=valore)
+    assert EgmsSettings(concorrenza=1).concorrenza == 1
