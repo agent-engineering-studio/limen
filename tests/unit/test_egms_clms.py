@@ -1,15 +1,19 @@
-"""La chiave di servizio CLMS: JWT, token, ricerca, release nuova."""
+"""La chiave di servizio CLMS e l'archivio EGMS visti da Limen."""
 
 from __future__ import annotations
 
-import base64
+import io
 import json
+import zipfile
+from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
-from egms_client import EgmsError, ServiceKey
+from pydantic import SecretStr
 
 from limen.config.settings import EgmsSettings, Settings
+from limen.integrations._http import SharedHttpClient
 from limen.integrations.egms import clms, sync_job
 
 
@@ -32,118 +36,110 @@ def _chiave() -> dict[str, Any]:
     }
 
 
-def _parte(jwt: str, i: int) -> dict[str, Any]:
-    pezzo = jwt.split(".")[i]
-    return dict(json.loads(base64.urlsafe_b64decode(pezzo + "=" * (-len(pezzo) % 4))))
-
-
-def test_il_jwt_e_quello_che_chiede_il_clms() -> None:
-    from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.primitives.asymmetric import padding, rsa
-
-    chiave = _chiave()
-    jwt = clms.asserzione(ServiceKey(**chiave), adesso=1000)
-    assert _parte(jwt, 0) == {"alg": "RS256", "typ": "JWT"}
-    assert _parte(jwt, 1) == {
-        "iss": "c",
-        "sub": "u",
-        "aud": chiave["token_uri"],
-        "iat": 1000,
-        "exp": 4600,
-    }
-    testa, corpo, firma = jwt.split(".")
-    privata = serialization.load_pem_private_key(chiave["private_key"].encode(), password=None)
-    assert isinstance(privata, rsa.RSAPrivateKey)
-    privata.public_key().verify(
-        base64.urlsafe_b64decode(firma + "=" * (-len(firma) % 4)),
-        f"{testa}.{corpo}".encode(),
-        padding.PKCS1v15(),
-        hashes.SHA256(),
-    )
-
-
 def test_una_chiave_incompleta_non_e_una_chiave() -> None:
     assert clms.leggi_chiave("") is None
     assert clms.leggi_chiave(json.dumps({"client_id": "c"})) is None
     assert clms.leggi_chiave(json.dumps(_chiave())) is not None
 
 
-class _Risposta:
-    def __init__(self, status: int, dati: Any) -> None:
-        self.status_code = status
-        self._dati = dati
-        self.content = json.dumps(dati).encode()
+def test_la_chiave_viene_dalla_variabile_o_dal_file(tmp_path: Path) -> None:
+    testo = json.dumps(_chiave())
+    assert clms.chiave(EgmsSettings(service_key=SecretStr(testo))) is not None
+    file = tmp_path / "chiave.json"
+    file.write_text(testo)
+    assert clms.chiave(EgmsSettings(service_key_file=str(file))) is not None
+    assert EgmsSettings(service_key_file=str(file)).attivo
+    assert clms.chiave(EgmsSettings(service_key_file=str(tmp_path / "manca.json"))) is None
+    assert clms.chiave(EgmsSettings()) is None
 
-    def json(self) -> Any:
-        return self._dati
+
+def test_il_motivo_del_salto_e_detto() -> None:
+    assert "non è più supportato" in clms.perche_no(EgmsSettings(token=SecretStr("abc")))
+    assert "illeggibile" in clms.perche_no(EgmsSettings(service_key=SecretStr("{}")))
+    assert clms.perche_no(EgmsSettings()).startswith("né")
 
 
-@pytest.fixture
-def archivio(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str, Any]]:
-    chiamate: list[tuple[str, str, Any]] = []
+class _Archivio:
+    """Un archivio finto: token, release, ricerca per tile, download."""
 
-    async def _fetch(metodo: str, url: str, **kw: Any) -> _Risposta:
-        chiamate.append((metodo, url, kw.get("json")))
-        if url.endswith("oauth2-token"):
-            return _Risposta(200, {"access_token": "a", "expires_in": 3600})
-        assert kw["headers"]["Authorization"] == "Bearer a"
-        if url.endswith("/releases"):
+    def __init__(self) -> None:
+        self.richieste: list[httpx.Request] = []
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.richieste.append(request)
+        path = request.url.path
+        if path.endswith("oauth2-token"):
+            return httpx.Response(200, json={"access_token": "a", "expires_in": 3600})
+        if path.endswith("/releases"):
             # Dopo la 2020-2024 è uscita la 2020-2025, non la 2021-2025.
-            return _Risposta(200, ["2019-2023", "2020-2024", "2020-2025"])
-        if url.endswith("/search"):
-            tile = kw["json"]["tileId"]
-            if tile == "E40N15":
-                return _Risposta(200, {"status": False, "message": "Invalid tile ID: 'E40N15'"})
-            if tile == "E99N99":
-                return _Risposta(200, {"status": False, "message": "Please log in"})
+            return httpx.Response(200, json=["2019-2023", "2020-2024", "2020-2025"])
+        if path.endswith("/search"):
+            assert request.headers["Authorization"] == "Bearer a"
+            tile = json.loads(request.content)["tileId"]
+            if tile != "E47N19":
+                return httpx.Response(
+                    200, json={"status": False, "message": f"Invalid tile ID: '{tile}'"}
+                )
             trovata = {
                 "filename": "EGMS_L3_E47N19_100km_U_2020_2024_1.zip",
                 "version": "2020_2024_1",
             }
-            return _Risposta(
-                200, {"status": True, "id": "q", "hits": [trovata] if tile == "E47N19" else []}
-            )
-        raise AssertionError(url)
+            return httpx.Response(200, json={"status": True, "id": "q", "hits": [trovata]})
+        if "/download/" in path:
+            assert request.url.params["id"] == "q"
+            stem = path.rsplit("/", 1)[1].removesuffix(".zip")
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, "w") as z:
+                z.writestr(f"{stem}.tiff", b"TIFF")
+                z.writestr(f"{stem}.csv", b"serie")
+            return httpx.Response(200, content=buffer.getvalue())
+        raise AssertionError(path)
 
-    monkeypatch.setattr(clms, "fetch_with_retry", _fetch)
-    return chiamate
-
-
-async def test_la_ricerca_usa_un_token_solo_e_dice_se_la_tile_c_e(
-    archivio: list[tuple[str, str, Any]],
-) -> None:
-    s = clms.Sessione(ServiceKey(**_chiave()), archivio="https://a/archive")
-    trovata = await s.cerca((47, 19), "U", "2020_2024")
-    assert trovata is not None and trovata.id == "q"
-    assert trovata.hits[0].stem == "EGMS_L3_E47N19_100km_U_2020_2024_1"
-    assert await s.cerca((40, 15), "E", "2020_2024") is None  # mare: «Invalid tile ID»
-    vuota = await s.cerca((48, 19), "E", "2020_2024")  # nessun risultato
-    assert vuota is not None and vuota.hits == []
-    with pytest.raises(EgmsError, match="log in"):
-        await s.cerca((99, 99), "E", "2020_2024")
-    assert [u for _, u, _ in archivio].count("https://land.example/@@oauth2-token") == 1
-    corpo = archivio[1][2]
-    assert corpo == {
-        "tileId": "E47N19",
-        "releases": ["2020-2024"],
-        "levels": ["L3"],
-        "productType": "ORTHO-UP",
-    }
-    assert archivio[2][2]["productType"] == "ORTHO-EAST"
+    def scaricati(self) -> int:
+        return sum("/download/" in r.url.path for r in self.richieste)
 
 
-async def test_una_release_nuova_si_segnala(archivio: list[tuple[str, str, Any]]) -> None:
-    from pydantic import SecretStr
+@pytest.fixture
+def archivio(monkeypatch: pytest.MonkeyPatch) -> _Archivio:
+    finto = _Archivio()
+    client = httpx.AsyncClient(transport=httpx.MockTransport(finto))
 
-    chiave = SecretStr(json.dumps(_chiave()))
-    vecchia = Settings(egms=EgmsSettings(service_key=chiave, release="2020_2024"))
+    async def _get(_cls: type[SharedHttpClient]) -> httpx.AsyncClient:
+        return client
+
+    monkeypatch.setattr(SharedHttpClient, "get", classmethod(_get))
+    return finto
+
+
+def _impostazioni(**kw: Any) -> EgmsSettings:
+    return EgmsSettings(
+        service_key=SecretStr(json.dumps(_chiave())), archive_url="https://a/archive", **kw
+    )
+
+
+async def test_le_tile_si_scaricano_una_volta_sola(archivio: _Archivio, tmp_path: Path) -> None:
+    a = await clms.archivio(_impostazioni())
+    assert a is not None
+    tiff = await a.fetch_tile((47, 19), "U", "2020_2024", tmp_path)
+    assert tiff is not None and tiff.read_bytes() == b"TIFF"
+    assert await a.fetch_tile((40, 15), "U", "2020_2024", tmp_path) is None  # mare
+    # Il secondo giro non chiede niente: il tiff c'è, il mare è ricordato.
+    prima = len(archivio.richieste)
+    assert await a.fetch_tile((47, 19), "U", "2020_2024", tmp_path) == tiff
+    assert await a.fetch_tile((40, 15), "U", "2020_2024", tmp_path) is None
+    assert len(archivio.richieste) == prima
+    assert archivio.scaricati() == 1
+    assert not list(tmp_path.glob("*.zip")) and not list(tmp_path.glob("*.part"))
+
+
+async def test_una_release_nuova_si_segnala(archivio: _Archivio) -> None:
+    vecchia = Settings(egms=_impostazioni(release="2020_2024"))
     assert await sync_job.controlla_release(vecchia) == {
         "status": "nuova_release",
         "configurata": "2020-2024",
         "disponibile": "2020-2025",
     }
-    attuale = Settings(egms=EgmsSettings(service_key=chiave))
-    assert (await sync_job.controlla_release(attuale))["status"] == "ok"
+    assert (await sync_job.controlla_release(Settings(egms=_impostazioni())))["status"] == "ok"
 
 
 async def test_senza_chiave_il_controllo_si_salta() -> None:

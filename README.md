@@ -212,7 +212,8 @@ Loaded from environment variables (and an optional `.env`) via
 | `SCHEDULER__FORECAST_CELLS_HOURS_UTC` | `[2, 8, 14, 20]` | When the per-cell 72-hour forecast is recomputed. |
 | `OPENMETEO__FORECAST_URL` / `__ARCHIVE_URL` | _empty_ | Self-hosted Open-Meteo; empty ⇒ public API. |
 | `COPERNICUS__EWDS_KEY` | _empty_ | EWDS key for the GloFAS forecast and references; empty ⇒ GloFAS via Open-Meteo. |
-| `EGMS__SERVICE_KEY` | _empty_ | CLMS service key (single-line JSON) for EGMS downloads and the release check. |
+| `EGMS__SERVICE_KEY` | _empty_ | CLMS service key (single-line JSON) for EGMS downloads and the release check; or `EGMS__SERVICE_KEY_FILE`, the path of the JSON. |
+| `EGMS__CARTELLA` | `data/egms` | EGMS tiles, kept between syncs (Docker: the `LIMEN_EGMS_DIR` volume on `/var/lib/limen/egms`). |
 | `LLM__PROVIDER` | _empty_ | Override: `anthropic` / `openai` / `foundry` / `ollama` / `llamacpp`. Empty ⇒ llama.cpp unless a cloud key is set. |
 | `LLM__LLAMACPP_BASE_URL` | `http://127.0.0.1:8091` | Self-hosted inference gateway (OpenAI shape). **Not** `:8081`, which is GeoServer. From a container: `host.docker.internal`. |
 | `LLM__MODELS__<ROLE>` | Claude id | Role → model map. Local engines honour only the roles they declare. `LLM__MODELS__FEDELTA` is a Claude id sent as a Message Batch, not through the gateway. See [`docs/inference.md`](./docs/inference.md). |
