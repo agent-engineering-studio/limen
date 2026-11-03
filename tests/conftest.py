@@ -28,10 +28,6 @@ if TYPE_CHECKING:
 #: `test_api_jobs` la riduceva comunque a sei celle subito dopo.
 SEED_SMALL_AOI = "it-valle-d-aosta"
 
-#: Quando il test nomina esplicitamente un'AOI (il backtest usa
-#: `LIMEN_BACKTEST_AOI=it-puglia`), quella va seminata e non un'altra.
-SEED_PUGLIA = "it-puglia"
-
 
 @pytest.fixture(autouse=True)
 def _retry_without_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -40,14 +36,17 @@ def _retry_without_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
     Ogni test che simula un 5xx o un host irraggiungibile passava dal backoff
     vero: 2 + 4 + 8 s fra i quattro tentativi, fino al tetto di 60 s. Il gate
     con la coverage spendeva cosi' minuti a dormire. Tentativi ed eccezioni
-    restano quelli reali; cambia solo l'attesa.
+    restano quelli reali; cambia solo l'attesa. Il downloader di geodata ha
+    una sua policy, costruita a ogni download: stessa sostituzione.
     """
     from tenacity import wait_none
 
+    from geodata.init import downloader
     from limen.integrations import _http
 
     monkeypatch.setattr(_http, "wait_exponential", lambda **_k: wait_none())
     monkeypatch.setattr(_http.RETRY_POLICY, "wait", wait_none())
+    monkeypatch.setattr(downloader, "wait_exponential", lambda **_k: wait_none())
 
 
 def register_flood_mocks(mock: respx.Router) -> None:
@@ -269,6 +268,10 @@ def geodata_postgres_container() -> Iterator[str]:
 
     container = PostgresContainer(
         image=POSTGIS_IMAGE, username="geodata", password="geodata", dbname="geodata"
+    )
+    # Data dir on tmpfs, as in `postgres_container`: the cluster is discarded.
+    container = container.with_env("PGDATA", "/var/lib/postgresql/data/pgdata").with_kwargs(
+        tmpfs={"/var/lib/postgresql/data": "rw,size=2g"}
     )
     container.start()
     try:
