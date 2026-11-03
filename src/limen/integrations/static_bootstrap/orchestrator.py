@@ -10,7 +10,7 @@ even when those datasets are not yet wired up.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from limen.core.logging import get_logger
 from limen.data.db import acquire
@@ -537,9 +537,13 @@ async def bootstrap_static_for_aoi(aoi_id: str, *, force: bool = False) -> Boots
     # ISPRA Carta Geologica — vector shapefile + faults; runs when
     # LIMEN_GEOLOGICAL_SHAPEFILE points at a polygon file.
     from limen.integrations.geological import sync_geological_for_aois
-    from limen.integrations.geological.sync_job import LITHO_SHAPEFILE_ENV
+    from limen.integrations.geological.sync_job import LITHO_SHAPEFILE_ENV, litho_field
 
     geo_fp = fingerprint.of_env_file(LITHO_SHAPEFILE_ENV)
+    if geo_fp.available:
+        # La colonna letta fa parte della sorgente: cambiarla deve ricalcolare,
+        # come cambiare il file.
+        geo_fp = replace(geo_fp, parts=(*geo_fp.parts, f"campo={litho_field()}"))
     if await gate.needs("geological", geo_fp):
         geo_written = await sync_geological_for_aois(aoi_ids=[aoi_id])
         if geo_written:
