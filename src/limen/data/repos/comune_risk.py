@@ -15,7 +15,7 @@ from limen.core.cascades.attention import HazardStanding, attention_index
 from limen.core.cascades.config import load_cascades
 from limen.core.models.risk import RiskLevel
 from limen.data.db import acquire
-from limen.data.repos import dpc_allerte_repo
+from limen.data.repos import dpc_allerte_repo, esposizione_comuni_repo
 
 #: Ordine delle classi, per scegliere il peggiore fra i pericoli. In SQL
 #: perché è lì che si ordina: portarlo in Python vorrebbe dire leggere tutti
@@ -488,6 +488,7 @@ async def top_comuni(
         segnali = await _segnali_alluvione(conn, codici)
         incendi = await _segnali_incendio(conn, codici)
         allerte = await dpc_allerte_repo.per_comuni(conn, codici)
+        esposizione = await esposizione_comuni_repo.per_comuni(conn, codici)
     comuni = [
         {
             **_con_segnali(
@@ -496,6 +497,7 @@ async def top_comuni(
                 incendi.get(str(r["istat_code"])),
             ),
             "allerta_ufficiale": allerte.get(str(r["istat_code"])),
+            "esposizione_ispra": esposizione.get(str(r["istat_code"])),
         }
         for r in rows
     ]
@@ -537,6 +539,7 @@ async def comune_detail(istat_code: str) -> dict[str, Any] | None:
         segnali = await _segnali_alluvione(conn, [istat_code])
         incendi = await _segnali_incendio(conn, [istat_code])
         allerte = await dpc_allerte_repo.per_comuni(conn, [istat_code])
+        esposizione = await esposizione_comuni_repo.per_comuni(conn, [istat_code])
     out = {
         **_con_segnali(
             _con_previsione(_to_comune(row), previsioni.get(istat_code, {})),
@@ -544,6 +547,7 @@ async def comune_detail(istat_code: str) -> dict[str, Any] | None:
             incendi.get(istat_code),
         ),
         "allerta_ufficiale": allerte.get(istat_code),
+        "esposizione_ispra": esposizione.get(istat_code),
     }
     return {
         "comune": out,

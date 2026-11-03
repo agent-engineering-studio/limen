@@ -247,6 +247,15 @@ e, con la chiave, i movimenti del suolo EGMS, poi calcola i fattori per cella.
 Il primo giro completo per l'Italia pesa ~25 GB (DTM compreso); i successivi
 saltano quello che non è cambiato.
 
+Un altro dato ISPRA arriva invece di notte: l'**esposizione per comune**. Il
+passo notturno `esposizione_ispra` salva in `esposizione_comuni` quanti
+residenti di ogni comune vivono nelle aree a pericolosità frana P3+P4 del PAI
+e idraulica P2 (censimento ISTAT 2021), più edifici e imprese, dall'API di
+IdroGEO. Le risposte stanno in `LIMEN_DATA_DIR/idrogeo` e si richiedono solo
+dopo 30 giorni: quasi tutte le notti si leggono dal disco in ~2 s.
+`/api/comuni` le restituisce come `esposizione_ispra`; non entrano in nessun
+punteggio. `limen esposizione-sync` riempie la tabella subito.
+
 Poi lancia un calcolo e guarda la mappa:
 
 ```bash
@@ -443,7 +452,7 @@ una libreria.
 | [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) | `~=0.1.0` | Apache-2.0 |
 | [`egms-client`](https://pypi.org/project/egms-client/) | `~=0.5.0` | Apache-2.0 |
 | [`firms-client`](https://pypi.org/project/firms-client/) | `~=0.2.0` | Apache-2.0 |
-| [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) | `~=0.1.0` | Apache-2.0 |
+| [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) | `~=0.3.0` | Apache-2.0 |
 | [`fwi-chain`](https://pypi.org/project/fwi-chain/) | `~=1.0.0` | Apache-2.0 |
 | [`effis-client`](https://pypi.org/project/effis-client/) | `~=0.1.2` | Apache-2.0 |
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |

@@ -242,6 +242,16 @@ with a key, EGMS ground motion, then computes the per-cell factors. The first
 full run for Italy is ~25 GB (the DTM included); later runs skip whatever has
 not changed.
 
+One more ISPRA dataset arrives through the night instead: the **exposure per
+municipality**. The nightly `esposizione_ispra` step stores in
+`esposizione_comuni` how many residents of each municipality live in PAI
+landslide hazard P3+P4 and flood hazard P2 areas (ISTAT 2021 census), plus
+buildings and businesses, from the IdroGEO API. The answers are kept under
+`LIMEN_DATA_DIR/idrogeo` and asked for again only after 30 days, so most
+nights read them from disk in ~2 s. `/api/comuni` returns them as
+`esposizione_ispra`; they enter no score. `limen esposizione-sync` fills the
+table at once.
+
 Then run one scoring pass and look at the map:
 
 ```bash
@@ -437,7 +447,7 @@ rule stays in Limen. The numbers that tune a hazard stay in
 | [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) | `~=0.1.0` | Apache-2.0 |
 | [`egms-client`](https://pypi.org/project/egms-client/) | `~=0.5.0` | Apache-2.0 |
 | [`firms-client`](https://pypi.org/project/firms-client/) | `~=0.2.0` | Apache-2.0 |
-| [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) | `~=0.1.0` | Apache-2.0 |
+| [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) | `~=0.3.0` | Apache-2.0 |
 | [`fwi-chain`](https://pypi.org/project/fwi-chain/) | `~=1.0.0` | Apache-2.0 |
 | [`effis-client`](https://pypi.org/project/effis-client/) | `~=0.1.2` | Apache-2.0 |
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |
