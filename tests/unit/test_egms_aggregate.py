@@ -1,23 +1,19 @@
-"""EGMS Ortho L3: tile, download e statistiche per cella."""
+"""EGMS Ortho L3: mosaico e statistiche per cella."""
 
 from __future__ import annotations
 
-import io
-import zipfile
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pytest
-from egms_client import Hit, Search
+from egms_client import tiles_for_bounds
 
-from limen.integrations.egms import client
 from limen.integrations.egms.aggregate import Cella, Griglia, mosaico, per_cella
 
 
 def test_le_tile_sono_le_centinaia_di_km_dell_angolo() -> None:
-    assert client.tile_per_limiti(4_750_000, 1_950_000, 4_760_000, 1_960_000) == [(47, 19)]
-    assert client.tile_per_limiti(4_790_000, 1_990_000, 4_810_000, 2_010_000) == [
+    assert tiles_for_bounds(4_750_000, 1_950_000, 4_760_000, 1_960_000) == [(47, 19)]
+    assert tiles_for_bounds(4_790_000, 1_990_000, 4_810_000, 2_010_000) == [
         (47, 19),
         (47, 20),
         (48, 19),
@@ -94,83 +90,6 @@ def test_il_mosaico_cuce_due_tile_e_lascia_nan_dove_mancano(tmp_path: Path) -> N
     assert np.isnan(m[:, 4]).all()
 
 
-class _Risposta:
-    def __init__(self, status: int, content: bytes = b"") -> None:
-        self.status_code = status
-        self.content = content
-
-
-def _zip(base: str) -> bytes:
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as z:
-        z.writestr(f"{base}.csv", "pid,mean_velocity\n")
-        z.writestr(f"{base}.tiff", b"TIFF")
-    return buf.getvalue()
-
-
-def _cerca(id_: str) -> Search:
-    hit = Hit(
-        filename="EGMS_L3_E47N19_100km_U_2020_2024_1.zip",
-        filesize=1,
-        tile_id="E47N19",
-        release="2020-2024",
-        version="2020_2024_1",
-        product_type="ORTHO-UP",
-    )
-    return Search(id=id_, hits=[hit])
-
-
-async def test_scarica_tiene_solo_il_tiff_e_ricorda_le_tile_assenti(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    chieste: list[str] = []
-    ricerche: list[str] = []
-
-    async def _fetch(_m: str, url: str, **kw: Any) -> _Risposta:
-        chieste.append(url)
-        assert url.startswith("https://x/archive/download/")
-        assert kw["params"] == {"id": "q1"}
-        return _Risposta(200, _zip(url.split("/")[-1][:-4]))
-
-    def _ricerca(trovata: bool) -> Any:
-        async def _id() -> Search | None:
-            ricerche.append("x")
-            return _cerca("q1") if trovata else None
-
-        return _id
-
-    monkeypatch.setattr(client, "fetch_with_retry", _fetch)
-    args: dict[str, Any] = {"release": "2020_2024", "archivio": "https://x/archive"}
-
-    p = await client.scarica_tile(tmp_path, (47, 19), "U", id_ricerca=_ricerca(True), **args)
-    assert p is not None and p.read_bytes() == b"TIFF"
-    # Il mare: la ricerca non trova niente, e non si scarica.
-    assert (
-        await client.scarica_tile(tmp_path, (40, 15), "U", id_ricerca=_ricerca(False), **args)
-        is None
-    )
-    # Il secondo giro non cerca e non scarica: tiff presente, mare ricordato.
-    await client.scarica_tile(tmp_path, (47, 19), "U", id_ricerca=_ricerca(True), **args)
-    await client.scarica_tile(tmp_path, (40, 15), "U", id_ricerca=_ricerca(True), **args)
-    assert len(chieste) == 1
-    assert len(ricerche) == 2
-    assert sorted(f.suffix for f in tmp_path.iterdir()) == [".assente", ".tiff"]
-
-
-async def test_un_id_scaduto_alza(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    async def _fetch(_m: str, _url: str, **_kw: Any) -> _Risposta:
-        return _Risposta(401)
-
-    async def _id() -> Search:
-        return _cerca("vecchio")
-
-    monkeypatch.setattr(client, "fetch_with_retry", _fetch)
-    with pytest.raises(RuntimeError, match="401"):
-        await client.scarica_tile(
-            tmp_path, (47, 19), "U", release="2020_2024", archivio="https://x", id_ricerca=_id
-        )
-
-
 def test_una_tile_con_l_etichetta_ignf_entra_nel_mosaico(tmp_path: Path) -> None:
     """E42N26 dichiara IGNF:ETRS89LAEA: stessi parametri di EPSG:3035."""
     rasterio = pytest.importorskip("rasterio")
@@ -216,32 +135,3 @@ def test_una_tile_in_un_altra_proiezione_alza(tmp_path: Path) -> None:
         dst.write(np.array([[1.0]], dtype="float32"), 1)
     with pytest.raises(ValueError, match="LAEA"):
         mosaico([path], minx=0.0, miny=0.0, maxx=100.0, maxy=100.0)
-
-
-async def test_il_segnaposto_vecchio_del_mare_vale_ancora(tmp_path: Path) -> None:
-    (tmp_path / "EGMS_L3_E40N15_100km_U_2020_2025_1.assente").touch()
-
-    async def _mai() -> Search | None:
-        raise AssertionError("nessuna ricerca per una tile già nota come assente")
-
-    assert (
-        await client.scarica_tile(
-            tmp_path, (40, 15), "U", release="2020_2025", archivio="x", id_ricerca=_mai
-        )
-        is None
-    )
-
-
-async def test_un_nome_che_non_corrisponde_alla_tile_alza(tmp_path: Path) -> None:
-    async def _altro() -> Search:
-        return _cerca("q")  # E47N19, chiesta come E48N19
-
-    with pytest.raises(RuntimeError, match="nome inatteso"):
-        await client.scarica_tile(
-            tmp_path, (48, 19), "U", release="2020_2024", archivio="x", id_ricerca=_altro
-        )
-
-
-def test_vince_la_sotto_release_piu_alta() -> None:
-    assert client._sotto_release(Path("EGMS_L3_E47N19_100km_U_2020_2025_10.tiff")) == 10
-    assert client._sotto_release(Path("strano.tiff")) == 0

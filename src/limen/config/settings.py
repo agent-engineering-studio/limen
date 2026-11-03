@@ -786,32 +786,38 @@ class TrainingSettings(BaseSettings):
 class EgmsSettings(BaseSettings):
     """Copernicus EGMS, prodotto Ortho L3: la velocità media del terreno a 100 m.
 
-    Fail-closed. Due credenziali, la prima vince:
+    Fail-closed: senza chiave di servizio CLMS (profilo su land.copernicus.eu
+    → «API Tokens») il sync e il controllo delle release si saltano. La
+    chiave si dà in uno dei due modi, il primo vince:
 
-    * ``EGMS__SERVICE_KEY`` — il JSON della chiave di servizio CLMS (profilo su
-      land.copernicus.eu → «API Tokens»). Non scade: ogni sync fa le sue
-      ricerche, e il passo notturno sa quando esce una release nuova;
-    * ``EGMS__TOKEN`` — l'``id`` copiato da un link dell'EGMS Explorer. È l'id
-      di una ricerca, e **scade**: va bene per un sync a mano.
+    * ``EGMS__SERVICE_KEY`` — il JSON della chiave, su una riga;
+    * ``EGMS__SERVICE_KEY_FILE`` — il percorso del file JSON (un secret
+      Docker, per esempio).
+
+    ``EGMS__TOKEN`` (l'``id`` copiato da un link dell'Explorer) non vale più:
+    era l'id di una ricerca e scadeva. Se è l'unica credenziale, il sync lo
+    dice nel log e si salta.
     """
 
     model_config = SettingsConfigDict(extra="ignore")
 
     service_key: SecretStr | None = None
+    service_key_file: str | None = None
+    #: Non più usato: resta per dire nel log perché il sync si salta.
     token: SecretStr | None = None
     archive_url: str = "https://egms.land.copernicus.eu/insar-api/archive"
     #: La finestra della release, una all'anno. Non è sempre di cinque anni: dopo
     #: la 2020-2024 è uscita la 2020-2025 (verificato sull'archivio il 2026-11-02).
     release: str = "2020_2025"
-    #: Dove tenere i GeoTIFF delle tile (~4 MB l'uno, due per tile).
-    cartella: str = "/tmp/limen-egms"
+    #: Dove tenere i GeoTIFF delle tile (~4 MB l'uno, due per tile; ~0,5 GB
+    #: per l'Italia). Deve sopravvivere ai riavvii: in Docker è il volume
+    #: ``/var/lib/limen/egms`` (compose), fuori da Docker ``data/egms``.
+    cartella: str = "data/egms"
 
     @property
     def attivo(self) -> bool:
-        return any(
-            v is not None and bool(v.get_secret_value().strip())
-            for v in (self.service_key, self.token)
-        )
+        chiave = self.service_key is not None and bool(self.service_key.get_secret_value().strip())
+        return chiave or bool((self.service_key_file or "").strip())
 
 
 class CopernicusSettings(BaseSettings):

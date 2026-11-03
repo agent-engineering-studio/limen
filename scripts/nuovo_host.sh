@@ -53,7 +53,7 @@ dotenv() {  # dotenv NOME: il valore che compose userà
   printf '%s' "$AMBIENTE" | { grep -E "^$1=" || true; } | tail -n 1 | cut -d= -f2-
 }
 for nome in LIMEN_DATA_ROOT LIMEN_DATASETS_DIR LIMEN_REPORTS_HOST_DIR LIMEN_MLRUNS_DIR \
-  LIMEN_SENSORI_DIR BACKUP__BUCKET BACKUP__ROOT SCHEDULER__NIGHTLY_HOUR_UTC POSTGIS_BASE; do
+  LIMEN_EGMS_DIR LIMEN_SENSORI_DIR BACKUP__BUCKET BACKUP__ROOT SCHEDULER__NIGHTLY_HOUR_UTC POSTGIS_BASE; do
   printf -v "$nome" '%s' "$(dotenv "$nome")"
 done
 RADICE="${LIMEN_DATA_ROOT:-$(pwd)/data}"
@@ -128,7 +128,7 @@ ok "volumi esterni di GeoServer"
 
 # API e worker girano come l'utente `limen` dell'immagine, non come chi lancia
 # lo script: le cartelle che scrivono (cataloghi, report, artefatti MLflow)
-# devono essere sue, o ingest, calibrazione e ripristino falliscono su
+# devono essere sue, o ingest, calibrazione, sync EGMS e ripristino falliscono su
 # "Permission denied" (Codex, #314). L'uid si chiede all'immagine; il chown
 # lo fa un container, così sull'host non serve sudo.
 say "proprietario delle cartelle scritte dai container"
@@ -145,6 +145,8 @@ scritte=(
   "${LIMEN_DATASETS_DIR:-$RADICE/datasets}"
   "${LIMEN_REPORTS_HOST_DIR:-$RADICE/reports}"
   "${LIMEN_MLRUNS_DIR:-$RADICE/mlruns}"
+  # Le tile EGMS: `limen sync-egms` ci scrive, e i sync dopo le ritrovano.
+  "${LIMEN_EGMS_DIR:-$RADICE/egms}"
 )
 for d in "${scritte[@]}"; do
   mkdir -p "$d"
