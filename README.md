@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="docs/images/banner.png" alt="Limen — Landslide Monitoring Framework" width="100%">
-</p>
-
 <h1 align="center">Limen</h1>
 
 <p align="center">
