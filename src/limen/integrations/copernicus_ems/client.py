@@ -18,26 +18,44 @@ mappatura. Su EMSR762 l'AOI01 misura ~750 km² e l'allagamento 1,19: prendere
 l'AOI significherebbe dichiarare allagate centinaia di celle asciutte e
 trasformare il FAR in un numero senza senso.
 
-Il pacchetto prodotti pesa ~100 MB per attivazione perché contiene gli
-ortofotomosaici; i vettori che ci interessano sono ~20 KB. Si scarica una
-volta, si estraggono i soli `observedEventA` nella cache, e lo zip si butta:
-i riavvii successivi leggono i vettori e non toccano la rete.
+Ogni prodotto pubblica i suoi vettori anche da soli, in GeoJSON (da decine
+di KB a 17 MB, ~210 MB tutta l'Italia): non serve il pacchetto prodotti da
+~100 MB ad attivazione con gli ortofotomosaici, che per qualche attivazione
+risponde 403 mentre i GeoJSON sono aperti (EMSR664, Emilia-Romagna maggio
+2023: 6.334 poligoni allagati che lo zip non dava). Verificato su 77 layer di
+10 attivazioni: stessi poligoni, nello stesso ordine, quindi gli id di
+`flood_events` non cambiano. Elenco, dettaglio e lettura dei layer vengono dal
+pacchetto ``copernicus-ems`` (estratto da Limen, Apache-2.0); qui restano il
+traffico via ``fetch_with_retry``, la cache su disco e le righe per il DB.
 """
 
 from __future__ import annotations
 
-import io
-import re
-import shutil
-import zipfile
+import json
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass
-from datetime import UTC, datetime
+from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from copernicus_ems import (
+    ACTIVATIONS_URL,
+    DETAIL_URL,
+    FLOOD_EVENT_TYPE,
+    FLOOD_NOTATIONS,
+    OBSERVED_EVENT,
+    Activation,
+    EmsError,
+    Product,
+    activations_url,
+    detail_url,
+    parse_activations,
+    parse_detail,
+    parse_layer,
+    select_activations,
+)
 from shapely import wkt
-from shapely.geometry import MultiPolygon
+from shapely.geometry import MultiPolygon, shape
 from shapely.geometry.base import BaseGeometry
 
 from limen.core.logging import get_logger
@@ -46,44 +64,10 @@ from limen.integrations.dem.zonal import geom_reprojector
 
 log = get_logger(__name__)
 
-_API = "https://rapidmapping.emergency.copernicus.eu/backend/dashboard-api"
-ACTIVATIONS_URL = f"{_API}/public-activations-info/"
-ACTIVATION_DETAIL_URL = f"{_API}/public-activations/"
-PRODUCTS_URL = "https://rapidmapping.emergency.copernicus.eu/backend/{code}/{code}_products.zip"
-
 #: Il visore pubblico espone le attivazioni dal 2023. Le precedenti vivono sul
 #: sito storico senza un'API documentata, quindi la copertura del catalogo
 #: parte da lì — un fatto da riportare nel report, non da nascondere.
 CATALOGUE_FROM_YEAR = 2023
-
-#: `event_type` da tenere. Un'attivazione alluvionale mappa anche frane
-#: innescate dalla stessa pioggia (`6-Mass Movement`): sono eventi veri ma di
-#: un altro pericolo, e infilarli qui gonfierebbe il truth set del flood con
-#: celle che non si sono allagate.
-FLOOD_EVENT_TYPE = "5-Flood"
-
-#: `notation` da tenere. «Flood trace» è il segno lasciato dall'acqua: quel
-#: terreno è stato sotto, quindi conta come positivo quanto «Flooded area».
-FLOOD_NOTATIONS = ("Flooded area", "Flood trace")
-
-_OBSERVED_RE = re.compile(r"observedEventA_.*\.(shp|shx|dbf|prj|cpg)$", re.I)
-#: `EMSR762_AOI01_DEL_PRODUCT_observedEventA_v1.shp` →  (1, 'DEL', 0)
-#: `EMSR762_AOI03_DEL_MONIT01_observedEventA_v2.shp` → (3, 'DEL', 1)
-_NAME_RE = re.compile(
-    r"^(?P<code>EMSR\d+)_AOI(?P<aoi>\d+)_(?P<ptype>[A-Z]+)_"
-    r"(?:PRODUCT|MONIT(?P<monit>\d+))_observedEventA",
-    re.I,
-)
-
-
-@dataclass(frozen=True, slots=True)
-class Activation:
-    code: str
-    name: str
-    category: str
-    event_time: datetime
-    countries: tuple[str, ...]
-    sub_category: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,16 +103,6 @@ class ObservationMask:
     area_km2: float | None = None
 
 
-def _parse_dt(raw: str | None) -> datetime | None:
-    if not raw:
-        return None
-    try:
-        parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
-
-
 async def fetch_activations(
     *,
     country: str = "Italy",
@@ -141,182 +115,112 @@ async def fetch_activations(
     l'effetto: parecchie alluvioni italiane sono classificate «Storm», e
     scartarle a priori butterebbe via eventi con perimetri allagati regolari.
     """
-    wanted = {c.lower() for c in categories}
-    out: list[Activation] = []
-    url: str | None = f"{ACTIVATIONS_URL}?limit={page_size}"
+    tutte: list[Activation] = []
+    url: str | None = activations_url(page_size=page_size)
     client = await SharedHttpClient.get()
     while url:
         resp = await fetch_with_retry("GET", url, client=client)
-        payload = resp.json()
-        for row in payload.get("results") or []:
-            countries = tuple(str(c) for c in (row.get("countries") or []))
-            when = _parse_dt(row.get("eventTime"))
-            if country not in countries or when is None:
-                continue
-            if str(row.get("category", "")).lower() not in wanted:
-                continue
-            out.append(
-                Activation(
-                    code=str(row["code"]),
-                    name=str(row.get("name") or row["code"]).strip(),
-                    category=str(row.get("category") or ""),
-                    event_time=when,
-                    countries=countries,
-                    sub_category=(row.get("subCategory") or None),
-                )
-            )
-        url = payload.get("next")
-    out.sort(key=lambda a: a.event_time)
+        pagina = parse_activations(resp.content)
+        tutte.extend(pagina.activations)
+        url = pagina.next_url
+    out = select_activations(tutte, country=country, categories=categories)
     log.info(
         "ems.activations",
         country=country,
-        categories=sorted(wanted),
+        categories=sorted(c.lower() for c in categories),
         found=len(out),
         since_year=CATALOGUE_FROM_YEAR,
     )
     return out
 
 
-async def fetch_activation_detail(code: str) -> list[dict[str, Any]]:
-    """Il dettaglio dell'attivazione: AOI, prodotti, acquisizioni."""
-    resp = await fetch_with_retry(
-        "GET", f"{ACTIVATION_DETAIL_URL}?code={code}", client=await SharedHttpClient.get()
+async def fetch_products(code: str) -> list[Product]:
+    """I prodotti dell'attivazione: AOI, tipo, acquisizioni, layer."""
+    products, _ = await _fetch_detail(code)
+    return products
+
+
+async def _fetch_detail(code: str) -> tuple[list[Product], set[str]]:
+    """I prodotti, e le maschere dei prodotti **consegnati**.
+
+    Consegnato = il dettaglio elenca almeno un layer, di qualunque formato.
+    ``Product.layers`` tiene solo i vettori con GeoJSON, quindi un prodotto
+    di sole ortofoto (COG) vi risulta vuoto come uno mai consegnato: per
+    distinguerli serve il dettaglio grezzo.
+    """
+    resp = await fetch_with_retry("GET", detail_url(code), client=await SharedHttpClient.get())
+    products = parse_detail(resp.content)
+    delivered: set[str] = set()
+    for activation in json.loads(resp.content).get("results") or []:
+        for aoi in activation.get("aois") or []:
+            for product in aoi.get("products") or []:
+                if product.get("layers"):
+                    delivered.add(
+                        f"{code}-aoi{int(aoi.get('number') or 0):02d}-"
+                        f"{str(product.get('type') or '').upper()}"
+                        f"{int(product.get('monitoringNumber') or 0)}"
+                    )
+    return products, delivered
+
+
+def _mask_id(product: Product) -> str:
+    return (
+        f"{product.activation_code}-aoi{product.aoi_number:02d}-{product.product_type}"
+        f"{product.monitoring_number}"
     )
-    results = resp.json().get("results") or []
-    return [row for row in results if isinstance(row, dict)]
 
 
-async def fetch_observation_masks(code: str) -> list[ObservationMask]:
-    """Le maschere di osservazione di un'attivazione, una per prodotto.
+def _mask(product: Product) -> ObservationMask | None:
+    """La maschera di osservazione del prodotto, se ha estensione e immagini.
 
     Geometria da ``aois[].extent``: verificato su EMSR762 AOI01 che coincide
-    con l'``areaOfInterestA`` del pacchetto prodotti (1846,1 km² entrambe),
-    quindi non vale scaricare 100 MB per riottenerla.
+    con l'``areaOfInterestA`` del pacchetto prodotti (1846,1 km² entrambe).
     """
-    out: list[ObservationMask] = []
-    for act in await fetch_activation_detail(code):
-        for aoi in act.get("aois") or []:
-            number = int(aoi.get("number") or 0)
-            raw_extent = aoi.get("extent")
-            if not raw_extent:
-                continue
-            try:
-                geom = wkt.loads(str(raw_extent))
-            except Exception:
-                # Un WKT illeggibile è un dato sporco, non un bug nostro: si
-                # perde quella maschera e si va avanti.
-                log.warning("ems.mask.bad_extent", code=code, aoi=number)
-                continue
-            for product in aoi.get("products") or []:
-                ptype = str(product.get("type") or "").upper()
-                monit = int(product.get("monitoringNumber") or 0)
-                stamps = [
-                    dt
-                    for image in product.get("images") or []
-                    if (dt := _parse_dt(image.get("acquisitionTime"))) is not None
-                ]
-                if not stamps:
-                    continue
-                out.append(
-                    ObservationMask(
-                        id=f"{code}-aoi{number:02d}-{ptype}{monit}",
-                        activation_code=code,
-                        aoi_label=f"AOI{number:02d}",
-                        product_type=ptype,
-                        observed_time=min(stamps),
-                        geom=geom,
-                    )
-                )
-    log.info("ems.observation_masks", code=code, masks=len(out))
-    return out
-
-
-async def _acquisition_times(code: str) -> dict[tuple[int, str, int], datetime]:
-    """``{(aoi_number, product_type, monitoring_number): earliest acquisition}``.
-
-    L'ora di acquisizione non sta nello shapefile ma nel dettaglio
-    dell'attivazione, e serve per distinguerla dall'inizio dell'evento: è
-    l'istante in cui il satellite ha visto l'acqua, quindi come ancora del
-    preavviso conterebbe ore in cui l'allagamento era già in corso.
-    """
-    out: dict[tuple[int, str, int], datetime] = {}
-    for act in await fetch_activation_detail(code):
-        for aoi in act.get("aois") or []:
-            number = int(aoi.get("number") or 0)
-            for product in aoi.get("products") or []:
-                key = (
-                    number,
-                    str(product.get("type") or "").upper(),
-                    int(product.get("monitoringNumber") or 0),
-                )
-                stamps = [
-                    dt
-                    for image in product.get("images") or []
-                    if (dt := _parse_dt(image.get("acquisitionTime"))) is not None
-                ]
-                if not stamps:
-                    continue
-                earliest = min(stamps)
-                if key not in out or earliest < out[key]:
-                    out[key] = earliest
-    return out
-
-
-def _extract_vectors(archive: Path, dest: Path) -> int:
-    """Estrae i soli `observedEventA` dallo zip di zip. Ritorna gli `.shp`."""
-    dest.mkdir(parents=True, exist_ok=True)
-    found = 0
-    with zipfile.ZipFile(archive) as outer:
-        for entry in outer.namelist():
-            if not entry.lower().endswith(".zip"):
-                continue
-            with zipfile.ZipFile(io.BytesIO(outer.read(entry))) as inner:
-                for member in inner.namelist():
-                    if not _OBSERVED_RE.search(member):
-                        continue
-                    target = dest / Path(member).name
-                    with inner.open(member) as src, target.open("wb") as fh:
-                        shutil.copyfileobj(src, fh)
-                    if member.lower().endswith(".shp"):
-                        found += 1
-    return found
-
-
-async def _ensure_vectors(code: str, *, cache_dir: Path) -> Path | None:
-    """Cartella con i vettori dell'attivazione, scaricandoli se assenti."""
-    dest = cache_dir / code
-    if dest.is_dir() and any(dest.glob("*.shp")):
-        log.info("ems.vectors.cache_hit", code=code, path=str(dest))
-        return dest
-
-    url = PRODUCTS_URL.format(code=code)
-    archive = cache_dir / f"{code}_products.zip"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    client = await SharedHttpClient.get()
+    if product.aoi_extent_wkt is None or product.observed_time is None:
+        return None
     try:
-        # Streaming: il pacchetto arriva a ~100 MB e tenerlo in memoria non
-        # serve a niente, dato che dopo l'estrazione lo cancelliamo.
-        async with client.stream("GET", url, follow_redirects=True) as resp:
-            resp.raise_for_status()
-            with archive.open("wb") as fh:
-                async for chunk in resp.aiter_bytes(1 << 20):
-                    fh.write(chunk)
+        geom = wkt.loads(product.aoi_extent_wkt)
+    except Exception:
+        # Un WKT illeggibile è un dato sporco, non un bug nostro: si perde
+        # quella maschera e si va avanti.
+        log.warning("ems.mask.bad_extent", code=product.activation_code, aoi=product.aoi_number)
+        return None
+    return ObservationMask(
+        id=_mask_id(product),
+        activation_code=product.activation_code,
+        aoi_label=f"AOI{product.aoi_number:02d}",
+        product_type=product.product_type,
+        observed_time=product.observed_time,
+        geom=geom,
+    )
+
+
+async def _layer(product: Product, *, cache_dir: Path) -> dict[str, Any] | None:
+    """Il GeoJSON ``observedEventA`` del prodotto, dalla cache o dalla rete."""
+    layer = product.layers.get(OBSERVED_EVENT)
+    if layer is None:
+        return None
+    path = cache_dir / product.activation_code / layer.url.rsplit("/", 1)[-1]
+    if path.exists():
+        try:
+            return parse_layer(path.read_bytes())
+        except EmsError:
+            # Una cache rovinata si riscarica, non ferma l'ingest.
+            log.warning("ems.layer.bad_cache", path=str(path))
+            path.unlink()
+    try:
+        resp = await fetch_with_retry("GET", layer.url, client=await SharedHttpClient.get())
+        resp.raise_for_status()
+        collection = parse_layer(resp.content)
     except Exception as exc:
-        # Un pacchetto non pubblico (EMSR664 risponde 403) non deve fermare
-        # l'ingest degli altri: si registra e si va avanti.
-        log.warning("ems.products.unavailable", code=code, url=url, error=str(exc))
-        archive.unlink(missing_ok=True)
+        # Un layer non leggibile non deve fermare gli altri prodotti.
+        log.warning("ems.layer.unavailable", url=layer.url, error=str(exc)[:200])
         return None
-
-    try:
-        found = _extract_vectors(archive, dest)
-    finally:
-        archive.unlink(missing_ok=True)
-    if not found:
-        log.warning("ems.vectors.none", code=code)
-        return None
-    log.info("ems.vectors.extracted", code=code, shapefiles=found)
-    return dest
+    path.parent.mkdir(parents=True, exist_ok=True)
+    parziale = path.with_suffix(".part")
+    parziale.write_text(json.dumps(collection))
+    parziale.rename(path)
+    return collection
 
 
 def _iter_polygons(geom: BaseGeometry) -> Iterator[BaseGeometry]:
@@ -326,56 +230,91 @@ def _iter_polygons(geom: BaseGeometry) -> Iterator[BaseGeometry]:
         yield geom
 
 
-async def fetch_observed_floods(activation: Activation, *, cache_dir: Path) -> list[ObservedFlood]:
-    """I poligoni allagati di un'attivazione, pronti per `flood_events`.
+@dataclass(frozen=True, slots=True)
+class ActivationTruth:
+    """Poligoni allagati e maschere di un'attivazione, dallo stesso dettaglio."""
 
-    Import locale di geopandas: la lettura di shapefile serve solo qui e
-    all'ingest, non al processo API.
+    floods: list[ObservedFlood]
+    masks: list[ObservationMask]
+    #: Maschere di prodotti che il dettaglio elenca **senza alcun layer**
+    #: (mai consegnati): se un ingest precedente le ha scritte, vanno tolte.
+    #: Un layer elencato ma non scaricato (403, 5xx) non è qui: è un errore
+    #: transitorio, e la maschera di prima resta con i suoi poligoni.
+    absent_masks: list[str] = field(default_factory=list)
+
+
+async def fetch_activation_truth(activation: Activation, *, cache_dir: Path) -> ActivationTruth:
+    """I poligoni allagati e le maschere di osservazione di un'attivazione.
+
+    Una maschera dice «qui il satellite ha guardato»: dentro, l'assenza di un
+    poligono è un *non allagato* osservato. Per questo si scrive **solo per i
+    prodotti il cui layer osservato è stato letto**: con il layer perso (403,
+    5xx, corpo illeggibile) o assente (prodotto annullato) la maschera direbbe
+    asciutto un posto di cui non si sa niente, e il backtest conterebbe falsi
+    allarmi dove manca il dato — «non misurato» letto come «nessun pericolo».
+
+    L'id del poligono porta la posizione della feature **nel layer intero**,
+    prima del filtro: è la stessa posizione che aveva nello shapefile del
+    pacchetto, e tenerla fissa è ciò che rende l'upsert idempotente.
+
+    Il dettaglio si chiede una volta; se non risponde, l'attivazione resta
+    vuota in entrambe le liste.
     """
-    import geopandas as gpd
-
-    folder = await _ensure_vectors(activation.code, cache_dir=cache_dir)
-    if folder is None:
-        return []
-    acquisitions = await _acquisition_times(activation.code)
-
-    out: list[ObservedFlood] = []
-    for shp in sorted(folder.glob("*observedEventA*.shp")):
-        match = _NAME_RE.match(shp.name)
-        aoi_number = int(match.group("aoi")) if match else 0
-        product_type = (match.group("ptype") if match else "DEL").upper()
-        monit = int(match.group("monit") or 0) if match else 0
-        observed = acquisitions.get((aoi_number, product_type, monit))
-
-        frame = gpd.read_file(shp)
-        if frame.empty:
+    try:
+        products, delivered = await _fetch_detail(activation.code)
+    except Exception as exc:
+        log.warning("ems.detail.unavailable", code=activation.code, error=str(exc)[:200])
+        return ActivationTruth(floods=[], masks=[])
+    # Un trasformatore per attivazione, non uno per poligono: costruirlo
+    # dentro il ciclo costa 67 ms a geometria (misurato sui zonali, #104).
+    to_metric = geom_reprojector(src_crs=4326, dst_crs=3035)
+    floods: list[ObservedFlood] = []
+    masks: list[ObservationMask] = []
+    absent: list[str] = []
+    for product in products:
+        if OBSERVED_EVENT not in product.layers:
+            if _mask_id(product) in delivered:
+                # Consegnato ma senza layer osservato (sette prodotti GRA in
+                # Italia, solo ortofoto): può voler dire «nessuna acqua vista»
+                # come no. Non si scrive e non si toglie: resta com'è.
+                log.info(
+                    "ems.mask.delivered_without_event",
+                    code=product.activation_code,
+                    aoi=product.aoi_number,
+                    product=product.label,
+                )
+            else:
+                absent.append(_mask_id(product))
             continue
-        if frame.crs is not None and frame.crs.to_epsg() != 4326:
-            frame = frame.to_crs(4326)
-        # Un trasformatore per file, non uno per poligono: costruirlo dentro
-        # il ciclo costa 67 ms a geometria (misurato sui zonali, #104).
-        to_metric = geom_reprojector(src_crs=4326, dst_crs=3035)
-
-        for position, (_, row) in enumerate(frame.iterrows()):
-            if str(row.get("event_type") or "") != FLOOD_EVENT_TYPE:
+        collection = await _layer(product, cache_dir=cache_dir)
+        if collection is None:
+            continue
+        mask = _mask(product)
+        if mask is not None:
+            masks.append(mask)
+        tag = f"{product.product_type}{product.monitoring_number}"
+        source = product.layers[OBSERVED_EVENT].url.rsplit("/", 1)[-1]
+        for position, feature in enumerate(collection["features"]):
+            props = feature.get("properties") or {}
+            if props.get("event_type") != FLOOD_EVENT_TYPE:
                 continue
-            notation = str(row.get("notation") or "")
-            if notation not in FLOOD_NOTATIONS:
+            notation = str(props.get("notation") or "")
+            if notation not in FLOOD_NOTATIONS or feature.get("geometry") is None:
                 continue
-            geom = row.geometry
-            if geom is None or geom.is_empty:
+            geom = shape(feature["geometry"])
+            if geom.is_empty:
                 continue
             for part_index, part in enumerate(_iter_polygons(geom)):
-                out.append(
+                floods.append(
                     ObservedFlood(
-                        id=f"{activation.code}-aoi{aoi_number:02d}-{product_type}"
-                        f"{monit}-{position}-{part_index}",
+                        id=f"{activation.code}-aoi{product.aoi_number:02d}-{tag}"
+                        f"-{position}-{part_index}",
                         activation_code=activation.code,
-                        aoi_label=f"AOI{aoi_number:02d}",
+                        aoi_label=f"AOI{product.aoi_number:02d}",
                         event_time=activation.event_time,
-                        observed_time=observed,
-                        event_type=str(row.get("obj_desc") or "") or None,
-                        detection_method=str(row.get("det_method") or "") or None,
+                        observed_time=product.observed_time,
+                        event_type=str(props.get("obj_desc") or "") or None,
+                        detection_method=str(props.get("det_method") or "") or None,
                         # Per parte e non per riga: una MultiPolygon diventa
                         # più righe, e ripetere l'area del gruppo su ognuna
                         # conterebbe lo stesso allagamento N volte nei totali.
@@ -386,12 +325,12 @@ async def fetch_observed_floods(activation: Activation, *, cache_dir: Path) -> l
                             "activation_name": activation.name,
                             "category": activation.category,
                             "sub_category": activation.sub_category,
-                            "product": shp.name,
+                            "product": source,
                         },
                     )
                 )
-    log.info("ems.observed_floods", code=activation.code, polygons=len(out))
-    return out
+    log.info("ems.activation_truth", code=activation.code, polygons=len(floods), masks=len(masks))
+    return ActivationTruth(floods=floods, masks=masks, absent_masks=absent)
 
 
 def catalogue_provenance() -> dict[str, str]:
@@ -423,14 +362,16 @@ def catalogue_provenance() -> dict[str, str]:
 __all__ = [
     "ACTIVATIONS_URL",
     "CATALOGUE_FROM_YEAR",
+    "DETAIL_URL",
     "FLOOD_EVENT_TYPE",
     "FLOOD_NOTATIONS",
     "Activation",
+    "ActivationTruth",
+    "EmsError",
     "ObservationMask",
     "ObservedFlood",
     "catalogue_provenance",
-    "fetch_activation_detail",
+    "fetch_activation_truth",
     "fetch_activations",
-    "fetch_observation_masks",
-    "fetch_observed_floods",
+    "fetch_products",
 ]

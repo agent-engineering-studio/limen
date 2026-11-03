@@ -186,6 +186,22 @@ async def test_upsert_is_idempotent(reset_db: None, pg_pool: object) -> None:
     assert int(masks) == 1
 
 
+async def test_masks_of_undelivered_products_are_removed(reset_db: None, pg_pool: object) -> None:
+    """Un ingest vecchio scriveva maschere per prodotti mai consegnati: il
+    nuovo le toglie, nella stessa transazione delle scritte, e solo quelle."""
+    await _seed_grid()
+    stale = _mask()
+    await upsert_masks([stale])
+
+    scritte, tolte = await upsert_masks([], absent=[stale.id, "mai-esistita"])
+
+    assert (scritte, tolte) == (0, 1)
+    async with acquire() as conn:
+        rimaste = await conn.fetchval("SELECT count(*) FROM flood_observation_masks")
+    assert int(rimaste) == 0
+    assert await upsert_masks([]) == (0, 0)
+
+
 async def test_provenance_summary_reports_source_coverage(reset_db: None, pg_pool: object) -> None:
     """Il report deve poter dire fonte, data e area senza rifare i conti."""
     await _seed_grid()
