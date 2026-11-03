@@ -1,30 +1,36 @@
 """Client Copernicus EMS: il truth set dell'alluvione, senza rete (#116).
 
-Il client parla con un servizio pubblico ma il valore da provare sta nel
-parsing: quali attivazioni tenere, quale acquisizione ancora il preavviso,
-come si leggono i vettori "observedEventA" da uno zip di zip. Qui la rete è
-simulata con `respx`, i vettori sono shapefile veri scritti in una cartella
-temporanea.
+Il parsing sta nel pacchetto ``copernicus-ems``, che ha i suoi test; qui si
+prova quello che resta di Limen: quali attivazioni si tengono, come una
+feature diventa una riga di `flood_events` (id stabile, area per parte, ora
+del satellite), la cache dei layer e il degrado di un layer illeggibile. La
+rete è simulata con `respx`.
 """
 
 from __future__ import annotations
 
-import io
-import zipfile
+import json
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
 import respx
-from shapely.geometry import MultiPolygon, Polygon
+from shapely.geometry import MultiPolygon, Polygon, mapping
 
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.copernicus_ems import client as ems
 
-_DETAIL = {
+_LAYER_URL = (
+    "https://s3.example/EMSR762/AOI01/DEL_PRODUCT/EMSR762_AOI01_DEL_PRODUCT_observedEventA_v1.json"
+)
+_LAYER_NAME = "EMSR762/AOI01/DEL_PRODUCT/EMSR762_AOI01_DEL_PRODUCT_observedEventA_v1_VT"
+
+_DETAIL: dict[str, Any] = {
     "results": [
         {
+            "code": "EMSR762",
             "aois": [
                 {
                     "number": 1,
@@ -38,20 +44,68 @@ _DETAIL = {
                                 {"acquisitionTime": "2024-09-18T06:00:00Z"},
                                 {"acquisitionTime": None},
                             ],
+                            "layers": [{"name": _LAYER_NAME, "format": "vt", "json": _LAYER_URL}],
                         },
                         # Prodotto senza immagini: nessuna maschera, nessun istante.
-                        {"type": "grad", "monitoringNumber": 1, "images": []},
+                        {"type": "gra", "monitoringNumber": 1, "images": [], "layers": []},
+                        # Consegnato ma di sole ortofoto: né maschera né rimozione.
+                        {
+                            "type": "gra",
+                            "monitoringNumber": 2,
+                            "images": [{"acquisitionTime": "2024-09-19T10:00:00Z"}],
+                            "layers": [{"name": "EMSR762_ORTHO.tif", "format": "cog"}],
+                        },
                     ],
                 },
                 # WKT illeggibile: dato sporco, si salta e si prosegue.
-                {"number": 2, "extent": "NON E' WKT", "products": []},
+                {
+                    "number": 2,
+                    "extent": "NON E' WKT",
+                    "products": [
+                        {"type": "del", "images": [{"acquisitionTime": "2024-09-18T06:00:00"}]}
+                    ],
+                },
                 # Nessuna estensione: niente da mascherare.
                 {"number": 3, "extent": None, "products": []},
-            ]
-        },
-        "non un dizionario",
+            ],
+        }
     ]
 }
+
+_FLOODED = MultiPolygon(
+    [
+        Polygon([(16.0, 41.0), (16.01, 41.0), (16.01, 41.01), (16.0, 41.01)]),
+        Polygon([(16.1, 41.1), (16.12, 41.1), (16.12, 41.12), (16.1, 41.12)]),
+    ]
+)
+
+
+def _feature(event_type: str, notation: str, **extra: str) -> dict[str, Any]:
+    return {
+        "type": "Feature",
+        "properties": {"event_type": event_type, "notation": notation, **extra},
+        "geometry": mapping(_FLOODED),
+    }
+
+
+# La prima feature non passa il filtro: la posizione nell'id resta quella nel
+# layer intero, come nello shapefile del pacchetto, o l'upsert duplicherebbe.
+_LAYER = {
+    "type": "FeatureCollection",
+    "features": [
+        _feature("3-Fire", "Flooded area"),
+        _feature("5-Flood", "Flooded area", obj_desc="Riverine flood", det_method="Radar"),
+        _feature("5-Flood", "Burnt area"),
+    ],
+}
+
+_ACTIVATION = ems.Activation(
+    code="EMSR762",
+    name="Emilia",
+    category="Flood",
+    event_time=datetime(2024, 9, 17, tzinfo=UTC),
+    countries=("Italy",),
+)
 
 
 @pytest.fixture(autouse=True)
@@ -60,11 +114,10 @@ async def _close_http():
     await SharedHttpClient.aclose()
 
 
-def test_parse_dt_handles_z_naive_and_garbage() -> None:
-    assert ems._parse_dt("2024-09-18T06:00:00Z") == datetime(2024, 9, 18, 6, tzinfo=UTC)
-    assert ems._parse_dt("2024-09-18T06:00:00") == datetime(2024, 9, 18, 6, tzinfo=UTC)
-    assert ems._parse_dt("ieri") is None
-    assert ems._parse_dt(None) is None
+def _detail() -> None:
+    respx.get(url__startswith=f"{ems.DETAIL_URL}?code=EMSR762").mock(
+        return_value=httpx.Response(200, json=_DETAIL)
+    )
 
 
 @respx.mock
@@ -137,174 +190,87 @@ async def test_fetch_activations_paginates_filters_and_sorts() -> None:
 
 
 @respx.mock
-async def test_observation_masks_skip_bad_extents_and_empty_products() -> None:
-    respx.get(f"{ems.ACTIVATION_DETAIL_URL}?code=EMSR762").mock(
-        return_value=httpx.Response(200, json=_DETAIL)
-    )
-    masks = await ems.fetch_observation_masks("EMSR762")
+async def test_observed_floods_come_from_the_geojson_layer(tmp_path: Path) -> None:
+    """Una MultiPolygon diventa più righe, **ognuna con la propria area**:
+    ripetere l'area del gruppo su ogni parte conterebbe lo stesso allagamento
+    N volte."""
+    _detail()
+    layer = respx.get(_LAYER_URL).mock(return_value=httpx.Response(200, json=_LAYER))
 
-    assert len(masks) == 1
-    mask = masks[0]
+    truth = await ems.fetch_activation_truth(_ACTIVATION, cache_dir=tmp_path)
+    out = truth.floods
+
+    assert {f.id for f in out} == {"EMSR762-aoi01-DEL0-1-0", "EMSR762-aoi01-DEL0-1-1"}
+    assert all(f.observed_time == datetime(2024, 9, 18, 6, tzinfo=UTC) for f in out)
+    assert out[0].detection_method == "Radar"
+    assert out[0].event_type == "Riverine flood"
+    assert out[0].area_km2 != out[1].area_km2
+    assert all(f.area_km2 > 0 for f in out)
+    assert out[0].attributes is not None
+    assert out[0].attributes["product"] == "EMSR762_AOI01_DEL_PRODUCT_observedEventA_v1.json"
+
+    # Il secondo giro legge la cache: il layer non si richiede.
+    again = await ems.fetch_activation_truth(_ACTIVATION, cache_dir=tmp_path)
+    assert [f.id for f in again.floods] == [f.id for f in out]
+    assert layer.call_count == 1
+    cached = tmp_path / "EMSR762" / _LAYER_URL.rsplit("/", 1)[-1]
+    assert json.loads(cached.read_text()) == json.loads(json.dumps(_LAYER))
+
+
+@respx.mock
+async def test_a_mask_only_where_the_observed_layer_was_read(tmp_path: Path) -> None:
+    """La maschera dice «qui si è guardato»: senza il layer letto direbbe
+    asciutto un posto di cui non si sa niente.
+
+    Nel dettaglio: AOI01 DEL ha il layer (maschera, con l'istante più antico);
+    AOI01 GRA non ha immagini né layer; AOI02 ha immagini ma né layer né un WKT
+    leggibile. Resta una maschera sola.
+    """
+    _detail()
+    respx.get(_LAYER_URL).mock(return_value=httpx.Response(200, json=_LAYER))
+    truth = await ems.fetch_activation_truth(_ACTIVATION, cache_dir=tmp_path)
+    (mask,) = truth.masks
     assert mask.id == "EMSR762-aoi01-DEL0"
+    # Senza alcun layer nel dettaglio: mai consegnati, da togliere se un
+    # ingest precedente li aveva scritti. Il GRA2 di sole ortofoto è stato
+    # consegnato: non si scrive e non si toglie.
+    assert truth.absent_masks == ["EMSR762-aoi01-GRA1", "EMSR762-aoi02-DEL0"]
+    assert "EMSR762-aoi01-GRA2" not in {m.id for m in truth.masks}
     assert mask.aoi_label == "AOI01"
-    # L'istante più antico: è quando il satellite ha visto per la prima volta.
     assert mask.observed_time == datetime(2024, 9, 18, 6, tzinfo=UTC)
 
 
 @respx.mock
-async def test_acquisition_times_keep_the_earliest_per_product() -> None:
-    respx.get(f"{ems.ACTIVATION_DETAIL_URL}?code=EMSR762").mock(
-        return_value=httpx.Response(200, json=_DETAIL)
-    )
-    times = await ems._acquisition_times("EMSR762")
-    assert times == {(1, "DEL", 0): datetime(2024, 9, 18, 6, tzinfo=UTC)}
-
-
-def _zip_of_zips(members: dict[str, bytes]) -> bytes:
-    inner = io.BytesIO()
-    with zipfile.ZipFile(inner, "w") as zf:
-        for name, data in members.items():
-            zf.writestr(name, data)
-    outer = io.BytesIO()
-    with zipfile.ZipFile(outer, "w") as zf:
-        zf.writestr("EMSR762_AOI01_DEL_PRODUCT.zip", inner.getvalue())
-        zf.writestr("leggimi.txt", b"non uno zip")
-    return outer.getvalue()
-
-
-def test_extract_vectors_keeps_only_observed_event_files(tmp_path: Path) -> None:
-    archive = tmp_path / "products.zip"
-    archive.write_bytes(
-        _zip_of_zips(
-            {
-                "EMSR762_AOI01_DEL_PRODUCT_observedEventA_v1.shp": b"shp",
-                "EMSR762_AOI01_DEL_PRODUCT_observedEventA_v1.dbf": b"dbf",
-                "EMSR762_AOI01_DEL_PRODUCT_areaOfInterestA_v1.shp": b"altro",
-            }
-        )
-    )
-    found = ems._extract_vectors(archive, tmp_path / "out")
-    assert found == 1
-    names = sorted(p.name for p in (tmp_path / "out").iterdir())
-    assert names == [
-        "EMSR762_AOI01_DEL_PRODUCT_observedEventA_v1.dbf",
-        "EMSR762_AOI01_DEL_PRODUCT_observedEventA_v1.shp",
-    ]
-
-
-async def test_ensure_vectors_uses_the_cache(tmp_path: Path) -> None:
-    folder = tmp_path / "EMSR762"
-    folder.mkdir()
-    (folder / "x_observedEventA_v1.shp").write_bytes(b"")
-    # Nessuna rete simulata: se provasse a scaricare, fallirebbe.
-    assert await ems._ensure_vectors("EMSR762", cache_dir=tmp_path) == folder
+async def test_an_unreadable_layer_gives_neither_polygons_nor_mask(tmp_path: Path) -> None:
+    _detail()
+    respx.get(_LAYER_URL).mock(return_value=httpx.Response(403))
+    truth = await ems.fetch_activation_truth(_ACTIVATION, cache_dir=tmp_path)
+    assert truth.floods == [] and truth.masks == []
+    # Il layer c'è ma non è arrivato: errore transitorio, la maschera di
+    # prima (con i suoi poligoni) resta.
+    assert "EMSR762-aoi01-DEL0" not in truth.absent_masks
+    assert not (tmp_path / "EMSR762").exists()
 
 
 @respx.mock
-async def test_ensure_vectors_downloads_and_extracts(tmp_path: Path) -> None:
-    respx.get(ems.PRODUCTS_URL.format(code="EMSR762")).mock(
-        return_value=httpx.Response(
-            200, content=_zip_of_zips({"EMSR762_AOI01_DEL_PRODUCT_observedEventA_v1.shp": b"x"})
-        )
-    )
-    folder = await ems._ensure_vectors("EMSR762", cache_dir=tmp_path)
-    assert folder is not None and any(folder.glob("*.shp"))
-    # Il pacchetto da ~100 MB non resta su disco dopo l'estrazione.
-    assert not (tmp_path / "EMSR762_products.zip").exists()
+async def test_a_corrupt_cache_is_downloaded_again(tmp_path: Path) -> None:
+    _detail()
+    layer = respx.get(_LAYER_URL).mock(return_value=httpx.Response(200, json=_LAYER))
+    cached = tmp_path / "EMSR762" / _LAYER_URL.rsplit("/", 1)[-1]
+    cached.parent.mkdir()
+    cached.write_text("{troncato")
+    truth = await ems.fetch_activation_truth(_ACTIVATION, cache_dir=tmp_path)
+    assert len(truth.floods) == 2
+    assert layer.call_count == 1
 
 
 @respx.mock
-async def test_ensure_vectors_degrades_on_a_private_package(tmp_path: Path) -> None:
-    """EMSR664 risponde 403: un pacchetto non pubblico non ferma l'ingest."""
-    respx.get(ems.PRODUCTS_URL.format(code="EMSR664")).mock(return_value=httpx.Response(403))
-    assert await ems._ensure_vectors("EMSR664", cache_dir=tmp_path) is None
-    assert not (tmp_path / "EMSR664_products.zip").exists()
-
-
-@respx.mock
-async def test_ensure_vectors_without_observed_events_is_none(tmp_path: Path) -> None:
-    respx.get(ems.PRODUCTS_URL.format(code="EMSR900")).mock(
-        return_value=httpx.Response(
-            200, content=_zip_of_zips({"EMSR900_AOI01_DEL_PRODUCT_areaOfInterestA_v1.shp": b"x"})
-        )
+async def test_an_unreachable_detail_is_empty(tmp_path: Path) -> None:
+    respx.get(url__startswith=f"{ems.DETAIL_URL}?code=EMSR762").mock(
+        return_value=httpx.Response(200, text="<html>manutenzione</html>")
     )
-    assert await ems._ensure_vectors("EMSR900", cache_dir=tmp_path) is None
-
-
-def test_iter_polygons_explodes_multipolygons() -> None:
-    a = Polygon([(0, 0), (1, 0), (1, 1)])
-    b = Polygon([(2, 2), (3, 2), (3, 3)])
-    assert list(ems._iter_polygons(MultiPolygon([a, b]))) == [a, b]
-    assert list(ems._iter_polygons(a)) == [a]
-
-
-@respx.mock
-async def test_fetch_observed_floods_reads_real_shapefiles(tmp_path: Path) -> None:
-    """Uno shapefile vero, con le righe che il filtro deve scartare.
-
-    Una MultiPolygon diventa più righe, **ognuna con la propria area**: ripetere
-    l'area del gruppo su ogni parte conterebbe lo stesso allagamento N volte.
-    """
-    import geopandas as gpd
-
-    folder = tmp_path / "EMSR762"
-    folder.mkdir()
-    flooded = MultiPolygon(
-        [
-            Polygon([(16.0, 41.0), (16.01, 41.0), (16.01, 41.01), (16.0, 41.01)]),
-            Polygon([(16.1, 41.1), (16.12, 41.1), (16.12, 41.12), (16.1, 41.12)]),
-        ]
-    )
-    frame = gpd.GeoDataFrame(
-        {
-            "event_type": ["5-Flood", "5-Flood", "3-Fire"],
-            "notation": ["Flooded area", "Burnt area", "Flooded area"],
-            "obj_desc": ["Riverine flood", "x", "y"],
-            "det_method": ["Radar", "", ""],
-        },
-        geometry=[flooded, flooded, flooded],
-        crs="EPSG:4326",
-    )
-    frame.to_file(folder / "EMSR762_AOI01_DEL_PRODUCT_observedEventA_v1.shp")
-
-    respx.get(f"{ems.ACTIVATION_DETAIL_URL}?code=EMSR762").mock(
-        return_value=httpx.Response(200, json=_DETAIL)
-    )
-    activation = ems.Activation(
-        code="EMSR762",
-        name="Emilia",
-        category="Flood",
-        event_time=datetime(2024, 9, 17, tzinfo=UTC),
-        countries=("Italy",),
-    )
-
-    out = await ems.fetch_observed_floods(activation, cache_dir=tmp_path)
-
-    # Solo la prima riga passa entrambi i filtri, e diventa due parti.
-    assert len(out) == 2
-    assert {f.id for f in out} == {"EMSR762-aoi01-DEL0-0-0", "EMSR762-aoi01-DEL0-0-1"}
-    assert all(f.observed_time == datetime(2024, 9, 18, 6, tzinfo=UTC) for f in out)
-    assert out[0].detection_method == "Radar"
-    # Aree diverse per le due parti: non l'area del gruppo ripetuta.
-    assert out[0].area_km2 != out[1].area_km2
-    assert all(f.area_km2 and f.area_km2 > 0 for f in out)
-
-
-async def test_fetch_observed_floods_without_vectors_is_empty(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    async def _none(code: str, *, cache_dir: Path) -> None:
-        return None
-
-    monkeypatch.setattr(ems, "_ensure_vectors", _none)
-    activation = ems.Activation(
-        code="EMSR1",
-        name="x",
-        category="Flood",
-        event_time=datetime(2024, 1, 1, tzinfo=UTC),
-        countries=("Italy",),
-    )
-    assert await ems.fetch_observed_floods(activation, cache_dir=tmp_path) == []
+    truth = await ems.fetch_activation_truth(_ACTIVATION, cache_dir=tmp_path)
+    assert truth.floods == [] and truth.masks == [] and truth.absent_masks == []
 
 
 def test_catalogue_provenance_declares_no_credentials() -> None:

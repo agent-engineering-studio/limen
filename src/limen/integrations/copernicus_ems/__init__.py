@@ -2,18 +2,18 @@
 
 from limen.integrations.copernicus_ems.client import (
     Activation,
+    ActivationTruth,
     ObservationMask,
     ObservedFlood,
+    fetch_activation_truth,
     fetch_activations,
-    fetch_observation_masks,
-    fetch_observed_floods,
 )
 
 __all__ = [
     "Activation",
+    "ActivationTruth",
     "ObservationMask",
     "ObservedFlood",
+    "fetch_activation_truth",
     "fetch_activations",
-    "fetch_observation_masks",
-    "fetch_observed_floods",
 ]

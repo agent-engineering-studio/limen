@@ -68,12 +68,28 @@ async def upsert_many(items: Iterable[ObservedFlood]) -> int:
     return len(events)
 
 
-async def upsert_masks(items: Iterable[ObservationMask]) -> int:
-    """Scrive le maschere di osservazione. Rieseguibile."""
+async def upsert_masks(
+    items: Iterable[ObservationMask], *, absent: Iterable[str] = ()
+) -> tuple[int, int]:
+    """Scrive le maschere di osservazione e toglie quelle ``absent``. Rieseguibile.
+
+    ``absent`` sono maschere di prodotti che la fonte dice mai consegnati: un
+    ingest precedente le scriveva per ogni prodotto con immagini, anche senza
+    layer osservato, e dicevano «osservato asciutto» dove nessuno aveva
+    guardato. Si tolgono nella stessa transazione delle scritte, così il
+    backtest non vede mai una tabella a metà. Restituisce (scritte, tolte).
+    """
     masks = list(items)
-    if not masks:
-        return 0
+    tolte_ids = list(absent)
+    if not masks and not tolte_ids:
+        return 0, 0
     async with acquire() as conn, conn.transaction():
+        esito = await conn.execute(
+            "DELETE FROM flood_observation_masks"
+            " WHERE id = ANY($1::text[]) AND source = 'copernicus-ems'",
+            tolte_ids,
+        )
+        tolte = int(esito.split()[-1])
         for m in masks:
             await conn.execute(
                 """
@@ -101,8 +117,8 @@ async def upsert_masks(items: Iterable[ObservationMask]) -> int:
                 m.area_km2,
                 m.geom,
             )
-    log.info("flood_observation_masks.upsert_many", count=len(masks))
-    return len(masks)
+    log.info("flood_observation_masks.upsert_many", count=len(masks), removed=tolte)
+    return len(masks), tolte
 
 
 async def observation_times(aoi_id: str) -> dict[str, list[datetime]]:
