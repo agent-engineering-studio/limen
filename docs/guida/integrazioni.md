@@ -116,6 +116,7 @@ pericolo è misurato, `attention` è `null`, non zero.
 | Rotta | Cosa restituisce |
 |---|---|
 | `GET /api/status/jobs` | L'ultimo giro orario nazionale (inizio, fine, esito, durata) e lo stato per regione. |
+| `GET /api/status/llm` | I token consumati dall'AI nel mese, per giorno e per modello, e se l'AI è in pausa (`in_pausa`, con la data di `ripresa`) perché il tetto mensile di spesa è stato raggiunto. I dollari non sono pubblici. |
 | `GET /api/shadow/summary?aoi=&since=` | Quanto il modello ML sfidante diverge dal motore campione, per regione, e il confronto sugli eventi reali. `since` in ISO 8601. Lo sfidante non guida mai gli avvisi. |
 | `GET /api/shadow/reliability?aoi=&since=` | La curva di affidabilità dello sfidante. `sufficient: false` quando gli eventi reali sono troppo pochi per tracciarla. |
 | `GET /health` | Sempre `200`; `status: degraded` se il database o la cache non rispondono. |
@@ -123,7 +124,7 @@ pericolo è misurato, `attention` è `null`, non zero.
 
 ### Inviare un contributo
 
-`POST /api/contributi` è l'unica rotta pubblica che accetta dati: una
+`POST /api/contributi` accetta
 segnalazione su una cella (una frana non censita, un parere sulla
 valutazione, sui pesi o sulle soglie, una mitigazione). Il corpo è JSON con
 `cell_id`, `tipo`, `testo` (da 20 a 4.000 caratteri), un'email e un nome o
@@ -133,6 +134,17 @@ progetto, con lo stato attuale della cella, e la risposta `201` arriva solo
 dopo l'invio. Gli invii sono limitati per indirizzo e in totale ogni ora
 (oltre il limite, `429`); senza un server di posta configurato la rotta
 risponde `503`. Un contributo non cambia mai un punteggio.
+
+### Sensori dei cittadini
+
+| Rotta | Cosa restituisce |
+|---|---|
+| `GET /api/sensori/stazioni?hazard=` | Le stazioni della rete in GeoJSON: tipo, stato, ultima lettura. La posizione delle stazioni di terzi è arrotondata, e non c'è nessun dato personale. In cache per 5 minuti. |
+| `GET /api/sensori/registrazione` | `{"aperta": true}` se il modulo di registrazione accetta richieste. |
+| `POST /api/sensori/registrazione` | La richiesta di registrare un sensore costruito da un cittadino: tipo, posizione, la CSR del dispositivo (o, per un sensore LoRaWAN, l'identificativo The Things Network), un'email, la licenza dei dati (CC-BY-4.0) e l'accettazione delle regole di sicurezza. Non crea un dispositivo: scrive la richiesta e avvisa chi cura il progetto, che la approva a mano. `201` dopo l'invio della mail; `503` se le registrazioni sono chiuse, `429` oltre il limite di invii. |
+
+La chiave privata resta sul dispositivo: Limen firma il certificato e lo
+manda per email. Come funziona la rete è nella pagina **Sensori**.
 
 ## Tile vettoriali
 
@@ -359,5 +371,7 @@ completa e troubleshooting:
 - **Le porte pubblicate dai container si legano al loopback per default.**
   L'esposizione pubblica passa da un reverse proxy su HTTPS; i server MCP
   non vanno esposti senza.
-- **Nessun dato personale conservato.** L'unica rotta che riceve dati da un
-  visitatore, quella dei contributi, li inoltra per email e non li salva.
+- **Dati personali solo dove servono.** I contributi si inoltrano per email
+  e non si salvano. La registrazione di un sensore conserva l'email di chi lo
+  registra, perché serve a mandargli il certificato; si cancella su
+  richiesta.

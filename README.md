@@ -412,7 +412,7 @@ flowchart TB
         CEMS["copernicus-ems<br/>flooded areas"]
         EG["egms-client<br/>ground motion"]
         FC["firms-client<br/>active fires"]
-        ID["ispra-idrogeo<br/>landslides & hazard maps"]
+        ID["ispra-idrogeo<br/>landslides & hazard maps<br/>+ idrogeo-mcp"]
         FWI["fwi-chain<br/>Fire Weather Index"]
         EF["effis-client<br/>burnt areas, official FWI"]
         RT["rainfall-thresholds<br/>rain that triggers landslides"]
@@ -523,6 +523,22 @@ floods: the **IFFI landslide inventory** (721,365 landslides), the national
 any region, province or municipality. Files are cached and refreshed with
 conditional requests, so a nightly update costs a few hundred bytes when
 nothing changed.
+
+Since 0.5 it is also:
+
+| | New | In plain words |
+|---|---|---|
+| 🤖 | **`idrogeo-mcp`, an MCP server** | `pip install "ispra-idrogeo[mcp]"`, add it to Claude Desktop or any agent, and ask *"how many people live in high landslide hazard areas in Sarno, and is anyone monitoring the landslides there?"*. Ten tools: `find_area`, `area_risk`, `area_landslides`, `landslide`, `search_landslides`, `search_events`, `monitoring_sites`, `webcams`, `code_list`, `download_dataset`. All read-only except the download; answers stop at `limit` rows, so an agent never receives 700,000 landslides at once. |
+| ⌨️ | **The `idrogeo` command** | `idrogeo fetch frane_piff --area molise`, `idrogeo summary pir comuni 72006`, `idrogeo landslides --since …`: downloads print the folder, everything else prints JSON Lines, ready for `jq` or a database loader. |
+| 🗺️ | **GeoDataFrames and GeoParquet** | The `[geo]` extra turns API rows and downloaded layers into GeoPandas tables. |
+| 🔎 | **Typed search filters** | Landslides by type of movement and activity, events by area and date, monitoring sites by status, without writing PostgREST syntax. |
+| 🏷️ | **Codes decoded** | The API's 73 code lists, in four languages: `strumentazione = [15, 22, 25]` becomes inclinometer, topographic monitoring, SAR interferometry. |
+| 🔁 | **Only what changed** | `modified_since` for incremental updates of landslides, events and monitoring sites. |
+| 📡 | **Monitoring sites and webcams** | Who is watching a landslide, with which instruments. |
+
+```json
+{ "mcpServers": { "idrogeo": { "command": "idrogeo-mcp" } } }
+```
 
 **How Limen uses it.** `limen geodati-sync`, step 3 of the static data at
 `make init`, downloads with it the IFFI inventory of every region (plus

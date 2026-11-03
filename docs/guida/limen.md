@@ -116,6 +116,7 @@ conteggio.
 | **Quadro nazionale** (colonna) | Una riga per pericolo con il numero di aree e la classe; cliccandola si filtra la mappa. «Tutti i pericoli» mostra il peggiore in ogni cella |
 | **Solo sopra soglia** | Nasconde le celle sotto Moderato: un quarto d'Italia è in classe bassa e coprirebbe la mappa. Le celle non misurate restano visibili |
 | **Livelli** | Contesto da sovrapporre: allerte ufficiali di oggi, frane censite (IFFI), pericolosità PAI, pericolosità idraulica, alluvioni osservate, aree bruciate |
+| **2D / Rilievo** | «Rilievo» inclina la mappa e alza il terreno dal modello digitale a 5 m, esagerato 1,5 volte (lo dice la legenda): si vede su quale versante e in quale fondovalle cadono le celle colorate. Tornando a 2D non si ricarica niente. La vista «3D» è ancora spenta |
 | **Timeline** Ora / +24 / +48 / +72 h | Scorre la previsione per cella; sotto ogni scadenza c'è il momento vero, e una scadenza già passata lo dice |
 | **Ispettore** (clic su una cella) | Il punteggio di ogni pericolo, le sue componenti, la pioggia prevista; sul futuro mostra il valore previsto e dichiara che il resto è di adesso. In fondo, **«Come nasce questo numero»**: chi ha fatto cosa (formula, meteo, ML, AI), la pioggia secondo cinque modelli meteo e il link al racconto della regione in «Regioni da monitorare» |
 | **Ricerca** (⌘K) | Porta la mappa sul comune e ne evidenzia il confine |
@@ -189,19 +190,25 @@ chiave a pagamento necessaria.
 | Frane già avvenute (IFFI) | ISPRA | Quante frane cadono entro 500 m dalla cella: l'indicatore più predittivo che esista | tutte le celle |
 | Pericolosità da frana (PAI) | ISPRA, mosaico dei Piani di Assetto Idrogeologico | La classificazione ufficiale P1-P4 | 167.693 celle (dentro le aree perimetrate) |
 | Pericolosità idraulica | ISPRA, mosaico PGRA | Quanto è allagabile la cella | 132.535 celle (bacini studiati) |
-| Forma del terreno | Modello digitale TINITALY (INGV) | Pendenza media della cella | 99,7% |
-| Tipo di roccia | Carta geologica ISPRA | Peso litologico (argille e flysch franano più dei calcari) | 99,8% |
+| Forma del terreno | Modello digitale HR-DTM a 5 m (IRPI-CNR) | Pendenza media della cella; il rilievo della mappa | 99,7% |
+| Tipo di roccia | Carta geolitologica d'Italia 1:500.000 (Geoportale nazionale) | Peso litologico (argille e flysch franano più dei calcari) | 99,8% |
 | Uso del suolo | CORINE Land Cover (Copernicus) | Combustibile per l'incendio, tessuto urbano per l'esposizione | tutte |
 | Suolo impermeabile | Copernicus Imperviousness | Amplifica la pioggia degli allagamenti in città | tutte |
 | Strade, ferrovie | OpenStreetMap | Esposizione: quanto conta allertare una cella | tutte |
 | Confini | ISTAT | Comuni e regioni | 7.901 comuni |
+
+Questi dati non si copiano a mano: alla prima installazione Limen li scarica
+da solo dalle fonti ufficiali (IdroGEO per frane e pericolosità, ISTAT,
+CORINE, geologia, il modello del terreno da Zenodo), circa 25 GB, e dopo
+richiede solo i file che sono cambiati.
 
 ### I dati veloci: cosa sta succedendo
 
 | Dato | Fonte | Cadenza | Uso |
 |---|---|---|---|
 | Pioggia, umidità del suolo, temperatura, vento | Open-Meteo (modelli ECMWF e ICON), **istanza ospitata su questo server** | ogni ora | Innesco delle frane, pioggia degli allagamenti, indice incendi |
-| Portata dei fiumi | GloFAS (Copernicus), via Open-Meteo pubblico | ogni 6 ore | Ramo fluviale degli allagamenti |
+| Portata dei fiumi | GloFAS (Copernicus), scaricato dal Data Store di Copernicus; Open-Meteo pubblico di riserva | ogni 6 ore | Ramo fluviale degli allagamenti |
+| Pioggia misurata | Protezione Civile, «Merging» (radar corretto con i pluviometri, 1 km) | a ogni giro | La pioggia già caduta: le ultime 24 ore per gli allagamenti, gli ultimi 3 giorni per la catena degli incendi |
 | Onde e mareggiate | Open-Meteo Marine | ogni ora | Componente idrologica delle frane costiere |
 | Terremoti | INGV (catalogo e ShakeMap) | ogni ora | Componente sismica delle frane |
 | Fuochi attivi | NASA FIRMS | ogni 45 minuti | Apre la finestra post-incendio in poche ore |
@@ -213,8 +220,10 @@ Perché un'istanza meteo propria: l'interfaccia pubblica di Open-Meteo ha un
 tetto di 10.000 richieste al giorno, e il calcolo orario di tutta Italia ne
 chiede diecimila a ogni giro. Quando il tetto è saltato, allagamenti e
 incendio hanno dato zero su tutta l'Italia per **mancanza di dato**, non per
-quiete. Oggi previsioni e archivio vengono da un'istanza sul server; solo la
-portata dei fiumi (GloFAS) resta pubblica, perché non si può ospitare.
+quiete. Oggi previsioni e archivio vengono da un'istanza sul server. La
+portata dei fiumi (GloFAS) non si può ospitare: Limen la scarica direttamente
+da Copernicus, e torna all'interfaccia pubblica di Open-Meteo solo se quel
+download manca.
 
 ### I dati di verità: per sapere se funziona
 
@@ -223,6 +232,7 @@ portata dei fiumi (GloFAS) resta pubblica, perché non si può ospitare.
 | Frane innescate da pioggia, datate | Catalogo e-ITALICA, CNR-IRPI (6.312 frane, 1996-2021) | Tarare le soglie di pioggia e verificare il motore frane |
 | Alluvioni osservate da satellite | Copernicus Emergency Management Service | Verificare il motore degli allagamenti |
 | Perimetri degli incendi | Copernicus EFFIS | Verificare il motore incendio |
+| Eventi dalla cronaca | Ogni mattina, i titoli dei quotidiani su frane, allagamenti e incendi; un evento diventa verità solo quando lo riportano **due testate diverse** e il comune è riconoscibile | Misurare quante ore prima Limen aveva visto un evento reale |
 | Rianalisi meteo | ERA5 e CERRA (Copernicus) | Rigiocare il passato, costruire le climatologie |
 
 ## I tre motori
@@ -255,10 +265,21 @@ punteggio = 0,35 × il posto (S)
 <!-- componente: figura-frane -->
 
 La **soglia di Caine** dice, per ogni durata, l'intensità oltre la quale le
-frane cominciano davvero ad accadere: 7,2 mm bastano se cadono in un'ora, ne
-servono 28,4 in un giorno. Le soglie sono state ricalcolate sul catalogo
-e-ITALICA (5.974 eventi di pioggia con frana): sopra la soglia sta il 95%
-delle frane vere.
+frane cominciano davvero ad accadere. Le soglie sono state ricalcolate sul
+catalogo e-ITALICA (5.974 eventi di pioggia con frana), una curva per
+macro-area: sopra la soglia sta il 95% delle frane vere.
+
+| Macro-area | In un'ora bastano | In un giorno servono |
+|---|---|---|
+| Nord (dal Piemonte all'Emilia-Romagna) | 6,4 mm | 30,0 mm |
+| Centro (Toscana, Umbria, Marche, Lazio, Abruzzo, Molise) | 8,0 mm | 27,6 mm |
+| Sud e isole | 8,8 mm | 27,0 mm |
+| Altre aree (curva prudente) | 7,2 mm | 28,4 mm |
+
+Abruzzo e Molise stanno nel Centro e non nel Sud dell'ISTAT, perché è con
+questo raggruppamento che le curve sono state ricavate dagli eventi: fino a
+novembre 2026 le due regioni giravano su una curva calcolata senza le loro
+frane.
 
 Classi: nessuno sotto 0,15, basso fino a 0,35, moderato fino a 0,55, alto
 fino a 0,75, molto alto oltre.
@@ -283,6 +304,15 @@ punteggio = suscettibilità idraulica × max(pioggia, fiume)
 - **Pioggia**: la pioggia **prevista nelle prossime 72 ore** sul nodo della
   cella, oltre la soglia di 40 mm, fino alla saturazione a 120 mm; smorzata
   se il suolo è asciutto, amplificata dove il suolo è cementato.
+- **Pioggia già caduta**: una finestra che comincia adesso perde il
+  nubifragio mentre cade. A Melito di Porto Salvo, la mattina del 10 ottobre
+  2026, la previsione dava 20 mm e il radar ne aveva già misurati 152. Per
+  questo la pioggia vale il **più alto** fra «prevista nelle 72 ore» e
+  «misurata nelle ultime 24 ore + prevista nelle 48 successive», con la
+  misura dal «Merging» della Protezione Civile (radar corretto con i
+  pluviometri). Con il radar Melito passa da 0,00 a 0,79. Un fotogramma
+  radar troppo vecchio o un pixel che salta di centinaia di millimetri in
+  mezz'ora non vale: la cella resta sulla previsione, mai «asciutta».
 - **Fiume**: la portata prevista da GloFAS divisa per la **piena ordinaria di
   quel corso d'acqua** (non per un valore regionale: il Po e un torrente non
   si confrontano). Un fiume senza riferimento è «non so», non «basso».
@@ -337,6 +367,12 @@ punteggio = FWI normalizzato × (0,25 + 0,60 × combustibile + 0,15 × pendenza)
   combustibili grossi sono molto secchi, come a fine estate, e si abbassano
   solo con piogge abbondanti. È il motivo per cui il pericolo può restare
   alto in un ottobre mite, se non piove da settimane.
+- I codici di siccità scendono solo con la pioggia, e il modello meteo a
+  ~9 km non vede i temporali. Per i giorni già passati la catena usa quindi
+  la **pioggia misurata** dal «Merging» della Protezione Civile, e ogni notte
+  rifà gli ultimi tre giorni. A Montegiordano, fra il 14 settembre e il 14
+  ottobre 2026, il modello dava 9 mm contro i 35-45 misurati, e l'FWI del 14
+  ottobre 50 invece di 26.
 - Il **terreno modula il tempo, non si somma**: sotto un acquazzone di
   gennaio nessuna pineta deve risultare pericolosa. La quota fissa del 25% è
   il pericolo di un fuoco che arriva da fuori: la roccia nuda in condizioni
@@ -458,6 +494,16 @@ il sistema segnala in generale (*tasso di base*). Esempio misurato in
 Basilicata sugli incendi del 2025: segnalati il 79% dei giorni con incendio
 vero, contro un tasso di base del 43%.
 
+**Il traguardo, misurato per comune.** Chi riceve un'allerta pensa per
+comuni, non per celle. Il metro con cui Limen si giudica è quindi questo: il
+comune di un evento reale deve essere almeno **Moderato** in un'ora
+qualunque delle **72 ore prima**, per il **90%** degli eventi, tenendo in
+allerta al più il **10%** dei giorni-comune. La seconda condizione è il
+tasso di base: senza, accendere tutto raggiungerebbe il traguardo. Gli
+eventi vengono dalla raccolta quotidiana della cronaca (due testate per
+evento) e dai fact check della pagina **Verifiche**; un evento su cui Limen
+non aveva dati nei giorni prima è «non verificabile», non «mancato».
+
 ## Il layer AI
 
 ### Cosa fa e cosa non può fare
@@ -484,19 +530,39 @@ alta, adesso o prevista, poi le aree in classe alta —: l'AI racconta una
 regione, non la sceglie. Se il modello non ha risposto, il testo non viene
 attribuito all'AI.
 
+### Il revisore serale e la cronaca del mattino
+
+Due lavori dell'AI non scrivono niente sulla mappa:
+
+- **Ogni sera** (21 UTC) un secondo modello, diverso da quello che le ha
+  scritte, rilegge un campione di spiegazioni del giorno e controlla che
+  dicano quello che dicono i dati; i numeri citati si confrontano anche in
+  codice. Il revisore non corregge: segnala, e una risposta mancante vale
+  «non so», mai «fedele».
+- **Ogni mattina** (06 UTC) un modello legge i titoli dei quotidiani degli
+  ultimi tre giorni e dice quali raccontano un evento nuovo, dove e quando.
+  Le verifiche che lo trasformano in verità (due testate, un comune che si
+  riconosce) e la misura dell'anticipo sono codice: il modello non vede né
+  punteggi né soglie. Gli articoli pubblici della pagina **Verifiche**
+  restano scritti a mano.
+
 ### I modelli e dove girano
 
-| Nome nel gateway | Modello | Dove | Uso |
+| Nome | Modello | Dove | Uso |
 |---|---|---|---|
 | `fast`, `chat`, `extract` | Qwen3 4B e 8B | GPU del server (llama.cpp) | Compiti brevi, estrazione per il knowledge graph |
 | `embed` | Qwen3-Embedding 0,6B | CPU del server | Ricerca semantica nei documenti |
-| `quality-local` | GLM-5.2 (colibrì) | server, dal disco | Solo lavori notturni: genera a decine di secondi per parola |
-| `quality-cloud` | Claude Sonnet 5.5 (Anthropic) | API, con tetto di spesa | Spiegazioni e diagnosi delle regioni |
+| `fast-cloud` | Claude Haiku 5.5 (Anthropic) | API | Spiegazioni e diagnosi delle regioni |
+| revisore, cronaca | Claude Sonnet 5.5 | API, in lotti (Message Batches) | Il controllo serale e la raccolta del mattino |
 
-Tutto il traffico passa da **un solo gateway** (LiteLLM), che sceglie il
-modello per nome, applica il tetto di spesa e passa a un modello di riserva
-se uno non risponde. I modelli lenti girano solo di notte, perché il server
-è uno solo e di giorno serve la mappa.
+Il traffico passa da **un solo gateway** (LiteLLM), che sceglie il modello
+per nome e passa a un modello di riserva se uno non risponde; il revisore e
+la raccolta della cronaca vanno a Claude direttamente, in lotti, perché
+nessuno li aspetta. **Tutta la spesa su Claude ha un tetto mensile**,
+controllato prima di ogni chiamata: raggiunto il tetto l'AI si ferma fino al
+primo del mese, le spiegazioni tornano al testo deterministico e in testata
+compare «AI in pausa». La mappa e gli avvisi non cambiano. I token consumati
+nel mese sono pubblici, nella pagina **Diagnostica**.
 
 ## Leggere i dati per prevedere un disastro
 
@@ -526,7 +592,11 @@ Una sequenza che usa tutto quello che Limen sa fare:
 - **Il motore frane non ha ancora superato i suoi controlli** su eventi
   reali (issue #122): finché non li supera, la mappa delle frane va letta in
   modo **relativo** — quali celle sono più scure delle vicine — più che per il
-  nome della classe.
+  nome della classe. Tre correzioni sono pronte ma **spente**, finché non
+  battono la formula di oggi sul metro per comune: un innesco che confronta
+  la pioggia con il clima del suo nodo, la pioggia dei giorni prima letta
+  contro la media di quel nodo e di quel mese, e le ore passate lette dal
+  radar invece che dal modello.
 - **Terremoto e fuoco** valgono insieme il 22% del punteggio frane e in
   condizioni ordinarie sono zero: la classe alta è difficile da raggiungere
   con la sola pioggia.
@@ -547,7 +617,8 @@ Una sequenza che usa tutto quello che Limen sa fare:
 | Servizi | API REST (FastAPI); server MCP per gli agenti; protocollo A2A |
 | Mappe | pg_tileserv (tile vettoriali dalle viste e dalle funzioni SQL); MapLibre |
 | Interfaccia | React 19, Mantine 9, TypeScript, Vite |
-| Inferenza | Gateway LiteLLM, llama.cpp/llama-swap su GPU, colibrì (GLM-5.2), Claude via API |
+| Inferenza | Gateway LiteLLM, llama.cpp/llama-swap su GPU, Claude via API con un tetto di spesa mensile |
+| Librerie aperte | Le parti che parlano con le fonti sono pacchetti Python a sé, Apache-2.0, usabili anche senza Limen: `fwi-chain` (indice incendi), `effis-client`, `firms-client`, `egms-client`, `copernicus-ems`, `ispra-idrogeo`, `rainfall-thresholds` (soglie di Caine); `mcp-geo-server` (MIT) tiene i grandi strati statici in GeoServer |
 | Esercizio | Docker Compose su un solo server, porte sul loopback dietro un reverse proxy; nessun cloud provider |
 
 Tutto è riproducibile: codice EUPL-1.2, dati pubblici, configurazioni
@@ -568,6 +639,7 @@ computer. Le API sono documentate nella pagina **Integrazioni**.
 | **FWI** | Fire Weather Index: l'indice meteorologico degli incendi |
 | **DC** | Drought Code: la siccità profonda nell'indice incendi |
 | **GloFAS** | Il sistema europeo di previsione delle piene fluviali |
+| **Merging** | La pioggia misurata della Protezione Civile: radar corretto con i pluviometri, a 1 km |
 | **IFFI** | L'inventario nazionale delle frane di ISPRA |
 | **PAI** | Piani di Assetto Idrogeologico: le aree perimetrate come pericolose |
 | **Campione / sfidante** | La formula che decide / il modello che la sfida in ombra |
