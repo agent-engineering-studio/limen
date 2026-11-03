@@ -113,6 +113,7 @@ measured, `attention` is `null`, not zero.
 | Route | What it returns |
 |---|---|
 | `GET /api/status/jobs` | The latest national hourly run (start, end, outcome, duration) and the status per region. |
+| `GET /api/status/llm` | The tokens used by the AI in the month, per day and per model, and whether the AI is paused (`in_pausa`, with the `ripresa` date) because the monthly spending cap has been reached. Dollars are not public. |
 | `GET /api/shadow/summary?aoi=&since=` | How far the ML challenger diverges from the champion engine, per region, and the comparison on real events. `since` in ISO 8601. The challenger never drives alerts. |
 | `GET /api/shadow/reliability?aoi=&since=` | The challenger's reliability curve. `sufficient: false` when there are too few real events to draw it. |
 | `GET /health` | Always `200`; `status: degraded` if the database or the cache do not answer. |
@@ -120,7 +121,7 @@ measured, `attention` is `null`, not zero.
 
 ### Sending a contribution
 
-`POST /api/contributi` is the only public route that accepts data: a report
+`POST /api/contributi` accepts a report
 about a cell (an unrecorded landslide, an opinion on the assessment, on the
 weights or the thresholds, a mitigation). The body is JSON with `cell_id`,
 `tipo`, `testo` (20 to 4,000 characters), an email and a name or a LinkedIn
@@ -130,6 +131,17 @@ with the cell's current state, and the `201` arrives only after it has been
 sent. Submissions are limited per address and in total every hour (beyond
 the limit, `429`); without a mail server configured the route answers
 `503`. A contribution never changes a score.
+
+### Citizen sensors
+
+| Route | What it returns |
+|---|---|
+| `GET /api/sensori/stazioni?hazard=` | The network's stations as GeoJSON: type, status, latest reading. Third-party stations have a rounded position, and there is no personal data. Cached for 5 minutes. |
+| `GET /api/sensori/registrazione` | `{"aperta": true}` when the registration form accepts requests. |
+| `POST /api/sensori/registrazione` | The request to register a sensor built by a citizen: type, position, the device's CSR (or, for a LoRaWAN sensor, its The Things Network identifier), an email, the data licence (CC-BY-4.0) and acceptance of the security rules. It does not create a device: it stores the request and notifies the project's curators, who approve it by hand. `201` after the email is sent; `503` when registrations are closed, `429` beyond the submission limit. |
+
+The private key stays on the device: Limen signs the certificate and sends
+it by email. How the network works is on the **Sensors** page.
 
 ## Vector tiles
 
@@ -354,6 +366,6 @@ troubleshooting:
 - **Ports published by the containers bind to loopback by default.** Public
   exposure goes through a reverse proxy on HTTPS; the MCP servers must not
   be exposed without one.
-- **No personal data kept.** The only route that receives data from a
-  visitor, the contributions one, forwards it by email and does not store
-  it.
+- **Personal data only where needed.** Contributions are forwarded by
+  email and not stored. A sensor registration keeps the registrant's email,
+  because it is needed to send the certificate; it is deleted on request.

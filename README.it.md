@@ -413,7 +413,7 @@ flowchart TB
         CEMS["copernicus-ems<br/>aree allagate"]
         EG["egms-client<br/>moto del suolo"]
         FC["firms-client<br/>fuochi attivi"]
-        ID["ispra-idrogeo<br/>frane e carte di pericolosità"]
+        ID["ispra-idrogeo<br/>frane e carte di pericolosità<br/>+ idrogeo-mcp"]
         FWI["fwi-chain<br/>Fire Weather Index"]
         EF["effis-client<br/>aree bruciate, FWI ufficiale"]
         RT["rainfall-thresholds<br/>la pioggia che innesca frane"]
@@ -527,6 +527,22 @@ di pericolosità PAI**, gli eventi datati e l'API REST con gli indicatori di
 rischio di qualsiasi regione, provincia o comune. I file restano in cache e si
 aggiornano con richieste condizionali, così un aggiornamento notturno costa
 poche centinaia di byte quando nulla è cambiato.
+
+Dalla 0.5 è anche:
+
+| | Novità | In parole semplici |
+|---|---|---|
+| 🤖 | **`idrogeo-mcp`, un server MCP** | `pip install "ispra-idrogeo[mcp]"`, lo aggiungi a Claude Desktop o a un altro agente e chiedi *«quante persone vivono in aree a pericolosità da frana elevata a Sarno, e qualcuno monitora quelle frane?»*. Dieci strumenti: `find_area`, `area_risk`, `area_landslides`, `landslide`, `search_landslides`, `search_events`, `monitoring_sites`, `webcams`, `code_list`, `download_dataset`. Tutti in sola lettura tranne lo scarico; le risposte si fermano a `limit` righe, così un agente non riceve mai 700.000 frane in una volta. |
+| ⌨️ | **Il comando `idrogeo`** | `idrogeo fetch frane_piff --area molise`, `idrogeo summary pir comuni 72006`, `idrogeo landslides --since …`: gli scarichi stampano la cartella, tutto il resto JSON Lines, pronto per `jq` o per un caricamento in database. |
+| 🗺️ | **GeoDataFrame e GeoParquet** | L'extra `[geo]` trasforma le righe dell'API e gli strati scaricati in tabelle GeoPandas. |
+| 🔎 | **Filtri di ricerca tipizzati** | Frane per tipo di movimento e attività, eventi per area e data, siti di monitoraggio per stato, senza scrivere la sintassi PostgREST. |
+| 🏷️ | **Codici decodificati** | Le 73 liste di codici dell'API, in quattro lingue: `strumentazione = [15, 22, 25]` diventa inclinometro, monitoraggio topografico, interferometria SAR. |
+| 🔁 | **Solo quello che è cambiato** | `modified_since` per aggiornare in modo incrementale frane, eventi e siti di monitoraggio. |
+| 📡 | **Siti di monitoraggio e webcam** | Chi sorveglia una frana, e con quali strumenti. |
+
+```json
+{ "mcpServers": { "idrogeo": { "command": "idrogeo-mcp" } } }
+```
 
 **Come la usa Limen.** `limen geodati-sync`, passo 3 dei dati statici di
 `make init`, scarica con lei l'inventario IFFI di ogni regione (più Bolzano e
