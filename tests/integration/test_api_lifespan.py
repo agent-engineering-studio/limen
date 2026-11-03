@@ -18,7 +18,6 @@ from limen.api.jobs.registration import (
     JOB_HOURLY_MONITORING,
     JOB_HTML_REPORT,
     JOB_PARTITIONS,
-    JOB_WEEKLY_IDROGEO,
     register_jobs,
 )
 from limen.config.settings import Settings
@@ -44,7 +43,6 @@ async def test_register_jobs_schedules_enabled_jobs(reset_db: None, pg_pool: obj
     registered_set = set(registered)
     assert {
         JOB_HOURLY_MONITORING,
-        JOB_WEEKLY_IDROGEO,
         JOB_HTML_REPORT,
         JOB_PARTITIONS,
         JOB_BRIEFING_ENRICHMENT,
@@ -89,7 +87,6 @@ async def test_register_jobs_skips_disabled(reset_db: None, pg_pool: object) -> 
             "scheduler": {
                 "cache_cleanup": "apscheduler",
                 "enable_hourly_monitoring": False,
-                "enable_weekly_idrogeo": False,
             }
         }
     )
@@ -101,7 +98,6 @@ async def test_register_jobs_skips_disabled(reset_db: None, pg_pool: object) -> 
     async with AsyncScheduler() as scheduler:
         registered = await register_jobs(scheduler, deps)
     assert JOB_HOURLY_MONITORING not in registered
-    assert JOB_WEEKLY_IDROGEO not in registered
     assert JOB_NIGHTLY in registered
     assert JOB_HTML_REPORT in registered  # report job still enabled by default
 
