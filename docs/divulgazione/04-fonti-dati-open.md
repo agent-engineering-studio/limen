@@ -203,8 +203,8 @@ Il **servizio europeo di gestione delle emergenze** attiva la mappatura
 rapida da satellite quando un paese la richiede, e pubblica i perimetri di
 quello che il satellite ha visto.
 
-Contiene, per l'Italia, **13 attivazioni, 9.463 poligoni, 480 chilometri
-quadrati allagati su 2.354 celle in 9 regioni** — e, insieme, le maschere di
+Contiene, per l'Italia, **14 attivazioni, 15.865 poligoni, 1.029 chilometri
+quadrati allagati su 3.593 celle in 9 regioni** — e, insieme, le maschere di
 osservazione che dicono dove il satellite ha guardato.
 
 Lo leggiamo **una volta**, e lo teniamo in cache.

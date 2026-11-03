@@ -219,7 +219,7 @@ Niente di questo è in git: si rigenera con il comando a destra.
 | `data/hazard/landslide/pai_frane_2020_2021/` | mosaicatura PAI frane | 1,9 GB | ISPRA, CC-BY 4.0 | idrogeo.isprambiente.it |
 | `data/hazard/hydraulic/pai_idraulica_2020/` | mosaicatura PAI idraulica | 22 MB | ISPRA, CC-BY 4.0 | `geodata/datasets.yaml` |
 | `data/events/italica/ITALICA_v4.csv` | catalogo frane datate | 1 MB | CNR-IRPI, CC-BY 4.0 | `limen ingest-events` |
-| `data/flood_events/EMSR*/` | perimetri allagati osservati, 13 attivazioni | 59 MB | Copernicus EMS | `limen ingest-events --hazard flood` |
+| `data/flood_events/EMSR*/` | perimetri allagati osservati (layer GeoJSON), 14 attivazioni | ~200 MB | Copernicus EMS | `limen ingest-events --hazard flood` |
 | `data/fires/firms/` | archivio incendi MODIS/VIIRS 2000- | 34 MB | NASA FIRMS | `limen ingest-fire-history` |
 | `data/sealing/clms_imd_2018/` | suolo sigillato 100 m | 4,5 MB | Copernicus Land (EEA) | `make imperviousness-data` |
 | `data/osm/` | PBF Italia + GPKG strade e ferrovie | 2,3 GB | © OpenStreetMap, ODbL | `make osm-data` |
