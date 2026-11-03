@@ -214,6 +214,7 @@ Loaded from environment variables (and an optional `.env`) via
 | `COPERNICUS__EWDS_KEY` | _empty_ | EWDS key for the GloFAS forecast and references; empty ⇒ GloFAS via Open-Meteo. |
 | `EGMS__SERVICE_KEY` | _empty_ | CLMS service key (single-line JSON) for EGMS downloads and the release check; or `EGMS__SERVICE_KEY_FILE`, the path of the JSON. |
 | `EGMS__CARTELLA` | `data/egms` | EGMS tiles, kept between syncs (Docker: the `LIMEN_EGMS_DIR` volume on `/var/lib/limen/egms`). |
+| `FIRMS__MAP_KEY` | _empty_ | NASA FIRMS key for the near-real-time hotspot trigger (free, [request it here](https://firms.modaps.eosdis.nasa.gov/api/map_key/)). Empty ⇒ the trigger is inert; the yearly per-country archives behind the fire history need no key. |
 | `LLM__PROVIDER` | _empty_ | Override: `anthropic` / `openai` / `foundry` / `ollama` / `llamacpp`. Empty ⇒ llama.cpp unless a cloud key is set. |
 | `LLM__LLAMACPP_BASE_URL` | `http://127.0.0.1:8091` | Self-hosted inference gateway (OpenAI shape). **Not** `:8081`, which is GeoServer. From a container: `host.docker.internal`. |
 | `LLM__MODELS__<ROLE>` | Claude id | Role → model map. Local engines honour only the roles they declare. `LLM__MODELS__FEDELTA` is a Claude id sent as a Message Batch, not through the gateway. See [`docs/inference.md`](./docs/inference.md). |
@@ -285,6 +286,47 @@ within the hour. The per-cell forecast: 02, 08, 14 and 20:20 UTC. The FWI
 chain needs a month of spin-up after `fwi-backfill` before wildfire numbers
 settle; a restore brings it back already settled. The GloFAS references: a
 share of nodes every night, weeks for all of them.
+
+### Data that downloads on its own
+
+Some sources need only a key in `.env`, and `make init`, `make up` and
+`make static-data` fetch them through `scripts/load_static_data.sh`:
+
+- **EGMS ground motion** (`EGMS__SERVICE_KEY` or `EGMS__SERVICE_KEY_FILE`,
+  a CLMS service key from land.copernicus.eu → profile → *API Tokens*): step
+  5/6 runs `limen sync-egms`. The first run for Italy takes ~25 minutes and
+  keeps 164 GeoTIFF tiles (~420 MB) in `EGMS__CARTELLA`; later runs find them
+  there and ask the archive nothing. Without a key the step is skipped and
+  the ML engine's InSAR features stay empty. A new EGMS release is reported
+  by the nightly `egms_release` step.
+- **Flood ground truth** (no key): `limen ingest-events --hazard flood` reads
+  the observed-flood layers of Copernicus EMS Rapid Mapping as GeoJSON,
+  ~200 MB for Italy, cached under `LIMEN_DATA_ROOT/flood_events`.
+- **Fire history** (no key): `limen ingest-fire-history` downloads the yearly
+  FIRMS archives for the country (MODIS from 2000, VIIRS from 2012, up to the
+  previous year). The near-real-time trigger instead needs `FIRMS__MAP_KEY`.
+
+### Updating production: `make deploy`
+
+Production runs from a detached worktree next to the development checkout
+(`../limen-deploy`, `DEPLOY_DIR`), with the same compose project, `.env` and
+volumes as `make up`. From the development checkout:
+
+```sh
+make deploy                       # production to origin/main
+make deploy DEPLOY_REF=3eadcda    # a given commit, also to go back
+```
+
+It refuses to start if the commit's tests (backend, integration, frontend)
+are not green on CI, or if the worktree has local changes. Otherwise it
+moves the worktree to the commit, rebuilds `api`, `worker` and `mcp` with
+the same compose files as `make up` (sensor overlay included), plus the
+static SPA when `frontend/` changed, waits for `/ready` and records the
+commit in `refs/deploy/ultimo`. If the API is not ready within two minutes
+it exits with an error and that ref does not move. Migrations are applied
+by the API at start-up. Never run `make up` in the development checkout on
+this host: it shares the project with production and would deploy whatever
+is checked out.
 
 ### Images: built here or pulled from GHCR
 
@@ -478,6 +520,49 @@ in EPSG:3035 (LAEA Europe). Immutable SQL migrations in
 `src/limen/data/migrations/NNN_*.sql`.
 
 ---
+
+## Dependencies and extracted libraries
+
+Python 3.12+, everything through `uv` (`uv sync --all-groups` for the full
+development set). The runtime dependencies are in `pyproject.toml`; the
+optional ones are grouped by what needs them:
+
+| Group | For | Main packages |
+|---|---|---|
+| _(runtime)_ | API, worker, CLI | asyncpg, shapely, geopandas, rasterio, pydantic, httpx + tenacity, APScheduler, FastAPI, structlog, OpenTelemetry |
+| `ml` | V2 ML engine, training, drift | LightGBM, scikit-learn, MLflow, Optuna, SHAP, ONNX Runtime |
+| `dl` | deep-learning experiments | PyTorch, ONNX |
+| `agents` | the Message Batch faithfulness reviewer | anthropic |
+| `mcp` | MCP server | fastmcp |
+| `report` | PDF/HTML reports | Jinja2, ReportLab |
+| `copernicus` | EWDS (GloFAS, FWI comparison) | cdsapi, netCDF4 |
+| `radar` | DPC radar archive | numcodecs |
+| `storage` | S3-compatible object store | boto3 (imported only by the object-store factory) |
+| `dev` | tests and gates | pytest, ruff, mypy, testcontainers, respx |
+
+**Libraries extracted from Limen.** Six parts with no reason to be tied to
+Limen are published as separate packages, Apache-2.0, each with its own
+repository under [agent-engineering-studio](https://github.com/agent-engineering-studio)
+and released to PyPI from a tag. Limen pins each with `~=`, so a minor
+version needs a deliberate bump:
+
+| Package | Pin | What it does |
+|---|---|---|
+| [`fwi-chain`](https://pypi.org/project/fwi-chain/) | `~=1.0.0` | Canadian Fire Weather Index chain (Van Wagner 1987), checked against the reference day to 1e-9 |
+| [`effis-client`](https://pypi.org/project/effis-client/) | `~=0.1.2` | EFFIS burnt-area perimeters (MapServer WFS) and official FWI rasters (WMS) |
+| [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | `~=0.1.0` | Caine intensity-duration thresholds, rainfall events, frequentist fit; T5 thresholds for Italy refitted on e-ITALICA |
+| [`egms-client`](https://pypi.org/project/egms-client/) | `~=0.3.0` | EGMS archive: CLMS service-key auth, Ortho L3 tile search and download, mosaics |
+| [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) | `~=0.1.0` | Copernicus EMS Rapid Mapping: activations, observation masks, observed-flood layers as GeoJSON |
+| [`firms-client`](https://pypi.org/project/firms-client/) | `~=0.2.0` | NASA FIRMS: open per-country archives, NRT area API, detection types |
+
+Limen uses five of them only for their **pure** parts — request building,
+parsing, validation — so their network calls go through
+`limen.integrations._http` (shared client, retry policy), and the neutral
+degradation stays in Limen. `egms-client` (since 0.2) also downloads the
+tiles itself, on Limen's shared HTTP client with its own retry on 429/5xx.
+The numbers that tune a hazard stay in `src/limen/config/hazards/*.yaml`:
+the libraries' constants (e.g. the Italian T5 thresholds) are not read. A
+change to one of them is a release of the library and a pin bump here.
 
 ## Testing and quality gates
 
