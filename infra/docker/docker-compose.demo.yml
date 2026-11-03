@@ -111,6 +111,9 @@ services:
       EGMS__SERVICE_KEY: ${EGMS__SERVICE_KEY:-}
       # Lo stesso default di EgmsSettings.release: qui vince su quello del codice.
       EGMS__RELEASE: ${EGMS__RELEASE:-2020_2025}
+      # Le tile EGMS (~0,5 GB per l'Italia) sul volume qui sotto, non in /tmp:
+      # sopravvivono ai riavvii e il sync dopo non riscarica niente.
+      EGMS__CARTELLA: /var/lib/limen/egms
       # Archivio del radar DPC «Merging»: deve stare sul volume dei dataset
       # (/var/lib/limen/datasets). Vuota ⇒ il passo notturno si salta.
       RADAR_ARCHIVE__CARTELLA: ${RADAR_ARCHIVE__CARTELLA:-}
@@ -293,6 +296,7 @@ services:
       # directory di lavoro e' di root, il processo gira come `limen`, e i
       # comandi morivano su "Permission denied" dopo aver lavorato per minuti.
       - ${LIMEN_DATASETS_DIR:-${LIMEN_DATA_ROOT:-../../data}/datasets}:/var/lib/limen/datasets
+      - ${LIMEN_EGMS_DIR:-${LIMEN_DATA_ROOT:-../../data}/egms}:/var/lib/limen/egms
       - ${LIMEN_REPORTS_HOST_DIR:-${LIMEN_DATA_ROOT:-../../data}/reports}:/var/lib/limen/reports
       # DTM / shared vector data (read-only). Same folder GeoServer serves.
       - ${GEOSERVER_SHAPEFILE_DIR:-${LIMEN_DATA_ROOT:-../../data}/geoserver}:/data:ro
@@ -363,6 +367,7 @@ services:
       # directory di lavoro e' di root, il processo gira come `limen`, e i
       # comandi morivano su "Permission denied" dopo aver lavorato per minuti.
       - ${LIMEN_DATASETS_DIR:-${LIMEN_DATA_ROOT:-../../data}/datasets}:/var/lib/limen/datasets
+      - ${LIMEN_EGMS_DIR:-${LIMEN_DATA_ROOT:-../../data}/egms}:/var/lib/limen/egms
       - ${LIMEN_REPORTS_HOST_DIR:-${LIMEN_DATA_ROOT:-../../data}/reports}:/var/lib/limen/reports
       - ${GEOSERVER_SHAPEFILE_DIR:-${LIMEN_DATA_ROOT:-../../data}/geoserver}:/data:ro
       # Il registry sta su Postgres (#78): niente più mlflow.db montato. Gli

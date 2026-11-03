@@ -57,7 +57,7 @@ predefinito LIMEN_IMPERVIOUSNESS_RASTER "$RADICE/sealing/clms_imd_2018/imd_2018_
 # e non scrive niente (dataset_versions).
 export EGMS__CARTELLA="${EGMS__CARTELLA:-$RADICE/egms}"
 have_egms=0
-if [ -n "${EGMS__SERVICE_KEY:-}" ] || [ -n "${EGMS__TOKEN:-}" ]; then
+if [ -n "${EGMS__SERVICE_KEY:-}" ] || [ -n "${EGMS__SERVICE_KEY_FILE:-}" ]; then
   have_egms=1
 fi
 
@@ -95,8 +95,10 @@ if [ "$MODO" = docker ]; then
   if [ "$have_egms" -eq 1 ]; then
     mkdir -p "$EGMS__CARTELLA"
     CONTAINER+=(-v "$EGMS__CARTELLA:$EGMS__CARTELLA" -e "EGMS__CARTELLA=$EGMS__CARTELLA")
-    # Il token di ripiego il worker non lo riceve dal compose (la chiave sì).
-    [ -n "${EGMS__TOKEN:-}" ] && CONTAINER+=(-e "EGMS__TOKEN=$EGMS__TOKEN")
+    # Il file della chiave, se è così che la si dà, montato in sola lettura.
+    if [ -n "${EGMS__SERVICE_KEY_FILE:-}" ]; then
+      CONTAINER+=(-v "$EGMS__SERVICE_KEY_FILE:$EGMS__SERVICE_KEY_FILE:ro" -e "EGMS__SERVICE_KEY_FILE=$EGMS__SERVICE_KEY_FILE")
+    fi
     [ -n "$egms_chiave_shell" ] && CONTAINER+=(-e "EGMS__SERVICE_KEY=$egms_chiave_shell")
   fi
   # Con il proprio uid: le sorgenti sono di chi le ha scaricate, e l'utente
@@ -173,7 +175,7 @@ fi
 if [ "$have_egms" -eq 1 ]; then
   ok "EGMS — velocità del terreno (tile in $EGMS__CARTELLA)"
 else
-  skip "né EGMS__SERVICE_KEY né EGMS__TOKEN"
+  skip "né EGMS__SERVICE_KEY né EGMS__SERVICE_KEY_FILE"
   echo "            → chiave di servizio CLMS: land.copernicus.eu, EU Login, profilo"
   echo "              → «API Tokens». Senza, le feature InSAR del modello ML restano vuote."
 fi
@@ -208,7 +210,7 @@ if [ "$have_egms" -eq 1 ]; then
   mkdir -p "$EGMS__CARTELLA"
   limen sync-egms || echo "  (EGMS non completato: si prosegue, il prossimo giro riprende dalle tile già scaricate)"
 else
-  echo "  saltato: né EGMS__SERVICE_KEY né EGMS__TOKEN"
+  echo "  saltato: né EGMS__SERVICE_KEY né EGMS__SERVICE_KEY_FILE"
 fi
 
 say "6/6  Fattori per cella"

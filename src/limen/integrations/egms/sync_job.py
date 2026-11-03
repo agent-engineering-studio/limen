@@ -9,28 +9,17 @@ from __future__ import annotations
 
 import asyncio
 import math
-from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import date
-from functools import partial
 from pathlib import Path
 
-from egms_client import (
-    PRODUCT_TYPES,
-    Component,
-    Hit,
-    Search,
-    api_release,
-    file_release,
-    tile_id,
-    tile_prefix,
-)
+from egms_client import COMPONENTS, api_release, tiles_for_bounds
 
-from limen.config.settings import EgmsSettings, Settings, get_settings
+from limen.config.settings import Settings, get_settings
 from limen.core.logging import get_logger
 from limen.data.db import acquire
 from limen.data.repos import cell_insar_features_repo, dataset_versions_repo
-from limen.integrations.egms import client, clms
+from limen.integrations.egms import clms
 from limen.integrations.egms.aggregate import PASSO_M, Cella, Griglia, mosaico, per_cella
 
 log = get_logger(__name__)
@@ -63,40 +52,6 @@ async def _celle(aoi_id: str) -> list[Cella]:
     ]
 
 
-IdRicerca = Callable[[client.Tile, Component, str], Awaitable[Search | None]]
-
-
-def _ricerche(s: EgmsSettings) -> IdRicerca | None:
-    """Chi dà l'id di ricerca per una tile: la chiave CLMS, o il token fisso."""
-    if s.service_key is not None:
-        chiave = clms.leggi_chiave(s.service_key.get_secret_value())
-        if chiave is not None:
-            return clms.Sessione(chiave, archivio=s.archive_url).cerca
-    if s.token is not None and s.token.get_secret_value().strip():
-        fisso = s.token.get_secret_value().strip()
-
-        async def _token(tile: client.Tile, componente: Component, release: str) -> Search:
-            # L'id copiato dall'Explorer non dice il nome del file: si assume
-            # la sotto-release 1, che è l'unica pubblicata finora.
-            nome = f"{tile_prefix(tile, componente, release)}1"
-            return Search(
-                id=fisso,
-                hits=[
-                    Hit(
-                        filename=f"{nome}.zip",
-                        filesize=0,
-                        tile_id=tile_id(tile),
-                        release=api_release(release),
-                        version=f"{file_release(release)}_1",
-                        product_type=PRODUCT_TYPES[componente],
-                    )
-                ],
-            )
-
-        return _token
-    return None
-
-
 def _periodo(release: str) -> tuple[date, date]:
     inizio, fine = release.split("_")
     return date(int(inizio), 1, 1), date(int(fine), 12, 31)
@@ -105,9 +60,9 @@ def _periodo(release: str) -> tuple[date, date]:
 async def sync_egms(*, aoi_id: str, settings: Settings | None = None) -> int:
     """Aggiorna `cell_insar_features` per un'AOI. Restituisce le righe scritte."""
     s = (settings or get_settings()).egms
-    id_ricerca = _ricerche(s)
-    if id_ricerca is None:
-        log.info("egms.sync.skip", aoi_id=aoi_id, reason="né EGMS__SERVICE_KEY né EGMS__TOKEN")
+    archivio = await clms.archivio(s)
+    if archivio is None:
+        log.info("egms.sync.skip", aoi_id=aoi_id, reason=clms.perche_no(s))
         return 0
     celle = await _celle(aoi_id)
     if not celle:
@@ -120,17 +75,12 @@ async def sync_egms(*, aoi_id: str, settings: Settings | None = None) -> int:
 
     cartella = Path(s.cartella)
     tiff: dict[str, list[Path]] = {}
-    for componente in client.COMPONENTI:
+    for componente in COMPONENTS:
         tiff[componente] = []
-        for tile in client.tile_per_limiti(minx, miny, maxx, maxy):
-            path = await client.scarica_tile(
-                cartella,
-                tile,
-                componente,
-                release=s.release,
-                archivio=s.archive_url,
-                id_ricerca=partial(id_ricerca, tile, componente, s.release),
-            )
+        for tile in tiles_for_bounds(minx, miny, maxx, maxy):
+            # Una tile già sul disco (o già nota come mare) non chiede niente
+            # all'archivio: il secondo sync scarica zero byte.
+            path = await archivio.fetch_tile(tile, componente, s.release, cartella)
             if path is not None:
                 tiff[componente].append(path)
 
@@ -189,10 +139,10 @@ async def controlla_release(settings: Settings | None = None) -> dict[str, objec
     non si scarica: sono ~7 GB e un'ora, e la si sceglie in `EGMS__RELEASE`.
     """
     s = (settings or get_settings()).egms
-    chiave = clms.leggi_chiave(s.service_key.get_secret_value()) if s.service_key else None
-    if chiave is None:
-        return {"status": "skipped", "reason": "EGMS__SERVICE_KEY non impostata"}
-    disponibili = await clms.Sessione(chiave, archivio=s.archive_url).release()
+    archivio = await clms.archivio(s)
+    if archivio is None:
+        return {"status": "skipped", "reason": clms.perche_no(s)}
+    disponibili = await archivio.releases()
     configurata = api_release(s.release)
     ultima = max(disponibili) if disponibili else None
     if ultima is not None and ultima > configurata:

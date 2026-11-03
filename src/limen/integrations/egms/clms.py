@@ -1,97 +1,22 @@
 """L'archivio EGMS con la chiave di servizio del Copernicus Land Monitoring Service.
 
-Il parametro ``id`` dei link di download non è un'autorizzazione: è l'id di
-una **ricerca** (`/archive/search`), e scade se non lo si usa. Il token che si
-copiava dall'Explorer era uno di questi. Con la chiave di servizio CLMS
-(profilo su land.copernicus.eu → «API Tokens», un JSON con ``client_id``,
-``user_id``, ``private_key``, ``token_uri``) si firma un JWT, lo si scambia per
-un token di accesso valido un'ora, e con quello si fa una ricerca nuova per
-ogni tile: niente da copiare a mano, a nessuna release.
-
-Lo stesso token apre `/archive/releases`, che è l'unico modo di sapere che è
-uscita una release nuova: senza login l'archivio risponde «Please log in» a
-tutto (verificato l'11 ottobre 2026).
-
-Firma, ricerca e lettura delle risposte vengono dal pacchetto ``egms-client``
-(estratto da Limen, Apache-2.0); qui resta il traffico, che passa da
-``fetch_with_retry`` come ogni chiamata esterna.
+Login, ricerche, download a blocchi, ritentativi e cache su disco vengono dal
+pacchetto ``egms-client`` (estratto da Limen, Apache-2.0). Qui resta solo
+come Limen trova la chiave (``EGMS__SERVICE_KEY`` o ``EGMS__SERVICE_KEY_FILE``)
+e quale client HTTP usa: quello condiviso di tutte le integrazioni.
 """
 
 from __future__ import annotations
 
-import time
+from pathlib import Path
 
-from egms_client import (
-    ARCHIVE_URL,
-    Component,
-    Search,
-    ServiceKey,
-    Token,
-    assertion,
-    parse_releases,
-    parse_search,
-    parse_token,
-    search_body,
-    token_request,
-)
+from egms_client import EgmsArchive, ServiceKey
 
+from limen.config.settings import EgmsSettings
 from limen.core.logging import get_logger
-from limen.integrations._http import SharedHttpClient, fetch_with_retry
+from limen.integrations._http import SharedHttpClient
 
 log = get_logger(__name__)
-
-ARCHIVIO = ARCHIVE_URL
-#: Il token dura un'ora: si rinnova prima, perché un sync d'Italia dura di più.
-_MARGINE_S = 300
-
-
-def asserzione(chiave: ServiceKey, *, adesso: int) -> str:
-    """Il JWT RS256 che la chiave di servizio firma per chiedere un token."""
-    return assertion(chiave, now=adesso)
-
-
-class Sessione:
-    """Un token di accesso, rinnovato quando sta per scadere."""
-
-    def __init__(self, chiave: ServiceKey, *, archivio: str = ARCHIVIO) -> None:
-        self._chiave = chiave
-        self._archivio = archivio.rstrip("/")
-        self._token: Token | None = None
-
-    async def _intestazioni(self) -> dict[str, str]:
-        adesso = time.time()
-        if self._token is None or adesso > self._token.expires_at - _MARGINE_S:
-            resp = await fetch_with_retry(
-                "POST",
-                self._chiave.token_uri,
-                client=await SharedHttpClient.get(),
-                data=token_request(self._chiave, now=int(adesso)),
-                headers={"Accept": "application/json"},
-            )
-            self._token = parse_token(resp.status_code, resp.content, now=adesso)
-        return self._token.headers()
-
-    async def release(self) -> list[str]:
-        resp = await fetch_with_retry(
-            "GET",
-            f"{self._archivio}/releases",
-            client=await SharedHttpClient.get(),
-            headers=await self._intestazioni(),
-        )
-        return parse_releases(resp.content)
-
-    async def cerca(
-        self, tile: tuple[int, int], componente: Component, release: str
-    ) -> Search | None:
-        """La ricerca con cui scaricare la tile, o ``None`` se la tile non esiste (mare)."""
-        resp = await fetch_with_retry(
-            "POST",
-            f"{self._archivio}/search",
-            client=await SharedHttpClient.get(),
-            headers=await self._intestazioni(),
-            json=search_body(tile, componente, release),
-        )
-        return parse_search(resp.content)
 
 
 def leggi_chiave(testo: str) -> ServiceKey | None:
@@ -102,9 +27,38 @@ def leggi_chiave(testo: str) -> ServiceKey | None:
         return ServiceKey.from_json(testo)
     except ValueError as exc:
         # Impostata ma illeggibile (PEM troncato, virgolette perse nel .env):
-        # senza questo log il sync direbbe «né chiave né token».
+        # senza questo log il sync direbbe solo «nessuna chiave».
         log.warning("egms.chiave_non_valida", error=str(exc)[:200])
         return None
 
 
-__all__ = ["ARCHIVIO", "Sessione", "asserzione", "leggi_chiave"]
+def chiave(s: EgmsSettings) -> ServiceKey | None:
+    """La chiave dalla variabile o dal file; ``None`` se nessuno dei due la dà."""
+    if s.service_key is not None and s.service_key.get_secret_value().strip():
+        return leggi_chiave(s.service_key.get_secret_value())
+    if s.service_key_file and s.service_key_file.strip():
+        try:
+            return leggi_chiave(Path(s.service_key_file).expanduser().read_text())
+        except OSError as exc:
+            log.warning("egms.file_chiave_illeggibile", path=s.service_key_file, error=str(exc))
+    return None
+
+
+async def archivio(s: EgmsSettings) -> EgmsArchive | None:
+    """L'archivio sul client HTTP condiviso, o ``None`` senza chiave."""
+    trovata = chiave(s)
+    if trovata is None:
+        return None
+    return EgmsArchive(await SharedHttpClient.get(), trovata, archive_url=s.archive_url)
+
+
+def perche_no(s: EgmsSettings) -> str:
+    """Il motivo, per il log, per cui non c'è un archivio."""
+    if s.token is not None and s.token.get_secret_value().strip():
+        return "EGMS__TOKEN non è più supportato (scadeva): serve EGMS__SERVICE_KEY"
+    if s.attivo:
+        return "chiave EGMS impostata ma illeggibile"
+    return "né EGMS__SERVICE_KEY né EGMS__SERVICE_KEY_FILE"
+
+
+__all__ = ["archivio", "chiave", "leggi_chiave", "perche_no"]
