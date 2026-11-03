@@ -136,8 +136,31 @@ async def fetch_activations(
 
 async def fetch_products(code: str) -> list[Product]:
     """I prodotti dell'attivazione: AOI, tipo, acquisizioni, layer."""
+    products, _ = await _fetch_detail(code)
+    return products
+
+
+async def _fetch_detail(code: str) -> tuple[list[Product], set[str]]:
+    """I prodotti, e le maschere dei prodotti **consegnati**.
+
+    Consegnato = il dettaglio elenca almeno un layer, di qualunque formato.
+    ``Product.layers`` tiene solo i vettori con GeoJSON, quindi un prodotto
+    di sole ortofoto (COG) vi risulta vuoto come uno mai consegnato: per
+    distinguerli serve il dettaglio grezzo.
+    """
     resp = await fetch_with_retry("GET", detail_url(code), client=await SharedHttpClient.get())
-    return parse_detail(resp.content)
+    products = parse_detail(resp.content)
+    delivered: set[str] = set()
+    for activation in json.loads(resp.content).get("results") or []:
+        for aoi in activation.get("aois") or []:
+            for product in aoi.get("products") or []:
+                if product.get("layers"):
+                    delivered.add(
+                        f"{code}-aoi{int(aoi.get('number') or 0):02d}-"
+                        f"{str(product.get('type') or '').upper()}"
+                        f"{int(product.get('monitoringNumber') or 0)}"
+                    )
+    return products, delivered
 
 
 def _mask_id(product: Product) -> str:
@@ -213,7 +236,7 @@ class ActivationTruth:
 
     floods: list[ObservedFlood]
     masks: list[ObservationMask]
-    #: Maschere di prodotti che il dettaglio dice **senza** layer osservato
+    #: Maschere di prodotti che il dettaglio elenca **senza alcun layer**
     #: (mai consegnati): se un ingest precedente le ha scritte, vanno tolte.
     #: Un layer elencato ma non scaricato (403, 5xx) non è qui: è un errore
     #: transitorio, e la maschera di prima resta con i suoi poligoni.
@@ -238,7 +261,7 @@ async def fetch_activation_truth(activation: Activation, *, cache_dir: Path) -> 
     vuota in entrambe le liste.
     """
     try:
-        products = await fetch_products(activation.code)
+        products, delivered = await _fetch_detail(activation.code)
     except Exception as exc:
         log.warning("ems.detail.unavailable", code=activation.code, error=str(exc)[:200])
         return ActivationTruth(floods=[], masks=[])
@@ -250,7 +273,18 @@ async def fetch_activation_truth(activation: Activation, *, cache_dir: Path) -> 
     absent: list[str] = []
     for product in products:
         if OBSERVED_EVENT not in product.layers:
-            absent.append(_mask_id(product))
+            if _mask_id(product) in delivered:
+                # Consegnato ma senza layer osservato (sette prodotti GRA in
+                # Italia, solo ortofoto): può voler dire «nessuna acqua vista»
+                # come no. Non si scrive e non si toglie: resta com'è.
+                log.info(
+                    "ems.mask.delivered_without_event",
+                    code=product.activation_code,
+                    aoi=product.aoi_number,
+                    product=product.label,
+                )
+            else:
+                absent.append(_mask_id(product))
             continue
         collection = await _layer(product, cache_dir=cache_dir)
         if collection is None:

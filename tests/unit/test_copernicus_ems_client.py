@@ -48,6 +48,13 @@ _DETAIL: dict[str, Any] = {
                         },
                         # Prodotto senza immagini: nessuna maschera, nessun istante.
                         {"type": "gra", "monitoringNumber": 1, "images": [], "layers": []},
+                        # Consegnato ma di sole ortofoto: né maschera né rimozione.
+                        {
+                            "type": "gra",
+                            "monitoringNumber": 2,
+                            "images": [{"acquisitionTime": "2024-09-19T10:00:00Z"}],
+                            "layers": [{"name": "EMSR762_ORTHO.tif", "format": "cog"}],
+                        },
                     ],
                 },
                 # WKT illeggibile: dato sporco, si salta e si prosegue.
@@ -224,9 +231,11 @@ async def test_a_mask_only_where_the_observed_layer_was_read(tmp_path: Path) -> 
     truth = await ems.fetch_activation_truth(_ACTIVATION, cache_dir=tmp_path)
     (mask,) = truth.masks
     assert mask.id == "EMSR762-aoi01-DEL0"
-    # Senza layer osservato nel dettaglio: mai consegnati, da togliere se un
-    # ingest precedente li aveva scritti.
+    # Senza alcun layer nel dettaglio: mai consegnati, da togliere se un
+    # ingest precedente li aveva scritti. Il GRA2 di sole ortofoto è stato
+    # consegnato: non si scrive e non si toglie.
     assert truth.absent_masks == ["EMSR762-aoi01-GRA1", "EMSR762-aoi02-DEL0"]
+    assert "EMSR762-aoi01-GRA2" not in {m.id for m in truth.masks}
     assert mask.aoi_label == "AOI01"
     assert mask.observed_time == datetime(2024, 9, 18, 6, tzinfo=UTC)
 
