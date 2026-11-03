@@ -63,7 +63,9 @@ STEP_VERSION: dict[str, int] = {
     "corine": 1,
     "wui": 1,
     "imperviousness": 1,
-    "geological": 1,
+    # 2: la litologia si legge da `legenda_li` e non più dalla prima colonna
+    # di testo (`gml_id`), che dava «unknown» a ogni cella d'Italia.
+    "geological": 2,
 }
 
 

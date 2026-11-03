@@ -45,6 +45,13 @@ Configuration knobs (env vars, kept off the dispatcher for parity with
   stesso con l'archivio locale del «Merging» DPC (radar più pluviometri,
   ``limen radar-archivio``, cartella ``RADAR_ARCHIVE__CARTELLA``): esiste solo
   da quando lo si archivia, ma è la pioggia che la produzione usa davvero.
+* ``LIMEN_BACKTEST_LITOLOGIA``   — ``db`` (default, il ``litho_weight`` scritto
+  in ``cell_static_factors``) o ``carta``: lo ricalcola in memoria dalla carta
+  geolitologica (``LIMEN_GEOLOGICAL_SHAPEFILE``, colonna
+  ``LIMEN_GEOLOGICAL_FIELD``) con lo stesso conto del bootstrap, senza
+  scrivere. Serve a misurare un cambio della litologia prima di metterlo in
+  produzione; una cella che la carta non copre tiene il valore del database,
+  come farebbe il bootstrap.
 * ``LIMEN_BACKTEST_SISMICA``     — ``no`` (default) o ``shakemap``: la componente
   E dalle ShakeMap storiche INGV (#287). Per ogni terremoto della finestra,
   più ``seismic.lookback_days`` prima, con ``M ≥ seismic.min_magnitude``, la
@@ -233,6 +240,24 @@ async def _fetch_static_factors(aoi_id: str) -> list[tuple[StaticFactors, float,
 # ---------------------------------------------------------------------------
 # Bundle assembly + metrics
 # ---------------------------------------------------------------------------
+async def con_litologia_della_carta(
+    aoi_id: str, cells: list[tuple[StaticFactors, float, float]]
+) -> list[tuple[StaticFactors, float, float]]:
+    """Le celle con il ``litho_weight`` ricalcolato dalla carta, in memoria."""
+    from limen.integrations.geological.sync_job import litho_weights_for_aoi
+
+    pesi = await litho_weights_for_aoi(aoi_id)
+    log.info("backtest.litologia_carta", aoi_id=aoi_id, celle=len(cells), dalla_carta=len(pesi))
+    return [
+        (
+            sf.model_copy(update={"litho_weight": pesi[sf.cell_id]}) if sf.cell_id in pesi else sf,
+            lon,
+            lat,
+        )
+        for sf, lon, lat in cells
+    ]
+
+
 def con_riferimento(
     cells: list[tuple[StaticFactors, float, float]],
     riferimenti: list[tuple[float, float, float | None]],
@@ -959,6 +984,10 @@ async def run() -> int:
     sorgenti = [
         x.strip() for x in os.getenv("LIMEN_BACKTEST_SORGENTI", "").split(",") if x.strip()
     ] or None
+    litologia = os.getenv("LIMEN_BACKTEST_LITOLOGIA", "db").strip() or "db"
+    if litologia not in ("db", "carta"):
+        log.error("backtest.bad_litologia", value=litologia)
+        return 1
     sismica = os.getenv("LIMEN_BACKTEST_SISMICA", "no").strip() or "no"
     if sismica not in ("no", "shakemap"):
         log.error("backtest.bad_sismica", value=sismica)
@@ -1033,6 +1062,8 @@ async def run() -> int:
                 assert len(bbox) == 4
 
                 cells = await _fetch_static_factors(aoi_id)
+                if litologia == "carta":
+                    cells = await con_litologia_della_carta(aoi_id, cells)
                 api_riferimento = None
                 if api_rif == "nodo":
                     mensili = riferimenti_api(clima, aoi_id, giorni=giorni_api)

@@ -21,7 +21,7 @@ _CELL = Polygon([(16.00, 41.00), (16.01, 41.00), (16.01, 41.01), (16.00, 41.01)]
 
 
 def _litho_shapefile(
-    path: Path, *, crs: str | None = "EPSG:4326", column: str = "litologia"
+    path: Path, *, crs: str | None = "EPSG:4326", column: str = "legenda_li"
 ) -> Path:
     frame = gpd.GeoDataFrame(
         {column: ["argille", None], "codice": ["A1", "B2"]},
@@ -37,7 +37,7 @@ def _litho_shapefile(
 
 
 def test_read_polygons_skips_rows_without_a_label(tmp_path: Path) -> None:
-    polys = geo._read_polygons(_litho_shapefile(tmp_path), field="litologia")
+    polys = geo._read_polygons(_litho_shapefile(tmp_path), field="legenda_li")
     assert [p.label for p in polys] == ["argille"]
 
 
@@ -48,17 +48,27 @@ def test_read_polygons_reprojects_to_4326(tmp_path: Path) -> None:
     metric = tmp_path / "metric"
     metric.mkdir()
     src.to_file(metric / "litho.shp")
-    polys = geo._read_polygons(metric / "litho.shp", field="litologia")
+    polys = geo._read_polygons(metric / "litho.shp", field="legenda_li")
     minx, _miny, _maxx, _maxy = polys[0].geom.bounds
     assert 15.8 < minx < 16.0  # di nuovo gradi, non metri
 
 
-def test_read_polygons_falls_back_to_the_first_text_column(tmp_path: Path) -> None:
-    """Un nome di colonna diverso non deve far saltare lo strato: meglio la
-    prima colonna di testo che nessuna litologia."""
+def test_una_colonna_che_manca_non_si_sostituisce_con_unaltra(tmp_path: Path) -> None:
+    """Il ripiego sulla prima colonna di testo leggeva `gml_id` sulla carta in
+    uso: ogni cella d'Italia in «unknown» con peso 0,5, un termine di S
+    costante. Ora il passo si ferma e dice quali colonne ci sono."""
     path = _litho_shapefile(tmp_path, column="descr")
-    polys = geo._read_polygons(path, field="litologia")
-    assert polys  # letta dalla colonna di ripiego
+    with pytest.raises(ValueError, match="descr"):
+        geo._read_polygons(path, field="litologia")
+
+
+def test_il_campo_predefinito_e_quello_della_carta(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("LIMEN_GEOLOGICAL_FIELD", raising=False)
+    assert geo.litho_field() == "legenda_li"
+    monkeypatch.setenv("LIMEN_GEOLOGICAL_FIELD", " litologia ")
+    assert geo.litho_field() == "litologia"
+    monkeypatch.setenv("LIMEN_GEOLOGICAL_FIELD", "")
+    assert geo.litho_field() == "legenda_li"
 
 
 def test_read_faults_keeps_only_real_geometries(tmp_path: Path) -> None:
@@ -155,3 +165,22 @@ async def test_an_unreadable_faults_file_does_not_block_lithology(
     )
     assert total == 1
     assert written[0].dist_faults_m is None
+
+
+async def test_i_pesi_per_cella_si_calcolano_senza_scrivere(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _cells(_aoi_id: str) -> dict[str, object]:
+        return {"c1": _CELL, "mare": Polygon([(10, 38), (10.01, 38), (10.01, 38.01), (10, 38.01)])}
+
+    async def _non_scrivere(_rows: list[Any]) -> int:
+        raise AssertionError("il calcolo per il backtest non deve scrivere")
+
+    monkeypatch.setattr(geo, "_load_cell_geometries", _cells)
+    monkeypatch.setattr(geo, "upsert_many", _non_scrivere)
+    pesi = await geo.litho_weights_for_aoi("it-test", shapefile=_litho_shapefile(tmp_path))
+    # «argille» copre la cella; il «mare» non lo copre nessun poligono.
+    assert list(pesi) == ["c1"]
+    assert 0 < pesi["c1"] <= 1
+    with pytest.raises(ValueError, match="shapefile"):
+        await geo.litho_weights_for_aoi("it-test", shapefile=tmp_path / "manca.shp")

@@ -4,7 +4,9 @@ Two env vars wire the shapefiles:
 
 * ``LIMEN_GEOLOGICAL_SHAPEFILE`` — polygon shapefile carrying the
   lithology label in a configurable attribute column
-  (``LIMEN_GEOLOGICAL_FIELD``, default ``litologia``).
+  (``LIMEN_GEOLOGICAL_FIELD``, default ``legenda_li``: the column of the
+  Carta geolitologica d'Italia 1:500.000 that ``limen geodati-sync``
+  downloads).
 * ``LIMEN_FAULTS_SHAPEFILE`` — optional; line shapefile with the fault
   geometries. Unset → ``dist_faults_m`` stays NULL.
 
@@ -35,6 +37,16 @@ _log: structlog.stdlib.BoundLogger = get_logger(__name__)
 
 LITHO_SHAPEFILE_ENV = "LIMEN_GEOLOGICAL_SHAPEFILE"
 LITHO_FIELD_ENV = "LIMEN_GEOLOGICAL_FIELD"
+#: La colonna con la litologia nella Carta geolitologica d'Italia: le
+#: etichette che `LITHO_WEIGHTS` riconosce («Calcari…», «Flysch…»).
+DEFAULT_LITHO_FIELD = "legenda_li"
+
+
+def litho_field() -> str:
+    """La colonna da leggere: ``LIMEN_GEOLOGICAL_FIELD`` o quella della carta."""
+    return os.environ.get(LITHO_FIELD_ENV, "").strip() or DEFAULT_LITHO_FIELD
+
+
 FAULTS_SHAPEFILE_ENV = "LIMEN_FAULTS_SHAPEFILE"
 
 
@@ -54,16 +66,15 @@ def _read_polygons(shapefile_path: Path, *, field: str) -> list[LithologyPolygon
     if gdf.crs.to_epsg() != 4326:
         gdf = gdf.to_crs("EPSG:4326")
     if field not in gdf.columns:
-        # Fall back to the first text-typed column; better than crashing.
-        text_cols = [c for c in gdf.columns if gdf[c].dtype == object and c != "geometry"]
-        if not text_cols:
-            raise ValueError(f"{shapefile_path}: column {field!r} not found and no text fallback")
-        field = text_cols[0]
-        _log.warning(
-            "geological.litho.field_fallback",
-            requested=field,
-            fallback=field,
-            available=list(gdf.columns),
+        # Niente ripiego su un'altra colonna: fino al 2026-11 si prendeva la
+        # prima di testo, che sulla carta in uso è `gml_id`, e ogni cella
+        # d'Italia finiva in «unknown» con peso 0,5 — un termine di S costante
+        # e un warning che nessuno leggeva. Meglio nessuna litologia (il passo
+        # si salta e la colonna resta com'era) che una inventata.
+        available = [str(c) for c in gdf.columns if c != "geometry"]
+        raise ValueError(
+            f"{shapefile_path}: nessuna colonna {field!r} ({LITHO_FIELD_ENV}); "
+            f"disponibili: {', '.join(available)}"
         )
     out: list[LithologyPolygon] = []
     for _, row in gdf.iterrows():
@@ -97,6 +108,25 @@ async def _load_cell_geometries(aoi_id: str) -> dict[str, object]:
     return {str(r["id"]): r["geom"] for r in rows if r["geom"] is not None}
 
 
+async def litho_weights_for_aoi(
+    aoi_id: str, *, shapefile: Path | str | None = None, field: str | None = None
+) -> dict[str, float]:
+    """Il ``litho_weight`` di ogni cella dell'AOI dalla carta, senza scrivere.
+
+    Lo stesso conto del sync, per chi vuole il risultato prima di metterlo nel
+    database: il backtest che confronta la litologia nuova con quella scritta.
+    Una cella che nessun poligono copre non c'è, come nel sync, che non la
+    tocca. ``ValueError`` se lo shapefile manca o non ha la colonna.
+    """
+    path = _resolve_path(LITHO_SHAPEFILE_ENV, shapefile)
+    if path is None or not path.exists():
+        raise ValueError(f"nessuno shapefile della litologia ({LITHO_SHAPEFILE_ENV})")
+    polygons = _read_polygons(path, field=field or litho_field())
+    cells = await _load_cell_geometries(aoi_id)
+    stats = compute_geological_stats(cells=cells, lithology_polygons=polygons, faults=[])
+    return {s.cell_id: s.litho_weight for s in stats if s.litho_weight is not None}
+
+
 async def sync_geological_for_aois(
     *,
     aoi_ids: list[str],
@@ -115,10 +145,10 @@ async def sync_geological_for_aois(
     if not litho_path.exists():
         _log.warning("geological.sync.shapefile_missing", path=str(litho_path))
         return 0
-    litho_field = field or os.environ.get(LITHO_FIELD_ENV, "litologia")
+    campo = field or litho_field()
 
     try:
-        polygons = _read_polygons(litho_path, field=litho_field)
+        polygons = _read_polygons(litho_path, field=campo)
     except Exception as exc:
         _log.warning(
             "geological.sync.read_failed",
@@ -173,8 +203,11 @@ async def sync_geological_for_aois(
 
 
 __all__ = [
+    "DEFAULT_LITHO_FIELD",
     "FAULTS_SHAPEFILE_ENV",
     "LITHO_FIELD_ENV",
     "LITHO_SHAPEFILE_ENV",
+    "litho_field",
+    "litho_weights_for_aoi",
     "sync_geological_for_aois",
 ]
