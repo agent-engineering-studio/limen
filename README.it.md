@@ -238,9 +238,18 @@ scaricano da soli (via `scripts/load_static_data.sh`):
 - **Dati di base ISPRA** (senza chiave): il passo 3/7 lancia
   `limen geodati-sync`, che scarica da IdroGEO l'inventario frane IFFI di
   tutte le regioni (più Bolzano e Trento) e i mosaici nazionali PAI frane e
-  idraulico in `GEOSERVER_SHAPEFILE_DIR`; poi, se lo stack GeoServer è
-  acceso, `geoserver-init` li carica nel suo PostGIS. Gira solo con
-  `GEOSERVER_SOURCE__DB_DSN` impostata. La prima volta ~3 GB. ISPRA rigenera
+  idraulico in `GEOSERVER_SHAPEFILE_DIR`, insieme a tutto il resto che sta nel
+  PostGIS di GeoServer: i confini amministrativi ISTAT 2023 (lo ZIP
+  ufficiale), CORINE Land Cover 2018 (`CLC18_IT`, SINAnet ISPRA) e la carta
+  geolitologica 1:500.000 (il WFS del Geoportale Nazionale, convertito in
+  shapefile con gli assi lat/lon raddrizzati). Il passo 4/7 lancia poi
+  `geoserver-init`, che accende da sé il PostGIS di GeoServer: un server nuovo
+  ricostruisce quel database senza copiare niente a mano. Lo stesso passo
+  costruisce il raster CORINE per cella (`clc2018_it_100m.tif`) e, se
+  `LIMEN_DEM_RASTER` non punta già a un file, scarica il DTM a 5 m da Zenodo
+  (HR-DTM IRPI-CNR v1.2, CC BY 4.0, 22 GB, ripreso dopo un errore di rete e
+  controllato con l'md5). Gira solo con `GEOSERVER_SOURCE__DB_DSN` impostata.
+  La prima volta ~25 GB, DTM compreso. ISPRA rigenera
   i file IFFI ogni notte (ETag nuovo, contenuto uguale), quindi un file si
   richiede solo dopo `GEODATI__RIVALIDA_DOPO_GIORNI` (30); i mosaici del 2023
   a quel punto rispondono `304`. Un layer già in
