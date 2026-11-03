@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import math
+import re
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
-from egms_client import COMPONENTS, api_release, tiles_for_bounds
+from egms_client import COMPONENTS, Component, Tile, api_release, tiles_for_bounds
 
 from limen.config.settings import Settings, get_settings
 from limen.core.logging import get_logger
@@ -52,6 +53,34 @@ async def _celle(aoi_id: str) -> list[Cella]:
     ]
 
 
+#: Il segnaposto del mare di prima di egms-client 0.2: ``…_2020_2025.assente``
+#: o ``…_2020_2025_1.assente``. La libreria scrive ``…_2020_2025_absent``.
+_VECCHIO_SEGNAPOSTO = re.compile(r"(EGMS_L3_E\d+N\d+_100km_[UE]_\d{4}_\d{4})(?:_\d+)?\.assente")
+
+
+def migra_segnaposto(cartella: Path) -> int:
+    """I segnaposto vecchi del mare rinominati come li cerca la libreria.
+
+    Senza, al primo sync ogni tile in mare tornerebbe a chiedere una ricerca
+    all'archivio (nessun download: la ricerca risponde «Invalid tile ID»).
+    Restituisce quanti ne ha rinominati.
+    """
+    rinominati = 0
+    for vecchio in cartella.glob("*.assente"):
+        trovato = _VECCHIO_SEGNAPOSTO.fullmatch(vecchio.name)
+        if trovato is None:
+            continue
+        nuovo = cartella / f"{trovato[1]}_absent"
+        if nuovo.exists():
+            vecchio.unlink()
+        else:
+            vecchio.rename(nuovo)
+        rinominati += 1
+    if rinominati:
+        log.info("egms.segnaposto_migrati", n=rinominati)
+    return rinominati
+
+
 def _periodo(release: str) -> tuple[date, date]:
     inizio, fine = release.split("_")
     return date(int(inizio), 1, 1), date(int(fine), 12, 31)
@@ -74,15 +103,22 @@ async def sync_egms(*, aoi_id: str, settings: Settings | None = None) -> int:
     maxy = max(c.maxy for c in celle)
 
     cartella = Path(s.cartella)
-    tiff: dict[str, list[Path]] = {}
-    for componente in COMPONENTS:
-        tiff[componente] = []
-        for tile in tiles_for_bounds(minx, miny, maxx, maxy):
-            # Una tile già sul disco (o già nota come mare) non chiede niente
-            # all'archivio: il secondo sync scarica zero byte.
-            path = await archivio.fetch_tile(tile, componente, s.release, cartella)
-            if path is not None:
-                tiff[componente].append(path)
+    cartella.mkdir(parents=True, exist_ok=True)
+    migra_segnaposto(cartella)
+    richieste = [(c, t) for c in COMPONENTS for t in tiles_for_bounds(minx, miny, maxx, maxy)]
+    cancello = asyncio.Semaphore(s.concorrenza)
+
+    async def _una(componente: Component, tile: Tile) -> Path | None:
+        # Una tile già sul disco (o già nota come mare) non chiede niente
+        # all'archivio: il secondo sync scarica zero byte.
+        async with cancello:
+            return await archivio.fetch_tile(tile, componente, s.release, cartella)
+
+    trovate = await asyncio.gather(*(_una(c, t) for c, t in richieste))
+    tiff: dict[str, list[Path]] = {c: [] for c in COMPONENTS}
+    for (componente, _), path in zip(richieste, trovate, strict=True):
+        if path is not None:
+            tiff[componente].append(path)
 
     usate = sorted(p.name for ps in tiff.values() for p in ps)
     versione = dataset_versions_repo.content_hash([VERSIONE_CALCOLO, s.release, *usate])
