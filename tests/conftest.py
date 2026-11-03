@@ -33,6 +33,23 @@ SEED_SMALL_AOI = "it-valle-d-aosta"
 SEED_PUGLIA = "it-puglia"
 
 
+@pytest.fixture(autouse=True)
+def _retry_without_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
+    """La policy di `_http` riprova come in produzione, ma senza aspettare.
+
+    Ogni test che simula un 5xx o un host irraggiungibile passava dal backoff
+    vero: 2 + 4 + 8 s fra i quattro tentativi, fino al tetto di 60 s. Il gate
+    con la coverage spendeva cosi' minuti a dormire. Tentativi ed eccezioni
+    restano quelli reali; cambia solo l'attesa.
+    """
+    from tenacity import wait_none
+
+    from limen.integrations import _http
+
+    monkeypatch.setattr(_http, "wait_exponential", lambda **_k: wait_none())
+    monkeypatch.setattr(_http.RETRY_POLICY, "wait", wait_none())
+
+
 def register_flood_mocks(mock: respx.Router) -> None:
     """Mock the flood/marine endpoints the default workflow calls.
 
