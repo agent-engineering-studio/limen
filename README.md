@@ -320,6 +320,14 @@ Some sources need only a key in `.env`, and `make init`, `make up` and
   2023 mosaics then answer `304`. A layer
   already in PostGIS is not reloaded: after an update,
   `GEO_INIT_FORCE=true make geoserver-init`.
+- **ISPRA exposure per municipality** (no key): the nightly
+  `esposizione_ispra` step stores, in `esposizione_comuni`, the residents of
+  each municipality living in PAI landslide hazard P3+P4 and flood hazard P2
+  areas (ISTAT 2021 census), plus buildings and businesses, from the IdroGEO
+  API. The answers are kept under `LIMEN_DATA_DIR/idrogeo` and asked for
+  again only after 30 days, so most nights read them from disk in ~2 s.
+  `/api/comuni` returns them as `esposizione_ispra`; they do not enter any
+  score. `limen esposizione-sync` fills the table at once.
 - **Flood ground truth** (no key): `limen ingest-events --hazard flood` reads
   the observed-flood layers of Copernicus EMS Rapid Mapping as GeoJSON,
   ~200 MB for Italy, cached under `LIMEN_DATA_ROOT/flood_events`.

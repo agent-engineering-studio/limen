@@ -23,6 +23,7 @@ Usage:
     limen monitor-once       Run the MAF landslide workflow once for an AOI.
     limen forecast           Predictive run at now+H hours (forecast rain, no persistence).
     limen firms-sync         Ingest NASA FIRMS active-fire hotspots (FIRMS__MAP_KEY).
+    limen esposizione-sync   Residenti in aree a pericolo frana/alluvione per comune (ISPRA).
     limen geodati-sync       Gli shapefile di GeoServer: IFFI, PAI, idraulica, ISTAT, CORINE, …
     limen imperviousness-fetch  Download the CLMS sealed-soil raster (public EEA service).
     limen fetch-static       Sorgenti statiche pubbliche, verificate con il manifest (#305).
@@ -61,6 +62,7 @@ from limen.cli.clima_pioggia import run as _run_clima_pioggia
 from limen.cli.data_status import run as _run_data_status
 from limen.cli.dpc_bollettini import run as _run_dpc_bollettini
 from limen.cli.effis_sync import run as _run_effis_sync
+from limen.cli.esposizione_sync import run as _run_esposizione_sync
 from limen.cli.fedelta_racconti import run as _run_fedelta_racconti
 from limen.cli.fetch_static import run as _run_fetch_static
 from limen.cli.firms_sync import run as _run_firms_sync
@@ -312,6 +314,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="refresh cell_insar_features from Copernicus EGMS (V2.1)",
     )
     sub.add_parser(
+        "esposizione-sync",
+        help="ISPRA per-municipality exposure (residents in landslide/flood hazard areas)",
+    )
+    sub.add_parser(
         "geodati-sync",
         help="download every shapefile geoserver-init loads (IdroGEO, ISTAT, CORINE, geology)",
     )
@@ -467,6 +473,7 @@ def main(argv: list[str] | None = None) -> int:
         "report": _run_report_build,
         "sync-egms": _run_sync_egms,
         "geodati-sync": _run_geodati_sync,
+        "esposizione-sync": _run_esposizione_sync,
         "ingest-kb": _run_ingest_kb,
         "geoserver-sync": _run_geoserver_sync,
         "firms-sync": _run_firms_sync,

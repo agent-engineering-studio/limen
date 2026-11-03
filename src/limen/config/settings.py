@@ -943,6 +943,7 @@ class BackupSettings(BaseSettings):
         "public.flood_hazard*",
         "public.iffi_landslides",
         "public.osm_infrastructure",
+        "public.esposizione_comuni",
     )
     #: Tabelle escluse del tutto (pattern di ``pg_dump``), schema compreso.
     escluse: tuple[str, ...] = ("public.tmp_*",)
@@ -963,7 +964,12 @@ class BackupSettings(BaseSettings):
     #: Le versioni di ``dataset_versions`` (``sorgente:dataset``, LIKE) delle
     #: tabelle solo schema: dopo un ripristino si dimenticano, o il loader
     #: direbbe «già caricato» e le lascerebbe vuote.
-    versioni_da_dimenticare: tuple[str, ...] = ("geoserver:flood:%", "osm:%", "ispra:idrogeo")
+    versioni_da_dimenticare: tuple[str, ...] = (
+        "geoserver:flood:%",
+        "osm:%",
+        "ispra:idrogeo",
+        "ispra:pir_comuni",
+    )
     #: Un backup con meno di questa frazione delle righe di stato del
     #: precedente sospende la retention: un volume ricreato vuoto non deve
     #: far uscire dal bucket i backup buoni.

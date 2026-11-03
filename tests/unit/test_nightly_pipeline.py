@@ -82,8 +82,12 @@ def stubbed(monkeypatch: pytest.MonkeyPatch) -> None:
     async def effis() -> dict[str, int]:
         return {"aoi": 0, "perimetri": 0, "falliti": 0}
 
+    async def esposizione() -> dict[str, object]:
+        return {"esito": "invariata", "comuni": 0}
+
     monkeypatch.setattr(nightly, "_glofas", glofas)
     monkeypatch.setattr(nightly, "_effis_perimetri", effis)
+    monkeypatch.setattr(nightly, "_esposizione_ispra", esposizione)
     monkeypatch.setattr(nightly, "_fwi_pioggia_osservata", fwi_pioggia)
     monkeypatch.setattr(nightly, "_storage", storage)
     monkeypatch.setattr(nightly, "_shadow_ml", shadow)

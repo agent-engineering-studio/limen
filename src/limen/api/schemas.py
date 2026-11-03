@@ -196,6 +196,25 @@ class AllertaGiorno(BaseModel):
     temporali: int
 
 
+class EsposizioneIspra(BaseModel):
+    """Chi vive dove la mappa di pericolosità ISPRA dice frana o alluvione.
+
+    Gli indicatori di IdroGEO per il comune (residenti del censimento 2021
+    nelle aree a pericolosità frana P3+P4 del mosaico PAI 2020-2021 e
+    idraulica media P2 del mosaico 2020), aggiornati una volta al mese. Dice
+    quanto pesa un evento qui, non se arriverà: non entra nel punteggio.
+    """
+
+    pop_residenti: int | None = None
+    pop_frana_p3p4: int | None = None
+    pop_frana_p3p4_pct: float | None = None
+    pop_idraulica_p2: int | None = None
+    pop_idraulica_p2_pct: float | None = None
+    edifici: int | None = None
+    imprese: int | None = None
+    aggiornato: str
+
+
 class AllertaUfficiale(BaseModel):
     """L'allerta della Protezione Civile per la zona del comune (#155).
 
@@ -243,6 +262,9 @@ class ComuneRisk(BaseModel):
     #: Il bollettino DPC per la zona del comune; `None` se non è ancora stato
     #: importato o il comune non cade in nessuna zona.
     allerta_ufficiale: AllertaUfficiale | None = None
+    #: L'esposizione ISPRA del comune; `None` finché il passo notturno non
+    #: l'ha importata, o per un comune che IdroGEO non elenca.
+    esposizione_ispra: EsposizioneIspra | None = None
     #: Lo stesso numero di `attention`, sul futuro e con la stessa regola:
     #: se è più alto, il comune sta salendo.
     forecast_attention: float | None = None

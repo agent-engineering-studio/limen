@@ -255,6 +255,14 @@ scaricano da soli (via `scripts/load_static_data.sh`):
   a quel punto rispondono `304`. Un layer già in
   PostGIS non si ricarica da solo: dopo un aggiornamento,
   `GEO_INIT_FORCE=true make geoserver-init`.
+- **Esposizione ISPRA per comune** (senza chiave): il passo notturno
+  `esposizione_ispra` salva in `esposizione_comuni` i residenti di ogni
+  comune nelle aree a pericolosità frana P3+P4 del PAI e idraulica P2
+  (censimento ISTAT 2021), più edifici e imprese, dall'API di IdroGEO. Le
+  risposte stanno in `LIMEN_DATA_DIR/idrogeo` e si richiedono solo dopo 30
+  giorni: quasi tutte le notti si leggono dal disco in ~2 s. `/api/comuni`
+  le restituisce come `esposizione_ispra`; non entrano in nessun punteggio.
+  `limen esposizione-sync` riempie la tabella subito.
 - **Truth set alluvione** (senza chiave): `limen ingest-events --hazard flood`
   legge i layer GeoJSON di Copernicus EMS, ~200 MB per l'Italia.
 - **Storia del fuoco** (senza chiave): `limen ingest-fire-history` scarica gli
