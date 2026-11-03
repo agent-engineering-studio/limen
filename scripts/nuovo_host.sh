@@ -145,14 +145,24 @@ scritte=(
   "${LIMEN_DATASETS_DIR:-$RADICE/datasets}"
   "${LIMEN_REPORTS_HOST_DIR:-$RADICE/reports}"
   "${LIMEN_MLRUNS_DIR:-$RADICE/mlruns}"
-  # Le tile EGMS: `limen sync-egms` ci scrive, e i sync dopo le ritrovano.
-  "${LIMEN_EGMS_DIR:-$RADICE/egms}"
 )
+# La cartella la crea il container del `-v` se manca, non un `mkdir` sull'host:
+# sotto una radice di root (/srv/data/limen-*) l'utente che lancia lo script
+# non può crearla, e con `set -e` lo script si fermava qui.
 for d in "${scritte[@]}"; do
-  mkdir -p "$d"
   docker run --rm -v "$d:/d" alpine chown -R "$uid:$gid" /d
 done
 ok "limen ($uid:$gid): ${scritte[*]}"
+
+# Le tile EGMS le scrivono in due: `limen` dell'immagine (api e worker, sync e
+# segnaposto del mare) e chi lancia `make static-data`, il cui container gira
+# con l'uid dell'host. Proprietario l'utente dell'host, gruppo quello
+# dell'immagine, setgid: i file nuovi restano del gruppo e tutti e due
+# scrivono, senza group_add nel compose.
+egms="${LIMEN_EGMS_DIR:-$RADICE/egms}"
+docker run --rm -v "$egms:/d" alpine sh -c \
+  "chown -R $(id -u):$gid /d && chmod -R g+rwX /d && find /d -type d -exec chmod g+s {} +"
+ok "EGMS ($(id -u):$gid, setgid): $egms"
 
 # --- 3. Stato ------------------------------------------------------------------
 if [ "$MODO" = "--ripristina" ]; then
