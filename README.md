@@ -777,8 +777,8 @@ only). Images are `linux/amd64`. Third-party images are pinned (pg_tileserv
   new instance after `migrate` and `seed`. Then `limen calibrate`.
 - **`make fetch-static`** downloads what needs no account: the CLMS
   sealed-soil raster and the OSM roads and railways, with a manifest of
-  sizes and sha256. DTM, CORINE and geology need registration with their
-  publishers.
+  sizes and sha256. DTM, CORINE, geology and the ISPRA layers are downloaded
+  by the static-data step of `make init` (see the Quick start).
 - **`make static-data`** runs the same commands on the host when `uv` is
   there, otherwise in a throwaway worker container.
 
