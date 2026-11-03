@@ -1152,6 +1152,26 @@ raster = [
 ]
 
 [[package]]
+name = "egms-client"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "httpx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/30/75/eea17c1198d2ddf63649b62b162df7ec1a025ad40e934827abaf678b9725/egms_client-0.1.0.tar.gz", hash = "sha256:dcdb2c9b13eb2179216c7e8a9eff6f1bdd936dd4b37c5524a04b1a8f5e7cf090", size = 15310, upload-time = "2026-11-03T08:08:58.881Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0f/31/2c41400bb3d4310f7eefd5a0bc6cec7620fcc740d2138f546b9dc229d2a1/egms_client-0.1.0-py3-none-any.whl", hash = "sha256:c56007cd2b4dbf5b4a0ccee38252633182543b23d8c012a737047a45f7542d54", size = 17245, upload-time = "2026-11-03T08:08:57.725Z" },
+]
+
+[package.optional-dependencies]
+raster = [
+    { name = "numpy" },
+    { name = "pyproj" },
+    { name = "rasterio" },
+]
+
+[[package]]
 name = "email-validator"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2177,6 +2197,7 @@ dependencies = [
     { name = "cbor2" },
     { name = "cryptography" },
     { name = "effis-client", extra = ["raster"] },
+    { name = "egms-client", extra = ["raster"] },
     { name = "fastapi" },
     { name = "fwi-chain" },
     { name = "geoalchemy2" },
@@ -2260,6 +2281,7 @@ requires-dist = [
     { name = "cbor2", specifier = ">=6.1" },
     { name = "cryptography", specifier = ">=43" },
     { name = "effis-client", extras = ["raster"], specifier = "~=0.1.2" },
+    { name = "egms-client", extras = ["raster"], specifier = "~=0.1.0" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "fwi-chain", specifier = "~=1.0.0" },
     { name = "geoalchemy2", specifier = ">=0.15" },
