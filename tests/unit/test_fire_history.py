@@ -21,6 +21,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import firms_client as firms
 import httpx
 import pytest
 import respx
@@ -31,8 +32,6 @@ from limen.integrations._http import SharedHttpClient
 from limen.integrations.firms import archive
 from limen.integrations.firms.archive import (
     ARCHIVE_PRODUCTS,
-    ARCHIVE_URL,
-    _looks_like_hotspot_csv,
     archive_years,
 )
 from limen.integrations.firms.client import parse_hotspot_csv
@@ -105,15 +104,15 @@ def test_missing_type_column_leaves_the_class_unknown() -> None:
 
 
 def test_an_error_body_is_not_mistaken_for_a_csv() -> None:
-    assert _looks_like_hotspot_csv(_VIIRS_HEADER)
-    assert not _looks_like_hotspot_csv('{"error":"not found"}')
-    assert not _looks_like_hotspot_csv("")
+    assert firms.is_hotspot_csv(_VIIRS_HEADER)
+    assert not firms.is_hotspot_csv('{"error":"not found"}')
+    assert not firms.is_hotspot_csv("")
     # Un HTML di errore contiene parole comuni ma non le colonne richieste.
-    assert not _looks_like_hotspot_csv("<html><body>Not Found</body></html>")
+    assert not firms.is_hotspot_csv("<html><body>Not Found</body></html>")
 
 
 def test_archive_url_matches_the_published_layout() -> None:
-    url = ARCHIVE_URL.format(source="viirs-snpp", year=2020, country="Italy")
+    url = firms.archive_url(firms.VIIRS_SNPP, 2020, "Italy")
     assert url == (
         "https://firms.modaps.eosdis.nasa.gov/data/country/"
         "viirs-snpp/2020/viirs-snpp_2020_Italy.csv"
@@ -168,7 +167,7 @@ async def test_a_downloaded_year_is_cached_and_then_read_from_disk(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("LIMEN_DATA_DIR", str(tmp_path))
-    url = ARCHIVE_URL.format(source="modis", year=2021, country="Italy")
+    url = firms.archive_url(firms.MODIS, 2021, "Italy")
     route = respx.get(url).mock(return_value=httpx.Response(200, text=_CSV))
 
     first = await archive.fetch_archive_year(product=_MODIS, year=2021)
@@ -187,12 +186,10 @@ async def test_an_unpublished_year_answering_200_is_not_parsed(
 ) -> None:
     """211 byte di JSON con esito 200: niente cache, niente righe fantasma."""
     monkeypatch.setenv("LIMEN_DATA_DIR", str(tmp_path))
-    respx.get(ARCHIVE_URL.format(source="modis", year=2030, country="Italy")).mock(
+    respx.get(firms.archive_url(firms.MODIS, 2030, "Italy")).mock(
         return_value=httpx.Response(200, json={"error": "not available"})
     )
-    respx.get(ARCHIVE_URL.format(source="modis", year=2031, country="Italy")).mock(
-        return_value=httpx.Response(404)
-    )
+    respx.get(firms.archive_url(firms.MODIS, 2031, "Italy")).mock(return_value=httpx.Response(404))
     assert await archive.fetch_archive_year(product=_MODIS, year=2030) == []
     assert await archive.fetch_archive_year(product=_MODIS, year=2031) == []
     assert not (tmp_path / "fires").exists()
@@ -208,6 +205,19 @@ async def test_an_unreachable_archive_degrades_to_an_empty_year(
 
     monkeypatch.setattr(archive, "fetch_with_retry", _down)
     assert await archive.fetch_archive_year(product=_MODIS, year=2021, use_cache=False) == []
+
+
+@respx.mock
+async def test_use_cache_false_downloads_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LIMEN_DATA_DIR", str(tmp_path))
+    route = respx.get(firms.archive_url(firms.MODIS, 2021, "Italy")).mock(
+        return_value=httpx.Response(200, text=_CSV)
+    )
+    await archive.fetch_archive_year(product=_MODIS, year=2021)
+    assert len(await archive.fetch_archive_year(product=_MODIS, year=2021, use_cache=False)) == 1
+    assert route.call_count == 2
 
 
 # ---------------------------------------------------------------------------

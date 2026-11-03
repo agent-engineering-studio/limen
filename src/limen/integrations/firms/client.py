@@ -8,6 +8,10 @@ active-fire detections with ~3 h NRT latency:
 One national bbox costs one transaction per source against a quota of
 5000 per 10 minutes, so the whole of Italy is a rounding error.
 
+Parsing, the confidence gate and the area URL come from the
+``firms-client`` package (extracted from Limen, Apache-2.0); the shared
+retry and the degradation stay here.
+
 Quality filter: FIRMS is a detection feed, not a fire inventory —
 industrial flares, sun glint and hot bare soil show up as
 low-confidence pixels. We drop them at parse time (thresholds from
@@ -24,9 +28,12 @@ from __future__ import annotations
 import csv
 import io
 from datetime import date
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 import httpx
+from firms_client import ConfidenceLevel as ConfidenceLevel
+from firms_client import area_url, parse_csv, select
+from firms_client.sources import AREA_API_BASE
 from tenacity import RetryError
 
 from limen.core.logging import get_logger
@@ -38,7 +45,7 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
-DEFAULT_BASE_URL = "https://firms.modaps.eosdis.nasa.gov/api/area/csv"
+DEFAULT_BASE_URL = AREA_API_BASE
 
 _DEGRADATION_EXC: tuple[type[BaseException], ...] = (
     httpx.HTTPError,
@@ -46,90 +53,6 @@ _DEGRADATION_EXC: tuple[type[BaseException], ...] = (
     TimeoutError,
     OSError,
 )
-
-ConfidenceLevel = Literal["low", "nominal", "high"]
-
-# VIIRS reports single letters in the NRT products and full words in the
-# standard ones; MODIS reports a 0..100 percentage instead.
-_VIIRS_CONFIDENCE: dict[str, ConfidenceLevel] = {
-    "l": "low",
-    "low": "low",
-    "n": "nominal",
-    "nominal": "nominal",
-    "h": "high",
-    "high": "high",
-}
-_CONFIDENCE_RANK: dict[ConfidenceLevel, int] = {"low": 0, "nominal": 1, "high": 2}
-
-
-def _passes_confidence(raw: str | None, *, min_level: ConfidenceLevel, min_pct: int) -> bool:
-    """Quality gate over either confidence encoding.
-
-    An unparseable / missing value is kept: MODIS SP rows occasionally
-    omit it, and dropping a real fire is worse than keeping a doubtful
-    pixel that still has to cluster with others to matter.
-    """
-    if raw is None:
-        return True
-    token = raw.strip().lower()
-    if not token:
-        return True
-    level = _VIIRS_CONFIDENCE.get(token)
-    if level is not None:
-        return _CONFIDENCE_RANK[level] >= _CONFIDENCE_RANK[min_level]
-    try:
-        return int(float(token)) >= min_pct
-    except ValueError:
-        return True
-
-
-def _as_float(raw: str | None) -> float | None:
-    if raw is None or not raw.strip():
-        return None
-    try:
-        return float(raw)
-    except ValueError:
-        return None
-
-
-def _parse_row(row: dict[str, str], *, source: str) -> FireHotspot | None:
-    lat = _as_float(row.get("latitude"))
-    lon = _as_float(row.get("longitude"))
-    if lat is None or lon is None:
-        return None
-    try:
-        acq_date = date.fromisoformat((row.get("acq_date") or "").strip()[:10])
-    except ValueError:
-        return None
-    try:
-        acq_time = int((row.get("acq_time") or "").strip())
-    except ValueError:
-        return None
-    if not 0 <= acq_time <= 2359:
-        return None
-
-    confidence = (row.get("confidence") or "").strip() or None
-    # VIIRS names the 4 µm channel bright_ti4, MODIS calls it brightness.
-    brightness = _as_float(row.get("bright_ti4")) or _as_float(row.get("brightness"))
-    # `type` dice *cosa* ha visto il satellite: 0 vegetazione, 1 vulcano,
-    # 2 sorgente statica al suolo, 3 offshore. Il filtro di confidenza non
-    # distingue un incendio da un'acciaieria — un'acciaieria è calda davvero e
-    # arriva ad alta confidenza. Solo questa colonna lo fa.
-    detection_type = _as_float(row.get("type"))
-    return FireHotspot(
-        source=source,
-        acq_date=acq_date,
-        acq_time=acq_time,
-        latitude=lat,
-        longitude=lon,
-        frp_mw=_as_float(row.get("frp")),
-        confidence=confidence,
-        brightness_k=brightness,
-        daynight=(row.get("daynight") or "").strip() or None,
-        satellite=(row.get("satellite") or "").strip() or None,
-        instrument=(row.get("instrument") or "").strip() or None,
-        detection_type=int(detection_type) if detection_type is not None else None,
-    )
 
 
 def parse_hotspot_csv(
@@ -140,29 +63,44 @@ def parse_hotspot_csv(
     min_confidence_pct: int = 50,
     min_frp_mw: float = 0.0,
 ) -> list[FireHotspot]:
-    """Parse a FIRMS CSV response, dropping rows below the quality bar."""
-    hotspots: list[FireHotspot] = []
-    dropped = 0
-    for row in csv.DictReader(io.StringIO(payload)):
-        clean: dict[str, str] = {
-            str(k).strip().lower(): str(v) if v is not None else "" for k, v in row.items()
-        }
-        hotspot = _parse_row(clean, source=source)
-        if hotspot is None:
-            dropped += 1
-            continue
-        if not _passes_confidence(
-            hotspot.confidence, min_level=min_confidence, min_pct=min_confidence_pct
-        ):
-            dropped += 1
-            continue
-        if min_frp_mw > 0.0 and (hotspot.frp_mw is None or hotspot.frp_mw < min_frp_mw):
-            dropped += 1
-            continue
-        hotspots.append(hotspot)
-    if dropped:
-        log.info("firms.hotspots.filtered", source=source, kept=len(hotspots), dropped=dropped)
-    return hotspots
+    """Parse a FIRMS CSV response, dropping rows below the quality bar.
+
+    Parsing and the confidence/FRP gate come from ``firms-client``. The
+    ``type`` filter (vegetation vs industry) is *not* applied here: the
+    column is stored, and the consumers that need fires only filter on it.
+    """
+    rows = parse_csv(payload)
+    kept = select(
+        rows,
+        vegetation_only=False,
+        min_confidence=min_confidence,
+        min_confidence_pct=min_confidence_pct,
+        min_frp_mw=min_frp_mw,
+    )
+    # Le righe malformate le scarta già parse_csv: si contano dal CSV, o un
+    # formato cambiato darebbe meno hotspot senza una riga di log.
+    total = sum(1 for _ in csv.DictReader(io.StringIO(payload)))
+    if len(kept) < total:
+        log.info(
+            "firms.hotspots.filtered", source=source, kept=len(kept), dropped=total - len(kept)
+        )
+    return [
+        FireHotspot(
+            source=source,
+            acq_date=h.acq_date,
+            acq_time=h.acq_time,
+            latitude=h.latitude,
+            longitude=h.longitude,
+            frp_mw=h.frp_mw,
+            confidence=h.confidence,
+            brightness_k=h.brightness_k,
+            daynight=h.daynight,
+            satellite=h.satellite,
+            instrument=h.instrument,
+            detection_type=h.detection_type,
+        )
+        for h in kept
+    ]
 
 
 class FirmsHttpClient:
@@ -196,9 +134,10 @@ class FirmsHttpClient:
         day_range: int,
         on_date: date | None,
     ) -> str:
-        area = ",".join(f"{c:g}" for c in bbox)
-        url = f"{self._base_url}/{self._map_key}/{source}/{area}/{day_range}"
-        return f"{url}/{on_date.isoformat()}" if on_date is not None else url
+        url = area_url(self._map_key, source, bbox, days=day_range, on_date=on_date)
+        if not url.startswith(AREA_API_BASE):
+            raise ValueError(f"firms-client built an unexpected area URL: {url}")
+        return self._base_url + url[len(AREA_API_BASE) :]
 
     async def fetch_hotspots(
         self,

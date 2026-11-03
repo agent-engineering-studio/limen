@@ -48,6 +48,7 @@ dependencies = [
     "effis-client[raster]~=0.1.2",
     "rainfall-thresholds~=0.1.0",
     "egms-client[raster]~=0.3.0",
+    "firms-client~=0.2.0",
     "copernicus-ems~=0.1.0",
 ]
 
