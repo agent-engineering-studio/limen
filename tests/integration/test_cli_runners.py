@@ -32,7 +32,7 @@ from limen.cli.seed import run as run_seed
 from limen.data.repos import partitions_repo
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.openmeteo.client import ARCHIVE_URL, FORECAST_URL
-from tests.conftest import SEED_PUGLIA, SEED_SMALL_AOI, register_flood_mocks
+from tests.conftest import SEED_SMALL_AOI, register_flood_mocks
 
 pytestmark = pytest.mark.integration
 
@@ -161,10 +161,11 @@ async def test_backtest_runs(
     The window is a single hour so the test stays fast even with hourly
     bundle assembly.
     """
-    # Puglia e non la regione piccola: il backtest la nomina qui sotto.
-    await run_seed(only=[SEED_PUGLIA])
+    # La regione piccola basta: il test guarda il report, non le metriche, e
+    # la Puglia costava ~90 volte le celle (seme, fattori statici, nodi).
+    await run_seed(only=[SEED_SMALL_AOI])
     await run_bootstrap_static()
-    os.environ["LIMEN_BACKTEST_AOI"] = SEED_PUGLIA
+    os.environ["LIMEN_BACKTEST_AOI"] = SEED_SMALL_AOI
     os.environ["LIMEN_BACKTEST_START"] = datetime(2026, 5, 1, 12, tzinfo=UTC).isoformat()
     os.environ["LIMEN_BACKTEST_END"] = datetime(2026, 5, 1, 13, tzinfo=UTC).isoformat()
 

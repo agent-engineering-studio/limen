@@ -210,15 +210,17 @@ layer e nessuna tabella grezza.
    sollevato un'eccezione) o `notifications.dispatch.empty` (nessun
    canale configurato).
 
-### "Il sync ISPRA IdroGEO sta fallendo"
+### "Mancano dati ISPRA (IFFI, PAI, mosaico idraulico)"
 
-1. Il sync settimanale degrada con grazia su 5xx — registra una riga
-   `dataset_versions` vuota con hash vuoto e salta le scritture. Il
-   workflow resta utilizzabile; si hanno solo IFFI/PAI stantii finché
-   ISPRA non torna disponibile.
-2. Controllare `SELECT * FROM dataset_versions WHERE source = 'ispra' ORDER BY fetched_at DESC LIMIT 5;`.
-3. Retry manuale: `uv run python -m limen.integrations.idrogeo.sync_job` (oppure
-   attendere il tick del lunedì successivo).
+1. Non c'è più un sync settimanale: il WFS di IdroGEO risponde 401 a un
+   utente anonimo. I dati arrivano dai download open data, che
+   `limen geodati-sync` scarica in `GEOSERVER_SHAPEFILE_DIR` (passo 3/7 di
+   `make init` / `make up` / `make static-data`).
+2. `geoserver-init` li carica nel PostGIS di GeoServer, `limen geoserver-sync`
+   li porta in Limen. Un layer già in PostGIS non si ricarica da solo: dopo un
+   aggiornamento, `GEO_INIT_FORCE=true make geoserver-init`.
+3. Un file che non è arrivato lo dice il log `geodati.file_fallito` (o
+   `geodati.base_fallito`); il giro dopo lo riprova.
 
 ### "La mappa è vuota"
 

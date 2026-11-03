@@ -18,11 +18,9 @@ Job design rules:
 from limen.api.jobs.cache_cleanup import run_cache_cleanup_job
 from limen.api.jobs.hourly_monitoring import run_hourly_monitoring
 from limen.api.jobs.registration import register_jobs
-from limen.api.jobs.weekly_idrogeo_sync import run_weekly_idrogeo_sync
 
 __all__ = [
     "register_jobs",
     "run_cache_cleanup_job",
     "run_hourly_monitoring",
-    "run_weekly_idrogeo_sync",
 ]

@@ -19,6 +19,15 @@ cartelle, volumi, ripristino e avvio. README, «Installing on a new server».
    la cartella e cambiare quella riga basta: compose, Makefile e
    `make static-data` ricavano i path da lì (DTM, CORINE e geolitologia li
    cercano in `GEOSERVER_SHAPEFILE_DIR`, o in `$LIMEN_DATA_ROOT/geoserver`).
+   Gli shapefile di quella cartella non vanno più copiati: IFFI, mosaici PAI e
+   idraulico, confini ISTAT, CORINE 2018 e geolitologia li scarica
+   `limen geodati-sync` (passo 3/7 di `make init`, ~3,3 GB la prima volta) e
+   `geoserver-init` li carica nel PostGIS di GeoServer (passo 4/7). Lo stesso
+   comando costruisce il raster CORINE per cella (`clc2018_it_100m.tif`,
+   identico pixel per pixel a quello fatto con `gdal_rasterize`) e, se
+   `LIMEN_DEM_RASTER` non punta già a un file, scarica il DTM a 5 m da Zenodo
+   (HR-DTM IRPI-CNR v1.2, 22 GB, ripresa e md5): sul server nuovo non si
+   copia niente a mano.
    Le variabili specifiche (`LIMEN_DEM_RASTER`, `LIMEN_DATASETS_DIR`, …)
    restano override; vuote, gli slot mancanti degradano e il bootstrap logga
    `static_bootstrap.skip`. Il server attuale le ha ancora esplicite nel

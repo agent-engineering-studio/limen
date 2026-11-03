@@ -230,9 +230,21 @@ and restart it):
 flowchart LR
     M[migrate<br/>create tables] --> S[seed<br/>20 regions,<br/>1 km² grid]
     S --> I[ingest-events<br/>e-ITALICA<br/>landslide catalogue]
-    I --> B[bootstrap-static<br/>slope, past landslides,<br/>flood maps per cell]
+    I --> D[static data<br/>download ISPRA, ISTAT,<br/>CORINE, geology, DTM]
+    D --> B[per-cell factors<br/>slope, past landslides,<br/>flood maps, fuel]
     B --> C[calibrate<br/>per-region<br/>normalisation]
 ```
+
+The static-data step (`scripts/load_static_data.sh`, the same path for
+`make up`, `make init` and `make static-data`) **downloads on its own**
+everything that needs no account: the IFFI landslide inventory and the PAI
+hazard mosaics from IdroGEO (`limen geodati-sync`, via
+[ispra-idrogeo](#ispra-idrogeo)), the ISTAT borders, CORINE 2018, the
+1:500k geology and the 5 m DTM (IRPI-CNR HR-DTM, Zenodo). It loads them into
+the [mcp-geo-server](#mcp-geo-server) PostGIS, adds EFFIS burnt areas and,
+with a key, EGMS ground motion, then computes the per-cell factors. The first
+full run for Italy is ~25 GB (the DTM included); later runs skip whatever has
+not changed.
 
 Then run one scoring pass and look at the map:
 
@@ -271,7 +283,7 @@ Every external source is *fail-closed*: without its key, that feed stays off
 ```mermaid
 flowchart LR
     L0["<b>Level 0 · no keys</b><br/>public Open-Meteo weather, DPC radar,<br/>INGV quakes, EFFIS burnt areas,<br/>FIRMS archive, Copernicus EMS floods,<br/>e-ITALICA landslides"]
-    L1["<b>Level 1 · local data</b><br/>GEOSERVER_SOURCE__DB_DSN → ISPRA landslides and flood maps<br/>LIMEN_DEM_RASTER → slope<br/>CORINE, geology, imperviousness rasters"]
+    L1["<b>Level 1 · static layers</b><br/>GEOSERVER_SOURCE__DB_DSN → ISPRA, ISTAT,<br/>CORINE, geology, DTM downloaded at init<br/>imperviousness, OSM: make fetch-static"]
     L2["<b>Level 2 · free keys</b><br/>FIRMS__MAP_KEY → live satellite fires<br/>COPERNICUS__EWDS_KEY → GloFAS rivers<br/>EGMS__SERVICE_KEY → ground motion"]
     L3["<b>Level 3 · production</b><br/>OPENMETEO__FORECAST_URL → own weather server<br/>LLM gateway + ANTHROPIC_API_KEY → summaries<br/>NOTIFICATIONS__* → alerts · BACKUP__* → backups"]
     L0 --> L1 --> L2 --> L3
@@ -283,8 +295,8 @@ All of these are **free**. None is needed to start.
 
 | Variable | What it switches on | Where to get it | Without it |
 |---|---|---|---|
-| `GEOSERVER_SOURCE__DB_DSN` | ISPRA landslide inventory (IFFI), landslide and flood hazard maps (PAI), ISTAT municipal borders, read from the [mcp-geo-server](#mcp-geo-server) PostGIS | run `make geoserver-up` (local) | landslide terrain term thinner; flood map uniform |
-| `LIMEN_DEM_RASTER` | slope, aspect, curvature per cell, from a terrain model (e.g. HR-DTM 5 m or TINITALY 10 m) | a GeoTIFF on disk ([`data/README.md`](./data/README.md)) | no slope term |
+| `GEOSERVER_SOURCE__DB_DSN` | the base-data download at init and the per-cell factors from it: IFFI, PAI landslide and flood maps, ISTAT borders, CORINE, geology, DTM, held in the [mcp-geo-server](#mcp-geo-server) PostGIS | the GeoServer stack, started by `make init` | landslide terrain term thinner; flood map uniform |
+| `LIMEN_DEM_RASTER` | use your own terrain model (e.g. TINITALY 10 m) instead of the HR-DTM 5 m downloaded at init | a GeoTIFF on disk ([`data/README.md`](./data/README.md)) | the downloaded HR-DTM is used |
 | `FIRMS__MAP_KEY` | live NASA satellite fire detections every 45 min; a fire can start a run within hours | [firms.modaps.eosdis.nasa.gov/api/map_key](https://firms.modaps.eosdis.nasa.gov/api/map_key/) | only the yearly archive (no key needed) |
 | `COPERNICUS__EWDS_KEY` | river discharge forecast and each river's *ordinary high flow* from Copernicus GloFAS | ECMWF account on [ewds.climate.copernicus.eu](https://ewds.climate.copernicus.eu/how-to-api); accept the CEMS-Floods licence once | GloFAS via the public Open-Meteo API |
 | `EGMS__SERVICE_KEY` (or `__SERVICE_KEY_FILE`) | ground-motion velocities from Sentinel-1 (EGMS), feeding the ML features | [land.copernicus.eu](https://land.copernicus.eu) → profile → *API Tokens* (the JSON is shown once) | no ground-motion features |
@@ -366,7 +378,7 @@ score.
 | [**DPC radar platform**](https://radar.protezionecivile.it) | national SRI (1 km, 5 min) and «Merging» radar + rain-gauge accumulations | nowcast trigger; rain already fallen for floods | CC-BY-SA 4.0 | no |
 | [**Copernicus EMS — GloFAS**](https://ewds.climate.copernicus.eu) | river discharge forecast per node; each node's ordinary high flow from the multi-year history | flood (fluvial branch) | CEMS-Floods licence, attribution required | free EWDS key (or via Open-Meteo) |
 | [**ISPRA IdroGEO**](https://idrogeo.isprambiente.it) | IFFI landslide inventory (721,365 landslides), PAI landslide and hydraulic hazard mosaics | landslide terrain; flood susceptibility | CC-BY 4.0 | no |
-| **HR-DTM 5 m** or **TINITALY 10 m** (INGV) | elevation → slope, aspect, curvature | landslide, wildfire | CC-BY 4.0 (TINITALY) | no |
+| **HR-DTM 5 m** (IRPI-CNR, Zenodo) or **TINITALY 10 m** (INGV) | elevation → slope, aspect, curvature | landslide, wildfire | CC-BY 4.0 | no |
 | [**CORINE Land Cover 2018**](https://groupware.sinanet.isprambiente.it) (SINAnet/ISPRA) | land cover → fuel type | wildfire | CC-BY | no |
 | **Geolithological Map of Italy 1:500k** (PCN/MASE) | rock and soil type | landslide | CC-BY 4.0 | no |
 | [**Copernicus Land — imperviousness**](https://land.copernicus.eu) | sealed soil (%) | flood (urban runoff) | Copernicus Land open licence | no |
@@ -413,9 +425,27 @@ flowchart TB
     FWI --> L
     EF --> L
     RT --> L
-    ID -. "extracted from Limen's<br/>IdroGEO client" .- L
+    ID --> L
     MGS -- "ISPRA layers in PostGIS<br/>WMS map overlays" --> L
 ```
+
+Limen pins each with `~=`, so a minor version needs a deliberate bump, and
+uses them only for their **pure** parts (request building, parsing,
+validation): network calls go through Limen's own shared client and retry
+policy (`limen.integrations._http`), and the "neutral result on failure"
+rule stays in Limen. The numbers that tune a hazard stay in
+`src/limen/config/hazards/*.yaml`, never in a library's constants.
+
+| Package | Pin in Limen | Licence |
+|---|---|---|
+| [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) | `~=0.1.0` | Apache-2.0 |
+| [`egms-client`](https://pypi.org/project/egms-client/) | `~=0.5.0` | Apache-2.0 |
+| [`firms-client`](https://pypi.org/project/firms-client/) | `~=0.2.0` | Apache-2.0 |
+| [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) | `~=0.1.0` | Apache-2.0 |
+| [`fwi-chain`](https://pypi.org/project/fwi-chain/) | `~=1.0.0` | Apache-2.0 |
+| [`effis-client`](https://pypi.org/project/effis-client/) | `~=0.1.2` | Apache-2.0 |
+| [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |
+| [`mcp-geo-server`](https://github.com/agent-engineering-studio/mcp-geo-server) | Docker image, pinned commit | MIT |
 
 ### copernicus-ems
 
@@ -448,8 +478,11 @@ ground moves, measured by the Sentinel-1 radar satellites. It handles the
 CLMS service-key login, search, download and caching of the L2A, L2B and
 Ortho L3 products, mosaics and GeoParquet time series.
 
-**How Limen uses it.** `limen sync-egms` downloads the Ortho L3 tiles for
-Italy (vertical and east-west, 100 m), and Limen computes per cell the 90th
+**How Limen uses it.** `limen sync-egms` (run by `make init` when the key is
+set) downloads the Ortho L3 tiles for Italy, vertical and east-west at 100 m:
+~25 minutes and 164 tiles (~420 MB) the first time, nothing afterwards. Limen
+uses the library's search and parsing and fetches the tiles itself
+(`integrations/egms/clms.py`), then computes per cell the 90th
 percentile of the velocity and the number of valid pixels
 (`cell_insar_features`). A nightly step checks for a new release. Needs
 `EGMS__SERVICE_KEY`; today it feeds the ML features, not the map. Code:
@@ -491,11 +524,15 @@ any region, province or municipality. Files are cached and refreshed with
 conditional requests, so a nightly update costs a few hundred bytes when
 nothing changed.
 
-**How it relates to Limen.** It was extracted from Limen's own IdroGEO
-client ([`integrations/idrogeo/`](./src/limen/integrations/idrogeo/)) to be
-useful to anyone working with Italian landslide data. In production, Limen
-loads the same IFFI and PAI layers from the mcp-geo-server PostGIS (next
-section).
+**How Limen uses it.** `limen geodati-sync`, step 3 of the static data at
+`make init`, downloads with it the IFFI inventory of every region (plus
+Bolzano and Trento) and the national PAI landslide and flood mosaics into
+`GEOSERVER_SHAPEFILE_DIR`, to be loaded into the mcp-geo-server PostGIS. It
+is the one library whose client Limen uses directly, because the files (up to
+1.2 GB) must be streamed to disk: with `retries=0`, inside Limen's own retry
+policy. ISPRA regenerates the IFFI files every night, so a file is asked
+for again only after `GEODATI__RIVALIDA_DOPO_GIORNI` (30 days). Code:
+[`integrations/idrogeo/`](./src/limen/integrations/idrogeo/).
 
 ### mcp-geo-server
 
@@ -509,11 +546,12 @@ Marche?"), with a chat-and-map web UI.
 
 **How Limen uses it.** It is the home of the **big static layers**: ISPRA
 IFFI and PAI, the hydraulic mosaic, ISTAT borders, terrain, land cover and
-geology.
+geology. `make init` starts it and loads everything by itself; by hand:
 
 ```bash
 make geoserver-up       # GeoServer :8081, web UI :8000, MCP agent :9000, PostGIS :55433
-make geoserver-init     # load the shapefiles under $LIMEN_DATA_ROOT/geoserver
+uv run limen geodati-sync   # download the base data into $LIMEN_DATA_ROOT/geoserver
+make geoserver-init     # load the shapefiles into PostGIS (GEO_INIT_FORCE=true to reload)
 make geoserver-sync     # copy IFFI + PAI into Limen's database
 ```
 
@@ -579,7 +617,7 @@ React app. The AI sits on the side, writing summaries.
 | Component | What it does | Cadence | Implementation |
 |---|---|---|---|
 | **Open-Meteo** | hourly precipitation, soil moisture 0–7 / 7–28 cm, snow (forecast); accumulated precipitation (archive). Served by **our own instance** (compose profile `meteo`): the public API's 10,000 calls/day were exhausted by the sweep and left flood and wildfire at zero across Italy (#142) | live, 30 min cache | `integrations/openmeteo/` + `CachedOpenMeteoClient` |
-| **ISPRA (GeoServer PostGIS)** | IFFI inventory, PAI landslide mosaic; the hydraulic mosaic feeds the flood susceptibility and the landslide `H` component | at init / weekly | `integrations/geoserver_source/` |
+| **ISPRA (GeoServer PostGIS)** | IFFI inventory, PAI landslide mosaic; the hydraulic mosaic feeds the flood susceptibility and the landslide `H` component | at init | `limen geodati-sync` (IdroGEO download) + `integrations/geoserver_source/` |
 | **Copernicus EWDS — GloFAS** | per-node river discharge forecast (`cems-glofas-forecast`, control run) and each node's **ordinary high flow** (`glofas_riferimento`), the denominator of the fluvial ratio | forecast 4×/day, references nightly | `integrations/copernicus/` |
 | **Copernicus Land — EGMS** | Ortho L3 ground motion: per-cell p90 velocity and valid pixels | yearly sync + nightly release check | `integrations/egms/` + `limen sync-egms` |
 | **DPC radar** | SRI (1 km / 5 min) as a nowcast trigger; «Merging» accumulation at each cell for floods (#199) | every `NOWCAST__INTERVAL_MINUTES` / per sweep | `integrations/dpc/` |
@@ -690,6 +728,24 @@ times out. The other two modes are re-runnable and end with
 the hour. The per-cell forecast: 02, 08, 14 and 20:20 UTC. The FWI chain
 needs a month of spin-up after `fwi-backfill`; a restore brings it back
 settled. The GloFAS references: a share of nodes every night, weeks for all.
+
+### Updating production: `make deploy`
+
+Production runs from a detached worktree next to the development checkout
+(`../limen-deploy`, `DEPLOY_DIR`), with the same compose project, `.env` and
+volumes as `make up`:
+
+```sh
+make deploy                       # production to origin/main
+make deploy DEPLOY_REF=3eadcda    # a given commit, also to go back
+```
+
+It refuses to start if that commit's tests are not green on CI or the
+worktree has local changes; otherwise it rebuilds `api`, `worker`, `mcp`
+(and the SPA when `frontend/` changed), waits for `/ready` and records the
+commit in `refs/deploy/ultimo`. Migrations are applied by the API at
+start-up. Never run `make up` in the development checkout on the production
+host: it shares the compose project and would deploy whatever is checked out.
 
 <details>
 <summary><b>Images, static data, LLM gateway, reverse proxy</b></summary>
@@ -810,6 +866,28 @@ add it to `BACKUP__CARTELLE` if older months matter).
 </details>
 
 ---
+
+<details>
+<summary><b>Python dependency groups</b></summary>
+
+Everything goes through `uv` (`uv sync --all-groups` for the full set). The
+runtime dependencies are in `pyproject.toml`; the optional ones are grouped
+by what needs them:
+
+| Group | For | Main packages |
+|---|---|---|
+| _(runtime)_ | API, worker, CLI | asyncpg, shapely, geopandas, rasterio, pydantic, httpx + tenacity, APScheduler, FastAPI, structlog, OpenTelemetry, the extracted libraries |
+| `ml` | V2 ML engine, training, drift | LightGBM, scikit-learn, MLflow, Optuna, SHAP, ONNX Runtime |
+| `dl` | deep-learning experiments | PyTorch, ONNX |
+| `agents` | the Message Batch faithfulness reviewer | anthropic |
+| `mcp` | MCP server | fastmcp |
+| `report` | PDF/HTML reports | Jinja2, ReportLab |
+| `copernicus` | EWDS (GloFAS, FWI comparison) | cdsapi, netCDF4 |
+| `radar` | DPC radar archive | numcodecs |
+| `storage` | S3-compatible object store | boto3 (imported only by the object-store factory) |
+| `dev` | tests and gates | pytest, ruff, mypy, testcontainers, respx |
+
+</details>
 
 ## Testing and quality gates
 

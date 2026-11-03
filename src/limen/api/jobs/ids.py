@@ -14,7 +14,6 @@ JOB_FORECAST_HISTORY = "limen-forecast-history"
 JOB_DAILY_REPORT = "limen-daily-report"
 JOB_NOWCAST_MONITORING = "limen-nowcast-monitoring"
 JOB_FIRMS_MONITORING = "limen-firms-monitoring"
-JOB_WEEKLY_IDROGEO = "limen-weekly-idrogeo"
 JOB_ALERT_DIGEST = "limen-alert-digest"
 JOB_CACHE_CLEANUP = "limen-cache-cleanup"
 JOB_PARTITIONS = "limen-partitions"
@@ -52,5 +51,4 @@ __all__ = [
     "JOB_NOWCAST_MONITORING",
     "JOB_PARTITIONS",
     "JOB_RACCOLTA_EVENTI",
-    "JOB_WEEKLY_IDROGEO",
 ]

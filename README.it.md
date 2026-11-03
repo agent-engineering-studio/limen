@@ -217,11 +217,65 @@ delimitatore.
 | `GEOSERVER_SOURCE__DB_DSN` | _vuoto_ | DSN del PostGIS di mcp-geoserver (IFFI + PAI). |
 | `LIMEN_DEM_RASTER` | _vuoto_ | GeoTIFF DTM per lo slope (opt-in). |
 | `LIMEN_ITALICA_CSV` | _vuoto_ | CSV e-ITALICA locale; se assente, auto-download da Zenodo. |
+| `EGMS__SERVICE_KEY` | _vuoto_ | Chiave di servizio CLMS (JSON su una riga) per scaricare EGMS e controllare le release; oppure `EGMS__SERVICE_KEY_FILE`, il percorso del JSON. |
+| `EGMS__CARTELLA` | `data/egms` | Tile EGMS, tenute fra un sync e l'altro (Docker: il volume `LIMEN_EGMS_DIR` su `/var/lib/limen/egms`). |
+| `FIRMS__MAP_KEY` | _vuoto_ | Chiave NASA FIRMS per il trigger hotspot quasi in tempo reale (gratuita, [si chiede qui](https://firms.modaps.eosdis.nasa.gov/api/map_key/)). Vuota ⇒ trigger inerte; gli archivi annuali per paese dietro la storia del fuoco non la chiedono. |
 | `LOG_LEVEL` / `LOG_JSON` | `INFO` / `false` | Livello + output JSON dei log structlog. |
 
 Vedi [`.env.example`](./.env.example) per l'elenco completo con esempi, e
 [`docs/inference.md`](./docs/inference.md) per il motore LLM (modelli del
 gateway, mappa ruolo → modello, vincoli sui percorsi sincroni).
+
+### Dati che si scaricano da soli, e aggiornare la produzione
+
+Con le chiavi nel `.env`, `make init`, `make up` e `make static-data`
+scaricano da soli (via `scripts/load_static_data.sh`):
+
+- **EGMS** (`EGMS__SERVICE_KEY` o `EGMS__SERVICE_KEY_FILE`): il passo 6/7
+  lancia `limen sync-egms`. La prima volta per l'Italia sono ~25 minuti e 164
+  tile GeoTIFF (~420 MB) in `EGMS__CARTELLA`; i giri successivi le ritrovano
+  lì e non chiedono niente all'archivio.
+- **Dati di base ISPRA** (senza chiave): il passo 3/7 lancia
+  `limen geodati-sync`, che scarica da IdroGEO l'inventario frane IFFI di
+  tutte le regioni (più Bolzano e Trento) e i mosaici nazionali PAI frane e
+  idraulico in `GEOSERVER_SHAPEFILE_DIR`, insieme a tutto il resto che sta nel
+  PostGIS di GeoServer: i confini amministrativi ISTAT 2023 (lo ZIP
+  ufficiale), CORINE Land Cover 2018 (`CLC18_IT`, SINAnet ISPRA) e la carta
+  geolitologica 1:500.000 (il WFS del Geoportale Nazionale, convertito in
+  shapefile con gli assi lat/lon raddrizzati). Il passo 4/7 lancia poi
+  `geoserver-init`, che accende da sé il PostGIS di GeoServer: un server nuovo
+  ricostruisce quel database senza copiare niente a mano. Lo stesso passo
+  costruisce il raster CORINE per cella (`clc2018_it_100m.tif`) e, se
+  `LIMEN_DEM_RASTER` non punta già a un file, scarica il DTM a 5 m da Zenodo
+  (HR-DTM IRPI-CNR v1.2, CC BY 4.0, 22 GB, ripreso dopo un errore di rete e
+  controllato con l'md5). Gira solo con `GEOSERVER_SOURCE__DB_DSN` impostata.
+  La prima volta ~25 GB, DTM compreso. ISPRA rigenera
+  i file IFFI ogni notte (ETag nuovo, contenuto uguale), quindi un file si
+  richiede solo dopo `GEODATI__RIVALIDA_DOPO_GIORNI` (30); i mosaici del 2023
+  a quel punto rispondono `304`. Un layer già in
+  PostGIS non si ricarica da solo: dopo un aggiornamento,
+  `GEO_INIT_FORCE=true make geoserver-init`.
+- **Truth set alluvione** (senza chiave): `limen ingest-events --hazard flood`
+  legge i layer GeoJSON di Copernicus EMS, ~200 MB per l'Italia.
+- **Storia del fuoco** (senza chiave): `limen ingest-fire-history` scarica gli
+  archivi FIRMS annuali per paese; il trigger in tempo quasi reale vuole invece
+  `FIRMS__MAP_KEY`.
+
+La produzione gira da un worktree staccato accanto al checkout di sviluppo
+(`../limen-deploy`), con lo stesso progetto compose, `.env` e volumi di
+`make up`. Dal checkout di sviluppo:
+
+```sh
+make deploy                       # produzione a origin/main
+make deploy DEPLOY_REF=3eadcda    # un commit preciso, anche per tornare indietro
+```
+
+Si rifiuta se i test del commit (backend, integration, frontend) non sono
+verdi in CI o se il worktree ha modifiche; ricostruisce `api`, `worker` e
+`mcp` (più la SPA se `frontend/` è cambiato) con gli stessi file compose di
+`make up`, aspetta `/ready` e registra il commit in `refs/deploy/ultimo`. Mai
+`make up` nel checkout di sviluppo su questo host: condivide il progetto con
+la produzione.
 
 ### Porte pubblicate: Docker scavalca ufw
 
@@ -252,6 +306,52 @@ calcolate in EPSG:3035 (LAEA Europe). Migrazioni SQL immutabili in
 `src/limen/data/migrations/NNN_*.sql`.
 
 ---
+
+## Dipendenze e librerie estratte
+
+Python 3.12+, tutto con `uv` (`uv sync --all-groups` per l'ambiente di
+sviluppo completo). Le dipendenze di runtime stanno in `pyproject.toml`; le
+opzionali sono raggruppate per chi le usa:
+
+| Gruppo | Per | Pacchetti principali |
+|---|---|---|
+| _(runtime)_ | API, worker, CLI | asyncpg, shapely, geopandas, rasterio, pydantic, httpx + tenacity, APScheduler, FastAPI, structlog, OpenTelemetry |
+| `ml` | motore ML V2, addestramento, drift | LightGBM, scikit-learn, MLflow, Optuna, SHAP, ONNX Runtime |
+| `dl` | esperimenti di deep learning | PyTorch, ONNX |
+| `agents` | il revisore di fedeltà in Message Batch | anthropic |
+| `mcp` | server MCP | fastmcp |
+| `report` | report PDF/HTML | Jinja2, ReportLab |
+| `copernicus` | EWDS (GloFAS, confronto FWI) | cdsapi, netCDF4 |
+| `radar` | archivio radar DPC | numcodecs |
+| `storage` | object store S3-compatibile | boto3 (importato solo dalla factory dell'object store) |
+| `dev` | test e gate | pytest, ruff, mypy, testcontainers, respx |
+
+**Librerie estratte da Limen.** Sei parti senza motivo di restare legate a
+Limen sono pacchetti a sé, Apache-2.0, ognuno con il suo repository sotto
+[agent-engineering-studio](https://github.com/agent-engineering-studio) e
+pubblicato su PyPI da un tag. Limen le fissa con `~=`, quindi una versione
+minore nuova richiede un aggiornamento deliberato:
+
+| Pacchetto | Vincolo | Cosa fa |
+|---|---|---|
+| [`fwi-chain`](https://pypi.org/project/fwi-chain/) | `~=1.0.0` | La catena canadese del Fire Weather Index (Van Wagner 1987), verificata sul giorno di riferimento a 1e-9 |
+| [`effis-client`](https://pypi.org/project/effis-client/) | `~=0.1.2` | Perimetri bruciati EFFIS (WFS MapServer) e raster FWI ufficiali (WMS) |
+| [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | `~=0.1.0` | Soglie intensità-durata di Caine, eventi di pioggia, fit frequentista; soglie T5 per l'Italia rifittate su e-ITALICA |
+| [`egms-client`](https://pypi.org/project/egms-client/) | `~=0.5.0` | Archivio EGMS: autenticazione con chiave CLMS, ricerca e download delle tile Ortho L3, mosaici |
+| [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) | `~=0.1.0` | Copernicus EMS Rapid Mapping: attivazioni, maschere di osservazione, layer allagati in GeoJSON |
+| [`firms-client`](https://pypi.org/project/firms-client/) | `~=0.2.0` | NASA FIRMS: archivi per paese aperti, API d'area NRT, tipi di rilevamento |
+| [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) | `~=0.1.0` | ISPRA IdroGEO: inventario IFFI, mosaici PAI e idraulico in una cartella persistente con GET condizionali; API REST pubblica |
+
+Limen ne usa solo le parti **pure** (costruzione delle richieste, parsing,
+validazione): le chiamate di rete passano da `limen.integrations._http`
+(client condiviso, policy di retry) e il degrado neutro resta in Limen.
+`egms-client` ha anche un client che scarica da sé (`EgmsArchive`), con un
+suo retry: Limen non lo usa, e scarica le tile in
+`integrations/egms/clms.py`. Di `ispra-idrogeo` invece Limen usa il client,
+perché i suoi file (fino a 1,2 GB) vanno scritti su disco in streaming: con
+`retries=0`, sul client condiviso, dentro `_http.call_with_retry`. I numeri che
+tarano un pericolo restano in `src/limen/config/hazards/*.yaml`: le costanti
+delle librerie (es. le soglie T5 italiane) non vengono lette.
 
 ## Testing e quality gates
 

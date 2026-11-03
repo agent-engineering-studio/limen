@@ -33,7 +33,6 @@ from limen.api.jobs.nightly import run_nightly_pipeline
 from limen.api.jobs.nowcast_monitoring import run_nowcast_monitoring
 from limen.api.jobs.partitions import run_partitions_job
 from limen.api.jobs.raccolta_eventi import run_raccolta_eventi
-from limen.api.jobs.weekly_idrogeo_sync import run_weekly_idrogeo_sync
 from limen.core.logging import get_logger
 
 log = get_logger(__name__)
@@ -59,7 +58,6 @@ from limen.api.jobs.ids import (  # noqa: E402
     JOB_NOWCAST_MONITORING,
     JOB_PARTITIONS,
     JOB_RACCOLTA_EVENTI,
-    JOB_WEEKLY_IDROGEO,
 )
 
 # Lo sweep orario non aspetta un intervallo intero dopo l'avvio: ogni deploy o
@@ -248,21 +246,6 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
         )
         registered.append(JOB_INGV_SYNC)
         log.info("scheduler.registered", job=JOB_INGV_SYNC, interval_minutes=cfg.ingv_sync_minutes)
-
-    if cfg.enable_weekly_idrogeo:
-        await scheduler.add_schedule(
-            track_job(JOB_WEEKLY_IDROGEO)(run_weekly_idrogeo_sync),
-            args=(deps,),
-            trigger=CronTrigger(day_of_week="mon", hour=3, minute=15),
-            id=JOB_WEEKLY_IDROGEO,
-            conflict_policy=ConflictPolicy.replace,
-        )
-        registered.append(JOB_WEEKLY_IDROGEO)
-        log.info(
-            "scheduler.registered",
-            job=JOB_WEEKLY_IDROGEO,
-            cron="mon 03:15",
-        )
 
     # Unconditional: partitions must exist whatever the cache-cleanup
     # backend is, and retention has nowhere else to run.

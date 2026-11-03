@@ -362,8 +362,6 @@ class SchedulerSettings(BaseSettings):
     ingv_sync_ritardo_massimo_minuti: int = Field(default=180, ge=30)
     #: Ovest, sud, est, nord: il riquadro del portale ShakeMap INGV.
     ingv_bbox: tuple[float, float, float, float] = (5.0, 35.0, 20.0, 49.0)
-    # Run the ISPRA IdroGEO sync every N hours.
-    weekly_idrogeo_hours: int = Field(default=24 * 7, ge=1)
     # Hot-table partition maintenance + retention. Partitions are created a
     # week ahead, so anything well under that is safe; 6 h keeps retention
     # responsive without hammering the catalogue.
@@ -389,7 +387,6 @@ class SchedulerSettings(BaseSettings):
     forecast_cells_hours_utc: list[int] = Field(default=[2, 8, 14, 20])
     forecast_cells_minute: int = Field(default=20, ge=0, le=59)
     enable_hourly_monitoring: bool = True
-    enable_weekly_idrogeo: bool = True
 
 
 class ApiSettings(BaseSettings):
@@ -813,11 +810,36 @@ class EgmsSettings(BaseSettings):
     #: per l'Italia). Deve sopravvivere ai riavvii: in Docker è il volume
     #: ``/var/lib/limen/egms`` (compose), fuori da Docker ``data/egms``.
     cartella: str = "data/egms"
+    #: Tile scaricate insieme (~60 MB l'una). Non più di 2: l'archivio
+    #: risponde 429 «At most 2 downloads may be performed simultaneously» al
+    #: terzo download in corso dello stesso account (verificato il 2026-11-03).
+    concorrenza: int = Field(default=2, ge=1, le=2)
 
     @property
     def attivo(self) -> bool:
         chiave = self.service_key is not None and bool(self.service_key.get_secret_value().strip())
         return chiave or bool((self.service_key_file or "").strip())
+
+
+class GeodatiSettings(BaseSettings):
+    """I dati geografici di base ISPRA (IdroGEO) per lo stack GeoServer.
+
+    L'inventario IFFI regione per regione e i mosaici PAI e idraulico, nella
+    cartella che ``geoserver-init`` carica nel PostGIS di GeoServer:
+    ``GEOSERVER_SHAPEFILE_DIR``, la stessa del compose
+    (:func:`~limen.config.percorsi.cartella_geoserver`).
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    #: Download insieme.
+    concorrenza: int = Field(default=3, ge=1, le=6)
+    #: Un file scaricato da meno di tanto non si chiede neanche. ISPRA rigenera
+    #: i file IFFI ogni notte e l'ETag di nginx è data+dimensione, quindi cambia
+    #: ogni giorno anche a contenuto identico: senza questa soglia ogni
+    #: `make up` di un giorno nuovo riscaricherebbe ~1 GB. I mosaici, fermi dal
+    #: 2023, passata la soglia rispondono 304.
+    rivalida_dopo_giorni: int = Field(default=30, ge=0)
 
 
 class CopernicusSettings(BaseSettings):
@@ -1282,6 +1304,7 @@ class Settings(BaseSettings):
     scoring: ScoringSettings = Field(default_factory=ScoringSettings)
     training: TrainingSettings = Field(default_factory=TrainingSettings)
     egms: EgmsSettings = Field(default_factory=EgmsSettings)
+    geodati: GeodatiSettings = Field(default_factory=GeodatiSettings)
     copernicus: CopernicusSettings = Field(default_factory=CopernicusSettings)
     radar_archive: RadarArchiveSettings = Field(default_factory=RadarArchiveSettings)
     backup: BackupSettings = Field(default_factory=BackupSettings)
