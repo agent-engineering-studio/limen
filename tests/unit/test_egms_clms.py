@@ -145,3 +145,36 @@ async def test_una_release_nuova_si_segnala(archivio: _Archivio) -> None:
 async def test_senza_chiave_il_controllo_si_salta() -> None:
     esito = await sync_job.controlla_release(Settings(egms=EgmsSettings()))
     assert esito["status"] == "skipped"
+
+
+async def test_il_download_passa_dal_retry_di_limen(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Un 429 («At most 2 downloads») e poi la tile: lo riprova la policy di
+    # `_http`, non un retry del pacchetto.
+    from limen.integrations import _http
+
+    politica = _http.make_retry_policy
+    monkeypatch.setattr(_http, "make_retry_policy", lambda: politica(multiplier=0))
+    finto = _Archivio()
+    occupato = [True]
+
+    def _prima_429(request: httpx.Request) -> httpx.Response:
+        if "/download/" in request.url.path and occupato:
+            occupato.clear()
+            finto.richieste.append(request)
+            return httpx.Response(429, text="At most 2 downloads may be performed simultaneously")
+        return finto(request)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(_prima_429))
+
+    async def _get(_cls: type[SharedHttpClient]) -> httpx.AsyncClient:
+        return client
+
+    monkeypatch.setattr(SharedHttpClient, "get", classmethod(_get))
+    a = await clms.archivio(_impostazioni())
+    assert a is not None
+    tiff = await a.fetch_tile((47, 19), "U", "2020_2024", tmp_path)
+    assert tiff is not None and tiff.read_bytes() == b"TIFF"
+    assert finto.scaricati() == 2
+    assert not list(tmp_path.glob("*.part"))
