@@ -120,6 +120,7 @@ count.
 | **National overview** (column) | One row per hazard with the number of areas and the class; clicking it filters the map. «All hazards» shows the worst in each cell |
 | **Above threshold only** | Hides cells below Moderate: a quarter of Italy is in the low class and would cover the map. Unmeasured cells remain visible |
 | **Layers** | Context to overlay: today's official warnings, recorded landslides (IFFI, the national landslide inventory), PAI hazard zones, hydraulic hazard, observed floods, burnt areas |
+| **2D / Relief** | «Relief» tilts the map and raises the terrain from the 5 m digital model, exaggerated 1.5 times (the legend says so): you see on which slope and in which valley floor the coloured cells fall. Going back to 2D reloads nothing. The «3D» view is still switched off |
 | **Timeline** Now / +24 / +48 / +72 h | Steps through the per-cell forecast; under each lead time is the actual moment, and a lead time already past says so |
 | **Inspector** (click on a cell) | The score of each hazard, its components, the forecast rain; for the future it shows the forecast value and states that the rest is from now. At the bottom, **«How this number is made»**: who did what (formula, weather, ML, AI), the rain according to five weather models and the link to the region's account in «Regions to watch» |
 | **Search** (⌘K) | Takes the map to the municipality and highlights its boundary |
@@ -196,19 +197,25 @@ contracts or subscriptions. No commercial source, no paid key required.
 | Past landslides (IFFI) | ISPRA (Italy's environmental protection and research institute) | How many landslides fall within 500 m of the cell: the most predictive indicator there is | all cells |
 | Landslide hazard (PAI) | ISPRA, mosaic of the Piani di Assetto Idrogeologico (hydrogeological plans) | The official P1-P4 classification | 167,693 cells (inside the mapped areas) |
 | Hydraulic hazard | ISPRA, PGRA mosaic | How floodable the cell is | 132,535 cells (studied basins) |
-| Shape of the terrain | TINITALY digital model (INGV, Italy's national institute of geophysics and volcanology) | Mean slope of the cell | 99.7% |
-| Rock type | ISPRA geological map | Lithological weight (clays and flysch slide more than limestones) | 99.8% |
+| Shape of the terrain | HR-DTM 5 m digital model (IRPI-CNR, the national research council's hydrogeological institute) | Mean slope of the cell; the relief on the map | 99.7% |
+| Rock type | Geolithological map of Italy 1:500,000 (national Geoportal) | Lithological weight (clays and flysch slide more than limestones) | 99.8% |
 | Land use | CORINE Land Cover (Copernicus) | Fuel for wildfire, urban fabric for exposure | all |
 | Sealed soil | Copernicus Imperviousness | Amplifies the flooding rain in towns | all |
 | Roads, railways | OpenStreetMap | Exposure: how much it matters to warn a cell | all |
 | Boundaries | ISTAT | Municipalities and regions | 7,901 municipalities |
+
+These data are not copied by hand: on the first installation Limen
+downloads them by itself from the official sources (IdroGEO for landslides
+and hazard, ISTAT, CORINE, geology, the terrain model from Zenodo), about
+25 GB, and afterwards asks only for the files that changed.
 
 ### Fast data: what is happening
 
 | Data | Source | Frequency | Use |
 |---|---|---|---|
 | Rain, soil moisture, temperature, wind | Open-Meteo (ECMWF and ICON models), **instance hosted on this server** | every hour | Landslide trigger, flooding rain, wildfire index |
-| River discharge | GloFAS (Copernicus), via public Open-Meteo | every 6 hours | River branch of flooding |
+| River discharge | GloFAS (Copernicus), downloaded from the Copernicus Data Store; public Open-Meteo as a fallback | every 6 hours | River branch of flooding |
+| Measured rain | Protezione Civile, «Merging» (radar corrected with rain gauges, 1 km) | every round | The rain already fallen: the last 24 hours for flooding, the last 3 days for the wildfire chain |
 | Waves and storm surges | Open-Meteo Marine | every hour | Hydrological component of coastal landslides |
 | Earthquakes | INGV (catalogue and ShakeMap) | every hour | Seismic component of landslides |
 | Active fires | NASA FIRMS | every 45 minutes | Opens the post-fire window within a few hours |
@@ -221,8 +228,9 @@ Why our own weather instance: the public Open-Meteo interface has a cap of
 ten thousand on every round. When the cap was exceeded, flooding and
 wildfire gave zero across all of Italy for **lack of data**, not because
 things were calm. Today forecasts and archive come from an instance on the
-server; only the river discharge (GloFAS) remains public, because it cannot
-be hosted.
+server. The river discharge (GloFAS) cannot be hosted: Limen downloads it
+directly from Copernicus, and falls back on the public Open-Meteo interface
+only when that download is missing.
 
 ### Ground-truth data: to know whether it works
 
@@ -231,6 +239,7 @@ be hosted.
 | Rain-triggered landslides, dated | e-ITALICA catalogue, CNR-IRPI (6,312 landslides, 1996-2021) | Calibrate the rain thresholds and check the landslide engine |
 | Floods observed by satellite | Copernicus Emergency Management Service | Check the flooding engine |
 | Wildfire perimeters | Copernicus EFFIS | Check the wildfire engine |
+| Events in the news | Every morning, the headlines of Italian newspapers about landslides, flooding and wildfires; an event becomes truth only when **two different outlets** report it and the municipality can be recognised | Measure how many hours before Limen had seen a real event |
 | Weather reanalysis | ERA5 and CERRA (Copernicus) | Replay the past, build the climatologies |
 
 ## The three engines
@@ -263,10 +272,21 @@ score = 0.35 × the place (S)
 <!-- componente: figura-frane -->
 
 **Caine's threshold** gives, for each duration, the intensity beyond which
-landslides really start to happen: 7.2 mm are enough if they fall in one
-hour, 28.4 are needed over a day. The thresholds have been recalculated on
-the e-ITALICA catalogue (5,974 rain events with a landslide): 95% of real
-landslides lie above the threshold.
+landslides really start to happen. The thresholds have been recalculated on
+the e-ITALICA catalogue (5,974 rain events with a landslide), one curve per
+macro-area: 95% of real landslides lie above the threshold.
+
+| Macro-area | Enough in one hour | Needed over a day |
+|---|---|---|
+| North (from Piemonte to Emilia-Romagna) | 6.4 mm | 30.0 mm |
+| Centre (Toscana, Umbria, Marche, Lazio, Abruzzo, Molise) | 8.0 mm | 27.6 mm |
+| South and islands | 8.8 mm | 27.0 mm |
+| Other areas (cautious curve) | 7.2 mm | 28.4 mm |
+
+Abruzzo and Molise sit in the Centre, not in ISTAT's South, because that is
+the grouping with which the curves were derived from the events: until
+November 2026 the two regions ran on a curve computed without their
+landslides.
 
 Classes: none below 0.15, low up to 0.35, moderate up to 0.55, high up to
 0.75, very high above.
@@ -292,6 +312,15 @@ score = hydraulic susceptibility × max(rain, river)
 - **Rain**: the rain **forecast over the next 72 hours** at the cell's node,
   above the 40 mm threshold, up to saturation at 120 mm; damped if the soil
   is dry, amplified where the ground is sealed.
+- **Rain already fallen**: a window that starts now loses the cloudburst
+  while it falls. At Melito di Porto Salvo, on the morning of 10 October
+  2026, the forecast gave 20 mm and the radar had already measured 152. So
+  the rain is the **higher** of «forecast over 72 hours» and «measured over
+  the last 24 hours + forecast over the next 48», with the measurement from
+  the Protezione Civile «Merging» (radar corrected with rain gauges). With
+  the radar Melito goes from 0.00 to 0.79. A radar frame that is too old, or
+  a pixel that jumps by hundreds of millimetres in half an hour, does not
+  count: the cell stays on the forecast, never «dry».
 - **River**: the discharge forecast by GloFAS divided by the **ordinary high
   flow of that watercourse** (not by a regional value: the Po and a torrent
   cannot be compared). A river without a reference is «I don't know», not
@@ -347,6 +376,12 @@ score = normalised FWI × (0.25 + 0.60 × fuel + 0.15 × slope)
   heavy fuels are very dry, as at the end of summer, and they come down only
   with abundant rain. It is why the hazard can stay high in a mild October,
   if it has not rained for weeks.
+- The drought codes come down only with rain, and the ~9 km weather model
+  does not see thunderstorms. For the days already past the chain therefore
+  uses the **measured rain** from the Protezione Civile «Merging», and every
+  night redoes the last three days. At Montegiordano, between 14 September
+  and 14 October 2026, the model gave 9 mm against the 35-45 measured, and
+  the FWI of 14 October 50 instead of 26.
 - The **terrain modulates the weather, it does not add to it**: under a
   January downpour no pine forest should come out as dangerous. The fixed
   25% share is the hazard of a fire arriving from outside: bare rock in
@@ -468,6 +503,16 @@ in general (*base rate*). An example measured in Basilicata on the 2025
 wildfires: 79% of days with a real fire flagged, against a base rate of
 43%.
 
+**The goal, measured per municipality.** Whoever receives a warning thinks
+in municipalities, not in cells. The yardstick Limen judges itself by is
+therefore this: the municipality of a real event must be at least
+**Moderate** at any hour of the **72 hours before**, for **90%** of events,
+while keeping at most **10%** of municipality-days on alert. The second
+condition is the base rate: without it, switching everything on would reach
+the goal. The events come from the daily collection of news (two outlets per
+event) and from the fact checks of the **Checks** page; an event on which
+Limen had no data in the days before is «unverifiable», not «missed».
+
 ## The AI layer
 
 ### What it does and what it cannot do
@@ -495,19 +540,39 @@ class, now or forecast, then the areas in the high class —: the AI tells a
 region's story, it does not choose it. If the model has not responded, the
 text is not attributed to the AI.
 
+### The evening reviewer and the morning news
+
+Two AI jobs write nothing on the map:
+
+- **Every evening** (21 UTC) a second model, different from the one that
+  wrote them, rereads a sample of the day's explanations and checks that
+  they say what the data say; the figures they quote are also compared in
+  code. The reviewer does not correct: it flags, and a missing answer counts
+  as «don't know», never «faithful».
+- **Every morning** (06 UTC) a model reads the newspaper headlines of the
+  last three days and says which ones report a new event, where and when.
+  The checks that turn it into truth (two outlets, a recognisable
+  municipality) and the measurement of the lead time are code: the model
+  sees neither scores nor thresholds. The public articles of the **Checks**
+  page are still written by hand.
+
 ### The models and where they run
 
-| Name in the gateway | Model | Where | Use |
+| Name | Model | Where | Use |
 |---|---|---|---|
 | `fast`, `chat`, `extract` | Qwen3 4B and 8B | Server GPU (llama.cpp) | Short tasks, extraction for the knowledge graph |
 | `embed` | Qwen3-Embedding 0.6B | Server CPU | Semantic search in documents |
-| `quality-local` | GLM-5.2 (colibrì) | server, from disk | Night jobs only: generates at tens of seconds per word |
-| `quality-cloud` | Claude Sonnet 5.5 (Anthropic) | API, with a spending cap | Explanations and diagnoses of the regions |
+| `fast-cloud` | Claude Haiku 5.5 (Anthropic) | API | Explanations and diagnoses of the regions |
+| reviewer, news | Claude Sonnet 5.5 | API, in batches (Message Batches) | The evening check and the morning collection |
 
-All traffic goes through **a single gateway** (LiteLLM), which picks the
-model by name, applies the spending cap and switches to a fallback model if
-one does not respond. The slow models run only at night, because there is
-only one server and by day it serves the map.
+Traffic goes through **a single gateway** (LiteLLM), which picks the model
+by name and switches to a fallback model if one does not respond; the
+reviewer and the news collection go to Claude directly, in batches, because
+nobody waits for them. **All spending on Claude has a monthly cap**, checked
+before every call: once it is reached the AI stops until the first of the
+month, the explanations go back to the deterministic text and «AI paused»
+appears in the header. The map and the alerts do not change. The tokens used
+in the month are public, on the **Diagnostics** page.
 
 ## Reading the data to anticipate a disaster
 
@@ -538,7 +603,11 @@ A sequence that uses everything Limen can do:
 - **The landslide engine has not yet passed its checks** on real events
   (issue #122): until it does, the landslide map should be read in a
   **relative** way — which cells are darker than their neighbours — rather
-  than by the name of the class.
+  than by the name of the class. Three corrections are ready but **switched
+  off**, until they beat today's formula on the per-municipality yardstick: a
+  trigger that compares the rain with the climate of its node, the rain of
+  the days before read against the mean of that node and that month, and the
+  past hours read from the radar instead of the model.
 - **Earthquake and fire** together account for 22% of the landslide score
   and are zero in ordinary conditions: the high class is hard to reach with
   rain alone.
@@ -559,7 +628,8 @@ A sequence that uses everything Limen can do:
 | Services | REST API (FastAPI); MCP server for agents; A2A protocol |
 | Maps | pg_tileserv (vector tiles from SQL views and functions); MapLibre |
 | Interface | React 19, Mantine 9, TypeScript, Vite |
-| Inference | LiteLLM gateway, llama.cpp/llama-swap on GPU, colibrì (GLM-5.2), Claude via API |
+| Inference | LiteLLM gateway, llama.cpp/llama-swap on GPU, Claude via API with a monthly spending cap |
+| Open libraries | The parts that talk to the sources are separate Python packages, Apache-2.0, usable without Limen too: `fwi-chain` (wildfire index), `effis-client`, `firms-client`, `egms-client`, `copernicus-ems`, `ispra-idrogeo`, `rainfall-thresholds` (Caine thresholds); `mcp-geo-server` (MIT) keeps the large static layers in GeoServer |
 | Operations | Docker Compose on a single server, ports on loopback behind a reverse proxy; no cloud provider |
 
 Everything is reproducible: EUPL-1.2 code, public data, readable
@@ -581,6 +651,7 @@ on another computer. The APIs are documented on the **Integrazioni**
 | **FWI** | Fire Weather Index: the fire weather index |
 | **DC** | Drought Code: deep drought in the wildfire index |
 | **GloFAS** | The European river-flood forecasting system |
+| **Merging** | The Protezione Civile's measured rain: radar corrected with rain gauges, at 1 km |
 | **IFFI** | ISPRA's national landslide inventory |
 | **PAI** | Piani di Assetto Idrogeologico: the areas mapped as hazardous |
 | **Champion / challenger** | The formula that decides / the model that challenges it in the shadows |
