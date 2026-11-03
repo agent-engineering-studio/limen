@@ -302,9 +302,19 @@ Some sources need only a key in `.env`, and `make init`, `make up` and
 - **ISPRA base data** (no key): step 3/7 runs `limen geodati-sync`, which
   downloads from IdroGEO the IFFI landslide inventory of every region (plus
   Bolzano and Trento) and the national PAI landslide and flood hazard
-  mosaics into `GEOSERVER_SHAPEFILE_DIR`, then `geoserver-init` loads them
-  into the GeoServer PostGIS when that stack is up; it runs only when
-  `GEOSERVER_SOURCE__DB_DSN` is set. The first run is ~3 GB. ISPRA
+  mosaics into `GEOSERVER_SHAPEFILE_DIR`, together with everything else the
+  GeoServer PostGIS holds: the ISTAT 2023 administrative boundaries (official
+  ZIP), CORINE Land Cover 2018 (`CLC18_IT`, SINAnet ISPRA) and the 1:500k
+  geolithological map (the national Geoportale WFS, converted to a shapefile
+  with its lat/lon axes put right). Step 4/7 then runs `geoserver-init`,
+  which starts the GeoServer PostGIS by itself, so a new server rebuilds
+  that whole database with no file copied by hand. The same step builds the
+  per-cell CORINE raster (`clc2018_it_100m.tif`) and, unless
+  `LIMEN_DEM_RASTER` already points at a file, downloads the 5 m DTM from
+  Zenodo (IRPI-CNR HR-DTM v1.2, CC BY 4.0, 22 GB, resumed after a network
+  error and checked against its md5). It runs only when
+  `GEOSERVER_SOURCE__DB_DSN` is set. The first run is ~25 GB, the DTM
+  included. ISPRA
   regenerates the IFFI files every night (new ETag, same content), so a file
   is asked for again only after `GEODATI__RIVALIDA_DOPO_GIORNI` (30); the
   2023 mosaics then answer `304`. A layer

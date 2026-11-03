@@ -46,6 +46,7 @@ predefinito() {  # predefinito VARIABILE percorso
   fi
 }
 predefinito LIMEN_DEM_RASTER "$GEOSERVER_DATI/dtm/dtm5m.vrt"
+predefinito LIMEN_DEM_RASTER "$GEOSERVER_DATI/dtm/HRDTM5m.tif"
 predefinito LIMEN_CORINE_RASTER "$GEOSERVER_DATI/clc2018_it/clc2018_it_100m.tif"
 predefinito LIMEN_GEOLOGICAL_SHAPEFILE "$GEOSERVER_DATI/carta_geolitologica/carta_geolitologica.shp"
 predefinito LIMEN_OSM_ROADS "$RADICE/osm/osm_roads.gpkg"
@@ -142,20 +143,20 @@ skip() { printf '  [manca]   %s\n' "$*"; }
 say "1/7  Cosa è configurato in questo ambiente (comandi: $MODO)"
 
 have_geoserver=0; have_dem=0; have_imperv=0; have_corine=0
+gs_risponde() { timeout 3 bash -c "</dev/tcp/${gs_host:?}/${gs_port:?}" 2>/dev/null; }
 if [ -n "${GEOSERVER_SOURCE__DB_DSN:-}" ]; then
   # La variabile impostata non basta: se lo stack non è acceso il sync degrada
   # in silenzio e la mappa resta vuota. Meglio provarci qui, dove si può
   # ancora dire cosa fare, che scoprirlo in venti righe di warning.
   gs_host=$(printf '%s' "$GEOSERVER_SOURCE__DB_DSN" | sed -E 's#.*@([^:/]+).*#\1#')
   gs_port=$(printf '%s' "$GEOSERVER_SOURCE__DB_DSN" | sed -E 's#.*:([0-9]+)/.*#\1#')
-  if timeout 3 bash -c "</dev/tcp/${gs_host}/${gs_port}" 2>/dev/null; then
+  if gs_risponde; then
     have_geoserver=1
     ok "GeoServer PostGIS raggiungibile su ${gs_host}:${gs_port}"
   else
     skip "GEOSERVER_SOURCE__DB_DSN impostata ma ${gs_host}:${gs_port} non risponde"
-    echo "            → lo stack non è acceso. Avvialo con 'make geoserver-up' e,"
-    echo "              la prima volta, 'make geoserver-init' per caricare gli"
-    echo "              shapefile ISPRA in PostGIS."
+    echo "            → lo stack non è acceso: il passo 4/7 lo avvia con geoserver-init,"
+    echo "              che carica in PostGIS gli shapefile scaricati al passo 3/7."
   fi
 else
   skip "GEOSERVER_SOURCE__DB_DSN non impostata"
@@ -208,29 +209,49 @@ fi
 say "2/7  Migrazioni"
 limen migrate || exit 1
 
-say "3/7  Dati geografici di base ISPRA (IdroGEO)"
-# L'inventario frane IFFI di tutte le regioni e i mosaici PAI e idraulico, in
-# GEOSERVER_SHAPEFILE_DIR. La prima volta ~3 GB; poi un file si richiede solo
-# dopo GEODATI__RIVALIDA_DOPO_GIORNI (30). Prima erano shapefile copiati a
+say "3/7  Dati geografici di base (IdroGEO, ISTAT, CORINE, geolitologia, DTM)"
+# In GEOSERVER_SHAPEFILE_DIR: l'inventario frane IFFI di tutte le regioni e i
+# mosaici PAI e idraulico (IdroGEO), i confini ISTAT, CORINE 2018 con il suo
+# raster per cella, la carta geolitologica e, se LIMEN_DEM_RASTER non punta
+# già a un file, il DTM a 5 m (22 GB, Zenodo). La prima volta ~25 GB; poi un
+# file IdroGEO si richiede solo dopo GEODATI__RIVALIDA_DOPO_GIORNI (30), e gli
+# altri, che non cambiano, mai più. Prima erano shapefile copiati a
 # mano: un server nuovo non sapeva ricostruirli. Solo con GeoServer
 # configurato (lo stack può essere ancora spento: i file aspettano lì), perché
 # senza nessuno li caricherebbe.
 geodati_fatto=0
 if [ "$have_geodati" -eq 1 ]; then
   geodati_fatto=1
-  limen geodati-sync || echo "  (qualche file IdroGEO non è arrivato: il prossimo giro lo riprova)"
+  limen geodati-sync || echo "  (qualche file non è arrivato: il prossimo giro lo riprova)"
+  # Su un server nuovo DTM, raster CORINE e geolitologia nascono adesso: i
+  # fattori per cella (7/7) devono vederli già a questo giro. La cartella è
+  # già montata nel container, basta la variabile.
+  for coppia in \
+    "LIMEN_DEM_RASTER:$GEOSERVER_DATI/dtm/HRDTM5m.tif" \
+    "LIMEN_CORINE_RASTER:$GEOSERVER_DATI/clc2018_it/clc2018_it_100m.tif" \
+    "LIMEN_GEOLOGICAL_SHAPEFILE:$GEOSERVER_DATI/carta_geolitologica/carta_geolitologica.shp"; do
+    v="${coppia%%:*}"; percorso="${coppia#*:}"
+    if [ -z "${!v:-}" ] && [ -e "$percorso" ]; then
+      export "$v=$percorso"
+      if [ "$MODO" = docker ]; then CONTAINER+=(-e "$v=$percorso"); fi
+    fi
+  done
 else
   echo "  saltato: GEOSERVER_SOURCE__DB_DSN non impostata"
 fi
 
 say "4/7  Sorgenti"
-if [ "$have_geoserver" -eq 1 ]; then
+if [ "$geodati_fatto" -eq 1 ]; then
   # geoserver-init carica nel PostGIS di GeoServer i layer che non ci sono
-  # ancora: su un server nuovo, tutti. Un layer che c'è già non lo ricarica;
-  # per aggiornarlo dopo un geodati-sync: GEO_INIT_FORCE=true make geoserver-init.
-  # Anche se qualche file è mancato: scaricamento ed estrazione sono atomici,
-  # e i layer che mancano arriveranno al prossimo giro.
-  if [ "$geodati_fatto" -eq 1 ] && [ -n "${LIMEN_COMPOSE:-}" ]; then
+  # ancora: su un server nuovo, tutti — IFFI, mosaici, confini ISTAT, CORINE,
+  # geolitologia. `compose run` avvia da sé PostGIS e GeoServer (sono sue
+  # dipendenze), quindi basta GeoServer configurato, non serve lo stack già
+  # acceso — e dopo resta acceso (restart: unless-stopped), anche su un host
+  # che lo teneva spento. Un layer che c'è già non lo ricarica; per aggiornarlo dopo un
+  # geodati-sync: GEO_INIT_FORCE=true make geoserver-init. Anche se qualche
+  # file è mancato: scaricamento ed estrazione sono atomici, e i layer che
+  # mancano arriveranno al prossimo giro.
+  if [ -n "${LIMEN_COMPOSE:-}" ]; then
     # shellcheck disable=SC2086 # LIMEN_COMPOSE sono opzioni da dividere
     env -i PATH="$PATH" HOME="$HOME" ${DOCKER_HOST:+DOCKER_HOST="$DOCKER_HOST"} \
       GEO_INIT_UID="${GEO_INIT_UID:-$(id -u)}" GEO_INIT_GID="${GEO_INIT_GID:-$(id -g)}" \
@@ -238,7 +259,15 @@ if [ "$have_geoserver" -eq 1 ]; then
       docker compose $LIMEN_COMPOSE --profile geoserver run --rm geoserver-init \
       || echo "  (geoserver-init non riuscito: 'make geoserver-init' a mano)"
   fi
+  if [ "$have_geoserver" -eq 0 ] && gs_risponde; then
+    have_geoserver=1
+    ok "GeoServer PostGIS acceso da geoserver-init"
+  fi
+fi
+if [ "$have_geoserver" -eq 1 ]; then
   limen geoserver-sync || exit 1
+elif [ -n "${GEOSERVER_SOURCE__DB_DSN:-}" ]; then
+  echo "  saltato: ${gs_host}:${gs_port} non risponde (vedi il passo 1/7)"
 else
   echo "  saltato: GEOSERVER_SOURCE__DB_DSN non impostata"
 fi

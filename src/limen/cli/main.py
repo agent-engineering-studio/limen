@@ -23,7 +23,7 @@ Usage:
     limen monitor-once       Run the MAF landslide workflow once for an AOI.
     limen forecast           Predictive run at now+H hours (forecast rain, no persistence).
     limen firms-sync         Ingest NASA FIRMS active-fire hotspots (FIRMS__MAP_KEY).
-    limen geodati-sync       Dati di base ISPRA (IFFI, mosaici PAI e idraulico) per GeoServer.
+    limen geodati-sync       Gli shapefile di GeoServer: IFFI, PAI, idraulica, ISTAT, CORINE, …
     limen imperviousness-fetch  Download the CLMS sealed-soil raster (public EEA service).
     limen fetch-static       Sorgenti statiche pubbliche, verificate con il manifest (#305).
     limen review-alerts      Sampled manual-review checklist for the alert FAR protocol.
@@ -313,7 +313,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     sub.add_parser(
         "geodati-sync",
-        help="download ISPRA IdroGEO base data (IFFI, PAI, flood mosaics) for GeoServer",
+        help="download every shapefile geoserver-init loads (IdroGEO, ISTAT, CORINE, geology)",
     )
     sub.add_parser(
         "geoserver-sync",

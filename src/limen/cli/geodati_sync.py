@@ -1,7 +1,9 @@
-"""`limen geodati-sync` — i dati geografici di base ISPRA per lo stack GeoServer.
+"""`limen geodati-sync` — tutti gli shapefile che geoserver-init carica.
 
-Il primo giro scarica ~3 GB (IFFI regione per regione, mosaici PAI e
-idraulico); i successivi chiedono a IdroGEO solo se qualcosa è cambiato.
+Il primo giro scarica ~3,3 GB: da IdroGEO l'IFFI regione per regione e i
+mosaici PAI e idraulico, poi confini ISTAT, CORINE 2018 e geolitologia. I
+giri successivi chiedono a IdroGEO solo se qualcosa è cambiato, e gli altri
+tre, che non cambiano, non li chiedono più.
 Esce con 1 se un file non è arrivato: gli altri sono comunque al loro posto,
 e il prossimo giro riprova solo quelli.
 """

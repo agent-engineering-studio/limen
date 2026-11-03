@@ -14,6 +14,16 @@ from limen.integrations._http import SharedHttpClient, call_with_retry
 from limen.integrations.idrogeo import geodati
 
 
+@pytest.fixture(autouse=True)
+def _senza_dati_base(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ISTAT, CORINE e geolitologia hanno i loro test (test_geoserver_dati_base)."""
+
+    async def niente(*_a: object) -> tuple[list[str], dict[str, str]]:
+        return [], {}
+
+    monkeypatch.setattr(geodati, "sync_dati_base", niente)
+
+
 def _zip(nome: str) -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as z:

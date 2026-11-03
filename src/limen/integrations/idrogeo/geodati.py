@@ -46,6 +46,7 @@ from limen.config.percorsi import cartella_geoserver
 from limen.config.settings import GeodatiSettings
 from limen.core.logging import get_logger
 from limen.integrations._http import SharedHttpClient, call_with_retry
+from limen.integrations.geoserver_source.dati_base import pulisci_appoggi, sync_dati_base
 
 log = get_logger(__name__)
 
@@ -103,9 +104,10 @@ async def _uno(idrogeo: IdroGEO, ds: Dataset, dove: Path, esito: Esito, *, giorn
 
 
 async def sync_geodati(s: GeodatiSettings) -> Esito:
-    """Scarica o rivalida ogni file; quelli cambiati vengono anche decompressi."""
+    """Tutto quello che geoserver-init carica: IdroGEO, poi ISTAT, CORINE e geolitologia."""
     dove = cartella_geoserver()
     dove.mkdir(parents=True, exist_ok=True)
+    pulisci_appoggi(dove)
     idrogeo = IdroGEO(await SharedHttpClient.get(), retries=0)
     cancello = asyncio.Semaphore(s.concorrenza)
     esito = Esito()
@@ -115,6 +117,10 @@ async def sync_geodati(s: GeodatiSettings) -> Esito:
             await _uno(idrogeo, ds, dove, esito, giorni=s.rivalida_dopo_giorni)
 
     await asyncio.gather(*(_con_cancello(ds) for ds in dataset()))
+    # Il resto di quello che geoserver-init carica: ISTAT, CORINE, geolitologia.
+    scaricati, falliti = await sync_dati_base(idrogeo, dove)
+    esito.cambiati.extend(scaricati)
+    esito.falliti.update(falliti)
     log.info(
         "geodati.fatto",
         cartella=str(dove),
