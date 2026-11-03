@@ -813,6 +813,10 @@ class EgmsSettings(BaseSettings):
     #: per l'Italia). Deve sopravvivere ai riavvii: in Docker è il volume
     #: ``/var/lib/limen/egms`` (compose), fuori da Docker ``data/egms``.
     cartella: str = "data/egms"
+    #: Tile scaricate insieme (~60 MB l'una). Non più di 2: l'archivio
+    #: risponde 429 «At most 2 downloads may be performed simultaneously» al
+    #: terzo download in corso dello stesso account (verificato il 2026-11-03).
+    concorrenza: int = 2
 
     @property
     def attivo(self) -> bool:

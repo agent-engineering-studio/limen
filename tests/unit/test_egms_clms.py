@@ -145,3 +145,44 @@ async def test_una_release_nuova_si_segnala(archivio: _Archivio) -> None:
 async def test_senza_chiave_il_controllo_si_salta() -> None:
     esito = await sync_job.controlla_release(Settings(egms=EgmsSettings()))
     assert esito["status"] == "skipped"
+
+
+def test_i_segnaposto_vecchi_del_mare_si_rinominano(tmp_path: Path) -> None:
+    (tmp_path / "EGMS_L3_E40N15_100km_U_2020_2025_1.assente").touch()
+    (tmp_path / "EGMS_L3_E40N16_100km_E_2020_2025.assente").touch()
+    (tmp_path / "EGMS_L3_E41N15_100km_U_2020_2025_absent").touch()
+    (tmp_path / "EGMS_L3_E41N15_100km_U_2020_2025_1.assente").touch()  # già migrato
+    (tmp_path / "altro.assente").touch()
+    assert sync_job.migra_segnaposto(tmp_path) == 3
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "EGMS_L3_E40N15_100km_U_2020_2025_absent",
+        "EGMS_L3_E40N16_100km_E_2020_2025_absent",
+        "EGMS_L3_E41N15_100km_U_2020_2025_absent",
+        "altro.assente",
+    ]
+    assert sync_job.migra_segnaposto(tmp_path) == 0
+
+
+async def test_una_tile_in_mare_migrata_non_chiede_niente(
+    archivio: _Archivio, tmp_path: Path
+) -> None:
+    (tmp_path / "EGMS_L3_E40N15_100km_U_2020_2024_1.assente").touch()
+    sync_job.migra_segnaposto(tmp_path)
+    a = await clms.archivio(_impostazioni())
+    assert a is not None
+    assert await a.fetch_tile((40, 15), "U", "2020_2024", tmp_path) is None
+    assert archivio.richieste == []
+
+
+async def test_le_tile_in_parallelo_usano_un_token_solo(
+    archivio: _Archivio, tmp_path: Path
+) -> None:
+    import asyncio
+
+    a = await clms.archivio(_impostazioni())
+    assert a is not None
+    tile = [(47, 19), (40, 15), (41, 15), (42, 15)]
+    trovate = await asyncio.gather(*(a.fetch_tile(t, "U", "2020_2024", tmp_path) for t in tile))
+    assert [p is not None for p in trovate] == [True, False, False, False]
+    token = [r for r in archivio.richieste if r.url.path.endswith("oauth2-token")]
+    assert len(token) == 1
