@@ -190,6 +190,7 @@ async def _run_flood() -> int:
             return 0
         polygons: list[ObservedFlood] = []
         masks: list[ObservationMask] = []
+        absent: list[str] = []
         for activation in activations:
             # Una maschera senza poligoni è un'osservazione «asciutto» solo se
             # il layer è stato letto: lo decide fetch_activation_truth, che
@@ -197,6 +198,7 @@ async def _run_flood() -> int:
             truth = await fetch_activation_truth(activation, cache_dir=cache)
             polygons.extend(truth.floods)
             masks.extend(truth.masks)
+            absent.extend(truth.absent_masks)
     finally:
         await SharedHttpClient.aclose()
 
@@ -214,13 +216,14 @@ async def _run_flood() -> int:
     async with lifespan_pool():
         await run_migrations()
         n = await flood_events_repo.upsert_many(polygons)
-        m = await flood_events_repo.upsert_masks(masks)
+        m, tolte = await flood_events_repo.upsert_masks(masks, absent=absent)
         total = await flood_events_repo.count_events()
     log.info(
         "ingest_events.done",
         hazard="flood",
         upserted=n,
         masks=m,
+        masks_removed=tolte,
         total_in_db=total,
         source=provenance["source"],
         licence=provenance["licence"],

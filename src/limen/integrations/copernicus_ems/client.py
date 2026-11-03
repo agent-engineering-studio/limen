@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -140,6 +140,13 @@ async def fetch_products(code: str) -> list[Product]:
     return parse_detail(resp.content)
 
 
+def _mask_id(product: Product) -> str:
+    return (
+        f"{product.activation_code}-aoi{product.aoi_number:02d}-{product.product_type}"
+        f"{product.monitoring_number}"
+    )
+
+
 def _mask(product: Product) -> ObservationMask | None:
     """La maschera di osservazione del prodotto, se ha estensione e immagini.
 
@@ -156,8 +163,7 @@ def _mask(product: Product) -> ObservationMask | None:
         log.warning("ems.mask.bad_extent", code=product.activation_code, aoi=product.aoi_number)
         return None
     return ObservationMask(
-        id=f"{product.activation_code}-aoi{product.aoi_number:02d}-{product.product_type}"
-        f"{product.monitoring_number}",
+        id=_mask_id(product),
         activation_code=product.activation_code,
         aoi_label=f"AOI{product.aoi_number:02d}",
         product_type=product.product_type,
@@ -207,6 +213,11 @@ class ActivationTruth:
 
     floods: list[ObservedFlood]
     masks: list[ObservationMask]
+    #: Maschere di prodotti che il dettaglio dice **senza** layer osservato
+    #: (mai consegnati): se un ingest precedente le ha scritte, vanno tolte.
+    #: Un layer elencato ma non scaricato (403, 5xx) non è qui: è un errore
+    #: transitorio, e la maschera di prima resta con i suoi poligoni.
+    absent_masks: list[str] = field(default_factory=list)
 
 
 async def fetch_activation_truth(activation: Activation, *, cache_dir: Path) -> ActivationTruth:
@@ -236,7 +247,11 @@ async def fetch_activation_truth(activation: Activation, *, cache_dir: Path) -> 
     to_metric = geom_reprojector(src_crs=4326, dst_crs=3035)
     floods: list[ObservedFlood] = []
     masks: list[ObservationMask] = []
+    absent: list[str] = []
     for product in products:
+        if OBSERVED_EVENT not in product.layers:
+            absent.append(_mask_id(product))
+            continue
         collection = await _layer(product, cache_dir=cache_dir)
         if collection is None:
             continue
@@ -281,7 +296,7 @@ async def fetch_activation_truth(activation: Activation, *, cache_dir: Path) -> 
                     )
                 )
     log.info("ems.activation_truth", code=activation.code, polygons=len(floods), masks=len(masks))
-    return ActivationTruth(floods=floods, masks=masks)
+    return ActivationTruth(floods=floods, masks=masks, absent_masks=absent)
 
 
 def catalogue_provenance() -> dict[str, str]:

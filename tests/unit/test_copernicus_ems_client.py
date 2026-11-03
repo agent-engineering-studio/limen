@@ -221,8 +221,12 @@ async def test_a_mask_only_where_the_observed_layer_was_read(tmp_path: Path) -> 
     """
     _detail()
     respx.get(_LAYER_URL).mock(return_value=httpx.Response(200, json=_LAYER))
-    (mask,) = (await ems.fetch_activation_truth(_ACTIVATION, cache_dir=tmp_path)).masks
+    truth = await ems.fetch_activation_truth(_ACTIVATION, cache_dir=tmp_path)
+    (mask,) = truth.masks
     assert mask.id == "EMSR762-aoi01-DEL0"
+    # Senza layer osservato nel dettaglio: mai consegnati, da togliere se un
+    # ingest precedente li aveva scritti.
+    assert truth.absent_masks == ["EMSR762-aoi01-GRA1", "EMSR762-aoi02-DEL0"]
     assert mask.aoi_label == "AOI01"
     assert mask.observed_time == datetime(2024, 9, 18, 6, tzinfo=UTC)
 
@@ -233,6 +237,9 @@ async def test_an_unreadable_layer_gives_neither_polygons_nor_mask(tmp_path: Pat
     respx.get(_LAYER_URL).mock(return_value=httpx.Response(403))
     truth = await ems.fetch_activation_truth(_ACTIVATION, cache_dir=tmp_path)
     assert truth.floods == [] and truth.masks == []
+    # Il layer c'è ma non è arrivato: errore transitorio, la maschera di
+    # prima (con i suoi poligoni) resta.
+    assert "EMSR762-aoi01-DEL0" not in truth.absent_masks
     assert not (tmp_path / "EMSR762").exists()
 
 
@@ -254,7 +261,7 @@ async def test_an_unreachable_detail_is_empty(tmp_path: Path) -> None:
         return_value=httpx.Response(200, text="<html>manutenzione</html>")
     )
     truth = await ems.fetch_activation_truth(_ACTIVATION, cache_dir=tmp_path)
-    assert truth.floods == [] and truth.masks == []
+    assert truth.floods == [] and truth.masks == [] and truth.absent_masks == []
 
 
 def test_catalogue_provenance_declares_no_credentials() -> None:
