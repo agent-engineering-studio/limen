@@ -19,6 +19,10 @@ cartelle, volumi, ripristino e avvio. README, «Installing on a new server».
    la cartella e cambiare quella riga basta: compose, Makefile e
    `make static-data` ricavano i path da lì (DTM, CORINE e geolitologia li
    cercano in `GEOSERVER_SHAPEFILE_DIR`, o in `$LIMEN_DATA_ROOT/geoserver`).
+   L'inventario IFFI e i mosaici PAI e idraulico in quella cartella non vanno
+   più copiati: li scarica `limen geodati-sync`, passo 3/7 di `make init`
+   (~3 GB da IdroGEO la prima volta). DTM, CORINE, geolitologia e confini
+   ISTAT invece sì.
    Le variabili specifiche (`LIMEN_DEM_RASTER`, `LIMEN_DATASETS_DIR`, …)
    restano override; vuote, gli slot mancanti degradano e il bootstrap logga
    `static_bootstrap.skip`. Il server attuale le ha ancora esplicite nel

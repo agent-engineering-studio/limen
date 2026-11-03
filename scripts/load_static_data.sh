@@ -56,6 +56,21 @@ predefinito LIMEN_IMPERVIOUSNESS_RASTER "$RADICE/sealing/clms_imd_2018/imd_2018_
 # riscaricherebbe ~7 GB. Con le tile già lì, un sync ripetuto non va in rete
 # e non scrive niente (dataset_versions).
 export EGMS__CARTELLA="${EGMS__CARTELLA:-$RADICE/egms}"
+# I dati di base ISPRA (IFFI, mosaici PAI e idraulico) li scarica
+# `limen geodati-sync` proprio dove `geoserver-init` li carica: la stessa
+# GEOSERVER_SHAPEFILE_DIR, assoluta perché diventa anche un mount di Docker.
+have_geodati=0
+if [ -n "${GEOSERVER_SOURCE__DB_DSN:-}" ]; then
+  # Una cartella che non si crea non deve diventare un mount vuoto «-v :»,
+  # che romperebbe ogni comando limen nel container, migrate compreso.
+  if mkdir -p "$GEOSERVER_DATI" && assoluta="$(cd "$GEOSERVER_DATI" && pwd)"; then
+    have_geodati=1
+    GEOSERVER_DATI="$assoluta"
+    export GEOSERVER_SHAPEFILE_DIR="$GEOSERVER_DATI"
+  else
+    echo "  [manca]   $GEOSERVER_DATI non si crea: dati di base ISPRA saltati" >&2
+  fi
+fi
 have_egms=0
 if [ -n "${EGMS__SERVICE_KEY:-}" ] || [ -n "${EGMS__SERVICE_KEY_FILE:-}" ]; then
   have_egms=1
@@ -101,6 +116,10 @@ if [ "$MODO" = docker ]; then
     fi
     [ -n "$egms_chiave_shell" ] && CONTAINER+=(-e "EGMS__SERVICE_KEY=$egms_chiave_shell")
   fi
+  # La cartella di GeoServer va in scrittura: ci scrive geodati-sync.
+  if [ "$have_geodati" -eq 1 ]; then
+    CONTAINER+=(-v "$GEOSERVER_DATI:$GEOSERVER_DATI" -e "GEOSERVER_SHAPEFILE_DIR=$GEOSERVER_DATI")
+  fi
   # Con il proprio uid: le sorgenti sono di chi le ha scaricate, e l'utente
   # dell'immagine (999) non le leggerebbe. E con un ambiente pulito: il .env
   # caricato qui sopra come shell ha perso le virgolette dei valori JSON, e
@@ -120,7 +139,7 @@ say()  { printf '\n\033[1m%s\033[0m\n' "$*"; }
 ok()   { printf '  [ok]      %s\n' "$*"; }
 skip() { printf '  [manca]   %s\n' "$*"; }
 
-say "1/6  Cosa è configurato in questo ambiente (comandi: $MODO)"
+say "1/7  Cosa è configurato in questo ambiente (comandi: $MODO)"
 
 have_geoserver=0; have_dem=0; have_imperv=0; have_corine=0
 if [ -n "${GEOSERVER_SOURCE__DB_DSN:-}" ]; then
@@ -186,23 +205,51 @@ if [ "$FOCUS" = "flood" ] && [ "$have_geoserver" -eq 0 ]; then
   echo "  Senza GEOSERVER_SOURCE__DB_DSN questo comando non caricherà nulla di utile."
 fi
 
-say "2/6  Migrazioni"
+say "2/7  Migrazioni"
 limen migrate || exit 1
 
-say "3/6  Sorgenti"
+say "3/7  Dati geografici di base ISPRA (IdroGEO)"
+# L'inventario frane IFFI di tutte le regioni e i mosaici PAI e idraulico, in
+# GEOSERVER_SHAPEFILE_DIR. La prima volta ~3 GB; poi un file si richiede solo
+# dopo GEODATI__RIVALIDA_DOPO_GIORNI (30). Prima erano shapefile copiati a
+# mano: un server nuovo non sapeva ricostruirli. Solo con GeoServer
+# configurato (lo stack può essere ancora spento: i file aspettano lì), perché
+# senza nessuno li caricherebbe.
+geodati_fatto=0
+if [ "$have_geodati" -eq 1 ]; then
+  geodati_fatto=1
+  limen geodati-sync || echo "  (qualche file IdroGEO non è arrivato: il prossimo giro lo riprova)"
+else
+  echo "  saltato: GEOSERVER_SOURCE__DB_DSN non impostata"
+fi
+
+say "4/7  Sorgenti"
 if [ "$have_geoserver" -eq 1 ]; then
+  # geoserver-init carica nel PostGIS di GeoServer i layer che non ci sono
+  # ancora: su un server nuovo, tutti. Un layer che c'è già non lo ricarica;
+  # per aggiornarlo dopo un geodati-sync: GEO_INIT_FORCE=true make geoserver-init.
+  # Anche se qualche file è mancato: scaricamento ed estrazione sono atomici,
+  # e i layer che mancano arriveranno al prossimo giro.
+  if [ "$geodati_fatto" -eq 1 ] && [ -n "${LIMEN_COMPOSE:-}" ]; then
+    # shellcheck disable=SC2086 # LIMEN_COMPOSE sono opzioni da dividere
+    env -i PATH="$PATH" HOME="$HOME" ${DOCKER_HOST:+DOCKER_HOST="$DOCKER_HOST"} \
+      GEO_INIT_UID="${GEO_INIT_UID:-$(id -u)}" GEO_INIT_GID="${GEO_INIT_GID:-$(id -g)}" \
+      GEOSERVER_SHAPEFILE_DIR="$GEOSERVER_DATI" \
+      docker compose $LIMEN_COMPOSE --profile geoserver run --rm geoserver-init \
+      || echo "  (geoserver-init non riuscito: 'make geoserver-init' a mano)"
+  fi
   limen geoserver-sync || exit 1
 else
   echo "  saltato: GEOSERVER_SOURCE__DB_DSN non impostata"
 fi
 
-say "4/6  Perimetri EFFIS (truth set del backtest incendio)"
+say "5/7  Perimetri EFFIS (truth set del backtest incendio)"
 # Comando a se' e non un passo del bootstrap: e' un dataset di verita', non un
 # fattore per cella, e il bootstrap per cella non fa chiamate HTTP. Sta pero'
 # in questa sequenza, che e' cio' che la #101 chiedeva.
 limen effis-sync || echo "  (EFFIS non raggiungibile: si prosegue)"
 
-say "5/6  Velocità del terreno EGMS (feature InSAR del modello ML)"
+say "6/7  Velocità del terreno EGMS (feature InSAR del modello ML)"
 # La prima volta sono ~7 GB e circa un'ora; poi, con le tile già nella
 # cartella, è un controllo senza rete. Una release nuova (il passo notturno
 # `egms_release` la segnala) entra cambiando EGMS__RELEASE e rilanciando questo.
@@ -213,7 +260,7 @@ else
   echo "  saltato: né EGMS__SERVICE_KEY né EGMS__SERVICE_KEY_FILE"
 fi
 
-say "6/6  Fattori per cella"
+say "7/7  Fattori per cella"
 # bootstrap-static esegue da sé i passi la cui sorgente è configurata e
 # registra `static_bootstrap.skip` per gli altri: una sola chiamata copre
 # DTM, CORINE, imperviousness, WUI, distanze OSM e litologia.

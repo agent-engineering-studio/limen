@@ -115,7 +115,7 @@ touching workflow, API or persistence.
 | Source | What we ingest | Cadence | Implementation |
 |---|---|---|---|
 | **Open-Meteo** | hourly precipitation, soil moisture 0–7 / 7–28 cm, snow (forecast); accumulated precipitation (archive). Served by **our own instance** (compose profile `meteo`): the public API's 10,000 calls/day were exhausted by the sweep and left flood and wildfire at zero across Italy (#142) | live, 30 min cache | `integrations/openmeteo/` + `CachedOpenMeteoClient` |
-| **ISPRA (GeoServer PostGIS)** | IFFI inventory (landslides/areas/DGPV, all regions), PAI landslide mosaic; the hydraulic mosaic feeds the flood susceptibility and the landslide `H` component | at init / weekly | `integrations/geoserver_source/` reads the mcp-geoserver PostGIS |
+| **ISPRA (GeoServer PostGIS)** | IFFI inventory (landslides/areas/DGPV, all regions), PAI landslide mosaic; the hydraulic mosaic feeds the flood susceptibility and the landslide `H` component | at init / weekly | `limen geodati-sync` downloads the shapefiles from IdroGEO; `integrations/geoserver_source/` reads the mcp-geoserver PostGIS |
 | **Copernicus EWDS — GloFAS** | per-node river discharge: the operational forecast (`cems-glofas-forecast`, control run) downloaded ahead of the per-cell forecast, and each node's **ordinary high flow** from the multi-year history (`glofas_riferimento`), the denominator of the fluvial ratio. Without `COPERNICUS__EWDS_KEY` it falls back to Open-Meteo's GloFAS | forecast 4×/day, references nightly | `integrations/copernicus/` + `glofas_previsione` / `glofas_riferimento` |
 | **Copernicus Land — EGMS** | Ortho L3 ground motion (Sentinel-1, 100 m, vertical and east-west): per-cell p90 velocity and the number of valid pixels. Downloaded with the CLMS service key; a nightly step checks whether a new release is out | yearly sync + nightly release check | `integrations/egms/` + `limen sync-egms` |
 | **DPC radar** | national SRI (1 km / 5 min) as a nowcast trigger, and the radar-gauge **«Merging»** accumulation, read at each cell centroid so a storm in progress counts in the flood score (#199) | every `NOWCAST__INTERVAL_MINUTES` / per sweep | `integrations/dpc/` |
@@ -294,11 +294,22 @@ Some sources need only a key in `.env`, and `make init`, `make up` and
 
 - **EGMS ground motion** (`EGMS__SERVICE_KEY` or `EGMS__SERVICE_KEY_FILE`,
   a CLMS service key from land.copernicus.eu → profile → *API Tokens*): step
-  5/6 runs `limen sync-egms`. The first run for Italy takes ~25 minutes and
+  6/7 runs `limen sync-egms`. The first run for Italy takes ~25 minutes and
   keeps 164 GeoTIFF tiles (~420 MB) in `EGMS__CARTELLA`; later runs find them
   there and ask the archive nothing. Without a key the step is skipped and
   the ML engine's InSAR features stay empty. A new EGMS release is reported
   by the nightly `egms_release` step.
+- **ISPRA base data** (no key): step 3/7 runs `limen geodati-sync`, which
+  downloads from IdroGEO the IFFI landslide inventory of every region (plus
+  Bolzano and Trento) and the national PAI landslide and flood hazard
+  mosaics into `GEOSERVER_SHAPEFILE_DIR`, then `geoserver-init` loads them
+  into the GeoServer PostGIS when that stack is up; it runs only when
+  `GEOSERVER_SOURCE__DB_DSN` is set. The first run is ~3 GB. ISPRA
+  regenerates the IFFI files every night (new ETag, same content), so a file
+  is asked for again only after `GEODATI__RIVALIDA_DOPO_GIORNI` (30); the
+  2023 mosaics then answer `304`. A layer
+  already in PostGIS is not reloaded: after an update,
+  `GEO_INIT_FORCE=true make geoserver-init`.
 - **Flood ground truth** (no key): `limen ingest-events --hazard flood` reads
   the observed-flood layers of Copernicus EMS Rapid Mapping as GeoJSON,
   ~200 MB for Italy, cached under `LIMEN_DATA_ROOT/flood_events`.
@@ -551,16 +562,19 @@ version needs a deliberate bump:
 | [`fwi-chain`](https://pypi.org/project/fwi-chain/) | `~=1.0.0` | Canadian Fire Weather Index chain (Van Wagner 1987), checked against the reference day to 1e-9 |
 | [`effis-client`](https://pypi.org/project/effis-client/) | `~=0.1.2` | EFFIS burnt-area perimeters (MapServer WFS) and official FWI rasters (WMS) |
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | `~=0.1.0` | Caine intensity-duration thresholds, rainfall events, frequentist fit; T5 thresholds for Italy refitted on e-ITALICA |
-| [`egms-client`](https://pypi.org/project/egms-client/) | `~=0.3.0` | EGMS archive: CLMS service-key auth, Ortho L3 tile search and download, mosaics |
+| [`egms-client`](https://pypi.org/project/egms-client/) | `~=0.5.0` | EGMS archive: CLMS service-key auth, Ortho L3 tile search and download, mosaics |
 | [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) | `~=0.1.0` | Copernicus EMS Rapid Mapping: activations, observation masks, observed-flood layers as GeoJSON |
 | [`firms-client`](https://pypi.org/project/firms-client/) | `~=0.2.0` | NASA FIRMS: open per-country archives, NRT area API, detection types |
+| [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) | `~=0.1.0` | ISPRA IdroGEO: IFFI inventory, PAI and flood mosaics into a persistent folder with conditional GETs; public REST API |
 
 Limen uses them only for their **pure** parts — request building, parsing,
 validation — so their network calls go through `limen.integrations._http`
 (shared client, retry policy), and the neutral degradation stays in Limen.
 `egms-client` also ships a downloading client (`EgmsArchive`) with its own
 retry: Limen does not use it, and fetches the tiles in
-`integrations/egms/clms.py`.
+`integrations/egms/clms.py`. `ispra-idrogeo` is the one whose client Limen
+uses, because its files (up to 1.2 GB) must be streamed to disk: with
+`retries=0`, on the shared client, inside `_http.call_with_retry`.
 The numbers that tune a hazard stay in `src/limen/config/hazards/*.yaml`:
 the libraries' constants (e.g. the Italian T5 thresholds) are not read. A
 change to one of them is a release of the library and a pin bump here.

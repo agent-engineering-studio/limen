@@ -23,6 +23,7 @@ Usage:
     limen monitor-once       Run the MAF landslide workflow once for an AOI.
     limen forecast           Predictive run at now+H hours (forecast rain, no persistence).
     limen firms-sync         Ingest NASA FIRMS active-fire hotspots (FIRMS__MAP_KEY).
+    limen geodati-sync       Dati di base ISPRA (IFFI, mosaici PAI e idraulico) per GeoServer.
     limen imperviousness-fetch  Download the CLMS sealed-soil raster (public EEA service).
     limen fetch-static       Sorgenti statiche pubbliche, verificate con il manifest (#305).
     limen review-alerts      Sampled manual-review checklist for the alert FAR protocol.
@@ -71,6 +72,7 @@ from limen.cli.fwi_confronto import run as _run_fwi_confronto
 from limen.cli.fwi_pioggia import run as _run_fwi_pioggia
 from limen.cli.geodata import build_subparser as _build_geodata_subparser
 from limen.cli.geodata import run as _run_geodata
+from limen.cli.geodati_sync import run as _run_geodati_sync
 from limen.cli.geoserver_sync import run as _run_geoserver_sync
 from limen.cli.glofas_ewds import run as _run_glofas_ewds
 from limen.cli.glofas_riferimenti import run as _run_glofas_riferimenti
@@ -310,6 +312,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="refresh cell_insar_features from Copernicus EGMS (V2.1)",
     )
     sub.add_parser(
+        "geodati-sync",
+        help="download ISPRA IdroGEO base data (IFFI, PAI, flood mosaics) for GeoServer",
+    )
+    sub.add_parser(
         "geoserver-sync",
         help="load ISPRA IFFI + PAI from GeoServer PostGIS (GEOSERVER_SOURCE__DB_DSN)",
     )
@@ -460,6 +466,7 @@ def main(argv: list[str] | None = None) -> int:
         # only action is `build`; inspect args.report_command before adding a second.
         "report": _run_report_build,
         "sync-egms": _run_sync_egms,
+        "geodati-sync": _run_geodati_sync,
         "ingest-kb": _run_ingest_kb,
         "geoserver-sync": _run_geoserver_sync,
         "firms-sync": _run_firms_sync,

@@ -272,7 +272,11 @@ async def _import_dizionario(
 
 
 def _coerce_dizionario(payload: Any) -> list[tuple[str, str]]:
-    """Accept either ``{code: label, ...}`` or ``[{code, label}, ...]``."""
+    """Accept ``{code: label, ...}`` or ``[{code, label}, ...]``.
+
+    The IdroGEO API (``/api/dizionari/<nome>``) answers the second form with
+    Italian keys: ``codice`` and ``descrizione``.
+    """
     pairs: list[tuple[str, str]] = []
     if isinstance(payload, dict):
         for code, label in payload.items():
@@ -281,8 +285,13 @@ def _coerce_dizionario(payload: Any) -> list[tuple[str, str]]:
         for entry in payload:
             if not isinstance(entry, dict):
                 continue
-            code = entry.get("code") or entry.get("id")
-            label = entry.get("label") or entry.get("name") or entry.get("description")
+            code = entry.get("code") or entry.get("id") or entry.get("codice")
+            label = (
+                entry.get("label")
+                or entry.get("name")
+                or entry.get("description")
+                or entry.get("descrizione")
+            )
             if code is None or label is None:
                 continue
             pairs.append((str(code), str(label)))

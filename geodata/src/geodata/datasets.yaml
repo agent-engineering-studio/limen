@@ -10,8 +10,11 @@
 # pointed at an unofficial mirror.
 #
 # Per-region IFFI ZIPs use the IdroGEO open-data naming convention:
-# `iffi_{regione}_{layer}.zip`. Replace `{regione}` with the lowercase
-# Italian region name when populating new entries.
+# `/opendata/frane/{layer}_{regione}_opendata.zip` (the old
+# `/opendata/iffi/{regione}/iffi_{regione}_{layer}.zip` answers 404 since
+# 2026). `{regione}` is the file name the IdroGEO web app uses
+# (`valle-d-aosta`, `emilia-romagna`, …; `bolzano`/`trento` for
+# Trentino-Alto Adige). The dictionaries moved to the API: `/api/dizionari/{nome}`.
 
 version: "2026-06-04"
 
@@ -42,56 +45,56 @@ datasets:
   # URL slug; the importer is parametric on `region`.
   # ---------------------------------------------------------------------
   - name: iffi_puglia_piff_line
-    url: https://idrogeo.isprambiente.it/opendata/iffi/puglia/iffi_puglia_piff_line.zip
+    url: https://idrogeo.isprambiente.it/opendata/frane/frane_line_puglia_opendata.zip
     format: shapefile-zip
     target: iffi_landslides
     region: puglia
     enabled: true
 
   - name: iffi_puglia_piff_poly
-    url: https://idrogeo.isprambiente.it/opendata/iffi/puglia/iffi_puglia_piff_poly.zip
+    url: https://idrogeo.isprambiente.it/opendata/frane/frane_poly_puglia_opendata.zip
     format: shapefile-zip
     target: iffi_landslides
     region: puglia
     enabled: true
 
   - name: iffi_puglia_aree_poly
-    url: https://idrogeo.isprambiente.it/opendata/iffi/puglia/iffi_puglia_aree_poly.zip
+    url: https://idrogeo.isprambiente.it/opendata/frane/aree_poly_puglia_opendata.zip
     format: shapefile-zip
     target: iffi_landslides
     region: puglia
     enabled: true
 
   - name: iffi_puglia_dgpv_poly
-    url: https://idrogeo.isprambiente.it/opendata/iffi/puglia/iffi_puglia_dgpv_poly.zip
+    url: https://idrogeo.isprambiente.it/opendata/frane/dgpv_poly_puglia_opendata.zip
     format: shapefile-zip
     target: iffi_landslides
     region: puglia
     enabled: true
 
   - name: iffi_basilicata_piff_line
-    url: https://idrogeo.isprambiente.it/opendata/iffi/basilicata/iffi_basilicata_piff_line.zip
+    url: https://idrogeo.isprambiente.it/opendata/frane/frane_line_basilicata_opendata.zip
     format: shapefile-zip
     target: iffi_landslides
     region: basilicata
     enabled: true
 
   - name: iffi_basilicata_piff_poly
-    url: https://idrogeo.isprambiente.it/opendata/iffi/basilicata/iffi_basilicata_piff_poly.zip
+    url: https://idrogeo.isprambiente.it/opendata/frane/frane_poly_basilicata_opendata.zip
     format: shapefile-zip
     target: iffi_landslides
     region: basilicata
     enabled: true
 
   - name: iffi_basilicata_aree_poly
-    url: https://idrogeo.isprambiente.it/opendata/iffi/basilicata/iffi_basilicata_aree_poly.zip
+    url: https://idrogeo.isprambiente.it/opendata/frane/aree_poly_basilicata_opendata.zip
     format: shapefile-zip
     target: iffi_landslides
     region: basilicata
     enabled: true
 
   - name: iffi_basilicata_dgpv_poly
-    url: https://idrogeo.isprambiente.it/opendata/iffi/basilicata/iffi_basilicata_dgpv_poly.zip
+    url: https://idrogeo.isprambiente.it/opendata/frane/dgpv_poly_basilicata_opendata.zip
     format: shapefile-zip
     target: iffi_landslides
     region: basilicata
@@ -103,19 +106,19 @@ datasets:
   # movement-type strings instead of opaque codes.
   # ---------------------------------------------------------------------
   - name: iffi_dizionari_cause
-    url: https://idrogeo.isprambiente.it/opendata/iffi/dizionari/cause.json
+    url: https://idrogeo.isprambiente.it/api/dizionari/cause
     format: json
     target: iffi_lookup_causes
     enabled: true
 
   - name: iffi_dizionari_movimento
-    url: https://idrogeo.isprambiente.it/opendata/iffi/dizionari/movimento.json
+    url: https://idrogeo.isprambiente.it/api/dizionari/tipo_movimento
     format: json
     target: iffi_lookup_movements
     enabled: true
 
   - name: iffi_dizionari_litologia
-    url: https://idrogeo.isprambiente.it/opendata/iffi/dizionari/litologia.json
+    url: https://idrogeo.isprambiente.it/api/dizionari/litologie
     format: json
     target: iffi_lookup_lithology
     enabled: true
