@@ -177,6 +177,8 @@ help:
 gs-volumes:
 	@docker volume create limen-geoserver-pgdata >/dev/null
 	@docker volume create limen-geoserver-gsdata >/dev/null
+	@docker volume create limen-idrogeo-cache >/dev/null
+	@docker volume create limen-idrogeo-data >/dev/null
 
 up: up-stack
 	@echo ""
