@@ -824,6 +824,27 @@ class EgmsSettings(BaseSettings):
         return chiave or bool((self.service_key_file or "").strip())
 
 
+class GeodatiSettings(BaseSettings):
+    """I dati geografici di base ISPRA (IdroGEO) per lo stack GeoServer.
+
+    L'inventario IFFI regione per regione e i mosaici PAI e idraulico, nella
+    cartella che ``geoserver-init`` carica nel PostGIS di GeoServer:
+    ``GEOSERVER_SHAPEFILE_DIR``, la stessa del compose
+    (:func:`~limen.config.percorsi.cartella_geoserver`).
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    #: Download insieme.
+    concorrenza: int = Field(default=3, ge=1, le=6)
+    #: Un file scaricato da meno di tanto non si chiede neanche. ISPRA rigenera
+    #: i file IFFI ogni notte e l'ETag di nginx è data+dimensione, quindi cambia
+    #: ogni giorno anche a contenuto identico: senza questa soglia ogni
+    #: `make up` di un giorno nuovo riscaricherebbe ~1 GB. I mosaici, fermi dal
+    #: 2023, passata la soglia rispondono 304.
+    rivalida_dopo_giorni: int = Field(default=30, ge=0)
+
+
 class CopernicusSettings(BaseSettings):
     """L'Early Warning Data Store di Copernicus (EWDS): GloFAS.
 
@@ -1286,6 +1307,7 @@ class Settings(BaseSettings):
     scoring: ScoringSettings = Field(default_factory=ScoringSettings)
     training: TrainingSettings = Field(default_factory=TrainingSettings)
     egms: EgmsSettings = Field(default_factory=EgmsSettings)
+    geodati: GeodatiSettings = Field(default_factory=GeodatiSettings)
     copernicus: CopernicusSettings = Field(default_factory=CopernicusSettings)
     radar_archive: RadarArchiveSettings = Field(default_factory=RadarArchiveSettings)
     backup: BackupSettings = Field(default_factory=BackupSettings)

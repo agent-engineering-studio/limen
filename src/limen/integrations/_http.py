@@ -7,6 +7,9 @@ All outbound HTTP must go through:
 * :data:`RETRY_POLICY` — a ``tenacity`` async retry policy: 4 attempts,
   exponential backoff with multiplier=2 and cap=60 s, retrying on
   network errors and 5xx / 429 responses.
+* :func:`call_with_retry` — the same policy around a call that does not fit
+  in one ``Response``: streamed downloads of files of hundreds of MB, which
+  :func:`fetch_with_retry` would hold in memory.
 * :func:`degrade_gracefully` — a decorator that, on terminal failure,
   logs the incident and returns the caller-supplied *neutral result*
   (e.g. an empty list, ``None``, an "unknown" enum value) instead of
@@ -24,10 +27,12 @@ import httpx
 from tenacity import (
     AsyncRetrying,
     RetryError,
+    retry_if_exception,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
 )
+from tenacity.retry import retry_base
 
 from limen.core.logging import get_logger
 
@@ -53,16 +58,22 @@ def make_retry_policy(
     max_attempts: int = 4,
     multiplier: float = 2.0,
     max_wait: float = 60.0,
+    only_retryable_status: bool = False,
 ) -> AsyncRetrying:
     """Build an :class:`AsyncRetrying` policy with Limen's defaults.
 
     Per Phase-2 spec: 4 attempts total, exponential backoff capped at 60 s,
     retries on transport / timeout errors and 5xx / 429 responses.
+    ``only_retryable_status`` is for callers that *raise* every status
+    (:func:`call_with_retry`): without it a 404 would be retried like a 503.
     """
+    retry: retry_base = retry_if_exception_type(_RETRYABLE_EXC)
+    if only_retryable_status:
+        retry = retry & retry_if_exception(_is_retryable_status)
     return AsyncRetrying(
         stop=stop_after_attempt(max_attempts),
         wait=wait_exponential(multiplier=multiplier, max=max_wait),
-        retry=retry_if_exception_type(_RETRYABLE_EXC),
+        retry=retry,
         reraise=True,
     )
 
@@ -137,6 +148,21 @@ async def fetch_with_retry(
             return response
 
     raise RuntimeError("fetch_with_retry: retry loop exited without returning")
+
+
+async def call_with_retry[T](call: Callable[[], Awaitable[T]]) -> T:
+    """``call()`` under :data:`RETRY_POLICY`, for what :func:`fetch_with_retry` cannot carry.
+
+    The exception to "every call goes through ``fetch_with_retry``" is the
+    streamed download of a large file (the ISPRA mosaics weigh 1.2 GB): the
+    caller streams on the shared client and raises ``httpx`` errors, and this
+    retries transport errors and 5xx/429 with the same policy. A 4xx
+    propagates at once.
+    """
+    async for attempt in make_retry_policy(only_retryable_status=True):
+        with attempt:
+            return await call()
+    raise RuntimeError("call_with_retry: retry loop exited without returning")
 
 
 def degrade_gracefully[T, **P](

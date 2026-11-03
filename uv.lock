@@ -1814,6 +1814,18 @@ wheels = [
 ]
 
 [[package]]
+name = "ispra-idrogeo"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/32/76/8f911e95c47006878f127c451de2e188949f8df193a5d5204d091b03da8f/ispra_idrogeo-0.1.0.tar.gz", hash = "sha256:bac9b7f8c682eef0af47e1321b8a6dbc6548695ae2a6a81f6207374d650d18ff", size = 16346, upload-time = "2026-11-03T16:07:25.196Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e5/94/d2636e878d412d5e14102ec286353ae79301f598d7a041efc2760c1f1688/ispra_idrogeo-0.1.0-py3-none-any.whl", hash = "sha256:10999f397632c16859b380440c38608098246323b60c6be3a31db4ad02007116", size = 18385, upload-time = "2026-11-03T16:07:23.844Z" },
+]
+
+[[package]]
 name = "itsdangerous"
 version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2229,6 +2241,7 @@ dependencies = [
     { name = "geoalchemy2" },
     { name = "geopandas" },
     { name = "httpx" },
+    { name = "ispra-idrogeo" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-instrumentation-asyncpg" },
@@ -2315,6 +2328,7 @@ requires-dist = [
     { name = "geoalchemy2", specifier = ">=0.15" },
     { name = "geopandas", specifier = ">=1.0" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "ispra-idrogeo", specifier = "~=0.1.0" },
     { name = "opentelemetry-api", specifier = ">=1.27" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.27" },
     { name = "opentelemetry-instrumentation-asyncpg", specifier = ">=0.48b0" },

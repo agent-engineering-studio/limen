@@ -231,10 +231,21 @@ gateway, mappa ruolo → modello, vincoli sui percorsi sincroni).
 Con le chiavi nel `.env`, `make init`, `make up` e `make static-data`
 scaricano da soli (via `scripts/load_static_data.sh`):
 
-- **EGMS** (`EGMS__SERVICE_KEY` o `EGMS__SERVICE_KEY_FILE`): il passo 5/6
+- **EGMS** (`EGMS__SERVICE_KEY` o `EGMS__SERVICE_KEY_FILE`): il passo 6/7
   lancia `limen sync-egms`. La prima volta per l'Italia sono ~25 minuti e 164
   tile GeoTIFF (~420 MB) in `EGMS__CARTELLA`; i giri successivi le ritrovano
   lì e non chiedono niente all'archivio.
+- **Dati di base ISPRA** (senza chiave): il passo 3/7 lancia
+  `limen geodati-sync`, che scarica da IdroGEO l'inventario frane IFFI di
+  tutte le regioni (più Bolzano e Trento) e i mosaici nazionali PAI frane e
+  idraulico in `GEOSERVER_SHAPEFILE_DIR`; poi, se lo stack GeoServer è
+  acceso, `geoserver-init` li carica nel suo PostGIS. Gira solo con
+  `GEOSERVER_SOURCE__DB_DSN` impostata. La prima volta ~3 GB. ISPRA rigenera
+  i file IFFI ogni notte (ETag nuovo, contenuto uguale), quindi un file si
+  richiede solo dopo `GEODATI__RIVALIDA_DOPO_GIORNI` (30); i mosaici del 2023
+  a quel punto rispondono `304`. Un layer già in
+  PostGIS non si ricarica da solo: dopo un aggiornamento,
+  `GEO_INIT_FORCE=true make geoserver-init`.
 - **Truth set alluvione** (senza chiave): `limen ingest-events --hazard flood`
   legge i layer GeoJSON di Copernicus EMS, ~200 MB per l'Italia.
 - **Storia del fuoco** (senza chiave): `limen ingest-fire-history` scarica gli
@@ -317,16 +328,19 @@ minore nuova richiede un aggiornamento deliberato:
 | [`fwi-chain`](https://pypi.org/project/fwi-chain/) | `~=1.0.0` | La catena canadese del Fire Weather Index (Van Wagner 1987), verificata sul giorno di riferimento a 1e-9 |
 | [`effis-client`](https://pypi.org/project/effis-client/) | `~=0.1.2` | Perimetri bruciati EFFIS (WFS MapServer) e raster FWI ufficiali (WMS) |
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | `~=0.1.0` | Soglie intensità-durata di Caine, eventi di pioggia, fit frequentista; soglie T5 per l'Italia rifittate su e-ITALICA |
-| [`egms-client`](https://pypi.org/project/egms-client/) | `~=0.3.0` | Archivio EGMS: autenticazione con chiave CLMS, ricerca e download delle tile Ortho L3, mosaici |
+| [`egms-client`](https://pypi.org/project/egms-client/) | `~=0.5.0` | Archivio EGMS: autenticazione con chiave CLMS, ricerca e download delle tile Ortho L3, mosaici |
 | [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) | `~=0.1.0` | Copernicus EMS Rapid Mapping: attivazioni, maschere di osservazione, layer allagati in GeoJSON |
 | [`firms-client`](https://pypi.org/project/firms-client/) | `~=0.2.0` | NASA FIRMS: archivi per paese aperti, API d'area NRT, tipi di rilevamento |
+| [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) | `~=0.1.0` | ISPRA IdroGEO: inventario IFFI, mosaici PAI e idraulico in una cartella persistente con GET condizionali; API REST pubblica |
 
 Limen ne usa solo le parti **pure** (costruzione delle richieste, parsing,
 validazione): le chiamate di rete passano da `limen.integrations._http`
 (client condiviso, policy di retry) e il degrado neutro resta in Limen.
 `egms-client` ha anche un client che scarica da sé (`EgmsArchive`), con un
 suo retry: Limen non lo usa, e scarica le tile in
-`integrations/egms/clms.py`. I numeri che
+`integrations/egms/clms.py`. Di `ispra-idrogeo` invece Limen usa il client,
+perché i suoi file (fino a 1,2 GB) vanno scritti su disco in streaming: con
+`retries=0`, sul client condiviso, dentro `_http.call_with_retry`. I numeri che
 tarano un pericolo restano in `src/limen/config/hazards/*.yaml`: le costanti
 delle librerie (es. le soglie T5 italiane) non vengono lette.
 
