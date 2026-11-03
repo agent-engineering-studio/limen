@@ -1165,15 +1165,15 @@ raster = [
 
 [[package]]
 name = "egms-client"
-version = "0.2.0"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
     { name = "httpx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7e/37/d91657860ff2ba2109a3c83330b34fe2cbc2f1a5c85a7c547f64c29ec5ec/egms_client-0.2.0.tar.gz", hash = "sha256:4676c86787d4d798c131ebea387da8aac01366ee833a2b988f0d05a6ba1da375", size = 38112, upload-time = "2026-11-03T09:53:59.463Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/dd/42/60e21e25d94467a5aac1567d71bc770386258f3d451ade09cdaa6d73d61a/egms_client-0.3.0.tar.gz", hash = "sha256:5c9902df6cde0df7884f43880d4a6d7709c60aaf4a3212ef4b51c37b7aea25dd", size = 42424, upload-time = "2026-11-03T11:05:36.5Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4d/f9/642d1043767714d2182edbc417025986281689eeece5287d1184f04728cc/egms_client-0.2.0-py3-none-any.whl", hash = "sha256:aa464518e3a5c036edba2c2b13c7a2dcc8d162e826e90d3b3a45778e6713eabe", size = 33027, upload-time = "2026-11-03T09:53:57.9Z" },
+    { url = "https://files.pythonhosted.org/packages/b4/a3/877f8e9173576f29c8402a97e23c6b1c113f9f26297e677ba2b6be9a1b39/egms_client-0.3.0-py3-none-any.whl", hash = "sha256:fd0365ce0190ee975eae1cc67b9a91ae821d86011beaf40d8f9c19dfc80f80e8", size = 37127, upload-time = "2026-11-03T11:05:35.195Z" },
 ]
 
 [package.optional-dependencies]
@@ -2295,7 +2295,7 @@ requires-dist = [
     { name = "copernicus-ems", specifier = "~=0.1.0" },
     { name = "cryptography", specifier = ">=43" },
     { name = "effis-client", extras = ["raster"], specifier = "~=0.1.2" },
-    { name = "egms-client", extras = ["raster"], specifier = "~=0.2.0" },
+    { name = "egms-client", extras = ["raster"], specifier = "~=0.3.0" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "fwi-chain", specifier = "~=1.0.0" },
     { name = "geoalchemy2", specifier = ">=0.15" },
