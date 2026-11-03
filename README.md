@@ -212,12 +212,15 @@ free disk for a regional demo; no API key at all.
 git clone https://github.com/agent-engineering-studio/limen.git
 cd limen
 cp .env.example .env               # works as is for a local demo
-uv sync --all-groups               # install Python dependencies
+uv sync --all-groups               # install Python dependencies (Intel Mac: see below)
 make up                            # start Postgres + PostGIS, GeoServer, map server, frontend
 make init                          # build the data (see below) — safe to re-run
 uv run limen serve                 # API on http://localhost:8080/docs
 ( cd frontend && npm ci && npm run dev )   # map on http://localhost:5173
 ```
+
+On macOS, `make` must be GNU make ≥ 4.3 and an Intel Mac cannot install the
+ML groups: see [Pitfalls met on a real install](#pitfalls-met-on-a-real-install-macos-host).
 
 What `make init` does, in order (every step is idempotent, so you can stop
 and restart it):
@@ -740,6 +743,24 @@ times out. The other two modes are re-runnable and end with
 the hour. The per-cell forecast: 02, 08, 14 and 20:20 UTC. The FWI chain
 needs a month of spin-up after `fwi-backfill`; a restore brings it back
 settled. The GloFAS references: a share of nodes every night, weeks for all.
+
+### Pitfalls met on a real install (macOS host)
+
+What went wrong bringing up a fresh stack on an Intel Mac with Docker
+Desktop, and the fix for each:
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `uv sync --all-groups` fails: *torch … doesn't have a wheel for the current platform* (then the same for `onnxruntime`) | PyTorch stopped publishing macOS x86_64 wheels after 2.2, onnxruntime soon after; the `dl` and `ml` groups need newer ones | on an Intel Mac `uv sync --all-groups --no-group dl --no-group ml`. Only the V2 ML shadow stack needs them; the V1 engine, API and worker do not. Apple Silicon and Linux install everything |
+| `make` stops at once: *unterminated call to function 'shell'* | macOS ships GNU make 3.81 (2006); the Makefile needs ≥ 4.3 | `brew install make`, then `export PATH="/usr/local/opt/make/libexec/gnubin:$PATH"` (`/opt/homebrew/...` on Apple Silicon) in `~/.zshrc`. `nuovo_host.sh` calls `make`, so run it with that `PATH` |
+| `--da-zero` dies mid-seed with `Error 255`, Docker socket gone | Docker Desktop auto-updated and restarted itself | Docker Desktop settings: turn off *Automatically download updates* and *Resource Saver*, turn on *Start Docker Desktop when you sign in*; on the host `sudo pmset -a sleep 0 disksleep 0`. The script is re-runnable: launch it again |
+| `geoserver-init` "stops immediately" and the map has no IFFI/PAI | it is a one-shot job (exits 0); with `GEOSERVER_SOURCE__DB_DSN` unset, `make static-data` skips `limen geodati-sync`, so `$LIMEN_DATA_ROOT/geoserver` is empty and it loads `0 shapefile(s)` | set `GEOSERVER_SOURCE__DB_DSN=postgresql://gis:gis@localhost:55433/gis` in `.env` **before** `--da-zero`, or set it afterwards and run `make static-data` (first run ~25 GB, the DTM is 22 GB) |
+| `data-status` reports the sealed-soil layer missing for flood | the raster is not part of `static-data` | `make imperviousness-data`, set `LIMEN_IMPERVIOUSNESS_RASTER` to the printed path, `make bootstrap-static` (only the new step runs) |
+
+With `LIMEN_IMAGE_PREFIX` set, the published SPA needs the reverse proxy
+even on a single machine: `LIMEN_DOMINIO=localhost` plus
+`LIMEN_PROXY_BIND=127.0.0.1` gives Caddy on `https://localhost` with an
+internal certificate.
 
 ### Updating production: `make deploy`
 
