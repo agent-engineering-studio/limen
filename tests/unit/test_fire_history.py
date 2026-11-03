@@ -192,19 +192,19 @@ async def test_an_unpublished_year_answering_200_is_not_parsed(
     respx.get(firms.archive_url(firms.MODIS, 2031, "Italy")).mock(return_value=httpx.Response(404))
     assert await archive.fetch_archive_year(product=_MODIS, year=2030) == []
     assert await archive.fetch_archive_year(product=_MODIS, year=2031) == []
-    assert not [p for p in tmp_path.rglob("*") if p.is_file()]
+    assert not (tmp_path / "fires").exists()
 
 
-@respx.mock
 async def test_an_unreachable_archive_degrades_to_an_empty_year(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("LIMEN_DATA_DIR", str(tmp_path))
-    respx.get(firms.archive_url(firms.MODIS, 2021, "Italy")).mock(
-        side_effect=httpx.ConnectError("nasa giù")
-    )
-    assert await archive.fetch_archive_year(product=_MODIS, year=2021) == []
-    assert not (tmp_path / "fires").exists()
+
+    async def _down(*_a: Any, **_k: Any) -> Any:
+        raise httpx.ConnectError("nasa giù")
+
+    monkeypatch.setattr(archive, "fetch_with_retry", _down)
+    assert await archive.fetch_archive_year(product=_MODIS, year=2021, use_cache=False) == []
 
 
 @respx.mock

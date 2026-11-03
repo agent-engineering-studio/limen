@@ -22,8 +22,8 @@ Copertura reale, misurata sondando gli anni (ultima verifica 2026-11-03):
 
 L'anno in corso non c'è ancora: quel tratto lo copre il feed NRT
 (`limen firms-sync`), e le due cose non si sovrappongono. URL, prodotti e
-riconoscimento del CSV, download e cache vengono dal pacchetto
-``firms-client``.
+riconoscimento del CSV vengono dal pacchetto ``firms-client``; download
+(con `fetch_with_retry`) e cache restano qui.
 
 Le righe finiscono nella stessa `fire_hotspots` dell'NRT, con `source`
 distinta (``MODIS_SP`` / ``VIIRS_SNPP_SP``, dove SP è la *standard
@@ -45,7 +45,7 @@ from tenacity import RetryError
 
 from limen.core.logging import get_logger
 from limen.data.repos.fire_repo import FireHotspot
-from limen.integrations._http import SharedHttpClient
+from limen.integrations._http import SharedHttpClient, fetch_with_retry
 from limen.integrations.firms.client import ConfidenceLevel, parse_hotspot_csv
 
 log = get_logger(__name__)
@@ -86,9 +86,10 @@ ARCHIVE_PRODUCTS: tuple[ArchiveProduct, ...] = (
 DEFAULT_COUNTRY = "Italy"
 
 
-def _cache_dir() -> Path:
-    """Cartella di cache. Layout theme-first: `data/fires/firms/`."""
-    return Path(os.getenv("LIMEN_DATA_DIR", "./data")).expanduser() / "fires" / "firms"
+def _cache_path(*, product: ArchiveProduct, year: int, country: str) -> Path:
+    """File di cache. Layout theme-first: `data/fires/firms/`."""
+    root = Path(os.getenv("LIMEN_DATA_DIR", "./data")).expanduser()
+    return root / "fires" / "firms" / firms.archive_filename(product.product, year, country)
 
 
 async def fetch_archive_year(
@@ -103,49 +104,53 @@ async def fetch_archive_year(
 ) -> list[FireHotspot]:
     """Gli hotspot di un anno, dalla cache o dalla rete.
 
-    Download e cache sono di ``firms-client`` (``download_archive``): un file
-    nella cartella è intero, perché si scarica in un ``.part`` rinominato a
-    fine download, e un anno non pubblicato non lascia niente su disco.
-    ``use_cache=False`` cancella il file e lo riscarica.
+    Il download passa da `fetch_with_retry` come ogni chiamata esterna; da
+    ``firms-client`` vengono solo URL, nome del file e riconoscimento del CSV.
 
     Degrada come il resto delle integrazioni: un anno non disponibile dà lista
     vuota e una riga di log, e gli altri anni continuano.
     """
-    directory = _cache_dir()
-    cached = directory / firms.archive_filename(product.product, year, country)
-    if not use_cache:
-        cached.unlink(missing_ok=True)
-    hit = cached.is_file()
-    try:
-        path = await firms.download_archive(
-            await SharedHttpClient.get(), product.product, year, country, directory
-        )
-    except firms.FirmsError as exc:
-        log.info("firms.archive.unavailable", product=product.slug, year=year, error=str(exc))
-        return []
-    except _DEGRADATION_EXC as exc:
-        log.warning(
-            "integration.degraded",
-            label="firms.archive",
+    path = _cache_path(product=product, year=year, country=country)
+    text: str | None = None
+    if use_cache and path.is_file() and path.stat().st_size > 0:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        log.info("firms.archive.cache_hit", product=product.slug, year=year, path=str(path))
+
+    if text is None:
+        url = firms.archive_url(product.product, year, country)
+        try:
+            resp = await fetch_with_retry("GET", url, client=await SharedHttpClient.get())
+        except _DEGRADATION_EXC as exc:
+            log.warning(
+                "integration.degraded",
+                label="firms.archive",
+                product=product.slug,
+                year=year,
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            return []
+        if resp.status_code >= 400 or not firms.is_hotspot_csv(resp.text):
+            log.info(
+                "firms.archive.unavailable",
+                product=product.slug,
+                year=year,
+                status=resp.status_code,
+            )
+            return []
+        text = resp.text
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        log.info(
+            "firms.archive.downloaded",
             product=product.slug,
             year=year,
-            error=str(exc),
-            error_type=type(exc).__name__,
+            bytes=len(text),
+            path=str(path),
         )
-        return []
-    if path is None:
-        log.info("firms.archive.unavailable", product=product.slug, year=year, status=404)
-        return []
-    log.info(
-        "firms.archive.cache_hit" if hit else "firms.archive.downloaded",
-        product=product.slug,
-        year=year,
-        bytes=path.stat().st_size,
-        path=str(path),
-    )
 
     hotspots = parse_hotspot_csv(
-        path.read_text(encoding="utf-8", errors="replace"),
+        text,
         source=product.source,
         min_confidence=min_confidence,
         min_confidence_pct=min_confidence_pct,
