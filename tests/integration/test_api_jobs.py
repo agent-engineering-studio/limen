@@ -17,7 +17,6 @@ from limen.agents.llm_factory.stub import StubLlmClientFactory
 from limen.api.dependencies import AppDependencies
 from limen.api.jobs.cache_cleanup import run_cache_cleanup_job
 from limen.api.jobs.hourly_monitoring import run_hourly_monitoring
-from limen.api.jobs.weekly_idrogeo_sync import run_weekly_idrogeo_sync
 from limen.cli.seed import run as run_seed
 from limen.config.settings import Settings
 from limen.data.db import acquire, get_pool
@@ -105,24 +104,6 @@ async def test_hourly_monitoring_runs_against_seeded_aois(
 
     # At least one AOI got at least one cell scored.
     assert sum(result.values()) > 0
-
-
-async def test_weekly_idrogeo_sync_handles_unreachable_isp_gracefully(
-    reset_db: None,
-    pg_pool: object,
-) -> None:
-    """ISPRA WFS is mocked to 503 → the sync degrades, no exception escapes."""
-    await run_seed(only=[SEED_SMALL_AOI])
-    deps = await _build_deps()
-    with respx.mock(assert_all_called=False) as mock:
-        # Match any ISPRA WFS path
-        mock.get(url__regex=r"https://idrogeo\.isprambiente\.it/.*").mock(
-            return_value=httpx.Response(503)
-        )
-        result = await run_weekly_idrogeo_sync(deps)
-    # Every AOI in the seeded set is iterated; degradation logs but
-    # records an empty version anyway, so result is non-empty.
-    assert isinstance(result, dict)
 
 
 async def test_cache_cleanup_runs(reset_db: None, pg_pool: object) -> None:

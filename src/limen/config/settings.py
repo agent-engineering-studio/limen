@@ -362,8 +362,6 @@ class SchedulerSettings(BaseSettings):
     ingv_sync_ritardo_massimo_minuti: int = Field(default=180, ge=30)
     #: Ovest, sud, est, nord: il riquadro del portale ShakeMap INGV.
     ingv_bbox: tuple[float, float, float, float] = (5.0, 35.0, 20.0, 49.0)
-    # Run the ISPRA IdroGEO sync every N hours.
-    weekly_idrogeo_hours: int = Field(default=24 * 7, ge=1)
     # Hot-table partition maintenance + retention. Partitions are created a
     # week ahead, so anything well under that is safe; 6 h keeps retention
     # responsive without hammering the catalogue.
@@ -389,7 +387,6 @@ class SchedulerSettings(BaseSettings):
     forecast_cells_hours_utc: list[int] = Field(default=[2, 8, 14, 20])
     forecast_cells_minute: int = Field(default=20, ge=0, le=59)
     enable_hourly_monitoring: bool = True
-    enable_weekly_idrogeo: bool = True
 
 
 class ApiSettings(BaseSettings):
