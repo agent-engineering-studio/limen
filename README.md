@@ -546,6 +546,11 @@ Since 0.5 it is also:
 { "mcpServers": { "idrogeo": { "command": "idrogeo-mcp" } } }
 ```
 
+In this repository `.mcp.json` already wires it for Claude Code, through
+`uvx` in an environment of its own: the MCP server needs `mcp>=2.0`, while
+Limen's own MCP server runs on `fastmcp` and `mcp` 1.x, so the two are never
+installed together.
+
 **How Limen uses it.** `limen geodati-sync`, step 3 of the static data at
 `make init`, downloads with it the IFFI inventory of every region (plus
 Bolzano and Trento) and the national PAI landslide and flood mosaics into
