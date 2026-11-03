@@ -1295,6 +1295,18 @@ wheels = [
 ]
 
 [[package]]
+name = "firms-client"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/46/ca/3782fc6cc0ef79db3d73b8ae1dc72a8f16489447d04a44127b65a09f4ecf/firms_client-0.2.0.tar.gz", hash = "sha256:7b6cd7a7416cb25df68c90aef4ff52beef334b01d33861d6dbcc587c51e42256", size = 27712, upload-time = "2026-11-03T10:50:58.533Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2a/d3/0e35d51b20beecf69c00119649246fcd679c580e4c391c791df672417771/firms_client-0.2.0-py3-none-any.whl", hash = "sha256:0e87418c9505c6a1f3ae6befb0004df68b08d59d0e00619af65db37a33813fdc", size = 21602, upload-time = "2026-11-03T10:50:57.226Z" },
+]
+
+[[package]]
 name = "flask"
 version = "3.1.3"
 source = { registry = "https://pypi.org/simple" }
@@ -2212,6 +2224,7 @@ dependencies = [
     { name = "effis-client", extra = ["raster"] },
     { name = "egms-client", extra = ["raster"] },
     { name = "fastapi" },
+    { name = "firms-client" },
     { name = "fwi-chain" },
     { name = "geoalchemy2" },
     { name = "geopandas" },
@@ -2297,6 +2310,7 @@ requires-dist = [
     { name = "effis-client", extras = ["raster"], specifier = "~=0.1.2" },
     { name = "egms-client", extras = ["raster"], specifier = "~=0.2.0" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "firms-client", specifier = "~=0.2.0" },
     { name = "fwi-chain", specifier = "~=1.0.0" },
     { name = "geoalchemy2", specifier = ">=0.15" },
     { name = "geopandas", specifier = ">=1.0" },

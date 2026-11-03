@@ -182,3 +182,11 @@ def test_feed_is_inactive_without_a_map_key() -> None:
     assert FirmsSettings().active is False
     assert FirmsSettings(map_key=SecretStr("abc")).active is True
     assert FirmsSettings(map_key=SecretStr("abc"), enabled=False).active is False
+
+
+def test_a_custom_base_url_replaces_the_public_one() -> None:
+    client = FirmsHttpClient(map_key="K", base_url="https://mirror.example/api/area/csv/")
+    url = client._url(
+        source="VIIRS_SNPP_NRT", bbox=(6.0, 36.0, 19.0, 47.6), day_range=2, on_date=None
+    )
+    assert url == "https://mirror.example/api/area/csv/K/VIIRS_SNPP_NRT/6,36,19,47.6/2"
