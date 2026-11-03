@@ -44,9 +44,8 @@ from limen.integrations.copernicus_ems.client import (
     ObservationMask,
     ObservedFlood,
     catalogue_provenance,
+    fetch_activation_truth,
     fetch_activations,
-    fetch_observation_masks,
-    fetch_observed_floods,
 )
 
 log = get_logger(__name__)
@@ -192,12 +191,12 @@ async def _run_flood() -> int:
         polygons: list[ObservedFlood] = []
         masks: list[ObservationMask] = []
         for activation in activations:
-            found = await fetch_observed_floods(activation, cache_dir=cache)
-            polygons.extend(found)
-            # Le maschere si prendono anche quando i poligoni non arrivano:
-            # sapere che una zona è stata osservata e trovata asciutta è
-            # informazione quanto sapere che si è allagata.
-            masks.extend(await fetch_observation_masks(activation.code))
+            # Una maschera senza poligoni è un'osservazione «asciutto» solo se
+            # il layer è stato letto: lo decide fetch_activation_truth, che
+            # restituisce le due cose dallo stesso dettaglio.
+            truth = await fetch_activation_truth(activation, cache_dir=cache)
+            polygons.extend(truth.floods)
+            masks.extend(truth.masks)
     finally:
         await SharedHttpClient.aclose()
 
@@ -209,7 +208,7 @@ async def _run_flood() -> int:
         years=sorted({a.event_time.year for a in activations}),
     )
     if not polygons:
-        log.warning("ingest_events.flood.no_polygons", note="pacchetti prodotti non leggibili")
+        log.warning("ingest_events.flood.no_polygons", note="layer GeoJSON non leggibili")
         return 1
 
     async with lifespan_pool():

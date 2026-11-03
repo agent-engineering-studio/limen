@@ -47,7 +47,8 @@ dependencies = [
     "fwi-chain~=1.0.0",
     "effis-client[raster]~=0.1.2",
     "rainfall-thresholds~=0.1.0",
-    "egms-client[raster]~=0.1.0",
+    "egms-client[raster]~=0.1.1",
+    "copernicus-ems~=0.1.0",
 ]
 
 [project.scripts]
