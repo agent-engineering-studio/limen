@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 380" width="1200" height="380" role="img" aria-labelledby="t d">
+  <title id="t">Backtest incendi, Basilicata</title>
+  <desc id="d">Rigiocato sui perimetri delle aree bruciate EFFIS in Basilicata. Nel 2025 Limen aveva in classe alta il 79 per cento dei giorni con un incendio reale, mentre metteva in quella classe un giorno qualsiasi delle stesse celle il 43 per cento delle volte. Nel 2024 i valori erano 100 per cento contro 28 per cento.</desc>
+  <style>
+    .bg{fill:#fcfcfb}.ink{fill:#0b0b0b}.ink2{fill:#52514e}.mute{fill:#8a8984}.grid{stroke:#e4e3de}.base{stroke:#b8b7b0}
+    .hit{fill:#eb6834}.br{fill:#a8a7a1}
+    text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif}
+    .h{font-size:20px;font-weight:700}.s{font-size:14px}.xs{font-size:12px}.v{font-size:15px;font-weight:700}
+    @media (prefers-color-scheme: dark){
+      .bg{fill:#0d1117}.ink{fill:#f0efec}.ink2{fill:#c3c2b7}.mute{fill:#8b949e}.grid{stroke:#262c34}.base{stroke:#484f58}
+      .hit{fill:#d95926}.br{fill:#6e7681}
+    }
+  </style>
+  <rect class="bg" width="1200" height="380" rx="16"/>
+  <text class="h ink" x="40" y="50">Incendi: segnalati prima che bruciassero, non “sempre accesi”</text>
+  <text class="s ink2" x="40" y="76">Basilicata, rigiocata giorno per giorno sui perimetri bruciati EFFIS · quota di giorni in classe alta</text>
+
+  <!-- legend -->
+  <rect class="hit" x="40" y="98" width="14" height="14" rx="3"/><text class="s ink" x="62" y="110">Tasso di successo: giorni con un incendio reale che Limen aveva in classe alta</text>
+  <rect class="br" x="40" y="122" width="14" height="14" rx="3"/><text class="s ink" x="62" y="134">Tasso di base: quanto spesso le stesse celle erano comunque in quella classe</text>
+
+  <!-- axis: x from 160 to 1120 = 0..100% -->
+  <g class="grid" stroke-width="1">
+    <line x1="160" y1="160" x2="160" y2="330"/><line x1="400" y1="160" x2="400" y2="330"/><line x1="640" y1="160" x2="640" y2="330"/><line x1="880" y1="160" x2="880" y2="330"/><line x1="1120" y1="160" x2="1120" y2="330"/>
+  </g>
+  <g class="xs mute" text-anchor="middle">
+    <text x="160" y="350">0%</text><text x="400" y="350">25%</text><text x="640" y="350">50%</text><text x="880" y="350">75%</text><text x="1120" y="350">100%</text>
+  </g>
+
+  <!-- 2025 -->
+  <text class="v ink" x="40" y="200">2025</text>
+  <path class="hit" d="M160,170 h754.4 a4,4 0 0 1 4,4 v20 a4,4 0 0 1 -4,4 h-754.4 z"/>
+  <text class="v ink" x="926" y="190">79%</text>
+  <path class="br" d="M160,200 h408.8 a4,4 0 0 1 4,4 v20 a4,4 0 0 1 -4,4 h-408.8 z"/>
+  <text class="v ink" x="580" y="220">43%</text>
+  <text class="xs ink2" x="640" y="220">→ 1,8 volte meglio del caso</text>
+
+  <!-- 2024 -->
+  <text class="v ink" x="40" y="286">2024</text>
+  <path class="hit" d="M160,256 h956 a4,4 0 0 1 4,4 v20 a4,4 0 0 1 -4,4 h-956 z"/>
+  <text class="v bg" x="1108" y="276" text-anchor="end" style="fill:#fff">100%</text>
+  <path class="br" d="M160,286 h264.8 a4,4 0 0 1 4,4 v20 a4,4 0 0 1 -4,4 h-264.8 z"/>
+  <text class="v ink" x="436" y="306">28%</text>
+  <text class="xs ink2" x="496" y="306">→ 3,6 volte meglio del caso</text>
+  <line class="base" x1="160" y1="160" x2="160" y2="330" stroke-width="2"/>
+</svg>
