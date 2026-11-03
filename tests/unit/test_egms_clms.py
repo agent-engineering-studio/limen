@@ -196,3 +196,32 @@ def test_la_concorrenza_resta_fra_1_e_2(valore: int) -> None:
     with pytest.raises(ValidationError):
         EgmsSettings(concorrenza=valore)
     assert EgmsSettings(concorrenza=1).concorrenza == 1
+
+
+async def test_il_download_passa_dal_retry_di_limen(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Un 429 («At most 2 downloads») e poi la tile: lo riprova la policy di
+    # `_http`, non un retry del pacchetto.
+    finto = _Archivio()
+    occupato = [True]
+
+    def _prima_429(request: httpx.Request) -> httpx.Response:
+        if "/download/" in request.url.path and occupato:
+            occupato.clear()
+            finto.richieste.append(request)
+            return httpx.Response(429, text="At most 2 downloads may be performed simultaneously")
+        return finto(request)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(_prima_429))
+
+    async def _get(_cls: type[SharedHttpClient]) -> httpx.AsyncClient:
+        return client
+
+    monkeypatch.setattr(SharedHttpClient, "get", classmethod(_get))
+    a = await clms.archivio(_impostazioni())
+    assert a is not None
+    tiff = await a.fetch_tile((47, 19), "U", "2020_2024", tmp_path)
+    assert tiff is not None and tiff.read_bytes() == b"TIFF"
+    assert finto.scaricati() == 2
+    assert not list(tmp_path.glob("*.part"))

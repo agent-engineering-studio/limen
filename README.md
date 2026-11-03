@@ -555,11 +555,12 @@ version needs a deliberate bump:
 | [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) | `~=0.1.0` | Copernicus EMS Rapid Mapping: activations, observation masks, observed-flood layers as GeoJSON |
 | [`firms-client`](https://pypi.org/project/firms-client/) | `~=0.2.0` | NASA FIRMS: open per-country archives, NRT area API, detection types |
 
-Limen uses five of them only for their **pure** parts — request building,
-parsing, validation — so their network calls go through
-`limen.integrations._http` (shared client, retry policy), and the neutral
-degradation stays in Limen. `egms-client` (since 0.2) also downloads the
-tiles itself, on Limen's shared HTTP client with its own retry on 429/5xx.
+Limen uses them only for their **pure** parts — request building, parsing,
+validation — so their network calls go through `limen.integrations._http`
+(shared client, retry policy), and the neutral degradation stays in Limen.
+`egms-client` also ships a downloading client (`EgmsArchive`) with its own
+retry: Limen does not use it, and fetches the tiles in
+`integrations/egms/clms.py`.
 The numbers that tune a hazard stay in `src/limen/config/hazards/*.yaml`:
 the libraries' constants (e.g. the Italian T5 thresholds) are not read. A
 change to one of them is a release of the library and a pin bump here.

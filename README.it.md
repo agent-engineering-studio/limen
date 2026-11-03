@@ -321,11 +321,12 @@ minore nuova richiede un aggiornamento deliberato:
 | [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) | `~=0.1.0` | Copernicus EMS Rapid Mapping: attivazioni, maschere di osservazione, layer allagati in GeoJSON |
 | [`firms-client`](https://pypi.org/project/firms-client/) | `~=0.2.0` | NASA FIRMS: archivi per paese aperti, API d'area NRT, tipi di rilevamento |
 
-Di cinque Limen usa solo le parti **pure** (costruzione delle richieste,
-parsing, validazione): le chiamate di rete passano da
-`limen.integrations._http` (client condiviso, policy di retry) e il degrado
-neutro resta in Limen. `egms-client` (dalla 0.2) scarica anche le tile da sé,
-sul client HTTP condiviso di Limen con un suo retry su 429/5xx. I numeri che
+Limen ne usa solo le parti **pure** (costruzione delle richieste, parsing,
+validazione): le chiamate di rete passano da `limen.integrations._http`
+(client condiviso, policy di retry) e il degrado neutro resta in Limen.
+`egms-client` ha anche un client che scarica da sé (`EgmsArchive`), con un
+suo retry: Limen non lo usa, e scarica le tile in
+`integrations/egms/clms.py`. I numeri che
 tarano un pericolo restano in `src/limen/config/hazards/*.yaml`: le costanti
 delle librerie (es. le soglie T5 italiane) non vengono lette.
 

@@ -121,10 +121,14 @@ the 1 km cells (p90 of the magnitude, median of each component, valid-pixel
 count — migration 072). Credentials: `EGMS__SERVICE_KEY`, the CLMS service
 key JSON (land.copernicus.eu → profile → «API Tokens»; it does not expire,
 and each sync runs its own archive searches), or `EGMS__SERVICE_KEY_FILE`,
-the path of that JSON. Search, download and the on-disk cache come from the
+the path of that JSON. Signing, search bodies, response parsing and the
+GeoTIFF extraction come from the
 [`egms-client`](https://github.com/agent-engineering-studio/egms-client)
-package: tiles already in `EGMS__CARTELLA` (a persistent volume in Docker,
-`/var/lib/limen/egms`) are never downloaded again. Cadence is yearly: the nightly `egms_release` step logs
+package; the traffic stays in `integrations/egms/clms.py` on
+`fetch_with_retry`, like every outbound call (the package's own
+`EgmsArchive` retries by itself, so Limen does not use it). Tiles already in
+`EGMS__CARTELLA` (a persistent volume in Docker, `/var/lib/limen/egms`) are
+never downloaded again, with the same file names as the package's cache. Cadence is yearly: the nightly `egms_release` step logs
 `egms.release.nuova` when the archive lists a release newer than
 `EGMS__RELEASE`; the operator bumps it and runs `limen sync-egms`.
 
