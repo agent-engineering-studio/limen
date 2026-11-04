@@ -16,7 +16,9 @@ import os
 from dataclasses import dataclass
 
 from limen.cli.dem_tiles import cartella_tile
+from limen.config.catalogo_dati import CatalogoDati, carica_catalogo
 from limen.core.logging import get_logger
+from limen.core.models.hazard import HazardType
 from limen.data.db import acquire, lifespan_pool
 
 log = get_logger(__name__)
@@ -24,7 +26,8 @@ log = get_logger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class Layer:
-    """Un fattore statico, la sua colonna e ciò che lo popola."""
+    """Un fattore statico, la sua colonna e ciò che lo popola: la vista di
+    ``data-status`` su una voce del catalogo (``config/dati.yaml``)."""
 
     column: str
     label: str
@@ -39,35 +42,42 @@ class Layer:
     fetch_with: str | None = None
 
 
-LAYERS: tuple[Layer, ...] = (
-    Layer("iffi_density_500", "densità frane storiche (IFFI)", "GEOSERVER_SOURCE__DB_DSN"),
-    Layer("pai_class_norm", "pericolosità frana PAI", "GEOSERVER_SOURCE__DB_DSN"),
-    Layer("flood_hazard_norm", "pericolosità idraulica ISPRA", "GEOSERVER_SOURCE__DB_DSN"),
-    Layer("slope_deg", "pendenza (DTM)", "LIMEN_DEM_RASTER"),
-    Layer("landuse_code", "copertura del suolo (CORINE)", "LIMEN_CORINE_RASTER"),
-    Layer(
-        "imperviousness_norm",
-        "suolo impermeabilizzato (CLMS)",
-        "LIMEN_IMPERVIOUSNESS_RASTER",
-        fetch_with="make imperviousness-data",
-    ),
-    Layer(
-        "wui_proximity_norm",
-        "interfaccia urbano-bosco",
-        None,
-        derived_from="landuse_code",
-    ),
-    Layer("distance_to_road_m", "distanza dalla rete stradale", "LIMEN_OSM_ROADS"),
-    Layer("litho_weight", "litologia", "LIMEN_GEOLOGICAL_SHAPEFILE"),
-)
-
-#: Di cosa ha bisogno ogni pericolo per discriminare nello spazio. Un pericolo
-#: a cui manca tutto produce una mappa uniforme: leggibile, e inutile.
-HAZARD_NEEDS: dict[str, tuple[str, ...]] = {
-    "frana": ("iffi_density_500", "pai_class_norm", "slope_deg", "litho_weight"),
-    "incendio": ("landuse_code", "slope_deg"),
-    "alluvione": ("flood_hazard_norm", "imperviousness_norm"),
+#: Come ``data-status`` chiama i pericoli, nell'ordine in cui li elenca.
+_NOMI_PERICOLO: dict[HazardType, str] = {
+    HazardType.LANDSLIDE: "frana",
+    HazardType.WILDFIRE: "incendio",
+    HazardType.FLOOD: "alluvione",
 }
+
+
+def _layers(catalogo: CatalogoDati) -> tuple[Layer, ...]:
+    colonne = {v.id: v.misura.colonna for v in catalogo.voci}
+    return tuple(
+        Layer(
+            column=v.misura.colonna,
+            label=v.nome,
+            gate=v.variabile,
+            derived_from=colonne[v.deriva_da] if v.deriva_da else None,
+            # `make static-data` è la strada di tutti i layer che non ne hanno
+            # una propria: stamparlo accanto a ogni variabile non direbbe niente.
+            fetch_with=v.procura_con if v.procura_con != "make static-data" else None,
+        )
+        for v in catalogo.voci
+        if v.misura.colonna is not None
+    )
+
+
+_CATALOGO = carica_catalogo()
+LAYERS: tuple[Layer, ...] = _layers(_CATALOGO)
+
+#: Di cosa ha bisogno ogni pericolo per discriminare nello spazio: le voci
+#: essenziali del catalogo. Un pericolo a cui manca tutto produce una mappa
+#: uniforme: leggibile, e inutile.
+HAZARD_NEEDS: dict[str, tuple[str, ...]] = {
+    nome: tuple(v.misura.colonna for v in _CATALOGO.essenziali(h) if v.misura.colonna)
+    for h, nome in _NOMI_PERICOLO.items()
+}
+_PERIMETRI = _CATALOGO.voce("perimetri_effis")
 
 
 def _bar(pct: float, width: int = 20) -> str:
@@ -95,7 +105,9 @@ async def run() -> int:
 
         # I perimetri di area bruciata non stanno in cell_static_factors: sono
         # il truth set del backtest incendio, e la loro assenza si nota solo lì.
-        perimeters = int(await conn.fetchval("SELECT count(*) FROM fire_perimeters") or 0)
+        perimeters = int(
+            await conn.fetchval(f"SELECT count(*) FROM {_PERIMETRI.misura.tabella}") or 0
+        )
 
     print(f"\nCopertura dei fattori statici — {total:,} celle in {aois} AOI\n".replace(",", "."))
     print(f"  {'layer':34s} {'celle':>10s}  {'':20s}  gate")
@@ -104,7 +116,7 @@ async def run() -> int:
         pct = n / total if total else 0.0
         gate = layer.gate or f"deriva da {layer.derived_from}"
         print(f"  {layer.label:34s} {n:>10,}  {_bar(pct)}  {gate}".replace(",", "."))
-    print(f"\n  {'perimetri EFFIS (truth set incendio)':34s} {perimeters:>10,}".replace(",", "."))
+    print(f"\n  {_PERIMETRI.nome:34s} {perimeters:>10,}".replace(",", "."))
     # Le tile del rilievo non sono un fattore per cella: servono alla vista
     # «Rilievo» della mappa, e mancano senza che lo score se ne accorga.
     rilievo = sorted(p.name for p in cartella_tile().glob("rilievo-*.pmtiles"))
