@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15' and platform_machine == 'ARM64' and sys_platform == 'win32'",
@@ -1829,14 +1829,14 @@ wheels = [
 
 [[package]]
 name = "ispra-idrogeo"
-version = "0.3.0"
+version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f4/f5/62821ebd2ae161a7ea366de1617683a7ceaa87ca87f714bd38bf29b0c749/ispra_idrogeo-0.3.0.tar.gz", hash = "sha256:c7e903d295cba2afec2631554f9cee1a3337bcf780ddb716e90d50c8bf75b999", size = 37290, upload-time = "2026-11-03T17:28:28.826Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/00/41/58c0937a5d5ab94478f8753b1210691630347314314e74be00ed8dc3e25f/ispra_idrogeo-0.6.0.tar.gz", hash = "sha256:e583c2bc140485c7d919174e0ef779c1da456703cb02830ab5e84fd68f4fc9c3", size = 66636, upload-time = "2026-11-03T19:39:20.672Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/11/2c/ab5cb7716c36eb05cbc9a8bd4229e77aa6f02d984069f88b7f1d29abaa43/ispra_idrogeo-0.3.0-py3-none-any.whl", hash = "sha256:3bc0a3b176b1e8a7ffb398825c9e80a9f33c43eb6a7d0ea45bf3a0409bc960d3", size = 29212, upload-time = "2026-11-03T17:28:27.414Z" },
+    { url = "https://files.pythonhosted.org/packages/cc/1c/b49996154c0175ef7ae6d2d18b7c8e167c6d8f043f573a9bf35327873ed2/ispra_idrogeo-0.6.0-py3-none-any.whl", hash = "sha256:0435923af5e6e10e6cc637deb5bd07e7b9736d6c39090a08b4589f9ede32e12f", size = 57489, upload-time = "2026-11-03T19:39:18.966Z" },
 ]
 
 [[package]]
@@ -2344,7 +2344,7 @@ requires-dist = [
     { name = "geopandas", specifier = ">=1.0" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "imageserver-export", specifier = "~=0.1.0" },
-    { name = "ispra-idrogeo", specifier = "~=0.3.0" },
+    { name = "ispra-idrogeo", specifier = "~=0.6.0" },
     { name = "opentelemetry-api", specifier = ">=1.27" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.27" },
     { name = "opentelemetry-instrumentation-asyncpg", specifier = ">=0.48b0" },
