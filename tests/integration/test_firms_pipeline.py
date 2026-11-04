@@ -18,7 +18,12 @@ from limen.config.settings import FirmsSettings, Settings
 from limen.core.models.context import MonitoringContext
 from limen.data.db import acquire, get_pool
 from limen.data.repos.aoi_repo import upsert_aoi
-from limen.data.repos.fire_repo import FireHotspot, count_hotspots, upsert_hotspots
+from limen.data.repos.fire_repo import (
+    FireHotspot,
+    aoi_hotspot_counts,
+    count_hotspots,
+    upsert_hotspots,
+)
 from limen.data.repos.grid_repo import generate_and_store_grid
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.firms import FirmsHttpClient, run_firms_sync
@@ -40,6 +45,16 @@ async def _reset_http() -> None:
     await SharedHttpClient.aclose()
     yield
     await SharedHttpClient.aclose()
+
+
+@pytest.fixture(autouse=True)
+def _no_static_mask(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The mask downloads the yearly archives; it has its own unit tests."""
+
+    async def none() -> None:
+        return None
+
+    monkeypatch.setattr("limen.api.jobs.firms_monitoring.load_static_mask", none)
 
 
 _AOI_ID = "firms-test-aoi"
@@ -247,6 +262,40 @@ async def test_industrial_hotspots_do_not_open_the_post_fire_window(
 
     assert updated.months_since_fire is None
     assert updated.fuoco_per_cella == {}
+
+
+async def test_static_sources_never_trigger_but_untyped_rows_do(
+    reset_db: None, pg_pool: object
+) -> None:
+    """The trigger counts vegetation and NRT rows the mask left unlabelled.
+
+    A steelworks or Etna, once the static mask has labelled them, never start
+    a sweep; a row without ``type`` still does, because missing a fire costs
+    more than one extra sweep.
+    """
+    aoi_id, lat, lon = await _seed_test_aoi()
+    today = datetime.now(UTC).date()
+
+    async def put(kind: int | None, times: tuple[int, ...]) -> None:
+        await upsert_hotspots(
+            [
+                FireHotspot(
+                    source=_SOURCE,
+                    acq_date=today,
+                    acq_time=t,
+                    latitude=lat,
+                    longitude=lon,
+                    detection_type=kind,
+                )
+                for t in times
+            ]
+        )
+
+    await put(2, (100, 200, 300))
+    assert await aoi_hotspot_counts(window_hours=48, min_hotspots=2) == {}
+
+    await put(None, (400, 500))
+    assert await aoi_hotspot_counts(window_hours=48, min_hotspots=2) == {aoi_id: 2}
 
 
 async def test_firms_monitoring_triggers_the_aoi_once_then_cools_down(

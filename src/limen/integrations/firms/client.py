@@ -43,6 +43,8 @@ from limen.integrations._http import SharedHttpClient, fetch_with_retry
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from firms_client import StaticMask
+
 log = get_logger(__name__)
 
 DEFAULT_BASE_URL = AREA_API_BASE
@@ -62,14 +64,22 @@ def parse_hotspot_csv(
     min_confidence: ConfidenceLevel = "nominal",
     min_confidence_pct: int = 50,
     min_frp_mw: float = 0.0,
+    static_mask: StaticMask | None = None,
 ) -> list[FireHotspot]:
     """Parse a FIRMS CSV response, dropping rows below the quality bar.
 
     Parsing and the confidence/FRP gate come from ``firms-client``. The
     ``type`` filter (vegetation vs industry) is *not* applied here: the
     column is stored, and the consumers that need fires only filter on it.
+
+    The area API (NRT) has no ``type`` column, so without ``static_mask``
+    the ILVA, the refineries and Etna arrive as ``NULL`` like any wildfire.
+    The mask, learned from the archives, gives those rows the ``type`` of
+    the static cell they fall in; rows that already carry one are untouched.
     """
     rows = parse_csv(payload)
+    if static_mask is not None:
+        rows = static_mask.label(rows)
     kept = select(
         rows,
         vegetation_only=False,
@@ -115,8 +125,10 @@ class FirmsHttpClient:
         min_confidence_pct: int = 50,
         min_frp_mw: float = 0.0,
         http_client: httpx.AsyncClient | None = None,
+        static_mask: StaticMask | None = None,
     ) -> None:
         self._map_key = map_key
+        self._static_mask = static_mask
         self._base_url = base_url.rstrip("/")
         self._min_confidence = min_confidence
         self._min_confidence_pct = min_confidence_pct
@@ -165,6 +177,7 @@ class FirmsHttpClient:
                     min_confidence=self._min_confidence,
                     min_confidence_pct=self._min_confidence_pct,
                     min_frp_mw=self._min_frp_mw,
+                    static_mask=self._static_mask,
                 )
             )
         log.info("firms.hotspots.fetched", count=len(out), sources=list(sources))

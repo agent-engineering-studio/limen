@@ -47,6 +47,7 @@ def _hotspots_to_hash(hotspots: Sequence[FireHotspot]) -> str:
                 h.longitude,
                 h.frp_mw,
                 h.confidence,
+                h.detection_type,
             ],
             default=str,
         )
