@@ -95,10 +95,35 @@ Cosa *non* dice: niente sul terreno (pendenza, litologia), niente sul
 decadimento τ (le frane cosismiche sono istantanee), niente fuori da una
 sequenza appenninica di tre eventi.
 
+### Verifica indipendente: L'Aquila 2009
+
+La soglia di 0,1 g è stata letta sugli stessi tre eventi su cui è misurata,
+quindi era ottimistica. Rigirata su un terremoto diverso: L'Aquila, 6 aprile
+2009, Mw 6.1 (INGV 1895389, ShakeMap v1 `automatic`), inventario CEDIT di 94
+frane (USGS, CC0), mediana 10 km dall'epicentro.
+
+| PGA ≥ | Recall | Carico | Lift |
+|---|---|---|---|
+| 0,02 g ← E | 100 % | 15,3 % | 6,5 |
+| 0,05 g | 98,5 % | 5,6 % | 17,6 |
+| **0,1 g** | **97,1 %** | **2,5 %** | **39,0** |
+| 0,2 g | 70,6 % | 0,9 % | 80,4 |
+| 0,3 g | 19,1 % | 0,2 % | 104,1 |
+
+AUC nel campo vicino: PGA 0,950, PGV 0,948, MMI 0,948, distanza 0,933.
+
+* **0,1 g regge**: 97 % delle frane su un quarantesimo del territorio in
+  mappa, in linea con i tre eventi del 2016 (86-98 % su 3-7 %).
+* **Più in alto si perde molto**: a 0,2 g la recall scende al 71 %, a 0,3 g
+  al 19 %. 0,1 g è il ginocchio della curva, non un valore fra tanti.
+* **Qui la ShakeMap batte la distanza** (0,950 contro 0,933): sul 2016 no.
+  La conclusione 3 sopra vale per quella sequenza, non in generale.
+
 Prossimi passi proposti:
 
 * rigiocare il backtest #287 con `pga_min_g` = 0,1 g per misurare quanto
-  scende il carico in allerta; è un cambio di soglia nella YAML, non di codice;
+  scende il carico in allerta; è un cambio di soglia nella YAML, non di codice.
+  La soglia ora ha una verifica indipendente (L'Aquila 2009);
 * aggiungere la pendenza delle celle di Limen (sul server, dove i fattori
   statici ci sono) e vedere se scuotimento × pendenza batte la distanza:
   è la domanda del modello «ground failure».
