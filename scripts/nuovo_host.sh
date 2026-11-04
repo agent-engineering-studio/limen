@@ -61,23 +61,45 @@ case "$RADICE" in
   /*) ok "LIMEN_DATA_ROOT=$RADICE" ;;
   *) stop "LIMEN_DATA_ROOT deve essere assoluta (compose e Makefile la risolvono da cartelle diverse)" ;;
 esac
-if grep -qs '^DB__TILES_PASSWORD=[0-9a-f]\{32,\}$' .env; then
-  ok "DB__TILES_PASSWORD presente"
-elif [ "$MODO" = "--controlla" ]; then
-  no "manca DB__TILES_PASSWORD: le altre modalità la generano"
-else
-  # La riga vuota di .env.example si sostituisce, non si duplica: compose
-  # legge il file, e una riga vuota nell'ambiente vincerebbe (Codex, #314).
-  [ -z "${DB__TILES_PASSWORD:-}" ] || stop "DB__TILES_PASSWORD nell'ambiente non è valida: toglila (unset) e rilancia"
-  DB__TILES_PASSWORD="$(openssl rand -hex 24)"
-  if grep -q '^DB__TILES_PASSWORD=' .env; then
-    sed -i "s/^DB__TILES_PASSWORD=.*/DB__TILES_PASSWORD=$DB__TILES_PASSWORD/" .env
-  else
-    printf '\n# Generata da nuovo_host.sh (#269): la password del ruolo di pg_tileserv.\nDB__TILES_PASSWORD=%s\n' \
-      "$DB__TILES_PASSWORD" >>.env
+# Un segreto nel .env: se la riga manca o è vuota lo genera, se ha un valore
+# lo lascia com'è — anche non esadecimale (virgolette, base64 scelto a mano):
+# rigenerare la password di pg_tileserv la scollerebbe dal ruolo nel database.
+# La riga vuota di .env.example si sostituisce, non si duplica: compose legge
+# il file, e una riga vuota nell'ambiente vincerebbe (Codex, #314). Si
+# riscrive lo stesso file (`cat >`), non lo si sostituisce: un `mv` gli
+# darebbe i permessi dell'umask, e un .env a 0600 con le chiavi API diventerebbe
+# leggibile da tutti. Niente `sed -i`: GNU e BSD (macOS) non lo accettano uguale.
+segreto() {  # segreto NOME "commento per la riga aggiunta"
+  local nome="$1" commento="$2" valore
+  if grep -qs "^$nome=[0-9a-f]\{32,\}$" .env; then
+    ok "$nome presente"
+    return
   fi
-  ok "DB__TILES_PASSWORD generata nel .env"
-fi
+  if grep -qs "^$nome=..*" .env; then
+    no "$nome nel .env non è esadecimale: la lascio com'è"
+    return
+  fi
+  if [ "$MODO" = "--controlla" ]; then
+    no "manca $nome: le altre modalità la generano"
+    return
+  fi
+  [ -z "${!nome:-}" ] || stop "$nome nell'ambiente non è valida: toglila (unset) e rilancia"
+  valore="$(openssl rand -hex 24)"
+  if grep -q "^$nome=" .env; then
+    (
+      umask 077
+      awk -v n="$nome" -v v="$valore" 'index($0, n "=") == 1 { print n "=" v; next } { print }' \
+        .env >.env.nuovo
+    ) && cat .env.nuovo >.env
+    rm -f .env.nuovo
+  else
+    printf '\n# %s\n%s=%s\n' "$commento" "$nome" "$valore" >>.env
+  fi
+  ok "$nome generata nel .env"
+}
+segreto DB__TILES_PASSWORD "Generata da nuovo_host.sh (#269): la password del ruolo di pg_tileserv."
+segreto INSTALLAZIONE__TOKEN \
+  "Generato da nuovo_host.sh (#403): il token delle azioni della pagina di installazione."
 
 # Lo spazio dove andranno i dati: la radice, o la cartella più vicina che esiste.
 dove="$RADICE"

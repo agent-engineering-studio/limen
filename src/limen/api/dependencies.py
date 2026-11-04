@@ -11,10 +11,11 @@ factory + a per-test pool and hand it to :func:`build_app_with_deps`.
 
 from __future__ import annotations
 
+import hmac
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends, Header, HTTPException, Request
 
 from limen.agents.grounding.service import GroundingService
 from limen.agents.llm_factory.base import LlmClientFactory
@@ -182,3 +183,32 @@ def _get_settings(deps: DepsDep) -> Settings:
 
 
 SettingsDep = Annotated[Settings, Depends(_get_settings)]
+
+
+#: L'header con cui la pagina `#/installazione` manda il token (#403).
+HEADER_TOKEN_INSTALLAZIONE = "X-Limen-Token"
+
+
+def _richiedi_token_installazione(
+    settings: SettingsDep,
+    token: Annotated[str | None, Header(alias=HEADER_TOKEN_INSTALLAZIONE)] = None,
+) -> None:
+    """Le azioni di installazione chiedono il token; fail-closed se non c'è.
+
+    Non è un login (epic #69): nessun utente, nessuna sessione. Il token non
+    finisce nei log, e il confronto è a tempo costante.
+    """
+    atteso = settings.installazione.token
+    if atteso is None or not settings.installazione.abilitato:
+        raise HTTPException(
+            status_code=403,
+            detail="Le azioni di installazione sono disabilitate: "
+            "INSTALLAZIONE__TOKEN non è impostata sul server.",
+        )
+    if not token or not hmac.compare_digest(
+        token.encode(), atteso.get_secret_value().strip().encode()
+    ):
+        raise HTTPException(status_code=401, detail="Token di installazione mancante o errato.")
+
+
+TokenInstallazioneDep = Annotated[None, Depends(_richiedi_token_installazione)]

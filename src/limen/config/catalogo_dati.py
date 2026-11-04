@@ -34,11 +34,16 @@ class _Rigido(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+#: Finiscono in una query (``copertura_repo``): un refuso nel YAML deve
+#: fermare il caricamento del catalogo, non far rispondere 500 a una pagina.
+_Identificatore = Annotated[str, StringConstraints(pattern=r"^[a-z_][a-z0-9_]*$")]
+
+
 class Misura(_Rigido):
     """Come si conta la copertura: celle con un valore, o righe di una tabella."""
 
-    colonna: str | None = None
-    tabella: str | None = None
+    colonna: _Identificatore | None = None
+    tabella: _Identificatore | None = None
 
     @model_validator(mode="after")
     def _una_sola(self) -> Self:

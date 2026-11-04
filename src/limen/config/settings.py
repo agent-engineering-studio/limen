@@ -1281,6 +1281,26 @@ class ContributiSettings(BaseSettings):
     secondi_minimi: float = Field(default=5.0, ge=0.0)
 
 
+class InstallazioneSettings(BaseSettings):
+    """Il token delle azioni di installazione (#403, epic #409).
+
+    Non è un login: niente utenti, niente sessioni, niente dati personali.
+    È lo schema di ``MCP_ADMIN_TOKEN``: chi installa lo trova nel ``.env``
+    (``nuovo_host.sh`` lo genera) e la pagina ``#/installazione`` lo manda
+    con le azioni che cambiano qualcosa — avviare un download. Leggere lo
+    stato resta pubblico. Vuoto ⇒ azioni disabilitate (fail-closed).
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    token: SecretStr | None = None
+
+    @property
+    def abilitato(self) -> bool:
+        """Le azioni sono aperte solo con un token non vuoto: fail-closed."""
+        return self.token is not None and bool(self.token.get_secret_value().strip())
+
+
 class Settings(BaseSettings):
     """Top-level application settings."""
 
@@ -1299,6 +1319,7 @@ class Settings(BaseSettings):
     api: ApiSettings = Field(default_factory=ApiSettings)
     notifications: NotificationsSettings = Field(default_factory=NotificationsSettings)
     contributi: ContributiSettings = Field(default_factory=ContributiSettings)
+    installazione: InstallazioneSettings = Field(default_factory=InstallazioneSettings)
     alert: AlertSettings = Field(default_factory=AlertSettings)
     forecast: ForecastSettings = Field(default_factory=ForecastSettings)
     report: ReportSettings = Field(default_factory=ReportSettings)

@@ -16,8 +16,12 @@ from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Literal
 
 from limen.data.db import acquire
+
+#: Gli stati del CHECK della migrazione 086.
+Stato = Literal["in_coda", "in_corso", "fatto", "errore"]
 
 #: Il canale di NOTIFY che sveglia il worker.
 CANALE = "dati_download"
@@ -32,7 +36,7 @@ _LOCK_DOWNLOAD = 0x4C494D454E_0402  # "LIMEN" #402
 @dataclass(frozen=True, slots=True)
 class StatoDownload:
     voce: str
-    stato: str
+    stato: Stato
     byte_fatti: int
     byte_totali: int | None
     richiesto_il: datetime
@@ -176,6 +180,7 @@ async def elenco() -> list[StatoDownload]:
 __all__ = [
     "CANALE",
     "TENTATIVI_MASSIMI",
+    "Stato",
     "StatoDownload",
     "accoda",
     "avanza",

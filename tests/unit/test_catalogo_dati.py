@@ -68,6 +68,8 @@ def test_le_voci_scaricate_dicono_da_dove() -> None:
         _voce(livello="indispensabile"),
         _voce(misura={}),
         _voce(misura={"colonna": "slope_deg", "tabella": "x"}),
+        _voce(misura={"colonna": "slope_deg; DROP TABLE aoi"}),
+        _voce(misura={"tabella": "Fire-Perimeters"}),
         _voce(variabile=None),
         _voce(peso_gb=-1),
         _voce(campo_sconosciuto=1),

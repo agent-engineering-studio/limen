@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 
 from limen.config.catalogo_dati import CatalogoDati, Livello, carica_catalogo
+from limen.core.installazione import byte_stimati, scaricabili
 from limen.core.logging import get_logger
 from limen.data.db import lifespan_pool
 from limen.data.migrate import run_migrations
@@ -32,18 +33,15 @@ def build_subparser(top: argparse._SubParsersAction[argparse.ArgumentParser]) ->
 
 def scelte(args: argparse.Namespace, catalogo: CatalogoDati) -> list[str]:
     """Le voci da accodare. Solleva ``SystemExit`` su un id sconosciuto o derivato."""
-    scaricabili = [v for v in catalogo.voci if v.deriva_da is None]
+    da_scaricare = [v for v in catalogo.voci if v.deriva_da is None]
     if args.tutte:
-        return [v.id for v in scaricabili]
+        return [v.id for v in da_scaricare]
     if args.essenziali:
-        return [v.id for v in scaricabili if v.livello is Livello.ESSENZIALE]
-    note = {v.id: v for v in catalogo.voci}
-    for voce in args.voci:
-        if voce not in note:
-            raise SystemExit(f"voce sconosciuta: {voce} (vedi `limen dati stato`)")
-        if note[voce].deriva_da is not None:
-            raise SystemExit(f"{voce} non si scarica: si calcola da {note[voce].deriva_da}")
-    return list(args.voci)
+        return [v.id for v in da_scaricare if v.livello is Livello.ESSENZIALE]
+    try:
+        return scaricabili(catalogo, args.voci)
+    except ValueError as exc:
+        raise SystemExit(f"{exc} Vedi `limen dati stato`.") from exc
 
 
 def _peso(byte: float | None) -> str:
@@ -76,8 +74,7 @@ async def run(args: argparse.Namespace) -> int:
         if args.dati_command == "stato":
             return await stato(catalogo)
         voci = scelte(args, catalogo)
-        totali = {v.id: round(v.peso_gb * 1e9) for v in catalogo.voci if v.peso_gb > 0}
-        accodate = await repo.accoda(voci, byte_totali=totali)
+        accodate = await repo.accoda(voci, byte_totali=byte_stimati(catalogo))
         gia = sorted(set(voci) - set(accodate))
         print(
             f"In coda: {', '.join(accodate) or 'nessuna'}"

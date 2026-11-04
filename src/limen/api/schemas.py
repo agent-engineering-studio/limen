@@ -11,11 +11,13 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from limen.config.catalogo_dati import Livello
 from limen.core.models.context import (
     CellRiskRecord,
     RiskAnalysisDTO,
 )
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
+from limen.data.repos.dati_download_repo import Stato as StatoDownload
 
 
 class HealthResponse(BaseModel):
@@ -325,3 +327,80 @@ class LlmStatusResponse(BaseModel):
     output_tokens: int
     per_giorno: list[ConsumoLlm] = Field(default_factory=list)
     per_modello: list[ConsumoLlm] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Installazione guidata (#403, #404, epic #409)
+# ---------------------------------------------------------------------------
+class DownloadDato(BaseModel):
+    """A che punto è il download di una voce (tabella `dati_download`)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    stato: StatoDownload
+    byte_fatti: int
+    byte_totali: int | None
+    aggiornato_il: datetime
+    errore: str | None
+
+
+class VoceDato(BaseModel):
+    """Una voce del catalogo `config/dati.yaml`, con copertura e download."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    nome: str
+    a_cosa_serve: str
+    pericoli: list[HazardType]
+    livello: Livello
+    fonte: str
+    url: str | None
+    licenza: str
+    attribuzione: str | None
+    peso_gb: float
+    #: L'id della voce da cui si calcola: queste non si scaricano.
+    deriva_da: str | None
+    #: Celle con il dato, o righe della sua tabella.
+    copertura: int
+    #: Le regioni seminate dove il dato manca (solo per i dati per cella).
+    regioni_senza: list[str]
+    download: DownloadDato | None
+
+
+class PericoloPronto(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pericolo: HazardType
+    pronto: bool
+    #: Gli id delle voci essenziali senza copertura.
+    mancano: list[str]
+
+
+class InstallazioneStato(BaseModel):
+    """`GET /api/installazione/stato`: pubblico, in sola lettura."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    celle_totali: int
+    regioni: int
+    pericoli: list[PericoloPronto]
+    voci: list[VoceDato]
+    #: Se il server ha un token di installazione: senza, i pulsanti non servono.
+    azioni_abilitate: bool
+
+
+class RichiestaDownload(BaseModel):
+    """`POST /api/installazione/download`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    voci: list[str] = Field(min_length=1)
+
+
+class RispostaDownload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    accodate: list[str]
+    #: Già in corso: non si rimettono in coda.
+    gia_in_corso: list[str]
