@@ -13,6 +13,7 @@ Usage:
     limen raccolta-eventi    Gli eventi della stampa, dai titoli al registro (#347).
     limen anticipo           Quanto prima Limen ha visto un evento, in JSON.
     limen sensore            Registro dei sensori dei cittadini: approva, revoca (#253).
+    limen dati               Download dei dati statici, eseguiti dal worker: stato | scarica (#402).
     limen backup             Backup dello stato fuori dal server; `elenco` li elenca (#304).
     limen restore            Ripristina un backup (`--conferma`: sovrascrive il database).
     limen static-snapshot    Fattori per cella senza i raster: export | import | elenco (#305).
@@ -60,6 +61,8 @@ from limen.cli.bootstrap_static import run as _run_bootstrap_static
 from limen.cli.calibrate import run as _run_calibrate
 from limen.cli.clima_pioggia import run as _run_clima_pioggia
 from limen.cli.data_status import run as _run_data_status
+from limen.cli.dati import build_subparser as _build_dati_subparser
+from limen.cli.dati import run as _run_dati
 from limen.cli.dpc_bollettini import run as _run_dpc_bollettini
 from limen.cli.effis_sync import run as _run_effis_sync
 from limen.cli.esposizione_sync import run as _run_esposizione_sync
@@ -403,6 +406,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # optional deps stay out of the main CLI's runtime.
     _build_geodata_subparser(sub)
     _build_sensore_subparser(sub)
+    _build_dati_subparser(sub)
     _build_backup_subparser(sub)
     _build_static_snapshot_subparser(sub)
     return parser
@@ -490,6 +494,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "static-snapshot":
         try:
             return asyncio.run(_run_static_snapshot(args))
+        except KeyboardInterrupt:  # pragma: no cover
+            return 130
+    if args.command == "dati":
+        try:
+            return asyncio.run(_run_dati(args))
         except KeyboardInterrupt:  # pragma: no cover
             return 130
     if args.command == "sensore":

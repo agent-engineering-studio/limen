@@ -14,6 +14,9 @@
 # usa e getta dell'immagine del worker (#306: sull'host basta Docker).
 # LIMEN_STATICI=host|docker sceglie a mano.
 set -uo pipefail
+# Il worker scarica nelle stesse cartelle (setgid, #402): i file nuovi
+# restano scrivibili dal gruppo, così ognuno riprende i `.part` dell'altro.
+umask 002
 
 UV="${UV:-uv}"
 FOCUS="${1:-tutti}"

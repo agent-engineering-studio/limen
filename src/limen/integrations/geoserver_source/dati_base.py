@@ -273,7 +273,8 @@ async def _scarica_riprendendo(url: str, parziale: Path, dimensione: int) -> Non
             gia = 0  # il server ignora il Range: si riparte
         with parziale.open("ab" if gia else "wb") as uscita:
             async for blocco in risposta.aiter_bytes(_BLOCCO):
-                uscita.write(blocco)
+                # Fuori dal loop: lo condivide lo sweep orario del worker.
+                await asyncio.to_thread(uscita.write, blocco)
     if parziale.stat().st_size != dimensione:
         raise httpx.ReadError(f"DTM interrotto a {parziale.stat().st_size} di {dimensione} byte")
 

@@ -57,9 +57,7 @@ AREE: tuple[str, ...] = (*REGIONS.values(), PROVINCES[21], PROVINCES[22])
 
 def dataset() -> list[Dataset]:
     """Cosa serve a ``geoserver_source``: 105 file IFFI e 2 mosaici."""
-    return [opendata(layer, area) for layer in LANDSLIDE_LAYERS for area in AREE] + [
-        mosaic(nome) for nome in MOSAICS
-    ]
+    return [*iffi(), *(mosaic(nome) for nome in MOSAICS)]
 
 
 @dataclass
@@ -103,11 +101,13 @@ async def _uno(idrogeo: IdroGEO, ds: Dataset, dove: Path, esito: Esito, *, giorn
         esito.invariati += 1
 
 
-async def sync_geodati(s: GeodatiSettings) -> Esito:
-    """Tutto quello che geoserver-init carica: IdroGEO, poi ISTAT, CORINE e geolitologia."""
-    dove = cartella_geoserver()
-    dove.mkdir(parents=True, exist_ok=True)
-    pulisci_appoggi(dove)
+def iffi() -> list[Dataset]:
+    """I 105 file dell'inventario frane, area per area."""
+    return [opendata(layer, area) for layer in LANDSLIDE_LAYERS for area in AREE]
+
+
+async def scarica_idrogeo(scelti: list[Dataset], s: GeodatiSettings, dove: Path) -> Esito:
+    """Scarica ``scelti`` da IdroGEO in ``dove``; un file che non arriva non ferma gli altri."""
     idrogeo = IdroGEO(await SharedHttpClient.get(), retries=0)
     cancello = asyncio.Semaphore(s.concorrenza)
     esito = Esito()
@@ -116,7 +116,17 @@ async def sync_geodati(s: GeodatiSettings) -> Esito:
         async with cancello:
             await _uno(idrogeo, ds, dove, esito, giorni=s.rivalida_dopo_giorni)
 
-    await asyncio.gather(*(_con_cancello(ds) for ds in dataset()))
+    await asyncio.gather(*(_con_cancello(ds) for ds in scelti))
+    return esito
+
+
+async def sync_geodati(s: GeodatiSettings) -> Esito:
+    """Tutto quello che geoserver-init carica: IdroGEO, poi ISTAT, CORINE e geolitologia."""
+    dove = cartella_geoserver()
+    dove.mkdir(parents=True, exist_ok=True)
+    pulisci_appoggi(dove)
+    esito = await scarica_idrogeo(dataset(), s, dove)
+    idrogeo = IdroGEO(await SharedHttpClient.get(), retries=0)
     # Il resto di quello che geoserver-init carica: ISTAT, CORINE, geolitologia.
     scaricati, falliti = await sync_dati_base(idrogeo, dove)
     esito.cambiati.extend(scaricati)
@@ -131,4 +141,4 @@ async def sync_geodati(s: GeodatiSettings) -> Esito:
     return esito
 
 
-__all__ = ["AREE", "Esito", "dataset", "sync_geodati"]
+__all__ = ["AREE", "Esito", "dataset", "iffi", "scarica_idrogeo", "sync_geodati"]

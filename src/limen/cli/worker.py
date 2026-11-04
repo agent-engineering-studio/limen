@@ -143,6 +143,10 @@ async def run(*, check_health: bool = False) -> int:
 
     from apscheduler import AsyncScheduler
 
+    # I file dei dati statici li scrivono in due, il worker e chi lancia
+    # `make static-data` sull'host, nelle stesse cartelle setgid: con il
+    # gruppo in scrittura ognuno riprende i `.part` dell'altro (#402).
+    os.umask(0o002)
     settings = get_settings()
     await init_pool(settings.db)
     if not await _wait_for_schema():
@@ -193,6 +197,19 @@ async def run(*, check_health: bool = False) -> int:
             await ingestore_v2.start()
             log.info("worker.iot.v2.started")
 
+        # I download dei dati statici (#402): partono quando qualcuno li chiede,
+        # quindi non sono uno schedule — il consumatore ascolta la coda.
+        scaricamenti: Any = None
+        try:
+            from limen.api.jobs.dati_download import ConsumatoreDownload
+
+            scaricamenti = ConsumatoreDownload()
+            await scaricamenti.start()
+        except Exception as exc:  # i download non valgono lo sweep orario
+            log.warning(
+                "dati_download.non_avviato", error=str(exc)[:300], error_type=type(exc).__name__
+            )
+
         heartbeat = asyncio.create_task(_heartbeat_loop(stop, scheduler))
         await stop.wait()
         log.info("worker.stopping")
@@ -201,6 +218,8 @@ async def run(*, check_health: bool = False) -> int:
             heartbeat.cancel()
             with contextlib.suppress(BaseException):
                 await heartbeat
+        if scaricamenti is not None:
+            await scaricamenti.stop()
         if ingestor is not None:
             with contextlib.suppress(Exception):
                 await ingestor.stop()
