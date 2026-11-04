@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 
+import pytest
+
 from limen.cli.backtest_flood import (
     FloodBacktestMetrics,
     _accumulate_72h,
@@ -235,6 +237,41 @@ def test_far_counts_only_the_verifiable_days() -> None:
 
     assert (out.true_days, out.false_days, out.unverifiable_days) == (1, 1, 2)
     assert out.far == 0.5
+
+
+def test_la_tabella_per_cella_conta_celle_e_non_giorni() -> None:
+    """CSI = hit / (hit + mancati + falsi); le allerte mai verificate a parte."""
+    passed_over = datetime(2024, 9, 18, 12, tzinfo=UTC)
+    flood = datetime(2024, 9, 18, 6, tzinfo=UTC)
+    tally = _tally(
+        alert_days={
+            "preso": [date(2024, 9, 17)],
+            # Tre giorni smentiti dallo stesso passaggio: un falso, non tre.
+            "falso": [date(2024, 9, 16), date(2024, 9, 17), date(2024, 9, 18)],
+            "mai_visto": [date(2024, 9, 25)],
+        },
+        truth={"preso": flood, "mancato": flood},
+    )
+    observed = {
+        "preso": [passed_over],
+        "mancato": [passed_over],
+        "falso": [passed_over],
+        "asciutto": [passed_over],
+    }
+    c = _run(tally, observed).celle
+
+    assert (c.hits, c.misses, c.false_alarms) == (1, 1, 1)
+    assert c.unobserved_predicted == 1
+    assert c.correct_negatives == 1
+    assert c.csi == pytest.approx(1 / 3)
+    assert c.pod == 0.5
+    assert c.bias == 1.0
+
+
+def test_senza_niente_di_osservato_il_csi_non_si_inventa() -> None:
+    c = _run(_tally(alert_days={"c1": [D0]}, truth={}), observed={}).celle
+    assert c.unobserved_predicted == 1
+    assert c.csi != c.csi  # nan: nessun denominatore
 
 
 def test_persistent_alert_is_measured_per_day_but_counted_as_one_warning() -> None:
@@ -518,6 +555,7 @@ def test_write_report_carries_the_numbers_and_the_gate(tmp_path, monkeypatch) ->
     assert "75%" in text and "3.00x" in text
     assert "non misurabile" in text
     assert "niente di verificabile" in text
+    assert "### Per cella (CSI)" in text
     assert "(dal 2024-09-05)" in text
     if _thresholds().calibration is not None:
         assert "### Gate §2.5" in text
