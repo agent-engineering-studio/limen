@@ -246,10 +246,11 @@ async def dtm(dove: Path) -> bool:
     parziale = finale.with_name(f"{finale.name}.part")
     gia = parziale.stat().st_size if parziale.exists() else 0
     libero = shutil.disk_usage(finale.parent).free
-    if libero < dimensione - gia + _DTM_MARGINE_BYTE:
+    servono = dimensione - gia + _DTM_MARGINE_BYTE
+    if libero < servono:
         raise RuntimeError(
-            f"DTM: servono {(dimensione - gia) / 1e9:.1f} GB in {finale.parent}, "
-            f"liberi {libero / 1e9:.1f}"
+            f"DTM: servono {servono / 1e9:.1f} GB in {finale.parent} "
+            f"(margine compreso), liberi {libero / 1e9:.1f}"
         )
     log.info("geodati.dtm_inizio", gb=round(dimensione / 1e9, 1), ripresa_gb=round(gia / 1e9, 1))
     await call_with_retry(partial(_scarica_riprendendo, url, parziale, dimensione))

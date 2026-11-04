@@ -83,6 +83,9 @@ class _Fonti:
 @pytest.fixture
 def fonti(monkeypatch: pytest.MonkeyPatch) -> tuple[_Fonti, IdroGEO]:
     finte = _Fonti()
+    # Il DTM finto pesa pochi KB: i 5 GB di margine misurerebbero il disco del
+    # runner, non il codice (su GitHub /tmp ne ha a volte 1,4).
+    monkeypatch.setattr(dati_base, "_DTM_MARGINE_BYTE", 0)
     client = httpx.AsyncClient(transport=httpx.MockTransport(finte))
 
     async def _get(_cls: type[SharedHttpClient]) -> httpx.AsyncClient:
