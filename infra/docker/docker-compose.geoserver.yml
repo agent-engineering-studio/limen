@@ -42,9 +42,9 @@ name: limen-geoserver
 # Fissate al commit di mcp-geo-server che gira oggi (era `latest`/`bootstrap`,
 # #303); per aggiornarle si cambia qui o in GEOSERVER_*_IMAGE.
 x-geoserver-app-image: &geoserver-app-image
-  image: ${GEOSERVER_APP_IMAGE:-ghcr.io/agent-engineering-studio/mcp-geo-server:sha-1b634a7}
+  image: ${GEOSERVER_APP_IMAGE:-ghcr.io/agent-engineering-studio/mcp-geo-server:sha-cb48b63}
 x-geoserver-bootstrap-image: &geoserver-bootstrap-image
-  image: ${GEOSERVER_BOOTSTRAP_IMAGE:-ghcr.io/agent-engineering-studio/mcp-geo-server:bootstrap-1b634a7078b92105fc1b61697235d7395b03d3be}
+  image: ${GEOSERVER_BOOTSTRAP_IMAGE:-ghcr.io/agent-engineering-studio/mcp-geo-server:bootstrap-cb48b63ddaf21181d11da8037e568ed2170d79eb}
 
 services:
 
@@ -228,6 +228,12 @@ services:
     depends_on:
       geoserver:
         condition: service_started
+      # The extra MCP servers are probed once, at startup: started before
+      # idrogeo-mcp is up, the agent would run without its tools until restarted.
+      # `required: false` so an idrogeo outage never keeps this one down.
+      idrogeo-mcp:
+        condition: service_healthy
+        required: false
     environment:
       GEOSERVER_URL: http://geoserver:8080/geoserver
       GEOSERVER_USER: ${GEOSERVER_ADMIN_USER:-admin}
@@ -260,6 +266,12 @@ services:
       # The service and container names are here for callers on the compose network.
       GEO_MCP_ALLOWED_HOSTS: ${GEO_MCP_ALLOWED_HOSTS:-localhost:*,127.0.0.1:*,geoserver-mcp:*,limen-geoserver-mcp:*}
       GEO_STYLES_CONFIG: ${GEO_STYLES_CONFIG:-/data/styles.yml}
+      # Remote MCP tools for geoserver-agent (and GEO_MCP_MODE=agent), prefixed
+      # with the name (idrogeo_area_risk, ...). geo_resolve_request and the web
+      # UI chat do not see them. An unreachable server is logged and skipped.
+      GEO_EXTRA_MCP_SERVERS: ${GEO_EXTRA_MCP_SERVERS:-idrogeo=http://idrogeo-mcp:8767/mcp}
+      GEO_EXTRA_MCP_TIMEOUT: ${GEO_EXTRA_MCP_TIMEOUT:-10}
+      GEO_EXTRA_MCP_INSTRUCTIONS: ${GEO_EXTRA_MCP_INSTRUCTIONS:-Usa gli strumenti idrogeo_* per frane, popolazione esposta e monitoraggio.}
       GEO_ALLOW_DESTRUCTIVE: ${GEO_ALLOW_DESTRUCTIVE:-false}
       GEO_MAP_OUTPUT_DIR: /app/maps
     extra_hosts:
@@ -277,10 +289,10 @@ services:
       retries: 3
 
   # IdroGEO di ISPRA come server MCP (pacchetto ispra-idrogeo, extra [mcp]):
-  # 12 strumenti in sola lettura tranne lo scarico — aree a rischio,
-  # popolazione esposta, frane IFFI vicine a un punto, pericolosità in un
-  # punto, eventi, siti di monitoraggio. Per l'agente della mappa
-  # (mcp-geo-server#8: GEO_EXTRA_MCP_SERVERS=idrogeo=http://idrogeo-mcp:8767/mcp).
+  # Strumenti in sola lettura tranne lo scarico — aree a rischio e loro
+  # classifica/confronto, popolazione esposta, frane IFFI vicine a un punto,
+  # pericolosità in un punto, eventi, siti di monitoraggio. L'agente della
+  # mappa li monta con GEO_EXTRA_MCP_SERVERS (geoserver-mcp, sopra).
   # Un'immagine uv e non quella di Limen: il server vuole `mcp>=2.0`, Limen
   # sta su fastmcp e `mcp` 1.x. uvx installa al primo avvio; la cache sul
   # volume evita di rifarlo a ogni riavvio.
@@ -289,7 +301,7 @@ services:
     container_name: limen-idrogeo-mcp
     restart: unless-stopped
     profiles: ["geoserver"]
-    command: ["uvx", "--from", "ispra-idrogeo[mcp]~=0.6.0", "idrogeo-mcp"]
+    command: ["uvx", "--from", "ispra-idrogeo[mcp]~=0.7.0", "idrogeo-mcp"]
     environment:
       IDROGEO_MCP_TRANSPORT: streamable-http
       IDROGEO_MCP_HOST: 0.0.0.0
