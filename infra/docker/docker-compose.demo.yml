@@ -182,11 +182,13 @@ services:
       KG__THREAD_ID: landslide-kb
       KG__TIMEOUT_SECONDS: "3.0"
       KG__CACHE_TTL_SECONDS: "3600"
-      # GeoServer PostGIS as the authoritative ISPRA static-data source.
-      # Resolves by service name on the merged `make up` network. Uses an
-      # API_-prefixed override so the host-side GEOSERVER_SOURCE__DB_DSN in
-      # .env (localhost:55433, for host `uv run`) never leaks in here.
-      GEOSERVER_SOURCE__DB_DSN: ${API_GEOSERVER_SOURCE_DSN:-postgresql://gis:gis@geoserver-postgis:5432/gis}
+      # I vettori ISPRA e ISTAT si leggono dal database di Limen, schema
+      # `sorgenti` (#426): vuoti ⇒ quello. API_-prefixed perché il
+      # GEOSERVER_SOURCE__DB_DSN del .env è per `uv run` sull'host
+      # (localhost) e qui dentro non risolverebbe. Per leggerli dal PostGIS
+      # di GeoServer: API_GEOSERVER_SOURCE_DSN=postgresql://gis:gis@geoserver-postgis:5432/gis.
+      GEOSERVER_SOURCE__DB_DSN: ${API_GEOSERVER_SOURCE_DSN:-}
+      GEOSERVER_SOURCE__SCHEMA_NAME: ${API_GEOSERVER_SOURCE_SCHEMA:-}
       # DTM path INSIDE the container (the shared /data folder is mounted
       # below). Distinct from the host-side LIMEN_DEM_RASTER so a host path
       # never leaks into the container. Empty ⇒ in-container DEM step is a
@@ -435,6 +437,8 @@ services:
     image: ${LIMEN_IMAGE_PREFIX:-limen/}api:${LIMEN_IMAGE_TAG:-0.1}
     container_name: limen-mcp
     restart: unless-stopped
+    # Per gli agenti AI, non per la mappa: parte con LIMEN_AGENTI=1 (#426).
+    profiles: ["agenti"]
     depends_on:
       postgres:
         condition: service_healthy

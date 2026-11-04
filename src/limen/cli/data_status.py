@@ -58,9 +58,7 @@ def _layers(catalogo: CatalogoDati) -> tuple[Layer, ...]:
             label=v.nome,
             gate=v.variabile,
             derived_from=colonne[v.deriva_da] if v.deriva_da else None,
-            # `make static-data` è la strada di tutti i layer che non ne hanno
-            # una propria: stamparlo accanto a ogni variabile non direbbe niente.
-            fetch_with=v.procura_con if v.procura_con != "make static-data" else None,
+            fetch_with=v.procura_con,
         )
         for v in catalogo.voci
         if v.misura.colonna is not None
@@ -114,7 +112,9 @@ async def run() -> int:
     for layer in LAYERS:
         n = counts[layer.column]
         pct = n / total if total else 0.0
-        gate = layer.gate or f"deriva da {layer.derived_from}"
+        gate = layer.gate or (
+            f"deriva da {layer.derived_from}" if layer.derived_from else layer.fetch_with or ""
+        )
         print(f"  {layer.label:34s} {n:>10,}  {_bar(pct)}  {gate}".replace(",", "."))
     print(f"\n  {_PERIMETRI.nome:34s} {perimeters:>10,}".replace(",", "."))
     # Le tile del rilievo non sono un fattore per cella: servono alla vista
@@ -142,7 +142,13 @@ async def run() -> int:
     )
     if unset:
         print("\nVariabili non impostate in questo ambiente:")
-        comandi = {layer.gate: layer.fetch_with for layer in LAYERS if layer.fetch_with}
+        # `make static-data` è la strada di tutti i layer che non ne hanno una
+        # propria: stamparlo accanto a ogni variabile non direbbe niente.
+        comandi = {
+            layer.gate: layer.fetch_with
+            for layer in LAYERS
+            if layer.fetch_with and layer.fetch_with != "make static-data"
+        }
         for var in unset:
             comando = comandi.get(var)
             print(f"  {var}" + (f"   → {comando}" if comando else ""))

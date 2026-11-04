@@ -60,7 +60,14 @@ UP_BUILD := $(if $(REGISTRO),--no-build,--build)
 # Con LIMEN_DOMINIO nel .env il reverse proxy è in compose (Caddy, #306): serve
 # la SPA statica, perché è quella che il proxy inoltra.
 DOMINIO := $(shell grep -s '^LIMEN_DOMINIO=.' .env)
-UP_PROFILES  := --profile geoserver --profile $(if $(or $(REGISTRO),$(DOMINIO)),frontend-static,frontend)$(if $(DOMINIO), --profile proxy)
+# Il profilo essenziale (#426): Postgres, API, worker, tile, mappa, proxy.
+# GeoServer serve solo ai WMS di PAI e IFFI (i numeri leggono i vettori dal
+# database di Limen) e il server MCP solo agli agenti AI: si accendono a
+# richiesta, perché insieme pesano ~2 GB e su un portatile da 16 GB fanno la
+# differenza fra uno stack che parte e uno che va in swap.
+GEOSERVER := $(shell grep -s '^LIMEN_GEOSERVER=1' .env)
+AGENTI := $(shell grep -s '^LIMEN_AGENTI=1' .env)
+UP_PROFILES  := $(if $(GEOSERVER),--profile geoserver )--profile $(if $(or $(REGISTRO),$(DOMINIO)),frontend-static,frontend)$(if $(DOMINIO), --profile proxy)$(if $(AGENTI), --profile agenti)
 # Dietro il proxy la SPA chiama API, tile e WMS sulla propria origine (Codex,
 # #330): costruita qui con i default del compose chiederebbe localhost:8080,
 # cioè il computer di chi guarda. Un valore nel .env vince sempre.

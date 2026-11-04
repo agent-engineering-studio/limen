@@ -64,16 +64,14 @@ export EGMS__CARTELLA="${EGMS__CARTELLA:-$RADICE/egms}"
 # `limen geodati-sync` proprio dove `geoserver-init` li carica: la stessa
 # GEOSERVER_SHAPEFILE_DIR, assoluta perché diventa anche un mount di Docker.
 have_geodati=0
-if [ -n "${GEOSERVER_SOURCE__DB_DSN:-}" ]; then
-  # Una cartella che non si crea non deve diventare un mount vuoto «-v :»,
-  # che romperebbe ogni comando limen nel container, migrate compreso.
-  if mkdir -p "$GEOSERVER_DATI" && assoluta="$(cd "$GEOSERVER_DATI" && pwd)"; then
-    have_geodati=1
-    GEOSERVER_DATI="$assoluta"
-    export GEOSERVER_SHAPEFILE_DIR="$GEOSERVER_DATI"
-  else
-    echo "  [manca]   $GEOSERVER_DATI non si crea: dati di base ISPRA saltati" >&2
-  fi
+# Una cartella che non si crea non deve diventare un mount vuoto «-v :», che
+# romperebbe ogni comando limen nel container, migrate compreso.
+if mkdir -p "$GEOSERVER_DATI" && assoluta="$(cd "$GEOSERVER_DATI" && pwd)"; then
+  have_geodati=1
+  GEOSERVER_DATI="$assoluta"
+  export GEOSERVER_SHAPEFILE_DIR="$GEOSERVER_DATI"
+else
+  echo "  [manca]   $GEOSERVER_DATI non si crea: dati di base ISPRA saltati" >&2
 fi
 have_egms=0
 if [ -n "${EGMS__SERVICE_KEY:-}" ] || [ -n "${EGMS__SERVICE_KEY_FILE:-}" ]; then
@@ -106,7 +104,7 @@ if [ "$MODO" = docker ]; then
   # Le manopole dei comandi passano anche loro (Codex, #329): con l'ambiente
   # pulito un LIMEN_BOOTSTRAP_FORCE=1 o un LIMEN_EFFIS_GIORNI chiesti
   # dall'operatore sparirebbero in silenzio. Sono scalari, non JSON.
-  for v in LIMEN_BOOTSTRAP_FORCE LIMEN_EFFIS_GIORNI; do
+  for v in LIMEN_BOOTSTRAP_FORCE LIMEN_EFFIS_GIORNI LIMEN_VETTORI_FORZA; do
     [ -n "${!v:-}" ] && CONTAINER+=(-e "$v=${!v}")
   done
   # La cartella delle tile EGMS è l'unica in scrittura: il sync ci salva i
@@ -147,24 +145,42 @@ say "1/7  Cosa è configurato in questo ambiente (comandi: $MODO)"
 
 have_geoserver=0; have_dem=0; have_imperv=0; have_corine=0
 gs_risponde() { timeout 3 bash -c "</dev/tcp/${gs_host:?}/${gs_port:?}" 2>/dev/null; }
-if [ -n "${GEOSERVER_SOURCE__DB_DSN:-}" ]; then
-  # La variabile impostata non basta: se lo stack non è acceso il sync degrada
-  # in silenzio e la mappa resta vuota. Meglio provarci qui, dove si può
-  # ancora dire cosa fare, che scoprirlo in venti righe di warning.
-  gs_host=$(printf '%s' "$GEOSERVER_SOURCE__DB_DSN" | sed -E 's#.*@([^:/]+).*#\1#')
-  gs_port=$(printf '%s' "$GEOSERVER_SOURCE__DB_DSN" | sed -E 's#.*:([0-9]+)/.*#\1#')
-  if gs_risponde; then
-    have_geoserver=1
-    ok "GeoServer PostGIS raggiungibile su ${gs_host}:${gs_port}"
-  else
-    skip "GEOSERVER_SOURCE__DB_DSN impostata ma ${gs_host}:${gs_port} non risponde"
-    echo "            → lo stack non è acceso: il passo 4/7 lo avvia con geoserver-init,"
-    echo "              che carica in PostGIS gli shapefile scaricati al passo 3/7."
+# La sorgente che i comandi `limen` leggeranno davvero: nel container non è
+# GEOSERVER_SOURCE__DB_DSN del .env (che è per l'host, `localhost:55433`) ma
+# API_GEOSERVER_SOURCE_DSN del compose. Decidere con l'altra faceva saltare
+# carica-vettori mentre geoserver-sync leggeva uno schema vuoto (#426).
+if [ "$MODO" = docker ]; then
+  DSN_VETTORI="${API_GEOSERVER_SOURCE_DSN:-}"
+  if [ -n "${GEOSERVER_SOURCE__DB_DSN:-}" ] && [ -z "$DSN_VETTORI" ]; then
+    skip "GEOSERVER_SOURCE__DB_DSN vale solo per l'host: nei container i vettori si leggono"
+    echo "            dal database di Limen. Per GeoServer: API_GEOSERVER_SOURCE_DSN nel .env."
   fi
 else
-  skip "GEOSERVER_SOURCE__DB_DSN non impostata"
-  echo "            → senza, la suscettibilità idraulica resta vuota e la mappa"
-  echo "              alluvione è uniforme. È lo stack mcp-geo-server: 'make geoserver-up'."
+  DSN_VETTORI="${GEOSERVER_SOURCE__DB_DSN:-}"
+fi
+if [ -n "$DSN_VETTORI" ]; then
+  # Vettori da un PostGIS esterno (quello di GeoServer): la variabile non
+  # basta, se lo stack non è acceso il sync degrada in silenzio e la mappa
+  # resta vuota. Meglio provarci qui, dove si può ancora dire cosa fare.
+  gs_host=$(printf '%s' "$DSN_VETTORI" | sed -E 's#.*@([^:/]+).*#\1#')
+  gs_port=$(printf '%s' "$DSN_VETTORI" | sed -E 's#.*:([0-9]+)/.*#\1#')
+  if [ "$MODO" = docker ]; then
+    # Un nome della rete di compose (geoserver-postgis): dall'host non si
+    # risolve, e la prova direbbe «spento» anche a stack acceso.
+    have_geoserver=1
+    ok "vettori ISPRA dal PostGIS esterno ${gs_host}:${gs_port} (rete dei container)"
+  elif gs_risponde; then
+    have_geoserver=1
+    ok "vettori ISPRA dal PostGIS esterno ${gs_host}:${gs_port}"
+  else
+    skip "la sorgente dei vettori ${gs_host}:${gs_port} non risponde"
+    echo "            → toglila per leggere i vettori dal database di Limen (#426),"
+    echo "              oppure accendi GeoServer: il passo 4/7 lo avvia con geoserver-init."
+  fi
+else
+  # Il caso normale (#426): `carica-vettori` li porta nel database di Limen.
+  have_geoserver=1
+  ok "vettori ISPRA nel database di Limen (schema sorgenti, limen carica-vettori)"
 fi
 
 if [ -n "${LIMEN_DEM_RASTER:-}" ] && [ -e "${LIMEN_DEM_RASTER}" ]; then
@@ -205,8 +221,8 @@ fi
 
 if [ "$FOCUS" = "flood" ] && [ "$have_geoserver" -eq 0 ]; then
   echo
-  echo "  Nota: per l'alluvione il layer che conta è il mosaico idraulico."
-  echo "  Senza GEOSERVER_SOURCE__DB_DSN questo comando non caricherà nulla di utile."
+  echo "  Nota: per l'alluvione il layer che conta è il mosaico idraulico,"
+  echo "  e il PostGIS da cui leggerlo non risponde (passo 1/7)."
 fi
 
 say "2/7  Migrazioni"
@@ -240,20 +256,21 @@ if [ "$have_geodati" -eq 1 ]; then
     fi
   done
 else
-  echo "  saltato: GEOSERVER_SOURCE__DB_DSN non impostata"
+  echo "  saltato: la cartella dei dati di base non si crea (vedi sopra)"
 fi
 
 say "4/7  Sorgenti"
-if [ "$geodati_fatto" -eq 1 ]; then
-  # geoserver-init carica nel PostGIS di GeoServer i layer che non ci sono
-  # ancora: su un server nuovo, tutti — IFFI, mosaici, confini ISTAT, CORINE,
-  # geolitologia. `compose run` avvia da sé PostGIS e GeoServer (sono sue
-  # dipendenze), quindi basta GeoServer configurato, non serve lo stack già
-  # acceso — e dopo resta acceso (restart: unless-stopped), anche su un host
-  # che lo teneva spento. Un layer che c'è già non lo ricarica; per aggiornarlo dopo un
-  # geodati-sync: GEO_INIT_FORCE=true make geoserver-init. Anche se qualche
-  # file è mancato: scaricamento ed estrazione sono atomici, e i layer che
-  # mancano arriveranno al prossimo giro.
+if [ "$geodati_fatto" -eq 1 ] && [ -z "$DSN_VETTORI" ]; then
+  # Gli shapefile nel database di Limen (#426): quelli che geoserver-sync,
+  # seed-comuni e il lookup dei comuni leggono. Salta quelli non cambiati.
+  limen carica-vettori || echo "  (qualche shapefile non è entrato: il prossimo giro lo riprova)"
+fi
+if [ "$geodati_fatto" -eq 1 ] && [ "${LIMEN_GEOSERVER:-}" = 1 ]; then
+  # GeoServer solo a richiesta, per i WMS di PAI e IFFI (o come sorgente con
+  # GEOSERVER_SOURCE__DB_DSN). geoserver-init carica nel suo PostGIS i layer
+  # che non ci sono ancora; `compose run` avvia da sé PostGIS e GeoServer, che
+  # poi restano accesi. Per aggiornare un layer dopo un geodati-sync:
+  # GEO_INIT_FORCE=true make geoserver-init.
   if [ -n "${LIMEN_COMPOSE:-}" ]; then
     # shellcheck disable=SC2086 # LIMEN_COMPOSE sono opzioni da dividere
     env -i PATH="$PATH" HOME="$HOME" ${DOCKER_HOST:+DOCKER_HOST="$DOCKER_HOST"} \
@@ -269,10 +286,8 @@ if [ "$geodati_fatto" -eq 1 ]; then
 fi
 if [ "$have_geoserver" -eq 1 ]; then
   limen geoserver-sync || exit 1
-elif [ -n "${GEOSERVER_SOURCE__DB_DSN:-}" ]; then
-  echo "  saltato: ${gs_host}:${gs_port} non risponde (vedi il passo 1/7)"
 else
-  echo "  saltato: GEOSERVER_SOURCE__DB_DSN non impostata"
+  echo "  saltato: ${gs_host}:${gs_port} non risponde (vedi il passo 1/7)"
 fi
 
 say "5/7  Perimetri EFFIS (truth set del backtest incendio)"

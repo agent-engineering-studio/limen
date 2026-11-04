@@ -20,10 +20,10 @@ def test_every_hazard_need_names_a_declared_layer() -> None:
 
 
 def test_every_layer_is_either_gated_or_derived() -> None:
-    """Un layer senza gate né sorgente derivata non si saprebbe come caricare,
+    """Un layer senza gate, sorgente derivata né comando non si saprebbe come caricare,
     e il rapporto lascerebbe l'utente senza il prossimo passo."""
     for layer in LAYERS:
-        assert layer.gate or layer.derived_from, layer.column
+        assert layer.gate or layer.derived_from or layer.fetch_with, layer.column
 
 
 def test_the_three_hazards_are_all_covered() -> None:

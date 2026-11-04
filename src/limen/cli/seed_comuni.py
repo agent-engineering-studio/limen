@@ -39,21 +39,18 @@ def demojibake(name: str) -> str:
 _SRC_SQL = """
 SELECT pro_com_t::text AS istat_code, comune AS name,
        ST_AsBinary(ST_Multi(ST_Force2D(ST_Transform(geom, 4326)))) AS wkb
-FROM com01012023_g
+FROM "{schema}".com01012023_g
 WHERE geom IS NOT NULL
 """
 
 
 async def run() -> int:
     settings = get_settings()
-    dsn = settings.geoserver_source.db_dsn
-    if not dsn:
-        log.error("cli.seed_comuni.no_dsn", need="GEOSERVER_SOURCE__DB_DSN")
-        return 2
+    dsn, schema = settings.geoserver_source.sorgente(settings.db)
 
     src = await asyncpg.connect(dsn)
     try:
-        rows = await src.fetch(_SRC_SQL)
+        rows = await src.fetch(_SRC_SQL.format(schema=schema))
     finally:
         await src.close()
 

@@ -348,8 +348,9 @@ extension points already:
   the two pure triggers, the engine, the basin-scale fluvial probe, the CLMS
   imperviousness ingest and the SPA's cold palette. All three enum hazards
   now have a schema, an engine and a workflow — `check_scorable` passes for
-  every one. Two caveats: without the ISPRA hydraulic mosaic loaded (it needs
-  `GEOSERVER_SOURCE__DB_DSN`) every cell falls back to
+  every one. Two caveats: without the ISPRA hydraulic mosaic loaded (`make static-data`
+  downloads it and `limen carica-vettori` loads it into Limen's own database,
+  schema `sorgenti`, #426 — GeoServer is optional) every cell falls back to
   `susceptibility.unmapped` and the flood map is uniform; and **EFAS return
   periods are deliberately not implemented** — they need a CDS account plus a
   NetCDF dependency, so the client could not be exercised. GloFAS through
