@@ -115,6 +115,10 @@ services:
       # (assoluto) sull'host, montato in sola lettura qui sotto; nel container
       # la variabile punta al mount. Non impostata ⇒ resta vuota e si ignora.
       EGMS__SERVICE_KEY_FILE: ${EGMS__SERVICE_KEY_FILE:+/run/secrets/clms_service_key}
+      # Credenziali Copernicus Data Space (OAuth client `sh-…`) per il backscatter
+      # Sentinel-1 di copernicus-ems: il JSON {"client_id", "client_secret"} è
+      # il secret `cdse` qui sotto, mai una riga d'ambiente.
+      CDSE_CREDENTIALS_FILE: /run/secrets/cdse
       # Lo stesso default di EgmsSettings.release: qui vince su quello del codice.
       EGMS__RELEASE: ${EGMS__RELEASE:-2020_2025}
       # Le tile EGMS (~0,5 GB per l'Italia) sul volume qui sotto, non in /tmp:
@@ -293,6 +297,8 @@ services:
     # Public surface, but published to loopback: put a reverse proxy on 443
     # in front rather than exposing 8080 directly. See the postgres note above
     # for why ufw is not the control here.
+    secrets:
+      - cdse
     ports:
       - "${LIMEN_API_BIND:-127.0.0.1}:8080:8080"
     volumes:
@@ -395,6 +401,8 @@ services:
       # Il registry sta su Postgres (#78): niente più mlflow.db montato. Gli
       # **artefatti** stanno qui, in /var/lib/limen/mlruns su ogni host (#302).
       - ${LIMEN_MLRUNS_DIR:-${LIMEN_DATA_ROOT:-../../data}/mlruns}:/var/lib/limen/mlruns
+    secrets:
+      - cdse
     # Nessuna `ports:`: il worker non serve niente.
     deploy:
       replicas: 1
@@ -755,6 +763,12 @@ configs:
           reverse_proxy frontend-static:80
         }
       }
+
+secrets:
+  # {"client_id": "sh-…", "client_secret": "…"}, locale all'host: secrets/ è
+  # in .gitignore. Un altro percorso con LIMEN_CDSE_SECRET_FILE.
+  cdse:
+    file: ${LIMEN_CDSE_SECRET_FILE:-../../secrets/cdse.json}
 
 volumes:
   limen-pgdata:
