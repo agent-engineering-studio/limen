@@ -829,14 +829,22 @@ wheels = [
 
 [[package]]
 name = "copernicus-ems"
-version = "0.4.0"
+version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/44/40/bfbb86f45696f78c2ec7f93727726c0833fcbeb6148fa6a0582d507827ae/copernicus_ems-0.4.0.tar.gz", hash = "sha256:c26915ede4883e60b752b28ac56aa5e94a897a22ecb988ca812445c4dd25a986", size = 51645, upload-time = "2026-11-04T09:59:58.66Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e4/18/2ab67a8a376856be5881ba09458a4f86002784cab20fb2a4b27e05c4f7d5/copernicus_ems-0.5.0.tar.gz", hash = "sha256:8cbaf95acc9dd3584035e34dc3507484342d35c79044da5a5dcd7d9babe531cb", size = 60632, upload-time = "2026-11-04T11:15:01.598Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/50/e0/59b184f34cbff8e4b33dfcd379111214592630c90ee2e6bc57706050006b/copernicus_ems-0.4.0-py3-none-any.whl", hash = "sha256:561d0a3fc5f7881271ef14632d85a435d84a5472fe311856dd6fac318a02a819", size = 48991, upload-time = "2026-11-04T09:59:57.206Z" },
+    { url = "https://files.pythonhosted.org/packages/dd/fd/ea6ed994615ce35111210a4eb5b24ea9b2d65aba70ca4bc417c338e7b553/copernicus_ems-0.5.0-py3-none-any.whl", hash = "sha256:f39657f96977550364204072a8c46340130eb7831f6bf7d4d905b09bc7229f79", size = 58635, upload-time = "2026-11-04T11:15:00.167Z" },
+]
+
+[package.optional-dependencies]
+cdse = [
+    { name = "numpy" },
+    { name = "pyproj" },
+    { name = "rasterio" },
+    { name = "shapely" },
 ]
 
 [[package]]
@@ -2245,7 +2253,7 @@ dependencies = [
     { name = "apscheduler" },
     { name = "asyncpg" },
     { name = "cbor2" },
-    { name = "copernicus-ems" },
+    { name = "copernicus-ems", extra = ["cdse"] },
     { name = "cryptography" },
     { name = "effis-client", extra = ["raster"] },
     { name = "egms-client", extra = ["raster"] },
@@ -2333,7 +2341,7 @@ requires-dist = [
     { name = "apscheduler", specifier = ">=4.0.0a5" },
     { name = "asyncpg", specifier = ">=0.30" },
     { name = "cbor2", specifier = ">=6.1" },
-    { name = "copernicus-ems", specifier = "~=0.4.0" },
+    { name = "copernicus-ems", extras = ["cdse"], specifier = "~=0.5.0" },
     { name = "cryptography", specifier = ">=43" },
     { name = "effis-client", extras = ["raster"], specifier = "~=0.1.2" },
     { name = "egms-client", extras = ["raster"], specifier = "~=0.7.0" },
