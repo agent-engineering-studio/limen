@@ -51,7 +51,7 @@ dependencies = [
     "firms-client~=0.4.0",
     "copernicus-ems~=0.1.0",
     "ispra-idrogeo~=0.6.0",
-    "imageserver-export~=0.1.0",
+    "imageserver-export~=0.2.0",
 ]
 
 [project.scripts]

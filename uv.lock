@@ -1794,16 +1794,16 @@ wheels = [
 
 [[package]]
 name = "imageserver-export"
-version = "0.1.0"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "numpy" },
     { name = "rasterio" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/83/c1/c5a4a4268dbef3687db65d6fb7060968eefa6be67a07488fda1ebdbbf65f/imageserver_export-0.1.0.tar.gz", hash = "sha256:b142e27311a8e586dd425b9327f4b18728cc6cc0ab729f845f02ebba66183c2b", size = 24279, upload-time = "2026-11-04T07:30:42.108Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c5/d4/94124a63981aa449cdd1eeb417cb043c4539c6fa0acf0e76f9674acd0dec/imageserver_export-0.2.0.tar.gz", hash = "sha256:6012e6c265eef101036247ad2dbee3dee329372a369ec2f84a9be5fa9b85c281", size = 35966, upload-time = "2026-11-04T10:00:31.958Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f6/7d/03aafcf330fba2dd2f785154ceb7940b16258c97d92fb9f36fa6e93ed0dc/imageserver_export-0.1.0-py3-none-any.whl", hash = "sha256:5d56fbd5f7b3cd59e40bc99f06e7d13d6574eac533be138c3b97596ce3b13325", size = 21948, upload-time = "2026-11-04T07:30:40.84Z" },
+    { url = "https://files.pythonhosted.org/packages/8d/17/9ebd18dc41f28af6cc8dbb83380e9976037d81f0efdd6a27fa7119fcf495/imageserver_export-0.2.0-py3-none-any.whl", hash = "sha256:96008f5b998852b4bd66181a2b873ce91c28985cc209b47567035b2870c24cfd", size = 34064, upload-time = "2026-11-04T10:00:30.428Z" },
 ]
 
 [[package]]
@@ -2343,7 +2343,7 @@ requires-dist = [
     { name = "geoalchemy2", specifier = ">=0.15" },
     { name = "geopandas", specifier = ">=1.0" },
     { name = "httpx", specifier = ">=0.27" },
-    { name = "imageserver-export", specifier = "~=0.1.0" },
+    { name = "imageserver-export", specifier = "~=0.2.0" },
     { name = "ispra-idrogeo", specifier = "~=0.6.0" },
     { name = "opentelemetry-api", specifier = ">=1.27" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.27" },

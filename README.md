@@ -456,7 +456,7 @@ rule stays in Limen. The numbers that tune a hazard stay in
 | [`fwi-chain`](https://pypi.org/project/fwi-chain/) | `~=1.0.0` | Apache-2.0 |
 | [`effis-client`](https://pypi.org/project/effis-client/) | `~=0.1.2` | Apache-2.0 |
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |
-| [`imageserver-export`](https://pypi.org/project/imageserver-export/) | `~=0.1.0` | Apache-2.0 |
+| [`imageserver-export`](https://pypi.org/project/imageserver-export/) | `~=0.2.0` | Apache-2.0 |
 | [`mcp-geo-server`](https://github.com/agent-engineering-studio/mcp-geo-server) | Docker image, pinned commit | MIT |
 
 ### copernicus-ems
@@ -589,8 +589,19 @@ when every tile is in.
 downloads with it the **sealed-soil** raster for every seeded AOI, at 100 m
 in LAEA Europe; the per-cell factor that amplifies the rain-driven flood
 trigger is computed from it. Every request goes through Limen's
-`fetch_with_retry` (the library's `send` hook). Code:
+`fetch_with_retry` (the library's `send` hook). An interrupted download
+resumes from the tiles already in, and the file carries its provenance
+(service URL, interpolation, valid range) as GeoTIFF tags. Code:
 [`integrations/imperviousness/`](./src/limen/integrations/imperviousness/).
+
+**For AI agents.** `imageserver-mcp` (`pip install "imageserver-export[mcp]"`)
+lets an agent read any ImageServer: `describe_layer`, `sample_point` (the
+value at a place, with its label), `area_summary` (mean, valid share and
+class counts of a box), `export_area`. Every number comes from the library,
+not from the model, the same rule as Limen's summaries. `.mcp.json` wires it
+for Claude Code through `uvx`, next to `idrogeo-mcp`, for the same reason
+(`mcp>=2.0` in its own environment). Ask *"how much of the ground is sealed
+around Sarno, and what is the tree cover upslope?"*.
 
 ### mcp-geo-server
 
