@@ -256,6 +256,43 @@ services:
       start_period: 10s
       retries: 3
 
+  # IdroGEO di ISPRA come server MCP (pacchetto ispra-idrogeo, extra [mcp]):
+  # 12 strumenti in sola lettura tranne lo scarico — aree a rischio,
+  # popolazione esposta, frane IFFI vicine a un punto, pericolosità in un
+  # punto, eventi, siti di monitoraggio. Per l'agente della mappa
+  # (mcp-geo-server#8: GEO_EXTRA_MCP_SERVERS=idrogeo=http://idrogeo-mcp:8767/mcp).
+  # Un'immagine uv e non quella di Limen: il server vuole `mcp>=2.0`, Limen
+  # sta su fastmcp e `mcp` 1.x. uvx installa al primo avvio; la cache sul
+  # volume evita di rifarlo a ogni riavvio.
+  idrogeo-mcp:
+    image: ${IDROGEO_MCP_IMAGE:-ghcr.io/astral-sh/uv:0.9-python3.12-bookworm-slim}
+    container_name: limen-idrogeo-mcp
+    restart: unless-stopped
+    profiles: ["geoserver"]
+    command: ["uvx", "--from", "ispra-idrogeo[mcp]~=0.6.0", "idrogeo-mcp"]
+    environment:
+      IDROGEO_MCP_TRANSPORT: streamable-http
+      IDROGEO_MCP_HOST: 0.0.0.0
+      IDROGEO_MCP_PORT: "8767"
+      # Su 0.0.0.0 l'SDK non controlla l'header Host: lo si limita ai nomi da
+      # cui arrivano le chiamate (gli altri container, e l'host per le prove).
+      IDROGEO_MCP_ALLOWED_HOSTS: "idrogeo-mcp:*,localhost:*,127.0.0.1:*"
+      IDROGEO_DATA_DIR: /data/idrogeo
+      UV_CACHE_DIR: /cache/uv
+    volumes:
+      - limen-idrogeo-cache:/cache/uv
+      - limen-idrogeo-data:/data/idrogeo
+    ports:
+      - "${LIMEN_IDROGEO_MCP_BIND:-127.0.0.1}:8767:8767"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8767/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      # Il primo avvio scarica il pacchetto e le sue dipendenze.
+      start_period: 120s
+      retries: 3
+
 volumes:
   # External so the same named volumes are shared cleanly between the
   # standalone `make geoserver-up` (project limen-geoserver) and the unified
@@ -266,4 +303,10 @@ volumes:
     external: true
   limen-geoserver-gsdata:
     name: limen-geoserver-gsdata
+    external: true
+  limen-idrogeo-cache:
+    name: limen-idrogeo-cache
+    external: true
+  limen-idrogeo-data:
+    name: limen-idrogeo-data
     external: true
