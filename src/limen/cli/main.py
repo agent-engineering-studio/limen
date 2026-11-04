@@ -8,6 +8,7 @@ Usage:
     limen backtest           Replay a historical window and emit a §2.5 metrics report.
     limen backtest-flood     Replay Copernicus EMS flood perimeters (#64).
     limen ingest-events      Dated event catalogue: --hazard landslide|flood.
+    limen ems-sentinel1      Sentinel-1 / EMS label pairs for flood ML (CDSE, PU budget).
     limen registra-verifica  Fact check: un evento verificato entra nel registro (074).
     limen verifiche-report   Eventi verificati contro le previsioni, col tasso di base.
     limen raccolta-eventi    Gli eventi della stampa, dai titoli al registro (#347).
@@ -353,6 +354,19 @@ def _build_parser() -> argparse.ArgumentParser:
         default="landslide",
         help="landslide: ITALICA CSV (LIMEN_ITALICA_CSV); flood: Copernicus EMS perimeters",
     )
+    ems_s1 = sub.add_parser(
+        "ems-sentinel1",
+        help=(
+            "coppie Sentinel-1 / etichette Copernicus EMS per l'ML alluvione "
+            "(CDSE, budget COPERNICUS__CDSE_PU_MENSILI; non entra nel punteggio)"
+        ),
+    )
+    ems_s1.add_argument("--dry-run", action="store_true", help="piano e PU, nessuna spesa")
+    ems_s1.add_argument(
+        "--codici",
+        default=None,
+        help="attivazioni separate da virgola (default: LIMEN_EMS_S1_CODICI, o tutte)",
+    )
     dem_tiles = sub.add_parser(
         "dem-tiles",
         help="tile del rilievo (terrain-RGB in PMTiles) dal DTM, per la vista «Rilievo»",
@@ -543,6 +557,18 @@ def main(argv: list[str] | None = None) -> int:
             return 130
     if args.command == "anticipo":
         return asyncio.run(_run_anticipo(args.istat, args.pericolo, args.quando, args.tolleranza))
+    if args.command == "ems-sentinel1":
+        from limen.cli import ems_sentinel1
+
+        codici = (
+            [c.strip() for c in args.codici.split(",") if c.strip()]
+            if args.codici
+            else ems_sentinel1.codici_da_env()
+        )
+        try:
+            return asyncio.run(ems_sentinel1.run(dry_run=args.dry_run, codici=codici))
+        except KeyboardInterrupt:  # pragma: no cover
+            return 130
     if args.command == "dem-tiles":
         from limen.cli.dem_tiles import run as run_dem_tiles
 
