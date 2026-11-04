@@ -426,6 +426,7 @@ flowchart TB
         FWI["fwi-chain<br/>Fire Weather Index"]
         EF["effis-client<br/>aree bruciate, FWI ufficiale"]
         RT["rainfall-thresholds<br/>la pioggia che innesca frane"]
+        IS["imageserver-export<br/>suolo sigillato e copertura del suolo"]
     end
     MGS["mcp-geo-server · MIT<br/>GeoServer + PostGIS + agente MCP"]
     L["<b>Limen</b>"]
@@ -436,6 +437,7 @@ flowchart TB
     EF --> L
     RT --> L
     ID --> L
+    IS --> L
     MGS -- "strati ISPRA in PostGIS<br/>sovrapposizioni WMS" --> L
 ```
 
@@ -456,6 +458,7 @@ una libreria.
 | [`fwi-chain`](https://pypi.org/project/fwi-chain/) | `~=1.0.0` | Apache-2.0 |
 | [`effis-client`](https://pypi.org/project/effis-client/) | `~=0.1.2` | Apache-2.0 |
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |
+| [`imageserver-export`](https://pypi.org/project/imageserver-export/) | `~=0.1.0` | Apache-2.0 |
 | [`mcp-geo-server`](https://github.com/agent-engineering-studio/mcp-geo-server) | immagine Docker, commit fissato | MIT |
 
 ### copernicus-ems
@@ -541,7 +544,7 @@ Dalla 0.5 è anche:
 
 | | Novità | In parole semplici |
 |---|---|---|
-| 🤖 | **`idrogeo-mcp`, un server MCP** | `pip install "ispra-idrogeo[mcp]"`, lo aggiungi a Claude Desktop o a un altro agente e chiedi *«quante persone vivono in aree a pericolosità da frana elevata a Sarno, e qualcuno monitora quelle frane?»*. Dieci strumenti: `find_area`, `area_risk`, `area_landslides`, `landslide`, `search_landslides`, `search_events`, `monitoring_sites`, `webcams`, `code_list`, `download_dataset`. Tutti in sola lettura tranne lo scarico; le risposte si fermano a `limit` righe, così un agente non riceve mai 700.000 frane in una volta. |
+| 🤖 | **`idrogeo-mcp`, un server MCP** | `pip install "ispra-idrogeo[mcp]"`, lo aggiungi a Claude Desktop o a un altro agente e chiedi *«quante persone vivono in aree a pericolosità da frana elevata a Sarno, e qualcuno monitora quelle frane?»*. Dodici strumenti dalla 0.6: `find_area`, `area_risk`, `area_landslides`, `landslide`, `search_landslides`, `search_events`, `monitoring_sites`, `webcams`, `hazard_at` (la classe di pericolosità in un punto), `landslides_near` (le frane intorno a un punto), `code_list`, `download_dataset`. Tutti in sola lettura tranne lo scarico; le risposte si fermano a `limit` righe, così un agente non riceve mai 700.000 frane in una volta. |
 | ⌨️ | **Il comando `idrogeo`** | `idrogeo fetch frane_piff --area molise`, `idrogeo summary pir comuni 72006`, `idrogeo landslides --since …`: gli scarichi stampano la cartella, tutto il resto JSON Lines, pronto per `jq` o per un caricamento in database. |
 | 🗺️ | **GeoDataFrame e GeoParquet** | L'extra `[geo]` trasforma le righe dell'API e gli strati scaricati in tabelle GeoPandas. |
 | 🔎 | **Filtri di ricerca tipizzati** | Frane per tipo di movimento e attività, eventi per area e data, siti di monitoraggio per stato, senza scrivere la sintassi PostgREST. |
@@ -561,9 +564,9 @@ insieme.
 **Come la usa Limen.** `limen geodati-sync`, passo 3 dei dati statici di
 `make init`, scarica con lei l'inventario IFFI di ogni regione (più Bolzano e
 Trento) e i mosaici nazionali PAI di frana e alluvione in
-`GEOSERVER_SHAPEFILE_DIR`, da caricare nel PostGIS di mcp-geo-server. È
-l'unica libreria di cui Limen usa direttamente il client, perché i file (fino
-a 1,2 GB) vanno scritti su disco in streaming: con `retries=0`, dentro la
+`GEOSERVER_SHAPEFILE_DIR`, da caricare nel PostGIS di mcp-geo-server. Limen
+ne usa direttamente il client, perché i file (fino a 1,2 GB) vanno scritti
+su disco in streaming: con `retries=0`, dentro la
 politica di retry di Limen. L'ISPRA rigenera i file IFFI ogni notte, quindi un
 file si richiede solo dopo `GEODATI__RIVALIDA_DOPO_GIORNI` (30 giorni).
 Codice: [`integrations/idrogeo/`](./src/limen/integrations/idrogeo/).
@@ -603,6 +606,7 @@ aspetta GeoServer. File compose:
 | [`fwi-chain`](https://pypi.org/project/fwi-chain/) | Il Fire Weather Index canadese (Van Wagner 1987), puro e verificato sul giorno di riferimento pubblicato fino a 1e-9 | il motore degli incendi, una catena per punto meteo |
 | [`effis-client`](https://pypi.org/project/effis-client/) | I perimetri delle aree bruciate EFFIS e le carte ufficiali del FWI (un MapServer pieno di sorprese) | la verità a terra degli incendi; `limen fwi-confronto` |
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | Eventi di pioggia e soglie intensità–durata (Caine) | il termine pioggia delle frane |
+| [`imageserver-export`](https://pypi.org/project/imageserver-export/) ([sito](https://agentengineering.it/imageserver-export/)) | Un'area di qualunque ImageServer ArcGIS come un solo GeoTIFF: pixel allineati, valori «nessun dato» intatti, errori mandati con «200 OK» intercettati, file scritto solo quando è completo. Prima applicazione: gli strati aperti di Copernicus Land che l'EEA pubblica senza account | il raster del suolo sigillato (`limen imperviousness-fetch`), che amplifica l'innesco pluviale delle alluvioni |
 
 ---
 
