@@ -7,6 +7,7 @@ Usage:
     limen calibrate          Precompute s_static + per-AOI norm stats; run S vs ISPRA gate.
     limen backtest           Replay a historical window and emit a §2.5 metrics report.
     limen backtest-flood     Replay Copernicus EMS flood perimeters (#64).
+    limen backtest-cosismico ShakeMap shaking vs earthquake-triggered landslides.
     limen ingest-events      Dated event catalogue: --hazard landslide|flood.
     limen registra-verifica  Fact check: un evento verificato entra nel registro (074).
     limen verifiche-report   Eventi verificati contro le previsioni, col tasso di base.
@@ -53,6 +54,7 @@ from typing import Any
 from limen import __version__
 from limen.cli.anticipo import run as _run_anticipo
 from limen.cli.backtest import run as _run_backtest
+from limen.cli.backtest_cosismico import run as _run_backtest_cosismico
 from limen.cli.backtest_flood import run as _run_backtest_flood
 from limen.cli.backtest_wildfire import run as _run_backtest_wildfire
 from limen.cli.backup import build_subparser as _build_backup_subparser
@@ -206,6 +208,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "replay the FWI chain against EFFIS burnt-area perimeters "
             "(env: LIMEN_BACKTEST_WILDFIRE_AOI / _START / _END / _LEVEL)"
+        ),
+    )
+    sub.add_parser(
+        "backtest-cosismico",
+        help=(
+            "ShakeMap shaking against earthquake-triggered landslide inventories "
+            "(env: LIMEN_BACKTEST_COSISMICO=id=path,... / _CACHE)"
         ),
     )
     sub.add_parser(
@@ -465,6 +474,7 @@ def main(argv: list[str] | None = None) -> int:
         "backtest": _run_backtest,
         "backtest-flood": _run_backtest_flood,
         "backtest-wildfire": _run_backtest_wildfire,
+        "backtest-cosismico": _run_backtest_cosismico,
         "clima-pioggia": _run_clima_pioggia,
         "fwi-backfill": _run_fwi_backfill,
         "fwi-confronto": _run_fwi_confronto,
