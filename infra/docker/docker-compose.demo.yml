@@ -365,6 +365,14 @@ services:
       BACKUP__ETA_MASSIMA_ORE: ${BACKUP__ETA_MASSIMA_ORE:-36}
       # Gli artefatti MLflow, al percorso del volume qui sotto.
       BACKUP__CARTELLE: ${BACKUP__CARTELLE:-/var/lib/limen/mlruns}
+      # I download dei dati statici (#402) scrivono sotto la radice, montata
+      # qui sotto allo **stesso percorso** dell'host, come nel container di
+      # `load_static_data.sh`: i file hanno lo stesso nome dentro e fuori. La
+      # cartella di GeoServer resta /data, anche quando GEOSERVER_SHAPEFILE_DIR
+      # la porta fuori dalla radice. Le variabili dei raster (LIMEN_DEM_RASTER,
+      # …) NON arrivano qui: il worker scarica, non calcola i fattori.
+      LIMEN_DATA_ROOT: ${LIMEN_DATA_ROOT:-/var/lib/limen/dati}
+      GEOSERVER_SHAPEFILE_DIR: /data
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -379,7 +387,9 @@ services:
       # percorso che non esiste Docker lo creerebbe come cartella.
       - ${EGMS__SERVICE_KEY_FILE:-/dev/null}:/run/secrets/clms_service_key:ro
       - ${LIMEN_REPORTS_HOST_DIR:-${LIMEN_DATA_ROOT:-../../data}/reports}:/var/lib/limen/reports
-      - ${GEOSERVER_SHAPEFILE_DIR:-${LIMEN_DATA_ROOT:-../../data}/geoserver}:/data:ro
+      # In scrittura: il worker ci scarica IFFI, mosaici, DTM, CORINE (#402).
+      - ${GEOSERVER_SHAPEFILE_DIR:-${LIMEN_DATA_ROOT:-../../data}/geoserver}:/data
+      - ${LIMEN_DATA_ROOT:-../../data}:${LIMEN_DATA_ROOT:-/var/lib/limen/dati}
       # Il registry sta su Postgres (#78): niente più mlflow.db montato. Gli
       # **artefatti** stanno qui, in /var/lib/limen/mlruns su ogni host (#302).
       - ${LIMEN_MLRUNS_DIR:-${LIMEN_DATA_ROOT:-../../data}/mlruns}:/var/lib/limen/mlruns

@@ -27,6 +27,7 @@ import hashlib
 import json
 import os
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +35,8 @@ from limen.config.percorsi import radice_dati
 from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.data.db import lifespan_pool
-from limen.integrations._http import SharedHttpClient
+from limen.data.repos.dati_download_repo import blocco_download
+from limen.integrations._http import SharedHttpClient, call_with_retry
 from limen.integrations.imperviousness.fetch import (
     CLMS_IMD_2018_URL,
     _resolve_dest,
@@ -118,7 +120,7 @@ async def _scarica(url: str, dest: Path) -> None:
         risposta.raise_for_status()
         with tmp.open("wb") as f:
             async for blocco in risposta.aiter_bytes(1 << 20):
-                f.write(blocco)
+                await asyncio.to_thread(f.write, blocco)
     tmp.replace(dest)
 
 
@@ -144,7 +146,7 @@ async def osm(radice: Path, manifest: dict[str, dict[str, Any]], url: str) -> No
     pbf = cartella / Path(url).name
     if not pbf.exists():
         log.info("fetch_static.osm.download", url=url)
-        await _scarica(url, pbf)
+        await call_with_retry(partial(_scarica, url, pbf))
     for nome, where in mancanti.items():
         await asyncio.to_thread(_estrai, pbf, cartella / nome, where)
         await _registra(radice, manifest, cartella / nome, f"{url} [{where}]")
@@ -163,7 +165,10 @@ async def run() -> int:
         )
         return 1
 
-    async with lifespan_pool(get_settings().db):
+    async with lifespan_pool(get_settings().db), blocco_download() as libero:
+        if not libero:
+            log.error("fetch_static.occupato", hint="il worker sta scaricando: `limen dati stato`")
+            return 1
         dest = _resolve_dest(None)
         if dest.exists() and _chiave(radice, dest) not in manifest:
             await _registra(radice, manifest, dest, CLMS_IMD_2018_URL)

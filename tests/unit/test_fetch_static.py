@@ -22,7 +22,12 @@ def radice(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     async def pool(*_a: Any) -> AsyncIterator[None]:
         yield
 
+    @contextlib.asynccontextmanager
+    async def libero() -> AsyncIterator[bool]:
+        yield True
+
     monkeypatch.setattr(fetch_static, "lifespan_pool", pool)
+    monkeypatch.setattr(fetch_static, "blocco_download", libero)
     return tmp_path
 
 

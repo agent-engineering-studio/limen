@@ -159,10 +159,22 @@ ok "limen ($uid:$gid): ${scritte[*]}"
 # con l'uid dell'host. Proprietario l'utente dell'host, gruppo quello
 # dell'immagine, setgid: i file nuovi restano del gruppo e tutti e due
 # scrivono, senza group_add nel compose.
-egms="${LIMEN_EGMS_DIR:-$RADICE/egms}"
-docker run --rm -v "$egms:/d" alpine sh -c \
-  "chown -R $(id -u):$gid /d && chmod -R g+rwX /d && find /d -type d -exec chmod g+s {} +"
-ok "EGMS ($(id -u):$gid, setgid): $egms"
+# Lo stesso vale per le cartelle in cui il worker scarica i dati statici
+# (#402) e in cui `make static-data` scarica dall'host.
+condivise=(
+  "${LIMEN_EGMS_DIR:-$RADICE/egms}"
+  "$(dotenv GEOSERVER_SHAPEFILE_DIR)"
+  "$RADICE/sealing"
+  "$RADICE/osm"
+)
+[ -n "${condivise[1]}" ] || condivise[1]="$RADICE/geoserver"
+for d in "${condivise[@]}"; do
+  docker run --rm -v "$d:/d" alpine sh -c \
+    "chown -R $(id -u):$gid /d && chmod -R g+rwX /d && find /d -type d -exec chmod g+s {} +"
+done
+# La radice stessa: il worker ci scrive static-manifest.json.
+docker run --rm -v "$RADICE:/d" alpine sh -c "chgrp $gid /d && chmod g+rwx,g+s /d"
+ok "condivise con il worker ($(id -u):$gid, setgid): ${condivise[*]} e la radice"
 
 # --- 3. Stato ------------------------------------------------------------------
 if [ "$MODO" = "--ripristina" ]; then
