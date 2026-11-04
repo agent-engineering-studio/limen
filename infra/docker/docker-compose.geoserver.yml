@@ -42,9 +42,9 @@ name: limen-geoserver
 # Fissate al commit di mcp-geo-server che gira oggi (era `latest`/`bootstrap`,
 # #303); per aggiornarle si cambia qui o in GEOSERVER_*_IMAGE.
 x-geoserver-app-image: &geoserver-app-image
-  image: ${GEOSERVER_APP_IMAGE:-ghcr.io/agent-engineering-studio/mcp-geo-server:sha-7ad6189}
+  image: ${GEOSERVER_APP_IMAGE:-ghcr.io/agent-engineering-studio/mcp-geo-server:sha-1b634a7}
 x-geoserver-bootstrap-image: &geoserver-bootstrap-image
-  image: ${GEOSERVER_BOOTSTRAP_IMAGE:-ghcr.io/agent-engineering-studio/mcp-geo-server:bootstrap-6af3bafbb1dc987a462ec2b8b82641e9d4290a22}
+  image: ${GEOSERVER_BOOTSTRAP_IMAGE:-ghcr.io/agent-engineering-studio/mcp-geo-server:bootstrap-1b634a7078b92105fc1b61697235d7395b03d3be}
 
 services:
 
@@ -204,11 +204,19 @@ services:
       OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+      # Basic auth on every route but /healthz when both are set; per-IP
+      # requests/minute on /api/ask. The image's HEALTHCHECK hits /healthz.
+      WEBUI_USER: ${WEBUI_USER:-}
+      WEBUI_PASSWORD: ${WEBUI_PASSWORD:-}
+      WEBUI_RATE_LIMIT: ${WEBUI_RATE_LIMIT:-30}
+      GEO_STYLES_CONFIG: ${GEO_STYLES_CONFIG:-/data/styles.yml}
     extra_hosts:
       # So host.docker.internal resolves on Linux (Aruba VPS) too.
       - "host.docker.internal:host-gateway"
     ports:
       - "${LIMEN_GEOSERVER_WEBUI_BIND:-127.0.0.1}:8000:8000"
+    volumes:
+      - ${GEOSERVER_SHAPEFILE_DIR:-${LIMEN_DATA_ROOT:-../../data}/geoserver}:/data:ro
 
   # Intelligent MCP server: GeoServer agent over streamable-HTTP at :9000/mcp.
   geoserver-mcp:
@@ -246,12 +254,20 @@ services:
       GEO_MCP_TRANSPORT: http
       GEO_MCP_HOST: 0.0.0.0
       GEO_MCP_PORT: "9000"
+      # `tools` = the typed tools plus geoserver-agent; `agent` = that one only.
+      GEO_MCP_MODE: ${GEO_MCP_MODE:-tools}
+      # DNS-rebinding guard on the 0.0.0.0 bind: any other Host header gets 421.
+      # The service and container names are here for callers on the compose network.
+      GEO_MCP_ALLOWED_HOSTS: ${GEO_MCP_ALLOWED_HOSTS:-localhost:*,127.0.0.1:*,geoserver-mcp:*,limen-geoserver-mcp:*}
+      GEO_STYLES_CONFIG: ${GEO_STYLES_CONFIG:-/data/styles.yml}
       GEO_ALLOW_DESTRUCTIVE: ${GEO_ALLOW_DESTRUCTIVE:-false}
       GEO_MAP_OUTPUT_DIR: /app/maps
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
       - "${LIMEN_GEOSERVER_MCP_BIND:-127.0.0.1}:9000:9000"
+    volumes:
+      - ${GEOSERVER_SHAPEFILE_DIR:-${LIMEN_DATA_ROOT:-../../data}/geoserver}:/data:ro
     healthcheck:
       test: ["CMD", "python", "-c",
              "import socket; socket.create_connection(('127.0.0.1', 9000), timeout=3)"]
