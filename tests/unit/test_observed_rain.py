@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import datetime as dt
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 
 import numpy as np
 import rasterio
+from dpc_radar import product
 from rasterio.crs import CRS
 
 from limen.agents.executors.observed_rain import ObservedRainExecutor
@@ -21,7 +23,7 @@ from limen.core.models.hazard import HazardType
 from limen.core.models.risk import CellFeatureBundle, DynamicInputs, StaticFactors
 from limen.core.scoring.flood import FloodScoringEngine
 from limen.core.scoring.regional_thresholds import FloodThresholds, load_hazard_thresholds
-from limen.integrations.dpc import SriGrid
+from limen.integrations.dpc import RainGrid
 
 _T = dt.datetime(2026, 10, 10, 6, tzinfo=dt.UTC)
 
@@ -88,14 +90,15 @@ def test_il_radar_arriva_alla_cella_e_la_previsione_restante_al_nodo() -> None:
     assert dyn["b"].flood_rain_observed_mm is None
 
 
-def _frame(observed_at: dt.datetime) -> SriGrid:
+def _frame(observed_at: dt.datetime) -> RainGrid:
     data = np.full((10, 10), 3.0, dtype=np.float32)
     data[4:7, 4:7] = 150.0
-    return SriGrid(
-        data=data,
-        transform=rasterio.Affine(0.1, 0, 15.0, 0, -0.1, 42.0),
-        crs=CRS.from_epsg(4326),
-        observed_at=observed_at,
+    return RainGrid(
+        product("CUM24"),
+        observed_at,
+        data.astype(np.float64),
+        rasterio.Affine(0.1, 0, 15.0, 0, -0.1, 42.0),
+        CRS.from_epsg(4326),
     )
 
 
@@ -109,14 +112,14 @@ def _ctx() -> MonitoringContext:
     )
 
 
-async def _uguale(hours: int, at: dt.datetime) -> SriGrid:
+async def _uguale(hours: int, at: dt.datetime) -> RainGrid:
     """Il fotogramma precedente identico: il controllo di #235 non scarta niente."""
     return _frame(at)
 
 
 def _step(
-    fetch: Callable[[int], Awaitable[SriGrid | None]],
-    fetch_at: Callable[[int, dt.datetime], Awaitable[SriGrid | None]] = _uguale,
+    fetch: Callable[[int], Awaitable[RainGrid | None]],
+    fetch_at: Callable[[int, dt.datetime], Awaitable[RainGrid | None]] = _uguale,
 ) -> ObservedRainExecutor:
     return ObservedRainExecutor(
         hours=24, max_age_minutes=90, max_step_mm=150.0, fetch=fetch, fetch_at=fetch_at
@@ -124,7 +127,7 @@ def _step(
 
 
 async def test_lo_step_mette_la_cumulata_sulle_celle() -> None:
-    async def _fetch(hours: int) -> SriGrid:
+    async def _fetch(hours: int) -> RainGrid:
         assert hours == 24
         return _frame(_T - dt.timedelta(minutes=20))
 
@@ -135,7 +138,7 @@ async def test_lo_step_mette_la_cumulata_sulle_celle() -> None:
 async def test_un_fotogramma_lontano_dall_istante_non_vale() -> None:
     """Un replay del 2024 non deve leggere la pioggia di stamattina."""
 
-    async def _fetch(hours: int) -> SriGrid:
+    async def _fetch(hours: int) -> RainGrid:
         return _frame(_T - dt.timedelta(hours=3))
 
     out = await _step(_fetch).run(_ctx())
@@ -150,17 +153,17 @@ async def test_senza_radar_lo_sweep_prosegue() -> None:
     assert out.flood_rain_observed_by_cell == {}
 
 
-def _guasto(observed_at: dt.datetime) -> SriGrid:
+def _guasto(observed_at: dt.datetime) -> RainGrid:
     """La serie delle :30 del 9-11 ottobre 2026 (#235): una campana fasulla
     dove il fotogramma delle :00 leggeva 28 mm."""
     g = _frame(observed_at)
     data = g.data.copy()
     data[4:7, 4:7] = 925.0
-    return SriGrid(data=data, transform=g.transform, crs=g.crs, observed_at=observed_at)
+    return replace(g, data=data)
 
 
 async def test_un_fotogramma_che_salta_piu_di_mezz_ora_di_pioggia_non_vale() -> None:
-    async def _fetch(hours: int) -> SriGrid:
+    async def _fetch(hours: int) -> RainGrid:
         return _guasto(_T - dt.timedelta(minutes=20))
 
     out = await _step(_fetch).run(_ctx())
@@ -170,10 +173,10 @@ async def test_un_fotogramma_che_salta_piu_di_mezz_ora_di_pioggia_non_vale() -> 
 async def test_anche_il_fotogramma_pulito_dopo_quello_guasto_non_vale_li() -> None:
     """Quale dei due sbagli non si sa: il pixel resta «non misurato»."""
 
-    async def _fetch(hours: int) -> SriGrid:
+    async def _fetch(hours: int) -> RainGrid:
         return _frame(_T - dt.timedelta(minutes=20))
 
-    async def _prima(hours: int, at: dt.datetime) -> SriGrid:
+    async def _prima(hours: int, at: dt.datetime) -> RainGrid:
         return _guasto(at)
 
     out = await _step(_fetch, _prima).run(_ctx())
@@ -181,13 +184,13 @@ async def test_anche_il_fotogramma_pulito_dopo_quello_guasto_non_vale_li() -> No
 
 
 async def test_un_nubifragio_vero_cresce_entro_il_tetto_e_passa() -> None:
-    async def _prima(hours: int, at: dt.datetime) -> SriGrid:
+    async def _prima(hours: int, at: dt.datetime) -> RainGrid:
         g = _frame(at)
         data = g.data.copy()
         data[4:7, 4:7] = 60.0
-        return SriGrid(data=data, transform=g.transform, crs=g.crs, observed_at=at)
+        return replace(g, data=data)
 
-    async def _fetch(hours: int) -> SriGrid:
+    async def _fetch(hours: int) -> RainGrid:
         return _frame(_T - dt.timedelta(minutes=20))
 
     out = await _step(_fetch, _prima).run(_ctx())
@@ -195,7 +198,7 @@ async def test_un_nubifragio_vero_cresce_entro_il_tetto_e_passa() -> None:
 
 
 async def test_senza_il_precedente_il_fotogramma_passa_com_e() -> None:
-    async def _fetch(hours: int) -> SriGrid:
+    async def _fetch(hours: int) -> RainGrid:
         return _frame(_T - dt.timedelta(minutes=20))
 
     async def _manca(hours: int, at: dt.datetime) -> None:
@@ -209,10 +212,10 @@ async def test_il_precedente_chiesto_e_mezz_ora_prima() -> None:
     chiesti: list[dt.datetime] = []
     emesso = _T - dt.timedelta(minutes=20)
 
-    async def _fetch(hours: int) -> SriGrid:
+    async def _fetch(hours: int) -> RainGrid:
         return _frame(emesso)
 
-    async def _prima(hours: int, at: dt.datetime) -> SriGrid:
+    async def _prima(hours: int, at: dt.datetime) -> RainGrid:
         chiesti.append(at)
         return _frame(at)
 

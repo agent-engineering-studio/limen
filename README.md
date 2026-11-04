@@ -427,6 +427,7 @@ flowchart TB
         EF["effis-client<br/>burnt areas, official FWI"]
         RT["rainfall-thresholds<br/>rain that triggers landslides"]
         IS["imageserver-export<br/>sealed soil & land cover"]
+        DR["dpc-radar<br/>national weather radar"]
     end
     MGS["mcp-geo-server · MIT<br/>GeoServer + PostGIS + MCP agent"]
     L["<b>Limen</b>"]
@@ -438,6 +439,7 @@ flowchart TB
     RT --> L
     ID --> L
     IS --> L
+    DR --> L
     MGS -- "ISPRA layers in PostGIS<br/>WMS map overlays" --> L
 ```
 
@@ -458,6 +460,7 @@ rule stays in Limen. The numbers that tune a hazard stay in
 | [`effis-client`](https://pypi.org/project/effis-client/) | `~=0.1.2` | Apache-2.0 |
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |
 | [`imageserver-export`](https://pypi.org/project/imageserver-export/) | `~=0.2.0` | Apache-2.0 |
+| [`dpc-radar`](https://pypi.org/project/dpc-radar/) | `~=0.1.0` | Apache-2.0 |
 | [`mcp-geo-server`](https://github.com/agent-engineering-studio/mcp-geo-server) | Docker image, pinned commit | MIT |
 
 ### copernicus-ems
