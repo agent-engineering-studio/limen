@@ -451,6 +451,7 @@ rule stays in Limen. The numbers that tune a hazard stay in
 | [`egms-client`](https://pypi.org/project/egms-client/) | `~=0.5.0` | Apache-2.0 |
 | [`firms-client`](https://pypi.org/project/firms-client/) | `~=0.2.0` | Apache-2.0 |
 | [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) | `~=0.3.0` | Apache-2.0 |
+| [`imageserver-export`](https://pypi.org/project/imageserver-export/) | `~=0.1.0` | Apache-2.0 |
 | [`fwi-chain`](https://pypi.org/project/fwi-chain/) | `~=1.0.0` | Apache-2.0 |
 | [`effis-client`](https://pypi.org/project/effis-client/) | `~=0.1.2` | Apache-2.0 |
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |
@@ -563,6 +564,25 @@ is the one library whose client Limen uses directly, because the files (up to
 policy. ISPRA regenerates the IFFI files every night, so a file is asked
 for again only after `GEODATI__RIVALIDA_DOPO_GIORNI` (30 days). Code:
 [`integrations/idrogeo/`](./src/limen/integrations/idrogeo/).
+
+### imageserver-export
+
+[![PyPI](https://img.shields.io/pypi/v/imageserver-export)](https://pypi.org/project/imageserver-export/) ·
+[GitHub](https://github.com/agent-engineering-studio/imageserver-export) ·
+[Docs](https://agentengineering.it/imageserver-export/) · Apache-2.0
+
+**What it does.** Turns an area of any ArcGIS ImageServer into one aligned,
+atomic GeoTIFF: grid on whole pixels, tiles the server accepts, nearest
+neighbour so sentinel values are never blended, `.part` renamed only when
+whole, and the JSON error an ImageServer sends with "200 OK" turned into a
+real error. Extracted from Limen.
+
+**How Limen uses it.** `limen imperviousness-fetch` downloads the Copernicus
+HRL Imperviousness Density 2018 from the EEA's open server, at 100 m in
+EPSG:3035, over the seeded AOIs; every request goes through Limen's shared
+retry policy (`send=`).
+
+Code: [`integrations/imperviousness/`](./src/limen/integrations/imperviousness/).
 
 ### mcp-geo-server
 

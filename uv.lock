@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15' and platform_machine == 'ARM64' and sys_platform == 'win32'",
@@ -1793,6 +1793,20 @@ wheels = [
 ]
 
 [[package]]
+name = "imageserver-export"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "numpy" },
+    { name = "rasterio" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/83/c1/c5a4a4268dbef3687db65d6fb7060968eefa6be67a07488fda1ebdbbf65f/imageserver_export-0.1.0.tar.gz", hash = "sha256:b142e27311a8e586dd425b9327f4b18728cc6cc0ab729f845f02ebba66183c2b", size = 24279, upload-time = "2026-11-04T07:30:42.108Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f6/7d/03aafcf330fba2dd2f785154ceb7940b16258c97d92fb9f36fa6e93ed0dc/imageserver_export-0.1.0-py3-none-any.whl", hash = "sha256:5d56fbd5f7b3cd59e40bc99f06e7d13d6574eac533be138c3b97596ce3b13325", size = 21948, upload-time = "2026-11-04T07:30:40.84Z" },
+]
+
+[[package]]
 name = "importlib-metadata"
 version = "9.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2241,6 +2255,7 @@ dependencies = [
     { name = "geoalchemy2" },
     { name = "geopandas" },
     { name = "httpx" },
+    { name = "imageserver-export" },
     { name = "ispra-idrogeo" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
@@ -2328,6 +2343,7 @@ requires-dist = [
     { name = "geoalchemy2", specifier = ">=0.15" },
     { name = "geopandas", specifier = ">=1.0" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "imageserver-export", specifier = "~=0.1.0" },
     { name = "ispra-idrogeo", specifier = "~=0.3.0" },
     { name = "opentelemetry-api", specifier = ">=1.27" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.27" },

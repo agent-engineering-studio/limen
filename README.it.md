@@ -453,6 +453,7 @@ una libreria.
 | [`egms-client`](https://pypi.org/project/egms-client/) | `~=0.5.0` | Apache-2.0 |
 | [`firms-client`](https://pypi.org/project/firms-client/) | `~=0.2.0` | Apache-2.0 |
 | [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) | `~=0.3.0` | Apache-2.0 |
+| [`imageserver-export`](https://pypi.org/project/imageserver-export/) | `~=0.1.0` | Apache-2.0 |
 | [`fwi-chain`](https://pypi.org/project/fwi-chain/) | `~=1.0.0` | Apache-2.0 |
 | [`effis-client`](https://pypi.org/project/effis-client/) | `~=0.1.2` | Apache-2.0 |
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |
@@ -567,6 +568,25 @@ a 1,2 GB) vanno scritti su disco in streaming: con `retries=0`, dentro la
 politica di retry di Limen. L'ISPRA rigenera i file IFFI ogni notte, quindi un
 file si richiede solo dopo `GEODATI__RIVALIDA_DOPO_GIORNI` (30 giorni).
 Codice: [`integrations/idrogeo/`](./src/limen/integrations/idrogeo/).
+
+### imageserver-export
+
+[![PyPI](https://img.shields.io/pypi/v/imageserver-export)](https://pypi.org/project/imageserver-export/) ·
+[GitHub](https://github.com/agent-engineering-studio/imageserver-export) ·
+[Docs](https://agentengineering.it/imageserver-export/) · Apache-2.0
+
+**Cosa fa.** Trasforma un'area di qualsiasi ArcGIS ImageServer in un unico
+GeoTIFF allineato e atomico: griglia su pixel interi, tessere che il server
+accetta, nearest neighbour perché i valori sentinella non vengano mai
+mescolati, `.part` rinominato solo quando è completo, e l'errore JSON che un
+ImageServer manda con "200 OK" trasformato in un errore vero. Estratta da Limen.
+
+**Come la usa Limen.** `limen imperviousness-fetch` scarica il Copernicus HRL
+Imperviousness Density 2018 dal server aperto dell'EEA, a 100 m in EPSG:3035,
+sulle AOI seminate; ogni richiesta passa dalla politica di retry condivisa di
+Limen (`send=`).
+
+Codice: [`integrations/imperviousness/`](./src/limen/integrations/imperviousness/).
 
 ### mcp-geo-server
 
