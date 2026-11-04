@@ -119,6 +119,11 @@ services:
       # Sentinel-1 di copernicus-ems: il JSON {"client_id", "client_secret"} è
       # il secret `cdse` qui sotto, mai una riga d'ambiente.
       CDSE_CREDENTIALS_FILE: /run/secrets/cdse
+      # Immagini Sentinel-1 ed etichette di copernicus-ems, sul volume dei
+      # dataset: il default ~/.cache sparirebbe a ogni ricreazione del
+      # container, e un'immagine già scaricata non si riscarica (né si ripaga
+      # in PU).
+      COPERNICUS_EMS_DATA_DIR: /var/lib/limen/datasets/copernicus-ems
       # Lo stesso default di EgmsSettings.release: qui vince su quello del codice.
       EGMS__RELEASE: ${EGMS__RELEASE:-2020_2025}
       # Le tile EGMS (~0,5 GB per l'Italia) sul volume qui sotto, non in /tmp:
