@@ -53,6 +53,7 @@ dependencies = [
     "ispra-idrogeo~=0.7.0",
     "imageserver-export~=0.2.0",
     "ingv-shakemap~=0.2.0",
+    "glofas-ewds~=0.1.0",
 ]
 
 [project.scripts]
@@ -146,6 +147,9 @@ members = ["geodata"]
 
 [tool.uv.sources]
 limen-geodata = { workspace = true }
+# Finché la 0.1.0 non è su PyPI (agent-engineering-studio/glofas-ewds#1):
+# poi questa riga se ne va e resta il vincolo ~=0.1.0 qui sopra.
+glofas-ewds = { git = "https://github.com/agent-engineering-studio/glofas-ewds", rev = "749d259e2e87e3c71045647ae5ffcd944bbd8d7f" }
 
 # ---------------------------------------------------------------------------
 # Ruff

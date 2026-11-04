@@ -1555,6 +1555,14 @@ wheels = [
 ]
 
 [[package]]
+name = "glofas-ewds"
+version = "0.1.0"
+source = { git = "https://github.com/agent-engineering-studio/glofas-ewds?rev=749d259e2e87e3c71045647ae5ffcd944bbd8d7f#749d259e2e87e3c71045647ae5ffcd944bbd8d7f" }
+dependencies = [
+    { name = "numpy" },
+]
+
+[[package]]
 name = "google-auth"
 version = "2.53.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2275,6 +2283,7 @@ dependencies = [
     { name = "fwi-chain" },
     { name = "geoalchemy2" },
     { name = "geopandas" },
+    { name = "glofas-ewds" },
     { name = "httpx" },
     { name = "imageserver-export" },
     { name = "ingv-shakemap" },
@@ -2364,6 +2373,7 @@ requires-dist = [
     { name = "fwi-chain", specifier = "~=1.0.0" },
     { name = "geoalchemy2", specifier = ">=0.15" },
     { name = "geopandas", specifier = ">=1.0" },
+    { name = "glofas-ewds", git = "https://github.com/agent-engineering-studio/glofas-ewds?rev=749d259e2e87e3c71045647ae5ffcd944bbd8d7f" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "imageserver-export", specifier = "~=0.2.0" },
     { name = "ingv-shakemap", specifier = "~=0.2.0" },
