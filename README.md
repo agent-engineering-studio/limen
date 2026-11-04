@@ -425,6 +425,7 @@ flowchart TB
         FWI["fwi-chain<br/>Fire Weather Index"]
         EF["effis-client<br/>burnt areas, official FWI"]
         RT["rainfall-thresholds<br/>rain that triggers landslides"]
+        IS["imageserver-export<br/>sealed soil & land cover"]
     end
     MGS["mcp-geo-server · MIT<br/>GeoServer + PostGIS + MCP agent"]
     L["<b>Limen</b>"]
@@ -435,6 +436,7 @@ flowchart TB
     EF --> L
     RT --> L
     ID --> L
+    IS --> L
     MGS -- "ISPRA layers in PostGIS<br/>WMS map overlays" --> L
 ```
 
@@ -454,6 +456,7 @@ rule stays in Limen. The numbers that tune a hazard stay in
 | [`fwi-chain`](https://pypi.org/project/fwi-chain/) | `~=1.0.0` | Apache-2.0 |
 | [`effis-client`](https://pypi.org/project/effis-client/) | `~=0.1.2` | Apache-2.0 |
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |
+| [`imageserver-export`](https://pypi.org/project/imageserver-export/) | `~=0.1.0` | Apache-2.0 |
 | [`mcp-geo-server`](https://github.com/agent-engineering-studio/mcp-geo-server) | Docker image, pinned commit | MIT |
 
 ### copernicus-ems
@@ -537,7 +540,7 @@ Since 0.5 it is also:
 
 | | New | In plain words |
 |---|---|---|
-| 🤖 | **`idrogeo-mcp`, an MCP server** | `pip install "ispra-idrogeo[mcp]"`, add it to Claude Desktop or any agent, and ask *"how many people live in high landslide hazard areas in Sarno, and is anyone monitoring the landslides there?"*. Ten tools: `find_area`, `area_risk`, `area_landslides`, `landslide`, `search_landslides`, `search_events`, `monitoring_sites`, `webcams`, `code_list`, `download_dataset`. All read-only except the download; answers stop at `limit` rows, so an agent never receives 700,000 landslides at once. |
+| 🤖 | **`idrogeo-mcp`, an MCP server** | `pip install "ispra-idrogeo[mcp]"`, add it to Claude Desktop or any agent, and ask *"how many people live in high landslide hazard areas in Sarno, and is anyone monitoring the landslides there?"*. Twelve tools since 0.6: `find_area`, `area_risk`, `area_landslides`, `landslide`, `search_landslides`, `search_events`, `monitoring_sites`, `webcams`, `hazard_at` (the hazard class at a point), `landslides_near` (the landslides around a point), `code_list`, `download_dataset`. All read-only except the download; answers stop at `limit` rows, so an agent never receives 700,000 landslides at once. |
 | ⌨️ | **The `idrogeo` command** | `idrogeo fetch frane_piff --area molise`, `idrogeo summary pir comuni 72006`, `idrogeo landslides --since …`: downloads print the folder, everything else prints JSON Lines, ready for `jq` or a database loader. |
 | 🗺️ | **GeoDataFrames and GeoParquet** | The `[geo]` extra turns API rows and downloaded layers into GeoPandas tables. |
 | 🔎 | **Typed search filters** | Landslides by type of movement and activity, events by area and date, monitoring sites by status, without writing PostgREST syntax. |
@@ -557,12 +560,37 @@ installed together.
 **How Limen uses it.** `limen geodati-sync`, step 3 of the static data at
 `make init`, downloads with it the IFFI inventory of every region (plus
 Bolzano and Trento) and the national PAI landslide and flood mosaics into
-`GEOSERVER_SHAPEFILE_DIR`, to be loaded into the mcp-geo-server PostGIS. It
-is the one library whose client Limen uses directly, because the files (up to
-1.2 GB) must be streamed to disk: with `retries=0`, inside Limen's own retry
-policy. ISPRA regenerates the IFFI files every night, so a file is asked
+`GEOSERVER_SHAPEFILE_DIR`, to be loaded into the mcp-geo-server PostGIS. Limen
+uses its client directly, because the files (up to 1.2 GB) must be streamed
+to disk: with `retries=0`, inside Limen's own retry policy. ISPRA regenerates the IFFI files every night, so a file is asked
 for again only after `GEODATI__RIVALIDA_DOPO_GIORNI` (30 days). Code:
 [`integrations/idrogeo/`](./src/limen/integrations/idrogeo/).
+
+### imageserver-export
+
+[![PyPI](https://img.shields.io/pypi/v/imageserver-export)](https://pypi.org/project/imageserver-export/) ·
+[GitHub](https://github.com/agent-engineering-studio/imageserver-export) ·
+[Docs](https://agentengineering.it/imageserver-export/) · Apache-2.0
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/agent-engineering-studio/imageserver-export/main/docs/images/map-milan.png" alt="Map of Milan and its belt: the share of sealed soil in each 100 m pixel, exported with imageserver-export" width="70%">
+</p>
+
+**What it does.** Turns an area of any **ArcGIS ImageServer** into one clean
+GeoTIFF. Its first use is the open server of the European Environment
+Agency, which publishes the **Copernicus Land Monitoring Service** maps of
+Europe at 10 m: sealed soil, tree cover, grassland, water and wetlands, with
+no account. The library snaps the area to whole pixels so the tiles line up,
+keeps the "no data" values intact (nearest neighbour, never bilinear),
+catches the errors the server sends with "200 OK", and writes the file only
+when every tile is in.
+
+**How Limen uses it.** `limen imperviousness-fetch` (and `make fetch-static`)
+downloads with it the **sealed-soil** raster for every seeded AOI, at 100 m
+in LAEA Europe; the per-cell factor that amplifies the rain-driven flood
+trigger is computed from it. Every request goes through Limen's
+`fetch_with_retry` (the library's `send` hook). Code:
+[`integrations/imperviousness/`](./src/limen/integrations/imperviousness/).
 
 ### mcp-geo-server
 

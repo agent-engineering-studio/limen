@@ -9,41 +9,40 @@ restituisce GeoTIFF georeferenziati.
 pubblica da un altro endpoint, e vale la pena verificarlo prima di dichiarare
 un layer non ottenibile.
 
-Tre scelte che il resto del modulo dà per fatte:
+Griglia, tessere, richieste e mosaico vengono dal pacchetto
+``imageserver-export`` (estratto da qui, Apache-2.0), con le stesse tre scelte
+di prima:
 
-* **EPSG:3035**, non il 3857 del servizio. È il CRS metrico del progetto, i
-  pixel sono equivalenti in area a ogni latitudine, e il bbox viene agganciato
-  a una griglia di 100 m così la risoluzione è esattamente quella dichiarata.
-* **Nearest neighbour**, mai bilineare. Il layer porta i sentinella 254
-  (non classificabile) e 255 (nessun dato) dentro la stessa banda dei valori
-  0-100: un'interpolazione fra 0 e 255 può cadere sotto 100 e diventare un
-  "64 % sigillato" indistinguibile dal dato vero, proprio dove il dato manca.
-* **Un file o nessuno.** Le tessere vengono scritte in un ``.part`` e
-  rinominate solo alla fine: un download interrotto non lascia un raster
-  parziale che il bootstrap leggerebbe come completo.
+* **EPSG:3035**, non il 3857 del servizio: il CRS metrico del progetto, con il
+  riquadro agganciato a una griglia di 100 m.
+* **Nearest neighbour**, mai bilineare: i sentinella 254 (non classificabile)
+  e 255 (nessun dato) stanno nella stessa banda dei valori 0-100, e
+  un'interpolazione fra 0 e 255 inventerebbe un «64 % sigillato».
+* **Un file o nessuno**: il mosaico si scrive in un ``.part`` e si rinomina
+  solo alla fine.
+
+Le richieste passano da ``fetch_with_retry`` (l'aggancio ``send`` della
+libreria), come ogni chiamata esterna.
 """
 
 from __future__ import annotations
 
-import asyncio
-import math
 import os
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+import httpx
+from imageserver_export import Grid, ImageServer, eea
 
 from limen.config.percorsi import radice_dati
 from limen.core.logging import get_logger
 from limen.data.db import acquire
+from limen.integrations._http import fetch_with_retry
 
 log = get_logger(__name__)
 
 #: ImageServer pubblico dell'EEA. Il layer è tematico, 1 banda, uint8.
-CLMS_IMD_2018_URL = (
-    "https://image.discomap.eea.europa.eu/arcgis/rest/services/GioLandPublic/"
-    "HRL_ImperviousnessDensity_2018/ImageServer/exportImage"
-)
+CLMS_IMD_2018_URL = eea("HRL_ImperviousnessDensity_2018")
 
 DEST_ENV = "LIMEN_IMPERVIOUSNESS_DEST"
 IMPERVIOUSNESS_FORCE_ENV = "LIMEN_IMPERVIOUSNESS_FORCE"
@@ -64,27 +63,7 @@ TILE_PX = 2048
 #: sigillato — che affermerebbe suolo permeabile dove non si sa.
 NODATA = 255
 
-_TARGET_EPSG = 3035
 _CONCURRENCY = 3
-_REQUEST_TIMEOUT_S = 180.0
-
-
-@dataclass(frozen=True, slots=True)
-class Tile:
-    """Una richiesta: la finestra in pixel sul raster di destinazione."""
-
-    col_off: int
-    row_off: int
-    width: int
-    height: int
-
-    def bounds(
-        self, *, origin_x: float, origin_y: float, res: float
-    ) -> tuple[float, float, float, float]:
-        """Bbox in EPSG:3035. L'origine è l'angolo in alto a sinistra."""
-        x0 = origin_x + self.col_off * res
-        y1 = origin_y - self.row_off * res
-        return (x0, y1 - self.height * res, x0 + self.width * res, y1)
 
 
 async def aoi_bounds_4326() -> tuple[float, float, float, float] | None:
@@ -104,98 +83,6 @@ async def aoi_bounds_4326() -> tuple[float, float, float, float] | None:
     return (float(row["x0"]), float(row["y0"]), float(row["x1"]), float(row["y1"]))
 
 
-def snap_bounds(
-    bounds_4326: tuple[float, float, float, float], *, res: float = RESOLUTION_M
-) -> tuple[float, float, float, float]:
-    """Riproietta in 3035 e allarga fino al multiplo di ``res``.
-
-    Allargare e non arrotondare: un bordo tagliato a metà pixel darebbe
-    risoluzione non intera e costringerebbe il servizio a ricampionare per
-    farci stare la dimensione richiesta.
-    """
-    from pyproj import Transformer
-
-    t = Transformer.from_crs(4326, _TARGET_EPSG, always_xy=True)
-    # `transform_bounds` con densificazione, non i quattro angoli: in LAEA i
-    # lati del riquadro geografico si incurvano, e il punto più a sud non sta
-    # in un angolo. Misurato sull'Italia: gli angoli da soli tagliavano
-    # **6,8 km** lungo il bordo meridionale, cioè Lampedusa fuori dal raster
-    # e 28 celle senza dato con un «Input shapes do not overlap raster».
-    x0, y0, x1, y1 = t.transform_bounds(*bounds_4326, densify_pts=101)
-    return (
-        math.floor(x0 / res) * res,
-        math.floor(y0 / res) * res,
-        math.ceil(x1 / res) * res,
-        math.ceil(y1 / res) * res,
-    )
-
-
-def plan_tiles(width: int, height: int, *, tile_px: int = TILE_PX) -> list[Tile]:
-    """Copre il raster con finestre allineate ai pixel di destinazione.
-
-    Allineate per costruzione: una tessera inserita in una finestra che non
-    cade su un confine di pixel andrebbe ricampionata in scrittura, e ogni
-    ricampionamento su una banda con sentinella può inventare valori validi.
-    """
-    return [
-        Tile(
-            col_off=col,
-            row_off=row,
-            width=min(tile_px, width - col),
-            height=min(tile_px, height - row),
-        )
-        for row in range(0, height, tile_px)
-        for col in range(0, width, tile_px)
-    ]
-
-
-async def _fetch_tile(tile: Tile, *, bounds: tuple[float, ...], url: str) -> bytes:
-    from limen.integrations._http import fetch_with_retry
-
-    params = {
-        "bbox": ",".join(f"{v:.1f}" for v in bounds),
-        "bboxSR": str(_TARGET_EPSG),
-        "imageSR": str(_TARGET_EPSG),
-        "size": f"{tile.width},{tile.height}",
-        "format": "tiff",
-        "pixelType": "U8",
-        "interpolation": "RSP_NearestNeighbor",
-        "f": "image",
-    }
-    resp = await fetch_with_retry("GET", url, params=params, timeout=_REQUEST_TIMEOUT_S)
-    # Un ImageServer risponde all'errore con un JSON e status 200: senza
-    # questo controllo il JSON finirebbe in rasterio come "TIFF corrotto",
-    # nascondendo il messaggio che dice cosa non è piaciuto della richiesta.
-    ctype = resp.headers.get("content-type", "")
-    if "json" in ctype:
-        raise RuntimeError(f"exportImage ha risposto con un errore: {resp.text[:300]}")
-    return resp.content
-
-
-def _paste(dst: Any, data: bytes, tile: Tile) -> int:
-    """Scrive la tessera nella sua finestra. Ritorna i pixel validi (0-100)."""
-    import numpy as np
-    from rasterio.io import MemoryFile
-    from rasterio.windows import Window
-
-    with MemoryFile(data) as mem, mem.open() as src:
-        band = src.read(1)
-    if band.shape != (tile.height, tile.width):
-        raise RuntimeError(
-            f"exportImage ha restituito {band.shape[1]}x{band.shape[0]} "
-            f"invece di {tile.width}x{tile.height}: la tessera non combacia "
-            f"con la finestra e incollarla sposterebbe i dati"
-        )
-    if band.dtype != np.uint8:
-        band = band.astype(np.uint8, copy=False)
-    dst.write(
-        band,
-        window=Window(tile.col_off, tile.row_off, tile.width, tile.height),
-        indexes=1,
-    )
-    return int(np.count_nonzero(band <= 100))
-
-
 def _resolve_dest(dest: Path | str | None) -> Path:
     if dest is not None:
         return Path(dest)
@@ -204,6 +91,10 @@ def _resolve_dest(dest: Path | str | None) -> Path:
         return Path(env_value)
     # Sotto la radice dati del deployment (#302).
     return radice_dati() / DEFAULT_DEST.relative_to("data")
+
+
+async def _send(method: str, url: str, **kwargs: Any) -> httpx.Response:
+    return await fetch_with_retry(method, url, **kwargs)
 
 
 async def fetch_imperviousness(
@@ -229,99 +120,36 @@ async def fetch_imperviousness(
         log.warning("imperviousness.fetch.skip", reason="no seeded AOI to cover")
         return None
 
-    x0, y0, x1, y1 = snap_bounds(box)
-    width = round((x1 - x0) / RESOLUTION_M)
-    height = round((y1 - y0) / RESOLUTION_M)
-    tiles = plan_tiles(width, height, tile_px=tile_px)
+    grid = Grid.from_lonlat(box, res=RESOLUTION_M, crs=3035)
     log.info(
         "imperviousness.fetch.start",
-        width=width,
-        height=height,
-        tiles=len(tiles),
-        bounds_3035=[x0, y0, x1, y1],
+        width=grid.width,
+        height=grid.height,
+        bounds_3035=list(grid.bounds),
         dest=str(target),
     )
 
-    target.parent.mkdir(parents=True, exist_ok=True)
-    partial = target.with_suffix(target.suffix + ".part")
-    valid = 0
-    gate = asyncio.Semaphore(_CONCURRENCY)
+    def _avanzamento(done: int, total: int) -> None:
+        log.info("imperviousness.fetch.tile", done=done, total=total)
 
-    async def _one(tile: Tile) -> tuple[Tile, bytes]:
-        async with gate:
-            data = await _fetch_tile(
-                tile,
-                bounds=tile.bounds(origin_x=x0, origin_y=y1, res=RESOLUTION_M),
-                url=url,
-            )
-        return tile, data
-
-    try:
-        valid = await _write_mosaic(
-            partial,
-            tiles=tiles,
-            fetch_one=_one,
-            width=width,
-            height=height,
-            origin=(x0, y1),
-        )
-    except BaseException:
-        # Un `.part` sopravvissuto verrebbe riprovato al giro dopo come se
-        # fosse un file valido a metà: meglio niente che un raster bugiardo.
-        partial.unlink(missing_ok=True)
-        raise
-
-    partial.replace(target)
+    server = ImageServer(url, send=_send)
+    result = await server.export(
+        grid,
+        target,
+        nodata=NODATA,
+        valid_range=(0, 100),
+        tile_px=tile_px,
+        concurrency=_CONCURRENCY,
+        on_tile=_avanzamento,
+    )
     log.info(
         "imperviousness.fetch.done",
         path=str(target),
         size_mb=round(target.stat().st_size / 1e6, 1),
-        valid_px=valid,
-        valid_fraction=round(valid / (width * height), 3),
+        valid_px=result.valid_px,
+        valid_fraction=round(result.valid_fraction, 3),
     )
     return target
-
-
-async def _write_mosaic(
-    partial: Path,
-    *,
-    tiles: list[Tile],
-    fetch_one: Callable[[Tile], Awaitable[tuple[Tile, bytes]]],
-    width: int,
-    height: int,
-    origin: tuple[float, float],
-) -> int:
-    """Crea il GeoTIFF e incolla ogni tessera appena arriva.
-
-    Non pre-riempie di nodata: ``plan_tiles`` partiziona esattamente il
-    raster, quindi ogni pixel viene scritto una volta e una sola. Se una
-    tessera manca il file non viene rinominato, quindi nessuno lo legge.
-    """
-    import rasterio
-    from rasterio.transform import from_origin
-
-    valid = 0
-    with rasterio.open(
-        partial,
-        "w",
-        driver="GTiff",
-        width=width,
-        height=height,
-        count=1,
-        dtype="uint8",
-        crs=f"EPSG:{_TARGET_EPSG}",
-        transform=from_origin(origin[0], origin[1], RESOLUTION_M, RESOLUTION_M),
-        nodata=NODATA,
-        tiled=True,
-        blockxsize=256,
-        blockysize=256,
-        compress="deflate",
-    ) as dst:
-        for done, coro in enumerate(asyncio.as_completed([fetch_one(t) for t in tiles]), 1):
-            tile, data = await coro
-            valid += _paste(dst, data, tile)
-            log.info("imperviousness.fetch.tile", done=done, total=len(tiles))
-    return valid
 
 
 __all__ = [
@@ -331,9 +159,6 @@ __all__ = [
     "IMPERVIOUSNESS_FORCE_ENV",
     "NODATA",
     "RESOLUTION_M",
-    "Tile",
     "aoi_bounds_4326",
     "fetch_imperviousness",
-    "plan_tiles",
-    "snap_bounds",
 ]
