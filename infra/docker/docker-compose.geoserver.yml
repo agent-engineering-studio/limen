@@ -108,6 +108,10 @@ services:
       - "${LIMEN_GEOSERVER_BIND:-127.0.0.1}:8081:8080"
     volumes:
       - limen-geoserver-gsdata:${GEOSERVER_DATA_DIR:-/opt/geoserver/data_dir}
+      # I raster (DTM, CORINE) sono store esterni: geoserver-init passa il
+      # percorso che vede lui, `/data/...`, e GeoServer lo apre dal proprio
+      # filesystem. Senza questo mount rispondeva 500 «no protocol».
+      - ${GEOSERVER_SHAPEFILE_DIR:-${LIMEN_DATA_ROOT:-../../data}/geoserver}:/data:ro
     healthcheck:
       # -m sotto il timeout: curl si chiude da solo invece di essere ucciso
       # da Docker a metà risposta.
