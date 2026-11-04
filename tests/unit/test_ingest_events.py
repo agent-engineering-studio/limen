@@ -169,7 +169,55 @@ async def test_senza_attivazioni_non_si_registra_una_versione(
     monkeypatch.setattr(ingest_events, "fetch_activations", nessuna)
     out = await ingest_events.sincronizza_alluvioni()
     assert out["esito"] == "nessuna_attivazione"
+    assert out["status"] == "warn"
     assert db.scritti == [] and db.registrate == []
+
+
+@pytest.mark.asyncio
+async def test_nessun_poligono_letto_e_un_errore_non_un_successo(
+    db: _Db, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Il dettaglio EMS giù tutta la notte: la riga di job_runs deve essere rossa."""
+
+    async def vuota(_a: object, *, cache_dir: Path) -> ActivationTruth:
+        return ActivationTruth(floods=[], masks=[])
+
+    monkeypatch.setattr(ingest_events, "fetch_activation_truth", vuota)
+    with pytest.raises(RuntimeError, match="1 senza dettaglio"):
+        await ingest_events.sincronizza_alluvioni()
+    assert db.scritti == [] and db.registrate == []
+
+
+@pytest.mark.asyncio
+async def test_un_attivazione_senza_dettaglio_scrive_le_altre_con_un_avviso(
+    db: _Db, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def due(**_kw: object) -> list[object]:
+        return [
+            SimpleNamespace(code="EMSR762", event_time=_T),
+            SimpleNamespace(code="X", event_time=_T),
+        ]
+
+    async def una_sola(a: Any, *, cache_dir: Path) -> ActivationTruth:
+        if a.code == "X":
+            return ActivationTruth(floods=[], masks=[])
+        return ActivationTruth(floods=[_flood(0)], masks=[_MASK])
+
+    monkeypatch.setattr(ingest_events, "fetch_activations", due)
+    monkeypatch.setattr(ingest_events, "fetch_activation_truth", una_sola)
+    out = await ingest_events.sincronizza_alluvioni()
+    assert out["esito"] == "scritto"
+    assert (out["senza_dettaglio"], out["status"]) == (1, "warn")
+
+
+@pytest.mark.asyncio
+async def test_forzato_riscrive_lo_stesso_catalogo(db: _Db) -> None:
+    await ingest_events.sincronizza_alluvioni()
+    db.versioni = set(db.registrate)
+    db.scritti.clear()
+    out = await ingest_events.sincronizza_alluvioni(forzato=True)
+    assert out["esito"] == "scritto"
+    assert db.scritti == ["poligoni", "maschere"]
 
 
 def test_la_versione_non_dipende_dall_ordine_ma_dalla_geometria() -> None:
@@ -184,3 +232,23 @@ def test_la_versione_non_dipende_dall_ordine_ma_dalla_geometria() -> None:
     assert ingest_events._versione([a, b], [_MASK], []) != ingest_events._versione(
         [a, b], [_MASK], ["EMSR762-aoi02-DEL1"]
     )
+
+
+def test_la_versione_vede_ogni_campo_che_si_scrive() -> None:
+    """Una correzione EMS dell'eventTime lascia uguali id e geometria."""
+    from dataclasses import replace
+
+    a = _flood(0)
+    base = ingest_events._versione([a], [_MASK], [])
+    assert (
+        ingest_events._versione(
+            [replace(a, event_time=datetime(2024, 9, 20, tzinfo=UTC))], [_MASK], []
+        )
+        != base
+    )
+    assert (
+        ingest_events._versione([replace(a, attributes={"notation": "Flood trace"})], [_MASK], [])
+        != base
+    )
+    assert ingest_events._versione([replace(a, area_km2=2.0)], [_MASK], []) != base
+    assert ingest_events._versione([a], [replace(_MASK, product_type="GRA")], []) != base
