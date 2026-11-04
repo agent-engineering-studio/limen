@@ -717,3 +717,54 @@ export interface RegistrazioneSensoreRichiesta {
 export interface RegistrazioneSensoreRisposta {
   ricevuta: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Installazione guidata (#404, epic #409) — `GET /api/installazione/stato`
+// ---------------------------------------------------------------------------
+export type StatoDownload = "in_coda" | "in_corso" | "fatto" | "errore";
+export type LivelloDato = "essenziale" | "consigliato" | "avanzato";
+
+export interface DownloadDato {
+  stato: StatoDownload;
+  byte_fatti: number;
+  byte_totali: number | null;
+  aggiornato_il: string;
+  errore: string | null;
+}
+
+export interface VoceDato {
+  id: string;
+  nome: string;
+  a_cosa_serve: string;
+  pericoli: HazardType[];
+  livello: LivelloDato;
+  fonte: string;
+  url: string | null;
+  licenza: string;
+  attribuzione: string | null;
+  peso_gb: number;
+  deriva_da: string | null;
+  copertura: number;
+  /** Le regioni seminate dove il dato manca (solo per i dati per cella). */
+  regioni_senza: string[];
+  download: DownloadDato | null;
+}
+
+export interface PericoloPronto {
+  pericolo: HazardType;
+  pronto: boolean;
+  mancano: string[];
+}
+
+export interface InstallazioneStato {
+  celle_totali: number;
+  regioni: number;
+  pericoli: PericoloPronto[];
+  voci: VoceDato[];
+  azioni_abilitate: boolean;
+}
+
+export interface RispostaDownload {
+  accodate: string[];
+  gia_in_corso: string[];
+}

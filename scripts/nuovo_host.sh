@@ -274,3 +274,15 @@ Fatto. Cosa si riempie da sé, e quando:
   - i riferimenti GloFAS: una quota di nodi ogni notte, settimane per tutti.
 Il reverse proxy e i certificati: README, «Installing on a new server».
 FINE
+
+# La pagina di installazione (#404): lo stato dei dati, e i download con il
+# token. Il token sta dopo il `#`: il browser non lo manda al server, e la
+# pagina lo toglie subito dall'indirizzo.
+token="$(grep -s '^INSTALLAZIONE__TOKEN=' .env | tail -n 1 | cut -d= -f2-)"
+dominio="$(dotenv LIMEN_DOMINIO)"
+if [ -n "$dominio" ]; then base="https://$dominio"; else base="http://localhost:5173"; fi
+if [ -n "$token" ]; then
+  printf '\nLo stato dei dati, e i download, dal browser:\n  %s/#/installazione?token=%s\n' "$base" "$token"
+else
+  printf '\nLo stato dei dati, dal browser: %s/#/installazione\n' "$base"
+fi

@@ -16,6 +16,7 @@ import AvvisoAi from "./components/AvvisoAi";
 import FreshnessBadge from "./components/FreshnessBadge";
 import HomePage from "./components/HomePage";
 import FontiPage from "./components/FontiPage";
+import InstallazionePage from "./components/InstallazionePage";
 import IntegrationsPage from "./components/IntegrationsPage";
 import SensoriPage from "./components/SensoriPage";
 import LegendPanel from "./components/LegendPanel";
@@ -46,6 +47,7 @@ type Page =
   | "integrations"
   | "sensori"
   | "fonti"
+  | "installazione"
   | "verifiche";
 
 function pageFromHash(): Page {
@@ -71,6 +73,10 @@ function pageFromHash(): Page {
   }
   if (hash.startsWith("#/fonti")) {
     return "fonti";
+  }
+  // Fuori dal menu: ci si arriva dal link che stampa lo script d'installazione.
+  if (hash.startsWith("#/installazione")) {
+    return "installazione";
   }
   // `#/italia` è un vecchio deep-link: il quadro nazionale vive in dashboard.
   if (rottaMappa(hash)) {
@@ -589,6 +595,10 @@ export function App(): JSX.Element {
         ) : page === "fonti" ? (
           <div className="explainer-area">
             <FontiPage />
+          </div>
+        ) : page === "installazione" ? (
+          <div className="explainer-area">
+            <InstallazionePage />
           </div>
         ) : (
           dashboard
