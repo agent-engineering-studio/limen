@@ -93,6 +93,8 @@ services:
       API__HOST: 0.0.0.0
       API__PG_TILESERV_URL: http://pg_tileserv:7800
       DB__TILES_PASSWORD: ${DB__TILES_PASSWORD:-}
+      # Il token della pagina di installazione (#403): vuoto ⇒ azioni disabilitate.
+      INSTALLAZIONE__TOKEN: ${INSTALLAZIONE__TOKEN:-}
       # Notifications — listing a channel here enables it; channels
       # whose creds are missing degrade to a no-op rather than erroring.
       # NOTIFICATIONS__ENABLED_CHANNELS: '["mqtt"]'

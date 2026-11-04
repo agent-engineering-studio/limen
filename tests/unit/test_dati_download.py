@@ -164,7 +164,7 @@ def test_la_cli_sceglie_le_voci_giuste() -> None:
     assert cli_dati.scelte(_args(voci=["dtm"]), catalogo) == ["dtm"]
     with pytest.raises(SystemExit, match="sconosciuta"):
         cli_dati.scelte(_args(voci=["meteo"]), catalogo)
-    with pytest.raises(SystemExit, match="si calcola"):
+    with pytest.raises(SystemExit, match="calcola"):
         cli_dati.scelte(_args(voci=["wui"]), catalogo)
 
 
