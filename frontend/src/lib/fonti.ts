@@ -566,8 +566,8 @@ export const FONTI: readonly Fonte[] = [
       "Floods mapped from satellite during emergencies.",
     ),
     accesso: t(
-      "API pubblica del Rapid Mapping, senza credenziali, con limen ingest-events.",
-      "Public Rapid Mapping API, without credentials, with limen ingest-events.",
+      "API pubblica del Rapid Mapping, senza credenziali: il worker la rilegge ogni notte (a mano, limen ingest-events --hazard flood).",
+      "Public Rapid Mapping API, without credentials: the worker reads it again every night (by hand, limen ingest-events --hazard flood).",
     ),
     interpretazione: t(
       "La verità del backtest alluvione: almeno il 70 % di eventi visti con 12 ore d'anticipo e non più del 30 % di falsi allarmi, contati solo dove il satellite ha davvero guardato. Ha tarato le soglie 40/120 mm e 1,6/10. È anche il livello «Alluvioni osservate».",

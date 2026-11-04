@@ -29,6 +29,7 @@ import csv
 import os
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from shapely.geometry import Point
 
@@ -36,7 +37,7 @@ from limen.config.percorsi import radice_dati
 from limen.core.logging import get_logger
 from limen.data.db import lifespan_pool
 from limen.data.migrate import run_migrations
-from limen.data.repos import flood_events_repo
+from limen.data.repos import dataset_versions_repo, flood_events_repo
 from limen.data.repos.landslide_events_repo import LandslideEvent, count_events
 from limen.data.repos.landslide_events_repo import upsert_many as events_upsert
 from limen.integrations._http import SharedHttpClient, fetch_with_retry
@@ -176,48 +177,86 @@ def _flood_categories() -> tuple[str, ...]:
     return tuple(part.strip() for part in raw.split(",") if part.strip())
 
 
-async def _run_flood() -> int:
+#: La riga di ``dataset_versions`` del catalogo EMS: la stessa per il comando
+#: e per il passo notturno, così una notte senza attivazioni nuove non riscrive
+#: le migliaia di poligoni già in ``flood_events``.
+EMS_SOURCE = "copernicus-ems"
+EMS_DATASET = "flood_events"
+
+
+def _versione(
+    polygons: list[ObservedFlood], masks: list[ObservationMask], absent: list[str]
+) -> str:
+    """SHA-256 di ciò che verrebbe scritto: id, tempi e geometria (WKB)."""
+    parti: list[bytes] = []
+    for p in sorted(polygons, key=lambda x: x.id):
+        parti += [p.id.encode(), str(p.observed_time).encode(), p.geom.wkb]
+    for m in sorted(masks, key=lambda x: x.id):
+        parti += [m.id.encode(), str(m.observed_time).encode(), m.geom.wkb]
+    parti += [a.encode() for a in sorted(absent)]
+    return dataset_versions_repo.content_hash(parti)
+
+
+async def sincronizza_alluvioni() -> dict[str, Any]:
+    """Attivazioni EMS italiane → ``flood_events``. Pool già aperto, client condiviso
+    lasciato aperto: lo chiamano sia il comando sia il passo notturno del worker.
+
+    ``esito``: ``scritto``, ``invariato`` (stesso contenuto della volta prima,
+    niente scritture), ``nessuna_attivazione`` o ``nessun_poligono``. Gli ultimi
+    due non registrano una versione: il giro dopo riprova.
+    """
     dove = os.getenv("LIMEN_FLOOD_EVENTS_CACHE")
     cache = Path(dove).expanduser() if dove else radice_dati() / "flood_events"
     country = os.getenv("LIMEN_FLOOD_EVENTS_COUNTRY", "Italy")
 
-    try:
-        activations = await fetch_activations(country=country, categories=_flood_categories())
-        if not activations:
-            # Nessuna attivazione è un risultato possibile e non un errore:
-            # un paese senza alluvioni mappate nella finestra pubblica.
-            log.warning("ingest_events.flood.no_activations", country=country)
-            return 0
-        polygons: list[ObservedFlood] = []
-        masks: list[ObservationMask] = []
-        absent: list[str] = []
-        for activation in activations:
-            # Una maschera senza poligoni è un'osservazione «asciutto» solo se
-            # il layer è stato letto: lo decide fetch_activation_truth, che
-            # restituisce le due cose dallo stesso dettaglio.
-            truth = await fetch_activation_truth(activation, cache_dir=cache)
-            polygons.extend(truth.floods)
-            masks.extend(truth.masks)
-            absent.extend(truth.absent_masks)
-    finally:
-        await SharedHttpClient.aclose()
+    activations = await fetch_activations(country=country, categories=_flood_categories())
+    if not activations:
+        # Nessuna attivazione è un risultato possibile e non un errore:
+        # un paese senza alluvioni mappate nella finestra pubblica.
+        log.warning("ingest_events.flood.no_activations", country=country)
+        return {"esito": "nessuna_attivazione", "attivazioni": 0}
+    polygons: list[ObservedFlood] = []
+    masks: list[ObservationMask] = []
+    absent: list[str] = []
+    for activation in activations:
+        # Una maschera senza poligoni è un'osservazione «asciutto» solo se
+        # il layer è stato letto: lo decide fetch_activation_truth, che
+        # restituisce le due cose dallo stesso dettaglio.
+        truth = await fetch_activation_truth(activation, cache_dir=cache)
+        polygons.extend(truth.floods)
+        masks.extend(truth.masks)
+        absent.extend(truth.absent_masks)
 
-    provenance = catalogue_provenance()
     log.info(
         "ingest_events.flood.parsed",
         polygons=len(polygons),
         activations=len(activations),
         years=sorted({a.event_time.year for a in activations}),
     )
+    conti: dict[str, Any] = {
+        "attivazioni": len(activations),
+        "poligoni": len(polygons),
+        "maschere": len(masks),
+    }
     if not polygons:
         log.warning("ingest_events.flood.no_polygons", note="layer GeoJSON non leggibili")
-        return 1
+        return {"esito": "nessun_poligono", **conti}
 
-    async with lifespan_pool():
-        await run_migrations()
-        n = await flood_events_repo.upsert_many(polygons)
-        m, tolte = await flood_events_repo.upsert_masks(masks, absent=absent)
-        total = await flood_events_repo.count_events()
+    versione = _versione(polygons, masks, absent)
+    if await dataset_versions_repo.find(EMS_SOURCE, EMS_DATASET, versione) is not None:
+        log.info("ingest_events.flood.unchanged", version=versione[:12])
+        return {"esito": "invariato", **conti}
+
+    n = await flood_events_repo.upsert_many(polygons)
+    m, tolte = await flood_events_repo.upsert_masks(masks, absent=absent)
+    total = await flood_events_repo.count_events()
+    provenance = catalogue_provenance()
+    await dataset_versions_repo.record(
+        source=EMS_SOURCE,
+        dataset=EMS_DATASET,
+        version=versione,
+        metadata={**conti, "licence": provenance["licence"]},
+    )
     log.info(
         "ingest_events.done",
         hazard="flood",
@@ -228,7 +267,17 @@ async def _run_flood() -> int:
         source=provenance["source"],
         licence=provenance["licence"],
     )
-    return 0
+    return {"esito": "scritto", **conti, "maschere_tolte": tolte, "totale": total}
+
+
+async def _run_flood() -> int:
+    try:
+        async with lifespan_pool():
+            await run_migrations()
+            esito = await sincronizza_alluvioni()
+    finally:
+        await SharedHttpClient.aclose()
+    return 1 if esito["esito"] == "nessun_poligono" else 0
 
 
 async def run(hazard: str = "landslide") -> int:
