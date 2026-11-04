@@ -829,14 +829,14 @@ wheels = [
 
 [[package]]
 name = "copernicus-ems"
-version = "0.1.0"
+version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b7/cb/92f0272b514bd50531d8b30477ce6aabcf4be3b173914811b8c1ee4565fd/copernicus_ems-0.1.0.tar.gz", hash = "sha256:e4b631669434285a838109a51abfca79606d0047853cce6853b6c011c12766ec", size = 12799, upload-time = "2026-11-03T09:23:06.301Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/44/40/bfbb86f45696f78c2ec7f93727726c0833fcbeb6148fa6a0582d507827ae/copernicus_ems-0.4.0.tar.gz", hash = "sha256:c26915ede4883e60b752b28ac56aa5e94a897a22ecb988ca812445c4dd25a986", size = 51645, upload-time = "2026-11-04T09:59:58.66Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/48/e0/b34ec79277b8fa6f77d166d0edeeb711e3dcb16ba4b9cee7cba2fc27f991/copernicus_ems-0.1.0-py3-none-any.whl", hash = "sha256:8c5bc09b4b515e137e4c5aa32da00dd09490ef171f5fc83cb4f4dd7018b4f30b", size = 14427, upload-time = "2026-11-03T09:23:05.134Z" },
+    { url = "https://files.pythonhosted.org/packages/50/e0/59b184f34cbff8e4b33dfcd379111214592630c90ee2e6bc57706050006b/copernicus_ems-0.4.0-py3-none-any.whl", hash = "sha256:561d0a3fc5f7881271ef14632d85a435d84a5472fe311856dd6fac318a02a819", size = 48991, upload-time = "2026-11-04T09:59:57.206Z" },
 ]
 
 [[package]]
@@ -1165,15 +1165,15 @@ raster = [
 
 [[package]]
 name = "egms-client"
-version = "0.5.0"
+version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
     { name = "httpx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c8/c2/53179b017ddbd836e61f2f99585c6dc6071ea6efd8c4f7a077dd2c0aee91/egms_client-0.5.0.tar.gz", hash = "sha256:ddb8f18d5f9dfd05624fe4862302e890e303c2a3e695faffea1878b61829138f", size = 50654, upload-time = "2026-11-03T15:24:55.192Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/d3/bced97819736311e2d4b284ab34df84b69753acad906e58243d66da310e7/egms_client-0.7.0.tar.gz", hash = "sha256:13ae9f7badd59368ff7b3799f7469ee3969f00b6d0456195a91d4f010543d4f3", size = 65920, upload-time = "2026-11-04T10:00:39.951Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/96/f7/e26a51ac810daed73face49dd17e8848323b05852e6037f259b1eb4196e9/egms_client-0.5.0-py3-none-any.whl", hash = "sha256:07867caa35669853fdbdd86866b6f77b8ff701a321b9dd246ecd3bb98be03cae", size = 44304, upload-time = "2026-11-03T15:24:53.682Z" },
+    { url = "https://files.pythonhosted.org/packages/ed/f8/2ef7b0032cf9340c44bca46c95ce6ec23cfedc0d97b5803c687d36ddb160/egms_client-0.7.0-py3-none-any.whl", hash = "sha256:a15236c3c846c0b93c74cfcb841b2fdb8537c8287987aad0579389a1017866e8", size = 58612, upload-time = "2026-11-04T10:00:38.208Z" },
 ]
 
 [package.optional-dependencies]
@@ -2333,10 +2333,10 @@ requires-dist = [
     { name = "apscheduler", specifier = ">=4.0.0a5" },
     { name = "asyncpg", specifier = ">=0.30" },
     { name = "cbor2", specifier = ">=6.1" },
-    { name = "copernicus-ems", specifier = "~=0.1.0" },
+    { name = "copernicus-ems", specifier = "~=0.4.0" },
     { name = "cryptography", specifier = ">=43" },
     { name = "effis-client", extras = ["raster"], specifier = "~=0.1.2" },
-    { name = "egms-client", extras = ["raster"], specifier = "~=0.5.0" },
+    { name = "egms-client", extras = ["raster"], specifier = "~=0.7.0" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "firms-client", specifier = "~=0.4.0" },
     { name = "fwi-chain", specifier = "~=1.0.0" },
