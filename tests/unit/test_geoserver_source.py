@@ -49,3 +49,18 @@ def test_static_weights_reweighted_and_gate_disabled() -> None:
     assert w.slope == pytest.approx(0.30)
     assert w.pai == pytest.approx(0.225)
     assert t.calibration.s_vs_ispra_correlation_min is None
+
+
+def test_senza_dsn_i_vettori_si_leggono_dal_database_di_limen() -> None:
+    """#426: GeoServer non serve più ai numeri. Chi aveva già un DSN verso il
+    PostGIS di mcp-geo-server continua a leggere da `public`."""
+    from limen.config.settings import DBSettings, GeoServerSourceSettings
+
+    db = DBSettings(connection_string="postgresql://limen:limen@postgres:5432/limen")
+    assert GeoServerSourceSettings().sorgente(db) == (db.connection_string, "sorgenti")
+    assert GeoServerSourceSettings(db_dsn="", schema_name="").sorgente(db) == (
+        db.connection_string,
+        "sorgenti",
+    )
+    esterno = "postgresql://gis:gis@geoserver-postgis:5432/gis"
+    assert GeoServerSourceSettings(db_dsn=esterno).sorgente(db) == (esterno, "public")

@@ -946,7 +946,10 @@ class BackupSettings(BaseSettings):
         "public.esposizione_comuni",
     )
     #: Tabelle escluse del tutto (pattern di ``pg_dump``), schema compreso.
-    escluse: tuple[str, ...] = ("public.tmp_*",)
+    #: ``sorgenti.*`` (#426) del tutto, non solo i dati: è il mosaico PAI
+    #: e gli IFFI, gigabyte che `carica-vettori` ricostruisce dai file, e con
+    #: il commento-impronta ripristinato su tabelle vuote li salterebbe.
+    escluse: tuple[str, ...] = ("public.tmp_*", "sorgenti.*")
     #: Cartelle salvate come tar.gz accanto al dump (per esempio ``mlruns``),
     #: separate da virgola.
     cartelle: str = ""
@@ -1069,23 +1072,30 @@ class GeodataSettings(BaseSettings):
 
 
 class GeoServerSourceSettings(BaseSettings):
-    """GeoServer PostGIS as the authoritative source of ISPRA static data.
+    """Where the ISPRA and ISTAT vector tables are read from.
 
-    When ``db_dsn`` is set, ``limen geoserver-sync`` (and the
-    ``bootstrap-static`` path) load the IFFI landslide inventory and the
-    PAI hazard mosaic from the GeoServer-backed PostGIS into the
-    operational ``iffi_landslides`` / ``pai_hazard`` tables, replacing the
-    IdroGeo WFS ingest as the source. Off by default (DSN unset) so the
-    operational API never assumes the GeoServer stack is running.
+    ``limen geoserver-sync``, ``seed-comuni`` and the comune lookup read the
+    IFFI inventory, the PAI and hydraulic mosaics and the ISTAT boundaries
+    from PostGIS tables named after their shapefiles. Since #426 they live by
+    default in Limen's **own** database, schema ``sorgenti``, loaded by
+    ``limen carica-vettori``: GeoServer is no longer needed for the numbers,
+    only for the WMS overlays. Setting ``db_dsn`` points them back at an
+    external PostGIS — the mcp-geo-server one, whose tables sit in ``public``.
     """
 
     model_config = SettingsConfigDict(extra="ignore")
 
-    # DSN of the GeoServer PostGIS (the mcp-geo-server stack, port 55433 on
-    # the same host). None ⇒ the loader is a clean no-op.
+    # Empty ⇒ Limen's own database. Set ⇒ an external PostGIS, e.g. the
+    # mcp-geo-server one on port 55433.
     db_dsn: str | None = None
-    # PostGIS schema holding the published feature tables.
-    schema_name: str = "public"
+    # Empty ⇒ ``sorgenti`` in Limen's database, ``public`` in an external one.
+    schema_name: str | None = None
+
+    def sorgente(self, db: DBSettings) -> tuple[str, str]:
+        """(DSN, schema) to read the vector tables from."""
+        if self.db_dsn:
+            return self.db_dsn, self.schema_name or "public"
+        return db.connection_string, self.schema_name or "sorgenti"
 
 
 class KgSettings(BaseSettings):

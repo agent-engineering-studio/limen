@@ -63,6 +63,19 @@ _ID_COL_PREFERENCE = ("id_frana", "fid", "ogc_fid", "gid", "objectid")
 _PAI_TOKEN_RE = re.compile(r"\b(AA|P[1-4])\b", re.IGNORECASE)
 
 
+def _manca(schema: str, table: str) -> None:
+    # Con le tabelle nel database di Limen (#426) una tabella assente è il
+    # guasto normale — `carica-vettori` mai eseguito, o uno shapefile non
+    # entrato — e lascerebbe la regione senza PAI o mosaico senza un errore.
+    log.warning(
+        "integration.degraded",
+        source="geoserver_source",
+        op="missing_table",
+        table=f"{schema}.{table}",
+        hint="limen carica-vettori",
+    )
+
+
 def _region_token(aoi_id: str) -> str:
     """Map an AOI id (e.g. ``it-puglia``) to the region table suffix."""
     token = aoi_id.strip().lower().replace("-", "_")
@@ -113,6 +126,7 @@ async def _load_iffi(conn: asyncpg.Connection, schema: str, region: str) -> list
         table = f"{family}_{region}_opendata"
         cols = await _table_columns(conn, schema, table)
         if "geom" not in cols:
+            _manca(schema, table)
             continue
         id_col = next((c for c in _ID_COL_PREFERENCE if c in cols), None)
         id_expr = f'"{id_col}"::text' if id_col else 'md5(ST_AsEWKB("geom"))'
@@ -145,6 +159,7 @@ async def _load_pai(
 ) -> list[PAIHazard]:
     cols = await _table_columns(conn, schema, _PAI_TABLE)
     if "geom" not in cols or _PAI_ATTR not in cols:
+        _manca(schema, _PAI_TABLE)
         return []
     id_col = next((c for c in _ID_COL_PREFERENCE if c in cols), None)
     id_expr = f'"{id_col}"::text' if id_col else 'md5(ST_AsEWKB("geom"))'
@@ -203,7 +218,7 @@ async def _idraulica_tables(conn: asyncpg.Connection, schema: str) -> dict[str, 
             found[table] = cls
             break
     if not found:
-        log.warning("geoserver_source.idraulica.no_tables", schema=schema)
+        _manca(schema, "mosaicatura_ispra_2020_aree_pericolosita_idraulica_*")
     return found
 
 
@@ -248,25 +263,23 @@ async def sync_geoserver_source_for_aoi(aoi_id: str) -> dict[str, int]:
     unset; degrades to zeros + an ``integration.degraded`` log when the
     GeoServer PostGIS is unreachable (read side never raises).
     """
-    cfg = get_settings().geoserver_source
-    if not cfg.db_dsn:
-        log.info("geoserver_source.skip_no_dsn", aoi_id=aoi_id)
-        return {"iffi": 0, "pai": 0, "flood": 0}
+    settings = get_settings()
+    dsn, schema = settings.geoserver_source.sorgente(settings.db)
 
     region = _region_token(aoi_id)
     bbox = await _aoi_bbox(aoi_id)
 
     try:
-        conn = await asyncpg.connect(cfg.db_dsn)
+        conn = await asyncpg.connect(dsn)
     except (OSError, asyncpg.PostgresError) as exc:
         log.warning("integration.degraded", source="geoserver_source", op="connect", error=str(exc))
         return {"iffi": 0, "pai": 0, "flood": 0}
 
     try:
         await register_postgis(conn)
-        iffi_items = await _load_iffi(conn, cfg.schema_name, region)
-        pai_items = await _load_pai(conn, cfg.schema_name, bbox) if bbox else []
-        flood_items = await _load_idraulica(conn, cfg.schema_name, bbox) if bbox else []
+        iffi_items = await _load_iffi(conn, schema, region)
+        pai_items = await _load_pai(conn, schema, bbox) if bbox else []
+        flood_items = await _load_idraulica(conn, schema, bbox) if bbox else []
     except (OSError, asyncpg.PostgresError) as exc:
         log.warning("integration.degraded", source="geoserver_source", op="read", error=str(exc))
         return {"iffi": 0, "pai": 0, "flood": 0}

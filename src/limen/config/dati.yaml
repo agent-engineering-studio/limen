@@ -27,7 +27,6 @@ voci:
     pericoli: [landslide]
     livello: essenziale
     misura: {colonna: iffi_density_500}
-    variabile: GEOSERVER_SOURCE__DB_DSN
     procura_con: make static-data
     fonte: ISPRA IdroGEO — Inventario dei Fenomeni Franosi in Italia
     url: https://idrogeo.isprambiente.it
@@ -43,7 +42,6 @@ voci:
     pericoli: [landslide]
     livello: essenziale
     misura: {colonna: pai_class_norm}
-    variabile: GEOSERVER_SOURCE__DB_DSN
     procura_con: make static-data
     fonte: ISPRA IdroGEO — mosaicatura nazionale PAI frane 2020-2021
     url: https://idrogeo.isprambiente.it
@@ -59,7 +57,6 @@ voci:
     pericoli: [flood]
     livello: essenziale
     misura: {colonna: flood_hazard_norm}
-    variabile: GEOSERVER_SOURCE__DB_DSN
     procura_con: make static-data
     fonte: ISPRA IdroGEO — mosaicatura nazionale della pericolosità idraulica 2020
     url: https://idrogeo.isprambiente.it

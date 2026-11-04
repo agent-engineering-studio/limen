@@ -292,7 +292,7 @@ Every external source is *fail-closed*: without its key, that feed stays off
 ```mermaid
 flowchart LR
     L0["<b>Level 0 · no keys</b><br/>public Open-Meteo weather, DPC radar,<br/>INGV quakes, EFFIS burnt areas,<br/>FIRMS archive, Copernicus EMS floods,<br/>e-ITALICA landslides"]
-    L1["<b>Level 1 · static layers</b><br/>GEOSERVER_SOURCE__DB_DSN → ISPRA, ISTAT,<br/>CORINE, geology, DTM downloaded at init<br/>imperviousness, OSM: make fetch-static"]
+    L1["<b>Level 1 · static layers</b><br/>make static-data → ISPRA, ISTAT,<br/>CORINE, geology, DTM, no keys<br/>imperviousness, OSM: make fetch-static"]
     L2["<b>Level 2 · free keys</b><br/>FIRMS__MAP_KEY → live satellite fires<br/>COPERNICUS__EWDS_KEY → GloFAS rivers<br/>EGMS__SERVICE_KEY → ground motion"]
     L3["<b>Level 3 · production</b><br/>OPENMETEO__FORECAST_URL → own weather server<br/>LLM gateway + ANTHROPIC_API_KEY → summaries<br/>NOTIFICATIONS__* → alerts · BACKUP__* → backups"]
     L0 --> L1 --> L2 --> L3
@@ -304,7 +304,8 @@ All of these are **free**. None is needed to start.
 
 | Variable | What it switches on | Where to get it | Without it |
 |---|---|---|---|
-| `GEOSERVER_SOURCE__DB_DSN` | the base-data download at init and the per-cell factors from it: IFFI, PAI landslide and flood maps, ISTAT borders, CORINE, geology, DTM, held in the [mcp-geo-server](#mcp-geo-server) PostGIS | the GeoServer stack, started by `make init` | landslide terrain term thinner; flood map uniform |
+| `LIMEN_GEOSERVER=1` | the [mcp-geo-server](#mcp-geo-server) stack: GeoServer, its PostGIS, web UI and geo MCP servers, for the PAI/IFFI WMS overlays (~2 GB of RAM). The numbers do not need it: the ISPRA and ISTAT vectors are loaded into Limen's own database by `limen carica-vettori` | nothing to get | no WMS overlays (PMTiles ones still work) |
+| `LIMEN_AGENTI=1` | the `limen-ops` MCP server for AI agents (OpenClaw & co.) | nothing to get | no MCP for agents |
 | `LIMEN_DEM_RASTER` | use your own terrain model (e.g. TINITALY 10 m) instead of the HR-DTM 5 m downloaded at init | a GeoTIFF on disk ([`data/README.md`](./data/README.md)) | the downloaded HR-DTM is used |
 | `FIRMS__MAP_KEY` | live NASA satellite fire detections every 45 min; a fire can start a run within hours | [firms.modaps.eosdis.nasa.gov/api/map_key](https://firms.modaps.eosdis.nasa.gov/api/map_key/) | only the yearly archive (no key needed) |
 | `COPERNICUS__EWDS_KEY` | river discharge forecast and each river's *ordinary high flow* from Copernicus GloFAS | ECMWF account on [ewds.climate.copernicus.eu](https://ewds.climate.copernicus.eu/how-to-api); accept the CEMS-Floods licence once | GloFAS via the public Open-Meteo API |
@@ -613,22 +614,23 @@ them as OGC WMS/WFS layers with thematic styles, and an **MCP server** where
 an AI agent drives GeoServer in natural language ("how many landslides in the
 Marche?"), with a chat-and-map web UI.
 
-**How Limen uses it.** It is the home of the **big static layers**: ISPRA
-IFFI and PAI, the hydraulic mosaic, ISTAT borders, terrain, land cover and
-geology. `make init` starts it and loads everything by itself; by hand:
+**How Limen uses it.** It is **optional** (`LIMEN_GEOSERVER=1`, #426): it
+publishes the ISPRA layers as WMS overlays for the map (`/geoserver/ispra/wms`)
+and gives AI agents a GeoServer to talk to. The numbers do not depend on it:
+`limen carica-vettori` loads the IFFI inventory, the PAI and hydraulic mosaics
+and the ISTAT borders into Limen's own database (schema `sorgenti`), with the
+same table names GeoServer used, and `geoserver-sync`, `bootstrap-static` and
+`seed-comuni` read them from there. `make static-data` does both; by hand:
 
 ```bash
-make geoserver-up       # GeoServer :8081, web UI :8000, MCP agent :9000, PostGIS :55433
-uv run limen geodati-sync   # download the base data into $LIMEN_DATA_ROOT/geoserver
-make geoserver-init     # load the shapefiles into PostGIS (GEO_INIT_FORCE=true to reload)
-make geoserver-sync     # copy IFFI + PAI into Limen's database
+uv run limen geodati-sync     # download the base data into $LIMEN_DATA_ROOT/geoserver
+uv run limen carica-vettori   # load the vectors into Limen's database (skips unchanged ones)
+make geoserver-sync           # copy IFFI, PAI and hydraulic hazard into the operational tables
+make geoserver-up             # optional: GeoServer :8081, web UI :8000, MCP :9000
+make geoserver-init           # optional: publish the shapefiles as WMS layers
 ```
 
-With `GEOSERVER_SOURCE__DB_DSN` set, `limen bootstrap-static` reads these
-layers and computes the per-cell factors, and `limen seed-comuni` imports the
-municipal borders. The map shows the PAI/IFFI layers as overlays through
-GeoServer's WMS (`/geoserver/ispra/wms`). Nothing in the hourly scoring path
-waits on GeoServer. Compose file:
+Nothing in the hourly scoring path waits on GeoServer. Compose file:
 [`infra/docker/docker-compose.geoserver.yml`](./infra/docker/docker-compose.geoserver.yml).
 
 ### Also extracted from Limen
@@ -808,7 +810,8 @@ Desktop, and the fix for each:
 | `uv sync --all-groups` fails: *torch … doesn't have a wheel for the current platform* (then the same for `onnxruntime`) | PyTorch stopped publishing macOS x86_64 wheels after 2.2, onnxruntime soon after; the `dl` and `ml` groups need newer ones | on an Intel Mac `uv sync --all-groups --no-group dl --no-group ml`. Only the V2 ML shadow stack needs them; the V1 engine, API and worker do not. Apple Silicon and Linux install everything |
 | `make` stops at once: *unterminated call to function 'shell'* | macOS ships GNU make 3.81 (2006); the Makefile needs ≥ 4.3 | `brew install make`, then `export PATH="/usr/local/opt/make/libexec/gnubin:$PATH"` (`/opt/homebrew/...` on Apple Silicon) in `~/.zshrc`. `nuovo_host.sh` calls `make`, so run it with that `PATH` |
 | `--da-zero` dies mid-seed with `Error 255`, Docker socket gone | Docker Desktop auto-updated and restarted itself | Docker Desktop settings: turn off *Automatically download updates* and *Resource Saver*, turn on *Start Docker Desktop when you sign in*; on the host `sudo pmset -a sleep 0 disksleep 0`. The script is re-runnable: launch it again |
-| `geoserver-init` "stops immediately" and the map has no IFFI/PAI | it is a one-shot job (exits 0); with `GEOSERVER_SOURCE__DB_DSN` unset, `make static-data` skips `limen geodati-sync`, so `$LIMEN_DATA_ROOT/geoserver` is empty and it loads `0 shapefile(s)` | set `GEOSERVER_SOURCE__DB_DSN=postgresql://gis:gis@localhost:55433/gis` in `.env` **before** `--da-zero`, or set it afterwards and run `make static-data` (first run ~25 GB, the DTM is 22 GB) |
+| `geoserver-init` "stops immediately" and the map has no IFFI/PAI | it is a one-shot job (exits 0); `make static-data` used to skip the download when `GEOSERVER_SOURCE__DB_DSN` was unset | fixed by #426: the download always runs and `limen carica-vettori` loads the vectors into Limen's database, no variable needed. GeoServer is opt-in (`LIMEN_GEOSERVER=1`) |
+| the Mac (i9, 16 GB) swaps, the API takes minutes to start, healthchecks time out | the full stack is 17 containers; GeoServer alone is 1.4 GB of Java at 300 % CPU even when idle | since #426 `make up` starts the essential profile (7 containers); `LIMEN_GEOSERVER=1` and `LIMEN_AGENTI=1` add the rest |
 | `data-status` reports the sealed-soil layer missing for flood | the raster is not part of `static-data` | `make imperviousness-data`, set `LIMEN_IMPERVIOUSNESS_RASTER` to the printed path, `make bootstrap-static` (only the new step runs) |
 
 With `LIMEN_IMAGE_PREFIX` set, the published SPA needs the reverse proxy

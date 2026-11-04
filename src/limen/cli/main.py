@@ -26,6 +26,7 @@ Usage:
     limen firms-sync         Ingest NASA FIRMS active-fire hotspots (FIRMS__MAP_KEY).
     limen esposizione-sync   Residenti in aree a pericolo frana/alluvione per comune (ISPRA).
     limen geodati-sync       Gli shapefile di GeoServer: IFFI, PAI, idraulica, ISTAT, CORINE, …
+    limen carica-vettori     IFFI, PAI, idraulica e comuni in Limen, senza GeoServer (#426).
     limen imperviousness-fetch  Download the CLMS sealed-soil raster (public EEA service).
     limen fetch-static       Sorgenti statiche pubbliche, verificate con il manifest (#305).
     limen review-alerts      Sampled manual-review checklist for the alert FAR protocol.
@@ -59,6 +60,8 @@ from limen.cli.backup import run as _run_backup
 from limen.cli.bootstrap_static import FORCE_ENV as BOOTSTRAP_FORCE_ENV
 from limen.cli.bootstrap_static import run as _run_bootstrap_static
 from limen.cli.calibrate import run as _run_calibrate
+from limen.cli.carica_vettori import FORZA_ENV as VETTORI_FORZA_ENV
+from limen.cli.carica_vettori import run as _run_carica_vettori
 from limen.cli.clima_pioggia import run as _run_clima_pioggia
 from limen.cli.data_status import run as _run_data_status
 from limen.cli.dati import build_subparser as _build_dati_subparser
@@ -325,6 +328,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help="download every shapefile geoserver-init loads (IdroGEO, ISTAT, CORINE, geology)",
     )
     sub.add_parser(
+        "carica-vettori",
+        help="IFFI, PAI, idraulica e comuni nello schema `sorgenti`, senza GeoServer (#426)",
+    ).add_argument(
+        "--forza",
+        action="store_true",
+        help=f"ricarica anche gli shapefile non cambiati (equivale a {VETTORI_FORZA_ENV}=1)",
+    )
+    sub.add_parser(
         "geoserver-sync",
         help="load ISPRA IFFI + PAI from GeoServer PostGIS (GEOSERVER_SOURCE__DB_DSN)",
     )
@@ -477,6 +488,7 @@ def main(argv: list[str] | None = None) -> int:
         "report": _run_report_build,
         "sync-egms": _run_sync_egms,
         "geodati-sync": _run_geodati_sync,
+        "carica-vettori": _run_carica_vettori,
         "esposizione-sync": _run_esposizione_sync,
         "ingest-kb": _run_ingest_kb,
         "geoserver-sync": _run_geoserver_sync,
@@ -516,6 +528,8 @@ def main(argv: list[str] | None = None) -> int:
             return asyncio.run(_run_worker(check_health=args.health))
         except KeyboardInterrupt:  # pragma: no cover
             return 130
+    if args.command == "carica-vettori" and args.forza:
+        os.environ[VETTORI_FORZA_ENV] = "1"
     if args.command == "bootstrap-static" and args.force:
         # Alias della variabile invece di un parametro al runner: i runner
         # hanno firma uniforme (`Runner`, nessun argomento) e leggono l'env,

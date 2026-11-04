@@ -231,7 +231,9 @@ async def test_data_status_names_what_each_hazard_is_missing(
     assert "incendio    tutto presente" in out
     assert "alluvione   manca: pericolosità idraulica ISPRA, suolo impermeabilizzato (CLMS)" in out
     assert "LIMEN_IMPERVIOUSNESS_RASTER   → make imperviousness-data" in out
-    assert "  GEOSERVER_SOURCE__DB_DSN\n" in out
+    # I vettori ISPRA non chiedono più una variabile (#426): si dice il comando.
+    assert "GEOSERVER_SOURCE__DB_DSN" not in out
+    assert "make static-data" in out
     # Impostata ma vuota: il problema non è la variabile, e non va elencata.
     assert "LIMEN_OSM_ROADS\n" not in out.split("Variabili non impostate")[1]
 
