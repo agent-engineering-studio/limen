@@ -221,7 +221,10 @@ async def aoi_hotspot_counts(*, window_hours: int, min_hotspots: int) -> dict[st
     """AOIs with at least ``min_hotspots`` detections in the trailing window.
 
     The AOI polygon (not its bbox) decides containment, so a hotspot just
-    outside the region never triggers it.
+    outside the region never triggers it. A row the static mask labelled
+    (volcano, steelworks, offshore) never counts; a ``NULL`` one does, because
+    the trigger only decides *when* to score and missing a fire costs more
+    than one extra sweep.
     """
     async with acquire() as conn:
         rows = await conn.fetch(
@@ -230,6 +233,7 @@ async def aoi_hotspot_counts(*, window_hours: int, min_hotspots: int) -> dict[st
             FROM aoi a
             JOIN fire_hotspots fh ON ST_Intersects(a.geom, fh.geom)
             WHERE fh.acquired_at >= now() - make_interval(hours => $1)
+              AND (fh.detection_type = 0 OR fh.detection_type IS NULL)
             GROUP BY a.id
             HAVING COUNT(*) >= $2
             ORDER BY a.id

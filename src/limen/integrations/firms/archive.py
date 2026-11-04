@@ -110,6 +110,28 @@ async def fetch_archive_year(
     Degrada come il resto delle integrazioni: un anno non disponibile dà lista
     vuota e una riga di log, e gli altri anni continuano.
     """
+    text = await archive_text(product=product, year=year, country=country, use_cache=use_cache)
+    if text is None:
+        return []
+    hotspots = parse_hotspot_csv(
+        text,
+        source=product.source,
+        min_confidence=min_confidence,
+        min_confidence_pct=min_confidence_pct,
+        min_frp_mw=min_frp_mw,
+    )
+    log.info("firms.archive.parsed", product=product.slug, year=year, hotspots=len(hotspots))
+    return hotspots
+
+
+async def archive_text(
+    *,
+    product: ArchiveProduct,
+    year: int,
+    country: str = DEFAULT_COUNTRY,
+    use_cache: bool = True,
+) -> str | None:
+    """Il CSV grezzo di un anno, dalla cache o dalla rete; ``None`` se manca."""
     path = _cache_path(product=product, year=year, country=country)
     text: str | None = None
     if use_cache and path.is_file() and path.stat().st_size > 0:
@@ -129,7 +151,7 @@ async def fetch_archive_year(
                 error=str(exc),
                 error_type=type(exc).__name__,
             )
-            return []
+            return None
         if resp.status_code >= 400 or not firms.is_hotspot_csv(resp.text):
             log.info(
                 "firms.archive.unavailable",
@@ -137,7 +159,7 @@ async def fetch_archive_year(
                 year=year,
                 status=resp.status_code,
             )
-            return []
+            return None
         text = resp.text
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
@@ -148,16 +170,7 @@ async def fetch_archive_year(
             bytes=len(text),
             path=str(path),
         )
-
-    hotspots = parse_hotspot_csv(
-        text,
-        source=product.source,
-        min_confidence=min_confidence,
-        min_confidence_pct=min_confidence_pct,
-        min_frp_mw=min_frp_mw,
-    )
-    log.info("firms.archive.parsed", product=product.slug, year=year, hotspots=len(hotspots))
-    return hotspots
+    return text
 
 
 def archive_years(product: ArchiveProduct, *, until_year: int) -> list[int]:
@@ -169,6 +182,7 @@ __all__ = [
     "ARCHIVE_PRODUCTS",
     "DEFAULT_COUNTRY",
     "ArchiveProduct",
+    "archive_text",
     "archive_years",
     "fetch_archive_year",
 ]

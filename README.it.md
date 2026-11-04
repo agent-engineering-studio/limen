@@ -453,7 +453,7 @@ una libreria.
 |---|---|---|
 | [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) | `~=0.1.0` | Apache-2.0 |
 | [`egms-client`](https://pypi.org/project/egms-client/) | `~=0.5.0` | Apache-2.0 |
-| [`firms-client`](https://pypi.org/project/firms-client/) | `~=0.2.0` | Apache-2.0 |
+| [`firms-client`](https://pypi.org/project/firms-client/) | `~=0.4.0` | Apache-2.0 |
 | [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) | `~=0.3.0` | Apache-2.0 |
 | [`fwi-chain`](https://pypi.org/project/fwi-chain/) | `~=1.0.0` | Apache-2.0 |
 | [`effis-client`](https://pypi.org/project/effis-client/) | `~=0.1.2` | Apache-2.0 |

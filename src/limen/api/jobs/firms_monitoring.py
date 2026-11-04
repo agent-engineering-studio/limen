@@ -30,6 +30,7 @@ from limen.core.models.context import MonitoringContext
 from limen.data.repos.aoi_repo import assessed_within
 from limen.data.repos.fire_repo import aoi_hotspot_counts
 from limen.integrations.firms import FirmsHttpClient, run_firms_sync
+from limen.integrations.firms.static_mask import load_static_mask
 
 log = get_logger(__name__)
 
@@ -46,6 +47,7 @@ async def run_firms_monitoring(deps: AppDependencies) -> dict[str, int]:
         min_confidence=cfg.min_confidence,
         min_confidence_pct=cfg.min_confidence_pct,
         min_frp_mw=cfg.min_frp_mw,
+        static_mask=await load_static_mask(),
     )
     sync = await run_firms_sync(
         client=client,

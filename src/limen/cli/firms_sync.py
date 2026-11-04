@@ -22,6 +22,7 @@ from limen.core.logging import get_logger
 from limen.data.db import lifespan_pool
 from limen.data.migrate import run_migrations
 from limen.integrations.firms import FirmsHttpClient, run_firms_sync
+from limen.integrations.firms.static_mask import load_static_mask
 
 log = get_logger(__name__)
 
@@ -46,6 +47,7 @@ async def run() -> int:
         min_confidence=cfg.min_confidence,
         min_confidence_pct=cfg.min_confidence_pct,
         min_frp_mw=cfg.min_frp_mw,
+        static_mask=await load_static_mask(),
     )
     async with lifespan_pool(settings.db):
         await run_migrations()
