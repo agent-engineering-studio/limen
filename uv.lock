@@ -1557,9 +1557,13 @@ wheels = [
 [[package]]
 name = "glofas-ewds"
 version = "0.1.0"
-source = { git = "https://github.com/agent-engineering-studio/glofas-ewds?rev=749d259e2e87e3c71045647ae5ffcd944bbd8d7f#749d259e2e87e3c71045647ae5ffcd944bbd8d7f" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/38/0f/0806b5247cf82c19f0cbd6fd4e55b47b58001be7ecc1a4d1e70566d2bbc6/glofas_ewds-0.1.0.tar.gz", hash = "sha256:aac23eefb815547e728b9ce2f4d40fa5d0ed016578166eb4b92ee7bc798008af", size = 25681, upload-time = "2026-11-04T15:57:50.49Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1b/8a/43fca061bdcf2545a25f6c595da06a19b711d9dc42f5e5c39192b9d05b90/glofas_ewds-0.1.0-py3-none-any.whl", hash = "sha256:785d5caa2845594536b253b7e05e12e3b98766bf11a3688e5879b5eeec634183", size = 24754, upload-time = "2026-11-04T15:57:49.222Z" },
 ]
 
 [[package]]
@@ -2373,7 +2377,7 @@ requires-dist = [
     { name = "fwi-chain", specifier = "~=1.0.0" },
     { name = "geoalchemy2", specifier = ">=0.15" },
     { name = "geopandas", specifier = ">=1.0" },
-    { name = "glofas-ewds", git = "https://github.com/agent-engineering-studio/glofas-ewds?rev=749d259e2e87e3c71045647ae5ffcd944bbd8d7f" },
+    { name = "glofas-ewds", specifier = "~=0.1.0" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "imageserver-export", specifier = "~=0.2.0" },
     { name = "ingv-shakemap", specifier = "~=0.2.0" },

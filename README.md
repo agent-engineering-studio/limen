@@ -458,7 +458,7 @@ rule stays in Limen. The numbers that tune a hazard stay in
 | [`effis-client`](https://pypi.org/project/effis-client/) | `~=0.1.2` | Apache-2.0 |
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |
 | [`imageserver-export`](https://pypi.org/project/imageserver-export/) | `~=0.2.0` | Apache-2.0 |
-| [`glofas-ewds`](https://github.com/agent-engineering-studio/glofas-ewds) | `~=0.1.0` (git commit until it is on PyPI) | Apache-2.0 |
+| [`glofas-ewds`](https://pypi.org/project/glofas-ewds/) | `~=0.1.0` | Apache-2.0 |
 | [`mcp-geo-server`](https://github.com/agent-engineering-studio/mcp-geo-server) | Docker image, pinned commit | MIT |
 
 ### copernicus-ems
@@ -641,7 +641,7 @@ Nothing in the hourly scoring path waits on GeoServer. Compose file:
 | [`fwi-chain`](https://pypi.org/project/fwi-chain/) | The Canadian Fire Weather Index (Van Wagner 1987), pure and verified against the published reference day to 1e-9 | the wildfire engine, one chain per weather node |
 | [`effis-client`](https://pypi.org/project/effis-client/) | EFFIS burnt-area perimeters and the official FWI maps (a MapServer with many surprises) | wildfire truth set; `limen fwi-confronto` |
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | Rainfall events and intensity–duration thresholds (Caine) | the landslide rain term |
-| [`glofas-ewds`](https://github.com/agent-engineering-studio/glofas-ewds) ([site](https://agentengineering.it/glofas-ewds/)) | GloFAS 4 discharge and the Copernicus FWI from the EWDS, read on the cell Open-Meteo serves (the declared one, one step east): requests, monthly re-runnable downloads, readers per node, a river's own reference | `limen glofas-ewds` (node references), the daily GloFAS forecast run, `limen fwi-confronto` |
+| [`glofas-ewds`](https://pypi.org/project/glofas-ewds/) ([site](https://agentengineering.it/glofas-ewds/)) | GloFAS 4 discharge and the Copernicus FWI from the EWDS, read on the cell Open-Meteo serves (the declared one, one step east): requests, monthly re-runnable downloads, readers per node, a river's own reference | `limen glofas-ewds` (node references), the daily GloFAS forecast run, `limen fwi-confronto` |
 
 ---
 

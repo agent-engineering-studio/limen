@@ -459,7 +459,7 @@ una libreria.
 | [`effis-client`](https://pypi.org/project/effis-client/) | `~=0.1.2` | Apache-2.0 |
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |
 | [`imageserver-export`](https://pypi.org/project/imageserver-export/) | `~=0.2.0` | Apache-2.0 |
-| [`glofas-ewds`](https://github.com/agent-engineering-studio/glofas-ewds) | `~=0.1.0` (commit git finché non è su PyPI) | Apache-2.0 |
+| [`glofas-ewds`](https://pypi.org/project/glofas-ewds/) | `~=0.1.0` | Apache-2.0 |
 | [`mcp-geo-server`](https://github.com/agent-engineering-studio/mcp-geo-server) | immagine Docker, commit fissato | MIT |
 
 ### copernicus-ems
@@ -607,7 +607,7 @@ aspetta GeoServer. File compose:
 | [`fwi-chain`](https://pypi.org/project/fwi-chain/) | Il Fire Weather Index canadese (Van Wagner 1987), puro e verificato sul giorno di riferimento pubblicato fino a 1e-9 | il motore degli incendi, una catena per punto meteo |
 | [`effis-client`](https://pypi.org/project/effis-client/) | I perimetri delle aree bruciate EFFIS e le carte ufficiali del FWI (un MapServer pieno di sorprese) | la verità a terra degli incendi; `limen fwi-confronto` |
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | Eventi di pioggia e soglie intensità–durata (Caine) | il termine pioggia delle frane |
-| [`glofas-ewds`](https://github.com/agent-engineering-studio/glofas-ewds) ([sito](https://agentengineering.it/glofas-ewds/)) | La portata GloFAS 4 e l'FWI Copernicus dall'EWDS, letti sulla cella che serve Open-Meteo (quella dichiarata, un passo a est): richieste, download mensili rilanciabili, lettura per nodo, il riferimento proprio di ogni fiume | `limen glofas-ewds` (i riferimenti dei nodi), la corsa giornaliera della previsione GloFAS, `limen fwi-confronto` |
+| [`glofas-ewds`](https://pypi.org/project/glofas-ewds/) ([sito](https://agentengineering.it/glofas-ewds/)) | La portata GloFAS 4 e l'FWI Copernicus dall'EWDS, letti sulla cella che serve Open-Meteo (quella dichiarata, un passo a est): richieste, download mensili rilanciabili, lettura per nodo, il riferimento proprio di ogni fiume | `limen glofas-ewds` (i riferimenti dei nodi), la corsa giornaliera della previsione GloFAS, `limen fwi-confronto` |
 | [`imageserver-export`](https://pypi.org/project/imageserver-export/) ([sito](https://agentengineering.it/imageserver-export/)) | Un'area di qualunque ImageServer ArcGIS come un solo GeoTIFF: pixel allineati, valori «nessun dato» intatti, errori mandati con «200 OK» intercettati, file scritto solo quando è completo, con la provenienza nei tag del GeoTIFF; un download interrotto riparte dalle tessere già arrivate. Con `[mcp]` anche un server MCP, `imageserver-mcp` (valore in un punto, sintesi di un riquadro, export), in cui ogni numero lo calcola la libreria e non il modello. Prima applicazione: gli strati aperti di Copernicus Land che l'EEA pubblica senza account | il raster del suolo sigillato (`limen imperviousness-fetch`), che amplifica l'innesco pluviale delle alluvioni; `.mcp.json` collega `imageserver-mcp` a Claude Code tramite `uvx`, come `idrogeo-mcp` |
 
 ---
