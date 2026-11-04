@@ -5,6 +5,8 @@
 import { sullOrigine } from "./env";
 import type {
   ForecastAlertsResponse,
+  InstallazioneStato,
+  RispostaDownload,
   ForecastSchedule,
   LegendResponse,
   NationalReportResponse,
@@ -385,6 +387,19 @@ export class ApiClient {
     );
   }
 
+  /** Cosa serve a Limen e a che punto è (#404): pubblico. */
+  getInstallazioneStato(signal?: AbortSignal): Promise<InstallazioneStato> {
+    return this.request<InstallazioneStato>("/api/installazione/stato", {}, signal);
+  }
+
+  /** Mette in coda dei download per il worker: chiede il token (#403). */
+  avviaDownload(voci: string[], token: string): Promise<RispostaDownload> {
+    return this.request<RispostaDownload>("/api/installazione/download", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Limen-Token": token },
+      body: JSON.stringify({ voci }),
+    });
+  }
 }
 
 export const defaultApiClient = new ApiClient();

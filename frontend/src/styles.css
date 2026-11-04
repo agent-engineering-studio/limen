@@ -3748,3 +3748,115 @@ html[lang="en"] .app-nav a { white-space: nowrap; }
     display: none;
   }
 }
+
+/* Installazione (#404): il semaforo porta sempre anche la parola, non solo il colore. */
+.installazione {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding-block: 1.5rem 3rem;
+}
+.installazione .occhiello {
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.8rem;
+  margin: 0;
+}
+.installazione .lede {
+  color: var(--muted);
+}
+.installazione-pericoli {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+  margin-block: 1.5rem;
+}
+.installazione-pericolo {
+  border: 1px solid var(--panel-border);
+  border-left-width: 0.4rem;
+  border-radius: 0.5rem;
+  background: var(--panel);
+  padding: 0.75rem 1rem;
+}
+.installazione-pericolo h2 {
+  font-size: 1.05rem;
+  margin: 0 0 0.5rem;
+}
+.installazione-pericolo ul {
+  padding-left: 1.1rem;
+  margin: 0;
+}
+.semaforo-verde {
+  border-left-color: var(--ok);
+}
+.semaforo-verde .semaforo-etichetta {
+  color: var(--ok);
+}
+.semaforo-giallo {
+  border-left-color: var(--accent);
+}
+.semaforo-giallo .semaforo-etichetta {
+  color: var(--accent);
+}
+.semaforo-rosso {
+  border-left-color: var(--warn);
+}
+.semaforo-rosso .semaforo-etichetta {
+  color: var(--warn);
+}
+.installazione-token {
+  border: 1px solid var(--panel-border);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin-block: 1.5rem;
+}
+.installazione-token input {
+  max-width: 100%;
+}
+.installazione-nota {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.installazione-voci {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.installazione-voce {
+  border: 1px solid var(--panel-border);
+  border-radius: 0.5rem;
+  background: var(--panel);
+  padding: 0.75rem 1rem;
+}
+.installazione-voce p {
+  margin: 0.35rem 0;
+}
+.installazione-voce-testa {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.installazione-voce .presente {
+  color: var(--ok);
+}
+.installazione-voce .assente {
+  color: var(--warn);
+}
+.installazione-download {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.installazione-download progress {
+  flex: 1 1 10rem;
+}
+.installazione-errore {
+  color: var(--warn);
+  flex-basis: 100%;
+}
+.installazione-tutti {
+  margin-bottom: 1rem;
+}
