@@ -1050,27 +1050,6 @@ class MonitoringSettings(BaseSettings):
     drift_feature: str = "rain.rain_72h_mm"
 
 
-class GeodataSettings(BaseSettings):
-    """Hooks into the V2 Geo-Data Service (§3.3.4-ter).
-
-    The geodata stack itself runs in its own compose profile — these
-    settings only control when the *operational* API refreshes its
-    per-cell static factors against the geodata PostGIS via
-    ``limen geodata export-features``.
-
-    Default off: the geodata profile is opt-in, so the operational API
-    never assumes it's running.
-    """
-
-    model_config = SettingsConfigDict(extra="ignore")
-
-    enable_periodic_export: bool = False
-    """When true, the scheduler runs ``export_cell_features`` periodically."""
-    export_features_hours: int = Field(default=168, ge=1)
-    """Cadence (hours). 168 = weekly. The PAI + IFFI datasets refresh
-    yearly at most — daily would be wasteful."""
-
-
 class GeoServerSourceSettings(BaseSettings):
     """Where the ISPRA and ISTAT vector tables are read from.
 
@@ -1348,7 +1327,6 @@ class Settings(BaseSettings):
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
     openmeteo: OpenMeteoSettings = Field(default_factory=OpenMeteoSettings)
     kg: KgSettings = Field(default_factory=KgSettings)
-    geodata: GeodataSettings = Field(default_factory=GeodataSettings)
     geoserver_source: GeoServerSourceSettings = Field(default_factory=GeoServerSourceSettings)
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"

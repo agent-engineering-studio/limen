@@ -23,7 +23,6 @@ from limen.api.jobs.fedelta_racconti import run_fedelta_racconti
 from limen.api.jobs.firms_monitoring import run_firms_monitoring
 from limen.api.jobs.forecast_history import run_forecast_history_job
 from limen.api.jobs.forecast_monitoring import run_forecast_monitoring
-from limen.api.jobs.geodata_export import run_geodata_export_job
 from limen.api.jobs.hourly_monitoring import run_hourly_monitoring
 from limen.api.jobs.html_report import run_html_report
 from limen.api.jobs.ingv_sync import run_ingv_sync_job
@@ -48,7 +47,6 @@ from limen.api.jobs.ids import (  # noqa: E402
     JOB_FIRMS_MONITORING,
     JOB_FORECAST_HISTORY,
     JOB_FORECAST_MONITORING,
-    JOB_GEODATA_EXPORT,
     JOB_HOURLY_MONITORING,
     JOB_HTML_REPORT,
     JOB_INGV_SYNC,
@@ -365,20 +363,5 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
     )
     registered.append(JOB_FORECAST_HISTORY)
     log.info("scheduler.registered", job=JOB_FORECAST_HISTORY, hours_utc=ore)
-
-    if deps.settings.geodata.enable_periodic_export:
-        await scheduler.add_schedule(
-            track_job(JOB_GEODATA_EXPORT)(run_geodata_export_job),
-            args=(deps,),
-            trigger=_deferred_interval(hours=deps.settings.geodata.export_features_hours),
-            id=JOB_GEODATA_EXPORT,
-            conflict_policy=ConflictPolicy.replace,
-        )
-        registered.append(JOB_GEODATA_EXPORT)
-        log.info(
-            "scheduler.registered",
-            job=JOB_GEODATA_EXPORT,
-            interval_hours=deps.settings.geodata.export_features_hours,
-        )
 
     return registered

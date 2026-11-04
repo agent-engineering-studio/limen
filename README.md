@@ -894,7 +894,7 @@ Docker writes its own iptables chains, consulted *before* ufw's: the host's
 every `ports:` entry binds to a `LIMEN_*_BIND` variable defaulting to
 `127.0.0.1` (`LIMEN_PG_BIND`, `LIMEN_API_BIND`, `LIMEN_MQTT_BIND`,
 `LIMEN_TILESERV_BIND`, `LIMEN_FRONTEND_BIND`, `LIMEN_MCP_BIND`,
-`LIMEN_GEOSERVER_*_BIND`, `LIMEN_GEODATA_*_BIND`). Public exposure goes
+`LIMEN_GEOSERVER_*_BIND`, `LIMEN_IDROGEO_MCP_BIND`). Public exposure goes
 through a reverse proxy on 443, never by binding to `0.0.0.0`.
 
 ---

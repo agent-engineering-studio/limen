@@ -846,7 +846,7 @@ container. Per questo ogni voce `ports:` si lega a una variabile
 `LIMEN_*_BIND` che vale `127.0.0.1` di default (`LIMEN_PG_BIND`,
 `LIMEN_API_BIND`, `LIMEN_MQTT_BIND`, `LIMEN_TILESERV_BIND`,
 `LIMEN_FRONTEND_BIND`, `LIMEN_MCP_BIND`, `LIMEN_GEOSERVER_*_BIND`,
-`LIMEN_GEODATA_*_BIND`). L'esposizione pubblica passa da un reverse proxy sulla
+`LIMEN_IDROGEO_MCP_BIND`). L'esposizione pubblica passa da un reverse proxy sulla
 443, mai legando una porta a `0.0.0.0`.
 
 ---
