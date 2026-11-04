@@ -1,0 +1,180 @@
+# Catalogo dei dati statici di Limen (#401, epic #409).
+#
+# Una voce per ogni dato che serve a un pericolo: cosa è, a cosa serve, cosa
+# succede se manca, da dove viene, sotto quale licenza, quanto pesa e come si
+# procura. `limen data-status` lo legge invece di tenerne una copia propria;
+# la pagina di installazione (#404) e i download del worker (#402) leggeranno
+# lo stesso file. Aggiungere un dato = una voce qui.
+#
+# livello:
+#   essenziale  senza, il pericolo non distingue un posto dall'altro
+#   consigliato migliora la precisione, la mappa ha senso anche senza
+#   avanzato    serve al modello ML in ombra o ai backtest, non alla mappa
+#
+# misura: come si conta la copertura — `colonna` di cell_static_factors
+# (celle con un valore) oppure `tabella` (righe).
+#
+# peso_gb: quanto si scarica la prima volta, misurato su un'installazione
+# nazionale (2026-11-03). I file che una sorgente condivide (lo stesso
+# download IdroGEO dà IFFI e i due mosaici) stanno sulla voce che li porta.
+
+voci:
+  - id: iffi
+    nome: densità frane storiche (IFFI)
+    a_cosa_serve: >-
+      Dove la terra è già franata, tende a franare di nuovo. Senza l'inventario
+      delle 721.365 frane censite, Limen non sa quali versanti hanno una storia.
+    pericoli: [landslide]
+    livello: essenziale
+    misura: {colonna: iffi_density_500}
+    variabile: GEOSERVER_SOURCE__DB_DSN
+    procura_con: make static-data
+    fonte: ISPRA IdroGEO — Inventario dei Fenomeni Franosi in Italia
+    url: https://idrogeo.isprambiente.it
+    licenza: CC-BY 4.0
+    attribuzione: ISPRA, Inventario dei Fenomeni Franosi in Italia (IFFI)
+    peso_gb: 0.84
+
+  - id: pai_frana
+    nome: pericolosità frana PAI
+    a_cosa_serve: >-
+      La classe di pericolosità che i Piani di Assetto Idrogeologico assegnano
+      a ogni area. Senza, Limen ignora la valutazione ufficiale del territorio.
+    pericoli: [landslide]
+    livello: essenziale
+    misura: {colonna: pai_class_norm}
+    variabile: GEOSERVER_SOURCE__DB_DSN
+    procura_con: make static-data
+    fonte: ISPRA IdroGEO — mosaicatura nazionale PAI frane 2020-2021
+    url: https://idrogeo.isprambiente.it
+    licenza: CC-BY 4.0
+    attribuzione: ISPRA, Mosaicatura nazionale della pericolosità da frana (PAI)
+    peso_gb: 1.09
+
+  - id: idraulica
+    nome: pericolosità idraulica ISPRA
+    a_cosa_serve: >-
+      Le aree che possono allagarsi, per probabilità alta, media e bassa. Senza,
+      ogni cella vale lo stesso valore di riserva e la mappa alluvione è uniforme.
+    pericoli: [flood]
+    livello: essenziale
+    misura: {colonna: flood_hazard_norm}
+    variabile: GEOSERVER_SOURCE__DB_DSN
+    procura_con: make static-data
+    fonte: ISPRA IdroGEO — mosaicatura nazionale della pericolosità idraulica 2020
+    url: https://idrogeo.isprambiente.it
+    licenza: CC-BY 4.0
+    attribuzione: ISPRA, Mosaicatura nazionale della pericolosità idraulica
+    peso_gb: 0.70
+
+  - id: dtm
+    nome: pendenza (DTM)
+    a_cosa_serve: >-
+      La pendenza del terreno, ricavata dal modello digitale del terreno a 5 m.
+      Senza, la frana non distingue un versante ripido da una pianura e
+      l'incendio non sa dove il fuoco risale più in fretta.
+    pericoli: [landslide, wildfire]
+    livello: essenziale
+    misura: {colonna: slope_deg}
+    variabile: LIMEN_DEM_RASTER
+    procura_con: make static-data
+    fonte: IRPI-CNR — HR-DTM Italia 5 m, versione 1.2 (Panza et al., Zenodo)
+    url: https://zenodo.org/records/18921767
+    licenza: CC-BY 4.0
+    attribuzione: Panza et al., CNR-IRPI, HR-DTM of Italy 5 m v1.2
+    peso_gb: 22.1
+
+  - id: corine
+    nome: copertura del suolo (CORINE)
+    a_cosa_serve: >-
+      Bosco, macchia, coltivi, città: dice quanto combustibile c'è in ogni
+      cella. Senza, l'incendio vale quanto il solo indice meteo FWI.
+    pericoli: [wildfire]
+    livello: essenziale
+    misura: {colonna: landuse_code}
+    variabile: LIMEN_CORINE_RASTER
+    procura_con: make static-data
+    fonte: CORINE Land Cover 2018 (SINAnet / ISPRA)
+    url: https://groupware.sinanet.isprambiente.it
+    licenza: CC-BY
+    attribuzione: >-
+      Contiene dati Copernicus Land Monitoring Service, CORINE Land Cover 2018,
+      distribuiti da ISPRA
+    peso_gb: 0.25
+
+  - id: impermeabilizzazione
+    nome: suolo impermeabilizzato (CLMS)
+    a_cosa_serve: >-
+      La percentuale di suolo coperto da asfalto e cemento, dove la pioggia non
+      si infiltra e scorre. Senza, le aree urbane sono stimate meno bene.
+    pericoli: [flood]
+    livello: essenziale
+    misura: {colonna: imperviousness_norm}
+    variabile: LIMEN_IMPERVIOUSNESS_RASTER
+    procura_con: make imperviousness-data
+    fonte: Copernicus Land Monitoring Service — Imperviousness Density 2018 (EEA)
+    url: https://land.copernicus.eu
+    licenza: Copernicus Land open licence
+    attribuzione: >-
+      Contiene dati Copernicus Land Monitoring Service, Imperviousness Density 2018
+    peso_gb: 0.005
+
+  - id: wui
+    nome: interfaccia urbano-bosco
+    a_cosa_serve: >-
+      Le case che confinano con la vegetazione, dove un incendio diventa una
+      minaccia per le persone. Si calcola dalla copertura del suolo.
+    pericoli: [wildfire]
+    livello: consigliato
+    misura: {colonna: wui_proximity_norm}
+    deriva_da: corine
+    fonte: calcolata da Limen su CORINE Land Cover 2018
+    licenza: come CORINE
+    peso_gb: 0
+
+  - id: strade
+    nome: distanza dalla rete stradale
+    a_cosa_serve: >-
+      Quanto una cella è vicina a strade principali e ferrovie, cioè cosa una
+      frana può interrompere. Pesa sull'esposizione, non sul pericolo.
+    pericoli: [landslide]
+    livello: consigliato
+    misura: {colonna: distance_to_road_m}
+    variabile: LIMEN_OSM_ROADS
+    procura_con: make fetch-static
+    fonte: OpenStreetMap (estratto Italia di Geofabrik)
+    url: https://www.openstreetmap.org
+    licenza: ODbL
+    attribuzione: © OpenStreetMap contributors
+    peso_gb: 2.0
+
+  - id: litologia
+    nome: litologia
+    a_cosa_serve: >-
+      Il tipo di roccia e di suolo: argille e detriti franano più delle rocce
+      compatte. Senza, ogni versante ha la stessa predisposizione.
+    pericoli: [landslide]
+    livello: essenziale
+    misura: {colonna: litho_weight}
+    variabile: LIMEN_GEOLOGICAL_SHAPEFILE
+    procura_con: make static-data
+    fonte: Carta geolitologica d'Italia 1:500.000 (PCN / MASE)
+    url: http://wms.pcn.minambiente.it/ogc?map=/ms_ogc/wfs/Carta_geolitologica.map
+    licenza: CC-BY 4.0
+    attribuzione: Ministero dell'Ambiente e della Sicurezza Energetica, Geoportale Nazionale
+    peso_gb: 0.02
+
+  - id: perimetri_effis
+    nome: perimetri EFFIS (truth set incendio)
+    a_cosa_serve: >-
+      Le aree effettivamente bruciate negli anni passati, con cui si verifica
+      quanto bene Limen aveva previsto gli incendi. Non entra nel punteggio.
+    pericoli: [wildfire]
+    livello: avanzato
+    misura: {tabella: fire_perimeters}
+    procura_con: make static-data
+    fonte: EFFIS — European Forest Fire Information System (JRC)
+    url: https://effis.jrc.ec.europa.eu
+    licenza: Copernicus EFFIS terms
+    attribuzione: European Forest Fire Information System (EFFIS), Copernicus EMS
+    peso_gb: 0.01
