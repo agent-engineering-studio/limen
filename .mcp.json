@@ -10,7 +10,7 @@
     },
     "copernicus-ems": {
       "command": "uvx",
-      "args": ["--from", "copernicus-ems[mcp]~=0.6", "copernicus-ems", "mcp"]
+      "args": ["--from", "copernicus-ems[mcp]~=0.7", "copernicus-ems-mcp"]
     }
   }
 }
