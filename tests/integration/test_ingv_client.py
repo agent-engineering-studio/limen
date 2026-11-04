@@ -15,8 +15,8 @@ from limen.data.repos.seismic_repo import count_events, get_event
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.ingv.shakemap_client import (
     FDSN_EVENT_URL,
-    SHAKEMAP_GRID_URL_TEMPLATE,
     IngvHttpClient,
+    shakemap_grid_url,
 )
 from limen.integrations.ingv.sync_job import run_ingv_sync
 
@@ -79,7 +79,8 @@ async def test_fetch_events_parses_features() -> None:
             )
         )
     assert len(feats) == 2
-    assert feats[0]["id"] == "ev-1"
+    assert feats[0].id == "ev-1"
+    assert feats[0].magnitude_type == "Mlv" and feats[0].place == "Murge meridionali"
 
 
 async def test_fetch_events_handles_no_content() -> None:
@@ -100,7 +101,7 @@ async def test_fetch_events_handles_no_content() -> None:
 async def test_fetch_shakemap_grid_returns_bytes() -> None:
     event_id = "ev-test-001"
     with respx.mock() as mock:
-        mock.get(SHAKEMAP_GRID_URL_TEMPLATE.format(event_id=event_id)).mock(
+        mock.get(shakemap_grid_url(event_id)).mock(
             return_value=httpx.Response(
                 200,
                 content=_FAKE_SHAKEMAP_XML,
@@ -115,9 +116,7 @@ async def test_fetch_shakemap_grid_returns_bytes() -> None:
 async def test_fetch_shakemap_grid_404_returns_none() -> None:
     event_id = "ev-no-shakemap"
     with respx.mock() as mock:
-        mock.get(SHAKEMAP_GRID_URL_TEMPLATE.format(event_id=event_id)).mock(
-            return_value=httpx.Response(404)
-        )
+        mock.get(shakemap_grid_url(event_id)).mock(return_value=httpx.Response(404))
         client = IngvHttpClient()
         body = await client.fetch_shakemap_grid(event_id)
     assert body is None
@@ -154,12 +153,11 @@ async def test_run_ingv_sync_upserts_events_and_shakemap(
                 ),
             )
         )
-        mock.get(SHAKEMAP_GRID_URL_TEMPLATE.format(event_id=event_with)).mock(
+        mock.get(shakemap_grid_url(event_with)).mock(
             return_value=httpx.Response(200, content=_FAKE_SHAKEMAP_XML)
         )
-        mock.get(SHAKEMAP_GRID_URL_TEMPLATE.format(event_id=event_without)).mock(
-            return_value=httpx.Response(404)
-        )
+        mock.get(shakemap_grid_url(event_without)).mock(return_value=httpx.Response(404))
+        mock.get(url__regex=r".*/info\.json").mock(return_value=httpx.Response(404))
 
         store = FilesystemObjectStore(tmp_path)
         result = await run_ingv_sync(
@@ -170,7 +168,7 @@ async def test_run_ingv_sync_upserts_events_and_shakemap(
         )
 
     # La ShakeMap finta non ha griglia: si salva il file, nessuna cella.
-    assert result == {"events": 2, "shakemaps": 1, "celle": 0}
+    assert result == {"events": 2, "shakemaps": 1, "celle": 0, "invariate": 0}
     assert await count_events() == 2
     assert await count_raster_refs("shakemap_grid") == 1
 

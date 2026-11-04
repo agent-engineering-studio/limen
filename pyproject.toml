@@ -52,6 +52,7 @@ dependencies = [
     "copernicus-ems[cdse]~=0.5.1",
     "ispra-idrogeo~=0.7.0",
     "imageserver-export~=0.2.0",
+    "ingv-shakemap~=0.2.0",
 ]
 
 [project.scripts]

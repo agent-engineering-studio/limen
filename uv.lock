@@ -1827,6 +1827,19 @@ wheels = [
 ]
 
 [[package]]
+name = "ingv-shakemap"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8e/a2/f9e825a265ec4279a0ba59a31e12043974e9f8ab4755e25ecbda6bd8adf4/ingv_shakemap-0.2.0.tar.gz", hash = "sha256:d90a4449a91a49660c7cf3b251ee5fe38cd6c1c3d3f6efe65e8f70a7e40e2195", size = 25902, upload-time = "2026-11-04T15:01:20.279Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/00/dc/a8f989e8dd851a66dab37959fcc13f51dc3f818df64d36d5bfd0db331c8e/ingv_shakemap-0.2.0-py3-none-any.whl", hash = "sha256:0242c0ba97ab2bb1a74e19cff972570b45af5ab40761f96cc44a9cc8557e1ae4", size = 24469, upload-time = "2026-11-04T15:01:18.97Z" },
+]
+
+[[package]]
 name = "iniconfig"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2264,6 +2277,7 @@ dependencies = [
     { name = "geopandas" },
     { name = "httpx" },
     { name = "imageserver-export" },
+    { name = "ingv-shakemap" },
     { name = "ispra-idrogeo" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
@@ -2352,6 +2366,7 @@ requires-dist = [
     { name = "geopandas", specifier = ">=1.0" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "imageserver-export", specifier = "~=0.2.0" },
+    { name = "ingv-shakemap", specifier = "~=0.2.0" },
     { name = "ispra-idrogeo", specifier = "~=0.7.0" },
     { name = "opentelemetry-api", specifier = ">=1.27" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.27" },
