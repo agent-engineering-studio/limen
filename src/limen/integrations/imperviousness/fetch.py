@@ -141,11 +141,18 @@ async def fetch_imperviousness(
         tile_px=tile_px,
         concurrency=_CONCURRENCY,
         on_tile=_avanzamento,
+        # Un'interruzione a metà Italia non riparte da zero: le tessere già
+        # arrivate restano in `<dest>.tiles/` e il giro dopo chiede solo le
+        # mancanti. La cartella sparisce quando il file è completo.
+        resume=True,
+        tags={"limen_layer": "clms_imd_2018", "limen_resolution_m": f"{RESOLUTION_M:g}"},
     )
     log.info(
         "imperviousness.fetch.done",
         path=str(target),
         size_mb=round(target.stat().st_size / 1e6, 1),
+        tiles=result.tiles,
+        reused=result.reused,
         valid_px=result.valid_px,
         valid_fraction=round(result.valid_fraction, 3),
     )

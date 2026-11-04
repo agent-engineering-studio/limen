@@ -61,7 +61,12 @@ async def test_le_tessere_passano_dal_retry_di_limen(
     with rasterio.open(dest) as r:
         assert r.crs.to_epsg() == 3035 and r.res == (100.0, 100.0) and r.nodata == 255
         assert (r.read(1) == 40).all()
-    assert not list(tmp_path.glob("*.part"))
+        # La provenienza viaggia con il file: da dove, come, e per cosa.
+        tags = r.tags()
+        assert tags["source"].endswith("/HRL_ImperviousnessDensity_2018/ImageServer")
+        assert tags["valid_range"] == "0,100" and tags["limen_layer"] == "clms_imd_2018"
+    # Né il `.part` né la cartella delle tessere di `resume` sopravvivono a un giro riuscito.
+    assert not list(tmp_path.glob("*.part")) and not list(tmp_path.glob("*.tiles"))
 
 
 async def test_un_file_presente_non_si_riscarica(
