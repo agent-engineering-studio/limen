@@ -1,10 +1,17 @@
-"""La griglia ShakeMap INGV letta per punto (#284), nel formato verificato dal vivo."""
+"""La PGA di una ShakeMap INGV sulle celle (#284), nel formato verificato dal vivo.
+
+Il parser è di ``ingv-shakemap``; qui si prova quello che Limen ci mette sopra.
+"""
 
 from __future__ import annotations
 
 import pytest
 
-from limen.integrations.ingv.shakemap_grid import GrigliaNonValidaError, leggi_griglia
+from limen.integrations.ingv.shakemap_grid import (
+    GrigliaNonValidaError,
+    celle_scosse,
+    leggi_griglia,
+)
 
 
 def griglia_xml(righe: list[str], *, nlon: int = 3, nlat: int = 2) -> bytes:
@@ -36,16 +43,24 @@ RIGHE = [
 
 def test_la_pga_e_in_g_e_si_legge_dal_punto_piu_vicino() -> None:
     g = leggi_griglia(griglia_xml(RIGHE))
-    assert g.pga_in(10.1, 43.1) == pytest.approx(0.075)
-    assert g.pga_in(10.04, 43.02) == pytest.approx(0.02)
-    assert g.pga_in(10.2, 43.0) == pytest.approx(0.005)
-    assert g.riquadro == pytest.approx((10.0, 43.0, 10.2, 43.1))
+    assert g.pga_g(10.1, 43.1) == pytest.approx(0.075)
+    assert g.pga_g(10.04, 43.02) == pytest.approx(0.02)
+    assert g.pga_g(10.2, 43.0) == pytest.approx(0.005)
+    assert g.bbox == pytest.approx((10.0, 43.0, 10.2, 43.1))
 
 
-def test_fuori_dalla_griglia_non_c_e_valore() -> None:
+def test_solo_le_celle_scosse_oltre_la_soglia() -> None:
     g = leggi_griglia(griglia_xml(RIGHE))
-    assert g.pga_in(9.5, 43.05) is None
-    assert g.pga_in(10.1, 44.0) is None
+    celle = [
+        ("forte", 10.1, 43.1),  # 7,5 %g
+        ("al_limite", 10.04, 43.02),  # 2 %g: conta
+        ("debole", 10.2, 43.0),  # 0,5 %g
+        ("fuori_ovest", 9.5, 43.05),
+        ("fuori_nord", 10.1, 44.0),
+    ]
+    scosse = dict(celle_scosse(g, celle, 0.02))
+    assert scosse == pytest.approx({"forte": 0.075, "al_limite": 0.02})
+    assert celle_scosse(g, [], 0.02) == []
 
 
 @pytest.mark.parametrize(
@@ -54,6 +69,7 @@ def test_fuori_dalla_griglia_non_c_e_valore() -> None:
         b"<non xml",
         griglia_xml(RIGHE[:4]),  # righe che non tornano con nlon x nlat
         griglia_xml(RIGHE).replace(b'name="PGA"', b'name="PGV"'),
+        griglia_xml(RIGHE).replace(b'units="%g"', b'units="m/s2"'),
         # Codex, #288: un indice di campo oltre le colonne dei dati.
         griglia_xml(RIGHE).replace(b'index="4" name="PGA"', b'index="9" name="PGA"'),
     ],

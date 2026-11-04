@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 import pytest
+from ingv_shakemap import Event
+from ingv_shakemap.events import parse_event
 
 from limen.cli import backtest
 from limen.core.models.risk import StaticFactors
@@ -45,10 +47,11 @@ class _Finto:
     def __init__(self, **_: Any) -> None:
         pass
 
-    async def fetch_events(self, **kw: Any) -> list[dict[str, Any]]:
+    async def fetch_events(self, **kw: Any) -> list[Event]:
         assert kw.pop("solleva") is True
         _Finto.finestra = kw
-        return [_evento("con-mappa", 5.0), _evento("senza-mappa", 4.0)]
+        eventi = [parse_event(_evento("con-mappa", 5.0)), parse_event(_evento("senza-mappa", 4.0))]
+        return [e for e in eventi if e is not None]
 
     async def fetch_shakemap_grid(self, event_id: str, *, solleva: bool = False) -> bytes | None:
         assert solleva, "il backtest non deve scambiare un guasto per «nessuna ShakeMap»"
@@ -101,7 +104,7 @@ async def test_un_catalogo_irraggiungibile_ferma_il_backtest(
 ) -> None:
     """Codex su #310: un catalogo che non risponde non è un periodo senza terremoti."""
 
-    async def guasto(self: _Finto, **kw: Any) -> list[dict[str, Any]]:
+    async def guasto(self: _Finto, **kw: Any) -> list[Event]:
         raise shakemap_client.IngvNonDisponibileError("catalogo FDSN: HTTP 503")
 
     monkeypatch.setattr(_Finto, "fetch_events", guasto)

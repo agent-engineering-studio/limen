@@ -14,9 +14,9 @@ import respx
 
 from limen.integrations.ingv.shakemap_client import (
     FDSN_EVENT_URL,
-    SHAKEMAP_GRID_URL_TEMPLATE,
     IngvHttpClient,
     IngvNonDisponibileError,
+    shakemap_grid_url,
 )
 
 FINESTRA = {
@@ -38,9 +38,7 @@ async def _eventi(risposta: httpx.Response, *, solleva: bool) -> list[object]:
 async def _griglia(risposta: httpx.Response, *, solleva: bool) -> bytes | None:
     async with httpx.AsyncClient() as http:
         with respx.mock:
-            respx.get(SHAKEMAP_GRID_URL_TEMPLATE.format(event_id="7073641")).mock(
-                return_value=risposta
-            )
+            respx.get(shakemap_grid_url("7073641")).mock(return_value=risposta)
             return await IngvHttpClient(http_client=http).fetch_shakemap_grid(
                 "7073641", solleva=solleva
             )
@@ -69,3 +67,30 @@ async def test_una_shakemap_rifiutata_e_un_guasto() -> None:
     assert await _griglia(httpx.Response(403), solleva=False) is None
     with pytest.raises(IngvNonDisponibileError):
         await _griglia(httpx.Response(403), solleva=True)
+
+
+async def test_info_json_della_mappa() -> None:
+    info = {
+        "input": {"event_information": {"event_id": "7073641"}},
+        "output": {},
+        "processing": {"shakemap_versions": {"map_version": 4, "map_status": "automatic"}},
+    }
+    async with httpx.AsyncClient() as http:
+        with respx.mock:
+            respx.get(shakemap_grid_url("7073641").replace("grid.xml", "info.json")).mock(
+                return_value=httpx.Response(200, json=info)
+            )
+            letta = await IngvHttpClient(http_client=http).fetch_info("7073641")
+    assert letta is not None and (letta.version, letta.map_status) == (4, "automatic")
+
+
+async def test_info_json_rifiutato() -> None:
+    async def info(*, solleva: bool) -> object:
+        async with httpx.AsyncClient() as http:
+            with respx.mock:
+                respx.get(url__regex=r".*/info\.json").mock(return_value=httpx.Response(403))
+                return await IngvHttpClient(http_client=http).fetch_info("1", solleva=solleva)
+
+    assert await info(solleva=False) is None
+    with pytest.raises(IngvNonDisponibileError):
+        await info(solleva=True)

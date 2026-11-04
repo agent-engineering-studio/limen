@@ -1,38 +1,49 @@
-"""INGV FDSN event client + ShakeMap grid.xml fetcher.
+"""INGV: catalogo FDSN e ShakeMap, attraverso il pacchetto ``ingv-shakemap``.
 
-FDSN event web service: ``https://webservices.ingv.it/fdsnws/event/1/query``
-ShakeMap grid:          ``https://shakemap.ingv.it/data/{eventID}/current/products/grid.xml``
-                        (il prefisso ``/shake4/`` di prima risponde 404 per ogni evento,
-                        verificato il 19 ottobre 2026, #284)
+Il pacchetto (estratto da qui, Apache-2.0, ``agent-engineering-studio/ingv-shakemap``)
+sa leggere INGV: le richieste, il 204 di una finestra vuota, il 404 di un evento
+senza mappa, il ``properties.eventId``, l'ordine delle righe di ``grid.xml``.
+Limen gli passa ``send``: ogni richiesta va per ``fetch_with_retry`` sul client
+condiviso, con la politica di retry comune, e il pacchetto non ne fa di sue.
 
-Both endpoints sometimes 404 or 5xx — terminal failures degrade to an
-empty list / ``None`` so the workflow keeps running.
-
-`fetch_shakemap_grid` returns raw XML bytes; parsing the PGA grid lives
-in :mod:`limen.integrations.ingv.shakemap_grid` so the client stays a
-thin transport layer.
+Qui resta quello che è di Limen: un guasto in lettura degrada a un risultato
+neutro e scrive ``integration.degraded``, oppure, con ``solleva=True``, solleva
+:class:`IngvNonDisponibileError` (il backtest lo chiede).
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 import httpx
+from ingv_shakemap import (
+    FDSN_EVENT_URL,
+    Event,
+    IngvClient,
+    IngvError,
+    ShakeMapInfo,
+    shakemap_grid_url,
+)
 from tenacity import RetryError
 
 from limen.core.logging import get_logger
 from limen.integrations._http import SharedHttpClient, fetch_with_retry
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Awaitable, Callable
 
 log = get_logger(__name__)
 
-FDSN_EVENT_URL = "https://webservices.ingv.it/fdsnws/event/1/query"
-SHAKEMAP_GRID_URL_TEMPLATE = "https://shakemap.ingv.it/data/{event_id}/current/products/grid.xml"
+__all__ = [
+    "FDSN_EVENT_URL",
+    "IngvHttpClient",
+    "IngvNonDisponibileError",
+    "shakemap_grid_url",
+]
 
 _DEGRADATION_EXC: tuple[type[BaseException], ...] = (
+    IngvError,
     httpx.HTTPError,
     RetryError,
     TimeoutError,
@@ -50,13 +61,15 @@ class IngvNonDisponibileError(RuntimeError):
 
 
 class IngvHttpClient:
-    """Concrete :class:`IngvClient` Protocol implementation."""
+    """INGV per Limen: il pacchetto ``ingv-shakemap`` sul client HTTP condiviso."""
 
     def __init__(self, *, http_client: httpx.AsyncClient | None = None) -> None:
         self._http = http_client
+        self._ingv = IngvClient(send=self._send)
 
-    async def _client(self) -> httpx.AsyncClient:
-        return self._http if self._http is not None else await SharedHttpClient.get()
+    async def _send(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        client = self._http if self._http is not None else await SharedHttpClient.get()
+        return await fetch_with_retry(method, url, client=client, **kwargs)
 
     async def fetch_events(
         self,
@@ -66,26 +79,13 @@ class IngvHttpClient:
         end: datetime,
         min_magnitude: float = 3.5,
         solleva: bool = False,
-    ) -> Iterable[dict[str, Any]]:
-        """Return FDSN event features (GeoJSON) intersecting ``bbox`` and ``[start, end]``.
+    ) -> list[Event]:
+        """I terremoti di ``bbox`` tra ``start`` ed ``end``, i più recenti prima.
 
-        On terminal HTTP failure: returns ``[]`` and logs ``integration.degraded``,
-        or raises :class:`IngvNonDisponibileError` with ``solleva=True``. An
-        empty window (204) is ``[]`` either way.
+        Una finestra vuota (204) è ``[]`` in ogni caso; un guasto è ``[]`` con
+        ``integration.degraded``, o :class:`IngvNonDisponibileError` con
+        ``solleva=True``.
         """
-        min_lon, min_lat, max_lon, max_lat = bbox
-        params: dict[str, Any] = {
-            "format": "geojson",
-            # FDSN vuole l'UTC senza offset né microsecondi.
-            "starttime": start.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S"),
-            "endtime": end.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S"),
-            "minlatitude": min_lat,
-            "maxlatitude": max_lat,
-            "minlongitude": min_lon,
-            "maxlongitude": max_lon,
-            "minmagnitude": min_magnitude,
-            "orderby": "time",
-        }
         log.info(
             "ingv.events.fetch",
             bbox=bbox,
@@ -93,77 +93,71 @@ class IngvHttpClient:
             end=end.isoformat(),
             min_magnitude=min_magnitude,
         )
-        try:
-            resp = await fetch_with_retry(
-                "GET", FDSN_EVENT_URL, client=await self._client(), params=params
-            )
-        except _DEGRADATION_EXC as exc:
-            if solleva:
-                raise IngvNonDisponibileError(f"catalogo FDSN: {exc}") from exc
-            log.warning(
-                "integration.degraded",
-                label="ingv.events",
-                error=str(exc),
-                error_type=type(exc).__name__,
-            )
-            return []
-
-        # Prima l'errore e poi il vuoto: un 4xx senza corpo non è una finestra
-        # senza terremoti, e passava per tale.
-        if resp.status_code >= 400:
-            # fetch_with_retry restituisce le 4xx senza sollevare.
-            if solleva:
-                raise IngvNonDisponibileError(f"catalogo FDSN: HTTP {resp.status_code}")
-            log.warning("integration.degraded", label="ingv.events", status=resp.status_code)
-            return []
-
-        # The FDSN event service sometimes returns 204/No Content for empty windows.
-        if resp.status_code == 204 or not resp.content:
-            return []
-        try:
-            payload = resp.json()
-        except ValueError as exc:
-            if solleva:
-                raise IngvNonDisponibileError("catalogo FDSN: JSON non valido") from exc
-            log.warning("integration.degraded", label="ingv.events", error_type="json")
-            return []
-        features = list(payload.get("features") or [])
-        log.info("ingv.events.fetched", count=len(features))
-        return features
+        nessuno: list[Event] = []
+        eventi = await self._leggi(
+            lambda: self._ingv.events(start, end, bbox=bbox, min_magnitude=min_magnitude),
+            neutro=nessuno,
+            cosa="catalogo FDSN",
+            label="ingv.events",
+            solleva=solleva,
+        )
+        log.info("ingv.events.fetched", count=len(eventi))
+        return eventi
 
     async def fetch_shakemap_grid(self, event_id: str, *, solleva: bool = False) -> bytes | None:
-        """Return the raw ``grid.xml`` for ``event_id``, or ``None`` if not published.
+        """Il ``grid.xml`` grezzo di un evento; ``None`` se INGV non ha una ShakeMap (404).
 
-        404 is treated as "no ShakeMap" (a legitimate state for small events);
-        5xx is treated as transient and degrades to ``None``, or raises
-        :class:`IngvNonDisponibileError` with ``solleva=True``.
+        Ogni altro guasto è ``None`` con ``integration.degraded``, o
+        :class:`IngvNonDisponibileError` con ``solleva=True``.
         """
-        url = SHAKEMAP_GRID_URL_TEMPLATE.format(event_id=event_id)
-        log.info("ingv.shakemap.fetch", event_id=event_id, url=url)
+        log.info("ingv.shakemap.fetch", event_id=event_id)
+
+        async def griglia() -> bytes | None:
+            grezzo = await self._ingv.shakemap_xml(event_id)
+            if grezzo is None:
+                log.info("ingv.shakemap.absent", event_id=event_id)
+            return grezzo
+
+        return await self._leggi(
+            griglia,
+            neutro=None,
+            cosa=f"ShakeMap {event_id}",
+            label="ingv.shakemap",
+            solleva=solleva,
+            event_id=event_id,
+        )
+
+    async def fetch_info(self, event_id: str, *, solleva: bool = False) -> ShakeMapInfo | None:
+        """L'``info.json`` della ShakeMap (pochi kB): versione e stato, senza la griglia."""
+        return await self._leggi(
+            lambda: self._ingv.info(event_id),
+            neutro=None,
+            cosa=f"ShakeMap {event_id} info.json",
+            label="ingv.shakemap.info",
+            solleva=solleva,
+            event_id=event_id,
+        )
+
+    async def _leggi[T](
+        self,
+        chiamata: Callable[[], Awaitable[T]],
+        *,
+        neutro: T,
+        cosa: str,
+        label: str,
+        solleva: bool,
+        **contesto: Any,
+    ) -> T:
         try:
-            resp = await fetch_with_retry("GET", url, client=await self._client())
+            return await chiamata()
         except _DEGRADATION_EXC as exc:
             if solleva:
-                raise IngvNonDisponibileError(f"ShakeMap {event_id}: {exc}") from exc
+                raise IngvNonDisponibileError(f"{cosa}: {exc}") from exc
             log.warning(
                 "integration.degraded",
-                label="ingv.shakemap",
-                event_id=event_id,
+                label=label,
                 error=str(exc),
                 error_type=type(exc).__name__,
+                **contesto,
             )
-            return None
-
-        if resp.status_code == 404:
-            log.info("ingv.shakemap.absent", event_id=event_id)
-            return None
-        if resp.status_code >= 400:
-            if solleva:
-                raise IngvNonDisponibileError(f"ShakeMap {event_id}: HTTP {resp.status_code}")
-            log.warning(
-                "ingv.shakemap.bad_status",
-                event_id=event_id,
-                status=resp.status_code,
-            )
-            return None
-        return bytes(resp.content)
+            return neutro
