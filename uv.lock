@@ -1152,6 +1152,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/5f/89/34ca71dccdf84eab7e219c522d65896bb5a9259629a00ca82db3d9d2ce3f/dpc_radar-0.2.0-py3-none-any.whl", hash = "sha256:b8cbe89f66103845012f3765a3cb85f4173b9cf2e166e4c120b1a5d40563f054", size = 35368, upload-time = "2026-11-05T13:29:37.872Z" },
 ]
 
+[package.optional-dependencies]
+bulletins = [
+    { name = "shapely" },
+]
+
 [[package]]
 name = "ecmwf-datastores-client"
 version = "0.5.3"
@@ -2294,7 +2299,7 @@ dependencies = [
     { name = "cbor2" },
     { name = "copernicus-ems", extra = ["cdse"] },
     { name = "cryptography" },
-    { name = "dpc-radar" },
+    { name = "dpc-radar", extra = ["bulletins"] },
     { name = "effis-client", extra = ["raster"] },
     { name = "egms-client", extra = ["raster"] },
     { name = "fastapi" },
@@ -2385,7 +2390,7 @@ requires-dist = [
     { name = "cbor2", specifier = ">=6.1" },
     { name = "copernicus-ems", extras = ["cdse"], specifier = "~=0.7.0" },
     { name = "cryptography", specifier = ">=43" },
-    { name = "dpc-radar", specifier = "~=0.2.0" },
+    { name = "dpc-radar", extras = ["bulletins"], specifier = "~=0.2.0" },
     { name = "effis-client", extras = ["raster"], specifier = "~=0.1.2" },
     { name = "egms-client", extras = ["raster"], specifier = "~=0.7.0" },
     { name = "fastapi", specifier = ">=0.115" },

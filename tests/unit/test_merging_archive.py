@@ -4,21 +4,17 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
+import httpx
 import numpy as np
 import pytest
 import rasterio
+from dpc_radar import ABSENT, Absent
 from rasterio.transform import from_origin
 
 from limen.integrations.dpc import merging_archive
-from limen.integrations.dpc.client import ASSENTE
-from limen.integrations.dpc.merging_archive import (
-    MergingArchive,
-    _disaggrega,
-    archivia,
-    istanti,
-    percorso,
-)
+from limen.integrations.dpc.merging_archive import MergingArchive, archivia, istanti, percorso
 
 _T = datetime(2026, 10, 10, 0, tzinfo=UTC)
 
@@ -34,20 +30,15 @@ def test_il_percorso_e_per_prodotto_e_giorno(tmp_path: Path) -> None:
     assert p == tmp_path / "CUM3/2026/06/01/CUM3_202606010300.tif"
 
 
-@pytest.mark.parametrize(
-    ("merging", "radar", "j", "atteso"),
-    [
-        (30.0, [1.0, 2.0, 3.0], 2, 15.0),  # il radar dice quando, il merging quanto
-        (30.0, [0.0, 0.0, 0.0], 0, 10.0),  # radar cieco: tre parti uguali
-        (30.0, [1.0, None, 3.0], 0, 10.0),  # un'ora di radar mancante: idem
-        (None, [1.0, 2.0, 3.0], 1, 2.0),  # senza merging resta il radar
-        (None, [1.0, None, 3.0], 1, None),  # senza nessuno dei due: non misurata
-    ],
-)
-def test_la_quota_di_un_ora_nel_blocco(
-    merging: float | None, radar: list[float | None], j: int, atteso: float | None
-) -> None:
-    assert _disaggrega(merging, radar, j) == atteso
+class _Radar:
+    """Il client dell'archivio, finto: ``scarica(prodotto, t)`` decide la risposta."""
+
+    def __init__(self, scarica: Any) -> None:
+        self.download = scarica
+
+
+def _usa(monkeypatch: pytest.MonkeyPatch, scarica: Any) -> None:
+    monkeypatch.setattr(merging_archive, "radar_archivio", lambda: _Radar(scarica))
 
 
 async def test_archivia_e_idempotente_e_ritenta_i_falliti(
@@ -55,15 +46,15 @@ async def test_archivia_e_idempotente_e_ritenta_i_falliti(
 ) -> None:
     chiesti: list[tuple[str, datetime]] = []
 
-    async def _scarica(prodotto: str, t: datetime) -> bytes | str | None:
+    async def _scarica(prodotto: str, t: datetime) -> bytes | Absent:
         chiesti.append((prodotto, t))
         if t.hour == 3:
-            return ASSENTE
+            return ABSENT
         if t.hour == 4:
-            return None
+            raise httpx.ConnectError("rete")
         return b"tif"
 
-    monkeypatch.setattr(merging_archive, "scarica_fotogramma", _scarica)
+    _usa(monkeypatch, _scarica)
     adesso = _T + timedelta(hours=8)  # ultimo istante: 06:00
     primo = await archivia(tmp_path, giorni=1, massimo=10_000, adesso=adesso)
     # Un 403 di cinque ore fa è un fotogramma non ancora pubblicato (#360).
@@ -86,11 +77,11 @@ async def test_un_403_vecchio_e_perso_e_non_si_ritenta(
 ) -> None:
     chiesti: list[datetime] = []
 
-    async def _scarica(prodotto: str, t: datetime) -> bytes | str:
+    async def _scarica(prodotto: str, t: datetime) -> bytes | Absent:
         chiesti.append(t)
-        return ASSENTE if t == _T else b"tif"
+        return ABSENT if t == _T else b"tif"
 
-    monkeypatch.setattr(merging_archive, "scarica_fotogramma", _scarica)
+    _usa(monkeypatch, _scarica)
     adesso = _T + timedelta(days=8)
     primo = await archivia(tmp_path, giorni=9, massimo=10_000, adesso=adesso)
     assert primo["persi"] == 2  # CUM3 e SRT1 delle 00 di otto giorni fa
@@ -108,7 +99,7 @@ async def test_lo_sweep_scarica_prima_le_ore_recenti(
         chiesti.append((prodotto, t))
         return b"tif"
 
-    monkeypatch.setattr(merging_archive, "scarica_fotogramma", _scarica)
+    _usa(monkeypatch, _scarica)
     adesso = _T + timedelta(hours=8)
     await archivia(tmp_path, giorni=1, massimo=1, adesso=adesso, recenti_prima=True)
     assert chiesti == [("CUM3", _T + timedelta(hours=6))]
@@ -118,7 +109,7 @@ async def test_archivia_si_ferma_al_tetto(tmp_path: Path, monkeypatch: pytest.Mo
     async def _scarica(prodotto: str, t: datetime) -> bytes:
         return b"tif"
 
-    monkeypatch.setattr(merging_archive, "scarica_fotogramma", _scarica)
+    _usa(monkeypatch, _scarica)
     conti = await archivia(tmp_path, giorni=2, massimo=5, adesso=_T)
     assert conti["scaricati"] == 5
 
@@ -160,3 +151,10 @@ def test_un_file_corrotto_e_un_ora_non_misurata(tmp_path: Path) -> None:
     file.write_bytes(b"<Error>AccessDenied</Error>")
     ore = MergingArchive(tmp_path).oraria([(15.02, 37.98)], _T, _T + timedelta(hours=3))
     assert {v[0] for v in ore.values()} == {None}
+
+
+def test_un_archivio_scritto_da_limen_resta_leggibile(tmp_path: Path) -> None:
+    """Gli ``assenti.txt`` di prima del pacchetto non si richiedono."""
+    (tmp_path / "CUM3").mkdir()
+    (tmp_path / "CUM3" / "assenti.txt").write_text(f"{_T:%Y%m%d%H%M}\n")
+    assert f"{_T:%Y%m%d%H%M}" in merging_archive.dpc_archive._absent(tmp_path, "CUM3")

@@ -1,14 +1,17 @@
 """Il bollettino di criticità DPC (#155): le parti pure dell'import.
 
 Il bollettino è già strutturato — testo del livello, zona, poligono — e
-questi test fissano come si legge, senza rete.
+questi test fissano come lo legge ``dpc_radar.bulletins``, senza rete: è ciò
+che finisce in ``dpc_allerte``.
 """
 
 from __future__ import annotations
 
 from datetime import date
 
-from limen.integrations.dpc.bollettini import emissione, livello, zone_da_geojson
+from dpc_radar.bulletins import issued as emissione
+from dpc_radar.bulletins import level as livello
+from dpc_radar.bulletins import zones_from_geojson as zone_da_geojson
 
 _NESSUNA = "Assenza di fenomeni significativi prevedibili / NESSUNA ALLERTA"
 
@@ -51,6 +54,6 @@ def test_le_zone_portano_i_tre_rischi_e_un_multipoligono() -> None:
         ]
     }
     [zona] = zone_da_geojson(dati, date(2026, 10, 6))
-    assert zona.zona == "Bacino di Levante / Carso"
-    assert (zona.livello, zona.idrogeologico, zona.idraulico, zona.temporali) == (1, 0, 0, 1)
-    assert zona.geom.geom_type == "MultiPolygon"
+    assert zona.name == "Bacino di Levante / Carso"
+    assert (zona.level, zona.hydrogeological, zona.hydraulic, zona.thunderstorms) == (1, 0, 0, 1)
+    assert zona.geometry.geom_type == "MultiPolygon"

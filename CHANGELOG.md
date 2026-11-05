@@ -16,6 +16,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+* **Archivio «Merging» e bollettini DPC dal pacchetto `dpc-radar` 0.2.**
+  `integrations/dpc/merging_archive.py` usa `dpc_radar.archive` (download
+  idempotente, ricostruzione oraria: 0 differenze su 20 fotogrammi reali) e
+  `bollettini.py` le parti pure di `dpc_radar.bulletins`; l'HTTP resta su
+  `_http`. I nuovi fotogrammi persi vanno in `absent.txt`, i vecchi
+  `assenti.txt` si leggono ancora. `sri_archive.py` resta di Limen: il
+  pacchetto corregge la prima ora persa della finestra, e cambiare i numeri
+  del backtest chiede un backtest.
+
 * **INGV passa per il pacchetto `ingv-shakemap` 0.2** (estratto da qui,
   Apache-2.0). `integrations/ingv/` resta come adattatore: il client gli passa
   `send=` su `fetch_with_retry`, quindi retry e degradazione restano quelli di
