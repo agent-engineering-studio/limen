@@ -452,7 +452,7 @@ rule stays in Limen. The numbers that tune a hazard stay in
 
 | Package | Pin in Limen | Licence |
 |---|---|---|
-| [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) | `~=0.7.0` | Apache-2.0 |
+| [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) | `~=0.7.1` | Apache-2.0 |
 | [`egms-client`](https://pypi.org/project/egms-client/) | `~=0.7.0` | Apache-2.0 |
 | [`firms-client`](https://pypi.org/project/firms-client/) | `~=0.5.0` | Apache-2.0 |
 | [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) | `~=0.7.0` | Apache-2.0 |

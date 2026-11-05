@@ -863,6 +863,19 @@ class CopernicusSettings(BaseSettings):
     #: Oltre questa età la corsa salvata non vale più come previsione, e il
     #: ramo fluviale torna a chiedere a Open-Meteo.
     eta_massima_giorni: int = Field(default=2, ge=1)
+    #: Tetto mensile di Limen sulle processing unit del Copernicus Data Space
+    #: (`limen ems-sentinel1`), sotto le 10.000 al mese di un account generico:
+    #: il resto resta a chi usa lo stesso account per altro. Le credenziali le
+    #: legge la libreria (CDSE_CREDENTIALS_FILE, o CDSE_CLIENT_ID/_SECRET).
+    cdse_pu_mensili: float = Field(default=1000.0, ge=0)
+    #: 40 m e non i 20 di default della libreria: è la risoluzione delle coppie
+    #: già pagate (artifact ems-data), che si riusano a 0 PU solo così, e costa
+    #: un quarto.
+    s1_risoluzione_m: float = Field(default=40.0, gt=0)
+    #: Anche il passaggio pre-evento della stessa orbita (circa il doppio delle
+    #: PU): è ciò che fa il change detection, l'unico che migliora sulle
+    #: etichette indipendenti.
+    s1_riferimento: bool = True
 
     @property
     def attivo(self) -> bool:

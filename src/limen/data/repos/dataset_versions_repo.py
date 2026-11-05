@@ -98,3 +98,20 @@ async def record(
         )
     assert row is not None
     return int(row["id"])
+
+
+async def sum_metadata_since(source: str, dataset: str, key: str, since: datetime) -> float:
+    """Somma di ``metadata[key]`` (numerico) per le righe registrate da ``since``."""
+    async with acquire() as conn:
+        value = await conn.fetchval(
+            """
+            SELECT coalesce(sum((metadata ->> $3)::double precision), 0)
+            FROM dataset_versions
+            WHERE source = $1 AND dataset = $2 AND fetched_at >= $4
+            """,
+            source,
+            dataset,
+            key,
+            since,
+        )
+    return float(value or 0.0)
