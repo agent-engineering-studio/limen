@@ -50,6 +50,8 @@ from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Literal
 
+from copernicus_ems.ml import Scores
+
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
 from limen.core.models.risk import (
@@ -116,6 +118,10 @@ def _at_least(level: RiskLevel, threshold: RiskLevel) -> bool:
     return _LEVEL_ORDER.index(level) >= _LEVEL_ORDER.index(threshold)
 
 
+#: ``Scores`` è immutabile: un solo zero condiviso come default.
+_NESSUNA_CELLA = Scores.zero()
+
+
 @dataclass(frozen=True, slots=True)
 class FloodBacktestMetrics:
     aoi_id: str
@@ -149,6 +155,12 @@ class FloodBacktestMetrics:
     #: Inizio effettivo della replica: `issued` parte dall'archivio delle
     #: previsioni emesse, che comincia dopo la finestra degli eventi.
     window_start: date | None
+    #: Tabella di contingenza **per cella** sull'intera finestra, con la classe
+    #: di ``copernicus_ems.ml``: CSI, POD, FAR e bias dello stesso modello che
+    #: misurano le mappe satellitari. Le celle allertate che nessun passaggio
+    #: ha verificato stanno in ``unobserved_predicted``, mai fra i falsi.
+    #: L'area del pixel è 0: si contano celle, non km².
+    celle: Scores = _NESSUNA_CELLA
 
 
 def _unmeasurable(aoi_id: str, mode: Mode, *, days: int) -> FloodBacktestMetrics:
@@ -771,6 +783,10 @@ def _metrics(
     false_days = 0
     unverifiable = 0
     episodes = 0
+    # Per la tabella per cella: una cella non allagata è un falso allarme se
+    # almeno un suo giorno di allerta è stato smentito da un passaggio.
+    false_cells: set[str] = set()
+    unverified_cells: set[str] = set()
     for cell_id, days_alert in tally.alert_days.items():
         flooded_at = tally.truth.get(cell_id)
         passes = observed.get(cell_id, ())
@@ -785,11 +801,24 @@ def _metrics(
                 true_days += 1
             elif any(moment < when <= deadline for when in passes):
                 false_days += 1
+                false_cells.add(cell_id)
             else:
                 unverifiable += 1
+                if flooded_at is None:
+                    unverified_cells.add(cell_id)
 
     hit_rate = hits / len(tally.truth) if tally.truth else 0.0
     verifiable = true_days + false_days
+    unverified_cells -= false_cells
+    dry_observed = {c for c in observed if c not in tally.truth}
+    celle = Scores(
+        hits=hits,
+        misses=len(tally.truth) - hits,
+        false_alarms=len(false_cells),
+        correct_negatives=len(dry_observed - false_cells - unverified_cells),
+        unobserved_predicted=len(unverified_cells),
+        pixel_area_km2=0.0,
+    )
     return FloodBacktestMetrics(
         aoi_id=aoi_id,
         mode=mode,
@@ -812,12 +841,20 @@ def _metrics(
         fluvial_driven=tally.fluvial_driven,
         measurable=tally.measurable,
         window_start=window_start,
+        celle=celle,
     )
 
 
 # ---------------------------------------------------------------------------
 # Report
 # ---------------------------------------------------------------------------
+def _ratio_cell(value: float, *, percent: bool = True) -> str:
+    """Un rapporto di ``Scores``: ``nan`` quando il denominatore è vuoto."""
+    if value != value:
+        return "-"
+    return f"{value:.0%}" if percent else f"{value:.2f}"
+
+
 def _write_report(
     *,
     aoi_id: str,
@@ -920,6 +957,36 @@ def _write_report(
         "`non verificabile` nel protocollo FAR degli alert. Contarli fra i "
         "falsi darebbe un FAR del 100% ogni volta che il satellite ha mappato "
         "una frazione dell'area allertata.",
+        "",
+    ]
+    lines += [
+        "### Per cella (CSI)",
+        "",
+        "| Replica | CSI | POD | FAR per cella | Bias | Hit / mancati / falsi | "
+        "Allertate non osservate |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    for run in runs:
+        if not run.measurable:
+            lines.append(f"| `{run.mode}` | non misurabile | - | - | - | - | - |")
+            continue
+        c = run.celle
+        lines.append(
+            f"| `{run.mode}` | {_ratio_cell(c.csi)} | {_ratio_cell(c.pod)} "
+            f"| {_ratio_cell(c.far)} | {_ratio_cell(c.bias, percent=False)} "
+            f"| {c.hits} / {c.misses} / {c.false_alarms} | {c.unobserved_predicted} |"
+        )
+    lines += [
+        "",
+        "La stessa tabella di contingenza con cui `copernicus-ems` misura le "
+        "mappe satellitari, ma per **cella** sull'intera finestra: hit e "
+        "mancati sono quelli dell'hit rate (il POD coincide), un **falso** è "
+        "una cella non allagata con almeno un'allerta smentita da un "
+        "passaggio, e le celle allertate che nessun passaggio ha verificato "
+        "restano a parte, mai fra i falsi. Il FAR per cella non è quello per "
+        "cella-giorno della tabella sopra: conta le celle, non il carico. "
+        "Bias > 1 vuol dire più celle allertate che allagate. Il CSI non entra "
+        "nel gate §2.5.",
         "",
     ]
     gate = thresholds.calibration.backtest if thresholds.calibration else None
@@ -1175,6 +1242,7 @@ async def run() -> int:
                         hit_rate=round(metrics.hit_rate, 4),
                         base_rate=round(metrics.base_rate, 4),
                         far=round(metrics.far, 4),
+                        csi=round(metrics.celle.csi, 4),
                         unverifiable_days=metrics.unverifiable_days,
                         pluvial_driven=metrics.pluvial_driven,
                         fluvial_driven=metrics.fluvial_driven,

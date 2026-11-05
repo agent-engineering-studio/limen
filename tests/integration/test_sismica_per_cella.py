@@ -16,17 +16,25 @@ from limen.data.db import acquire
 from limen.data.object_store.filesystem import FilesystemObjectStore
 from limen.data.repos.aoi_repo import upsert_aoi
 from limen.data.repos.grid_repo import generate_and_store_grid
+from limen.data.repos.seismic_repo import get_event
 from limen.integrations._http import SharedHttpClient
-from limen.integrations.ingv.shakemap_client import (
-    FDSN_EVENT_URL,
-    SHAKEMAP_GRID_URL_TEMPLATE,
-)
+from limen.integrations.ingv.shakemap_client import FDSN_EVENT_URL, shakemap_grid_url
 from limen.integrations.ingv.sync_job import run_ingv_sync
 
 pytestmark = pytest.mark.integration
 
 _AOI = "aoi-sisma"
 _EVENTO = "ev-sisma-001"
+_INFO_URL = shakemap_grid_url(_EVENTO).replace("grid.xml", "info.json")
+
+
+def _info(versione: int) -> dict[str, object]:
+    """L'``info.json`` di INGV, ridotto a quello che il job legge."""
+    return {
+        "input": {"event_information": {"event_id": _EVENTO}},
+        "output": {},
+        "processing": {"shakemap_versions": {"map_version": versione, "map_status": "automatic"}},
+    }
 
 
 def _griglia() -> bytes:
@@ -82,9 +90,10 @@ async def test_la_scossa_arriva_solo_alle_celle_scosse(reset_db: None, tmp_path:
                 200, json={"type": "FeatureCollection", "features": [feature]}
             )
         )
-        mock.get(SHAKEMAP_GRID_URL_TEMPLATE.format(event_id=_EVENTO)).mock(
+        mock.get(shakemap_grid_url(_EVENTO)).mock(
             return_value=httpx.Response(200, content=_griglia())
         )
+        mock.get(_INFO_URL).mock(return_value=httpx.Response(200, json=_info(1)))
         esito = await run_ingv_sync(
             bbox=(16.0, 40.5, 17.5, 41.8),
             object_store=FilesystemObjectStore(tmp_path),
@@ -115,9 +124,14 @@ async def test_la_scossa_arriva_solo_alle_celle_scosse(reset_db: None, tmp_path:
     assert not (est & set(scosse))
 
 
-async def test_un_evento_gia_calcolato_e_vecchio_non_si_riscarica(
-    reset_db: None, tmp_path: Path
-) -> None:
+async def test_si_riscarica_quando_cambia_la_versione(reset_db: None, tmp_path: Path) -> None:
+    """Una ShakeMap si riscarica quando INGV ne pubblica una versione nuova, non a tempo.
+
+    La regola di prima («stabile dopo 24 ore») perdeva la versione 4 della Mw 5.5
+    del 23 ottobre 2026, uscita quaranta ore dopo. Un evento salvato senza la PGA
+    per cella (prima della 080), o una regione aggiunta dopo, rimettono in gioco
+    l'evento anche a versione ferma.
+    """
     await upsert_aoi(
         id=_AOI,
         name="sisma",
@@ -126,10 +140,6 @@ async def test_un_evento_gia_calcolato_e_vecchio_non_si_riscarica(
         metadata={},
     )
     await generate_and_store_grid(_AOI)
-    """Dopo un giorno la ShakeMap non cambia più: non si riscaricano 10 MB ogni ora.
-
-    Ma un evento salvato senza la PGA per cella (prima della 080) sì.
-    """
     quando = datetime.now(UTC) - timedelta(days=3)
     feature = {
         "type": "Feature",
@@ -140,22 +150,41 @@ async def test_un_evento_gia_calcolato_e_vecchio_non_si_riscarica(
     collezione = {"type": "FeatureCollection", "features": [feature]}
     store = FilesystemObjectStore(tmp_path)
 
-    async def giro() -> respx.Route:
+    async def giro(info: httpx.Response, griglia_ok: bool = True) -> int:
         with respx.mock(assert_all_called=False) as mock:
             mock.get(FDSN_EVENT_URL).mock(return_value=httpx.Response(200, json=collezione))
-            griglia = mock.get(SHAKEMAP_GRID_URL_TEMPLATE.format(event_id=_EVENTO)).mock(
+            mock.get(_INFO_URL).mock(return_value=info)
+            griglia = mock.get(shakemap_grid_url(_EVENTO)).mock(
                 return_value=httpx.Response(200, content=_griglia())
+                if griglia_ok
+                else httpx.Response(403)
             )
             await run_ingv_sync(bbox=(16.0, 40.5, 17.5, 41.8), object_store=store)
-        return griglia
+        return griglia.call_count
 
-    assert (await giro()).call_count == 1
-    assert (await giro()).call_count == 0
+    def v(n: int) -> httpx.Response:
+        return httpx.Response(200, json=_info(n))
+
+    assert await giro(v(3)) == 1
+    assert await giro(v(3)) == 0
+    # La versione 4, tre giorni dopo il terremoto: si riscarica.
+    assert await giro(v(4)) == 1
+    assert await giro(v(4)) == 0
+    evento = await get_event(_EVENTO)
+    assert evento is not None and evento.attributes is not None
+    assert evento.attributes["shakemap_version"] == 4
+    assert evento.attributes["shakemap_status"] == "automatic"
+    # La 5 annunciata ma la griglia non arriva: la versione salvata resta la 4,
+    # così il giro dopo ci riprova invece di crederla già calcolata.
+    assert await giro(v(5), griglia_ok=False) == 1
+    assert await giro(v(5)) == 1
+    # info.json irraggiungibile: vale la regola di prima, e l'evento ha tre giorni.
+    assert await giro(httpx.Response(403)) == 0
     async with acquire() as conn:
         await conn.execute("UPDATE seismic_events SET pga_celle_at = NULL")
-    assert (await giro()).call_count == 1
-    assert (await giro()).call_count == 0
+    assert await giro(v(5)) == 1
+    assert await giro(v(5)) == 0
     # Codex, #288: una regione aggiunta dopo il calcolo rimette in gioco l'evento.
     async with acquire() as conn:
         await conn.execute("UPDATE grid_cells SET created_at = now() + interval '1 minute'")
-    assert (await giro()).call_count == 1
+    assert await giro(v(5)) == 1
