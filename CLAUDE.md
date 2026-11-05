@@ -9,14 +9,13 @@
 > Pilot: **Puglia + Basilicata**. Current state: **implementation
 > complete (0.6.0-impl-complete) — entering formal testing**.
 > V1 prototype (Phases 0–8) + V1.5 in-situ IoT (Phase 9) + V2 ML
-> stack (Phase 10) + KG grounding (Phase 11) + Geo-Data Service
-> (Phase 12) + Flood / DEM / CORINE / Geological / SHAP-backed ML
+> stack (Phase 10) + KG grounding (Phase 11) + Flood / DEM / CORINE / Geological / SHAP-backed ML
 > component breakdown / EFFIS bulk fallback / official ISTAT seed
 > AOIs / static PMTiles overlays. Every scoring component
 > (S/M/E/F/H/K) has at least one tested opt-in data-feed pipeline;
 > the deterministic V1 engine remains the production champion.
 > Next session opens the formal test cycle. See `README.md`,
-> `docs/ml.md`, `docs/grounding.md`, `docs/geodata.md`.
+> `docs/ml.md`, `docs/grounding.md`.
 
 ---
 
@@ -48,7 +47,7 @@
 | Logging | `structlog.get_logger(__name__)` via `limen.core.logging.get_logger`. **Never `print`.** |
 | Geometry CRS | All geometries stored in EPSG:4326. Compute distances/areas in EPSG:3035 (LAEA Europe). |
 | Quality gates | `ruff check` + `ruff format` clean, `mypy --strict` clean, `pytest` green before commit. **The gate is `make check`** (lint + typecheck + `pytest --cov=limen`, coverage ≥ 80 %); in CI it is split so a slow suite cannot hide a lint failure (#90): `backend` runs lint + types + `tests/unit` as the fast gate on every PR, `integration` runs the whole suite with the coverage threshold, and `slow` runs the national-seed tests on `main` only. Tests marked `slow` are **deselected by default** (`addopts` carries `-m 'not slow'`) — run them with `make test-slow`. An integration test that needs an AOI seeds **one** with `run_seed(only=[SEED_SMALL_AOI])`: seeding the twenty regions is ~312,000 cells and twenty minutes, and it is what kept the CI red from July to September without a single test actually failing. |
-| External HTTP | All outbound calls go through `limen.integrations._http` (shared `httpx.AsyncClient` + tenacity policy: 4 attempts, exp backoff cap 60 s, retries on transport errors + 5xx/429). **One exception, and it keeps the policy**: a streamed download of a large file (the ISPRA mosaics weigh 1.2 GB, which `fetch_with_retry` would hold in memory) streams on the shared client and runs inside `call_with_retry`, the same policy with only 5xx/429 retried among statuses. A library's own retry is never used: Limen passes `retries=0` (`ispra-idrogeo`), routes it through `send=` on `fetch_with_retry` (`ingv-shakemap`, `imageserver-export`), or uses only the pure parts (`egms-client`, `firms-client`). |
+| External HTTP | All outbound calls go through `limen.integrations._http` (shared `httpx.AsyncClient` + tenacity policy: 4 attempts, exp backoff cap 60 s, retries on transport errors + 5xx/429). **One exception, and it keeps the policy**: a streamed download of a large file (the ISPRA mosaics weigh 1.2 GB, which `fetch_with_retry` would hold in memory) streams on the shared client and runs inside `call_with_retry`, the same policy with only 5xx/429 retried among statuses. A library's own retry is never used: Limen passes `retries=0` (`ispra-idrogeo`), routes it through `send=` on `fetch_with_retry` (`ingv-shakemap`, `imageserver-export`, `dpc-radar` — whose link request for the archive skips the retry, as before: an expired frame is a 500 that must come back as `ASSENTE` at once), or uses only the pure parts (`egms-client`, `firms-client`). `glofas-ewds` talks to the EWDS queue through `cdsapi`, not HTTP: Limen hands it the client (wrapped to log every request) and keeps the timeout and the degradation in `glofas_previsione`. |
 | Degradation | Read-only operations that miss external sources return a *neutral result* (`None`, `[]`, `{}`) and log `integration.degraded` — they MUST NOT raise. Writes do raise. |
 | Il bootstrap statico è idempotente sul **costo** | `bootstrap_static_for_aoi` salta ogni passo la cui sorgente non è cambiata (#101). L'impronta sta in `integrations/static_bootstrap/fingerprint.py` e tiene tre cose: la **sorgente** (mtime+dimensione per i file, conteggio+ultimo inserimento per le tabelle — mai l'hash del contenuto, che su un mosaico DTM costa quanto ricalcolare), il **numero di celle dell'AOI** (un re-seed che cambia la griglia invalida tutto: i fattori sono per cella) e una **versione di codice per passo** (`STEP_VERSION`, da bumpare quando cambia la *formula* e non il dato — è successo con il WUI della #62 e con `imperviousness_norm` della #63). La chiave è `(aoi_id, passo)`: aggiungere una regione ne calcola una, non rifà le altre diciannove. Una sorgente non configurata resta uno `static_bootstrap.skip`, mai un errore. `make up`, `make init` e `make static-data` passano tutti da `scripts/load_static_data.sh`: **non aggiungere una quarta variante**. |
 | Idempotency (sync jobs) | Compute SHA-256 over canonical-JSON of the fetched payloads, look up `dataset_versions(source, dataset, version)`. If the version exists, **skip all writes**. |
@@ -89,14 +88,9 @@
 | KG is advisory only | The knowledge-graph sidecar enriches briefings with citations; it NEVER alters numeric scoring. `BriefingAgent` launches the KG task concurrently with the LLM and accepts an empty result on any failure. KG-down ⇒ briefing still emits, scores unchanged. |
 | KG short timeout | `KG__TIMEOUT_SECONDS` (default 3s) is the per-call ceiling. `GroundingService.ground()` wraps it in a defensive `asyncio.wait_for`; an unhealthy sidecar can never extend the briefing's total wall time. |
 | KG cache by (region, mechanism) | Same `(region, mechanism)` inside the TTL ⇒ same cached citations; different `top_k` requests reuse the cached set sliced client-side. Empty results are cached too, so an un-ingested sidecar doesn't generate repeat traffic. |
-| Geodata is VPS-only | The `geodata` compose profile runs **only** on the self-hosted VPS / dedicated host — never on Neon, never on the operational API process. Activate explicitly: `docker compose --profile geodata up`. |
-| Geodata image carries no data | The Docker image bundles Python + GDAL/PROJ + tippecanoe + the code. Datasets land in the named PostGIS volume at first `limen geodata init`. Verify with `docker image inspect` — image size ≪ data size. |
-| Geodata never in critical path | The operational API reads pre-computed numeric per-cell features. `limen geodata export-features` ships those across with one upsert per cell. The MCP server is for agents; nothing in the hourly scoring path waits on it. |
-| Geodata is self-contained | `geodata/` is a uv workspace member designed to be extracted into a standalone repo with one `mv`. Nothing in `geodata.*` imports from `limen.*`; Prompt-2 parsers are duplicated in `geodata/parsers.py`. |
 | EFFIS is MapServer, not GeoServer | `maps.effis.emergency.copernicus.eu/gwis` is a **MapServer** CGI, and every GeoServer habit fails differently: `/gwis/ows` hangs (use `/gwis`), a wrong `typeNames` closes the connection mid-response instead of 404ing, `CQL_FILTER` is silently ignored, and `bbox` + `filter` together kill the connection. The layer is `nrt.ba.poly` with `initialdate`/`area`; dates are filtered **client-side** after a bbox request, which is cheap because one AOI's whole history is a single response (Basilicata: 515 perimeters 2012-2026, 305 KB). A sync that returns zero is a client bug, not missing credentials — that mistake cost this project a year of an empty `fire_perimeters` and three issues blocked on an accreditation nobody needed. The request and parsing now live in the `effis-client` package (extracted from Limen, Apache-2.0, `agent-engineering-studio/effis-client`), perimeters and the official FWI WMS alike; the retry through `_http` and the neutral degradation stay here. |
 | A hit rate without a base rate is unreadable | `backtest-wildfire` reports both, plus their ratio. A model that calls every summer day dangerous scores a perfect hit rate while discriminating nothing, and the base rate is what exposes it. Measure it over the **fire season only**, never the spin-up days: including them dropped Basilicata's 2025 base from 43 % to 35 % and inflated the discrimination from 1.82 to 2.27 for free. |
-| Geodata URLs are official | The manifest schema refuses any URL outside `https://idrogeo.isprambiente.it/` by construction. To add a dataset, edit `datasets.yaml` (single source of truth) — no code change required. |
-| MCP refresh is admin-only | The `refresh` tool requires `MCP_ADMIN_TOKEN`. Env var **unset** = refresh disabled (fail-closed). |
+| MCP admin tools are token-gated | The mutating `limen-ops` MCP tools (`tool_run_monitor`, `tool_build_report`, `tool_forecast_history`) require `MCP_ADMIN_TOKEN`. Env var **unset** = those tools disabled (fail-closed). |
 | The install token is not a login | `INSTALLAZIONE__TOKEN` (#403, epic #409) gates the actions of `#/installazione` that **change** something — `POST /api/installazione/*`, i.e. queueing a download for the worker — through `TokenInstallazioneDep` (header `X-Limen-Token`, constant-time compare, never logged). Reading the state (`GET /api/installazione/stato`) stays public like the rest of the map. Same scheme as `MCP_ADMIN_TOKEN`: one shared secret in the `.env`, generated by `nuovo_host.sh`; **no users, no sessions, no personal data**, unset ⇒ actions disabled (fail-closed). It does not reopen epic #69: do not grow it into accounts, roles or an operator area. |
 | The faithfulness reviewer is a Message Batch | `fedelta` (`api/jobs/fedelta_racconti.py`) is the one LLM call that bypasses the gateway: the whole evening sample goes to the Claude Message Batches API through the `anthropic` SDK (`agents` group, in the image), with `ANTHROPIC_API_KEY` and `LLM__MODELS__FEDELTA` a Claude id **other than** the briefing author (`fast-cloud` = Haiku 5.5, so the reviewer is Sonnet 5.5). The JSON is constrained by `output_config.format`; an unfinished batch is cancelled after `LLM__FEDELTA_ATTESA_MASSIMA_MINUTI` and every missing verdict is `null`, never «fedele». It replaced colibrì/GLM-5.2, removed after it OOM-killed the host on 28/10/2026: no local model that generates in tens of minutes is wired in anymore. |
 | One monthly cap on Claude, checked on every call | `LLM__ANTHROPIC_BUDGET_MENSILE_USD` (10 $) covers **all** Claude spend — gateway roles on `fast-cloud`/`quality-cloud` and the batch reviewer. Every LLM call writes a `spesa_llm` row (migration 083) with the model that actually answered (`x-litellm-model-name`: a gateway fallback can make `fast-cloud` the local `chat`); before any call that can reach Claude, `agents/llm_factory/budget.py` sums the calendar month and raises `BudgetSuperatoError` at the cap, which callers treat like any model failure (deterministic text). Unreadable spend ⇒ the call does not run. LiteLLM's `max_budget` is **not** enforced (no database behind the gateway). Tokens are public (`/api/status/llm`, the Diagnostica page, «AI in pausa» in the header); dollars never are — `limen llm-spesa` and the logs only. |
@@ -290,7 +284,7 @@ src/limen/
 │   └── jobs/            # APScheduler jobs run by `limen worker`: hourly/nowcast/firms monitoring,
 │                        # briefing_enrichment, nightly, forecast_history, fedelta_racconti, …
 ├── a2a/                 # Agent-to-agent card, skills, service
-├── mcp/                 # MCP server + tools (refresh behind MCP_ADMIN_TOKEN)
+├── mcp/                 # MCP server + tools (admin tools behind MCP_ADMIN_TOKEN)
 ├── core/
 │   ├── abstractions/    # external-source Protocols
 │   ├── cascades/        # multi-hazard attention index + cascade rules
@@ -326,8 +320,7 @@ frontend/                # Vite + TypeScript + React + Mantine + MapLibre SPA
 │                        # VerifichePage, GuidaPage, IntegrationsPage, ShadowDiagnosticsPage, …
 ├── src/lib/             # api-client, risk-colors, hazard, attribuzioni, i18n, overlays, …
 └── src/__tests__/       # Vitest + Testing Library (risk-colors contrast test lives here)
-geodata/                 # uv workspace member, self-contained (never imports limen.*)
-infra/docker/            # compose files: dev, demo, geodata, geoserver, inference, meteo, observability
+infra/docker/            # compose files: dev, demo, geoserver, inference, meteo, observability
 infra/{postgres,inference,nginx,observability,posta}/
 scripts/load_static_data.sh   # the one path for static data (make up / init / static-data)
 tests/{unit,integration,e2e}  # `slow` deselected by default
@@ -393,7 +386,7 @@ to advance.
   examples).
 - **`docs/`** — `architecture.md`, `scoring-model.md`, `warning-logic.md`,
   `data-model.md`, `inference.md`, `runbook.md`, `deployment.md`, `ml.md`,
-  `grounding.md`, `geodata.md`; `docs/guida/` feeds the SPA wiki.
+  `grounding.md`; `docs/guida/` feeds the SPA wiki.
 - **Memories** at `~/.claude/projects/-srv-appdata-git-limen/memory/`
   (local to this machine; `docs/HANDOFF.md` carries what must survive a move).
 - **Project doc**: `Limen_Project_Document.md` (when present at repo root)

@@ -26,20 +26,20 @@ async def run_sync_bollettini() -> dict[str, Any]:
     if await dataset_versions_repo.find(SOURCE, DATASET, nome) is not None:
         return {"skipped": True, "reason": "già importato", "bollettino": nome}
     bollettino = await scarica(nome)
-    if bollettino is None or not bollettino.zone:
+    if bollettino is None or not bollettino.zones:
         return {"skipped": True, "reason": "vuoto o illeggibile", "bollettino": nome}
     zone = await dpc_allerte_repo.scrivi(bollettino)
     await dataset_versions_repo.record(
         source=SOURCE,
         dataset=DATASET,
         version=nome,
-        valid_from=bollettino.emesso,
-        metadata={"zone": zone, "allerte": sum(z.livello > 0 for z in bollettino.zone)},
+        valid_from=bollettino.issued,
+        metadata={"zone": zone, "allerte": sum(z.level > 0 for z in bollettino.zones)},
     )
     log.info(
         "dpc.bollettino.imported",
-        bollettino=bollettino.nome,
+        bollettino=bollettino.name,
         zone=zone,
-        allerte=sum(z.livello > 0 for z in bollettino.zone),
+        allerte=sum(z.level > 0 for z in bollettino.zones),
     )
-    return {"skipped": False, "bollettino": bollettino.nome, "zone": zone}
+    return {"skipped": False, "bollettino": bollettino.name, "zone": zone}

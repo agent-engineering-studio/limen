@@ -387,7 +387,7 @@ score.
 | [**Open-Meteo**](https://open-meteo.com) (ECMWF IFS, ICON-EU, ERA5, ERA5-Land) | hourly rain, soil moisture, temperature, humidity, wind; forecast and archive | all three hazards | CC-BY 4.0 (data: Copernicus / DWD / ECMWF) | no |
 | [**DPC radar platform**](https://radar.protezionecivile.it) | national SRI (1 km, 5 min) and «Merging» radar + rain-gauge accumulations | nowcast trigger; rain already fallen for floods | CC-BY-SA 4.0 | no |
 | [**Copernicus EMS — GloFAS**](https://ewds.climate.copernicus.eu) | river discharge forecast per node; each node's ordinary high flow from the multi-year history | flood (fluvial branch) | CEMS-Floods licence, attribution required | free EWDS key (or via Open-Meteo) |
-| [**ISPRA IdroGEO**](https://idrogeo.isprambiente.it) | IFFI landslide inventory (721,365 landslides), PAI landslide and hydraulic hazard mosaics | landslide terrain; flood susceptibility | CC-BY 4.0 | no |
+| [**ISPRA IdroGEO**](https://idrogeo.isprambiente.it) | IFFI landslide inventory (721,365 landslides), PAI landslide and hydraulic hazard mosaics | landslide terrain; flood susceptibility | IFFI CC-BY 4.0; mosaics CC BY-SA 4.0 | no |
 | **HR-DTM 5 m** (IRPI-CNR, Zenodo) or **TINITALY 10 m** (INGV) | elevation → slope, aspect, curvature | landslide, wildfire | CC-BY 4.0 | no |
 | [**CORINE Land Cover 2018**](https://groupware.sinanet.isprambiente.it) (SINAnet/ISPRA) | land cover → fuel type | wildfire | CC-BY | no |
 | **Geolithological Map of Italy 1:500k** (PCN/MASE) | rock and soil type | landslide | CC-BY 4.0 | no |
@@ -427,6 +427,7 @@ flowchart TB
         EF["effis-client<br/>burnt areas, official FWI"]
         RT["rainfall-thresholds<br/>rain that triggers landslides"]
         IS["imageserver-export<br/>sealed soil & land cover"]
+        DR["dpc-radar<br/>national weather radar"]
     end
     MGS["mcp-geo-server · MIT<br/>GeoServer + PostGIS + MCP agent"]
     L["<b>Limen</b>"]
@@ -438,6 +439,7 @@ flowchart TB
     RT --> L
     ID --> L
     IS --> L
+    DR --> L
     MGS -- "ISPRA layers in PostGIS<br/>WMS map overlays" --> L
 ```
 
@@ -450,14 +452,16 @@ rule stays in Limen. The numbers that tune a hazard stay in
 
 | Package | Pin in Limen | Licence |
 |---|---|---|
-| [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) | `~=0.4.0` | Apache-2.0 |
+| [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) | `~=0.7.1` | Apache-2.0 |
 | [`egms-client`](https://pypi.org/project/egms-client/) | `~=0.7.0` | Apache-2.0 |
-| [`firms-client`](https://pypi.org/project/firms-client/) | `~=0.4.0` | Apache-2.0 |
+| [`firms-client`](https://pypi.org/project/firms-client/) | `~=0.5.0` | Apache-2.0 |
 | [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) | `~=0.7.0` | Apache-2.0 |
 | [`fwi-chain`](https://pypi.org/project/fwi-chain/) | `~=1.0.0` | Apache-2.0 |
 | [`effis-client`](https://pypi.org/project/effis-client/) | `~=0.1.2` | Apache-2.0 |
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |
 | [`imageserver-export`](https://pypi.org/project/imageserver-export/) | `~=0.2.0` | Apache-2.0 |
+| [`dpc-radar`](https://pypi.org/project/dpc-radar/) | `~=0.2.1` | Apache-2.0 |
+| [`glofas-ewds`](https://pypi.org/project/glofas-ewds/) | `~=0.1.0` | Apache-2.0 |
 | [`mcp-geo-server`](https://github.com/agent-engineering-studio/mcp-geo-server) | Docker image, pinned commit | MIT |
 
 ### copernicus-ems
@@ -640,6 +644,7 @@ Nothing in the hourly scoring path waits on GeoServer. Compose file:
 | [`fwi-chain`](https://pypi.org/project/fwi-chain/) | The Canadian Fire Weather Index (Van Wagner 1987), pure and verified against the published reference day to 1e-9 | the wildfire engine, one chain per weather node |
 | [`effis-client`](https://pypi.org/project/effis-client/) | EFFIS burnt-area perimeters and the official FWI maps (a MapServer with many surprises) | wildfire truth set; `limen fwi-confronto` |
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | Rainfall events and intensity–duration thresholds (Caine) | the landslide rain term |
+| [`glofas-ewds`](https://pypi.org/project/glofas-ewds/) ([site](https://agentengineering.it/glofas-ewds/)) | GloFAS 4 discharge and the Copernicus FWI from the EWDS, read on the cell Open-Meteo serves (the declared one, one step east): requests, monthly re-runnable downloads, readers per node, a river's own reference | `limen glofas-ewds` (node references), the daily GloFAS forecast run, `limen fwi-confronto` |
 
 ---
 
@@ -894,7 +899,7 @@ Docker writes its own iptables chains, consulted *before* ufw's: the host's
 every `ports:` entry binds to a `LIMEN_*_BIND` variable defaulting to
 `127.0.0.1` (`LIMEN_PG_BIND`, `LIMEN_API_BIND`, `LIMEN_MQTT_BIND`,
 `LIMEN_TILESERV_BIND`, `LIMEN_FRONTEND_BIND`, `LIMEN_MCP_BIND`,
-`LIMEN_GEOSERVER_*_BIND`, `LIMEN_GEODATA_*_BIND`). Public exposure goes
+`LIMEN_GEOSERVER_*_BIND`, `LIMEN_IDROGEO_MCP_BIND`). Public exposure goes
 through a reverse proxy on 443, never by binding to `0.0.0.0`.
 
 ---
@@ -1043,7 +1048,7 @@ See [`ROADMAP.md`](./ROADMAP.md) and [`CHANGELOG.md`](./CHANGELOG.md).
 | Component | Licence |
 |---|---|
 | **Limen** (this repository) | [EUPL-1.2](./LICENSE) — copyleft that also covers network use: whoever offers Limen as a service must publish their changes. Versions up to `v0.6.0-impl-complete` remain Apache-2.0. A commercial licence is available for uses incompatible with copyleft. |
-| copernicus-ems, egms-client, firms-client, ispra-idrogeo, fwi-chain, effis-client, rainfall-thresholds | Apache-2.0 |
+| copernicus-ems, egms-client, firms-client, ispra-idrogeo, fwi-chain, effis-client, rainfall-thresholds, glofas-ewds | Apache-2.0 |
 | mcp-geo-server | MIT |
 
 External contributions require the CLA in
@@ -1054,8 +1059,15 @@ External contributions require the CLA in
 Attribution is **mandatory** when you publish the map, the summaries or
 anything derived from them:
 
-* **ISPRA IdroGEO** (IFFI, PAI landslide and hydraulic mosaics) — © ISPRA,
-  CC-BY 4.0. <https://idrogeo.isprambiente.it>
+* **ISPRA IdroGEO** (IFFI) — © ISPRA, CC-BY 4.0.
+  <https://idrogeo.isprambiente.it>
+* **ISPRA hazard mosaics** — CC BY SA 4.0, as stated by the licence PDF in each
+  download: data derived from them must be distributed under the same licence.
+  Citations: «ISPRA - Mosaicatura nazionale delle aree a pericolosità da frana
+  PAI (v. 4.0 – 2020-2021), https://idrogeo.isprambiente.it» and «ISPRA -
+  Mosaicatura delle aree a pericolosità idraulica (v. 5.0 – 2020),
+  https://idrogeo.isprambiente.it». They are technical and scientific works:
+  the maps with legal value are those of the basin district authorities.
 * **e-ITALICA** (CNR-IRPI) — CC-BY 4.0, DOI
   [10.5281/zenodo.14204473](https://doi.org/10.5281/zenodo.14204473).
 * **Open-Meteo** (ECMWF, DWD, Copernicus ERA5 / CERRA) — CC-BY 4.0.

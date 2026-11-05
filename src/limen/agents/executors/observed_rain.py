@@ -23,7 +23,7 @@ from datetime import datetime
 from limen.agents.workflow_runtime.executor import Executor, handler
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
-from limen.integrations.dpc import CUM_PERIOD, SriGrid, get_cum_at, get_latest_cum
+from limen.integrations.dpc import CUM_PERIOD, RainGrid, get_cum_at, get_latest_cum
 
 log = get_logger(__name__)
 
@@ -37,8 +37,8 @@ class ObservedRainExecutor(Executor):
         hours: int,
         max_age_minutes: int,
         max_step_mm: float,
-        fetch: Callable[[int], Awaitable[SriGrid | None]] = get_latest_cum,
-        fetch_at: Callable[[int, datetime], Awaitable[SriGrid | None]] = get_cum_at,
+        fetch: Callable[[int], Awaitable[RainGrid | None]] = get_latest_cum,
+        fetch_at: Callable[[int, datetime], Awaitable[RainGrid | None]] = get_cum_at,
     ) -> None:
         super().__init__(name="ObservedRain")
         self._hours = hours
@@ -52,13 +52,13 @@ class ObservedRainExecutor(Executor):
         grid = await self._fetch(self._hours)
         if grid is None:
             return ctx
-        age = abs((ctx.valuation_time - grid.observed_at).total_seconds())
+        age = abs((ctx.valuation_time - grid.time).total_seconds())
         if age > self._max_age_s:
             log.info(
                 "executor.observed_rain.skip",
                 aoi_id=ctx.aoi_id,
                 reason="frame too far from valuation time",
-                observed_at=grid.observed_at.isoformat(),
+                observed_at=grid.time.isoformat(),
             )
             return ctx
         grid = await self._checked(grid, ctx.aoi_id)
@@ -69,25 +69,25 @@ class ObservedRainExecutor(Executor):
             "executor.observed_rain.done",
             aoi_id=ctx.aoi_id,
             hours=self._hours,
-            observed_at=grid.observed_at.isoformat(),
+            observed_at=grid.time.isoformat(),
             cells=len(observed),
             max_mm=round(max(observed.values()), 1) if observed else None,
         )
         return ctx.with_update(flood_rain_observed_by_cell=observed)
 
-    async def _checked(self, grid: SriGrid, aoi_id: str) -> SriGrid:
+    async def _checked(self, grid: RainGrid, aoi_id: str) -> RainGrid:
         """Il fotogramma senza i pixel incoerenti col precedente.
 
         Senza il precedente il controllo non si può fare e il fotogramma passa
         com'è: è il comportamento di prima di #235, e perdere il radar per un
         download mancato sarebbe peggio del caso raro che il controllo copre.
         """
-        previous = await self._fetch_at(self._hours, grid.observed_at - CUM_PERIOD)
+        previous = await self._fetch_at(self._hours, grid.time - CUM_PERIOD)
         if previous is None:
             log.warning(
                 "executor.observed_rain.unchecked",
                 aoi_id=aoi_id,
-                observed_at=grid.observed_at.isoformat(),
+                observed_at=grid.time.isoformat(),
             )
             return grid
         checked, discarded = grid.discard_inconsistent(previous, max_step=self._max_step_mm)
@@ -95,7 +95,7 @@ class ObservedRainExecutor(Executor):
             log.warning(
                 "executor.observed_rain.inconsistent",
                 aoi_id=aoi_id,
-                observed_at=grid.observed_at.isoformat(),
+                observed_at=grid.time.isoformat(),
                 pixels=discarded,
                 max_step_mm=self._max_step_mm,
             )

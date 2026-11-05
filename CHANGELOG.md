@@ -20,6 +20,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   cresca verso l'epicentro. Recall, carico e lift per soglia di PGA, compresa
   quella di E. Le ShakeMap stanno in cache; tre eventi del 2016 in ~7 s.
 
+### Fixed
+
+* **La licenza dei mosaici ISPRA è CC BY-SA 4.0, non CC BY 4.0.** Lo dice il
+  PDF in ogni ZIP, per frane e per idraulica. README, `data/README.md` e la
+  pagina Fonti ora lo scrivono, con le citazioni che ISPRA chiede.
+
 ### Security
 
 * **I container GeoServer passano la chiave al gateway LiteLLM.** Il gateway
@@ -29,6 +35,25 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   al provider OpenAI; api e worker usano già `LLM__LLAMACPP_API_KEY`.
 
 ### Changed
+
+* **`dpc-radar` 0.2.1: via gli aggiramenti di Limen.** Il pacchetto ora protegge
+  da solo la cache dei fotogrammi, conta come fallito un fotogramma con una
+  risposta non JSON o un `OSError` e accetta `send=` sui bollettini: le tre
+  chiamate a GitHub non sono più qui. I suoi log diventano
+  `integration.degraded`, anche per un fotogramma non ancora pubblicato.
+
+* **Le trappole delle fonti esterne nella guida.** `docs/guida/integrazioni`
+  (IT e EN) racconta quelle di Open-Meteo, GloFAS e SINAnet, che non sono
+  diventate una libreria.
+
+* **Archivio «Merging» e bollettini DPC dal pacchetto `dpc-radar` 0.2.**
+  `integrations/dpc/merging_archive.py` usa `dpc_radar.archive` (download
+  idempotente, ricostruzione oraria: 0 differenze su 20 fotogrammi reali) e
+  `bollettini.py` le parti pure di `dpc_radar.bulletins`; l'HTTP resta su
+  `_http`. I nuovi fotogrammi persi vanno in `absent.txt`, i vecchi
+  `assenti.txt` si leggono ancora. `sri_archive.py` resta di Limen: il
+  pacchetto corregge la prima ora persa della finestra, e cambiare i numeri
+  del backtest chiede un backtest.
 
 * **INGV passa per il pacchetto `ingv-shakemap` 0.2** (estratto da qui,
   Apache-2.0). `integrations/ingv/` resta come adattatore: il client gli passa
@@ -60,6 +85,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `risk_assessments` su tre colonne: con lo storico rado quell'unione avrebbe
   trovato le sole celle cambiate, e il briefing sarebbe arrivato a una
   manciata di celle invece che all'area intera.
+
+### Removed
+
+* **Il membro uv `geodata/`**, con il comando `limen geodata`, il profilo
+  compose `geodata` e la sua immagine (`limen/geodata`, `-geodata` su GHCR),
+  l'MCP `ispra-geo` e il job `limen-geodata-export`. Il percorso operativo
+  lo aveva già sostituito: il download passa da `ispra-idrogeo`
+  (`integrations/idrogeo`), il caricamento da `geoserver_source`, i fattori
+  per cella da `bootstrap-static`, gli strumenti per gli agenti da
+  `idrogeo-mcp`. L'export (spento di default) riscriveva con `COALESCE`
+  cinque colonne di `cell_static_factors` che il bootstrap riempie già, il
+  manifest dichiarava una licenza sbagliata (PAI e idraulica sono CC BY-SA
+  4.0) e importava un solo scenario idraulico. Spariscono anche
+  `GeodataSettings`, `docs/geodata.md` e
+  `infra/docker/docker-compose.geodata.yml`.
 
 ### Added
 

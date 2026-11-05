@@ -5,14 +5,12 @@ import { IntegrationsPage } from "../components/IntegrationsPage";
 import { render as renderLingua } from "../test-utils";
 
 describe("IntegrationsPage", () => {
-  it("documents both MCP servers with their tools", () => {
+  it("documents the limen-ops MCP server with its tools", () => {
     render(<IntegrationsPage />);
     expect(screen.getByText("Integrazioni: API, MCP & A2A")).toBeInTheDocument();
     // limen-ops read + admin tools
     expect(screen.getByText("tool_national_report()")).toBeInTheDocument();
     expect(screen.getByText("tool_build_report(admin_token)")).toBeInTheDocument();
-    // ispra-geo geodata tools
-    expect(screen.getByText("tool_hazard_at(lat, lon)")).toBeInTheDocument();
   });
 
   it("documents the A2A surface: agent card, endpoint, skills, streaming", () => {

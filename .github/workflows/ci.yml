@@ -144,7 +144,7 @@ jobs:
   # ---------------------------------------------------------------------------
   # Immagini del progetto — buildx, push su GHCR su main e sui tag (#303).
   # Un server nuovo le tira con LIMEN_IMAGE_PREFIX + LIMEN_IMAGE_TAG invece di
-  # costruirle: api (anche worker e mcp), postgres, web, geodata.
+  # costruirle: api (anche worker e mcp), postgres, web.
   # ---------------------------------------------------------------------------
   # Sulle PR basta sapere che l'immagine dell'API si costruisce e che `limen`
   # parte: in parallelo ai test, non dopo, così la PR aspetta l'integrazione e
@@ -207,10 +207,6 @@ jobs:
               VITE_DEFAULT_LON=12.6
               VITE_DEFAULT_LAT=41.9
               VITE_DEFAULT_ZOOM=5.3
-          - immagine: geodata
-            context: .
-            file: geodata/Dockerfile
-            build-args: ""
     steps:
       - uses: actions/checkout@v5
 

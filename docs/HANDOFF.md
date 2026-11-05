@@ -170,14 +170,11 @@ Versione: implementazione completa, in fase di test. Feature mergiate di recente
   `127.0.0.1`. Doc: `docs/inference.md`.
   Repo collegati: `mcp-geo-server` `7ad6189` (provider `openai`),
   `aes-inference-lab` `ec9824a` (alias `glm52`).
-- **`make build` copre tutto lo stack** (2026-09-03, `19fa2ca`) — costruiva 3
-  immagini su 4 di quelle di Limen: `limen/geodata:0.1`, cioè `geodata-init`
-  **e** `ispra-geo-mcp`, non veniva mai vista perché `COMPOSE_ALL` include solo
-  demo + geoserver. Ora spazza demo + geoserver + geodata + observability in due
-  passi (build per le proprie, `pull --ignore-buildable` per terze parti e
-  cross-repo): 15 servizi, 4 immagini costruite, 8 scaricate. `COMPOSE_BUILD` è
-  separato da `COMPOSE_ALL` di proposito — `make build` deve *vedere* geodata,
-  `make up` non deve *avviarlo*.
+- **`make build` copre tutto lo stack** (2026-09-03, `19fa2ca`) — spazza demo +
+  geoserver + observability in due passi (build per le proprie,
+  `pull --ignore-buildable` per terze parti e cross-repo). `COMPOSE_BUILD` è
+  separato da `COMPOSE_ALL` di proposito — `make build` deve *vedere*
+  observability, `make up` non deve *avviarlo*.
   Attenzione: `make build-images` resta un target distinto e non ridondante —
   costruisce con `--platform linux/amd64` esplicito (la base `postgis/postgis`
   non ha manifest arm64) e produce anche `frontend/dist/`.
@@ -203,7 +200,7 @@ Versione: implementazione completa, in fase di test. Feature mergiate di recente
   `/.well-known/agent-card.json` + endpoint JSON-RPC `/a2a` (message/send,
   message/stream SSE, tasks/get|cancel, push), task in `a2a_tasks`. Tool MCP
   admin `tool_build_report`/`tool_forecast_history` (fail-closed su
-  `MCP_ADMIN_TOKEN`). `scripts/setup_openclaw.sh` registra `limen-ops` + `ispra-geo`.
+  `MCP_ADMIN_TOKEN`). `scripts/setup_openclaw.sh` registra `limen-ops`.
   Pagina UI **Integrazioni** (`#/integrazioni`). Guida: `docs/openclaw.md`.
 - **Aggregazione per comune** (PR #54) — `mv_comune_risk` (specchio di
   `v_region_tiles`): classe della peggior cella + profilo + classifica per
@@ -431,8 +428,8 @@ una che dipende da un altro repo.
   - `mcp-geoserver/data/HRDTM5m.tif` (21G grezzo, referenziato da `.env`).
   - `limen/data/` (inventory 2.6G, osm 2.3G, hazard 1.9G; il DEM duplicato
     `limen/data/dem` è già stato cancellato il 2026-07-21).
-  - Nessuno è nel percorso operativo caldo (invariante "geodata mai nel critical
-    path"): l'API legge feature pre-calcolate dal DB. Servono solo per ri-ingest.
+  - Nessuno è nel percorso operativo caldo: l'API legge feature pre-calcolate
+    dal DB. Servono solo per ri-ingest.
 - **Validazioni live rimaste** (bloccate in locale dal Docker instabile, da rifare
   sul server): curl
   `/api/comuni` con `serve`, integration test `tests/integration/test_alert_dispatch_executor.py`.
@@ -504,7 +501,7 @@ make check                   # ruff check + mypy --strict + pytest
   resolver: Anthropic → OpenAI → Foundry → Ollama; una chiave cloud vince su
   Ollama salvo `LLM__PROVIDER`.
 - **geoserver-mcp-generic**: `geoserver-mcp` è un MCP GeoServer generico/data-agnostic;
-  la semantica ISPRA sta solo nel loader Limen. Distinto da `geodata`/`ispra-geo`.
+  la semantica ISPRA sta solo nel loader Limen. Distinto da `idrogeo-mcp`.
 - **data-layout-plan**: `data/` è theme-first country-agnostic (per ruolo nello
   scoring: `dem/`, `hazard/`, `inventory/`…), mai per nazione; tutti i path via env
   var. Un clone = una nazione. Vedi `data/README.md`.
@@ -526,8 +523,7 @@ PostGIS, **no ORM**; migrazioni SQL immutabili; geometrie EPSG:4326 (distanze in
 3035); scoring engine **puro** (no DB/rete/LLM); costanti solo in
 `hazards/landslide.yaml`; HTTP esterno via `integrations/_http`; degradazione
 neutra in lettura; V1 deterministico resta il champion; refresh matview **solo**
-via `refresh_mv_latest_risk()`; alert mai inventati + dedup obbligatorio; geodata
-mai nel critical path. Leggerli prima di lavorare.
+via `refresh_mv_latest_risk()`; alert mai inventati + dedup obbligatorio. Leggerli prima di lavorare.
 
 Tre aggiunti il 2026-09-03 (dettaglio in `docs/inference.md`):
 

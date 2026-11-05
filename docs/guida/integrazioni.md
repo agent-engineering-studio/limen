@@ -1,7 +1,7 @@
 # Integrazioni: API, MCP & A2A
 
 **Limen si lascia leggere da altri sistemi in cinque modi: un'API REST
-pubblica, le tile vettoriali della mappa, due server MCP per i gateway
+pubblica, le tile vettoriali della mappa, un server MCP per i gateway
 agentici, il protocollo A2A per l'interoperabilità tra agent e le notifiche
 push verso canali esterni.** Tutti sono di sola lettura sul punteggio:
 nessuna integrazione può alterare un valore di rischio, e le poche azioni
@@ -14,7 +14,7 @@ un token amministrativo che, se non è impostato, le spegne.
 |---|---|---|---|
 | API REST | applicazioni, script, dashboard | `/api/...` sulla porta 8080 (default) | nessuna |
 | Tile vettoriali | mappe web (MapLibre, OpenLayers, QGIS) | pg_tileserv, oppure il proxy `/api/tiles/...` | nessuna |
-| MCP `limen-ops` e `ispra-geo` | gateway agentici (OpenClaw, Claude Desktop, …) | `:8766/mcp` e `:8765/mcp` | lettura aperta; scrittura con `MCP_ADMIN_TOKEN` |
+| MCP `limen-ops` | gateway agentici (OpenClaw, Claude Desktop, …) | `:8766/mcp` | lettura aperta; scrittura con `MCP_ADMIN_TOKEN` |
 | A2A | agent di terze parti | `/.well-known/agent-card.json` + `POST /a2a` | nessuna (solo lettura) |
 | Notifiche push | Telegram, MQTT, email, webhook | configurate lato server | il canale stesso |
 
@@ -183,8 +183,8 @@ risponde `503`, se non è raggiungibile `502`.
 
 Il [Model Context Protocol](https://modelcontextprotocol.io) espone Limen
 come «strumenti» che un gateway (OpenClaw, Claude Desktop, …) può chiamare.
-I server MCP sono due; entrambi parlano `stdio` per default e HTTP
-streamable con `--transport http`.
+Il server parla `stdio` per default e HTTP streamable con
+`--transport http`.
 
 ### `limen-ops` · `http://127.0.0.1:8766/mcp`
 
@@ -215,19 +215,6 @@ agire):
 | `tool_run_monitor(aoi_id, admin_token)` | Lancia il workflow di monitoraggio una volta (accetta anche `cell_limit` e `hazard`). |
 | `tool_build_report(admin_token)` | Genera il report HTML statico on-demand (idempotente). |
 | `tool_forecast_history(admin_token, aoi_ids?)` | Persiste il trend di previsione (+24/48/72h) per i grafici UI. |
-
-### `ispra-geo` · `http://127.0.0.1:8765/mcp` (profilo geodata)
-
-Dati geografici ISPRA (PAI / IFFI). Attivo solo sul VPS, si avvia con
-`limen geodata mcp --transport http`:
-
-| Strumento | Cosa fa |
-|---|---|
-| `tool_hazard_at(lat, lon)` | Classe di pericolosità PAI + autorità + regione in un punto. |
-| `tool_iffi_query(bbox o region, movement_type?, limit?)` | Frane del catalogo IFFI in un'area (una sola tra `bbox` e `region`; massimo 500). |
-| `tool_pai_summary(region / bbox)` | Distribuzione area/conteggio per classe PAI. |
-| `tool_dataset_status()` | Stato dei dataset ISPRA caricati: origine, ultimo aggiornamento, righe. |
-| `tool_refresh(dataset, admin_token)` | Ricarica un dataset (admin, fail-closed). |
 
 Registrazione in un gateway:
 
@@ -330,6 +317,19 @@ lo stesso riassunto in italiano (per gli hook `/hooks/wake` e
 pericolo, classe e punteggio massimi, celle con priorità e comune,
 riepilogo per comune, eventuali cascate tra pericoli e link alla mappa.
 
+## Le fonti esterne: le trappole già pagate
+
+**Chi interroga le stesse fonti di Limen trova gli stessi inciampi, e nessuno
+di questi produce un errore chiaro.** Sono qui perché il codice che li aggira
+è legato a Limen e non è diventato una libreria.
+
+| Fonte | Cosa succede | Cosa fare |
+|-------|--------------|-----------|
+| Open-Meteo, più punti | 677 punti in una sola query string non rispondono JSON | Blocchi da 100 punti |
+| Open-Meteo, API pubblica | Il tetto è di 10.000 chiamate al giorno, e ogni località e variabile conta: una griglia nazionale lo esaurisce in un giro, e senza dati il punteggio di alluvione e incendio è zero | Un'istanza propria per previsione e archivio; un dato mancante si tratta come «non misurato» |
+| GloFAS via Open-Meteo | Il flood API non è sul bucket pubblico, quindi non si può ospitare. Un 429, anche orario, vuol dire «riprova domani» | Fermarsi fino alla mezzanotte UTC e non ritentare; due anni di archivio pesano ~52 chiamate per nodo |
+| SINAnet ISPRA (CORINE) | Alla HEAD risponde 404, al GET no | Controllare un file con un GET in streaming, mai con una HEAD |
+
 ## Dati aperti e licenze
 
 **Il codice di Limen è rilasciato sotto EUPL-1.2; i dati che usa restano
@@ -346,6 +346,10 @@ Service information [Year]»), e non deve presentare il risultato come un
 avviso di piena: l'allertamento spetta alle autorità nazionali e regionali.
 Il rapporto PDF e la mappa la portano già; chi integra l'API o le tile in
 un'altra applicazione la deve aggiungere.
+
+**Per i mosaici ISPRA di pericolosità la licenza è CC BY-SA 4.0.** Lo dice il
+PDF dentro ogni ZIP: i dati derivati si distribuiscono con la stessa licenza,
+citando la fonte.
 
 L'elenco completo, con le condizioni di ciascuna fonte, è nel
 [README](https://github.com/agent-engineering-studio/limen/blob/main/README.md#attribution-and-open-licences).

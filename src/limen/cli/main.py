@@ -9,6 +9,7 @@ Usage:
     limen backtest-flood     Replay Copernicus EMS flood perimeters (#64).
     limen backtest-cosismico ShakeMap shaking vs earthquake-triggered landslides.
     limen ingest-events      Dated event catalogue: --hazard landslide|flood.
+    limen ems-sentinel1      Sentinel-1 / EMS label pairs for flood ML (CDSE, PU budget).
     limen registra-verifica  Fact check: un evento verificato entra nel registro (074).
     limen verifiche-report   Eventi verificati contro le previsioni, col tasso di base.
     limen raccolta-eventi    Gli eventi della stampa, dai titoli al registro (#347).
@@ -80,8 +81,6 @@ from limen.cli.fwi_backfill import run as _run_fwi_backfill
 from limen.cli.fwi_climatology import run as _run_fwi_climatology
 from limen.cli.fwi_confronto import run as _run_fwi_confronto
 from limen.cli.fwi_pioggia import run as _run_fwi_pioggia
-from limen.cli.geodata import build_subparser as _build_geodata_subparser
-from limen.cli.geodata import run as _run_geodata
 from limen.cli.geodati_sync import run as _run_geodati_sync
 from limen.cli.geoserver_sync import run as _run_geoserver_sync
 from limen.cli.glofas_ewds import run as _run_glofas_ewds
@@ -319,8 +318,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     # ``limen report build`` — nested dispatcher for the static HTML risk
     # report. Only one action exists today, so this is a plain inline
-    # subparser (not a `build_subparser`-style module like `geodata`, which
-    # earns that indirection with five distinct subcommands).
+    # subparser rather than a `build_subparser`-style module.
     report_parser = sub.add_parser("report", help="static HTML risk report")
     report_sub = report_parser.add_subparsers(dest="report_command", required=True)
     report_sub.add_parser("build", help="generate the report once (idempotent)")
@@ -361,6 +359,19 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=["landslide", "flood"],
         default="landslide",
         help="landslide: ITALICA CSV (LIMEN_ITALICA_CSV); flood: Copernicus EMS perimeters",
+    )
+    ems_s1 = sub.add_parser(
+        "ems-sentinel1",
+        help=(
+            "coppie Sentinel-1 / etichette Copernicus EMS per l'ML alluvione "
+            "(CDSE, budget COPERNICUS__CDSE_PU_MENSILI; non entra nel punteggio)"
+        ),
+    )
+    ems_s1.add_argument("--dry-run", action="store_true", help="piano e PU, nessuna spesa")
+    ems_s1.add_argument(
+        "--codici",
+        default=None,
+        help="attivazioni separate da virgola (default: LIMEN_EMS_S1_CODICI, o tutte)",
     )
     dem_tiles = sub.add_parser(
         "dem-tiles",
@@ -420,11 +431,6 @@ def _build_parser() -> argparse.ArgumentParser:
         "ingest-kb",
         help="push the local corpus (papers + PAI + ISPRA + briefings) to the KG sidecar",
     )
-    # ``limen geodata <subcommand>`` — nested dispatcher for the
-    # Geo-Data Service (§3.3.4-ter). The implementation lives in the
-    # `geodata` workspace package; imports are lazy so the geodata
-    # optional deps stay out of the main CLI's runtime.
-    _build_geodata_subparser(sub)
     _build_sensore_subparser(sub)
     _build_dati_subparser(sub)
     _build_backup_subparser(sub)
@@ -528,11 +534,6 @@ def main(argv: list[str] | None = None) -> int:
             return asyncio.run(_run_sensore(args))
         except KeyboardInterrupt:  # pragma: no cover
             return 130
-    if args.command == "geodata":
-        try:
-            return asyncio.run(_run_geodata(args))
-        except KeyboardInterrupt:  # pragma: no cover
-            return 130
     if args.command == "worker":
         try:
             return asyncio.run(_run_worker(check_health=args.health))
@@ -553,6 +554,18 @@ def main(argv: list[str] | None = None) -> int:
             return 130
     if args.command == "anticipo":
         return asyncio.run(_run_anticipo(args.istat, args.pericolo, args.quando, args.tolleranza))
+    if args.command == "ems-sentinel1":
+        from limen.cli import ems_sentinel1
+
+        codici = (
+            [c.strip() for c in args.codici.split(",") if c.strip()]
+            if args.codici
+            else ems_sentinel1.codici_da_env()
+        )
+        try:
+            return asyncio.run(ems_sentinel1.run(dry_run=args.dry_run, codici=codici))
+        except KeyboardInterrupt:  # pragma: no cover
+            return 130
     if args.command == "dem-tiles":
         from limen.cli.dem_tiles import run as run_dem_tiles
 

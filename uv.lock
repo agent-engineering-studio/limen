@@ -36,12 +36,6 @@ resolution-markers = [
     "python_full_version < '3.13' and platform_machine == 's390x' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
-[manifest]
-members = [
-    "limen",
-    "limen-geodata",
-]
-
 [[package]]
 name = "affine"
 version = "2.4.0"
@@ -829,14 +823,14 @@ wheels = [
 
 [[package]]
 name = "copernicus-ems"
-version = "0.5.1"
+version = "0.7.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/24/17/f5ff6511100f956b93c374c1073291355f73370ffce7f3b2dbd9f7f5c586/copernicus_ems-0.5.1.tar.gz", hash = "sha256:72f8e3b2541d30464f478d504572a62d4b7f3086656d8036e5ffc88bc46c63d3", size = 65346, upload-time = "2026-11-04T12:44:07.404Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/56/37/1f8e924a97489a8e1a955023bec14714d8913781c3317a9e85c5462d8bc0/copernicus_ems-0.7.1.tar.gz", hash = "sha256:bf612b7d803c8ff5119d60f6d9115cde2b6dca055712540d91be59653a1ee207", size = 71178, upload-time = "2026-11-05T15:42:58.669Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9f/f5/053425318e258ae7225c7be7031791a3751aa9d3dd26a9ac090cfbb8c571/copernicus_ems-0.5.1-py3-none-any.whl", hash = "sha256:47a3100aa86def62485009f2b72402e2e93178fa4d655c4dfa0c3aba33ef2b55", size = 63894, upload-time = "2026-11-04T12:44:05.813Z" },
+    { url = "https://files.pythonhosted.org/packages/07/d1/5a9fbc1b32a01834ffd2005fe04db7f423629c8b9fbe672df4dbc93cdb20/copernicus_ems-0.7.1-py3-none-any.whl", hash = "sha256:4b091ede5b953854b5ef78d19a27379ed52aad79c1681ad1ea4e2eb072244074", size = 69292, upload-time = "2026-11-05T15:42:57.192Z" },
 ]
 
 [package.optional-dependencies]
@@ -1139,6 +1133,25 @@ wheels = [
 ]
 
 [[package]]
+name = "dpc-radar"
+version = "0.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "numpy" },
+    { name = "rasterio" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ac/99/9399e33bfc5ff3040b10cbb9b0d9fc8e441d656ced0463ec570cc9548558/dpc_radar-0.2.1.tar.gz", hash = "sha256:e530ca3f21fcb0aa5a99d3282e35da88f66b31ec21eb5c0bdc0818678a80e8d0", size = 42524, upload-time = "2026-11-05T16:24:19.275Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0a/7a/e8defe5213d34c0a8bba6afe3ad63622465e27ac4bf119e644657f58e28d/dpc_radar-0.2.1-py3-none-any.whl", hash = "sha256:976d2623224b84ff3a2c341251e569c71a1b20856bfb02447c6e2556cbb48088", size = 36462, upload-time = "2026-11-05T16:24:17.979Z" },
+]
+
+[package.optional-dependencies]
+bulletins = [
+    { name = "shapely" },
+]
+
+[[package]]
 name = "ecmwf-datastores-client"
 version = "0.5.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1304,14 +1317,14 @@ wheels = [
 
 [[package]]
 name = "firms-client"
-version = "0.4.0"
+version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2d/e7/b916e786657b85821f2ed0b7ddd18e4880e69295233cf14675408bd4507b/firms_client-0.4.0.tar.gz", hash = "sha256:7b9fc1ef73910d648102c913cf209ba18aab2bd21a82d6998192d6cb44d03c40", size = 61088, upload-time = "2026-11-04T09:45:49.179Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d5/34/40ae221a45cc83407b0ecc911fdfd13feb7f932588a4c8b0575f889f94e8/firms_client-0.5.0.tar.gz", hash = "sha256:3cf49516ae7fbd1cad9e699b572c2c56648b52a40d5cd0ce5527f154dc0bc0c7", size = 67024, upload-time = "2026-11-04T10:11:56.775Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e7/fb/45ac63889fcfbe4947d432ae8e7d07b2ed3cc7e08ec51ec34c1203fbb174/firms_client-0.4.0-py3-none-any.whl", hash = "sha256:690e4abac1c7416c1ce3f1e05595c0293d5e6c3afe4611944887c622dcd30e6b", size = 56117, upload-time = "2026-11-04T09:45:47.488Z" },
+    { url = "https://files.pythonhosted.org/packages/47/a8/d72ae1d43d39305733844e39832676bf3348c3e7bdc2d415015afb6ccd03/firms_client-0.5.0-py3-none-any.whl", hash = "sha256:8049ee4ed2298c2686821dbd9578ef300124920f4dc821ac4b9f60050e4fe467", size = 61555, upload-time = "2026-11-04T10:11:55.16Z" },
 ]
 
 [[package]]
@@ -1552,6 +1565,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/33/f6/354ae6491228b5eb40e10d89c4d13c651fe1cf7556e35ebdded50cff57ce/gitpython-3.1.50.tar.gz", hash = "sha256:80da2d12504d52e1f998772dc5baf6e553f8d2fcfe1fcc226c9d9a2ee3372dcc", size = 219798, upload-time = "2026-05-06T04:01:26.571Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/20/7a/1c6e3562dfd8950adbb11ffbc65d21e7c89d01a6e4f137fa981056de25c5/gitpython-3.1.50-py3-none-any.whl", hash = "sha256:d352abe2908d07355014abdd21ddf798c2a961469239afec4962e9da884858f9", size = 212507, upload-time = "2026-05-06T04:01:23.799Z" },
+]
+
+[[package]]
+name = "glofas-ewds"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/38/0f/0806b5247cf82c19f0cbd6fd4e55b47b58001be7ecc1a4d1e70566d2bbc6/glofas_ewds-0.1.0.tar.gz", hash = "sha256:aac23eefb815547e728b9ce2f4d40fa5d0ed016578166eb4b92ee7bc798008af", size = 25681, upload-time = "2026-11-04T15:57:50.49Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1b/8a/43fca061bdcf2545a25f6c595da06a19b711d9dc42f5e5c39192b9d05b90/glofas_ewds-0.1.0-py3-none-any.whl", hash = "sha256:785d5caa2845594536b253b7e05e12e3b98766bf11a3688e5879b5eeec634183", size = 24754, upload-time = "2026-11-04T15:57:49.222Z" },
 ]
 
 [[package]]
@@ -2268,6 +2293,7 @@ dependencies = [
     { name = "cbor2" },
     { name = "copernicus-ems", extra = ["cdse"] },
     { name = "cryptography" },
+    { name = "dpc-radar", extra = ["bulletins"] },
     { name = "effis-client", extra = ["raster"] },
     { name = "egms-client", extra = ["raster"] },
     { name = "fastapi" },
@@ -2275,6 +2301,7 @@ dependencies = [
     { name = "fwi-chain" },
     { name = "geoalchemy2" },
     { name = "geopandas" },
+    { name = "glofas-ewds" },
     { name = "httpx" },
     { name = "imageserver-export" },
     { name = "ingv-shakemap" },
@@ -2307,7 +2334,6 @@ copernicus = [
 ]
 dev = [
     { name = "anthropic" },
-    { name = "limen-geodata" },
     { name = "mypy" },
     { name = "openai" },
     { name = "pre-commit" },
@@ -2355,15 +2381,17 @@ requires-dist = [
     { name = "apscheduler", specifier = ">=4.0.0a5" },
     { name = "asyncpg", specifier = ">=0.30" },
     { name = "cbor2", specifier = ">=6.1" },
-    { name = "copernicus-ems", extras = ["cdse"], specifier = "~=0.5.1" },
+    { name = "copernicus-ems", extras = ["cdse"], specifier = "~=0.7.1" },
     { name = "cryptography", specifier = ">=43" },
+    { name = "dpc-radar", extras = ["bulletins"], specifier = "~=0.2.1" },
     { name = "effis-client", extras = ["raster"], specifier = "~=0.1.2" },
     { name = "egms-client", extras = ["raster"], specifier = "~=0.7.0" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "firms-client", specifier = "~=0.4.0" },
+    { name = "firms-client", specifier = "~=0.5.0" },
     { name = "fwi-chain", specifier = "~=1.0.0" },
     { name = "geoalchemy2", specifier = ">=0.15" },
     { name = "geopandas", specifier = ">=1.0" },
+    { name = "glofas-ewds", specifier = "~=0.1.0" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "imageserver-export", specifier = "~=0.2.0" },
     { name = "ingv-shakemap", specifier = "~=0.2.0" },
@@ -2394,7 +2422,6 @@ copernicus = [
 ]
 dev = [
     { name = "anthropic", specifier = ">=0.40" },
-    { name = "limen-geodata", editable = "geodata" },
     { name = "mypy", specifier = ">=1.13" },
     { name = "openai", specifier = ">=1.55" },
     { name = "pre-commit", specifier = ">=4.0" },
@@ -2428,42 +2455,6 @@ report = [
     { name = "reportlab", specifier = ">=5.0.1" },
 ]
 storage = [{ name = "boto3", specifier = ">=1.35" }]
-
-[[package]]
-name = "limen-geodata"
-version = "0.1.0"
-source = { editable = "geodata" }
-dependencies = [
-    { name = "asyncpg" },
-    { name = "httpx" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "pyogrio" },
-    { name = "pyyaml" },
-    { name = "shapely" },
-    { name = "structlog" },
-    { name = "tenacity" },
-]
-
-[package.optional-dependencies]
-mcp = [
-    { name = "fastmcp" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "asyncpg", specifier = ">=0.30" },
-    { name = "fastmcp", marker = "extra == 'mcp'", specifier = ">=0.4" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "pydantic", specifier = ">=2.9" },
-    { name = "pydantic-settings", specifier = ">=2.5" },
-    { name = "pyogrio", specifier = ">=0.10" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "shapely", specifier = ">=2.0" },
-    { name = "structlog", specifier = ">=24.4" },
-    { name = "tenacity", specifier = ">=9.0" },
-]
-provides-extras = ["mcp"]
 
 [[package]]
 name = "llvmlite"

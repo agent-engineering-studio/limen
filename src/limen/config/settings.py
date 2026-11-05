@@ -863,6 +863,19 @@ class CopernicusSettings(BaseSettings):
     #: Oltre questa età la corsa salvata non vale più come previsione, e il
     #: ramo fluviale torna a chiedere a Open-Meteo.
     eta_massima_giorni: int = Field(default=2, ge=1)
+    #: Tetto mensile di Limen sulle processing unit del Copernicus Data Space
+    #: (`limen ems-sentinel1`), sotto le 10.000 al mese di un account generico:
+    #: il resto resta a chi usa lo stesso account per altro. Le credenziali le
+    #: legge la libreria (CDSE_CREDENTIALS_FILE, o CDSE_CLIENT_ID/_SECRET).
+    cdse_pu_mensili: float = Field(default=1000.0, ge=0)
+    #: 40 m e non i 20 di default della libreria: è la risoluzione delle coppie
+    #: già pagate (artifact ems-data), che si riusano a 0 PU solo così, e costa
+    #: un quarto.
+    s1_risoluzione_m: float = Field(default=40.0, gt=0)
+    #: Anche il passaggio pre-evento della stessa orbita (circa il doppio delle
+    #: PU): è ciò che fa il change detection, l'unico che migliora sulle
+    #: etichette indipendenti.
+    s1_riferimento: bool = True
 
     @property
     def attivo(self) -> bool:
@@ -1048,27 +1061,6 @@ class MonitoringSettings(BaseSettings):
     # Must exist both in training_samples.features and in the shadow's
     # persisted breakdown["features"] (same keys, same scales).
     drift_feature: str = "rain.rain_72h_mm"
-
-
-class GeodataSettings(BaseSettings):
-    """Hooks into the V2 Geo-Data Service (§3.3.4-ter).
-
-    The geodata stack itself runs in its own compose profile — these
-    settings only control when the *operational* API refreshes its
-    per-cell static factors against the geodata PostGIS via
-    ``limen geodata export-features``.
-
-    Default off: the geodata profile is opt-in, so the operational API
-    never assumes it's running.
-    """
-
-    model_config = SettingsConfigDict(extra="ignore")
-
-    enable_periodic_export: bool = False
-    """When true, the scheduler runs ``export_cell_features`` periodically."""
-    export_features_hours: int = Field(default=168, ge=1)
-    """Cadence (hours). 168 = weekly. The PAI + IFFI datasets refresh
-    yearly at most — daily would be wasteful."""
 
 
 class GeoServerSourceSettings(BaseSettings):
@@ -1348,7 +1340,6 @@ class Settings(BaseSettings):
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
     openmeteo: OpenMeteoSettings = Field(default_factory=OpenMeteoSettings)
     kg: KgSettings = Field(default_factory=KgSettings)
-    geodata: GeodataSettings = Field(default_factory=GeodataSettings)
     geoserver_source: GeoServerSourceSettings = Field(default_factory=GeoServerSourceSettings)
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"

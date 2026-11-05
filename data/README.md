@@ -51,7 +51,7 @@ data/
 | `hazard/landslide/` | consigliato | S | poligoni con classe ordinale | GeoServer (`GEOSERVER_SOURCE__DB_DSN`) | S su inventory+DEM |
 | `inventory/` | consigliato | S (densità frane) | poligoni/linee/punti | GeoServer | S su hazard+DEM |
 | `dem/` | opzionale | S (derivate morfometriche) | GeoTIFF **tiled** | `LIMEN_DEM_RASTER` | derivate NULL |
-| `hazard/hydraulic/` | opzionale | H | poligoni con classi | manifest `geodata/datasets.yaml` | H neutra |
+| `hazard/hydraulic/` | opzionale | H | poligoni con classi | GeoServer (`GEOSERVER_SOURCE__DB_DSN`) | H neutra |
 | `events/` | per backtest/ML | truth set §2.5 + feature store | CSV con data+lat/lon | `LIMEN_ITALICA_CSV` | niente backtest/training |
 | `landcover/` | opzionale | S/K | GeoTIFF Int16 codici classe | `LIMEN_CORINE_RASTER` | skip |
 | `sealing/` | opzionale | ramo pluviale (alluvione) | GeoTIFF uint8, % sigillato 0-100 | `LIMEN_IMPERVIOUSNESS_RASTER` | nessuna amplificazione urbana |
@@ -100,8 +100,8 @@ nazionali ISPRA PAI frana e idraulica (idrogeo.isprambiente.it,
 CC-BY 4.0). **Altrove**: i PPR francesi (Géorisques), o qualsiasi
 zonazione suscettibilità/pericolosità nazionale; in mancanza, lo slot
 resta vuoto e S si regge su inventario + DEM. L'ingestione passa dal
-PostGIS di GeoServer (`limen geoserver-sync`) o dal manifest
-`geodata/datasets.yaml` (idraulica).
+PostGIS di GeoServer (`limen geodati-sync` scarica, `limen geoserver-sync`
+porta in Limen), idraulica compresa.
 
 ### `inventory/` — inventario frane storiche
 
@@ -216,8 +216,8 @@ Niente di questo è in git: si rigenera con il comando a destra.
 |---|---|---|---|---|
 | `data/boundaries/istat_2023/` | confini comunali, provinciali, regionali | 20 MB | ISTAT, CC-BY 3.0 | download manuale (sopra) |
 | `data/inventory/iffi/<regione>/` | inventario frane IFFI, 21 territori | 2,7 GB | ISPRA, CC-BY | download per regione |
-| `data/hazard/landslide/pai_frane_2020_2021/` | mosaicatura PAI frane | 1,9 GB | ISPRA, CC-BY 4.0 | idrogeo.isprambiente.it |
-| `data/hazard/hydraulic/pai_idraulica_2020/` | mosaicatura PAI idraulica | 22 MB | ISPRA, CC-BY 4.0 | `geodata/datasets.yaml` |
+| `data/hazard/landslide/pai_frane_2020_2021/` | mosaicatura PAI frane | 1,9 GB | ISPRA, CC BY-SA 4.0 | idrogeo.isprambiente.it |
+| `data/hazard/hydraulic/pai_idraulica_2020/` | mosaicatura PAI idraulica | 22 MB | ISPRA, CC BY-SA 4.0 | `limen geodati-sync` |
 | `data/events/italica/ITALICA_v4.csv` | catalogo frane datate | 1 MB | CNR-IRPI, CC-BY 4.0 | `limen ingest-events` |
 | `data/flood_events/EMSR*/` | perimetri allagati osservati (layer GeoJSON), 14 attivazioni | ~200 MB | Copernicus EMS | `limen ingest-events --hazard flood` |
 | `data/fires/firms/` | archivio incendi MODIS/VIIRS 2000- | 34 MB | NASA FIRMS | `limen ingest-fire-history` |

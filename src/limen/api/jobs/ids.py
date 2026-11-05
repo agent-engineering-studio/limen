@@ -20,7 +20,6 @@ JOB_PARTITIONS = "limen-partitions"
 JOB_IOT_ROLLUP = "limen-iot-rollup"
 JOB_IOT_PARTITION_ROLLOVER = "limen-iot-partition-rollover"
 JOB_DRIFT_MONITOR = "limen-drift-monitor"
-JOB_GEODATA_EXPORT = "limen-geodata-export"
 JOB_HTML_REPORT = "limen-html-report"
 JOB_BRIEFING_ENRICHMENT = "limen-briefing-enrichment"
 JOB_NIGHTLY = "limen-nightly"
@@ -41,7 +40,6 @@ __all__ = [
     "JOB_FIRMS_MONITORING",
     "JOB_FORECAST_HISTORY",
     "JOB_FORECAST_MONITORING",
-    "JOB_GEODATA_EXPORT",
     "JOB_HOURLY_MONITORING",
     "JOB_HTML_REPORT",
     "JOB_INGV_SYNC",
