@@ -1,77 +1,42 @@
 """L'archivio locale del radar DPC: pioggia oraria corretta con i pluviometri.
 
-L'API pubblica del DPC tiene circa cinque mesi di fotogrammi, poi li perde.
-Lo storico IT-DPC-SRI (2010-2025) è solo radar, e sottostima: in Puglia, nel
-settembre 2016, leggeva fra il 10 e l'80 % dei pluviometri. Il «Merging» è la
-correzione con i pluviometri, ma non esiste in archivio pubblico: se non lo
-salviamo noi, ogni mese ne sparisce uno.
+L'API pubblica del DPC tiene circa cinque mesi di fotogrammi, poi li perde, e
+il «Merging» (radar più pluviometri) non esiste in archivio pubblico: se non
+lo salviamo noi, ogni mese ne sparisce uno.
 
-Due prodotti, perché il «Merging» più breve dura tre ore:
-
-* ``CUM3`` alle 00, 03, ..., 21 UTC: blocchi da tre ore che non si
-  sovrappongono, radar più pluviometri, 0,01° in EPSG:4326;
-* ``SRT1`` a ogni ora piena: la cumulata oraria del solo radar, 1 km.
-
-La pioggia di un'ora è SRT1 riscalata perché le tre ore del blocco sommino
-esattamente al CUM3: il «Merging» dice quanta, il radar dice quando. Se il
-radar non ha visto niente e i pluviometri sì, il blocco si divide in parti
-uguali; senza CUM3 resta SRT1; senza nessuno dei due l'ora è «non misurata».
-
-Layout: ``<cartella>/<PRODOTTO>/<AAAA>/<MM>/<GG>/<PRODOTTO>_<AAAAMMGGhhmm>.tif``,
-più ``assenti.txt`` per prodotto con i fotogrammi che il DPC non tiene più.
+Layout su disco, download idempotente e ricostruzione dell'ora (lo SRT1
+riscalato perché le tre ore del blocco sommino al CUM3) vengono dal pacchetto
+``dpc-radar`` (``dpc_radar.archive``), che legge anche gli ``assenti.txt``
+scritti da Limen prima di lui. Qui restano tre cose di Limen: l'HTTP passa da
+``_http`` (:func:`~limen.integrations.dpc.client.radar_archivio`), la cache
+dei fotogrammi è **una per cartella** e protetta da un lock, perché le regioni
+dello stesso sweep leggono gli stessi file da thread diversi, e un fotogramma
+illeggibile logga ``integration.degraded``.
 """
 
 from __future__ import annotations
 
+import threading
 from datetime import UTC, datetime, timedelta
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 
-import numpy as np
-import rasterio
-from dpc_radar import RainGrid, product
-from dpc_radar.products import NODATA
-from rasterio.errors import RasterioIOError
+from dpc_radar import RainGrid
+from dpc_radar import archive as dpc_archive
 
 from limen.core.logging import get_logger
-from limen.integrations.dpc.client import ASSENTE, scarica_fotogramma
+from limen.integrations.dpc.client import radar_archivio
 from limen.integrations.openmeteo.dtos import WeatherSample
 
 log = get_logger(__name__)
 
-#: Prodotto → passo in ore fra due fotogrammi archiviati.
-PRODOTTI = {"CUM3": 3, "SRT1": 1}
-#: Sotto questa somma oraria il radar «non ha visto niente» nel blocco (mm).
-_RADAR_SECCO_MM = 0.1
+percorso = dpc_archive.path
+istanti = dpc_archive.times
+
 #: Le 48 ore dello sweep toccano fino a 51 SRT1 e 17 CUM3, ~6,5 MB l'uno.
 #: Con margine: a cache piena giusta, un fotogramma in più fa girare l'LRU
 #: a vuoto su ogni regione (~530 MB).
 _FOTOGRAMMI_IN_MEMORIA = 80
-#: Prima di questa età un 403 è un fotogramma non ancora pubblicato, non uno
-#: che il DPC non tiene più (~150 giorni): si ritenta invece di annotarlo.
-_ASSENTE_DOPO = timedelta(days=7)
-
-
-def percorso(cartella: Path, prodotto: str, t: datetime) -> Path:
-    return cartella / prodotto / f"{t:%Y/%m/%d}" / f"{prodotto}_{t:%Y%m%d%H%M}.tif"
-
-
-def istanti(prodotto: str, dal: datetime, al: datetime) -> list[datetime]:
-    """Gli istanti archiviati di ``prodotto`` in ``[dal, al]``, dal più vecchio."""
-    passo = PRODOTTI[prodotto]
-    t = dal.replace(minute=0, second=0, microsecond=0)
-    if t < dal:
-        t += timedelta(hours=1)
-    t += timedelta(hours=(-t.hour) % passo)
-    out = []
-    while t <= al:
-        out.append(t)
-        t += timedelta(hours=passo)
-    return out
-
-
-def _assenti(cartella: Path, prodotto: str) -> Path:
-    return cartella / prodotto / "assenti.txt"
 
 
 async def archivia(
@@ -86,127 +51,74 @@ async def archivia(
     perderà per primo.
 
     Idempotente: un file già su disco non si riscarica, uno che il DPC non
-    tiene più si annota e non si richiede. Si ferma a ``massimo`` download.
+    tiene più si annota e non si richiede. Si ferma a ``massimo`` richieste.
     ``recenti_prima`` è per lo sweep orario (#360): le ore appena cadute
     prima che il tetto se ne vada su fotogrammi vecchi bloccati.
     """
     adesso = adesso or datetime.now(UTC)
-    # L'ultima ora non è ancora pubblicata con certezza.
-    al = adesso - timedelta(hours=2)
-    dal = adesso - timedelta(days=giorni)
-    conti = {"scaricati": 0, "presenti": 0, "persi": 0, "falliti": 0}
-    byte = 0
-    for prodotto in PRODOTTI:
-        assenti_f = _assenti(cartella, prodotto)
-        noti = set(assenti_f.read_text().split()) if assenti_f.exists() else set()
-        ordine = istanti(prodotto, dal, al)
-        for t in reversed(ordine) if recenti_prima else ordine:
-            if conti["scaricati"] + conti["persi"] + conti["falliti"] >= massimo:
-                break
-            dest = percorso(cartella, prodotto, t)
-            chiave = f"{t:%Y%m%d%H%M}"
-            if dest.exists() or chiave in noti:
-                conti["presenti"] += 1
-                continue
-            dati = await scarica_fotogramma(prodotto, t)
-            if dati == ASSENTE and adesso - t > _ASSENTE_DOPO:
-                assenti_f.parent.mkdir(parents=True, exist_ok=True)
-                with assenti_f.open("a") as f:
-                    f.write(chiave + "\n")
-                conti["persi"] += 1
-            elif isinstance(dati, bytes):
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                tmp = dest.with_suffix(".tmp")
-                tmp.write_bytes(dati)
-                tmp.rename(dest)
-                conti["scaricati"] += 1
-                byte += len(dati)
-            else:
-                # Anche un ASSENTE troppo giovane: annotarlo lo perderebbe per
-                # sempre, e le sue tre ore cadrebbero sul solo radar.
-                conti["falliti"] += 1
-    conti["mb"] = byte // 1_000_000
+    report = await dpc_archive.archive(
+        cartella,
+        radar_archivio(),
+        start=adesso - timedelta(days=giorni),
+        # L'ultima ora non è ancora pubblicata con certezza.
+        end=adesso - timedelta(hours=2),
+        limit=massimo,
+        newest_first=recenti_prima,
+        now=adesso,
+    )
+    conti = {
+        "scaricati": report.downloaded,
+        "presenti": report.present,
+        "persi": report.lost,
+        "falliti": report.failed,
+        "mb": report.bytes // 1_000_000,
+    }
     log.info("dpc.archivio.done", cartella=str(cartella), giorni=giorni, **conti)
     return conti
 
 
-def _leggi(file: Path, t: datetime) -> RainGrid | None:
-    try:
-        versione = file.stat().st_mtime_ns
-    except FileNotFoundError:
-        # Fuori dalla cache: un fotogramma che manca adesso può arrivare col
-        # prossimo `archivia`, e un `None` ricordato lo nasconderebbe.
-        return None
-    try:
-        return _decodifica(file, versione, t)
-    except RasterioIOError as exc:
-        # Un file salvato da una risposta d'errore: il fotogramma manca, la
-        # regione tiene le altre ore misurate.
-        log.warning(
-            "integration.degraded", source="dpc_merging_archive", file=str(file), error=str(exc)
-        )
-        return None
+class _ArchivioCondiviso(dpc_archive.MergingArchive):
+    def __init__(self, cartella: Path) -> None:
+        super().__init__(cartella, cache_frames=_FOTOGRAMMI_IN_MEMORIA)
+        self._lock = threading.Lock()
+
+    def read(self, product: str, time: datetime) -> RainGrid | None:
+        # Sotto il lock anche la decodifica: due regioni che chiedono lo stesso
+        # fotogramma lo decodificano una volta sola.
+        file = percorso(self.folder, product, time)
+        try:
+            with self._lock:
+                grid = super().read(product, time)
+        except OSError as exc:
+            # Permessi, o un file sparito fra stat e lettura: manca quel
+            # fotogramma, non tutte le ore della regione.
+            log.warning(
+                "integration.degraded", source="dpc_merging_archive", file=str(file), error=str(exc)
+            )
+            return None
+        if grid is None and file.exists():
+            # Un file salvato da una risposta d'errore: il fotogramma manca, la
+            # regione tiene le altre ore misurate.
+            log.warning("integration.degraded", source="dpc_merging_archive", file=str(file))
+        return grid
 
 
-@lru_cache(maxsize=_FOTOGRAMMI_IN_MEMORIA)
-def _decodifica(file: Path, versione: int, t: datetime) -> RainGrid:  # noqa: ARG001 — `versione` è la chiave della cache: un file riscritto non riusa il vecchio
-    """Un fotogramma decodificato, ricordato fra le regioni dello stesso sweep.
-
-    Lo SRT1 è un GeoTIFF LZW non a blocchi: 0,17 s a lettura, e le 48 ore di
-    una regione costavano 16 s. Le venti regioni leggono gli stessi file.
-    """
-    with rasterio.open(file) as ds:
-        dati = ds.read(1).astype(np.float32)
-        dati[dati <= NODATA] = np.nan
-        # Condiviso fra i thread delle regioni: solo in lettura.
-        dati.setflags(write=False)
-        prodotto = file.name.split("_", 1)[0]
-        return RainGrid(product(prodotto), t, dati, ds.transform, ds.crs)
+@cache
+def _condiviso(cartella: Path) -> _ArchivioCondiviso:
+    return _ArchivioCondiviso(cartella)
 
 
 class MergingArchive:
     """Pioggia oraria corretta con i pluviometri, dall'archivio su disco."""
 
     def __init__(self, cartella: Path) -> None:
-        self._cartella = cartella
-
-    def _campiona(
-        self, prodotto: str, t: datetime, points: list[tuple[float, float]]
-    ) -> list[float | None]:
-        grid = _leggi(percorso(self._cartella, prodotto, t), t)
-        return grid.sample(points) if grid is not None else [None] * len(points)
+        self._archivio = _condiviso(cartella)
 
     def oraria(
         self, points: list[tuple[float, float]], start: datetime, end: datetime
     ) -> dict[datetime, list[float | None]]:
         """Pioggia di ogni ora ``(h-1, h]`` in ``(start, end]``, per punto (mm)."""
-        out: dict[datetime, list[float | None]] = {}
-        primo = start.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
-        for fine in istanti("CUM3", primo, end + timedelta(hours=2)):
-            ore = [fine - timedelta(hours=k) for k in (2, 1, 0)]
-            merging = self._campiona("CUM3", fine, points)
-            radar = [self._campiona("SRT1", h, points) for h in ore]
-            for j, h in enumerate(ore):
-                if not (start < h <= end):
-                    continue
-                valori: list[float | None] = []
-                for k in range(len(points)):
-                    blocco = [r[k] for r in radar]
-                    valori.append(_disaggrega(merging[k], blocco, j))
-                out[h] = valori
-        return out
-
-
-def _disaggrega(merging: float | None, radar: list[float | None], j: int) -> float | None:
-    """La quota dell'ora ``j`` del blocco nel totale «Merging»."""
-    if merging is None:
-        return radar[j]
-    misurate = [r for r in radar if r is not None]
-    somma = sum(max(r, 0.0) for r in misurate)
-    if somma < _RADAR_SECCO_MM or len(misurate) < len(radar):
-        return merging / len(radar)
-    r = radar[j]
-    return merging * max(r, 0.0) / somma if r is not None else None
+        return self._archivio.hourly(points, start, end)
 
 
 def pioggia_dal_radar(

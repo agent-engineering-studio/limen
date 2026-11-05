@@ -26,7 +26,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import httpx
-from dpc_radar import Absent, DpcRadarError, RadarClient, RainGrid
+from dpc_radar import Absent, DpcRadarError, Product, RadarClient, RainGrid
 from tenacity import RetryError
 
 from limen.core.logging import get_logger
@@ -63,13 +63,40 @@ async def _send_archivio(method: str, url: str, **kwargs: Any) -> httpx.Response
 
     Un fotogramma scaduto risponde 500 con il 403 di S3 nel corpo: ritentato
     sarebbero quattro tentativi con backoff per niente, e poi un ``RetryError``
-    al posto di :data:`ASSENTE`.
+    al posto di :data:`~dpc_radar.ABSENT`. Gli altri guasti escono come
+    ``httpx.HTTPError``: è ciò che ``dpc_radar.archive`` conta come fotogramma
+    fallito, da ritentare al giro dopo, invece di fermare l'archivio.
     """
-    if method == "POST":
-        kwargs.pop("timeout", None)
-        client = await SharedHttpClient.get()
-        return await client.request(method, url, **kwargs)
-    return await _send(method, url, **kwargs)
+    try:
+        if method == "POST":
+            kwargs.pop("timeout", None)
+            client = await SharedHttpClient.get()
+            return await client.request(method, url, **kwargs)
+        return await _send(method, url, **kwargs)
+    except (RetryError, TimeoutError, OSError) as exc:
+        raise httpx.TransportError(str(exc)) from exc
+
+
+class _RadarArchivio(RadarClient):
+    """Ogni fotogramma fallito logga ``integration.degraded`` ed esce come un
+    errore che ``dpc_radar.archive`` conta e ritenta: anche una risposta che
+    non è JSON, che altrimenti fermerebbe tutto il giro su quel fotogramma."""
+
+    async def download(self, name: str | Product, time: datetime) -> bytes | Absent:
+        label = f"dpc.archivio.{(name if isinstance(name, str) else name.name).lower()}"
+        try:
+            return await super().download(name, time)
+        except (httpx.HTTPError, DpcRadarError) as exc:
+            _degraded(label, exc)
+            raise
+        except (ValueError, KeyError) as exc:
+            _degraded(label, exc)
+            raise DpcRadarError(f"risposta illeggibile: {exc}") from exc
+
+
+def radar_archivio() -> RadarClient:
+    """Il client per l'archivio «Merging»: vedi :func:`_send_archivio`."""
+    return _RadarArchivio(send=_send_archivio)
 
 
 def _degraded(label: str, exc: BaseException | str) -> None:
@@ -113,25 +140,6 @@ async def get_latest_sri() -> RainGrid | None:
     return await _download("SRI")
 
 
-#: Un fotogramma che il DPC non tiene più: non si ritenta.
-ASSENTE = "assente"
-
-
-async def scarica_fotogramma(product_type: str, at: datetime) -> bytes | str | None:
-    """Il GeoTIFF di ``product_type`` emesso ``at``, così com'è.
-
-    :data:`ASSENTE` se il DPC non lo tiene più (l'API ne conserva circa
-    cinque mesi, e oltre risponde 500 con il 403 di S3 nel corpo); ``None``
-    se è fallito per altro, e allora si ritenta il giro dopo.
-    """
-    try:
-        raw = await RadarClient(send=_send_archivio).download(product_type, at)
-    except _DEGRADATION_EXC as exc:
-        _degraded(f"dpc.archivio.{product_type.lower()}", exc)
-        return None
-    return ASSENTE if isinstance(raw, Absent) else raw
-
-
 #: L'ultimo fotogramma CUM per durata. Una regione dopo l'altra chiede lo
 #: stesso file nazionale (~2 MB, nuovo ogni 30 minuti): si riscarica solo
 #: quando il DPC ne pubblica uno nuovo.
@@ -164,11 +172,10 @@ async def get_cum_at(hours: int, observed_at: datetime) -> RainGrid | None:
 
 
 __all__ = [
-    "ASSENTE",
     "CUM_PERIOD",
     "RainGrid",
     "get_cum_at",
     "get_latest_cum",
     "get_latest_sri",
-    "scarica_fotogramma",
+    "radar_archivio",
 ]

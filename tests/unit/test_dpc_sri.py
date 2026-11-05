@@ -10,7 +10,7 @@ import httpx
 import numpy as np
 import pytest
 import rasterio
-from dpc_radar import RainGrid
+from dpc_radar import ABSENT, DpcRadarError, RainGrid
 from rasterio.io import MemoryFile
 
 from limen.integrations import _http
@@ -246,23 +246,31 @@ async def test_un_fotogramma_scaduto_e_assente_con_una_richiesta_sola(
 ) -> None:
     """Il 500 con il 403 di S3 non si ritenta: ``ASSENTE`` subito (#429)."""
     rete.risposte[f"POST {_API}/downloadProduct"] = httpx.Response(500, text=_S3_403)
-    assert (
-        await client.scarica_fotogramma("CUM3", datetime(2026, 1, 1, tzinfo=UTC)) == client.ASSENTE
-    )
+    radar = client.radar_archivio()
+    assert await radar.download("CUM3", datetime(2026, 1, 1, tzinfo=UTC)) is ABSENT
     assert len(rete.viste) == 1
 
 
-async def test_un_altro_errore_dell_archivio_e_none(rete: _Rete) -> None:
+async def test_un_altro_errore_dell_archivio_e_un_errore_http(rete: _Rete) -> None:
+    """Un ``httpx.HTTPError``: ``dpc_radar.archive`` lo conta fallito e lo ritenta."""
     rete.risposte[f"POST {_API}/downloadProduct"] = httpx.Response(502, text="Bad Gateway")
-    assert await client.scarica_fotogramma("CUM3", _T) is None
+    with pytest.raises(httpx.HTTPError):
+        await client.radar_archivio().download("CUM3", _T)
     assert len(rete.viste) == 1
+
+
+async def test_una_risposta_non_json_e_un_fotogramma_fallito(rete: _Rete) -> None:
+    """Un fotogramma che non si legge si conta e si ritenta: non ferma il giro."""
+    rete.risposte[f"POST {_API}/downloadProduct"] = httpx.Response(200, text="<html>")
+    with pytest.raises(DpcRadarError):
+        await client.radar_archivio().download("CUM3", _T)
 
 
 async def test_l_archivio_scarica_il_geotiff_com_e(rete: _Rete) -> None:
     raw = _tiff(_data())
     rete.risposte[f"POST {_API}/downloadProduct"] = httpx.Response(200, json={"url": _LINK})
     rete.risposte[f"GET {_LINK}"] = httpx.Response(200, content=raw)
-    assert await client.scarica_fotogramma("SRT1", _T) == raw
+    assert await client.radar_archivio().download("SRT1", _T) == raw
 
 
 async def test_il_radar_che_non_risponde_degrada_a_none(rete: _Rete) -> None:

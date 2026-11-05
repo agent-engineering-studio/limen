@@ -18,7 +18,7 @@ from limen.config.settings import RadarArchiveSettings, Settings
 from limen.core.models.context import MonitoringContext
 from limen.core.models.hazard import HazardType
 from limen.integrations.dpc import merging_archive
-from limen.integrations.dpc.merging_archive import MergingArchive, _leggi, percorso
+from limen.integrations.dpc.merging_archive import MergingArchive, _condiviso, percorso
 from limen.integrations.openmeteo.dtos import WeatherSample
 
 _T = datetime(2026, 10, 10, 6, tzinfo=UTC)
@@ -105,10 +105,10 @@ async def test_un_archivio_illeggibile_degrada_al_modello(tmp_path: Path) -> Non
 
 
 def test_un_file_che_arriva_dopo_non_resta_assente(tmp_path: Path) -> None:
-    file = percorso(tmp_path, "CUM3", _T)
-    assert _leggi(file, _T) is None
-    _tif(file, 5.0)
-    grid = _leggi(file, _T)
+    archivio = _condiviso(tmp_path)
+    assert archivio.read("CUM3", _T) is None
+    _tif(percorso(tmp_path, "CUM3", _T), 5.0)
+    grid = archivio.read("CUM3", _T)
     assert grid is not None and float(grid.data.max()) == 5.0
 
 

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from dpc_radar.bulletins import Bulletin
+
 from limen.data.db import acquire
-from limen.integrations.dpc.bollettini import Bollettino
 
 _UPSERT_SQL = """
 INSERT INTO dpc_allerte (
@@ -25,26 +26,26 @@ WHERE dpc_allerte.emesso <= EXCLUDED.emesso
 """
 
 
-async def scrivi(b: Bollettino) -> int:
+async def scrivi(b: Bulletin) -> int:
     async with acquire() as conn, conn.transaction():
         await conn.executemany(
             _UPSERT_SQL,
             [
                 (
-                    z.valido,
-                    z.zona,
-                    b.nome,
-                    b.emesso,
-                    z.livello,
-                    z.idrogeologico,
-                    z.idraulico,
-                    z.temporali,
-                    z.geom,
+                    z.valid,
+                    z.name,
+                    b.name,
+                    b.issued,
+                    z.level,
+                    z.hydrogeological,
+                    z.hydraulic,
+                    z.thunderstorms,
+                    z.geometry,
                 )
-                for z in b.zone
+                for z in b.zones
             ],
         )
-    return len(b.zone)
+    return len(b.zones)
 
 
 #: Per comune, la zona che contiene il suo punto interno, per oggi e domani
