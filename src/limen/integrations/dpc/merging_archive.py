@@ -9,19 +9,18 @@ riscalato perché le tre ore del blocco sommino al CUM3) vengono dal pacchetto
 ``dpc-radar`` (``dpc_radar.archive``), che legge anche gli ``assenti.txt``
 scritti da Limen prima di lui. Qui restano tre cose di Limen: l'HTTP passa da
 ``_http`` (:func:`~limen.integrations.dpc.client.radar_archivio`), la cache
-dei fotogrammi è **una per cartella** e protetta da un lock, perché le regioni
-dello stesso sweep leggono gli stessi file da thread diversi, e un fotogramma
-illeggibile logga ``integration.degraded``.
+dei fotogrammi è **una per cartella**, perché le regioni dello stesso sweep
+leggono gli stessi file, e quello che il pacchetto scrive sul suo logger
+diventa ``integration.degraded``.
 """
 
 from __future__ import annotations
 
-import threading
+import logging
 from datetime import UTC, datetime, timedelta
 from functools import cache
 from pathlib import Path
 
-from dpc_radar import RainGrid
 from dpc_radar import archive as dpc_archive
 
 from limen.core.logging import get_logger
@@ -37,6 +36,21 @@ istanti = dpc_archive.times
 #: Con margine: a cache piena giusta, un fotogramma in più fa girare l'LRU
 #: a vuoto su ogni regione (~530 MB).
 _FOTOGRAMMI_IN_MEMORIA = 80
+
+
+class _DegradoArchivio(logging.Handler):
+    """Un fotogramma che manca o non si legge, come ogni altro degrado di Limen.
+
+    Il pacchetto toglie dal messaggio il link firmato di S3.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        log.warning("integration.degraded", source="dpc_merging_archive", error=record.getMessage())
+
+
+_logger_archivio = logging.getLogger(dpc_archive.__name__)
+_logger_archivio.addHandler(_DegradoArchivio())
+_logger_archivio.propagate = False
 
 
 async def archivia(
@@ -77,35 +91,9 @@ async def archivia(
     return conti
 
 
-class _ArchivioCondiviso(dpc_archive.MergingArchive):
-    def __init__(self, cartella: Path) -> None:
-        super().__init__(cartella, cache_frames=_FOTOGRAMMI_IN_MEMORIA)
-        self._lock = threading.Lock()
-
-    def read(self, product: str, time: datetime) -> RainGrid | None:
-        # Sotto il lock anche la decodifica: due regioni che chiedono lo stesso
-        # fotogramma lo decodificano una volta sola.
-        file = percorso(self.folder, product, time)
-        try:
-            with self._lock:
-                grid = super().read(product, time)
-        except OSError as exc:
-            # Permessi, o un file sparito fra stat e lettura: manca quel
-            # fotogramma, non tutte le ore della regione.
-            log.warning(
-                "integration.degraded", source="dpc_merging_archive", file=str(file), error=str(exc)
-            )
-            return None
-        if grid is None and file.exists():
-            # Un file salvato da una risposta d'errore: il fotogramma manca, la
-            # regione tiene le altre ore misurate.
-            log.warning("integration.degraded", source="dpc_merging_archive", file=str(file))
-        return grid
-
-
 @cache
-def _condiviso(cartella: Path) -> _ArchivioCondiviso:
-    return _ArchivioCondiviso(cartella)
+def _condiviso(cartella: Path) -> dpc_archive.MergingArchive:
+    return dpc_archive.MergingArchive(cartella, cache_frames=_FOTOGRAMMI_IN_MEMORIA)
 
 
 class MergingArchive:

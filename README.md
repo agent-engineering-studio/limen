@@ -460,7 +460,7 @@ rule stays in Limen. The numbers that tune a hazard stay in
 | [`effis-client`](https://pypi.org/project/effis-client/) | `~=0.1.2` | Apache-2.0 |
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |
 | [`imageserver-export`](https://pypi.org/project/imageserver-export/) | `~=0.2.0` | Apache-2.0 |
-| [`dpc-radar`](https://pypi.org/project/dpc-radar/) | `~=0.2.0` | Apache-2.0 |
+| [`dpc-radar`](https://pypi.org/project/dpc-radar/) | `~=0.2.1` | Apache-2.0 |
 | [`glofas-ewds`](https://pypi.org/project/glofas-ewds/) | `~=0.1.0` | Apache-2.0 |
 | [`mcp-geo-server`](https://github.com/agent-engineering-studio/mcp-geo-server) | Docker image, pinned commit | MIT |
 

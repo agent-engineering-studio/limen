@@ -22,6 +22,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+* **`dpc-radar` 0.2.1: via gli aggiramenti di Limen.** Il pacchetto ora protegge
+  da solo la cache dei fotogrammi, conta come fallito un fotogramma con una
+  risposta non JSON o un `OSError` e accetta `send=` sui bollettini: le tre
+  chiamate a GitHub non sono più qui. I suoi log diventano
+  `integration.degraded`, anche per un fotogramma non ancora pubblicato.
+
 * **Le trappole delle fonti esterne nella guida.** `docs/guida/integrazioni`
   (IT e EN) racconta quelle di Open-Meteo, GloFAS e SINAnet, che non sono
   diventate una libreria.
