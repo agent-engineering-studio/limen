@@ -29,10 +29,12 @@ from pathlib import Path
 
 import numpy as np
 import rasterio
+from dpc_radar import RainGrid, product
+from dpc_radar.products import NODATA
 from rasterio.errors import RasterioIOError
 
 from limen.core.logging import get_logger
-from limen.integrations.dpc.client import ASSENTE, SriGrid, scarica_fotogramma
+from limen.integrations.dpc.client import ASSENTE, scarica_fotogramma
 from limen.integrations.openmeteo.dtos import WeatherSample
 
 log = get_logger(__name__)
@@ -128,7 +130,7 @@ async def archivia(
     return conti
 
 
-def _leggi(file: Path, t: datetime) -> SriGrid | None:
+def _leggi(file: Path, t: datetime) -> RainGrid | None:
     try:
         versione = file.stat().st_mtime_ns
     except FileNotFoundError:
@@ -147,7 +149,7 @@ def _leggi(file: Path, t: datetime) -> SriGrid | None:
 
 
 @lru_cache(maxsize=_FOTOGRAMMI_IN_MEMORIA)
-def _decodifica(file: Path, versione: int, t: datetime) -> SriGrid:  # noqa: ARG001 — `versione` è la chiave della cache: un file riscritto non riusa il vecchio
+def _decodifica(file: Path, versione: int, t: datetime) -> RainGrid:  # noqa: ARG001 — `versione` è la chiave della cache: un file riscritto non riusa il vecchio
     """Un fotogramma decodificato, ricordato fra le regioni dello stesso sweep.
 
     Lo SRT1 è un GeoTIFF LZW non a blocchi: 0,17 s a lettura, e le 48 ore di
@@ -155,10 +157,11 @@ def _decodifica(file: Path, versione: int, t: datetime) -> SriGrid:  # noqa: ARG
     """
     with rasterio.open(file) as ds:
         dati = ds.read(1).astype(np.float32)
-        dati[~np.isfinite(dati)] = -9999.0
+        dati[dati <= NODATA] = np.nan
         # Condiviso fra i thread delle regioni: solo in lettura.
         dati.setflags(write=False)
-        return SriGrid(data=dati, transform=ds.transform, crs=ds.crs, observed_at=t)
+        prodotto = file.name.split("_", 1)[0]
+        return RainGrid(product(prodotto), t, dati, ds.transform, ds.crs)
 
 
 class MergingArchive:

@@ -130,8 +130,10 @@ pluvial:
   #
   # Nei giorni calmi (1, 4, 6 ottobre) la quota d'Italia ≥ moderato non si
   # muove (+0,01 punti al massimo); nei due istanti dell'evento passa da 0 a
-  # 0,2-0,9%. Lipari resta mancata: il radar non ha visto il nubifragio. Un
-  # pixel spurio (7.348 mm in 24 h, l'11 ottobre) si scarta con la mediana 3×3.
+  # 0,2-0,9%. Lipari resta mancata: il radar non ha visto il nubifragio. I
+  # 7.348 mm in 24 h dell'11 ottobre non erano un pixel isolato ma la cima
+  # della campana corrotta delle :30 (limen#429): la mediana 3×3 non li toglie,
+  # li toglie il controllo contro il fotogramma precedente (`observed.max_step_mm`).
   observed:
     hours: 24
     max_age_minutes: 90
