@@ -50,6 +50,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+* **L'installazione carica anche gli eventi alluvione.** `make init` e
+  `nuovo_host.sh --da-zero` lanciano `ingest-events --hazard flood`: il truth
+  set di `backtest-flood` e i perimetri sulla mappa ci sono subito, non dopo la
+  prima notte. Se Copernicus EMS non risponde, l'installazione prosegue.
+
 * **`dpc-radar` 0.2.1: via gli aggiramenti di Limen.** Il pacchetto ora protegge
   da solo la cache dei fotogrammi, conta come fallito un fotogramma con una
   risposta non JSON o un `OSError` e accetta `send=` sui bollettini: le tre

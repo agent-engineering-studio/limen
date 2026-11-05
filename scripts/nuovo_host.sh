@@ -253,6 +253,7 @@ make --no-print-directory static-data || no "dati statici incompleti: guarda sop
 if [ "$MODO" = "--da-zero" ]; then
   say "eventi, calibrazione e catena FWI (nel worker)"
   limen ingest-events || no "ingest-events: riprova più tardi, è idempotente"
+  limen ingest-events --hazard flood || no "ingest-events --hazard flood: riprova più tardi, è idempotente; il passo notturno lo rifà"
   limen calibrate || no "calibrate: riprova dopo i dati statici"
   # La catena FWI parte da ERA5: un mese di spin-up prima che l'incendio
   # abbia numeri stabili. Con un backup c'è già (fwi_state).
