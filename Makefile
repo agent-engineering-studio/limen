@@ -22,7 +22,6 @@ COMPOSE_DEV  := infra/docker/docker-compose.dev.yml
 COMPOSE_DEMO := infra/docker/docker-compose.demo.yml
 COMPOSE_OBS  := infra/docker/docker-compose.observability.yml
 COMPOSE_GEOSERVER := infra/docker/docker-compose.geoserver.yml
-COMPOSE_GEODATA := infra/docker/docker-compose.geodata.yml
 COMPOSE_METEO := infra/docker/docker-compose.meteo.yml
 COMPOSE_SENSORI := infra/docker/docker-compose.sensori.yml
 # Unified stack: operational services + GeoServer, one project, one network.
@@ -39,7 +38,7 @@ COMPOSE_ALL  := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_DEMO) -f $(C
 # `infra/docker/.env`, che non esiste, e GEOSERVER_SHAPEFILE_DIR resta al
 # default — che punta a una directory vuota.
 COMPOSE_GS   := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_GEOSERVER) -p limen
-# L'istanza Open-Meteo propria: fuori da `make up` come geodata, perche'
+# L'istanza Open-Meteo propria: fuori da `make up`, perche'
 # scarica decine di GB e un deployment che non la vuole non deve pagarli.
 # Progetto suo, non `-p limen`: non condivide la rete con lo stack operativo
 # e i container la raggiungono su `host.docker.internal:8085`, come il
@@ -86,14 +85,13 @@ endif
 # `make build` spans EVERY compose file, not just the ones `make up` starts:
 # a build target that silently skips half the stack is worse than no target.
 # Deliberately separate from COMPOSE_ALL/UP_PROFILES — `make up` must NOT
-# start geodata (VPS-only, activated explicitly per CLAUDE.md) nor the
-# observability sidecar.
+# start the observability sidecar.
 COMPOSE_BUILD := $(if $(wildcard .env),--env-file .env) \
                  -f $(COMPOSE_DEMO) -f $(COMPOSE_GEOSERVER) \
-                 -f $(COMPOSE_GEODATA) -f $(COMPOSE_OBS) -p limen
+                 -f $(COMPOSE_OBS) -p limen
 # No `kg` profile: the knowledge-graph sidecar is not a service of any compose
 # here — it runs from its own repo (see the note in docker-compose.demo.yml).
-BUILD_PROFILES ?= --profile geoserver --profile frontend --profile geodata
+BUILD_PROFILES ?= --profile geoserver --profile frontend
 
 .PHONY: fetch-static inference-up inference-up-cpu inference-down inference-logs inference-check help install docs-links docs-bundle \
         up down build rebuild pull up-host-ollama \
@@ -287,7 +285,7 @@ down:
 
 # Bring EVERY image in the stack up to date (native arch, local testing).
 # Two steps, because the stack has two kinds of image:
-#   1. build — the ones Limen owns (api, mcp, postgres, geodata*)
+#   1. build — the ones Limen owns (api, mcp, postgres)
 #   2. pull  — third-party (GeoServer, pg_tileserv, mosquitto, node, otel-lgtm)
 #      and cross-repo (mcp-geo-server, pulled pre-built from GHCR: there is no
 #      build context for it inside Limen, by design)
@@ -296,7 +294,7 @@ down:
 build: gs-volumes
 	docker compose $(COMPOSE_BUILD) $(BUILD_PROFILES) build $(if $(NOCACHE),--no-cache)
 	docker compose $(COMPOSE_BUILD) $(BUILD_PROFILES) pull --ignore-buildable
-	@echo "[build] built + pulled every image across demo/geoserver/geodata/observability"
+	@echo "[build] built + pulled every image across demo/geoserver/observability"
 	@echo "[build] NOT covered: knowledge-graph sidecar (image unpublished — see BUILD_PROFILES)"
 
 # Full refresh of the local test environment: down → build → up.
@@ -317,9 +315,8 @@ PLATFORM ?= linux/amd64
 build-images:
 	docker build --platform $(PLATFORM) -f infra/postgres/Dockerfile.db -t limen/postgres:16-3.5 infra/postgres
 	docker build --platform $(PLATFORM) -f infra/docker/Dockerfile.api  -t limen/api:0.1 .
-	docker build --platform $(PLATFORM) -f geodata/Dockerfile           -t limen/geodata:0.1 .
 	( cd frontend && npm ci && npm run build )
-	@echo "[build-images] built limen/postgres:16-3.5, limen/api:0.1 (also mcp), limen/geodata:0.1 ($(PLATFORM)) + frontend dist/"
+	@echo "[build-images] built limen/postgres:16-3.5, limen/api:0.1 (also mcp) ($(PLATFORM)) + frontend dist/"
 
 # ---------------------------------------------------------------------------
 # Backend

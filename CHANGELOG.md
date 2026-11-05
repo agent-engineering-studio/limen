@@ -47,6 +47,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   trovato le sole celle cambiate, e il briefing sarebbe arrivato a una
   manciata di celle invece che all'area intera.
 
+### Removed
+
+* **Il membro uv `geodata/`**, con il comando `limen geodata`, il profilo
+  compose `geodata` e la sua immagine (`limen/geodata`, `-geodata` su GHCR),
+  l'MCP `ispra-geo` e il job `limen-geodata-export`. Il percorso operativo
+  lo aveva già sostituito: il download passa da `ispra-idrogeo`
+  (`integrations/idrogeo`), il caricamento da `geoserver_source`, i fattori
+  per cella da `bootstrap-static`, gli strumenti per gli agenti da
+  `idrogeo-mcp`. L'export (spento di default) riscriveva con `COALESCE`
+  cinque colonne di `cell_static_factors` che il bootstrap riempie già, il
+  manifest dichiarava una licenza sbagliata (PAI e idraulica sono CC BY-SA
+  4.0) e importava un solo scenario idraulico. Spariscono anche
+  `GeodataSettings`, `docs/geodata.md` e
+  `infra/docker/docker-compose.geodata.yml`.
+
 ### Added
 
 * **Contributi degli esperti dall'ispettore della cella.** Sotto «Come nasce

@@ -13,7 +13,6 @@ utilizzi, raggruppati per area:
 - `src/limen/<modulo>/` (un gruppo per sotto-pacchetto: agents, api, core, data, integrations, ml, …)
 - `src/limen/data/migrations/` (SQL: tabelle, viste, funzioni come `risk_at`, `refresh_mv_latest_risk`)
 - `src/limen/config/hazards/*.yaml` e `.env.example` (chiavi e variabili `SEZIONE__CHIAVE`)
-- `geodata/` (membro uv separato: non importa da `limen.*`)
 - `frontend/src/` (TS/TSX)
 - `tests/` e `docs/`
 

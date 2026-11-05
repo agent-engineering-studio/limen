@@ -2,8 +2,7 @@
 
 Read tools are thin queries over the operational tables (same SQL shapes as
 the public API endpoints). The one mutating tool (``run_monitor``) is gated
-by ``MCP_ADMIN_TOKEN`` exactly like the geodata MCP's ``refresh``: env var
-unset ⇒ disabled (fail-closed).
+by ``MCP_ADMIN_TOKEN``: env var unset ⇒ disabled (fail-closed).
 
 Everything here is advisory/operator tooling: nothing participates in the
 hourly scoring critical path, and nothing can alter a persisted score.

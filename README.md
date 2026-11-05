@@ -427,6 +427,7 @@ flowchart TB
         EF["effis-client<br/>burnt areas, official FWI"]
         RT["rainfall-thresholds<br/>rain that triggers landslides"]
         IS["imageserver-export<br/>sealed soil & land cover"]
+        DR["dpc-radar<br/>national weather radar"]
     end
     MGS["mcp-geo-server · MIT<br/>GeoServer + PostGIS + MCP agent"]
     L["<b>Limen</b>"]
@@ -438,6 +439,7 @@ flowchart TB
     RT --> L
     ID --> L
     IS --> L
+    DR --> L
     MGS -- "ISPRA layers in PostGIS<br/>WMS map overlays" --> L
 ```
 
@@ -450,14 +452,15 @@ rule stays in Limen. The numbers that tune a hazard stay in
 
 | Package | Pin in Limen | Licence |
 |---|---|---|
-| [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) | `~=0.4.0` | Apache-2.0 |
+| [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) | `~=0.7.1` | Apache-2.0 |
 | [`egms-client`](https://pypi.org/project/egms-client/) | `~=0.7.0` | Apache-2.0 |
-| [`firms-client`](https://pypi.org/project/firms-client/) | `~=0.4.0` | Apache-2.0 |
+| [`firms-client`](https://pypi.org/project/firms-client/) | `~=0.5.0` | Apache-2.0 |
 | [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) | `~=0.7.0` | Apache-2.0 |
 | [`fwi-chain`](https://pypi.org/project/fwi-chain/) | `~=1.0.0` | Apache-2.0 |
 | [`effis-client`](https://pypi.org/project/effis-client/) | `~=0.1.2` | Apache-2.0 |
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |
 | [`imageserver-export`](https://pypi.org/project/imageserver-export/) | `~=0.2.0` | Apache-2.0 |
+| [`dpc-radar`](https://pypi.org/project/dpc-radar/) | `~=0.2.0` | Apache-2.0 |
 | [`glofas-ewds`](https://pypi.org/project/glofas-ewds/) | `~=0.1.0` | Apache-2.0 |
 | [`mcp-geo-server`](https://github.com/agent-engineering-studio/mcp-geo-server) | Docker image, pinned commit | MIT |
 
@@ -896,7 +899,7 @@ Docker writes its own iptables chains, consulted *before* ufw's: the host's
 every `ports:` entry binds to a `LIMEN_*_BIND` variable defaulting to
 `127.0.0.1` (`LIMEN_PG_BIND`, `LIMEN_API_BIND`, `LIMEN_MQTT_BIND`,
 `LIMEN_TILESERV_BIND`, `LIMEN_FRONTEND_BIND`, `LIMEN_MCP_BIND`,
-`LIMEN_GEOSERVER_*_BIND`, `LIMEN_GEODATA_*_BIND`). Public exposure goes
+`LIMEN_GEOSERVER_*_BIND`, `LIMEN_IDROGEO_MCP_BIND`). Public exposure goes
 through a reverse proxy on 443, never by binding to `0.0.0.0`.
 
 ---

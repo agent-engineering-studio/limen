@@ -48,11 +48,12 @@ dependencies = [
     "effis-client[raster]~=0.1.2",
     "rainfall-thresholds~=0.1.0",
     "egms-client[raster]~=0.7.0",
-    "firms-client~=0.4.0",
+    "firms-client~=0.5.0",
     "copernicus-ems[cdse]~=0.7.1",
     "ispra-idrogeo~=0.7.0",
     "imageserver-export~=0.2.0",
     "ingv-shakemap~=0.2.0",
+    "dpc-radar~=0.2.0",
     "glofas-ewds~=0.1.0",
 ]
 
@@ -78,9 +79,6 @@ dev = [
     # via the optional `storage`/`agents` route per provider.
     "anthropic>=0.40",
     "openai>=1.55",
-    # Workspace member — installed editable so `geodata.*` is importable
-    # from the test harness without a separate `uv pip install -e`.
-    "limen-geodata",
     "types-reportlab>=5.0.0.20261006",
 ]
 storage = [
@@ -90,10 +88,8 @@ agents = [
     "anthropic>=0.105",
 ]
 mcp = [
-    # FastMCP — required to actually run the `ispra-geo` MCP server in
-    # `geodata/`. The geodata workspace member also declares this in its
-    # own optional-deps, but `uv sync --extra mcp` reads from this root
-    # pyproject when building the geodata Docker image.
+    # FastMCP — required to actually run Limen's own MCP server
+    # (`limen.mcp.server`); without it the server logs and stays off.
     "fastmcp>=0.4",
 ]
 ml = [
@@ -136,25 +132,13 @@ radar = [
 requires = ["uv_build>=0.11.16,<0.12.0"]
 build-backend = "uv_build"
 
-# Workspace — geodata/ is a sibling Python package installable as
-# `limen-geodata` and importable as `geodata.*`. The layout is locked
-# by §3.3.4-ter so the package is extractable into a standalone repo
-# without refactoring; the main `limen` package never imports from
-# `geodata.*` outside the optional `limen geodata` CLI subcommand
-# (lazy-imported so the geodata deps stay optional at runtime).
-[tool.uv.workspace]
-members = ["geodata"]
-
-[tool.uv.sources]
-limen-geodata = { workspace = true }
-
 # ---------------------------------------------------------------------------
 # Ruff
 # ---------------------------------------------------------------------------
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["src", "tests", "geodata/src"]
+src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = [
@@ -193,10 +177,10 @@ line-ending = "lf"
 strict = true
 python_version = "3.12"
 plugins = ["pydantic.mypy"]
-mypy_path = ["src", "geodata/src"]
+mypy_path = ["src"]
 namespace_packages = true
 explicit_package_bases = true
-files = ["src", "geodata/src"]
+files = ["src"]
 warn_unused_ignores = true
 warn_redundant_casts = true
 
@@ -238,13 +222,6 @@ ignore_missing_imports = true
 module = "limen.integrations.dem.terrain_tiles"
 disallow_untyped_calls = false
 
-# The MCP server binds FastMCP decorators. FastMCP ships in the optional
-# `[mcp]` extra and supplies its own types at runtime — we run a separate
-# type-check job there. Locally the strict decorator rule is relaxed.
-[[tool.mypy.overrides]]
-module = "geodata.mcp.server"
-disallow_untyped_decorators = false
-
 # ---------------------------------------------------------------------------
 # pytest
 # ---------------------------------------------------------------------------
@@ -266,7 +243,7 @@ markers = [
 
 [tool.coverage.run]
 branch = true
-source = ["src/limen", "geodata/src/geodata"]
+source = ["src/limen"]
 omit = [
     # Argparse dispatchers + uvicorn process wrappers — exercised by the
     # CLI integration smoke tests but not granularly counted.
@@ -298,18 +275,6 @@ omit = [
     # integration job, not by the local unit suite.
     "*/cli/ingest_kb.py",
     "*/knowledge/ingest.py",
-    # Geodata workspace member runs against its own VPS PostGIS and the
-    # tippecanoe / pyogrio system stack — separate integration job.
-    # Local unit suite exercises the pure logic (manifest, parsers,
-    # exports aggregators, MCP tool argument validation).
-    "*/cli/geodata.py",
-    "*/geodata/__init__.py",
-    "*/geodata/cli.py",
-    "*/geodata/db.py",
-    "*/geodata/init/*",
-    "*/geodata/exports/features.py",
-    "*/geodata/exports/pmtiles.py",
-    "*/geodata/mcp/server.py",
 ]
 
 [tool.coverage.report]

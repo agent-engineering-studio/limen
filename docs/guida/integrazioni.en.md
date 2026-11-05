@@ -1,7 +1,7 @@
 # Integrations: API, MCP & A2A
 
 **Other systems can read Limen in five ways: a public REST API, the map's
-vector tiles, two MCP servers for agent gateways, the A2A protocol for
+vector tiles, an MCP server for agent gateways, the A2A protocol for
 agent-to-agent interoperability, and push notifications to external
 channels.** All of them are read-only with respect to the score: no
 integration can alter a risk value, and the few actions that write
@@ -14,7 +14,7 @@ that switches them off when it is not set.
 |---|---|---|---|
 | REST API | applications, scripts, dashboards | `/api/...` on port 8080 (default) | none |
 | Vector tiles | web maps (MapLibre, OpenLayers, QGIS) | pg_tileserv, or the `/api/tiles/...` proxy | none |
-| MCP `limen-ops` and `ispra-geo` | agent gateways (OpenClaw, Claude Desktop, …) | `:8766/mcp` and `:8765/mcp` | open reads; writes with `MCP_ADMIN_TOKEN` |
+| MCP `limen-ops` | agent gateways (OpenClaw, Claude Desktop, …) | `:8766/mcp` | open reads; writes with `MCP_ADMIN_TOKEN` |
 | A2A | third-party agents | `/.well-known/agent-card.json` + `POST /a2a` | none (read-only) |
 | Push notifications | Telegram, MQTT, email, webhook | configured on the server | the channel's own |
 
@@ -178,9 +178,8 @@ cannot be reached `502`.
 ## MCP — asking Limen for data and actions
 
 The [Model Context Protocol](https://modelcontextprotocol.io) exposes Limen
-as "tools" that a gateway (OpenClaw, Claude Desktop, …) can call. There are
-two MCP servers; both speak `stdio` by default and streamable HTTP with
-`--transport http`.
+as "tools" that a gateway (OpenClaw, Claude Desktop, …) can call. The server
+speaks `stdio` by default and streamable HTTP with `--transport http`.
 
 ### `limen-ops` · `http://127.0.0.1:8766/mcp`
 
@@ -211,19 +210,6 @@ disabled, and the tool answers with an error instead of acting):
 | `tool_run_monitor(aoi_id, admin_token)` | Runs the monitoring workflow once (also accepts `cell_limit` and `hazard`). |
 | `tool_build_report(admin_token)` | Builds the static HTML report on demand (idempotent). |
 | `tool_forecast_history(admin_token, aoi_ids?)` | Stores the forecast trend (+24/48/72h) for the UI charts. |
-
-### `ispra-geo` · `http://127.0.0.1:8765/mcp` (geodata profile)
-
-ISPRA geographic data (PAI / IFFI). Active only on the VPS, started with
-`limen geodata mcp --transport http`:
-
-| Tool | What it does |
-|---|---|
-| `tool_hazard_at(lat, lon)` | PAI hazard class + authority + region at a point. |
-| `tool_iffi_query(bbox or region, movement_type?, limit?)` | Landslides of the IFFI inventory in an area (only one of `bbox` and `region`; at most 500). |
-| `tool_pai_summary(region / bbox)` | Area/count distribution per PAI class. |
-| `tool_dataset_status()` | Status of the loaded ISPRA datasets: origin, last update, rows. |
-| `tool_refresh(dataset, admin_token)` | Reloads a dataset (admin, fail-closed). |
 
 Registering in a gateway:
 
