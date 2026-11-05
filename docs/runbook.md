@@ -8,6 +8,7 @@ sistema.
 Copertura **nazionale**: 20 regioni italiane. Avvio completo con
 `make up` + `make init` (che esegue in sequenza migrate → seed delle 20
 regioni → `ingest-events` (truth set e-ITALICA da Zenodo) →
+`ingest-events --hazard flood` (perimetri Copernicus EMS) →
 `bootstrap-static` → `calibrate`).
 
 ## Ciclo di una giornata normale
