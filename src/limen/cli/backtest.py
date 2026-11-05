@@ -846,22 +846,21 @@ async def scosse_storiche(
     scuote eccome.
     """
     from limen.integrations.ingv.shakemap_client import IngvHttpClient
-    from limen.integrations.ingv.shakemap_grid import GrigliaNonValidaError, leggi_griglia
-    from limen.integrations.ingv.sync_job import _parse_feature
+    from limen.integrations.ingv.shakemap_grid import (
+        GrigliaNonValidaError,
+        celle_scosse,
+        leggi_griglia,
+    )
 
     client = IngvHttpClient()
     w, s, e, n = bbox
-    eventi = [
-        ev
-        for f in await client.fetch_events(
-            bbox=(w - 1.0, s - 1.0, e + 1.0, n + 1.0),
-            start=start - timedelta(days=seismic.lookback_days),
-            end=end,
-            min_magnitude=seismic.min_magnitude,
-            solleva=True,
-        )
-        if (ev := _parse_feature(f)) is not None
-    ]
+    eventi = await client.fetch_events(
+        bbox=(w - 1.0, s - 1.0, e + 1.0, n + 1.0),
+        start=start - timedelta(days=seismic.lookback_days),
+        end=end,
+        min_magnitude=seismic.min_magnitude,
+        solleva=True,
+    )
     per_cella: dict[str, list[SeismicHistoryEvent]] = {}
     for ev in eventi:
         file = None if cache is None else cache / f"{ev.id}.xml"
@@ -880,22 +879,23 @@ async def scosse_storiche(
         except GrigliaNonValidaError as exc:
             log.warning("backtest.sismica.griglia", event_id=ev.id, error=str(exc))
             continue
-        scosse = 0
-        for sf, lon, lat in cells:
-            pga = griglia.pga_in(lon, lat)
-            if pga is None or pga < seismic.pga_min_g:
-                continue
-            scosse += 1
+        # Lo stesso conto del job di produzione.
+        posizioni = [(i, lon, lat) for i, (_, lon, lat) in enumerate(cells)]
+        scosse = celle_scosse(griglia, posizioni, seismic.pga_min_g)
+        for i, pga in scosse:
+            sf, lon, lat = cells[i]
             per_cella.setdefault(sf.cell_id, []).append(
                 SeismicHistoryEvent(
                     event_id=ev.id,
-                    origin_time=ev.origin_time,
+                    origin_time=ev.time,
                     magnitude=ev.magnitude,
-                    distance_km=_distanza_km(lon, lat, ev.geom.x, ev.geom.y),
+                    distance_km=_distanza_km(lon, lat, ev.longitude, ev.latitude),
                     pga_g=pga,
                 )
             )
-        log.info("backtest.sismica.evento", event_id=ev.id, magnitudo=ev.magnitude, celle=scosse)
+        log.info(
+            "backtest.sismica.evento", event_id=ev.id, magnitudo=ev.magnitude, celle=len(scosse)
+        )
     return {cella: tuple(lista) for cella, lista in per_cella.items()}
 
 

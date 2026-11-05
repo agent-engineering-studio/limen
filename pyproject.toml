@@ -49,9 +49,11 @@ dependencies = [
     "rainfall-thresholds~=0.1.0",
     "egms-client[raster]~=0.7.0",
     "firms-client~=0.5.0",
-    "copernicus-ems[cdse]~=0.5.2",
+    "copernicus-ems[cdse]~=0.7.0",
     "ispra-idrogeo~=0.7.0",
     "imageserver-export~=0.2.0",
+    "ingv-shakemap~=0.2.0",
+    "glofas-ewds~=0.1.0",
 ]
 
 [project.scripts]
