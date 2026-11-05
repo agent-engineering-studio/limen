@@ -7,6 +7,10 @@
     "imageserver": {
       "command": "uvx",
       "args": ["--from", "imageserver-export[mcp]~=0.2", "imageserver-mcp"]
+    },
+    "copernicus-ems": {
+      "command": "uvx",
+      "args": ["--from", "copernicus-ems[mcp]~=0.7", "copernicus-ems-mcp"]
     }
   }
 }
