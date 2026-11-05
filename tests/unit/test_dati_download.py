@@ -284,7 +284,7 @@ async def test_un_passo_fallito_non_ferma_gli_altri(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(dd, "_esegui_passo", finto)
     with pytest.raises(dd.DownloadFallitoError, match="ingest-events"):
         await dd.elabora_dati()
-    assert [p for p, _ in passi] == [
+    assert [p for p, _ in passi][:4] == [
         "fattori per cella",
         "seed-comuni",
         "ingest-events",
@@ -293,6 +293,27 @@ async def test_un_passo_fallito_non_ferma_gli_altri(monkeypatch: pytest.MonkeyPa
     # Non riscarica: i file li ha portati la coda, e solo quelli chiesti.
     assert passi[0][1]["LIMEN_STATICI"] == "qui"
     assert passi[0][1]["LIMEN_STATICI_SCARICA"] == "0"
+
+
+@pytest.mark.parametrize(("archivio", "attesa"), [("", False), ("http://openmeteo:8080", True)])
+async def test_la_catena_fwi_solo_con_un_istanza_propria(
+    monkeypatch: pytest.MonkeyPatch, archivio: str, attesa: bool
+) -> None:
+    """Sull'API pubblica l'archivio consumerebbe il tetto giornaliero dello sweep."""
+    passi: list[str] = []
+
+    async def finto(nome: str, *comando: str, ambiente: dict[str, str]) -> str | None:
+        passi.append(nome)
+        return None
+
+    class _Finti:
+        class openmeteo:  # noqa: N801
+            archive_url = archivio
+
+    monkeypatch.setattr(dd, "_esegui_passo", finto)
+    monkeypatch.setattr(dd, "get_settings", _Finti)
+    await dd.elabora_dati()
+    assert ("fwi-backfill" in passi) is attesa
 
 
 async def test_il_passo_riporta_il_codice_del_processo() -> None:

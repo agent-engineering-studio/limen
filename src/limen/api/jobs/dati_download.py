@@ -15,8 +15,8 @@ Il totale è il ``peso_gb`` del catalogo, una stima dichiarata come tale.
 Un file scaricato non è ancora un dato: finita la coda, se qualcosa è arrivato,
 il consumatore accoda l'**elaborazione** (#405), che porta i file nelle celle.
 Gira in un processo a parte: per tutta Italia sono ore di raster, e nel processo
-del worker terrebbero fermo lo sweep orario. I passi sono idempotenti sul costo,
-quindi rifarla dopo un download piccolo non ricalcola il resto.
+del worker terrebbero fermo lo sweep orario. I fattori per cella sono idempotenti
+sul costo, quindi rifarla dopo un download piccolo non ricalcola i raster.
 """
 
 from __future__ import annotations
@@ -118,6 +118,17 @@ async def _corine() -> None:
     await corine_raster(dove)
 
 
+async def _confini_comuni() -> None:
+    from ispra_idrogeo import IdroGEO
+
+    from limen.integrations._http import SharedHttpClient
+    from limen.integrations.geoserver_source.dati_base import istat
+
+    dove = cartella_geoserver()
+    dove.mkdir(parents=True, exist_ok=True)
+    await istat(IdroGEO(await SharedHttpClient.get(), retries=0), dove)
+
+
 async def _litologia() -> None:
     from limen.integrations.geoserver_source.dati_base import geolitologia
 
@@ -191,6 +202,7 @@ def procuratori() -> dict[str, Procuratore]:
         "dtm": Procuratore(_dtm, gs("dtm/HRDTM5m.tif*")),
         "corine": Procuratore(_corine, gs("clc2018_it", "clc2018_it.part")),
         "litologia": Procuratore(_litologia, gs("carta_geolitologica*")),
+        "comuni": Procuratore(_confini_comuni, gs("Limiti01012023_g*")),
         "impermeabilizzazione": Procuratore(_impermeabilizzazione, _cartella_impermeabilizzazione),
         "strade": Procuratore(_strade, lambda: [radice_dati() / "osm"]),
         "perimetri_effis": Procuratore(_perimetri_effis, list),
@@ -274,14 +286,21 @@ async def elabora_dati() -> None:
     bash = shutil.which("bash") or "bash"
     limen = shutil.which("limen") or "limen"
     ambiente = os.environ | {"LIMEN_STATICI": "qui", "LIMEN_STATICI_SCARICA": "0"}
+    passi = list(_PASSI_FINALI)
+    # La catena FWI parte dall'archivio ERA5: settimane di giorni per ogni nodo,
+    # che sull'API pubblica consumerebbero il tetto giornaliero dello sweep.
+    if get_settings().openmeteo.archive_url:
+        passi.append("fwi-backfill")
+    else:
+        log.info("dati_elaborazione.fwi_saltato", motivo="nessuna istanza Open-Meteo propria")
     falliti = [
         await _esegui_passo("fattori per cella", bash, _SCRIPT_STATICI, ambiente=ambiente),
-        *[await _esegui_passo(p, limen, p, ambiente=ambiente) for p in _PASSI_FINALI],
+        *[await _esegui_passo(p, limen, p, ambiente=ambiente) for p in passi],
     ]
     if nomi := [f for f in falliti if f is not None]:
         raise DownloadFallitoError(
             f"Non è riuscito: {', '.join(nomi)}. Il dettaglio è nei log del worker; "
-            "i passi riusciti non si rifanno."
+            "si può riprovare, i fattori già calcolati non si ricalcolano."
         )
 
 
@@ -364,6 +383,8 @@ class ConsumatoreDownload:
                 arrivato = False
                 await repo.accoda([repo.ELABORAZIONE], byte_totali={})
             elif voce == repo.ELABORAZIONE:
+                # Chiesta a mano durante un download: copre anche quel download.
+                arrivato = False
                 await self.elabora()
             elif await self.esegui(voce):
                 arrivato = True
@@ -383,7 +404,12 @@ class ConsumatoreDownload:
             try:
                 await self._elabora()
             except Exception as exc:
-                errore = messaggio(exc, "Limen")
+                errore = (
+                    str(exc)
+                    if isinstance(exc, DownloadFallitoError)
+                    else f"Errore imprevisto ({type(exc).__name__}): il dettaglio è nei log "
+                    "del worker."
+                )
                 log.warning(
                     "dati_elaborazione.errore",
                     error=str(exc)[:300],

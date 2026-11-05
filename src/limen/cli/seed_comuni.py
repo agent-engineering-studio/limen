@@ -44,6 +44,10 @@ WHERE geom IS NOT NULL
 """
 
 
+#: Su 312.000 celle i 30 s del pool non bastano (#405).
+_TIMEOUT_S = 1800.0
+
+
 async def run() -> int:
     settings = get_settings()
     dsn, schema = settings.geoserver_source.sorgente(settings.db)
@@ -51,6 +55,11 @@ async def run() -> int:
     src = await asyncpg.connect(dsn)
     try:
         rows = await src.fetch(_SRC_SQL.format(schema=schema))
+    except asyncpg.UndefinedTableError:
+        # Confini non ancora scaricati: la pagina di installazione lo dice, e
+        # l'elaborazione dopo un altro download non deve risultare fallita.
+        log.warning("integration.degraded", op="missing_table", source="seed_comuni", schema=schema)
+        return 0
     finally:
         await src.close()
 
@@ -88,12 +97,13 @@ async def run() -> int:
                 FROM grid_cells g
                 JOIN comuni c ON ST_Contains(c.geom, g.centroid)
                 ON CONFLICT (cell_id) DO UPDATE SET istat_code = EXCLUDED.istat_code
-                """
+                """,
+                timeout=_TIMEOUT_S,
             )
             tagged = await conn.fetchval("SELECT COUNT(*) FROM cell_comune")
             # I comuni troppo piccoli per contenere il centro di una cella
             # leggono quelle che intersecano (#152).
-            await conn.execute("SELECT refresh_cell_comune_extra()")
+            await conn.execute("SELECT refresh_cell_comune_extra()", timeout=_TIMEOUT_S)
         async with acquire() as conn:
             # refresh_mv_comune_risk() directly, not the latest-risk chain:
             # that one debounces to once per 5 minutes, so right after a sweep

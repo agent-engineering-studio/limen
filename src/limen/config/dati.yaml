@@ -116,6 +116,21 @@ voci:
       Contiene dati Copernicus Land Monitoring Service, Imperviousness Density 2018
     peso_gb: 0.005
 
+  - id: comuni
+    nome: confini dei comuni (ISTAT)
+    a_cosa_serve: >-
+      Il comune di ogni cella: senza, la classifica dei comuni resta vuota e gli
+      avvisi non dicono dove. Non cambia i punteggi delle celle.
+    pericoli: [landslide, flood, wildfire]
+    livello: essenziale
+    misura: {tabella: comuni}
+    procura_con: make static-data
+    fonte: ISTAT — Confini delle unità amministrative 2023
+    url: https://www.istat.it/it/archivio/222527
+    licenza: CC-BY 3.0 IT
+    attribuzione: ISTAT, Confini delle unità amministrative a fini statistici
+    peso_gb: 0.02
+
   - id: wui
     nome: interfaccia urbano-bosco
     a_cosa_serve: >-

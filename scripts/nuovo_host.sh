@@ -249,12 +249,13 @@ if [ "$MODO" = "--da-zero" ]; then
 fi
 
 if [ "$MODO" = "--solo-stack" ]; then
-  # Dopo lo stack: si attacca alla sua rete. Non ferma l'installazione: senza,
-  # si resta sull'API pubblica, che col suo tetto dà celle «non misurate».
+  # Dopo lo stack: si attacca alla sua rete. Si ferma se non parte: api e worker
+  # hanno già questo indirizzo, e senza istanza ogni sweep darebbe alluvione e
+  # incendio «non misurati» su tutta Italia dietro un'installazione riuscita.
   case "$(dotenv OPENMETEO__FORECAST_URL)" in
     *openmeteo:*)
       say "Open-Meteo locale (make meteo-up)"
-      make --no-print-directory meteo-up || no "Open-Meteo locale non partito: make meteo-up"
+      make --no-print-directory meteo-up || stop "Open-Meteo locale non è partito: guarda sopra, poi rilancia"
       ;;
   esac
 else

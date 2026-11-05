@@ -69,12 +69,8 @@ if [ ! -f .env ]; then
   ok ".env creato da .env.example"
 fi
 
-# Una chiave con un valore non si tocca; una vuota o assente prende il default.
-imposta() {  # imposta NOME valore
+scrivi() {  # scrivi NOME valore
   local nome="$1" valore="$2"
-  if grep -qs "^$nome=..*" .env; then
-    return
-  fi
   if grep -q "^$nome=" .env; then
     # `cat >` e non `mv`, per tenere i permessi del file (come in nuovo_host.sh).
     (umask 077 && awk -v n="$nome" -v v="$valore" \
@@ -86,6 +82,10 @@ imposta() {  # imposta NOME valore
   fi
   ok "$nome=$valore"
 }
+# Una chiave con un valore non si tocca; una vuota o assente prende il default.
+imposta() {  # imposta NOME valore
+  grep -qs "^$1=..*" .env || scrivi "$1" "$2"
+}
 valore() { grep -s "^$1=" .env | tail -n 1 | cut -d= -f2-; }
 
 imposta LIMEN_DATA_ROOT "$HOME/limen-data"
@@ -94,14 +94,31 @@ if [ -z "$DOMINIO" ] && [ -z "$(valore LIMEN_DOMINIO)" ] && [ -t 0 ]; then
   printf '  Dominio pubblico del server (Invio per usarlo solo da questa macchina): '
   read -r DOMINIO || DOMINIO=""
 fi
-imposta LIMEN_DOMINIO "${DOMINIO:-localhost}"
-if [ "$(valore LIMEN_DOMINIO)" != localhost ]; then
+# Il dominio chiesto con --dominio vince su quello del .env: è una scelta esplicita.
+if [ -n "$DOMINIO" ] && [ "$DOMINIO" != "$(valore LIMEN_DOMINIO)" ]; then
+  scrivi LIMEN_DOMINIO "$DOMINIO"
+  scrivi LIMEN_PROXY_BIND 0.0.0.0
+fi
+imposta LIMEN_DOMINIO localhost
+# «Solo da questa macchina» deve esserlo: il default del compose è 0.0.0.0.
+if [ "$(valore LIMEN_DOMINIO)" = localhost ]; then
+  imposta LIMEN_PROXY_BIND 127.0.0.1
+else
   imposta LIMEN_PROXY_BIND 0.0.0.0
 fi
 
+# Le credenziali Sentinel-1 (`limen ems-sentinel1`, opzionali) sono un segreto
+# del compose: un file che non c'è ferma api e worker all'avvio. /dev/null, come
+# la chiave CLMS, finché qualcuno non ne ha bisogno.
+if [ ! -f secrets/cdse.json ]; then
+  imposta LIMEN_CDSE_SECRET_FILE /dev/null
+fi
+
 # Le immagini del commit di questo clone, se esistono: CI le pubblica solo da
-# main. Altrimenti si costruiscono qui, più lentamente.
-if [ -z "$(valore LIMEN_IMAGE_TAG)" ]; then
+# main e solo per amd64. Altrimenti si costruiscono qui, più lentamente.
+if [ -z "$(valore LIMEN_IMAGE_TAG)" ] && [ "$(uname -m)" != x86_64 ]; then
+  nota "architettura $(uname -m): le immagini pubblicate sono amd64, le costruisco qui."
+elif [ -z "$(valore LIMEN_IMAGE_TAG)" ]; then
   prefisso=ghcr.io/agent-engineering-studio/limen-
   tag="sha-$(git rev-parse --short=7 HEAD)"
   if docker manifest inspect "${prefisso}api:$tag" >/dev/null 2>&1; then

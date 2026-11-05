@@ -9,6 +9,7 @@ con il terminale, uno del worker riprende dopo un riavvio.
 from __future__ import annotations
 
 import argparse
+import sys
 
 from limen.config.catalogo_dati import CatalogoDati, Livello, carica_catalogo
 from limen.core.installazione import byte_stimati, scaricabili
@@ -65,7 +66,7 @@ async def stato(catalogo: CatalogoDati) -> int:
             errore = r.errore or ""
         print(f"  {v.id:22s} {v.livello.value:12s} {stato_:11s} {gb:>19s}  {errore}")
     if (e := righe.get(repo.ELABORAZIONE)) is not None:
-        print(f"\n  caricamento nelle celle: {e.stato}  {e.errore or ''}")
+        sys.stdout.write(f"\n  caricamento nelle celle: {e.stato}  {e.errore or ''}\n")
     print()
     return 0
 
@@ -78,7 +79,7 @@ async def run(args: argparse.Namespace) -> int:
             return await stato(catalogo)
         if args.dati_command == "elabora":
             accodata = await repo.accoda([repo.ELABORAZIONE], byte_totali={})
-            print("In coda: lo fa il worker." if accodata else "È già in corso.")
+            sys.stdout.write("In coda: lo fa il worker.\n" if accodata else "È già in corso.\n")
             return 0
         voci = scelte(args, catalogo)
         accodate = await repo.accoda(voci, byte_totali=byte_stimati(catalogo))

@@ -141,12 +141,14 @@ async def riaccoda_interrotte() -> list[str]:
             """
             UPDATE dati_download
                SET stato = 'errore', finito_il = now(), aggiornato_il = now(),
-                   errore = 'Il download si è interrotto ' || tentativi
+                   errore = CASE WHEN voce = $2 THEN 'Il caricamento' ELSE 'Il download' END
+                            || ' si è interrotto ' || tentativi
                             || ' volte facendo ripartire il worker: '
                             || 'guarda i log del worker prima di riprovare.'
              WHERE stato = 'in_corso' AND tentativi >= $1
             """,
             TENTATIVI_MASSIMI,
+            ELABORAZIONE,
         )
         righe = await conn.fetch(
             "UPDATE dati_download SET stato = 'in_coda', aggiornato_il = now() "

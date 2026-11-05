@@ -183,7 +183,11 @@ def test_mancanti_conta_solo_gli_essenziali() -> None:
     assert all(
         not ids for ids in mancanti(catalogo, totali=senza_strade, per_regione=regioni).values()
     )
-    assert mancanti(catalogo, totali={}, per_regione={})[HazardType.WILDFIRE] == ["dtm", "corine"]
+    assert mancanti(catalogo, totali={}, per_regione={})[HazardType.WILDFIRE] == [
+        "dtm",
+        "corine",
+        "comuni",
+    ]
 
 
 def test_un_dato_in_una_sola_regione_non_rende_pronto_il_pericolo(
