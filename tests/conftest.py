@@ -36,17 +36,14 @@ def _retry_without_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
     Ogni test che simula un 5xx o un host irraggiungibile passava dal backoff
     vero: 2 + 4 + 8 s fra i quattro tentativi, fino al tetto di 60 s. Il gate
     con la coverage spendeva cosi' minuti a dormire. Tentativi ed eccezioni
-    restano quelli reali; cambia solo l'attesa. Il downloader di geodata ha
-    una sua policy, costruita a ogni download: stessa sostituzione.
+    restano quelli reali; cambia solo l'attesa.
     """
     from tenacity import wait_none
 
-    from geodata.init import downloader
     from limen.integrations import _http
 
     monkeypatch.setattr(_http, "wait_exponential", lambda **_k: wait_none())
     monkeypatch.setattr(_http.RETRY_POLICY, "wait", wait_none())
-    monkeypatch.setattr(downloader, "wait_exponential", lambda **_k: wait_none())
 
 
 def register_flood_mocks(mock: respx.Router) -> None:
@@ -234,75 +231,3 @@ async def clean_cache(pg_pool: asyncpg.Pool) -> AsyncIterator[None]:
         with contextlib.suppress(Exception):
             await conn.execute("TRUNCATE app_cache")
     yield
-
-
-# ---------------------------------------------------------------------------
-# Geo-Data Service (Phase 12) — separate PostGIS container.
-#
-# The geodata stack runs on its own DB on the VPS (port 55432 in
-# production); locally we spin up a second testcontainers Postgres so the
-# two schemas never collide. The `geodata_conn` fixture truncates the
-# geodata tables on entry, so individual tests get a clean slate without
-# rebuilding the schema.
-# ---------------------------------------------------------------------------
-_GEODATA_TABLES = (
-    "dataset_versions",
-    "pai_landslide_hazard",
-    "idraulica_hazard",
-    "iffi_landslides",
-    "iffi_lookup_causes",
-    "iffi_lookup_movements",
-    "iffi_lookup_lithology",
-)
-
-
-@pytest.fixture(scope="session")
-def geodata_postgres_container() -> Iterator[str]:
-    """Second Postgres+PostGIS testcontainer dedicated to the geodata service."""
-    esterno = os.getenv("LIMEN_TEST_GEODATA_DATABASE_URL")
-    if esterno:
-        yield esterno
-        return
-    pytest.importorskip("testcontainers.postgres")
-    from testcontainers.postgres import PostgresContainer
-
-    container = PostgresContainer(
-        image=POSTGIS_IMAGE, username="geodata", password="geodata", dbname="geodata"
-    )
-    # Data dir on tmpfs, as in `postgres_container`: the cluster is discarded.
-    container = container.with_env("PGDATA", "/var/lib/postgresql/data/pgdata").with_kwargs(
-        tmpfs={"/var/lib/postgresql/data": "rw,size=2g"}
-    )
-    container.start()
-    try:
-        dsn = container.get_connection_url()
-        dsn = dsn.replace("postgresql+psycopg2://", "postgresql://")
-        dsn = dsn.replace("postgresql+psycopg://", "postgresql://")
-        yield dsn
-    finally:
-        container.stop()
-
-
-@pytest.fixture()
-async def geodata_conn(
-    geodata_postgres_container: str,
-    monkeypatch: pytest.MonkeyPatch,
-) -> AsyncIterator[asyncpg.Connection]:
-    """Yield a clean asyncpg connection to the geodata container.
-
-    Ensures the schema exists, truncates every geodata table, and rewires
-    ``GEODATA_DB_DSN`` so ``geodata.db.connect()`` reaches the same
-    container in the same test.
-    """
-    import asyncpg as _asyncpg
-
-    from geodata.db import GEODATA_DSN_ENV, ensure_schema
-
-    monkeypatch.setenv(GEODATA_DSN_ENV, geodata_postgres_container)
-    conn = await _asyncpg.connect(geodata_postgres_container)
-    try:
-        await ensure_schema(conn)
-        await conn.execute(f"TRUNCATE {', '.join(_GEODATA_TABLES)} RESTART IDENTITY CASCADE")
-        yield conn
-    finally:
-        await conn.close()

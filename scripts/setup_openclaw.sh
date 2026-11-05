@@ -7,7 +7,6 @@
 #
 # Variables (all optional — defaults assume same-host deployment):
 #   LIMEN_MCP_URL         limen-ops MCP endpoint      (default http://127.0.0.1:8766/mcp)
-#   LIMEN_GEODATA_MCP_URL ispra-geo MCP endpoint      (default http://127.0.0.1:8765/mcp)
 #   LIMEN_A2A_URL         A2A base URL of the API     (default http://127.0.0.1:8080)
 #   OPENCLAW_GATEWAY_URL  OpenClaw gateway base URL   (default http://127.0.0.1:18789)
 #   OPENCLAW_HOOK_TOKEN   hooks shared secret         (default: generated)
@@ -16,7 +15,6 @@
 set -euo pipefail
 
 LIMEN_MCP_URL="${LIMEN_MCP_URL:-http://127.0.0.1:8766/mcp}"
-LIMEN_GEODATA_MCP_URL="${LIMEN_GEODATA_MCP_URL:-http://127.0.0.1:8765/mcp}"
 LIMEN_A2A_URL="${LIMEN_A2A_URL:-http://127.0.0.1:8080}"
 OPENCLAW_GATEWAY_URL="${OPENCLAW_GATEWAY_URL:-http://127.0.0.1:18789}"
 OPENCLAW_HOOK_MODE="${OPENCLAW_HOOK_MODE:-wake}"
@@ -40,14 +38,9 @@ openclaw mcp set "${MCP_SERVER_NAME}" \
   "{\"url\":\"${LIMEN_MCP_URL}\",\"transport\":\"streamable-http\"}"
 openclaw mcp status "${MCP_SERVER_NAME}" || say "ATTENZIONE: probe MCP fallita — verifica che il servizio compose 'mcp' di Limen sia su (docker ps | grep limen-mcp)"
 
-# --- 1b. Register the ispra-geo MCP server (geodata profile, VPS-only) ---
-# Best-effort: the `geodata` compose profile is optional and often absent on
-# the operational host. A failed probe is a warning, not a fatal error.
-say "registro l'MCP 'ispra-geo' → ${LIMEN_GEODATA_MCP_URL} (opzionale — profilo geodata)"
-if openclaw mcp set "ispra-geo" \
-     "{\"url\":\"${LIMEN_GEODATA_MCP_URL}\",\"transport\":\"streamable-http\"}"; then
-  openclaw mcp status "ispra-geo" || say "nota: 'ispra-geo' non risponde — attivo solo con 'docker compose --profile geodata up'. Registrazione conservata."
-fi
+# The ISPRA IdroGEO tools come from `idrogeo-mcp` (geoserver compose profile,
+# infra/docker/docker-compose.geoserver.yml): register it the same way if the
+# agent needs them.
 
 # --- 2. Enable the hooks endpoint (push: Limen alerts wake the agent) ---
 say "abilito gli hooks del gateway (hooks.enabled/token/path)"

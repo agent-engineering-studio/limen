@@ -8,14 +8,14 @@
 #   docker compose -f infra/docker/docker-compose.geoserver.yml \
 #     --profile geoserver up -d
 #
-# Self-contained like the `geodata` stack: a DEDICATED Postgres+PostGIS
+# Self-contained: a DEDICATED Postgres+PostGIS
 # holds the vector layers, isolated from Limen's operational DB. The
 # application images are pulled PRE-BUILT from GHCR (multi-arch: native
 # arm64 on Apple Silicon, amd64 on the Aruba VPS) — no cross-repo build
 # context inside Limen.
 #
 # Ports are remapped to coexist with the Limen stack on the same host:
-#   geoserver-postgis  -> 55433  (limen-postgres=5432, geodata-db=55432)
+#   geoserver-postgis  -> 55433  (limen-postgres=5432)
 #   geoserver          -> 8081   (limen-api=8080)
 #   geoserver-webui    -> 8000
 #   geoserver-mcp      -> 9000   (streamable-HTTP /mcp)

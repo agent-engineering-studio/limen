@@ -575,9 +575,9 @@ services:
       # HMR ricarica la pagina di continuo e nessuna richiesta arriva a
       # completarsi. Vedi la nota in vite.config.ts.
       VITE_HMR: ${VITE_HMR:-}
-      # Phase 12 — optional static PMTiles served by the geodata stack.
-      # Leave unset to keep the overlays hidden. Production deploys the
-      # files behind nginx / Caddy from `$GEODATA_PMTILES_DIR`.
+      # Optional static PMTiles of the PAI / IFFI layers (any file, e.g.
+      # built with tippecanoe from the ISPRA mosaic), served behind
+      # nginx / Caddy. Leave unset to keep the overlays hidden.
       VITE_PAI_PMTILES_URL: ${VITE_PAI_PMTILES_URL:-}
       VITE_IFFI_PMTILES_URL: ${VITE_IFFI_PMTILES_URL:-}
       VITE_DEM_PMTILES_URL: ${VITE_DEM_PMTILES_URL:-}

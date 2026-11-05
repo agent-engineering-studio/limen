@@ -46,15 +46,12 @@ RUN cd frontend && npm ci --no-audit --no-fund && npm run build
 # geometria prima che le migrazioni (fixture `pg_pool`) girino.
 RUN pg_ctlcluster 15 main start \
     && su postgres -c "psql -q -c \"CREATE ROLE limen LOGIN SUPERUSER PASSWORD 'limen'\"" \
-    && for db in limen geodata; do \
-         su postgres -c "createdb -O limen $db" \
-         && su postgres -c "psql -q -d $db -c 'CREATE EXTENSION postgis'"; \
-       done \
+    && su postgres -c "createdb -O limen limen" \
+    && su postgres -c "psql -q -d limen -c 'CREATE EXTENSION postgis'" \
     && pg_ctlcluster 15 main stop
 
 ENV UV_OFFLINE=1 \
-    LIMEN_TEST_DATABASE_URL=postgresql://limen:limen@127.0.0.1:5432/limen \
-    LIMEN_TEST_GEODATA_DATABASE_URL=postgresql://limen:limen@127.0.0.1:5432/geodata
+    LIMEN_TEST_DATABASE_URL=postgresql://limen:limen@127.0.0.1:5432/limen
 
 # I test girano per verificare l'immagine, ma un rosso non ferma la build.
 RUN uv run pytest tests/unit -q -p no:cacheprovider || echo "WARNING: unit tests reported failures"

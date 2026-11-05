@@ -3,7 +3,7 @@
 Thin FastMCP wrapper around :mod:`limen.mcp.tools`; the tool bodies live
 there (testable without FastMCP). Read tools are open; ``run_monitor`` is
 gated by ``MCP_ADMIN_TOKEN`` (fail-closed). Designed to be registered in an
-agent gateway (e.g. OpenClaw) next to ``ispra-geo`` and ``geoserver-mcp``.
+agent gateway (e.g. OpenClaw) next to ``idrogeo-mcp`` and ``geoserver-mcp``.
 
 Run via ``limen mcp-serve`` (stdio, default) or
 ``limen mcp-serve --transport http`` (streamable HTTP on :8766).

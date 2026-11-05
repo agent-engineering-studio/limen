@@ -36,12 +36,6 @@ resolution-markers = [
     "python_full_version < '3.13' and platform_machine == 's390x' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
-[manifest]
-members = [
-    "limen",
-    "limen-geodata",
-]
-
 [[package]]
 name = "affine"
 version = "2.4.0"
@@ -2335,7 +2329,6 @@ copernicus = [
 ]
 dev = [
     { name = "anthropic" },
-    { name = "limen-geodata" },
     { name = "mypy" },
     { name = "openai" },
     { name = "pre-commit" },
@@ -2424,7 +2417,6 @@ copernicus = [
 ]
 dev = [
     { name = "anthropic", specifier = ">=0.40" },
-    { name = "limen-geodata", editable = "geodata" },
     { name = "mypy", specifier = ">=1.13" },
     { name = "openai", specifier = ">=1.55" },
     { name = "pre-commit", specifier = ">=4.0" },
@@ -2458,42 +2450,6 @@ report = [
     { name = "reportlab", specifier = ">=5.0.1" },
 ]
 storage = [{ name = "boto3", specifier = ">=1.35" }]
-
-[[package]]
-name = "limen-geodata"
-version = "0.1.0"
-source = { editable = "geodata" }
-dependencies = [
-    { name = "asyncpg" },
-    { name = "httpx" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "pyogrio" },
-    { name = "pyyaml" },
-    { name = "shapely" },
-    { name = "structlog" },
-    { name = "tenacity" },
-]
-
-[package.optional-dependencies]
-mcp = [
-    { name = "fastmcp" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "asyncpg", specifier = ">=0.30" },
-    { name = "fastmcp", marker = "extra == 'mcp'", specifier = ">=0.4" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "pydantic", specifier = ">=2.9" },
-    { name = "pydantic-settings", specifier = ">=2.5" },
-    { name = "pyogrio", specifier = ">=0.10" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "shapely", specifier = ">=2.0" },
-    { name = "structlog", specifier = ">=24.4" },
-    { name = "tenacity", specifier = ">=9.0" },
-]
-provides-extras = ["mcp"]
 
 [[package]]
 name = "llvmlite"

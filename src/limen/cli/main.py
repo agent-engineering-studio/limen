@@ -78,8 +78,6 @@ from limen.cli.fwi_backfill import run as _run_fwi_backfill
 from limen.cli.fwi_climatology import run as _run_fwi_climatology
 from limen.cli.fwi_confronto import run as _run_fwi_confronto
 from limen.cli.fwi_pioggia import run as _run_fwi_pioggia
-from limen.cli.geodata import build_subparser as _build_geodata_subparser
-from limen.cli.geodata import run as _run_geodata
 from limen.cli.geodati_sync import run as _run_geodati_sync
 from limen.cli.geoserver_sync import run as _run_geoserver_sync
 from limen.cli.glofas_ewds import run as _run_glofas_ewds
@@ -310,8 +308,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     # ``limen report build`` — nested dispatcher for the static HTML risk
     # report. Only one action exists today, so this is a plain inline
-    # subparser (not a `build_subparser`-style module like `geodata`, which
-    # earns that indirection with five distinct subcommands).
+    # subparser rather than a `build_subparser`-style module.
     report_parser = sub.add_parser("report", help="static HTML risk report")
     report_sub = report_parser.add_subparsers(dest="report_command", required=True)
     report_sub.add_parser("build", help="generate the report once (idempotent)")
@@ -411,11 +408,6 @@ def _build_parser() -> argparse.ArgumentParser:
         "ingest-kb",
         help="push the local corpus (papers + PAI + ISPRA + briefings) to the KG sidecar",
     )
-    # ``limen geodata <subcommand>`` — nested dispatcher for the
-    # Geo-Data Service (§3.3.4-ter). The implementation lives in the
-    # `geodata` workspace package; imports are lazy so the geodata
-    # optional deps stay out of the main CLI's runtime.
-    _build_geodata_subparser(sub)
     _build_sensore_subparser(sub)
     _build_dati_subparser(sub)
     _build_backup_subparser(sub)
@@ -516,11 +508,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "sensore":
         try:
             return asyncio.run(_run_sensore(args))
-        except KeyboardInterrupt:  # pragma: no cover
-            return 130
-    if args.command == "geodata":
-        try:
-            return asyncio.run(_run_geodata(args))
         except KeyboardInterrupt:  # pragma: no cover
             return 130
     if args.command == "worker":

@@ -56,8 +56,7 @@ Less important but in scope: the scheduler jobs, the CLI (`src/limen/cli/`,
 operator-only), the scoring engine (pure functions, no I/O).
 
 Out of scope: `notebooks/`, `llm-training/`, `scripts/`, `data/`,
-`infra/` compose files for local development, and the `geodata/` ingestion
-CLI (operator-run, URLs restricted to `idrogeo.isprambiente.it` by schema).
+and `infra/` compose files for local development.
 Wrong risk scores are a correctness issue, not a security one, unless an
 attacker can influence them.
 

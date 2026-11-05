@@ -33,11 +33,10 @@ VPS dedicato domani — cambia solo un URL):
    | `tool_build_report(admin_token)` | genera il report HTML statico on-demand, idempotente (admin) |
    | `tool_forecast_history(admin_token, aoi_ids?)` | persiste il trend di previsione +24/48/72h per i grafici UI (admin) |
 
-   Un secondo MCP, **`ispra-geo`** (`127.0.0.1:8765/mcp`, profilo `geodata`,
-   solo VPS), espone i dati geografici ISPRA: `hazard_at`, `iffi_query`,
-   `pai_summary`, `dataset_status`, `refresh` (admin). Lo script
-   `setup_openclaw.sh` lo registra best-effort (la probe fallisce senza il
-   profilo attivo — normale).
+   I dati geografici ISPRA (IdroGEO) come strumenti MCP li espone
+   **`idrogeo-mcp`**, nel profilo `geoserver`
+   (`infra/docker/docker-compose.geoserver.yml`); `setup_openclaw.sh` non lo
+   registra: va aggiunto a mano se l'agente ne ha bisogno.
 
    > **Report ricorrenti**: `tool_build_report` / `tool_forecast_history` sono
    > per generazioni *on-demand*. La cadenza automatica è già gestita da
