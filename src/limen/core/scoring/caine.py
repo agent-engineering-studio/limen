@@ -46,9 +46,9 @@ def _resolve_region(caine: CaineBlock, macroregion: str) -> CaineMacroregion:
     return region
 
 
-def _threshold(caine: CaineBlock, macroregion: str) -> PowerLawThreshold:
+def _threshold(caine: CaineBlock, macroregion: str, alpha_factor: float = 1.0) -> PowerLawThreshold:
     region = _resolve_region(caine, macroregion)
-    return PowerLawThreshold(alpha=region.alpha, beta=region.beta)
+    return PowerLawThreshold(alpha=region.alpha * alpha_factor, beta=region.beta)
 
 
 def threshold_intensity_mm_h(
@@ -80,16 +80,20 @@ def caine_excess(
     *,
     caine: CaineBlock,
     macroregion: str = "italy_default",
+    alpha_factor: float = 1.0,
 ) -> float:
     """Compute ``max(0, log10(I_event) − log10(I_threshold(D)))``.
 
     Returns 0 when no event is provided or when the event sits below
     the threshold. Using ``log10`` keeps the magnitude human-friendly
     on the order of "fraction of a decade above the threshold".
+    ``alpha_factor`` scales α (a post-earthquake threshold is lower, #441).
     """
     if event is None:
         return 0.0
-    excess = _threshold(caine, macroregion).exceedance(event.intensity_mm_h, event.duration_hours)
+    excess = _threshold(caine, macroregion, alpha_factor).exceedance(
+        event.intensity_mm_h, event.duration_hours
+    )
     # -inf (a dry event) goes to zero; +inf from a corrupt series stays.
     return excess if excess > 0.0 else 0.0
 
@@ -100,6 +104,7 @@ def compute_caine(
     caine: CaineBlock,
     macroregion: str = "italy_default",
     as_of_window: timedelta | None = None,
+    alpha_factor: float = 1.0,
 ) -> tuple[float, RainfallEvent | None]:
     """End-to-end Caine computation for a rainfall series.
 
@@ -120,7 +125,7 @@ def compute_caine(
         min_event_mm=caine.event_reconstruction.min_event_mm,
     )
     event = latest_event(events)
-    excess = caine_excess(event, caine=caine, macroregion=macroregion)
+    excess = caine_excess(event, caine=caine, macroregion=macroregion, alpha_factor=alpha_factor)
     return excess, event
 
 

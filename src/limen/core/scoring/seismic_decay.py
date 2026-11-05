@@ -81,6 +81,34 @@ def seismic_factor(
     return max(0.0, (_sigmoid(z) - base) / (1.0 - base))
 
 
+def riduzione_soglia_pioggia(
+    events: Iterable[SeismicHistoryEvent],
+    *,
+    as_of: datetime,
+    seismic: SeismicBlock,
+) -> float:
+    """Di quanto scende la soglia di pioggia della cella, in ``[0, riduzione_max]`` (#441).
+
+    Conta lo scuotimento di ogni evento, non quello decaduto con ``tau_days``:
+    il versante resta indebolito per mesi, non per due giorni. Il recupero è
+    ``exp(−Δt / memoria_giorni)``. 0 senza blocco ``soglia_pioggia``.
+    """
+    soglia = seismic.soglia_pioggia
+    if soglia is None:
+        return 0.0
+    massimo = 0.0
+    for ev in events:
+        if ev.magnitude < seismic.min_magnitude:
+            continue
+        dt_days = (as_of - ev.origin_time).total_seconds() / 86_400.0
+        if dt_days < 0 or dt_days > soglia.lookback_giorni:
+            continue
+        recupero = math.exp(-dt_days / soglia.memoria_giorni)
+        peso = seismic_factor(ev.pga_g, seismic=seismic) * recupero
+        massimo = max(massimo, peso)
+    return soglia.riduzione_max * massimo
+
+
 def compute_seismic(
     events: Iterable[SeismicHistoryEvent],
     *,

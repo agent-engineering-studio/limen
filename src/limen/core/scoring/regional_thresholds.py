@@ -309,6 +309,20 @@ class SnowBlock(_StrictModel):
     weight: float = Field(..., ge=0.0, le=1.0)
 
 
+class SogliaPioggiaSismica(_StrictModel):
+    """Dopo un terremoto forte la soglia di pioggia scende, e risale piano (#441).
+
+    ``α`` di Caine (e la pioggia di riferimento della cumulata) si moltiplica
+    per ``1 − r``, con ``r = riduzione_max · max_i f(PGA_i) · exp(−Δt_i /
+    memoria_giorni)`` sugli eventi degli ultimi ``lookback_giorni`` che hanno
+    scosso la cella; ``f`` è la curva di E.
+    """
+
+    riduzione_max: float = Field(..., gt=0.0, lt=1.0)
+    memoria_giorni: float = Field(..., gt=0.0)
+    lookback_giorni: int = Field(..., gt=0)
+
+
 class SeismicBlock(_StrictModel):
     tau_days: float = Field(..., gt=0.0)
     min_magnitude: float = Field(..., gt=0.0)
@@ -316,6 +330,15 @@ class SeismicBlock(_StrictModel):
     pga_threshold_g: float = Field(..., gt=0.0)
     pga_scale_g: float = Field(..., gt=0.0)
     pga_min_g: float = Field(..., gt=0.0)
+    # Assente: la pioggia non sente i terremoti, e il motore è quello di prima.
+    soglia_pioggia: SogliaPioggiaSismica | None = None
+
+    @property
+    def giorni_da_leggere(self) -> int:
+        """Quanti giorni di terremoti servono al motore: E e, se c'è, la soglia."""
+        if self.soglia_pioggia is None:
+            return self.lookback_days
+        return max(self.lookback_days, self.soglia_pioggia.lookback_giorni)
 
 
 class PostFireBlock(_StrictModel):

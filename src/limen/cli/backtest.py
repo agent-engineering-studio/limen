@@ -63,6 +63,10 @@ Configuration knobs (env vars, kept off the dispatcher for parity with
   ``seismic.pga_min_g``, per il solo backtest: vale sia per le celle scosse sia
   per il motore, e finisce nella configurazione del report. Serve a misurare
   una soglia prima di scriverla nella YAML (0,1 g dal backtest cosismico).
+* ``LIMEN_BACKTEST_SOGLIA_SISMICA`` — quanto un terremoto abbassa la soglia di
+  pioggia (#441), per il solo backtest: vuota come la YAML, ``no`` senza,
+  ``riduzione_max,memoria_giorni`` (es. ``0.5,365``) con quei valori, e i
+  terremoti letti per ``3·memoria`` giorni prima della finestra.
 * ``LIMEN_BACKTEST_CLIMA``       — il file di ``limen clima-pioggia``. Con un
   blocco ``cumulata`` in ``landslide.yaml`` dà a ogni cella il riferimento del
   suo nodo, e l'innesco diventa la cumulata relativa (#243). Senza il file, o
@@ -82,8 +86,10 @@ import os
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from zoneinfo import ZoneInfo
+
+from pydantic import ValidationError
 
 from limen.cli.clima_pioggia import Mensile, riferimenti_aoi, riferimenti_api
 from limen.cli.clima_pioggia import leggi as leggi_clima
@@ -103,6 +109,7 @@ from limen.core.scoring.regional_thresholds import (
     MetricaComuni,
     RegionalThresholds,
     SeismicBlock,
+    SogliaPioggiaSismica,
     load_regional_thresholds,
 )
 from limen.data.db import acquire, lifespan_pool
@@ -862,7 +869,8 @@ async def scosse_storiche(
     w, s, e, n = bbox
     eventi = await client.fetch_events(
         bbox=(w - 1.0, s - 1.0, e + 1.0, n + 1.0),
-        start=start - timedelta(days=seismic.lookback_days),
+        # Anche i terremoti che abbassano ancora la soglia di pioggia (#441).
+        start=start - timedelta(days=seismic.giorni_da_leggere),
         end=end,
         min_magnitude=seismic.min_magnitude,
         solleva=True,
@@ -956,12 +964,46 @@ def descrivi_verita(precisioni: list[str] | None, sorgenti: list[str] | None) ->
     return "; ".join(parti)
 
 
-def soglie_backtest(pga_min_g: float | None = None) -> RegionalThresholds:
-    """Le soglie frana del pacchetto, con ``seismic.pga_min_g`` sovrascritta se data."""
+def soglia_pioggia_da_env(raw: str) -> SogliaPioggiaSismica | None | Literal["yaml"]:
+    """``LIMEN_BACKTEST_SOGLIA_SISMICA``: vuota = YAML, ``no`` = senza,
+    ``riduzione_max,memoria_giorni`` = quella, letta per ``3·memoria`` giorni.
+
+    Solleva :class:`ValueError` su un valore che non è niente di questi.
+    """
+    raw = raw.strip()
+    if not raw:
+        return "yaml"
+    if raw == "no":
+        return None
+    parti = raw.split(",")
+    if len(parti) != 2:
+        raise ValueError(f"attesi riduzione_max,memoria_giorni: {raw!r}")
+    riduzione, memoria = (float(x) for x in parti)
+    try:
+        return SogliaPioggiaSismica(
+            riduzione_max=riduzione,
+            memoria_giorni=memoria,
+            lookback_giorni=math.ceil(3 * memoria),
+        )
+    except ValidationError as exc:
+        raise ValueError(str(exc)) from exc
+
+
+def soglie_backtest(
+    pga_min_g: float | None = None,
+    soglia_pioggia: SogliaPioggiaSismica | None | Literal["yaml"] = "yaml",
+) -> RegionalThresholds:
+    """Le soglie frana del pacchetto, con ``seismic.pga_min_g`` e
+    ``seismic.soglia_pioggia`` sovrascritte se date."""
     soglie = load_regional_thresholds()
-    if pga_min_g is None:
+    update: dict[str, object] = {}
+    if pga_min_g is not None:
+        update["pga_min_g"] = pga_min_g
+    if soglia_pioggia != "yaml":
+        update["soglia_pioggia"] = soglia_pioggia
+    if not update:
         return soglie
-    seismic = soglie.seismic.model_copy(update={"pga_min_g": pga_min_g})
+    seismic = soglie.seismic.model_copy(update=update)
     return soglie.model_copy(update={"seismic": seismic})
 
 
@@ -1016,7 +1058,12 @@ async def run() -> int:
     if pga_min_g is not None and pga_min_g <= 0:
         log.error("backtest.bad_pga_min_g", value=pga_env)
         return 1
-    soglie = soglie_backtest(pga_min_g)
+    try:
+        soglia_pioggia = soglia_pioggia_da_env(os.getenv("LIMEN_BACKTEST_SOGLIA_SISMICA", ""))
+    except ValueError as exc:
+        log.error("backtest.bad_soglia_sismica", error=str(exc))
+        return 1
+    soglie = soglie_backtest(pga_min_g, soglia_pioggia)
     cache_env = os.getenv("LIMEN_BACKTEST_SHAKEMAP_CACHE", "").strip()
     cache_shakemap = Path(cache_env) if cache_env else None
     pioggia = os.getenv("LIMEN_BACKTEST_PIOGGIA", "modello").strip() or "modello"
@@ -1064,6 +1111,12 @@ async def run() -> int:
     )
     if sismica == "shakemap":
         configurazione += f" (soglia E {soglie.seismic.pga_min_g:g} g)"
+        sp = soglie.seismic.soglia_pioggia
+        if sp is not None:
+            configurazione += (
+                f"; soglia di pioggia ridotta fino al {sp.riduzione_max:.0%} dopo le scosse, "
+                f"memoria {sp.memoria_giorni:g} giorni"
+            )
     if cumulata is not None and clima:
         configurazione += (
             f"; innesco cumulata {cumulata.window_hours} h / q{clima.get('quantile')} del nodo "

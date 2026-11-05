@@ -8,6 +8,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+* **Dopo un terremoto forte, nella cella la soglia di pioggia scende, e risale
+  piano (#441).** Un nuovo blocco opzionale in `landslide.yaml`,
+  `seismic.soglia_pioggia` (`riduzione_max`, `memoria_giorni`,
+  `lookback_giorni`), moltiplica α di Caine per `1 − r`. Lo stesso fattore vale
+  per la pioggia di riferimento della cumulata e per la soglia minima del
+  tiering. `r` è la scossa più pesante degli ultimi `lookback_giorni`: la curva
+  di E sulla PGA dell'evento, per `exp(−Δt / memoria_giorni)`. Il termine
+  additivo E dura giorni, mentre un versante scosso frana con piogge più deboli
+  per mesi; il backtest cosismico (#436) mostra che E da solo non vede questo
+  rischio. Senza il blocco i punteggi non cambiano. Lo sweep legge i terremoti
+  di `max(lookback_days, lookback_giorni)` giorni. Nel breakdown, la riduzione
+  applicata è in `meteo_terms.riduzione_sismica`. Nel backtest,
+  `LIMEN_BACKTEST_SOGLIA_SISMICA` (`no`, oppure `riduzione_max,memoria_giorni`)
+  la misura prima di scriverla nella YAML.
 * **`limen backtest-cosismico`: la componente sismica E misurata sulle frane
   che un terremoto ha innescato.** Il backtest #287 l'aveva misurata su
   ITALICA, che ha solo frane da pioggia, e non poteva premiarla. Qui la verità
