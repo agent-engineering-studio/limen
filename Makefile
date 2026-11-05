@@ -184,6 +184,8 @@ gs-volumes:
 	@docker volume create limen-geoserver-gsdata >/dev/null
 	@docker volume create limen-idrogeo-cache >/dev/null
 	@docker volume create limen-idrogeo-data >/dev/null
+	@docker volume create limen-copernicus-ems-cache >/dev/null
+	@docker volume create limen-copernicus-ems-data >/dev/null
 
 up: up-stack
 	@echo ""

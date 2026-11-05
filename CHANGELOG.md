@@ -16,6 +16,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+* **INGV passa per il pacchetto `ingv-shakemap` 0.2** (estratto da qui,
+  Apache-2.0). `integrations/ingv/` resta come adattatore: il client gli passa
+  `send=` su `fetch_with_retry`, quindi retry e degradazione restano quelli di
+  Limen; il parser e la lettura del catalogo sono del pacchetto. La PGA per
+  cella si calcola in una chiamata NumPy (`celle_scosse`, la stessa nel job e
+  nel backtest): identica al parser di prima su 100.000 punti di una griglia
+  reale, 28 volte più veloce.
+* **Una ShakeMap si riscarica quando cambia versione, non dopo 24 ore.** Il job
+  legge `info.json` (pochi kB) e scarica `grid.xml` solo se la versione è
+  diversa da quella in `seismic_events.attributes.shakemap_version`. La Mw 5.5
+  del Tirreno meridionale del 23 ottobre 2026 ha avuto quattro versioni,
+  l'ultima quaranta ore dopo: la regola «stabile dopo 24 ore» la perdeva. Le
+  24 ore restano il ripiego quando `info.json` non si legge, e la versione
+  nuova si scrive solo con la griglia in mano.
+
 * **Lo storico registra i cambiamenti, non i fotogrammi** (#135). Lo sweep
   orario scriveva una riga per cella a ogni giro — 312.550 celle × 3 pericoli
   × 24 giri, misurate 18.898.377 righe nella sola partizione del 20 settembre

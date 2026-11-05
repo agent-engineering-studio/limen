@@ -823,14 +823,14 @@ wheels = [
 
 [[package]]
 name = "copernicus-ems"
-version = "0.5.1"
+version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/24/17/f5ff6511100f956b93c374c1073291355f73370ffce7f3b2dbd9f7f5c586/copernicus_ems-0.5.1.tar.gz", hash = "sha256:72f8e3b2541d30464f478d504572a62d4b7f3086656d8036e5ffc88bc46c63d3", size = 65346, upload-time = "2026-11-04T12:44:07.404Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2d/a8/d93026b971a56ddd89f34f0b52a1bb407c906e3462f941d9a111e67d51ad/copernicus_ems-0.7.0.tar.gz", hash = "sha256:d7b5b450fb5b365ea05eccb89733181d09fb741aa93d74128837ac0e5836d2a0", size = 70994, upload-time = "2026-11-04T15:53:06.339Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9f/f5/053425318e258ae7225c7be7031791a3751aa9d3dd26a9ac090cfbb8c571/copernicus_ems-0.5.1-py3-none-any.whl", hash = "sha256:47a3100aa86def62485009f2b72402e2e93178fa4d655c4dfa0c3aba33ef2b55", size = 63894, upload-time = "2026-11-04T12:44:05.813Z" },
+    { url = "https://files.pythonhosted.org/packages/85/6e/06b258e8cbd1f36a9f4c0055127658c5582150a2a015f91c11acc000072a/copernicus_ems-0.7.0-py3-none-any.whl", hash = "sha256:4fd54c1566eb0e22292a1f22622857441b923c9939ff854501219ced12909af6", size = 69109, upload-time = "2026-11-04T15:53:05.091Z" },
 ]
 
 [package.optional-dependencies]
@@ -1549,6 +1549,18 @@ wheels = [
 ]
 
 [[package]]
+name = "glofas-ewds"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/38/0f/0806b5247cf82c19f0cbd6fd4e55b47b58001be7ecc1a4d1e70566d2bbc6/glofas_ewds-0.1.0.tar.gz", hash = "sha256:aac23eefb815547e728b9ce2f4d40fa5d0ed016578166eb4b92ee7bc798008af", size = 25681, upload-time = "2026-11-04T15:57:50.49Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1b/8a/43fca061bdcf2545a25f6c595da06a19b711d9dc42f5e5c39192b9d05b90/glofas_ewds-0.1.0-py3-none-any.whl", hash = "sha256:785d5caa2845594536b253b7e05e12e3b98766bf11a3688e5879b5eeec634183", size = 24754, upload-time = "2026-11-04T15:57:49.222Z" },
+]
+
+[[package]]
 name = "google-auth"
 version = "2.53.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1818,6 +1830,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a9/01/15bb152d77b21318514a96f43af312635eb2500c96b55398d020c93d86ea/importlib_metadata-9.0.0.tar.gz", hash = "sha256:a4f57ab599e6a2e3016d7595cfd72eb4661a5106e787a95bcc90c7105b831efc", size = 56405, upload-time = "2026-03-20T06:42:56.999Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/38/3d/2d244233ac4f76e38533cfcb2991c9eb4c7bf688ae0a036d30725b8faafe/importlib_metadata-9.0.0-py3-none-any.whl", hash = "sha256:2d21d1cc5a017bd0559e36150c21c830ab1dc304dedd1b7ea85d20f45ef3edd7", size = 27789, upload-time = "2026-03-20T06:42:55.665Z" },
+]
+
+[[package]]
+name = "ingv-shakemap"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8e/a2/f9e825a265ec4279a0ba59a31e12043974e9f8ab4755e25ecbda6bd8adf4/ingv_shakemap-0.2.0.tar.gz", hash = "sha256:d90a4449a91a49660c7cf3b251ee5fe38cd6c1c3d3f6efe65e8f70a7e40e2195", size = 25902, upload-time = "2026-11-04T15:01:20.279Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/00/dc/a8f989e8dd851a66dab37959fcc13f51dc3f818df64d36d5bfd0db331c8e/ingv_shakemap-0.2.0-py3-none-any.whl", hash = "sha256:0242c0ba97ab2bb1a74e19cff972570b45af5ab40761f96cc44a9cc8557e1ae4", size = 24469, upload-time = "2026-11-04T15:01:18.97Z" },
 ]
 
 [[package]]
@@ -2256,8 +2281,10 @@ dependencies = [
     { name = "fwi-chain" },
     { name = "geoalchemy2" },
     { name = "geopandas" },
+    { name = "glofas-ewds" },
     { name = "httpx" },
     { name = "imageserver-export" },
+    { name = "ingv-shakemap" },
     { name = "ispra-idrogeo" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
@@ -2334,7 +2361,7 @@ requires-dist = [
     { name = "apscheduler", specifier = ">=4.0.0a5" },
     { name = "asyncpg", specifier = ">=0.30" },
     { name = "cbor2", specifier = ">=6.1" },
-    { name = "copernicus-ems", extras = ["cdse"], specifier = "~=0.5.1" },
+    { name = "copernicus-ems", extras = ["cdse"], specifier = "~=0.7.0" },
     { name = "cryptography", specifier = ">=43" },
     { name = "effis-client", extras = ["raster"], specifier = "~=0.1.2" },
     { name = "egms-client", extras = ["raster"], specifier = "~=0.7.0" },
@@ -2343,8 +2370,10 @@ requires-dist = [
     { name = "fwi-chain", specifier = "~=1.0.0" },
     { name = "geoalchemy2", specifier = ">=0.15" },
     { name = "geopandas", specifier = ">=1.0" },
+    { name = "glofas-ewds", specifier = "~=0.1.0" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "imageserver-export", specifier = "~=0.2.0" },
+    { name = "ingv-shakemap", specifier = "~=0.2.0" },
     { name = "ispra-idrogeo", specifier = "~=0.7.0" },
     { name = "opentelemetry-api", specifier = ">=1.27" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.27" },
