@@ -1140,16 +1140,16 @@ wheels = [
 
 [[package]]
 name = "dpc-radar"
-version = "0.1.0"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "numpy" },
     { name = "rasterio" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0e/fa/0da18c8cefc1fd0c8b1c0f96058104e6bfb6df9cd7baae3f9bca7641be29/dpc_radar-0.1.0.tar.gz", hash = "sha256:0d399a2c81fc7090378b8bd17d48dbb3df357209ebd8290fbcc126327ff962d1", size = 30426, upload-time = "2026-11-04T15:28:30.711Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/76/05/8bad48e70c9af7df0de4eb18d4203fdf34abbc48bc4e9a09fb59657f26e3/dpc_radar-0.2.0.tar.gz", hash = "sha256:226157bd91ec7fae677e44787c3f3911fc4d8ee727254bb0f08eea6c3efc6070", size = 41507, upload-time = "2026-11-05T13:29:39.439Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5f/48/e1b4dd2e565d26dacbdd40646761ca0e4b047407782cbfa45e8e10c414bc/dpc_radar-0.1.0-py3-none-any.whl", hash = "sha256:143010f9c1d0e67aafdf92327a6ba869b04fd5569814eadf7f4e0bc214b5683d", size = 23915, upload-time = "2026-11-04T15:28:29.419Z" },
+    { url = "https://files.pythonhosted.org/packages/5f/89/34ca71dccdf84eab7e219c522d65896bb5a9259629a00ca82db3d9d2ce3f/dpc_radar-0.2.0-py3-none-any.whl", hash = "sha256:b8cbe89f66103845012f3765a3cb85f4173b9cf2e166e4c120b1a5d40563f054", size = 35368, upload-time = "2026-11-05T13:29:37.872Z" },
 ]
 
 [[package]]
@@ -2372,7 +2372,7 @@ requires-dist = [
     { name = "cbor2", specifier = ">=6.1" },
     { name = "copernicus-ems", extras = ["cdse"], specifier = "~=0.5.1" },
     { name = "cryptography", specifier = ">=43" },
-    { name = "dpc-radar", specifier = "~=0.1.0" },
+    { name = "dpc-radar", specifier = "~=0.2.0" },
     { name = "effis-client", extras = ["raster"], specifier = "~=0.1.2" },
     { name = "egms-client", extras = ["raster"], specifier = "~=0.7.0" },
     { name = "fastapi", specifier = ">=0.115" },
