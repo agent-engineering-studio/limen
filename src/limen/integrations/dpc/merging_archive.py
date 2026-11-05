@@ -85,16 +85,21 @@ class _ArchivioCondiviso(dpc_archive.MergingArchive):
     def read(self, product: str, time: datetime) -> RainGrid | None:
         # Sotto il lock anche la decodifica: due regioni che chiedono lo stesso
         # fotogramma lo decodificano una volta sola.
-        with self._lock:
-            grid = super().read(product, time)
-        if grid is None and percorso(self.folder, product, time).exists():
+        file = percorso(self.folder, product, time)
+        try:
+            with self._lock:
+                grid = super().read(product, time)
+        except OSError as exc:
+            # Permessi, o un file sparito fra stat e lettura: manca quel
+            # fotogramma, non tutte le ore della regione.
+            log.warning(
+                "integration.degraded", source="dpc_merging_archive", file=str(file), error=str(exc)
+            )
+            return None
+        if grid is None and file.exists():
             # Un file salvato da una risposta d'errore: il fotogramma manca, la
             # regione tiene le altre ore misurate.
-            log.warning(
-                "integration.degraded",
-                source="dpc_merging_archive",
-                file=str(percorso(self.folder, product, time)),
-            )
+            log.warning("integration.degraded", source="dpc_merging_archive", file=str(file))
         return grid
 
 

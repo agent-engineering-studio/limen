@@ -158,3 +158,17 @@ def test_un_archivio_scritto_da_limen_resta_leggibile(tmp_path: Path) -> None:
     (tmp_path / "CUM3").mkdir()
     (tmp_path / "CUM3" / "assenti.txt").write_text(f"{_T:%Y%m%d%H%M}\n")
     assert f"{_T:%Y%m%d%H%M}" in merging_archive.dpc_archive._absent(tmp_path, "CUM3")
+
+
+def test_un_file_che_non_si_apre_e_un_ora_non_misurata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fine = _T + timedelta(hours=3)
+    _tif(percorso(tmp_path, "CUM3", fine), 60.0)
+
+    def _negato(_self: Path) -> bytes:
+        raise PermissionError("uid diverso")
+
+    monkeypatch.setattr(Path, "read_bytes", _negato)
+    ore = MergingArchive(tmp_path).oraria([(15.02, 37.98)], _T, fine)
+    assert {v[0] for v in ore.values()} == {None}
