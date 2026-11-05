@@ -786,6 +786,24 @@ Limen needs **only Docker** on the host, plus the repository and a `.env`.
 The `limen` commands run inside the worker container; the periodic jobs live
 in the worker, not in the host's crontab.
 
+The short way, one command from the clone to a link in the browser (#405):
+
+```sh
+git clone https://github.com/agent-engineering-studio/limen.git && cd limen
+./scripts/installa.sh                  # or: ./scripts/installa.sh --dominio limen.example.org
+```
+
+It checks the prerequisites (Docker, GNU make ≥ 4.3), creates the `.env` with
+working defaults, starts the stack and the local Open-Meteo, prepares the
+twenty regions (~312,000 cells, about twenty minutes) and prints the link to
+`#/installazione`. From that page you choose what to download; the worker
+downloads it and then loads it into the cells by itself. Re-running never
+overwrites a value already in `.env`. Without a domain the proxy serves
+`https://localhost` with a local certificate, so the browser warns once.
+
+The longer way, for a restore from backup or for a fresh stack that loads all
+the data without stopping at the browser:
+
 ```sh
 git clone https://github.com/agent-engineering-studio/limen.git && cd limen
 cp .env.example .env                   # at least LIMEN_DATA_ROOT (absolute)

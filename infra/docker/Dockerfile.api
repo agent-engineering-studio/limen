@@ -92,6 +92,9 @@ WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/src /app/src
 COPY --from=builder /app/pyproject.toml /app/pyproject.toml
+# Il worker lo lancia dopo i download della pagina di installazione (#405): la
+# sequenza dei dati statici resta scritta in un posto solo.
+COPY scripts/load_static_data.sh /app/scripts/load_static_data.sh
 
 USER limen
 

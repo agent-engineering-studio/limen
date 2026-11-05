@@ -761,6 +761,7 @@ export interface InstallazioneStato {
   regioni: number;
   pericoli: PericoloPronto[];
   voci: VoceDato[];
+  elaborazione: DownloadDato | null;
   azioni_abilitate: boolean;
 }
 

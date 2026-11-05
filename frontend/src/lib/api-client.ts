@@ -400,6 +400,13 @@ export class ApiClient {
       body: JSON.stringify({ voci }),
     });
   }
+
+  avviaElaborazione(token: string): Promise<RispostaDownload> {
+    return this.request<RispostaDownload>("/api/installazione/elabora", {
+      method: "POST",
+      headers: { "X-Limen-Token": token },
+    });
+  }
 }
 
 export const defaultApiClient = new ApiClient();
