@@ -26,7 +26,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import httpx
-from dpc_radar import Absent, DpcRadarError, Product, RadarClient, RainGrid
+from dpc_radar import Absent, DpcRadarError, RadarClient, RainGrid
 from tenacity import RetryError
 
 from limen.core.logging import get_logger
@@ -63,9 +63,9 @@ async def _send_archivio(method: str, url: str, **kwargs: Any) -> httpx.Response
 
     Un fotogramma scaduto risponde 500 con il 403 di S3 nel corpo: ritentato
     sarebbero quattro tentativi con backoff per niente, e poi un ``RetryError``
-    al posto di :data:`~dpc_radar.ABSENT`. Gli altri guasti escono come
+    al posto di :data:`~dpc_radar.ABSENT`. Un ``RetryError`` esce come
     ``httpx.HTTPError``: è ciò che ``dpc_radar.archive`` conta come fotogramma
-    fallito, da ritentare al giro dopo, invece di fermare l'archivio.
+    fallito, da ritentare al giro dopo; qualunque altro tipo fermerebbe l'archivio.
     """
     try:
         if method == "POST":
@@ -73,30 +73,13 @@ async def _send_archivio(method: str, url: str, **kwargs: Any) -> httpx.Response
             client = await SharedHttpClient.get()
             return await client.request(method, url, **kwargs)
         return await _send(method, url, **kwargs)
-    except (RetryError, TimeoutError, OSError) as exc:
+    except RetryError as exc:
         raise httpx.TransportError(str(exc)) from exc
-
-
-class _RadarArchivio(RadarClient):
-    """Ogni fotogramma fallito logga ``integration.degraded`` ed esce come un
-    errore che ``dpc_radar.archive`` conta e ritenta: anche una risposta che
-    non è JSON, che altrimenti fermerebbe tutto il giro su quel fotogramma."""
-
-    async def download(self, name: str | Product, time: datetime) -> bytes | Absent:
-        label = f"dpc.archivio.{(name if isinstance(name, str) else name.name).lower()}"
-        try:
-            return await super().download(name, time)
-        except (httpx.HTTPError, DpcRadarError) as exc:
-            _degraded(label, exc)
-            raise
-        except (ValueError, KeyError) as exc:
-            _degraded(label, exc)
-            raise DpcRadarError(f"risposta illeggibile: {exc}") from exc
 
 
 def radar_archivio() -> RadarClient:
     """Il client per l'archivio «Merging»: vedi :func:`_send_archivio`."""
-    return _RadarArchivio(send=_send_archivio)
+    return RadarClient(send=_send_archivio)
 
 
 def _degraded(label: str, exc: BaseException | str) -> None:

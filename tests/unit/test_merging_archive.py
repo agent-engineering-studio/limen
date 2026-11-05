@@ -10,6 +10,7 @@ import httpx
 import numpy as np
 import pytest
 import rasterio
+import structlog
 from dpc_radar import ABSENT, Absent
 from rasterio.transform import from_origin
 
@@ -149,8 +150,12 @@ def test_un_file_corrotto_e_un_ora_non_misurata(tmp_path: Path) -> None:
     file = percorso(tmp_path, "CUM3", _T + timedelta(hours=3))
     file.parent.mkdir(parents=True)
     file.write_bytes(b"<Error>AccessDenied</Error>")
-    ore = MergingArchive(tmp_path).oraria([(15.02, 37.98)], _T, _T + timedelta(hours=3))
+    with structlog.testing.capture_logs() as logs:
+        ore = MergingArchive(tmp_path).oraria([(15.02, 37.98)], _T, _T + timedelta(hours=3))
     assert {v[0] for v in ore.values()} == {None}
+    assert any(e["event"] == "integration.degraded" and str(file) in e["error"] for e in logs), (
+        "il pacchetto logga sul suo logger: qui deve diventare un degrado di Limen"
+    )
 
 
 def test_un_archivio_scritto_da_limen_resta_leggibile(tmp_path: Path) -> None:
@@ -172,3 +177,18 @@ def test_un_file_che_non_si_apre_e_un_ora_non_misurata(
     monkeypatch.setattr(Path, "read_bytes", _negato)
     ore = MergingArchive(tmp_path).oraria([(15.02, 37.98)], _T, fine)
     assert {v[0] for v in ore.values()} == {None}
+
+
+async def test_un_fotogramma_fallito_e_un_degrado(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _scarica(prodotto: str, t: datetime) -> bytes:
+        raise httpx.ConnectError("rete")
+
+    _usa(monkeypatch, _scarica)
+    with structlog.testing.capture_logs() as logs:
+        conti = await archivia(tmp_path, giorni=1, massimo=1, adesso=_T)
+    assert conti["falliti"] == 1
+    assert [e["source"] for e in logs if e["event"] == "integration.degraded"] == [
+        "dpc_merging_archive"
+    ]
