@@ -202,6 +202,8 @@ class MeteoBreakdown(_Frozen):
     snow_factor: float = Field(default=0.0, ge=0.0, le=1.0)
     # #243: l'innesco dalla cumulata relativa al nodo; None quando non è attivo.
     cumulata_norm: float | None = Field(default=None, ge=0.0, le=1.0)
+    # #441: di quanto è scesa la soglia di pioggia per i terremoti recenti.
+    riduzione_sismica: float = Field(default=0.0, ge=0.0, lt=1.0)
     # V1.5: which inputs came from in-situ sensors (vs Open-Meteo).
     # Empty tuple on the pure V1 path.
     measured_overrides: tuple[str, ...] = ()

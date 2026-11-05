@@ -43,7 +43,8 @@ class SeismicCheckExecutor(Executor):
     @handler
     async def run(self, ctx: MonitoringContext) -> MonitoringContext:
         cfg = load_regional_thresholds().seismic
-        lookback = self._lookback_days or cfg.lookback_days
+        # Anche i terremoti che abbassano ancora la soglia di pioggia (#441).
+        lookback = self._lookback_days or cfg.giorni_da_leggere
         end: datetime = ctx.valuation_time
         start = end - timedelta(days=lookback)
 

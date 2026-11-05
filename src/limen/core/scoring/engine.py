@@ -46,7 +46,7 @@ from limen.core.scoring.regional_thresholds import (
     SoilBlock,
     load_regional_thresholds,
 )
-from limen.core.scoring.seismic_decay import compute_seismic
+from limen.core.scoring.seismic_decay import compute_seismic, riduzione_soglia_pioggia
 
 # How much "log10-excess above Caine threshold" should map to 1.0?
 # One full decade above threshold is already extreme — we cap norm() at
@@ -192,10 +192,17 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
     # ------------------------------------------------------------------
     def _meteo(self, bundle: CellFeatureBundle) -> _MeteoAggregate:
         w = self._t.meteo.weights
+        # #441: un terremoto forte abbassa la soglia per mesi; 0 senza il blocco.
+        riduzione = riduzione_soglia_pioggia(
+            bundle.dynamic.seismic_history,
+            as_of=bundle.dynamic.valuation_time,
+            seismic=self._t.seismic,
+        )
         caine_excess_val, _event = compute_caine(
             bundle.dynamic.rainfall,
             caine=self._t.caine,
             macroregion=self._macroregion(bundle),
+            alpha_factor=1.0 - riduzione,
         )
         caine_norm = _norm_caine(caine_excess_val)
         innesco = caine_norm
@@ -210,7 +217,7 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
                 for s in bundle.dynamic.rainfall.samples
                 if inizio < s.timestamp <= fine
             )
-            cumulata_norm = _clamp01(mm / (cum.saturazione * riferimento))
+            cumulata_norm = _clamp01(mm / (cum.saturazione * riferimento * (1.0 - riduzione)))
             innesco = cumulata_norm if cum.modo == "sostituisce" else max(caine_norm, cumulata_norm)
 
         api_f = api_factor(
@@ -257,6 +264,7 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
                 soil_factor=soil_f,
                 snow_factor=snow_f,
                 cumulata_norm=cumulata_norm,
+                riduzione_sismica=riduzione,
                 measured_overrides=tuple(overrides),
             ),
         )
@@ -280,10 +288,18 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
         floor = self._t.rain_floor
         if floor is None or self._caine_floor is None:
             return False
+        # La soglia minima scende come quella piena (#441): una cella scossa
+        # di recente non si perde nel tiering per una pioggia ora pericolosa.
+        riduzione = riduzione_soglia_pioggia(
+            bundle.dynamic.seismic_history,
+            as_of=bundle.dynamic.valuation_time,
+            seismic=self._t.seismic,
+        )
         excess, _event = compute_caine(
             bundle.dynamic.rainfall,
             caine=self._caine_floor,
             macroregion=self._macroregion(bundle),
+            alpha_factor=1.0 - riduzione,
         )
         if excess <= 0.0:
             return False
