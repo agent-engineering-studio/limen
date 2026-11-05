@@ -387,7 +387,7 @@ score.
 | [**Open-Meteo**](https://open-meteo.com) (ECMWF IFS, ICON-EU, ERA5, ERA5-Land) | hourly rain, soil moisture, temperature, humidity, wind; forecast and archive | all three hazards | CC-BY 4.0 (data: Copernicus / DWD / ECMWF) | no |
 | [**DPC radar platform**](https://radar.protezionecivile.it) | national SRI (1 km, 5 min) and «Merging» radar + rain-gauge accumulations | nowcast trigger; rain already fallen for floods | CC-BY-SA 4.0 | no |
 | [**Copernicus EMS — GloFAS**](https://ewds.climate.copernicus.eu) | river discharge forecast per node; each node's ordinary high flow from the multi-year history | flood (fluvial branch) | CEMS-Floods licence, attribution required | free EWDS key (or via Open-Meteo) |
-| [**ISPRA IdroGEO**](https://idrogeo.isprambiente.it) | IFFI landslide inventory (721,365 landslides), PAI landslide and hydraulic hazard mosaics | landslide terrain; flood susceptibility | CC-BY 4.0 | no |
+| [**ISPRA IdroGEO**](https://idrogeo.isprambiente.it) | IFFI landslide inventory (721,365 landslides), PAI landslide and hydraulic hazard mosaics | landslide terrain; flood susceptibility | IFFI CC-BY 4.0; mosaics CC BY-SA 4.0 | no |
 | **HR-DTM 5 m** (IRPI-CNR, Zenodo) or **TINITALY 10 m** (INGV) | elevation → slope, aspect, curvature | landslide, wildfire | CC-BY 4.0 | no |
 | [**CORINE Land Cover 2018**](https://groupware.sinanet.isprambiente.it) (SINAnet/ISPRA) | land cover → fuel type | wildfire | CC-BY | no |
 | **Geolithological Map of Italy 1:500k** (PCN/MASE) | rock and soil type | landslide | CC-BY 4.0 | no |
@@ -1059,8 +1059,15 @@ External contributions require the CLA in
 Attribution is **mandatory** when you publish the map, the summaries or
 anything derived from them:
 
-* **ISPRA IdroGEO** (IFFI, PAI landslide and hydraulic mosaics) — © ISPRA,
-  CC-BY 4.0. <https://idrogeo.isprambiente.it>
+* **ISPRA IdroGEO** (IFFI) — © ISPRA, CC-BY 4.0.
+  <https://idrogeo.isprambiente.it>
+* **ISPRA hazard mosaics** — CC BY SA 4.0, as stated by the licence PDF in each
+  download: data derived from them must be distributed under the same licence.
+  Citations: «ISPRA - Mosaicatura nazionale delle aree a pericolosità da frana
+  PAI (v. 4.0 – 2020-2021), https://idrogeo.isprambiente.it» and «ISPRA -
+  Mosaicatura delle aree a pericolosità idraulica (v. 5.0 – 2020),
+  https://idrogeo.isprambiente.it». They are technical and scientific works:
+  the maps with legal value are those of the basin district authorities.
 * **e-ITALICA** (CNR-IRPI) — CC-BY 4.0, DOI
   [10.5281/zenodo.14204473](https://doi.org/10.5281/zenodo.14204473).
 * **Open-Meteo** (ECMWF, DWD, Copernicus ERA5 / CERRA) — CC-BY 4.0.

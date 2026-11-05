@@ -311,6 +311,19 @@ are the same Italian summary (for OpenClaw's `/hooks/wake` and
 maximum class and score, cells with priority and municipality, summary per
 municipality, any cascades between hazards and a link to the map.
 
+## External sources: the traps already paid for
+
+**Anyone calling the same sources as Limen meets the same traps, and none of
+them gives a clear error.** They are written here because the code around them
+is tied to Limen and did not become a library.
+
+| Source | What happens | What to do |
+|--------|--------------|------------|
+| Open-Meteo, many points | 677 points in one query string do not answer JSON | Batches of 100 points |
+| Open-Meteo, public API | The cap is 10,000 calls a day, and every location and variable counts: a national grid spends it in one run, and with no data the flood and wildfire scores are zero | Your own instance for forecast and archive; treat missing data as "not measured" |
+| GloFAS through Open-Meteo | The flood API is not on the public bucket, so it cannot be self-hosted. A 429, even an hourly one, means "try again tomorrow" | Stop until midnight UTC and do not retry; two years of archive weigh ~52 calls per node |
+| ISPRA SINAnet (CORINE) | It answers 404 to HEAD but not to GET | Check a file with a streamed GET, never with HEAD |
+
 ## Open data and licences
 
 **Limen's code is released under EUPL-1.2; the data it uses keep their
@@ -326,6 +339,9 @@ informazioni modificate del Copernicus Emergency Management Service,
 warnings is the responsibility of national and regional authorities. The
 PDF report and the map already carry it; whoever integrates the API or the
 tiles into another application must add it.
+
+**The ISPRA hazard mosaics are under CC BY-SA 4.0.** The PDF inside each ZIP
+says so: derived data is distributed under the same licence, citing the source.
 
 The full list, with each source's conditions, is in the
 [README](https://github.com/agent-engineering-studio/limen/blob/main/README.md#attribution-and-open-licences).
