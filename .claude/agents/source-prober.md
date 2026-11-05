@@ -18,7 +18,13 @@ Lezioni già pagate (non ripeterle):
   `127.0.0.1:8085`) quando configurata; un 429 su GloFAS sospende il fiume fino a mezzanotte.
   Mai più di 1-2 località per prova.
 - **GloFAS via Open-Meteo**: i valori sono quelli della cella EWDS **+0,05° a est**
-  di quella dichiarata — confronta valori, non coordinate.
+  di quella dichiarata — confronta valori, non coordinate. Il `consolidated_v4`
+  di Open-Meteo finisce nel 2024: dopo, la sua storia (`seamless_v4`, quella che
+  Limen legge) è l'archivio di `forecast_v4`, non la rianalisi (Faenza,
+  1/1/2025: 5,55 contro 4,75 m³/s). Confronta con l'EWDS consolidato solo sui
+  giorni `consolidated_v4`. Questi fatti li riverifica ogni settimana `live.yml`
+  di `agent-engineering-studio/glofas-ewds`: guarda le issue `live-api` prima
+  di sondare.
 - **EFFIS** è MapServer su `/gwis` (non `/gwis/ows`), layer `nrt.ba.poly`,
   `CQL_FILTER` ignorato, `bbox`+`filter` insieme chiudono la connessione: filtra
   per data lato client. Pubblico, nessuna credenziale: un risultato vuoto è un bug del client.
