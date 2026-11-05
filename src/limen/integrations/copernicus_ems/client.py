@@ -241,6 +241,10 @@ class ActivationTruth:
     #: Un layer elencato ma non scaricato (403, 5xx) non è qui: è un errore
     #: transitorio, e la maschera di prima resta con i suoi poligoni.
     absent_masks: list[str] = field(default_factory=list)
+    #: I prodotti di cui ora si sa tutto: layer letto, o mai consegnato. Solo
+    #: per questi un poligono che non c'è più è stato tolto dalla fonte; di un
+    #: layer non scaricato non si sa niente, e i poligoni di prima restano.
+    prodotti_letti: list[str] = field(default_factory=list)
 
 
 async def fetch_activation_truth(activation: Activation, *, cache_dir: Path) -> ActivationTruth:
@@ -271,6 +275,7 @@ async def fetch_activation_truth(activation: Activation, *, cache_dir: Path) -> 
     floods: list[ObservedFlood] = []
     masks: list[ObservationMask] = []
     absent: list[str] = []
+    letti: list[str] = []
     for product in products:
         if OBSERVED_EVENT not in product.layers:
             if _mask_id(product) in delivered:
@@ -289,6 +294,7 @@ async def fetch_activation_truth(activation: Activation, *, cache_dir: Path) -> 
         collection = await _layer(product, cache_dir=cache_dir)
         if collection is None:
             continue
+        letti.append(_mask_id(product))
         mask = _mask(product)
         if mask is not None:
             masks.append(mask)
@@ -330,7 +336,9 @@ async def fetch_activation_truth(activation: Activation, *, cache_dir: Path) -> 
                     )
                 )
     log.info("ems.activation_truth", code=activation.code, polygons=len(floods), masks=len(masks))
-    return ActivationTruth(floods=floods, masks=masks, absent_masks=absent)
+    return ActivationTruth(
+        floods=floods, masks=masks, absent_masks=absent, prodotti_letti=[*letti, *absent]
+    )
 
 
 def catalogue_provenance() -> dict[str, str]:

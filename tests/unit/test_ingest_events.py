@@ -99,6 +99,7 @@ class _Db:
         self.versioni = versioni or set()
         self.scritti: list[str] = []
         self.registrate: list[str] = []
+        self.tolti: list[tuple[list[str], list[str]]] = []
 
     async def find(self, _src: str, _ds: str, version: str) -> object | None:
         return object() if version in self.versioni else None
@@ -110,6 +111,10 @@ class _Db:
     async def upsert_many(self, polygons: list[ObservedFlood]) -> int:
         self.scritti.append("poligoni")
         return len(polygons)
+
+    async def togli_superati(self, prodotti: list[str], *, tenuti: list[str]) -> int:
+        self.tolti.append((prodotti, tenuti))
+        return 0
 
     async def upsert_masks(
         self, masks: list[ObservationMask], *, absent: list[str]
@@ -130,13 +135,15 @@ def db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> _Db:
         return [SimpleNamespace(code="EMSR762", event_time=_T)]
 
     async def verita(_a: object, *, cache_dir: Path) -> ActivationTruth:
-        return ActivationTruth(floods=[_flood(0), _flood(1)], masks=[_MASK])
+        return ActivationTruth(
+            floods=[_flood(0), _flood(1)], masks=[_MASK], prodotti_letti=["EMSR1-aoi01-DEL0"]
+        )
 
     monkeypatch.setattr(ingest_events, "fetch_activations", attivazioni)
     monkeypatch.setattr(ingest_events, "fetch_activation_truth", verita)
     for nome in ("find", "record"):
         monkeypatch.setattr(ingest_events.dataset_versions_repo, nome, getattr(finto, nome))
-    for nome in ("upsert_many", "upsert_masks", "count_events"):
+    for nome in ("upsert_many", "togli_superati", "upsert_masks", "count_events"):
         monkeypatch.setattr(ingest_events.flood_events_repo, nome, getattr(finto, nome))
     return finto
 
@@ -147,6 +154,9 @@ async def test_un_catalogo_nuovo_si_scrive_e_si_registra(db: _Db) -> None:
     assert out["esito"] == "scritto"
     assert db.scritti == ["poligoni", "maschere"]
     assert len(db.registrate) == 1
+    (prodotti, tenuti) = db.tolti[0]
+    assert prodotti == ["EMSR1-aoi01-DEL0"]
+    assert tenuti == [p.id for p in (_flood(0), _flood(1))]
 
 
 @pytest.mark.asyncio
@@ -154,9 +164,11 @@ async def test_lo_stesso_catalogo_non_riscrive_niente(db: _Db) -> None:
     await ingest_events.sincronizza_alluvioni()
     db.versioni = set(db.registrate)
     db.scritti.clear()
+    db.tolti.clear()
     out = await ingest_events.sincronizza_alluvioni()
     assert out["esito"] == "invariato"
     assert db.scritti == []
+    assert db.tolti == []
 
 
 @pytest.mark.asyncio

@@ -23,6 +23,7 @@ from limen.data.repos.flood_events_repo import (
     catalogue_window,
     count_events,
     observation_times,
+    togli_superati,
     truth_cells,
     upsert_many,
     upsert_masks,
@@ -200,6 +201,30 @@ async def test_masks_of_undelivered_products_are_removed(reset_db: None, pg_pool
         rimaste = await conn.fetchval("SELECT count(*) FROM flood_observation_masks")
     assert int(rimaste) == 0
     assert await upsert_masks([]) == (0, 0)
+
+
+async def test_polygons_dropped_by_a_new_layer_version_are_removed(
+    reset_db: None, pg_pool: object
+) -> None:
+    """La v2 ha un poligono in meno: quello non resta come allagamento. Un
+    prodotto non riletto (layer non scaricato) e `DEL1` contro `DEL10` no."""
+    ids = [
+        "EMSR762-aoi01-DEL0-0-0",
+        "EMSR762-aoi01-DEL0-1-0",
+        "EMSR762-aoi01-DEL1-0-0",
+        "EMSR762-aoi01-DEL10-0-0",
+    ]
+    await upsert_many([_flood(0, event_id=i) for i in ids])
+
+    tolti = await togli_superati(
+        ["EMSR762-aoi01-DEL0", "EMSR762-aoi01-DEL1"],
+        tenuti=["EMSR762-aoi01-DEL0-0-0", "EMSR762-aoi01-DEL1-0-0"],
+    )
+
+    assert tolti == 1
+    async with acquire() as conn:
+        rimasti = {r["id"] for r in await conn.fetch("SELECT id FROM flood_events")}
+    assert rimasti == {ids[0], ids[2], ids[3]}
 
 
 async def test_provenance_summary_reports_source_coverage(reset_db: None, pg_pool: object) -> None:

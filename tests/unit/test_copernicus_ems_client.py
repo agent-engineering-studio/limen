@@ -236,6 +236,12 @@ async def test_a_mask_only_where_the_observed_layer_was_read(tmp_path: Path) -> 
     # consegnato: non si scrive e non si toglie.
     assert truth.absent_masks == ["EMSR762-aoi01-GRA1", "EMSR762-aoi02-DEL0"]
     assert "EMSR762-aoi01-GRA2" not in {m.id for m in truth.masks}
+    # I soli prodotti di cui un poligono scomparso è davvero stato tolto.
+    assert truth.prodotti_letti == [
+        "EMSR762-aoi01-DEL0",
+        "EMSR762-aoi01-GRA1",
+        "EMSR762-aoi02-DEL0",
+    ]
     assert mask.aoi_label == "AOI01"
     assert mask.observed_time == datetime(2024, 9, 18, 6, tzinfo=UTC)
 
@@ -249,6 +255,7 @@ async def test_an_unreadable_layer_gives_neither_polygons_nor_mask(tmp_path: Pat
     # Il layer c'è ma non è arrivato: errore transitorio, la maschera di
     # prima (con i suoi poligoni) resta.
     assert "EMSR762-aoi01-DEL0" not in truth.absent_masks
+    assert "EMSR762-aoi01-DEL0" not in truth.prodotti_letti
     assert not (tmp_path / "EMSR762").exists()
 
 

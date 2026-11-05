@@ -68,6 +68,31 @@ async def upsert_many(items: Iterable[ObservedFlood]) -> int:
     return len(events)
 
 
+async def togli_superati(prodotti: Iterable[str], *, tenuti: Iterable[str]) -> int:
+    """Toglie i poligoni che la fonte non ha più. Quanti ne ha tolti.
+
+    Il rapid mapping corregge i prodotti pubblicando una versione nuova del
+    layer (``_v2``, ``_v3``): con meno feature, gli id delle ultime posizioni
+    non vengono più riscritti e resterebbero come allagamenti mai accaduti
+    nella verità del backtest. Si guardano solo i ``prodotti`` riletti, per id
+    di maschera: un poligono è ``<maschera>-<posizione>-<parte>``.
+    """
+    async with acquire() as conn:
+        esito = await conn.execute(
+            r"""
+            DELETE FROM flood_events
+            WHERE source = 'copernicus-ems'
+              AND regexp_replace(id, '-\d+-\d+$', '') = ANY($1::text[])
+              AND id <> ALL($2::text[])
+            """,
+            list(prodotti),
+            list(tenuti),
+        )
+    tolti = int(esito.split()[-1])
+    log.info("flood_events.superseded_removed", count=tolti)
+    return tolti
+
+
 async def upsert_masks(
     items: Iterable[ObservationMask], *, absent: Iterable[str] = ()
 ) -> tuple[int, int]:
