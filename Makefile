@@ -471,11 +471,11 @@ restore-training:            # usage: make restore-training DUMP=data/backups/tr
 # Stessa sequenza di `make up` per i fattori statici: `load_static_data.sh` è
 # l'unico posto che la descrive, così le tre strade (up / init / static-data)
 # non divergono (#101).
+# Copernicus EMS giù non ferma l'init: il passo notturno ems_alluvioni riprova.
 init:
 	$(UV) run limen migrate
 	$(UV) run limen seed
 	$(UV) run limen ingest-events
-	# Copernicus EMS giù non ferma l'init: il passo notturno ems_alluvioni riprova.
 	-$(UV) run limen ingest-events --hazard flood
 	@LIMEN_COMPOSE="$(COMPOSE_ALL)" bash scripts/load_static_data.sh
 	$(UV) run limen calibrate
