@@ -317,6 +317,19 @@ lo stesso riassunto in italiano (per gli hook `/hooks/wake` e
 pericolo, classe e punteggio massimi, celle con priorità e comune,
 riepilogo per comune, eventuali cascate tra pericoli e link alla mappa.
 
+## Le fonti esterne: le trappole già pagate
+
+**Chi interroga le stesse fonti di Limen trova gli stessi inciampi, e nessuno
+di questi produce un errore chiaro.** Sono qui perché il codice che li aggira
+è legato a Limen e non è diventato una libreria.
+
+| Fonte | Cosa succede | Cosa fare |
+|-------|--------------|-----------|
+| Open-Meteo, più punti | 677 punti in una sola query string non rispondono JSON | Blocchi da 100 punti |
+| Open-Meteo, API pubblica | Il tetto è di 10.000 chiamate al giorno, e ogni località e variabile conta: una griglia nazionale lo esaurisce in un giro, e senza dati il punteggio di alluvione e incendio è zero | Un'istanza propria per previsione e archivio; un dato mancante si tratta come «non misurato» |
+| GloFAS via Open-Meteo | Il flood API non è sul bucket pubblico, quindi non si può ospitare. Un 429, anche orario, vuol dire «riprova domani» | Fermarsi fino alla mezzanotte UTC e non ritentare; due anni di archivio pesano ~52 chiamate per nodo |
+| SINAnet ISPRA (CORINE) | Alla HEAD risponde 404, al GET no | Controllare un file con un GET in streaming, mai con una HEAD |
+
 ## Dati aperti e licenze
 
 **Il codice di Limen è rilasciato sotto EUPL-1.2; i dati che usa restano
@@ -333,6 +346,10 @@ Service information [Year]»), e non deve presentare il risultato come un
 avviso di piena: l'allertamento spetta alle autorità nazionali e regionali.
 Il rapporto PDF e la mappa la portano già; chi integra l'API o le tile in
 un'altra applicazione la deve aggiungere.
+
+**Per i mosaici ISPRA di pericolosità la licenza è CC BY-SA 4.0.** Lo dice il
+PDF dentro ogni ZIP: i dati derivati si distribuiscono con la stessa licenza,
+citando la fonte.
 
 L'elenco completo, con le condizioni di ciascuna fonte, è nel
 [README](https://github.com/agent-engineering-studio/limen/blob/main/README.md#attribution-and-open-licences).

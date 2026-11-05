@@ -278,7 +278,7 @@ export const FONTI: readonly Fonte[] = [
       "La classe più alta che tocca la cella: aree di attenzione 0,20, P1 0,40, P2 0,60, P3 0,80, P4 1,00. Peso nella suscettibilità S: 0,225.",
       "The highest class touching the cell: attention areas 0.20, P1 0.40, P2 0.60, P3 0.80, P4 1.00. Weight in susceptibility S: 0.225.",
     ),
-    licenza: "CC BY 4.0",
+    licenza: "CC BY-SA 4.0",
     url: "https://idrogeo.isprambiente.it",
   },
   {
@@ -299,7 +299,7 @@ export const FONTI: readonly Fonte[] = [
       "Suscettibilità all'allagamento: P3 0,80, P2 0,60, P1 0,40; una cella non studiata vale 0,15 (non studiata non vuol dire non allagabile), sotto 0,05 l'acqua non arriva e il punteggio è zero. Moltiplica la spinta di pioggia e fiume. Nelle frane pesa 0,03 nel termine H.",
       "Flood susceptibility: P3 0.80, P2 0.60, P1 0.40; an unstudied cell is 0.15 (unstudied does not mean it cannot flood), below 0.05 water does not reach and the score is zero. It multiplies the push of rain and river. In landslides it weighs 0.03 in term H.",
     ),
-    licenza: "CC BY 4.0",
+    licenza: "CC BY-SA 4.0",
     url: "https://idrogeo.isprambiente.it",
     facoltativa: true,
   },

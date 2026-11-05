@@ -6,6 +6,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+* **La licenza dei mosaici ISPRA è CC BY-SA 4.0, non CC BY 4.0.** Lo dice il
+  PDF in ogni ZIP, per frane e per idraulica. README, `data/README.md` e la
+  pagina Fonti ora lo scrivono, con le citazioni che ISPRA chiede.
+
 ### Security
 
 * **I container GeoServer passano la chiave al gateway LiteLLM.** Il gateway
@@ -15,6 +21,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   al provider OpenAI; api e worker usano già `LLM__LLAMACPP_API_KEY`.
 
 ### Changed
+
+* **Le trappole delle fonti esterne nella guida.** `docs/guida/integrazioni`
+  (IT e EN) racconta quelle di Open-Meteo, GloFAS e SINAnet, che non sono
+  diventate una libreria.
 
 * **Archivio «Merging» e bollettini DPC dal pacchetto `dpc-radar` 0.2.**
   `integrations/dpc/merging_archive.py` usa `dpc_radar.archive` (download
