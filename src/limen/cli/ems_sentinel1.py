@@ -8,9 +8,10 @@ e ``_pair.json`` in ``COPERNICUS_EMS_DATA_DIR``. Con il riferimento (default)
 anche il passaggio pre-evento della stessa orbita, per il change detection.
 
 **Non entra nel punteggio, né nella mappa, né negli alert.** Sulle etichette
-indipendenti (Pléiades/SPOT) i rivelatori su queste immagini arrivano a un
-CSI di circa 0,04: è materiale per addestrare un futuro challenger, non un
-segnale osservato da mettere accanto al motore V1.
+indipendenti (Pléiades/SPOT), lasciando fuori un'attivazione alla volta, la
+soglia su VV arriva a un CSI di 0,12 e ogni rivelatore sovrastima (bias da 2
+a 7): è materiale per addestrare un futuro challenger, non un segnale
+osservato da mettere accanto al motore V1.
 
 Le processing unit sono soldi di una quota: 10.000 al mese per un account
 generico. Prima di spendere si sommano quelle che ``make_pair`` spenderebbe
