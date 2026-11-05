@@ -110,3 +110,29 @@ async def test_un_catalogo_irraggiungibile_ferma_il_backtest(
     monkeypatch.setattr(_Finto, "fetch_events", guasto)
     with pytest.raises(shakemap_client.IngvNonDisponibileError):
         await _scosse()
+
+
+def test_la_soglia_di_e_si_sovrascrive_solo_nel_backtest() -> None:
+    """`LIMEN_BACKTEST_PGA_MIN_G`: si misura una soglia prima di scriverla nella YAML."""
+    from limen.core.scoring.regional_thresholds import load_regional_thresholds
+    from limen.core.scoring.seismic_decay import seismic_factor
+
+    yaml = load_regional_thresholds()
+    assert backtest.soglie_backtest() == yaml
+    alta = backtest.soglie_backtest(0.1)
+    assert alta.seismic.pga_min_g == 0.1
+    assert alta.seismic.model_copy(update={"pga_min_g": yaml.seismic.pga_min_g}) == yaml.seismic
+    assert alta.model_copy(update={"seismic": yaml.seismic}) == yaml
+    # 0,05 g accende E con la soglia della YAML, non con 0,1 g.
+    assert seismic_factor(0.05, seismic=yaml.seismic) > 0
+    assert seismic_factor(0.05, seismic=alta.seismic) == 0
+    # La YAML in cache non è stata toccata.
+    assert load_regional_thresholds().seismic.pga_min_g == yaml.seismic.pga_min_g
+
+
+@pytest.mark.parametrize("valore", ["zero virgola uno", "0", "-0.1"])
+async def test_una_soglia_storta_ferma_il_backtest(
+    valore: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LIMEN_BACKTEST_PGA_MIN_G", valore)
+    assert await backtest.run() == 1

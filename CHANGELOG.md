@@ -6,6 +6,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+* **`limen backtest-cosismico`: la componente sismica E misurata sulle frane
+  che un terremoto ha innescato.** Il backtest #287 l'aveva misurata su
+  ITALICA, che ha solo frane da pioggia, e non poteva premiarla. Qui la verità
+  è un inventario di frane cosismiche per evento (il CEDIT della Sapienza,
+  pubblicato da USGS in CC0) e il confronto è caso-controllo sui punti della
+  ShakeMap INGV: i punti franati contro tutta la terra in mappa (i confini del
+  seme nazionale, senza database). AUC di PGA, PGV e MMI accanto alla sola
+  distanza dall'epicentro, sull'intera mappa e nel **campo vicino** (dove E è
+  acceso, PGA ≥ `pga_min_g`): sull'intera mappa vince qualunque misura che
+  cresca verso l'epicentro. Recall, carico e lift per soglia di PGA, compresa
+  quella di E. Le ShakeMap stanno in cache; tre eventi del 2016 in ~7 s.
+
 ### Fixed
 
 * **La licenza dei mosaici ISPRA è CC BY-SA 4.0, non CC BY 4.0.** Lo dice il
