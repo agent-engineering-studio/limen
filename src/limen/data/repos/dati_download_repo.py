@@ -23,6 +23,10 @@ from limen.data.db import acquire
 #: Gli stati del CHECK della migrazione 086.
 Stato = Literal["in_coda", "in_corso", "fatto", "errore"]
 
+#: La riga che non è un download: caricare nelle celle quello che si è scaricato
+#: (#405). Sta nella stessa coda per averne gli stessi stati, la ripresa dopo un
+#: riavvio e il tetto ai tentativi. Non è una voce del catalogo.
+ELABORAZIONE = "elaborazione"
 #: Il canale di NOTIFY che sveglia il worker.
 CANALE = "dati_download"
 #: Oltre queste prese interrotte da un riavvio, la voce si chiude in errore.
@@ -179,6 +183,7 @@ async def elenco() -> list[StatoDownload]:
 
 __all__ = [
     "CANALE",
+    "ELABORAZIONE",
     "TENTATIVI_MASSIMI",
     "Stato",
     "StatoDownload",

@@ -55,7 +55,7 @@ export function percentuale(d: DownloadDato): number | null {
   return Math.min(100, Math.round((d.byte_fatti / d.byte_totali) * 100));
 }
 
-/** Scaricata ma non ancora nelle celle: la carica `make static-data` (#402). */
+/** Scaricata ma non ancora nelle celle: la carica l'elaborazione del worker (#405). */
 export function daCaricare(v: VoceDato): boolean {
   return v.download?.stato === "fatto" && v.copertura === 0 && v.deriva_da === null;
 }
@@ -101,8 +101,12 @@ const T = testi(
       fatto: "Scaricato",
       errore: "Errore",
     },
-    daCaricare:
-      "Scaricato ma non ancora caricato: sul server esegui `make static-data`.",
+    daCaricare: "Scaricato, non ancora caricato nelle celle.",
+    elaborazioneInCorso:
+      "Limen sta caricando nelle celle i dati scaricati. Per tutta Italia può durare qualche ora; la pagina si aggiorna da sola.",
+    elaborazioneErrore: "Il caricamento nelle celle non è riuscito del tutto:",
+    elaboraDaFare: "Ci sono dati scaricati da caricare nelle celle.",
+    elabora: "Carica i dati scaricati",
     scarica: "Scarica",
     riprova: "Riprova",
     scaricaEssenziali: "Scarica tutti i dati essenziali che mancano",
@@ -150,7 +154,12 @@ const T = testi(
     derivato: (da: string) => `Computed from «${da}»: not downloaded.`,
     pesoCirca: (p: string) => `about ${p}`,
     statoDl: { in_coda: "Queued", in_corso: "Downloading", fatto: "Downloaded", errore: "Error" },
-    daCaricare: "Downloaded but not loaded yet: run `make static-data` on the server.",
+    daCaricare: "Downloaded, not loaded into the cells yet.",
+    elaborazioneInCorso:
+      "Limen is loading the downloaded data into the cells. For all of Italy this can take a few hours; the page updates by itself.",
+    elaborazioneErrore: "Loading into the cells did not fully succeed:",
+    elaboraDaFare: "Some downloaded data still have to be loaded into the cells.",
+    elabora: "Load the downloaded data",
     scarica: "Download",
     riprova: "Retry",
     scaricaEssenziali: "Download every missing essential dataset",
@@ -227,10 +236,9 @@ export function InstallazionePage(): JSX.Element {
     };
   }, [aggiorna]);
 
-  const scarica = async (voci: string[]): Promise<void> => {
+  const azione = async (chiama: () => Promise<string | null>): Promise<void> => {
     try {
-      const r = await defaultApiClient.avviaDownload(voci, token);
-      setMessaggio(t.accodate(r.accodate.length));
+      setMessaggio(await chiama());
       await aggiorna();
     } catch (e) {
       if (e instanceof ApiClientError && e.status === 401) {
@@ -243,6 +251,18 @@ export function InstallazionePage(): JSX.Element {
       }
     }
   };
+
+  const scarica = (voci: string[]): Promise<void> =>
+    azione(async () => {
+      const r = await defaultApiClient.avviaDownload(voci, token);
+      return t.accodate(r.accodate.length);
+    });
+
+  const elabora = (): Promise<void> =>
+    azione(async () => {
+      await defaultApiClient.avviaElaborazione(token);
+      return null;
+    });
 
   const puoAgire = Boolean(stato?.azioni_abilitate && token);
 
@@ -265,6 +285,16 @@ export function InstallazionePage(): JSX.Element {
       v.download?.stato !== "in_coda" &&
       v.download?.stato !== "in_corso",
   );
+  const elaborazione = stato.elaborazione;
+  const inElaborazione =
+    elaborazione?.stato === "in_coda" || elaborazione?.stato === "in_corso";
+  const scaricando = stato.voci.some(
+    (v) => v.download?.stato === "in_coda" || v.download?.stato === "in_corso",
+  );
+  const daElaborare =
+    !inElaborazione &&
+    !scaricando &&
+    (elaborazione?.stato === "errore" || stato.voci.some(daCaricare));
 
   return (
     <main className="installazione">
@@ -303,6 +333,26 @@ export function InstallazionePage(): JSX.Element {
           );
         })}
       </section>
+
+      {(inElaborazione || daElaborare) && (
+        <section className="installazione-elaborazione" role="status">
+          {inElaborazione ? (
+            <p>{t.elaborazioneInCorso}</p>
+          ) : elaborazione?.stato === "errore" ? (
+            <>
+              <p>{t.elaborazioneErrore}</p>
+              <p className="installazione-errore">{elaborazione.errore}</p>
+            </>
+          ) : (
+            <p>{t.elaboraDaFare}</p>
+          )}
+          {daElaborare && puoAgire && (
+            <button type="button" onClick={() => void elabora()}>
+              {elaborazione?.stato === "errore" ? t.riprova : t.elabora}
+            </button>
+          )}
+        </section>
+      )}
 
       <section className="installazione-token">
         <h2>{t.token}</h2>

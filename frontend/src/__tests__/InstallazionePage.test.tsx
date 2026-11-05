@@ -45,6 +45,7 @@ function stato(extra: Partial<InstallazioneStato> = {}): InstallazioneStato {
       voce("strade", { livello: "consigliato", copertura: 0 }),
       voce("wui", { pericoli: ["wildfire"], livello: "consigliato", deriva_da: "corine" }),
     ],
+    elaborazione: null,
     azioni_abilitate: true,
     ...extra,
   };
@@ -133,6 +134,46 @@ describe("InstallazionePage", () => {
     fireEvent.click(primo!);
     expect(await screen.findByText(/token non è valido/)).toBeInTheDocument();
     await waitFor(() => expect(sessionStorage.getItem("limen-installazione-token")).toBeNull());
+  });
+
+  it("dice che sta caricando nelle celle, senza chiedere comandi", async () => {
+    vi.spyOn(defaultApiClient, "getInstallazioneStato").mockResolvedValue(
+      stato({
+        elaborazione: {
+          stato: "in_corso",
+          byte_fatti: 0,
+          byte_totali: null,
+          aggiornato_il: "2026-11-05T10:00:00Z",
+          errore: null,
+        },
+      }),
+    );
+    render(<InstallazionePage />);
+    expect(await screen.findByText(/sta caricando nelle celle/)).toBeInTheDocument();
+    expect(screen.queryByText(/make static-data/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Riprova" })).not.toBeInTheDocument();
+  });
+
+  it("un caricamento fallito mostra il motivo e si può rifare con il token", async () => {
+    vi.spyOn(defaultApiClient, "getInstallazioneStato").mockResolvedValue(
+      stato({
+        elaborazione: {
+          stato: "errore",
+          byte_fatti: 0,
+          byte_totali: null,
+          aggiornato_il: "2026-11-05T10:00:00Z",
+          errore: "Non è riuscito: calibrate.",
+        },
+      }),
+    );
+    const rifai = vi
+      .spyOn(defaultApiClient, "avviaElaborazione")
+      .mockResolvedValue({ accodate: ["elaborazione"], gia_in_corso: [] });
+    window.location.hash = "#/installazione?token=segreto";
+    render(<InstallazionePage />);
+    expect(await screen.findByText(/Non è riuscito: calibrate/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Riprova" }));
+    await waitFor(() => expect(rifai).toHaveBeenCalledWith("segreto"));
   });
 
   it("senza token sul server non mostra pulsanti", async () => {

@@ -29,6 +29,7 @@ def build_subparser(top: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     gruppo.add_argument("voci", nargs="*", default=[], metavar="VOCE")
     gruppo.add_argument("--essenziali", action="store_true", help="le voci essenziali")
     gruppo.add_argument("--tutte", action="store_true", help="tutte le voci che si scaricano")
+    sub.add_parser("elabora", help="porta nelle celle i file già scaricati; lo fa il worker")
 
 
 def scelte(args: argparse.Namespace, catalogo: CatalogoDati) -> list[str]:
@@ -63,6 +64,8 @@ async def stato(catalogo: CatalogoDati) -> int:
             stato_, gb = r.stato, f"{_peso(r.byte_fatti)} / {_peso(r.byte_totali)}"
             errore = r.errore or ""
         print(f"  {v.id:22s} {v.livello.value:12s} {stato_:11s} {gb:>19s}  {errore}")
+    if (e := righe.get(repo.ELABORAZIONE)) is not None:
+        print(f"\n  caricamento nelle celle: {e.stato}  {e.errore or ''}")
     print()
     return 0
 
@@ -73,6 +76,10 @@ async def run(args: argparse.Namespace) -> int:
         await run_migrations()
         if args.dati_command == "stato":
             return await stato(catalogo)
+        if args.dati_command == "elabora":
+            accodata = await repo.accoda([repo.ELABORAZIONE], byte_totali={})
+            print("In coda: lo fa il worker." if accodata else "È già in corso.")
+            return 0
         voci = scelte(args, catalogo)
         accodate = await repo.accoda(voci, byte_totali=byte_stimati(catalogo))
         gia = sorted(set(voci) - set(accodate))

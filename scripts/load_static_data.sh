@@ -12,13 +12,17 @@
 #
 # I comandi `limen` girano sull'host con uv se c'è, altrimenti in un container
 # usa e getta dell'immagine del worker (#306: sull'host basta Docker).
-# LIMEN_STATICI=host|docker sceglie a mano.
+# LIMEN_STATICI=host|docker sceglie a mano; `qui` è il worker che lo lancia dopo
+# i download della pagina di installazione (#405), dentro il suo container.
+# LIMEN_STATICI_SCARICA=0 salta i passi che vanno in rete: lì i file li ha già
+# scaricati la coda, e solo quelli chiesti da chi installa.
 set -uo pipefail
 # Il worker scarica nelle stesse cartelle (setgid, #402): i file nuovi
 # restano scrivibili dal gruppo, così ognuno riprende i `.part` dell'altro.
 umask 002
 
 UV="${UV:-uv}"
+SCARICA="${LIMEN_STATICI_SCARICA:-1}"
 FOCUS="${1:-tutti}"
 
 # I comandi `limen` leggono `.env` da soli (pydantic-settings + python-dotenv),
@@ -133,6 +137,8 @@ if [ "$MODO" = docker ]; then
       docker compose $LIMEN_COMPOSE run --rm --no-deps -T --user "$(id -u):$(id -g)" \
       "${CONTAINER[@]}" worker limen "$@"
   }
+elif [ "$MODO" = qui ]; then
+  limen() { command limen "$@"; }
 else
   limen() { $UV run limen "$@"; }
 fi
@@ -241,7 +247,9 @@ say "3/7  Dati geografici di base (IdroGEO, ISTAT, CORINE, geolitologia, DTM)"
 geodati_fatto=0
 if [ "$have_geodati" -eq 1 ]; then
   geodati_fatto=1
-  limen geodati-sync || echo "  (qualche file non è arrivato: il prossimo giro lo riprova)"
+  if [ "$SCARICA" = 1 ]; then
+    limen geodati-sync || echo "  (qualche file non è arrivato: il prossimo giro lo riprova)"
+  fi
   # Su un server nuovo DTM, raster CORINE e geolitologia nascono adesso: i
   # fattori per cella (7/7) devono vederli già a questo giro. La cartella è
   # già montata nel container, basta la variabile.
@@ -294,13 +302,17 @@ say "5/7  Perimetri EFFIS (truth set del backtest incendio)"
 # Comando a se' e non un passo del bootstrap: e' un dataset di verita', non un
 # fattore per cella, e il bootstrap per cella non fa chiamate HTTP. Sta pero'
 # in questa sequenza, che e' cio' che la #101 chiedeva.
-limen effis-sync || echo "  (EFFIS non raggiungibile: si prosegue)"
+if [ "$SCARICA" = 1 ]; then
+  limen effis-sync || echo "  (EFFIS non raggiungibile: si prosegue)"
+fi
 
 say "6/7  Velocità del terreno EGMS (feature InSAR del modello ML)"
 # La prima volta sono ~7 GB e circa un'ora; poi, con le tile già nella
 # cartella, è un controllo senza rete. Una release nuova (il passo notturno
 # `egms_release` la segnala) entra cambiando EGMS__RELEASE e rilanciando questo.
-if [ "$have_egms" -eq 1 ]; then
+if [ "$SCARICA" != 1 ]; then
+  echo "  saltato: niente download a questo giro"
+elif [ "$have_egms" -eq 1 ]; then
   mkdir -p "$EGMS__CARTELLA"
   limen sync-egms || echo "  (EGMS non completato: si prosegue, il prossimo giro riprende dalle tile già scaricate)"
 else

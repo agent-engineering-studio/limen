@@ -11,6 +11,12 @@ L'avanzamento non chiede niente ai downloader, che sono di tre moduli e di un
 pacchetto esterno (``ispra-idrogeo``): un osservatore misura ogni pochi
 secondi i file che la voce sta scrivendo (``.part`` compresi) e lo salva.
 Il totale è il ``peso_gb`` del catalogo, una stima dichiarata come tale.
+
+Un file scaricato non è ancora un dato: finita la coda, se qualcosa è arrivato,
+il consumatore accoda l'**elaborazione** (#405), che porta i file nelle celle.
+Gira in un processo a parte: per tutta Italia sono ore di raster, e nel processo
+del worker terrebbero fermo lo sweep orario. I passi sono idempotenti sul costo,
+quindi rifarla dopo un download piccolo non ricalcola il resto.
 """
 
 from __future__ import annotations
@@ -19,6 +25,7 @@ import asyncio
 import contextlib
 import errno
 import os
+import shutil
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,6 +49,10 @@ INTERVALLO_AVANZAMENTO_S = 5.0
 ATTESA_MASSIMA_S = 300.0
 #: Dopo un errore del database il consumatore riprova, non muore.
 PAUSA_DOPO_ERRORE_S = 30.0
+#: Lo script dei dati statici, dove lo mette l'immagine.
+_SCRIPT_STATICI = "/app/scripts/load_static_data.sh"
+#: Dopo i fattori per cella: quello che lo script lascia a `nuovo_host.sh`.
+_PASSI_FINALI = ("seed-comuni", "ingest-events", "calibrate")
 
 
 class DownloadFallitoError(RuntimeError):
@@ -236,6 +247,44 @@ def messaggio(exc: BaseException, fonte: str) -> str:
     )
 
 
+async def _esegui_passo(nome: str, *comando: str, ambiente: dict[str, str]) -> str | None:
+    """Il nome del passo se è fallito. L'output va nei log del worker."""
+    log.info("dati_elaborazione.passo", passo=nome)
+    processo = await asyncio.create_subprocess_exec(*comando, env=ambiente)
+    try:
+        codice = await processo.wait()
+    except asyncio.CancelledError:
+        # Il worker si sta fermando: l'elaborazione riparte al prossimo avvio,
+        # e due giri insieme scriverebbero sulle stesse tabelle.
+        with contextlib.suppress(ProcessLookupError):
+            processo.terminate()
+        raise
+    if codice != 0:
+        log.warning("dati_elaborazione.passo_fallito", passo=nome, codice=codice)
+        return nome
+    return None
+
+
+async def elabora_dati() -> None:
+    """Porta nelle celle i file scaricati, con lo script di sempre.
+
+    Un passo fallito non ferma gli altri: la calibrazione sui fattori che ci
+    sono vale più di una pagina ferma, e ogni passo si può rifare.
+    """
+    bash = shutil.which("bash") or "bash"
+    limen = shutil.which("limen") or "limen"
+    ambiente = os.environ | {"LIMEN_STATICI": "qui", "LIMEN_STATICI_SCARICA": "0"}
+    falliti = [
+        await _esegui_passo("fattori per cella", bash, _SCRIPT_STATICI, ambiente=ambiente),
+        *[await _esegui_passo(p, limen, p, ambiente=ambiente) for p in _PASSI_FINALI],
+    ]
+    if nomi := [f for f in falliti if f is not None]:
+        raise DownloadFallitoError(
+            f"Non è riuscito: {', '.join(nomi)}. Il dettaglio è nei log del worker; "
+            "i passi riusciti non si rifanno."
+        )
+
+
 class ConsumatoreDownload:
     """Il task del worker che esegue la coda dei download."""
 
@@ -245,12 +294,14 @@ class ConsumatoreDownload:
         catalogo: CatalogoDati | None = None,
         da_procurare: dict[str, Procuratore] | None = None,
         intervallo_s: float = INTERVALLO_AVANZAMENTO_S,
+        elabora: Callable[[], Awaitable[None]] = elabora_dati,
     ) -> None:
         # Caricati al primo uso, dentro il ciclo protetto: un `dati.yaml`
         # malformato deve spegnere i download, non il worker e lo sweep orario.
         self._catalogo = catalogo
         self._procuratori = da_procurare
         self._intervallo_s = intervallo_s
+        self._elabora = elabora
         self._task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
@@ -303,10 +354,47 @@ class ConsumatoreDownload:
                 await conn.remove_listener(repo.CANALE, _notifica)
 
     async def svuota_coda(self) -> None:
-        while (voce := await repo.prendi_prossima()) is not None:
-            await self.esegui(voce)
+        arrivato = False
+        while True:
+            voce = await repo.prendi_prossima()
+            if voce is None:
+                if not arrivato:
+                    return
+                # In coda e non chiamata qui: un riavvio la riprende come ogni voce.
+                arrivato = False
+                await repo.accoda([repo.ELABORAZIONE], byte_totali={})
+            elif voce == repo.ELABORAZIONE:
+                await self.elabora()
+            elif await self.esegui(voce):
+                arrivato = True
 
-    async def esegui(self, voce: str) -> None:
+    async def elabora(self) -> None:
+        async with repo.blocco_download() as libero:
+            if not libero:
+                await repo.chiudi(
+                    repo.ELABORAZIONE,
+                    errore=(
+                        "Un download (`make static-data` o `limen geodati-sync`) sta scrivendo "
+                        "i file da caricare: riprova quando ha finito."
+                    ),
+                )
+                return
+            errore: str | None = None
+            try:
+                await self._elabora()
+            except Exception as exc:
+                errore = messaggio(exc, "Limen")
+                log.warning(
+                    "dati_elaborazione.errore",
+                    error=str(exc)[:300],
+                    error_type=type(exc).__name__,
+                    exc_info=True,
+                )
+            await repo.chiudi(repo.ELABORAZIONE, errore=errore)
+            log.info("dati_elaborazione.fine", ok=errore is None)
+
+    async def esegui(self, voce: str) -> bool:
+        """Scarica la voce; ``True`` se ora c'è qualcosa da portare nelle celle."""
         catalogo = self._catalogo or carica_catalogo()
         procuratori_ = self._procuratori if self._procuratori is not None else procuratori()
         procuratore = procuratori_.get(voce)
@@ -314,7 +402,7 @@ class ConsumatoreDownload:
             await repo.chiudi(
                 voce, errore="Questo dato non si scarica: Limen lo calcola da un altro."
             )
-            return
+            return False
         async with repo.blocco_download() as libero:
             if not libero:
                 await repo.chiudi(
@@ -324,10 +412,10 @@ class ConsumatoreDownload:
                         "sta scrivendo negli stessi file: riprova quando ha finito."
                     ),
                 )
-                return
-            await self._scarica(voce, procuratore, catalogo.voce(voce).fonte)
+                return False
+            return await self._scarica(voce, procuratore, catalogo.voce(voce).fonte)
 
-    async def _scarica(self, voce: str, procuratore: Procuratore, fonte: str) -> None:
+    async def _scarica(self, voce: str, procuratore: Procuratore, fonte: str) -> bool:
         log.info("dati_download.inizio", voce=voce)
         osservatore = asyncio.create_task(self._osserva(voce, procuratore))
         errore: str | None = None
@@ -349,6 +437,7 @@ class ConsumatoreDownload:
         fatti = await asyncio.to_thread(misura_byte, list(procuratore.file()))
         await repo.chiudi(voce, errore=errore, byte_fatti=fatti)
         log.info("dati_download.fine", voce=voce, ok=errore is None, byte=fatti)
+        return errore is None
 
     async def _osserva(self, voce: str, procuratore: Procuratore) -> None:
         while True:
@@ -361,6 +450,7 @@ __all__ = [
     "ConsumatoreDownload",
     "DownloadFallitoError",
     "Procuratore",
+    "elabora_dati",
     "messaggio",
     "misura_byte",
     "procuratori",

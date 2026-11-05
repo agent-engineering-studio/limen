@@ -205,3 +205,19 @@ def test_un_dato_in_una_sola_regione_non_rende_pronto_il_pericolo(
     assert pericoli["wildfire"]["mancano"] == ["dtm"]
     assert not pericoli["landslide"]["pronto"]
     assert {v["id"]: v for v in corpo["voci"]}["dtm"]["regioni_senza"] == ["it-basilicata"]
+
+
+def test_rifare_il_caricamento_chiede_il_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, coda = _client(monkeypatch)
+    assert client.post("/api/installazione/elabora").status_code == 401
+    assert coda.accodate == []
+    risposta = client.post(
+        "/api/installazione/elabora", headers={HEADER_TOKEN_INSTALLAZIONE: _TOKEN}
+    )
+    assert risposta.status_code == 202
+    assert coda.accodate == ["elaborazione"]
+
+
+def test_lo_stato_dice_a_che_punto_e_il_caricamento(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, _ = _client(monkeypatch)
+    assert client.get("/api/installazione/stato").json()["elaborazione"] is None

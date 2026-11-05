@@ -386,6 +386,8 @@ class InstallazioneStato(BaseModel):
     regioni: int
     pericoli: list[PericoloPronto]
     voci: list[VoceDato]
+    #: Il passo che porta nelle celle i file scaricati; `None` se mai partito.
+    elaborazione: DownloadDato | None
     #: Se il server ha un token di installazione: senza, i pulsanti non servono.
     azioni_abilitate: bool
 

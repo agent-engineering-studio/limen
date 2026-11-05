@@ -5,6 +5,7 @@
 #   ./scripts/nuovo_host.sh --controlla    solo i prerequisiti, non tocca niente
 #   ./scripts/nuovo_host.sh --ripristina   dal backup notturno (#304): stato, poi lo stack
 #   ./scripts/nuovo_host.sh --da-zero      stack nuovo: seed, eventi, calibrazione, FWI
+#   ./scripts/nuovo_host.sh --solo-stack   stack e seed; i dati dal browser (lo usa installa.sh)
 #
 # Prima: Docker, il repository, e un .env (cp .env.example .env, poi almeno
 # LIMEN_DATA_ROOT; per --ripristina anche le BACKUP__*). I comandi `limen`
@@ -26,8 +27,8 @@ no() { printf '  [NO]    %s\n' "$*" >&2; }
 stop() { no "$*"; exit 1; }
 
 case "$MODO" in
-  --controlla | --ripristina | --da-zero) ;;
-  *) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+  --controlla | --ripristina | --da-zero | --solo-stack) ;;
+  *) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
 esac
 
 # --- 1. Prerequisiti ----------------------------------------------------------
@@ -247,8 +248,19 @@ if [ "$MODO" = "--da-zero" ]; then
   fi
 fi
 
-say "dati statici (make static-data)"
-make --no-print-directory static-data || no "dati statici incompleti: guarda sopra, poi make static-data"
+if [ "$MODO" = "--solo-stack" ]; then
+  # Dopo lo stack: si attacca alla sua rete. Non ferma l'installazione: senza,
+  # si resta sull'API pubblica, che col suo tetto dà celle «non misurate».
+  case "$(dotenv OPENMETEO__FORECAST_URL)" in
+    *openmeteo:*)
+      say "Open-Meteo locale (make meteo-up)"
+      make --no-print-directory meteo-up || no "Open-Meteo locale non partito: make meteo-up"
+      ;;
+  esac
+else
+  say "dati statici (make static-data)"
+  make --no-print-directory static-data || no "dati statici incompleti: guarda sopra, poi make static-data"
+fi
 
 if [ "$MODO" = "--da-zero" ]; then
   say "eventi, calibrazione e catena FWI (nel worker)"

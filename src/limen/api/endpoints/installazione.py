@@ -3,7 +3,9 @@
 ``GET /api/installazione/stato`` è pubblico come il resto della mappa: dice
 quali dati servono, a cosa, quanti ce ne sono e cosa manca a ogni pericolo.
 ``POST /api/installazione/download`` cambia qualcosa — mette in coda un
-download che il worker eseguirà — e chiede il token di installazione (#403).
+download che il worker eseguirà — e chiede il token di installazione (#403),
+come ``POST /api/installazione/elabora``, che rimette in coda il caricamento
+nelle celle dei file già scaricati (#405).
 
 Nessuna logica qui: catalogo, copertura, coda e prontezza stanno in
 ``config``, ``data/repos`` e ``core``.
@@ -28,6 +30,18 @@ from limen.data.repos import copertura_repo
 from limen.data.repos import dati_download_repo as coda
 
 router = APIRouter(prefix="/api/installazione", tags=["installazione"])
+
+
+def _dto(riga: coda.StatoDownload | None) -> DownloadDato | None:
+    if riga is None:
+        return None
+    return DownloadDato(
+        stato=riga.stato,
+        byte_fatti=riga.byte_fatti,
+        byte_totali=riga.byte_totali,
+        aggiornato_il=riga.aggiornato_il,
+        errore=riga.errore,
+    )
 
 
 @router.get("/stato", response_model=InstallazioneStato)
@@ -60,20 +74,11 @@ async def stato(settings: SettingsDep) -> InstallazioneStato:
                 deriva_da=v.deriva_da,
                 copertura=copertura.totali.get(v.id, 0),
                 regioni_senza=senza.get(v.id, []),
-                download=(
-                    None
-                    if (r := scaricamenti.get(v.id)) is None
-                    else DownloadDato(
-                        stato=r.stato,
-                        byte_fatti=r.byte_fatti,
-                        byte_totali=r.byte_totali,
-                        aggiornato_il=r.aggiornato_il,
-                        errore=r.errore,
-                    )
-                ),
+                download=_dto(scaricamenti.get(v.id)),
             )
             for v in catalogo.voci
         ],
+        elaborazione=_dto(scaricamenti.get(coda.ELABORAZIONE)),
         azioni_abilitate=settings.installazione.abilitato,
     )
 
@@ -88,6 +93,13 @@ async def download(richiesta: RichiestaDownload, _: TokenInstallazioneDep) -> Ri
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     accodate = await coda.accoda(voci, byte_totali=byte_stimati(catalogo))
     return RispostaDownload(accodate=accodate, gia_in_corso=sorted(set(voci) - set(accodate)))
+
+
+@router.post("/elabora", response_model=RispostaDownload, status_code=202)
+async def elabora(_: TokenInstallazioneDep) -> RispostaDownload:
+    """Rimette in coda il caricamento nelle celle: senza scaricare niente."""
+    accodate = await coda.accoda([coda.ELABORAZIONE], byte_totali={})
+    return RispostaDownload(accodate=accodate, gia_in_corso=[] if accodate else [coda.ELABORAZIONE])
 
 
 __all__ = ["router"]

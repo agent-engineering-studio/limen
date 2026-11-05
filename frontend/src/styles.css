@@ -3860,3 +3860,7 @@ html[lang="en"] .app-nav a { white-space: nowrap; }
 .installazione-tutti {
   margin-bottom: 1rem;
 }
+
+.installazione-elaborazione {
+  margin-block: 1rem;
+}

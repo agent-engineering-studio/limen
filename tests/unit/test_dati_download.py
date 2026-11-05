@@ -78,6 +78,12 @@ class _Coda:
         self.voci = list(voci)
         self.chiuse: dict[str, str | None] = {}
         self.avanzamenti: list[tuple[str, int]] = []
+        self.accodate: list[str] = []
+
+    async def accoda(self, voci: list[str], *, byte_totali: dict[str, int]) -> list[str]:
+        self.accodate.extend(voci)
+        self.voci.extend(voci)
+        return voci
 
     async def prendi_prossima(self) -> str | None:
         return self.voci.pop(0) if self.voci else None
@@ -92,7 +98,7 @@ class _Coda:
 @pytest.fixture
 def coda(monkeypatch: pytest.MonkeyPatch) -> _Coda:
     c = _Coda(["iffi", "dtm", "wui"])
-    for nome in ("prendi_prossima", "avanza", "chiudi"):
+    for nome in ("prendi_prossima", "avanza", "chiudi", "accoda"):
         monkeypatch.setattr(dd.repo, nome, getattr(c, nome))
     monkeypatch.setattr(dd.repo, "blocco_download", _blocco(libero=True))
     return c
@@ -104,6 +110,14 @@ def _blocco(*, libero: bool) -> Any:
         yield libero
 
     return blocco
+
+
+async def _niente() -> None:
+    return None
+
+
+async def _nessuna_elaborazione() -> None:
+    raise AssertionError("non doveva partire")
 
 
 async def test_la_coda_si_svuota_e_ogni_voce_si_chiude(coda: _Coda, tmp_path: Path) -> None:
@@ -122,6 +136,7 @@ async def test_la_coda_si_svuota_e_ogni_voce_si_chiude(coda: _Coda, tmp_path: Pa
             "dtm": dd.Procuratore(rotto, list),
         },
         intervallo_s=0.01,
+        elabora=_niente,
     )
     await consumatore.svuota_coda()
 
@@ -143,6 +158,7 @@ async def test_un_errore_non_ferma_le_voci_dopo(coda: _Coda) -> None:
 
     consumatore = dd.ConsumatoreDownload(
         da_procurare={"iffi": dd.Procuratore(esplode, list), "dtm": dd.Procuratore(ok, list)},
+        elabora=_niente,
     )
     await consumatore.svuota_coda()
     assert fatte == ["dtm"]
@@ -212,3 +228,73 @@ def test_un_catalogo_rotto_non_ferma_il_costruttore(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(dd, "carica_catalogo", rotto)
     monkeypatch.setattr(dd, "procuratori", rotto)
     dd.ConsumatoreDownload()
+
+
+async def test_dopo_i_download_i_dati_entrano_nelle_celle_una_volta_sola(coda: _Coda) -> None:
+    """Un file scaricato non è ancora un dato: senza questo passo la pagina resta
+    rossa dopo ogni download, e chi installa non ha un comando da lanciare."""
+    giri: list[int] = []
+
+    async def elabora() -> None:
+        giri.append(1)
+
+    consumatore = dd.ConsumatoreDownload(
+        da_procurare={v: dd.Procuratore(_niente, list) for v in ("iffi", "dtm")},
+        elabora=elabora,
+    )
+    await consumatore.svuota_coda()
+    assert giri == [1]
+    assert coda.chiuse[dd.repo.ELABORAZIONE] is None
+
+
+async def test_se_nessun_download_riesce_non_si_elabora(
+    coda: _Coda, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coda.voci[:] = ["wui"]
+    consumatore = dd.ConsumatoreDownload(da_procurare={}, elabora=_nessuna_elaborazione)
+    await consumatore.svuota_coda()
+    assert coda.accodate == []
+
+
+async def test_un_elaborazione_fallita_lo_dice_e_si_puo_rifare(coda: _Coda) -> None:
+    async def rotta() -> None:
+        raise dd.DownloadFallitoError("Non è riuscito: calibrate.")
+
+    await dd.ConsumatoreDownload(da_procurare={}, elabora=rotta).elabora()
+    assert "calibrate" in (coda.chiuse[dd.repo.ELABORAZIONE] or "")
+
+
+async def test_col_lock_occupato_non_si_elabora(
+    coda: _Coda, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(dd.repo, "blocco_download", _blocco(libero=False))
+    await dd.ConsumatoreDownload(da_procurare={}, elabora=_nessuna_elaborazione).elabora()
+    assert "riprova" in (coda.chiuse[dd.repo.ELABORAZIONE] or "")
+
+
+async def test_un_passo_fallito_non_ferma_gli_altri(monkeypatch: pytest.MonkeyPatch) -> None:
+    """La calibrazione deve girare anche se un download non è entrato, e il
+    motivo che arriva alla pagina nomina il passo."""
+    passi: list[tuple[str, dict[str, str]]] = []
+
+    async def finto(nome: str, *comando: str, ambiente: dict[str, str]) -> str | None:
+        passi.append((nome, ambiente))
+        return nome if nome == "ingest-events" else None
+
+    monkeypatch.setattr(dd, "_esegui_passo", finto)
+    with pytest.raises(dd.DownloadFallitoError, match="ingest-events"):
+        await dd.elabora_dati()
+    assert [p for p, _ in passi] == [
+        "fattori per cella",
+        "seed-comuni",
+        "ingest-events",
+        "calibrate",
+    ]
+    # Non riscarica: i file li ha portati la coda, e solo quelli chiesti.
+    assert passi[0][1]["LIMEN_STATICI"] == "qui"
+    assert passi[0][1]["LIMEN_STATICI_SCARICA"] == "0"
+
+
+async def test_il_passo_riporta_il_codice_del_processo() -> None:
+    assert await dd._esegui_passo("ok", "true", ambiente={}) is None
+    assert await dd._esegui_passo("rotto", "false", ambiente={}) == "rotto"
