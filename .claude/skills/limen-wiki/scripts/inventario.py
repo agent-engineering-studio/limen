@@ -25,9 +25,9 @@ GUIDA = ROOT / "docs" / "guida" / "limen.md"
 INTEGRAZIONI = ROOT / "docs" / "guida" / "integrazioni.md"
 DOCPAGE = ROOT / "frontend" / "src" / "components" / "DocPage.tsx"
 
-# Quale pagina racconta quale fonte: le integrazioni vengono da questi tre,
+# Quale pagina racconta quale fonte: le integrazioni vengono da questi due,
 # tutto il resto confluisce nella guida.
-INTEGRAZIONI_FONTI = {"docs/api.md", "docs/openclaw.md", "docs/geodata.md"}
+INTEGRAZIONI_FONTI = {"docs/api.md", "docs/openclaw.md"}
 
 
 def ultimo_commit(path: Path) -> str:
@@ -82,16 +82,8 @@ def superfici() -> None:
         r"async def (tool_\w+)",
         (ROOT / "src" / "limen" / "mcp" / "server.py").read_text(encoding="utf-8"),
     )
-    geo_server = ROOT / "geodata"
-    geo: list[str] = []
-    for f in geo_server.rglob("*.py"):
-        if "mcp" in f.parts:
-            geo += re.findall(r"def (tool_\w+)", f.read_text(encoding="utf-8"))
     print("   MCP limen-ops:")
     for t in mcp:
-        print(f"     {'✓' if t in testo else '✗'} {t}")
-    print("   MCP ispra-geo:")
-    for t in sorted(set(geo)):
         print(f"     {'✓' if t in testo else '✗'} {t}")
 
     skills = re.findall(

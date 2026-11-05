@@ -2,10 +2,10 @@
 
 from limen.integrations.dpc.client import (
     CUM_PERIOD,
-    SriGrid,
+    RainGrid,
     get_cum_at,
     get_latest_cum,
     get_latest_sri,
 )
 
-__all__ = ["CUM_PERIOD", "SriGrid", "get_cum_at", "get_latest_cum", "get_latest_sri"]
+__all__ = ["CUM_PERIOD", "RainGrid", "get_cum_at", "get_latest_cum", "get_latest_sri"]

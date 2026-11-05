@@ -336,8 +336,8 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
         # H (hydrology) is the ISPRA Mosaicatura Idraulica per-cell
         # flood-hazard class, mapped through the same AA/P1..P4 ladder
         # as PAI. NULL ⇒ keeps the V1 baseline `h = 0` so behaviour is
-        # byte-identical for operational DBs not yet exported from
-        # the geodata stack.
+        # byte-identical for operational DBs whose bootstrap has not
+        # loaded the mosaic yet.
         h_static = (
             _clamp01(bundle.static.flood_hazard_norm)
             if bundle.static.flood_hazard_norm is not None

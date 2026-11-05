@@ -442,7 +442,8 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     };
 
     // Build the source set lazily so optional PMTiles overlays only
-    // appear when their env URL is set — see `docs/geodata.md`.
+    // appear when their env URL is set (`VITE_PAI_PMTILES_URL`,
+    // `VITE_IFFI_PMTILES_URL`: any PMTiles of the layer).
     const sources: maplibregl.StyleSpecification["sources"] = {
       [HIGHLIGHT_SOURCE_ID]: {
         type: "geojson",

@@ -8,14 +8,14 @@
 #   docker compose -f infra/docker/docker-compose.geoserver.yml \
 #     --profile geoserver up -d
 #
-# Self-contained like the `geodata` stack: a DEDICATED Postgres+PostGIS
+# Self-contained: a DEDICATED Postgres+PostGIS
 # holds the vector layers, isolated from Limen's operational DB. The
 # application images are pulled PRE-BUILT from GHCR (multi-arch: native
 # arm64 on Apple Silicon, amd64 on the Aruba VPS) — no cross-repo build
 # context inside Limen.
 #
 # Ports are remapped to coexist with the Limen stack on the same host:
-#   geoserver-postgis  -> 55433  (limen-postgres=5432, geodata-db=55432)
+#   geoserver-postgis  -> 55433  (limen-postgres=5432)
 #   geoserver          -> 8081   (limen-api=8080)
 #   geoserver-webui    -> 8000
 #   geoserver-mcp      -> 9000   (streamable-HTTP /mcp)
@@ -234,6 +234,9 @@ services:
       idrogeo-mcp:
         condition: service_healthy
         required: false
+      copernicus-ems-mcp:
+        condition: service_healthy
+        required: false
     environment:
       GEOSERVER_URL: http://geoserver:8080/geoserver
       GEOSERVER_USER: ${GEOSERVER_ADMIN_USER:-admin}
@@ -269,9 +272,9 @@ services:
       # Remote MCP tools for geoserver-agent (and GEO_MCP_MODE=agent), prefixed
       # with the name (idrogeo_area_risk, ...). geo_resolve_request and the web
       # UI chat do not see them. An unreachable server is logged and skipped.
-      GEO_EXTRA_MCP_SERVERS: ${GEO_EXTRA_MCP_SERVERS:-idrogeo=http://idrogeo-mcp:8767/mcp}
+      GEO_EXTRA_MCP_SERVERS: ${GEO_EXTRA_MCP_SERVERS:-idrogeo=http://idrogeo-mcp:8767/mcp,copernicus-ems=http://copernicus-ems-mcp:8768/mcp}
       GEO_EXTRA_MCP_TIMEOUT: ${GEO_EXTRA_MCP_TIMEOUT:-10}
-      GEO_EXTRA_MCP_INSTRUCTIONS: ${GEO_EXTRA_MCP_INSTRUCTIONS:-Usa gli strumenti idrogeo_* per frane, popolazione esposta e monitoraggio.}
+      GEO_EXTRA_MCP_INSTRUCTIONS: ${GEO_EXTRA_MCP_INSTRUCTIONS:-Usa gli strumenti idrogeo_* per frane, popolazione esposta e monitoraggio, e copernicus-ems_* per le alluvioni e le frane mappate da satellite nelle emergenze Copernicus EMS.}
       GEO_ALLOW_DESTRUCTIVE: ${GEO_ALLOW_DESTRUCTIVE:-false}
       GEO_MAP_OUTPUT_DIR: /app/maps
     extra_hosts:
@@ -325,6 +328,40 @@ services:
       start_period: 120s
       retries: 3
 
+  # Copernicus EMS Rapid Mapping come server MCP (pacchetto copernicus-ems,
+  # extra [mcp]): attivazioni, riepilogo per prodotto, confronto dei prodotti
+  # di un'AOI nel tempo, export degli eventi osservati, scene Sentinel. Tutti in
+  # sola lettura, rispondono con fatti e percorsi di file, mai con geometrie.
+  # Stesso schema di idrogeo-mcp: immagine uv (il server vuole `mcp>=2`),
+  # porta sul loopback. Il server non ha autenticazione: resta sulla rete
+  # interna, e la lista degli host ammessi tiene fuori il DNS rebinding.
+  copernicus-ems-mcp:
+    image: ${COPERNICUS_EMS_MCP_IMAGE:-ghcr.io/astral-sh/uv:0.9-python3.12-bookworm-slim}
+    container_name: limen-copernicus-ems-mcp
+    restart: unless-stopped
+    profiles: ["geoserver"]
+    command: ["uvx", "--from", "copernicus-ems[mcp]~=0.7.0", "copernicus-ems-mcp"]
+    environment:
+      COPERNICUS_EMS_MCP_TRANSPORT: streamable-http
+      COPERNICUS_EMS_MCP_HOST: 0.0.0.0
+      COPERNICUS_EMS_MCP_PORT: "8768"
+      COPERNICUS_EMS_MCP_ALLOWED_HOSTS: "copernicus-ems-mcp:*,localhost:*,127.0.0.1:*"
+      COPERNICUS_EMS_DATA_DIR: /data/copernicus-ems
+      UV_CACHE_DIR: /cache/uv
+    volumes:
+      - limen-copernicus-ems-cache:/cache/uv
+      - limen-copernicus-ems-data:/data/copernicus-ems
+    ports:
+      - "${LIMEN_COPERNICUS_EMS_MCP_BIND:-127.0.0.1}:8768:8768"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8768/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      # Il primo avvio scarica il pacchetto e le sue dipendenze.
+      start_period: 120s
+      retries: 3
+
 volumes:
   # External so the same named volumes are shared cleanly between the
   # standalone `make geoserver-up` (project limen-geoserver) and the unified
@@ -341,4 +378,10 @@ volumes:
     external: true
   limen-idrogeo-data:
     name: limen-idrogeo-data
+    external: true
+  limen-copernicus-ems-cache:
+    name: limen-copernicus-ems-cache
+    external: true
+  limen-copernicus-ems-data:
+    name: limen-copernicus-ems-data
     external: true

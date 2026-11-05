@@ -158,12 +158,12 @@ _BBOXES = {
 
 
 class _Sri:
-    observed_at = datetime(2026, 9, 15, 14, 5, tzinfo=UTC)
+    time = datetime(2026, 9, 15, 14, 5, tzinfo=UTC)
 
     def __init__(self, by_bbox: dict[tuple[float, ...], tuple[float, int]]) -> None:
         self._by_bbox = by_bbox
 
-    def max_intensity(self, bbox: tuple[float, ...], *, threshold_mmh: float) -> tuple[float, int]:
+    def peak(self, bbox: tuple[float, ...], *, threshold: float) -> tuple[float, int]:
         return self._by_bbox.get(bbox, (0.0, 0))
 
 

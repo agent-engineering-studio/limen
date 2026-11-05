@@ -55,6 +55,7 @@ STEPS = (
     "egms_release",
     "radar_archivio",
     "effis_perimetri",
+    "ems_alluvioni",
     "esposizione_ispra",
     "glofas_riferimenti",
 )
@@ -222,6 +223,7 @@ async def run_nightly_pipeline(deps: AppDependencies) -> dict[str, Any]:
     out["egms_release"] = await _step("egms_release", lambda: _egms_release(deps))
     out["radar_archivio"] = await _step("radar_archivio", lambda: _radar_archivio(deps))
     out["effis_perimetri"] = await _step("effis_perimetri", _effis_perimetri)
+    out["ems_alluvioni"] = await _step("ems_alluvioni", _ems_alluvioni)
     out["esposizione_ispra"] = await _step("esposizione_ispra", _esposizione_ispra)
     # Per ultimo: il tetto di GloFAS riparte a mezzanotte UTC, quindi alle due
     # è intero comunque, e il riempimento ora dura un paio d'ore (i lotti si
@@ -347,6 +349,15 @@ async def _effis_perimetri() -> dict[str, Any]:
     from limen.cli.effis_sync import sincronizza
 
     return await sincronizza(forzato=True)
+
+
+async def _ems_alluvioni() -> dict[str, Any]:
+    """Le attivazioni Copernicus EMS italiane: il truth set del backtest
+    alluvione e lo strato dei perimetri sulla mappa, che senza questo passo
+    restavano fermi all'ultimo `limen ingest-events --hazard flood` a mano."""
+    from limen.cli.ingest_events import sincronizza_alluvioni
+
+    return await sincronizza_alluvioni()
 
 
 async def _esposizione_ispra() -> dict[str, Any]:

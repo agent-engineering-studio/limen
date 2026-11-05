@@ -57,7 +57,7 @@ async def run_nowcast_monitoring(deps: AppDependencies) -> dict[str, float]:
 
     triggered: dict[str, float] = {}
     for aoi_id, bbox in await _aoi_bboxes():
-        peak, hot_pixels = sri.max_intensity(bbox, threshold_mmh=cfg.min_intensity_mmh)
+        peak, hot_pixels = sri.peak(bbox, threshold=cfg.min_intensity_mmh)
         if peak < cfg.min_intensity_mmh or hot_pixels < cfg.min_pixels:
             continue
         if await assessed_within(aoi_id, minutes=cfg.cooldown_minutes):
@@ -68,7 +68,7 @@ async def run_nowcast_monitoring(deps: AppDependencies) -> dict[str, float]:
             aoi_id=aoi_id,
             peak_mmh=round(peak, 1),
             hot_pixels=hot_pixels,
-            observed_at=sri.observed_at.isoformat(),
+            observed_at=sri.time.isoformat(),
         )
         try:
             # Profilo orario e non previsionale (#78): questo tick è

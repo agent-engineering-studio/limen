@@ -12,9 +12,11 @@ rapporto sarebbe comunque «non so».
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
+
+from glofas_ewds import candidate_runs
 
 from limen.config.settings import Settings
 from limen.core.logging import get_logger
@@ -48,9 +50,7 @@ async def aggiorna(settings: Settings, *, oggi: date | None = None) -> dict[str,
             return {"status": "skipped", "reason": "nessun riferimento con un fiume"}
         client = ewds_glofas.nuovo_client(cfg.ewds_url, cfg.ewds_key.get_secret_value())
         cartella = Path(cfg.cartella)
-        for corsa in (oggi, oggi - timedelta(days=1)):
-            if ultima is not None and ultima >= corsa:
-                break
+        for corsa in candidate_runs(oggi, latest_saved=ultima):
             try:
                 path = await asyncio.wait_for(
                     asyncio.to_thread(
