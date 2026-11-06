@@ -797,8 +797,10 @@ It checks the prerequisites (Docker, GNU make ≥ 4.3), creates the `.env` with
 working defaults, starts the stack and the local Open-Meteo, prepares the
 twenty regions (~312,000 cells, about twenty minutes) and prints the link to
 `#/installazione`. From that page you choose what to download; the worker
-downloads it and then loads it into the cells by itself. Re-running never
-overwrites a value already in `.env`. Without a domain the proxy serves
+downloads it and then loads it into the cells by itself. Before starting or
+downloading anything it stops if a variable in `.env` is empty, naming it. Re-running never
+overwrites a value already in `.env`, except `LIMEN_IMAGE_TAG`, which follows
+the checked-out commit when its images are published. Without a domain the proxy serves
 `https://localhost` with a local certificate, so the browser warns once.
 
 The longer way, for a restore from backup or for a fresh stack that loads all

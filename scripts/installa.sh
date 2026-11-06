@@ -86,7 +86,8 @@ scrivi() {  # scrivi NOME valore
 imposta() {  # imposta NOME valore
   grep -qs "^$1=..*" .env || scrivi "$1" "$2"
 }
-valore() { grep -s "^$1=" .env | tail -n 1 | cut -d= -f2-; }
+# Una chiave assente non è un errore: con pipefail il grep a vuoto fermerebbe lo script.
+valore() { { grep -s "^$1=" .env || true; } | tail -n 1 | cut -d= -f2-; }
 
 imposta LIMEN_DATA_ROOT "$HOME/limen-data"
 
@@ -114,19 +115,22 @@ if [ ! -f secrets/cdse.json ]; then
   imposta LIMEN_CDSE_SECRET_FILE /dev/null
 fi
 
-# Le immagini del commit di questo clone, se esistono: CI le pubblica solo da
-# main e solo per amd64. Altrimenti si costruiscono qui, più lentamente.
-if [ -z "$(valore LIMEN_IMAGE_TAG)" ] && [ "$(uname -m)" != x86_64 ]; then
-  nota "architettura $(uname -m): le immagini pubblicate sono amd64, le costruisco qui."
-elif [ -z "$(valore LIMEN_IMAGE_TAG)" ]; then
-  prefisso=ghcr.io/agent-engineering-studio/limen-
-  tag="sha-$(git rev-parse --short=7 HEAD)"
-  if docker manifest inspect "${prefisso}api:$tag" >/dev/null 2>&1; then
-    imposta LIMEN_IMAGE_PREFIX "$prefisso"
-    imposta LIMEN_IMAGE_TAG "$tag"
-  else
-    nota "nessuna immagine pubblicata per $tag: le costruisco qui (qualche minuto)."
-  fi
+# Le immagini seguono il commit di questo clone, anche con un tag già nel .env:
+# compose e codice devono essere della stessa versione, e tornare indietro è un
+# `git checkout`. CI le pubblica solo da main e solo per amd64: altrimenti si
+# costruiscono qui, o si resta sul tag che c'è, dicendolo.
+prefisso=ghcr.io/agent-engineering-studio/limen-
+tag="sha-$(git rev-parse --short=7 HEAD)"
+attuale="$(valore LIMEN_IMAGE_TAG)"
+if [ "$attuale" = "$tag" ]; then
+  ok "immagini $tag"
+elif [ "$(uname -m)" = x86_64 ] && docker manifest inspect "${prefisso}api:$tag" >/dev/null 2>&1; then
+  imposta LIMEN_IMAGE_PREFIX "$prefisso"
+  scrivi LIMEN_IMAGE_TAG "$tag"
+elif [ -n "$attuale" ]; then
+  nota "nessuna immagine pubblicata per $tag: resto su $attuale, più vecchia di questo codice."
+else
+  nota "nessuna immagine pubblicata per $tag ($(uname -m)): le costruisco qui (qualche minuto)."
 fi
 
 # Open-Meteo locale: l'API pubblica ha un tetto che lo sweep supera in un tick,
@@ -138,6 +142,23 @@ imposta OPENMETEO__MODELS ecmwf_ifs025
 if [ -n "$(valore GEOSERVER_SOURCE__DB_DSN)" ] && [ "$(valore LIMEN_GEOSERVER)" != 1 ]; then
   nota "GEOSERVER_SOURCE__DB_DSN nel .env vale per i comandi dall'host: senza GeoServer, toglila."
 fi
+
+# Prima di avviare o scaricare qualsiasi cosa. Una chiave vuota nel .env vince
+# sul default del compose e arriva ai container così: meglio dirlo adesso che
+# trovarla ore dopo. Solo i nomi: i valori di un .env non si stampano. Le due
+# chiavi escluse le genera nuovo_host.sh.
+say "controllo del .env"
+vuote="$(awk -F= '/^[A-Za-z_][A-Za-z0-9_]*=[[:space:]]*$/ &&
+  $1 != "DB__TILES_PASSWORD" && $1 != "INSTALLAZIONE__TOKEN" { print "          " $1 }' .env)"
+if [ -n "$vuote" ]; then
+  printf '%s\n' "$vuote" >&2
+  stop "queste variabili del .env sono vuote: dai loro un valore o togli la riga, poi rilancia"
+fi
+case "$(valore LIMEN_DATA_ROOT)" in
+  /*) ;;
+  *) stop "LIMEN_DATA_ROOT nel .env deve essere un percorso assoluto" ;;
+esac
+ok "tutte le variabili hanno un valore"
 
 # --- Stack -------------------------------------------------------------------
 # Segreti, cartelle, permessi, avvio, seed e link: li fa già nuovo_host.sh.
