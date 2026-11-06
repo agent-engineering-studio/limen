@@ -127,6 +127,10 @@ async def _scarica(url: str, dest: Path) -> None:
 def _estrai(pbf: Path, dest: Path, where: str) -> None:
     import pyogrio
 
+    # Il driver OSM di GDAL tiene i nodi in un file temporaneo, di default nella
+    # cartella di lavoro: nel worker è /app, che non è sua, e dopo 25 minuti di
+    # download l'estrazione falliva. Accanto al PBF lo spazio c'è di sicuro.
+    pyogrio.set_gdal_config_options({"CPL_TMPDIR": str(dest.parent)})
     tabella = pyogrio.read_dataframe(pbf, layer="lines", where=where)
     tmp = dest.with_name(dest.name + ".part.gpkg")
     pyogrio.write_dataframe(tabella, tmp, driver="GPKG")

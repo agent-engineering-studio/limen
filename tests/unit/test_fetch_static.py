@@ -93,3 +93,22 @@ async def test_i_file_gia_presenti_si_registrano_senza_riscaricarli(
     assert scaricati == ["imperviousness"]
     manifest = json.loads((radice / fetch_static.MANIFEST).read_text())
     assert "osm/osm_roads.gpkg" in manifest
+
+
+def test_i_file_temporanei_di_gdal_stanno_accanto_al_pbf(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Il driver OSM li scrive nella cartella di lavoro, che nel worker non è sua."""
+    import pyogrio
+
+    opzioni: dict[str, str] = {}
+    monkeypatch.setattr(pyogrio, "set_gdal_config_options", opzioni.update)
+    monkeypatch.setattr(pyogrio, "read_dataframe", lambda *a, **k: object())
+
+    def scrivi(_: object, percorso: Path, **__: object) -> None:
+        percorso.write_bytes(b"x")
+
+    monkeypatch.setattr(pyogrio, "write_dataframe", scrivi)
+    fetch_static._estrai(tmp_path / "i.pbf", tmp_path / "strade.gpkg", "1=1")
+    assert opzioni["CPL_TMPDIR"] == str(tmp_path)
+    assert (tmp_path / "strade.gpkg").exists()
