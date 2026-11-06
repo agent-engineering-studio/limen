@@ -187,8 +187,9 @@ EMS_DATASET = "flood_events"
 
 
 #: Da aumentare quando cambia come si leggono i layer (notazioni, attributi,
-#: area): il contenuto in ingresso sarebbe lo stesso, le righe scritte no.
-VERSIONE_CALCOLO = 1
+#: area, poligoni superati): il contenuto in ingresso sarebbe lo stesso, le
+#: righe scritte no.
+VERSIONE_CALCOLO = 2
 
 
 def _riga(**campi: object) -> str:
@@ -258,6 +259,7 @@ async def sincronizza_alluvioni(*, forzato: bool = False) -> dict[str, Any]:
     polygons: list[ObservedFlood] = []
     masks: list[ObservationMask] = []
     absent: list[str] = []
+    letti: list[str] = []
     senza_dettaglio = 0
     for activation in activations:
         # Una maschera senza poligoni è un'osservazione «asciutto» solo se
@@ -271,6 +273,7 @@ async def sincronizza_alluvioni(*, forzato: bool = False) -> dict[str, Any]:
         polygons.extend(truth.floods)
         masks.extend(truth.masks)
         absent.extend(truth.absent_masks)
+        letti.extend(truth.prodotti_letti)
 
     log.info(
         "ingest_events.flood.parsed",
@@ -298,6 +301,7 @@ async def sincronizza_alluvioni(*, forzato: bool = False) -> dict[str, Any]:
         return {"esito": "invariato", **conti}
 
     n = await flood_events_repo.upsert_many(polygons)
+    tolti = await flood_events_repo.togli_superati(letti, tenuti=[p.id for p in polygons])
     m, tolte = await flood_events_repo.upsert_masks(masks, absent=absent)
     total = await flood_events_repo.count_events()
     provenance = catalogue_provenance()
@@ -311,13 +315,20 @@ async def sincronizza_alluvioni(*, forzato: bool = False) -> dict[str, Any]:
         "ingest_events.done",
         hazard="flood",
         upserted=n,
+        removed=tolti,
         masks=m,
         masks_removed=tolte,
         total_in_db=total,
         source=provenance["source"],
         licence=provenance["licence"],
     )
-    return {"esito": "scritto", **conti, "maschere_tolte": tolte, "totale": total}
+    return {
+        "esito": "scritto",
+        **conti,
+        "poligoni_tolti": tolti,
+        "maschere_tolte": tolte,
+        "totale": total,
+    }
 
 
 async def _run_flood() -> int:
