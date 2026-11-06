@@ -19,9 +19,12 @@ import pytest
 import respx
 
 from limen.cli import data_status, llm_check
+from limen.config.catalogo_dati import carica_catalogo
 from limen.config.settings import LLMProvider
+from limen.data.repos.copertura_repo import Copertura
 from limen.integrations._http import SharedHttpClient
 
+_CATALOGO = carica_catalogo()
 _GATEWAY = "http://host.docker.internal:8091"
 
 
@@ -179,30 +182,33 @@ async def test_a_malformed_catalogue_counts_as_unreachable() -> None:
 # ---------------------------------------------------------------------------
 # data-status
 # ---------------------------------------------------------------------------
-def _db(monkeypatch: pytest.MonkeyPatch, counts: dict[str, int]) -> None:
-    class _Conn:
-        async def fetchval(self, sql: str) -> int:
-            for fragment, value in counts.items():
-                if fragment in sql:
-                    return value
-            raise AssertionError(f"query non prevista: {sql}")
-
+def _db(monkeypatch: pytest.MonkeyPatch, copertura: Copertura) -> None:
     @asynccontextmanager
     async def _pool():
         yield
 
-    @asynccontextmanager
-    async def _acquire():
-        yield _Conn()
+    async def _leggi(_: Any) -> Copertura:
+        return copertura
 
     monkeypatch.setattr(data_status, "lifespan_pool", _pool)
-    monkeypatch.setattr(data_status, "acquire", _acquire)
+    monkeypatch.setattr(data_status.copertura_repo, "leggi", _leggi)
+
+
+def _copertura(celle: int, per_regione: dict[str, dict[str, int]], **tabelle: int) -> Copertura:
+    voci = {id_ for conte in per_regione.values() for id_ in conte}
+    totali = {id_: sum(c.get(id_, 0) for c in per_regione.values()) for id_ in voci}
+    return Copertura(
+        celle_totali=celle,
+        regioni=len(per_regione),
+        totali={"perimetri_effis": 0, **{v.id: 0 for v in _CATALOGO.voci}, **totali, **tabelle},
+        per_regione=per_regione,
+    )
 
 
 async def test_data_status_on_an_unseeded_database(
     monkeypatch: pytest.MonkeyPatch, capsys: Any
 ) -> None:
-    _db(monkeypatch, {"count(*) FROM cell_static_factors": 0, "count(*) FROM aoi": 0})
+    _db(monkeypatch, _copertura(0, {}))
     assert await data_status.run() == 0
     assert "esegui prima `limen seed`" in capsys.readouterr().out
 
@@ -212,12 +218,13 @@ async def test_data_status_names_what_each_hazard_is_missing(
 ) -> None:
     """Le frane hanno tutto, l'alluvione no: il rapporto deve dire quale layer
     manca, quale variabile lo abilita e con che comando si procura."""
-    loaded = {"iffi_density_500", "pai_class_norm", "slope_deg", "litho_weight", "landuse_code"}
-    counts = {"count(*) FROM cell_static_factors": 10353, "count(*) FROM aoi": 2}
-    for layer in data_status.LAYERS:
-        counts[f"count({layer.column})"] = 10353 if layer.column in loaded else 0
-    counts["count(*) FROM fire_perimeters"] = 515
-    _db(monkeypatch, counts)
+    per_cella = {v.id for v in _CATALOGO.voci if v.misura.colonna}
+    caricati = {"iffi", "pai_frana", "dtm", "litologia", "corine"}
+    conte = {id_: 5000 if id_ in caricati else 0 for id_ in per_cella}
+    _db(
+        monkeypatch,
+        _copertura(10353, {"it-puglia": conte, "it-basilicata": conte}, perimetri_effis=515),
+    )
     monkeypatch.delenv("LIMEN_IMPERVIOUSNESS_RASTER", raising=False)
     monkeypatch.delenv("GEOSERVER_SOURCE__DB_DSN", raising=False)
     monkeypatch.setenv("LIMEN_OSM_ROADS", "/dati/strade.gpkg")
@@ -236,6 +243,21 @@ async def test_data_status_names_what_each_hazard_is_missing(
     assert "make static-data" in out
     # Impostata ma vuota: il problema non è la variabile, e non va elencata.
     assert "LIMEN_OSM_ROADS\n" not in out.split("Variabili non impostate")[1]
+
+
+async def test_data_status_un_dato_in_poche_regioni_non_e_presente(
+    monkeypatch: pytest.MonkeyPatch, capsys: Any
+) -> None:
+    """Il 6 novembre 2026 diceva «tutto presente» con due regioni caricate su venti."""
+    piena = {v.id: 100 for v in _CATALOGO.voci if v.misura.colonna}
+    vuota = dict.fromkeys(piena, 0)
+    _db(monkeypatch, _copertura(300, {"it-marche": piena, "it-abruzzo": piena, "it-puglia": vuota}))
+
+    assert await data_status.run() == 0
+
+    out = capsys.readouterr().out
+    assert "tutto presente" not in out
+    assert "(1 regioni su 3)" in out
 
 
 def test_bar_is_proportional() -> None:

@@ -17,9 +17,11 @@ from dataclasses import dataclass
 
 from limen.cli.dem_tiles import cartella_tile
 from limen.config.catalogo_dati import CatalogoDati, carica_catalogo
+from limen.core.installazione import regioni_senza
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
-from limen.data.db import acquire, lifespan_pool
+from limen.data.db import lifespan_pool
+from limen.data.repos import copertura_repo
 
 log = get_logger(__name__)
 
@@ -84,28 +86,20 @@ def _bar(pct: float, width: int = 20) -> str:
 
 
 async def run() -> int:
-    async with lifespan_pool(), acquire() as conn:
-        total = int(await conn.fetchval("SELECT count(*) FROM cell_static_factors") or 0)
-        aois = int(await conn.fetchval("SELECT count(*) FROM aoi") or 0)
-        if total == 0:
-            print("Nessuna cella in cell_static_factors: esegui prima `limen seed`.")
-            return 0
+    async with lifespan_pool():
+        copertura = await copertura_repo.leggi(_CATALOGO)
+    total = copertura.celle_totali
+    aois = copertura.regioni
+    if total == 0:
+        print("Nessuna cella nella griglia: esegui prima `limen seed`.")
+        return 0
 
-        counts: dict[str, int] = {}
-        for layer in LAYERS:
-            counts[layer.column] = int(
-                await conn.fetchval(
-                    f"SELECT count({layer.column}) FROM cell_static_factors"
-                    # Nome di colonna da una costante del modulo, non da input.
-                )
-                or 0
-            )
-
-        # I perimetri di area bruciata non stanno in cell_static_factors: sono
-        # il truth set del backtest incendio, e la loro assenza si nota solo lì.
-        perimeters = int(
-            await conn.fetchval(f"SELECT count(*) FROM {_PERIMETRI.misura.tabella}") or 0
-        )
+    voce_di = {v.misura.colonna: v.id for v in _CATALOGO.voci if v.misura.colonna}
+    counts = {layer.column: copertura.totali[voce_di[layer.column]] for layer in LAYERS}
+    senza = regioni_senza(_CATALOGO, copertura.per_regione)
+    # I perimetri di area bruciata non stanno in cell_static_factors: sono
+    # il truth set del backtest incendio, e la loro assenza si nota solo lì.
+    perimeters = copertura.totali[_PERIMETRI.id]
 
     print(f"\nCopertura dei fattori statici — {total:,} celle in {aois} AOI\n".replace(",", "."))
     print(f"  {'layer':34s} {'celle':>10s}  {'':20s}  gate")
@@ -127,7 +121,14 @@ async def run() -> int:
 
     print("\nCosa manca a ciascun pericolo\n")
     for hazard, needed in HAZARD_NEEDS.items():
-        missing = [next(x.label for x in LAYERS if x.column == c) for c in needed if counts[c] == 0]
+        # In ogni regione, come la pagina di installazione: un dato caricato per
+        # due regioni su venti non è «tutto presente».
+        missing = [
+            next(x.label for x in LAYERS if x.column == c)
+            + (f" ({len(senza[voce_di[c]])} regioni su {aois})" if counts[c] else "")
+            for c in needed
+            if senza[voce_di[c]]
+        ]
         if not missing:
             print(f"  {hazard:11s} tutto presente")
         else:
