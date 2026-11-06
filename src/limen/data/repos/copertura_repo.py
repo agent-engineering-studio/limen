@@ -32,7 +32,10 @@ async def leggi(catalogo: CatalogoDati) -> Copertura:
     async with acquire() as conn:
         righe = await conn.fetch(
             f"SELECT g.aoi_id, count(*) AS celle, {conte} "
-            "FROM cell_static_factors f JOIN grid_cells g ON g.id = f.cell_id "
+            # Dalla griglia: una regione seminata ma senza fattori non ha righe in
+            # `cell_static_factors`, e partendo da lì non esisterebbe, così il
+            # pericolo risulterebbe «pronto» con due regioni caricate su venti.
+            "FROM grid_cells g LEFT JOIN cell_static_factors f ON f.cell_id = g.id "
             "GROUP BY g.aoi_id"
         )
         regioni = int(await conn.fetchval("SELECT count(*) FROM aoi") or 0)
