@@ -51,6 +51,9 @@ _IDRAULICA_SEVERITY: dict[str, tuple[str, ...]] = {
 # ``<family>_<region>_opendata`` (polygons, lines, points).
 _IFFI_FAMILIES = ("frane_poly", "frane_line", "frane_piff", "aree_poly", "dgpv_poly")
 
+# IFFI has no Trentino-Alto Adige: it publishes the two autonomous provinces.
+_IFFI_AREE = {"trentino_alto_adige": ("bolzano", "trento")}
+
 # National PAI landslide-hazard mosaic (single table, ~900k polygons).
 _PAI_TABLE = "mosaicatura_ispra_2020_2021_aree_pericolosita_frana_pai"
 _PAI_ATTR = "per_fr_ita"
@@ -122,35 +125,36 @@ async def _aoi_bbox(aoi_id: str) -> tuple[float, float, float, float] | None:
 
 async def _load_iffi(conn: asyncpg.Connection, schema: str, region: str) -> list[IFFILandslide]:
     items: list[IFFILandslide] = []
-    for family in _IFFI_FAMILIES:
-        table = f"{family}_{region}_opendata"
-        cols = await _table_columns(conn, schema, table)
-        if "geom" not in cols:
-            _manca(schema, table)
-            continue
-        id_col = next((c for c in _ID_COL_PREFERENCE if c in cols), None)
-        id_expr = f'"{id_col}"::text' if id_col else 'md5(ST_AsEWKB("geom"))'
-        move_col = "nome_tipo" if "nome_tipo" in cols else None
-        move_expr = f'"{move_col}"::text' if move_col else "NULL::text"
-        rows = await conn.fetch(
-            f'SELECT {id_expr} AS rid, {move_expr} AS movement, "geom" AS geom '
-            f'FROM "{schema}"."{table}"'
-        )
-        for r in rows:
-            geom = r["geom"]
-            if geom is None:
+    for area in _IFFI_AREE.get(region, (region,)):
+        for family in _IFFI_FAMILIES:
+            table = f"{family}_{area}_opendata"
+            cols = await _table_columns(conn, schema, table)
+            if "geom" not in cols:
+                _manca(schema, table)
                 continue
-            items.append(
-                IFFILandslide(
-                    id=f"{table}:{r['rid']}",
-                    movement_type=r["movement"],
-                    state=None,
-                    velocity_class=None,
-                    occurrence_date=None,
-                    geom=geom,
-                    attributes={"source": "geoserver", "family": family, "region": region},
-                )
+            id_col = next((c for c in _ID_COL_PREFERENCE if c in cols), None)
+            id_expr = f'"{id_col}"::text' if id_col else 'md5(ST_AsEWKB("geom"))'
+            move_col = "nome_tipo" if "nome_tipo" in cols else None
+            move_expr = f'"{move_col}"::text' if move_col else "NULL::text"
+            rows = await conn.fetch(
+                f'SELECT {id_expr} AS rid, {move_expr} AS movement, "geom" AS geom '
+                f'FROM "{schema}"."{table}"'
             )
+            for r in rows:
+                geom = r["geom"]
+                if geom is None:
+                    continue
+                items.append(
+                    IFFILandslide(
+                        id=f"{table}:{r['rid']}",
+                        movement_type=r["movement"],
+                        state=None,
+                        velocity_class=None,
+                        occurrence_date=None,
+                        geom=geom,
+                        attributes={"source": "geoserver", "family": family, "region": region},
+                    )
+                )
     return items
 
 
