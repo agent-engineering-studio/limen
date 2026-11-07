@@ -27,6 +27,8 @@ JOB_DPC_BOLLETTINI = "limen-dpc-bollettini"
 JOB_INGV_SYNC = "limen-ingv-sync"
 JOB_FEDELTA_RACCONTI = "limen-fedelta-racconti"
 JOB_RACCOLTA_EVENTI = "limen-raccolta-eventi"
+#: Il battito del worker (`limen worker`): porta anche lo spazio su disco (#408).
+JOB_WORKER_HEARTBEAT = "limen-worker-heartbeat"
 
 
 __all__ = [
@@ -49,4 +51,5 @@ __all__ = [
     "JOB_NOWCAST_MONITORING",
     "JOB_PARTITIONS",
     "JOB_RACCOLTA_EVENTI",
+    "JOB_WORKER_HEARTBEAT",
 ]

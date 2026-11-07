@@ -15,6 +15,7 @@ import type { JSX } from "react";
 import { ApiClientError, defaultApiClient } from "../lib/api-client";
 import { NOMI_PERICOLO } from "../lib/hazard";
 import { testi, useLingua, useTesti } from "../lib/i18n";
+import SalutePanel from "./SalutePanel";
 import type {
   DownloadDato,
   HazardType,
@@ -68,6 +69,7 @@ const T = testi(
   {
     occhiello: "Installazione",
     titolo: "Limen è pronto?",
+    titoloInstallato: "Come sta Limen",
     lede:
       "Ogni pericolo ha bisogno di alcuni dati sul territorio. Qui si vede quali ci sono, quali mancano, da dove si scaricano e a che punto è il download.",
     caricamento: "Lettura dello stato…",
@@ -127,6 +129,7 @@ const T = testi(
   {
     occhiello: "Installation",
     titolo: "Is Limen ready?",
+    titoloInstallato: "How Limen is doing",
     lede:
       "Each hazard needs some data about the territory. This page shows which are there, which are missing, where they are downloaded from and how far each download has got.",
     caricamento: "Reading the state…",
@@ -296,14 +299,20 @@ export function InstallazionePage(): JSX.Element {
     !scaricando &&
     (elaborazione?.stato === "errore" || stato.voci.some(daCaricare));
 
+  // A installazione finita la pagina diventa «Salute» (#408): la prontezza
+  // dei dati resta sotto, perché un'altra regione o un dato consigliato si
+  // aggiungono anche dopo.
+  const installato = stato.celle_totali > 0 && stato.pericoli.every((p) => p.pronto);
+
   return (
     <main className="installazione">
       <p className="occhiello">{t.occhiello}</p>
-      <h1>{t.titolo}</h1>
-      <p className="lede">{t.lede}</p>
+      <h1>{installato ? t.titoloInstallato : t.titolo}</h1>
       <p>
         {stato.celle_totali === 0 ? t.nonSeminato : t.regioni(stato.regioni, stato.celle_totali)}
       </p>
+      {installato && <SalutePanel />}
+      <p className="lede">{t.lede}</p>
 
       <section className="installazione-pericoli" aria-label={t.titolo}>
         {ORDINE_PERICOLI.map((h) => {

@@ -35,6 +35,7 @@ from tenacity import (
 from tenacity.retry import retry_base
 
 from limen.core.logging import get_logger
+from limen.integrations import salute
 
 log = get_logger(__name__)
 
@@ -133,6 +134,20 @@ async def fetch_with_retry(
     """
     cli = client or await SharedHttpClient.get()
 
+    try:
+        response = await _fetch(cli, method, url, **kwargs)
+    except httpx.HTTPStatusError as exc:
+        salute.annota(url, errore=salute.messaggio(stato_http=exc.response.status_code))
+        raise
+    except (httpx.TransportError, httpx.TimeoutException) as exc:
+        salute.annota(url, errore=salute.messaggio(eccezione=exc))
+        raise
+    if response.status_code < 400:
+        salute.annota(url)
+    return response
+
+
+async def _fetch(cli: httpx.AsyncClient, method: str, url: str, **kwargs: Any) -> httpx.Response:
     async for attempt in make_retry_policy():
         with attempt:
             response = await cli.request(method, url, **kwargs)

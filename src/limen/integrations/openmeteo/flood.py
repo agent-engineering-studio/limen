@@ -182,6 +182,25 @@ async def _in_pausa() -> bool:
     return False
 
 
+async def pausa_glofas_fino() -> datetime | None:
+    """Fino a quando GloFAS è sospeso dopo un 429, letto dalla cache condivisa.
+
+    Per la pagina «Salute» (#408), che gira nel processo dell'API: la pausa la
+    decide il worker, e la variabile di modulo qui non la vede.
+    """
+    try:
+        from limen.data.caching.postgres_cache import PostgresCache
+
+        valore = await PostgresCache().get_json(_PAUSA_KEY)
+    except Exception as exc:
+        log.warning("integration.degraded", label="openmeteo.flood.pausa_cache", error=str(exc))
+        return None
+    if not isinstance(valore, str):
+        return None
+    fino = datetime.fromisoformat(valore)
+    return fino if fino > datetime.now(UTC) else None
+
+
 async def _entra_in_pausa(label: str) -> None:
     global _pausa_fino
     adesso = datetime.now(UTC)

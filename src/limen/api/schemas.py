@@ -8,6 +8,7 @@ MonitoringContext, AggregateAssessment) already live in
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -406,3 +407,67 @@ class RispostaDownload(BaseModel):
     accodate: list[str]
     #: Già in corso: non si rimettono in coda.
     gia_in_corso: list[str]
+
+
+# ---------------------------------------------------------------------------
+# Salute, dopo l'installazione (#408)
+# ---------------------------------------------------------------------------
+class FonteSalute(BaseModel):
+    """Una fonte esterna: l'ultima chiamata riuscita e l'ultimo errore."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    nome: str
+    pericoli: list[HazardType]
+    ultimo_ok: datetime | None = None
+    ultimo_errore: datetime | None = None
+    errore: str | None = None
+    in_errore: bool
+
+
+class NonMisurate(BaseModel):
+    """Le celle di un pericolo valutate senza il dato dinamico, e le fonti in errore
+    da cui il pericolo dipende (la causa, quando è nota)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pericolo: HazardType
+    celle: int
+    totali: int
+    cause: list[str] = Field(default_factory=list)
+
+
+class DiscoSalute(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    nome: str
+    libero_gb: float
+    totale_gb: float
+
+
+class PassoSalute(BaseModel):
+    """Un passo del notturno (o il backup), dall'ultima riga di `job_runs`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    nome: str
+    stato: Literal["ok", "avviso", "errore", "saltato", "in_corso"]
+    finito_il: datetime | None = None
+    nota: str | None = None
+
+
+class SaluteStato(BaseModel):
+    """`GET /api/installazione/salute`: pubblico, in sola lettura, senza segreti né importi."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    fonti: list[FonteSalute]
+    openmeteo: Literal["locale", "pubblica"]
+    glofas_in_pausa_fino: datetime | None = None
+    non_misurate: list[NonMisurate]
+    dischi: list[DiscoSalute]
+    db_gb: float | None = None
+    battito: datetime | None = None
+    backup: PassoSalute | None = None
+    notturno: list[PassoSalute]

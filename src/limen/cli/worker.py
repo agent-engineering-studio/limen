@@ -25,22 +25,27 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+import shutil
 import signal
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from limen.api.dependencies import AppDependencies
+from limen.api.jobs.ids import JOB_WORKER_HEARTBEAT
 from limen.api.jobs.registration import register_jobs
+from limen.config.percorsi import radice_dati
 from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.data.db import close_pool, get_pool, init_pool
-from limen.data.repos import job_runs_repo
+from limen.data.repos import job_runs_repo, salute_repo
+from limen.integrations import salute
 
 log = get_logger(__name__)
 
 #: Job id del battito. Vive nella stessa `job_runs` di tutto il resto, così
 #: `limen jobs` mostra anche "il worker è vivo" senza una tabella in più.
-HEARTBEAT_JOB = "limen-worker-heartbeat"
+HEARTBEAT_JOB = JOB_WORKER_HEARTBEAT
 
 _MIGRATION_WAIT_MAX_S = 300.0
 
@@ -101,12 +106,36 @@ async def _publish_next_fire(scheduler: Any, period: float) -> None:
         log.warning("worker.next_fire.failed", error=str(exc), error_type=type(exc).__name__)
 
 
+def _disco() -> dict[str, float]:
+    """Lo spazio libero, per la pagina «Salute» (#408): sotto la radice dei dati
+    e sul disco di Docker, dove sta il volume di Postgres (`/` del container è
+    sullo stesso disco; da SQL lo spazio libero non si vede)."""
+    out: dict[str, float] = {}
+    for chiave, percorso in (("dati", radice_dati()), ("docker", Path("/"))):
+        try:
+            uso = shutil.disk_usage(percorso)
+        except OSError:
+            continue
+        out[f"disco_{chiave}_libero_gb"] = round(uso.free / 1e9, 1)
+        out[f"disco_{chiave}_totale_gb"] = round(uso.total / 1e9, 1)
+    return out
+
+
+async def _riversa_salute() -> None:
+    """Gli esiti delle chiamate alle fonti dall'ultimo battito, in `salute_fonti`."""
+    try:
+        await salute_repo.riversa(salute.svuota())
+    except Exception as exc:
+        log.warning("worker.salute.failed", error=str(exc), error_type=type(exc).__name__)
+
+
 async def _heartbeat_loop(stop: asyncio.Event, scheduler: Any = None) -> None:
     """Una riga in `job_runs` a intervalli, finché non arriva lo stop."""
     period = _heartbeat_seconds()
     while not stop.is_set():
         run_id = await job_runs_repo.start(HEARTBEAT_JOB)
-        await job_runs_repo.finish(run_id, status="ok", metrics={"period_s": period})
+        await job_runs_repo.finish(run_id, status="ok", metrics={"period_s": period, **_disco()})
+        await _riversa_salute()
         if scheduler is not None:
             await _publish_next_fire(scheduler, period)
         with contextlib.suppress(TimeoutError):
