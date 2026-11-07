@@ -378,6 +378,19 @@ class PericoloPronto(BaseModel):
     mancano: list[str]
 
 
+class RegioneInstallazione(BaseModel):
+    """Una regione del seme: monitorata o da aggiungere (#407)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    nome: str
+    #: Le celle seminate; 0 se la regione non è monitorata.
+    celle: int
+    #: La semina chiesta dalla pagina; `None` se mai chiesta.
+    semina: DownloadDato | None
+
+
 class InstallazioneStato(BaseModel):
     """`GET /api/installazione/stato`: pubblico, in sola lettura."""
 
@@ -385,6 +398,7 @@ class InstallazioneStato(BaseModel):
 
     celle_totali: int
     regioni: int
+    elenco_regioni: list[RegioneInstallazione]
     pericoli: list[PericoloPronto]
     voci: list[VoceDato]
     #: Il passo che porta nelle celle i file scaricati; `None` se mai partito.
@@ -399,6 +413,14 @@ class RichiestaDownload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     voci: list[str] = Field(min_length=1)
+
+
+class RichiestaRegioni(BaseModel):
+    """`POST /api/installazione/regioni`: le regioni da aggiungere."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    regioni: list[str] = Field(min_length=1)
 
 
 class RispostaDownload(BaseModel):

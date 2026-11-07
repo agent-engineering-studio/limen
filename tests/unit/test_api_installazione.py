@@ -89,6 +89,7 @@ def _client(
             regioni=len(regioni),
             totali=conte,
             per_regione=regioni if celle else {},
+            celle_per_regione={r: celle // len(regioni) for r in regioni} if celle else {},
         )
 
     monkeypatch.setattr(ep.copertura_repo, "leggi", leggi)
@@ -225,3 +226,42 @@ def test_rifare_il_caricamento_chiede_il_token(monkeypatch: pytest.MonkeyPatch) 
 def test_lo_stato_dice_a_che_punto_e_il_caricamento(monkeypatch: pytest.MonkeyPatch) -> None:
     client, _ = _client(monkeypatch)
     assert client.get("/api/installazione/stato").json()["elaborazione"] is None
+
+
+def _regioni(client: TestClient, token: str | None, regioni: list[str]) -> Any:
+    intestazioni = {} if token is None else {HEADER_TOKEN_INSTALLAZIONE: token}
+    return client.post(
+        "/api/installazione/regioni", json={"regioni": regioni}, headers=intestazioni
+    )
+
+
+def test_lo_stato_elenca_le_venti_regioni_e_quali_sono_monitorate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = _client(monkeypatch, celle=40_000)
+    elenco = client.get("/api/installazione/stato").json()["elenco_regioni"]
+    assert len(elenco) == 20
+    celle = {r["id"]: r["celle"] for r in elenco}
+    assert celle["it-puglia"] == 20_000
+    assert celle["it-lazio"] == 0
+    assert next(r for r in elenco if r["id"] == "it-lazio")["nome"] == "Lazio"
+
+
+def test_aggiungere_una_regione_chiede_il_token_e_la_mette_in_coda(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, coda = _client(monkeypatch)
+    assert _regioni(client, None, ["it-lazio"]).status_code == 401
+    assert coda.accodate == []
+
+    risposta = _regioni(client, _TOKEN, ["it-lazio", "it-lazio", "it-molise"])
+    assert risposta.status_code == 202
+    assert coda.accodate == ["regione:it-lazio", "regione:it-molise"]
+
+
+def test_una_regione_che_non_e_nel_seme_e_rifiutata(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, coda = _client(monkeypatch)
+    risposta = _regioni(client, _TOKEN, ["it-atlantide"])
+    assert risposta.status_code == 422
+    assert "it-atlantide" in risposta.json()["detail"]
+    assert coda.accodate == []

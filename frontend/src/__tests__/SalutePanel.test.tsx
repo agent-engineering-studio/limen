@@ -89,6 +89,7 @@ describe("InstallazionePage a installazione finita", () => {
     const pronto: InstallazioneStato = {
       celle_totali: 312550,
       regioni: 20,
+      elenco_regioni: [],
       pericoli: [
         { pericolo: "landslide", pronto: true, mancano: [] },
         { pericolo: "flood", pronto: true, mancano: [] },

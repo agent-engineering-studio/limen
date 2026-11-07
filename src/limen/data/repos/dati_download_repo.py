@@ -27,6 +27,9 @@ Stato = Literal["in_coda", "in_corso", "fatto", "errore"]
 #: (#405). Sta nella stessa coda per averne gli stessi stati, la ripresa dopo un
 #: riavvio e il tetto ai tentativi. Non è una voce del catalogo.
 ELABORAZIONE = "elaborazione"
+#: Le righe che seminano una regione aggiunta dalla pagina (#407):
+#: ``regione:it-puglia``. Come l'elaborazione, non sono voci del catalogo.
+PREFISSO_REGIONE = "regione:"
 #: Il canale di NOTIFY che sveglia il worker.
 CANALE = "dati_download"
 #: Oltre queste prese interrotte da un riavvio, la voce si chiude in errore.
@@ -186,6 +189,7 @@ async def elenco() -> list[StatoDownload]:
 __all__ = [
     "CANALE",
     "ELABORAZIONE",
+    "PREFISSO_REGIONE",
     "TENTATIVI_MASSIMI",
     "Stato",
     "StatoDownload",

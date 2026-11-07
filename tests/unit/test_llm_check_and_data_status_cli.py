@@ -202,6 +202,7 @@ def _copertura(celle: int, per_regione: dict[str, dict[str, int]], **tabelle: in
         regioni=len(per_regione),
         totali={"perimetri_effis": 0, **{v.id: 0 for v in _CATALOGO.voci}, **totali, **tabelle},
         per_regione=per_regione,
+        celle_per_regione={r: celle // max(len(per_regione), 1) for r in per_regione},
     )
 
 

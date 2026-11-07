@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -101,9 +102,24 @@ async def _uno(idrogeo: IdroGEO, ds: Dataset, dove: Path, esito: Esito, *, giorn
         esito.invariati += 1
 
 
-def iffi() -> list[Dataset]:
-    """I 105 file dell'inventario frane, area per area."""
-    return [opendata(layer, area) for layer in LANDSLIDE_LAYERS for area in AREE]
+#: Il Trentino-Alto Adige (ISTAT 4) ha i file delle due province, non uno suo.
+_TRENTINO_ALTO_ADIGE = 4
+
+
+def aree_iffi(cod_reg: Iterable[int]) -> tuple[str, ...]:
+    """Le aree IFFI delle regioni con questi codici ISTAT (#407)."""
+    aree: list[str] = []
+    for c in cod_reg:
+        if c == _TRENTINO_ALTO_ADIGE:
+            aree += [PROVINCES[21], PROVINCES[22]]
+        elif c in REGIONS:
+            aree.append(REGIONS[c])
+    return tuple(aree)
+
+
+def iffi(aree: Iterable[str] = AREE) -> list[Dataset]:
+    """I file dell'inventario frane, area per area: 105 per tutta Italia."""
+    return [opendata(layer, area) for layer in LANDSLIDE_LAYERS for area in aree]
 
 
 async def scarica_idrogeo(scelti: list[Dataset], s: GeodatiSettings, dove: Path) -> Esito:
@@ -141,4 +157,4 @@ async def sync_geodati(s: GeodatiSettings) -> Esito:
     return esito
 
 
-__all__ = ["AREE", "Esito", "dataset", "iffi", "scarica_idrogeo", "sync_geodati"]
+__all__ = ["AREE", "Esito", "aree_iffi", "dataset", "iffi", "scarica_idrogeo", "sync_geodati"]

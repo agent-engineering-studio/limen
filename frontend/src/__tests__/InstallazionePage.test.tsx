@@ -34,6 +34,11 @@ function stato(extra: Partial<InstallazioneStato> = {}): InstallazioneStato {
   return {
     celle_totali: 312550,
     regioni: 20,
+    elenco_regioni: [
+      { id: "it-basilicata", nome: "Basilicata", celle: 10353, semina: null },
+      { id: "it-lazio", nome: "Lazio", celle: 0, semina: null },
+      { id: "it-molise", nome: "Molise", celle: 0, semina: null },
+    ],
     pericoli: [
       { pericolo: "landslide", pronto: true, mancano: [] },
       { pericolo: "flood", pronto: false, mancano: ["idraulica"] },
@@ -105,6 +110,28 @@ describe("InstallazionePage", () => {
     expect(screen.getByText("Parziale")).toBeInTheDocument();
     expect(screen.getByText("Pronto")).toBeInTheDocument();
     expect(screen.getAllByText(/serve a idraulica/).length).toBeGreaterThan(0);
+  });
+
+  it("aggiunge le regioni scelte con il token (#407)", async () => {
+    window.location.hash = "#/installazione?token=segreto123";
+    vi.spyOn(defaultApiClient, "getInstallazioneStato").mockResolvedValue(stato());
+    const aggiungi = vi
+      .spyOn(defaultApiClient, "aggiungiRegioni")
+      .mockResolvedValue({ accodate: ["regione:it-lazio"], gia_in_corso: [] });
+    render(<InstallazionePage />);
+
+    expect(await screen.findByText("Basilicata")).toBeInTheDocument();
+    const bottone = screen.getByRole("button", { name: /Aggiungi la regione scelta|Aggiungi le/ });
+    expect(bottone).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Lazio" }));
+    fireEvent.click(screen.getByRole("button", { name: "Aggiungi la regione scelta" }));
+    await waitFor(() => expect(aggiungi).toHaveBeenCalledWith(["it-lazio"], "segreto123"));
+  });
+
+  it("senza token le regioni non si scelgono", async () => {
+    vi.spyOn(defaultApiClient, "getInstallazioneStato").mockResolvedValue(stato());
+    render(<InstallazionePage />);
+    expect(await screen.findByRole("checkbox", { name: "Lazio" })).toBeDisabled();
   });
 
   it("prende il token dal link, lo toglie dall'indirizzo e lo usa per scaricare", async () => {

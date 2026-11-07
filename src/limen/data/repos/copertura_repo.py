@@ -24,6 +24,8 @@ class Copertura:
     totali: dict[str, int]
     #: Per regione e id di voce (solo le voci misurate per cella).
     per_regione: dict[str, dict[str, int]]
+    #: Le celle di ogni regione seminata.
+    celle_per_regione: dict[str, int]
 
 
 async def leggi(catalogo: CatalogoDati) -> Copertura:
@@ -53,6 +55,7 @@ async def leggi(catalogo: CatalogoDati) -> Copertura:
         regioni=regioni,
         totali=totali,
         per_regione=per_regione,
+        celle_per_regione={str(r["aoi_id"]): int(r["celle"]) for r in righe},
     )
 
 

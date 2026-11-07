@@ -2,7 +2,7 @@
 # Limen su una macchina nuova, con un solo comando (#405, epic #409): dal clone
 # al link nel browser. I dati si scaricano dalla pagina che si apre alla fine.
 #
-#   ./scripts/installa.sh [--dominio limen.example.org]
+#   ./scripts/installa.sh [--dominio limen.example.org] [--regioni puglia,basilicata]
 #
 # Serve solo Docker (e GNU make >= 4.3, che su macOS è `brew install make`).
 # Rieseguibile: un .env esistente non si sovrascrive, si completano solo le
@@ -17,11 +17,14 @@ nota() { printf '  [nota]  %s\n' "$*"; }
 stop() { printf '  [NO]    %s\n' "$*" >&2; exit 1; }
 
 DOMINIO=""
-case "${1:-}" in
-  "") ;;
-  --dominio) DOMINIO="${2:?--dominio vuole il nome}" ;;
-  *) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
-esac
+REGIONI=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dominio) DOMINIO="${2:?--dominio vuole il nome}"; shift 2 ;;
+    --regioni) REGIONI="${2:?--regioni vuole un elenco, o tutte}"; shift 2 ;;
+    *) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+  esac
+done
 
 # --- Prerequisiti ------------------------------------------------------------
 say "prerequisiti"
@@ -101,6 +104,27 @@ if [ -n "$DOMINIO" ] && [ "$DOMINIO" != "$(valore LIMEN_DOMINIO)" ]; then
   scrivi LIMEN_PROXY_BIND 0.0.0.0
 fi
 imposta LIMEN_DOMINIO localhost
+
+# Le regioni (#407): una Protezione Civile regionale non ha bisogno delle
+# 312.550 celle di tutta Italia, né delle ore per riempirle. Si chiede una
+# volta; le altre si aggiungono dopo dalla pagina di installazione.
+if [ -z "$REGIONI" ] && [ -z "$(valore INSTALLAZIONE__REGIONI)" ] && [ -t 0 ]; then
+  printf '  Regioni da monitorare, separate da virgole (es. puglia,basilicata; Invio per tutta Italia): '
+  read -r REGIONI || REGIONI=""
+fi
+if [ -n "$REGIONI" ]; then
+  REGIONI="$(printf '%s' "$REGIONI" | tr '[:upper:] ' '[:lower:],' | tr -s ,)"
+  REGIONI="${REGIONI#,}"
+  REGIONI="${REGIONI%,}"
+  if [ "$REGIONI" != tutte ]; then
+    for r in ${REGIONI//,/ }; do
+      grep -q "\"id\":\"it-${r#it-}\"" src/limen/data/seed/italy_regions_aoi.geojson ||
+        stop "regione sconosciuta: $r (es. puglia, emilia-romagna, trentino-alto-adige)"
+    done
+  fi
+  [ "$REGIONI" = "$(valore INSTALLAZIONE__REGIONI)" ] || scrivi INSTALLAZIONE__REGIONI "$REGIONI"
+fi
+imposta INSTALLAZIONE__REGIONI tutte
 # «Solo da questa macchina» deve esserlo: il default del compose è 0.0.0.0.
 if [ "$(valore LIMEN_DOMINIO)" = localhost ]; then
   imposta LIMEN_PROXY_BIND 127.0.0.1
