@@ -167,6 +167,21 @@ def test_conifers_outrank_farmland_at_identical_weather() -> None:
     assert conifer > scrub > farmland > water
 
 
+def test_grassland_and_sparse_vegetation_rank_above_broadleaf() -> None:
+    """wildfire-v1.1.0 (#295): bruciano più spesso, dicono i perimetri EFFIS.
+
+    Sopra le latifoglie, sotto le conifere: il rosso di pinete e macchia
+    resta dov'era.
+    """
+    engine = WildfireScoringEngine(_thresholds())
+    conifer = engine.score(_bundle(landuse="312")).score
+    grassland = engine.score(_bundle(landuse="321")).score
+    sparse = engine.score(_bundle(landuse="333")).score
+    broadleaf = engine.score(_bundle(landuse="311")).score
+    assert conifer > grassland > broadleaf
+    assert sparse > broadleaf
+
+
 def test_unknown_land_cover_is_not_read_as_incombustible() -> None:
     """Dato assente ≠ "non può bruciare". Una cella senza CORINE deve pesare
     quanto un'area agricola, non quanto un lago."""

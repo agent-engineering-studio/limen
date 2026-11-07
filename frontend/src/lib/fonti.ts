@@ -350,8 +350,8 @@ export const FONTI: readonly Fonte[] = [
       "Local file, at bootstrap: the prevailing class of each cell.",
     ),
     interpretazione: t(
-      "Incendio, combustibile (peso 0,60): conifere 1,00, macchia e sclerofille 0,85-0,90, boschi di latifoglie 0,65, coltivi 0,35, città 0,05, rocce nude 0,05, acque 0. Incendio = FWI normalizzato × (0,25 + 0,60 combustibile + 0,15 pendenza). Città e infrastrutture vicine alzano la priorità di un'allerta, non il punteggio.",
-      "Wildfire, fuel (weight 0.60): conifers 1.00, scrub and sclerophyll 0.85-0.90, broadleaf woods 0.65, crops 0.35, towns 0.05, bare rock 0.05, water 0. Wildfire = normalised FWI × (0.25 + 0.60 fuel + 0.15 slope). Nearby towns and infrastructure raise an alert's priority, not the score.",
+      "Incendio, combustibile (peso 0,60): conifere 1,00, macchia e sclerofille 0,85-0,90, praterie 0,79, vegetazione rada 0,73, boschi di latifoglie 0,65, prati 0,64, coltivi 0,35, città 0,05, rocce nude 0,05, acque 0. Incendio = FWI normalizzato × (0,25 + 0,60 combustibile + 0,15 pendenza). Città e infrastrutture vicine alzano la priorità di un'allerta, non il punteggio.",
+      "Wildfire, fuel (weight 0.60): conifers 1.00, scrub and sclerophyll 0.85-0.90, grassland 0.79, sparse vegetation 0.73, broadleaf woods 0.65, meadows 0.64, crops 0.35, towns 0.05, bare rock 0.05, water 0. Wildfire = normalised FWI × (0.25 + 0.60 fuel + 0.15 slope). Nearby towns and infrastructure raise an alert's priority, not the score.",
     ),
     licenza: "Copernicus, uso libero con attribuzione",
     url: "https://land.copernicus.eu/en/products/corine-land-cover",

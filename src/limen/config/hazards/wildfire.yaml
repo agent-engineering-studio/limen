@@ -8,7 +8,7 @@
 # Wagner (1987), non una calibrazione, e metterli in YAML inviterebbe a
 # "tararli". Qui c'è solo ciò che un deployment può legittimamente scegliere.
 
-model_version: "wildfire-v1.0.0"
+model_version: "wildfire-v1.1.0"
 
 # Il terreno **modula** il tempo, non si somma ad esso:
 #
@@ -104,6 +104,17 @@ fwi:
 # CORINE Land Cover 2018 → infiammabilità. Prefisso più lungo vince.
 # Ordine fisico: conifere > macchia/sclerofille > latifoglie/misti >
 # pascolo/incolto > agricolo > urbano > acqua.
+#
+# wildfire-v1.1.0 (#295): praterie, prati, vegetazione rada e aree già
+# percorse salgono ai pesi stimati dai perimetri EFFIS 2021-23 (osservate/
+# attese a parità di nodo meteo 0,25° e quota, scala k = 0,794): bruciano più
+# spesso di quanto dicesse l'ordine fisico. Foreste, macchia, agricolo e
+# rocce restano dove erano: abbassare le conifere toglieva il rosso a pinete e
+# macchia (backtest 2024-25: Sicilia da 8,0 a 3,5 % degli incendi in rosso),
+# e alzare i seminativi apriva il gate delle allerte sotto «Alto» a metà
+# d'Italia. Sulla stagione 2026: rosso da 4,2 a 6,2 % delle celle bruciate
+# prese con carico da 0,90 a 1,00 %, pinete e macchia invariate; «Alto» da
+# 50,8 a 51,7 % con carico da 14,1 a 14,5 %.
 fuel:
   # Copertura ignota non vuol dire "non può bruciare": il default è il
   # valore di un'area agricola, non zero.
@@ -112,7 +123,7 @@ fuel:
     "1":    0.10   # superfici artificiali
     "11":   0.05   # tessuto urbano continuo/discontinuo
     "2":    0.35   # aree agricole
-    "231":  0.45   # prati stabili
+    "231":  0.64   # prati stabili
     "244":  0.55   # aree agroforestali
     "3":    0.70   # aree boscate e seminaturali
     "311":  0.65   # latifoglie
@@ -122,14 +133,14 @@ fuel:
     # classe restino leggibili come bande EFFIS.
     "312":  1.00   # conifere — il combustibile più pericoloso del Mediterraneo
     "313":  0.80   # bosco misto
-    "321":  0.70   # praterie naturali
+    "321":  0.79   # praterie naturali
     "322":  0.85   # brughiere e cespuglieti
     "323":  0.90   # sclerofille (macchia mediterranea)
     "324":  0.85   # vegetazione in evoluzione
     "331":  0.15   # spiagge, dune, sabbie
     "332":  0.05   # rocce nude
-    "333":  0.30   # aree con vegetazione rada
-    "334":  0.60   # aree percorse da incendi
+    "333":  0.73   # aree con vegetazione rada
+    "334":  0.67   # aree percorse da incendi
     "335":  0.00   # ghiacciai e nevi perenni
     "4":    0.20   # zone umide
     "5":    0.00   # corpi idrici
