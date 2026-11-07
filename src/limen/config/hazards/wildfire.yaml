@@ -110,15 +110,17 @@ fwi:
 # celle bruciate; poi tutto scalato (k = 0,807) perché il combustibile medio
 # d'Italia resti quello di v1.0.0, e con lui il carico a soglie invariate.
 # Sulla stagione 2026, con la catena FWI di produzione: «Alto» e sopra da
-# 51,1 % a 57,2 % delle celle bruciate prese con il carico da 14,1 % a
-# 14,9 %; il rosso da 11,7 % a 15,7 % con il carico da 1,36 % a 0,89 %.
+# 50,8 % a 56,4 % delle celle bruciate prese con il carico da 14,1 % a
+# 14,8 %. Il rosso invece PEGGIORA: da 4,2 % a 2,9 % delle celle bruciate,
+# e solo su praterie e vegetazione rada (#295, rettifica del 2026-11-07).
 #
 # Sono pesi di **frequenza** di incendio, non di intensità: praterie e prati
 # bruciano più spesso delle pinete, e la vecchia scala fisica (conifere >
 # macchia > latifoglie > pascolo > agricolo) metteva il pascolo sotto. Le
 # conifere non sono più a 1,00: nessuna cella vale esattamente il suo FWI
-# normalizzato, e il rosso arriva dove terreno ≥ 0,76 (8,4 % delle celle,
-# contro 18,9 %) — misurato, prende più incendi con meno carico.
+# normalizzato, e il rosso arriva solo dove terreno ≥ 0,76 (8,4 % delle
+# celle, contro 18,9 %): pinete e macchia non ci arrivano più. Per questo
+# questa tabella NON va promossa così (PR #462).
 fuel:
   # Copertura ignota non vuol dire "non può bruciare": il default è il
   # valore di un'area agricola, non zero.
