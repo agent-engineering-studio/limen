@@ -66,7 +66,8 @@ def _mezzogiorno(giorno: date, ora_utc: int) -> datetime:
 
 
 def fonte_dpc(max_step_mm: float) -> Fonte:
-    """La cumulata CUM24 all'ora di osservazione dall'API DPC, controllata come in #235."""
+    """La cumulata CUM24 all'ora di osservazione dall'API DPC, controllata come lo step
+    ``ObservedRain``: un fotogramma respinto lascia il posto a quello di mezz'ora prima (#429)."""
     ora = _ora_osservazione()
 
     async def pioggia(nodi: list[tuple[float, float]], giorno: date) -> list[float | None]:
@@ -76,7 +77,8 @@ def fonte_dpc(max_step_mm: float) -> Fonte:
             return [None] * len(nodi)
         prima = await get_cum_at(24, t - CUM_PERIOD)
         if prima is not None:
-            grid, _ = grid.discard_inconsistent(prima, max_step=max_step_mm)
+            esito = grid.check(prima, max_step=max_step_mm)
+            grid = esito.grid if esito.grid is not None else prima
         return grid.sample(nodi)
 
     return pioggia

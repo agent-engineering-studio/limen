@@ -10,9 +10,9 @@ motore la somma alla previsione sulle ore che restano.
 
 Degrada senza alzare: senza fotogramma, o con un fotogramma troppo lontano
 dall'istante valutato (un replay, un backtest), nessuna cella riceve
-l'osservata e il motore resta sulla previsione. Lo stesso vale, pixel per
-pixel, dove il fotogramma si è mosso più di quanto possa piovere in mezz'ora
-rispetto a quello prima (#235).
+l'osservata e il motore resta sulla previsione. Un fotogramma che si è mosso
+più di quanto possa piovere in mezz'ora rispetto a quello prima (#235) si
+giudica intero (#429): se è lui ad aver aggiunto pioggia si usa il precedente.
 """
 
 from __future__ import annotations
@@ -50,18 +50,11 @@ class ObservedRainExecutor(Executor):
     @handler
     async def run(self, ctx: MonitoringContext) -> MonitoringContext:
         grid = await self._fetch(self._hours)
-        if grid is None:
-            return ctx
-        age = abs((ctx.valuation_time - grid.time).total_seconds())
-        if age > self._max_age_s:
-            log.info(
-                "executor.observed_rain.skip",
-                aoi_id=ctx.aoi_id,
-                reason="frame too far from valuation time",
-                observed_at=grid.time.isoformat(),
-            )
+        if grid is None or self._too_far(grid, ctx):
             return ctx
         grid = await self._checked(grid, ctx.aoi_id)
+        if self._too_far(grid, ctx):
+            return ctx
         cells = [c for c in ctx.cell_ids if c in ctx.cell_centroids]
         values = grid.sample([ctx.cell_centroids[c] for c in cells])
         observed = {c: v for c, v in zip(cells, values, strict=True) if v is not None}
@@ -75,12 +68,30 @@ class ObservedRainExecutor(Executor):
         )
         return ctx.with_update(flood_rain_observed_by_cell=observed)
 
+    def _too_far(self, grid: RainGrid, ctx: MonitoringContext) -> bool:
+        if abs((ctx.valuation_time - grid.time).total_seconds()) <= self._max_age_s:
+            return False
+        log.info(
+            "executor.observed_rain.skip",
+            aoi_id=ctx.aoi_id,
+            reason="frame too far from valuation time",
+            observed_at=grid.time.isoformat(),
+        )
+        return True
+
     async def _checked(self, grid: RainGrid, aoi_id: str) -> RainGrid:
-        """Il fotogramma senza i pixel incoerenti col precedente.
+        """Il fotogramma da usare, giudicato contro quello di mezz'ora prima.
+
+        Il giudizio è sul fotogramma intero (#429): la regola per pixel di
+        #235 toglieva la cima di una campana corrotta e ne lasciava passare i
+        fianchi, migliaia di pixel sbagliati di 10-150 mm, e quando il guasto
+        era nel precedente bucava il fotogramma pulito. Il segno del salto dice
+        quale dei due è sbagliato: ogni corruzione vista finora *aggiunge*
+        pioggia. Respinto questo, si usa il precedente.
 
         Senza il precedente il controllo non si può fare e il fotogramma passa
-        com'è: è il comportamento di prima di #235, e perdere il radar per un
-        download mancato sarebbe peggio del caso raro che il controllo copre.
+        com'è: perdere il radar per un download mancato sarebbe peggio del
+        caso raro che il controllo copre.
         """
         previous = await self._fetch_at(self._hours, grid.time - CUM_PERIOD)
         if previous is None:
@@ -90,13 +101,14 @@ class ObservedRainExecutor(Executor):
                 observed_at=grid.time.isoformat(),
             )
             return grid
-        checked, discarded = grid.discard_inconsistent(previous, max_step=self._max_step_mm)
-        if discarded:
+        esito = grid.check(previous, max_step=self._max_step_mm)
+        if esito.verdict != "consistent":
             log.warning(
                 "executor.observed_rain.inconsistent",
                 aoi_id=aoi_id,
                 observed_at=grid.time.isoformat(),
-                pixels=discarded,
+                verdict=esito.verdict,
+                pixels=esito.jumps,
                 max_step_mm=self._max_step_mm,
             )
-        return checked
+        return esito.grid if esito.grid is not None else previous
