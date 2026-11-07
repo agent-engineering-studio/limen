@@ -57,13 +57,10 @@ def _catena(fwi: list[float]) -> dict[date, FireWeatherState]:
 
 CELLE = [
     CellaAoi(
-        "praterie-ripide",
+        "conifere-ripide",
         16.01,
         40.0,
-        # Praterie e non conifere: con i pesi di v1.1.0 (#295) le conifere su
-        # versante saturo restano un soffio sotto il rosso, e il caso
-        # VeryHigh senza regola non distinguerebbe più niente.
-        StaticFactors(cell_id="praterie-ripide", landuse_code="321", slope_deg=40.0),
+        StaticFactors(cell_id="conifere-ripide", landuse_code="312", slope_deg=40.0),
     ),
     CellaAoi(
         "seminativo-piano",

@@ -386,12 +386,6 @@ score = normalised FWI × (0.25 + 0.60 × fuel + 0.15 × slope)
   January downpour no pine forest should come out as dangerous. The fixed
   25% share is the hazard of a fire arriving from outside: bare rock in
   extreme conditions is not worth zero.
-- **The fuel comes from observed fires** (from version 1.1.0): each CORINE
-  class weighs as much as that class burnt between 2021 and 2025 in the
-  EFFIS perimeters, at equal weather and elevation. Grassland, meadows and
-  sparse vegetation burn more often than pine forests, and weigh more;
-  broadleaf woods and farm mosaics less. On the 2026 season these weights
-  warned of more fires with the same number of warnings.
 
 > It is the **potential** hazard: how far a fire would spread if it
 > started. It is **not** the probability that one starts, and it does not
@@ -399,9 +393,7 @@ score = normalised FWI × (0.25 + 0.60 × fuel + 0.15 × slope)
 
 Classes, aligned with the EFFIS bands: none below 0.12 (FWI 6), low up to
 0.24 (FWI 12), moderate up to 0.42 (FWI 21), high up to 0.76 (FWI 38),
-very high above. The bands hold for a terrain of 1; no class reaches it, so
-a cell reaches a band at a somewhat higher FWI: grassland on a steep slope at
-FWI 43, while a pine forest on flat ground never reaches «very high».
+very high above.
 
 **Compared with usual.** The classes are absolute: FWI 36 is «high» in
 August as in October. That is why Limen also keeps a **climatology**: for

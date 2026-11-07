@@ -102,25 +102,19 @@ fwi:
     max_step_mm: 150
 
 # CORINE Land Cover 2018 → infiammabilità. Prefisso più lungo vince.
+# Ordine fisico: conifere > macchia/sclerofille > latifoglie/misti >
+# pascolo/incolto > agricolo > urbano > acqua.
 #
-# wildfire-v1.1.0 (#295): le classi di terzo livello hanno pesi **stimati**
-# dai perimetri EFFIS 2021-25, non scritti a mano. Per ogni classe le celle
-# bruciate (perimetro su almeno un quarto della cella) contro le attese a
-# parità di nodo meteo 0,25° e fascia di quota, solo classi con almeno 30
-# celle bruciate; poi tutto scalato (k = 0,807) perché il combustibile medio
-# d'Italia resti quello di v1.0.0, e con lui il carico a soglie invariate.
-# Sulla stagione 2026, con la catena FWI di produzione: «Alto» e sopra da
-# 50,8 % a 56,4 % delle celle bruciate prese con il carico da 14,1 % a
-# 14,8 %. Il rosso invece PEGGIORA: da 4,2 % a 2,9 % delle celle bruciate,
-# e solo su praterie e vegetazione rada (#295, rettifica del 2026-11-07).
-#
-# Sono pesi di **frequenza** di incendio, non di intensità: praterie e prati
-# bruciano più spesso delle pinete, e la vecchia scala fisica (conifere >
-# macchia > latifoglie > pascolo > agricolo) metteva il pascolo sotto. Le
-# conifere non sono più a 1,00: nessuna cella vale esattamente il suo FWI
-# normalizzato, e il rosso arriva solo dove terreno ≥ 0,76 (8,4 % delle
-# celle, contro 18,9 %): pinete e macchia non ci arrivano più. Per questo
-# questa tabella NON va promossa così (PR #462).
+# wildfire-v1.1.0 (#295): praterie, prati, vegetazione rada e aree già
+# percorse salgono ai pesi stimati dai perimetri EFFIS 2021-23 (osservate/
+# attese a parità di nodo meteo 0,25° e quota, scala k = 0,794): bruciano più
+# spesso di quanto dicesse l'ordine fisico. Foreste, macchia, agricolo e
+# rocce restano dove erano: abbassare le conifere toglieva il rosso a pinete e
+# macchia (backtest 2024-25: Sicilia da 8,0 a 3,5 % degli incendi in rosso),
+# e alzare i seminativi apriva il gate delle allerte sotto «Alto» a metà
+# d'Italia. Sulla stagione 2026: rosso da 4,2 a 6,2 % delle celle bruciate
+# prese con carico da 0,90 a 1,00 %, pinete e macchia invariate; «Alto» da
+# 50,8 a 51,7 % con carico da 14,1 a 14,5 %.
 fuel:
   # Copertura ignota non vuol dire "non può bruciare": il default è il
   # valore di un'area agricola, non zero.
@@ -129,30 +123,24 @@ fuel:
     "1":    0.10   # superfici artificiali
     "11":   0.05   # tessuto urbano continuo/discontinuo
     "2":    0.35   # aree agricole
-    "211":  0.52   # seminativi in aree non irrigue
-    "221":  0.36   # vigneti
-    "222":  0.36   # frutteti
-    "223":  0.43   # oliveti
-    "231":  0.74   # prati stabili
-    "241":  0.38   # colture annuali associate a permanenti
-    "242":  0.26   # sistemi colturali complessi
-    "243":  0.49   # agricolo con spazi naturali
-    "244":  0.55   # aree agroforestali (meno di 30 celle bruciate: v1.0.0)
+    "231":  0.64   # prati stabili
+    "244":  0.55   # aree agroforestali
     "3":    0.70   # aree boscate e seminaturali
-    "311":  0.42   # latifoglie
-    "312":  0.59   # conifere
-    "313":  0.63   # bosco misto
-    "321":  0.81   # praterie naturali — la classe che brucia più spesso
-    "322":  0.85   # brughiere e cespuglieti (meno di 30 celle bruciate: v1.0.0)
-    "323":  0.60   # sclerofille (macchia mediterranea)
-    "324":  0.71   # vegetazione in evoluzione
+    "311":  0.65   # latifoglie
+    # Le conifere sono a 1.00 non per enfasi ma per costruzione: sono il
+    # combustibile di riferimento, e una cella di conifere su versante saturo
+    # deve valere esattamente il suo FWI normalizzato perché i cutoff di
+    # classe restino leggibili come bande EFFIS.
+    "312":  1.00   # conifere — il combustibile più pericoloso del Mediterraneo
+    "313":  0.80   # bosco misto
+    "321":  0.79   # praterie naturali
+    "322":  0.85   # brughiere e cespuglieti
+    "323":  0.90   # sclerofille (macchia mediterranea)
+    "324":  0.85   # vegetazione in evoluzione
     "331":  0.15   # spiagge, dune, sabbie
-    # Rocce nude che bruciano: a 100 m la classe di maggioranza nasconde la
-    # vegetazione fra le rocce. Il dato lo dice (O/A 1,15 al Centro-Sud), e
-    # il peso lo segue.
-    "332":  0.52   # rocce nude
-    "333":  0.74   # aree con vegetazione rada
-    "334":  0.80   # aree percorse da incendi
+    "332":  0.05   # rocce nude
+    "333":  0.73   # aree con vegetazione rada
+    "334":  0.67   # aree percorse da incendi
     "335":  0.00   # ghiacciai e nevi perenni
     "4":    0.20   # zone umide
     "5":    0.00   # corpi idrici

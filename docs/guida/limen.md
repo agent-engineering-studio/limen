@@ -377,13 +377,6 @@ punteggio = FWI normalizzato × (0,25 + 0,60 × combustibile + 0,15 × pendenza)
   gennaio nessuna pineta deve risultare pericolosa. La quota fissa del 25% è
   il pericolo di un fuoco che arriva da fuori: la roccia nuda in condizioni
   estreme non vale zero.
-- **Il combustibile viene dagli incendi osservati** (dalla versione 1.1.0):
-  il peso di ogni classe CORINE è quanto spesso quella classe ha bruciato
-  fra il 2021 e il 2025 nei perimetri EFFIS, a parità di meteo e di quota.
-  Praterie, prati e vegetazione rada bruciano più spesso delle pinete, e
-  pesano di più; i boschi di latifoglie e i mosaici agricoli di meno. Sulla
-  stagione 2026 questi pesi hanno allertato più incendi con lo stesso
-  numero di allerte.
 
 > È il pericolo **potenziale**: quanto si propagherebbe un incendio se
 > partisse. **Non** è la probabilità che parta, e non dice che c'è un fuoco
@@ -391,10 +384,7 @@ punteggio = FWI normalizzato × (0,25 + 0,60 × combustibile + 0,15 × pendenza)
 
 Classi, allineate alle bande EFFIS: nessuno sotto 0,12 (FWI 6), basso fino a
 0,24 (FWI 12), moderato fino a 0,42 (FWI 21), alto fino a 0,76 (FWI 38),
-molto alto oltre. Le bande valgono per un terreno pari a 1; nessuna classe
-ci arriva, quindi una cella raggiunge la banda con un FWI un po' più alto:
-le praterie su versante ripido a FWI 43, una pineta piana non arriva al
-«molto alto».
+molto alto oltre.
 
 **Rispetto al solito.** Le classi sono assolute: FWI 36 è «alto» ad agosto
 come a ottobre. Per questo Limen tiene anche una **climatologia**: per ogni
