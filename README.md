@@ -387,7 +387,7 @@ score.
 | [**Open-Meteo**](https://open-meteo.com) (ECMWF IFS, ICON-EU, ERA5, ERA5-Land) | hourly rain, soil moisture, temperature, humidity, wind; forecast and archive | all three hazards | CC-BY 4.0 (data: Copernicus / DWD / ECMWF) | no |
 | [**DPC radar platform**](https://radar.protezionecivile.it) | national SRI (1 km, 5 min) and «Merging» radar + rain-gauge accumulations | nowcast trigger; rain already fallen for floods | CC-BY-SA 4.0 | no |
 | [**Copernicus EMS — GloFAS**](https://ewds.climate.copernicus.eu) | river discharge forecast per node; each node's ordinary high flow from the multi-year history | flood (fluvial branch) | CEMS-Floods licence, attribution required | free EWDS key (or via Open-Meteo) |
-| [**ISPRA IdroGEO**](https://idrogeo.isprambiente.it) | IFFI landslide inventory (721,365 landslides), PAI landslide and hydraulic hazard mosaics | landslide terrain; flood susceptibility | CC BY-SA 4.0 (IFFI: checked for Valle d'Aosta only) | no |
+| [**ISPRA IdroGEO**](https://idrogeo.isprambiente.it) | IFFI landslide inventory (721,365 landslides), PAI landslide and hydraulic hazard mosaics | landslide terrain; flood susceptibility | CC BY-SA 4.0 (IFFI: one licence per region, all 21 checked) | no |
 | **HR-DTM 5 m** (IRPI-CNR, Zenodo) or **TINITALY 10 m** (INGV) | elevation → slope, aspect, curvature | landslide, wildfire | CC-BY 4.0 | no |
 | [**CORINE Land Cover 2018**](https://groupware.sinanet.isprambiente.it) (SINAnet/ISPRA) | land cover → fuel type | wildfire | Copernicus open access (EU Reg. 1159/2013) | no |
 | **Geolithological Map of Italy 1:500k** (PCN/MASE) | rock and soil type | landslide | CC-BY 4.0 | no |

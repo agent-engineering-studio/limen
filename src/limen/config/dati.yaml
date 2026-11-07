@@ -30,8 +30,9 @@ voci:
     procura_con: make static-data
     fonte: ISPRA IdroGEO — Inventario dei Fenomeni Franosi in Italia
     url: https://idrogeo.isprambiente.it
-    # BY-SA nel PDF della Valle d'Aosta; le altre regioni sono da verificare
-    # una per una (#406), e una NC escluderebbe gli usi commerciali.
+    # Una licenza per area, tutte CC BY-SA 4.0 (verificate le 21, #406):
+    # Licenza_Condizioni_Uso_Inventario_IFFI_ISPRA_<Regione_X>.pdf sul CMS di
+    # IdroGEO, non dentro gli ZIP. «Regione» va sostituito con l'ente dell'area.
     licenza: CC BY-SA 4.0
     attribuzione: >-
       ISPRA – Regione, Inventario dei Fenomeni Franosi in Italia (IFFI),
