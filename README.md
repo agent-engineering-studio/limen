@@ -387,9 +387,9 @@ score.
 | [**Open-Meteo**](https://open-meteo.com) (ECMWF IFS, ICON-EU, ERA5, ERA5-Land) | hourly rain, soil moisture, temperature, humidity, wind; forecast and archive | all three hazards | CC-BY 4.0 (data: Copernicus / DWD / ECMWF) | no |
 | [**DPC radar platform**](https://radar.protezionecivile.it) | national SRI (1 km, 5 min) and «Merging» radar + rain-gauge accumulations | nowcast trigger; rain already fallen for floods | CC-BY-SA 4.0 | no |
 | [**Copernicus EMS — GloFAS**](https://ewds.climate.copernicus.eu) | river discharge forecast per node; each node's ordinary high flow from the multi-year history | flood (fluvial branch) | CEMS-Floods licence, attribution required | free EWDS key (or via Open-Meteo) |
-| [**ISPRA IdroGEO**](https://idrogeo.isprambiente.it) | IFFI landslide inventory (721,365 landslides), PAI landslide and hydraulic hazard mosaics | landslide terrain; flood susceptibility | IFFI CC-BY 4.0; mosaics CC BY-SA 4.0 | no |
+| [**ISPRA IdroGEO**](https://idrogeo.isprambiente.it) | IFFI landslide inventory (721,365 landslides), PAI landslide and hydraulic hazard mosaics | landslide terrain; flood susceptibility | CC BY-SA 4.0 (IFFI: checked for Valle d'Aosta only) | no |
 | **HR-DTM 5 m** (IRPI-CNR, Zenodo) or **TINITALY 10 m** (INGV) | elevation → slope, aspect, curvature | landslide, wildfire | CC-BY 4.0 | no |
-| [**CORINE Land Cover 2018**](https://groupware.sinanet.isprambiente.it) (SINAnet/ISPRA) | land cover → fuel type | wildfire | CC-BY | no |
+| [**CORINE Land Cover 2018**](https://groupware.sinanet.isprambiente.it) (SINAnet/ISPRA) | land cover → fuel type | wildfire | Copernicus open access (EU Reg. 1159/2013) | no |
 | **Geolithological Map of Italy 1:500k** (PCN/MASE) | rock and soil type | landslide | CC-BY 4.0 | no |
 | [**Copernicus Land — imperviousness**](https://land.copernicus.eu) | sealed soil (%) | flood (urban runoff) | Copernicus Land open licence | no |
 | [**OpenStreetMap**](https://www.openstreetmap.org) | roads, railways; basemap | exposure; map | ODbL | no |
@@ -399,7 +399,7 @@ score.
 | [**EFFIS**](https://effis.jrc.ec.europa.eu) | burnt-area perimeters; official FWI | wildfire truth set and comparison | Copernicus EFFIS terms | no |
 | [**Copernicus EMS Rapid Mapping**](https://rapidmapping.emergency.copernicus.eu) | observed flooded areas + where the satellite looked | flood truth set | © EU, free with attribution | no |
 | [**e-ITALICA**](https://doi.org/10.5281/zenodo.14204473) (CNR-IRPI) | dated, rainfall-triggered landslides across Italy | landslide calibration and backtest | CC-BY 4.0 | no |
-| **ISTAT** | municipal, provincial, regional borders (2023) | grid, rankings per comune | CC-BY | no |
+| **ISTAT** | municipal, provincial, regional borders (2023) | grid, rankings per comune | CC-BY 4.0 | no |
 
 Where each source is configured, refreshed and stored on disk is in
 [`data/README.md`](./data/README.md); the Italian guide
@@ -1080,7 +1080,7 @@ External contributions require the CLA in
 Attribution is **mandatory** when you publish the map, the summaries or
 anything derived from them:
 
-* **ISPRA IdroGEO** (IFFI) — © ISPRA, CC-BY 4.0.
+* **ISPRA IdroGEO** (IFFI) — © ISPRA, CC BY-SA 4.0 (checked for Valle d'Aosta; other regions still to verify, #406).
   <https://idrogeo.isprambiente.it>
 * **ISPRA hazard mosaics** — CC BY SA 4.0, as stated by the licence PDF in each
   download: data derived from them must be distributed under the same licence.
@@ -1114,9 +1114,9 @@ anything derived from them:
   Information System (ESDIS) with funding provided by NASA Headquarters.»
   <https://firms.modaps.eosdis.nasa.gov>
 * **DPC radar platform** (SRI, «Merging») — CC-BY-SA 4.0.
-* **CORINE Land Cover 2018 Italy** (SINAnet/ISPRA) — CC-BY.
+* **CORINE Land Cover 2018 Italy** (SINAnet/ISPRA) — Copernicus open access (EU Reg. 1159/2013): «Generated using European Union's Copernicus Land Monitoring Service information».
 * **Geolithological Map of Italy 1:500k** (PCN/MASE) — CC-BY 4.0.
-* **ISTAT** (2023 administrative boundaries) — CC-BY.
+* **ISTAT** (2023 administrative boundaries) — CC-BY 4.0.
 * **OpenStreetMap** (basemap, roads, railways) — © OpenStreetMap
   contributors, ODbL.
 
