@@ -162,16 +162,36 @@ def _guasto(observed_at: dt.datetime) -> RainGrid:
     return replace(g, data=data)
 
 
-async def test_un_fotogramma_che_salta_piu_di_mezz_ora_di_pioggia_non_vale() -> None:
+def _con(observed_at: dt.datetime, mm: float) -> RainGrid:
+    g = _frame(observed_at)
+    data = g.data.copy()
+    data[4:7, 4:7] = mm
+    return replace(g, data=data)
+
+
+async def test_un_fotogramma_guasto_lascia_il_posto_al_precedente() -> None:
+    """#429: si scarta il fotogramma intero, non la cima della campana."""
+
     async def _fetch(hours: int) -> RainGrid:
         return _guasto(_T - dt.timedelta(minutes=20))
+
+    async def _prima(hours: int, at: dt.datetime) -> RainGrid:
+        return _con(at, 140.0)
+
+    out = await _step(_fetch, _prima).run(_ctx())
+    assert out.flood_rain_observed_by_cell == {"nubifragio": 140.0}
+
+
+async def test_il_precedente_troppo_vecchio_non_sostituisce_il_guasto() -> None:
+    async def _fetch(hours: int) -> RainGrid:
+        return _guasto(_T - dt.timedelta(minutes=70))
 
     out = await _step(_fetch).run(_ctx())
     assert out.flood_rain_observed_by_cell == {}
 
 
-async def test_anche_il_fotogramma_pulito_dopo_quello_guasto_non_vale_li() -> None:
-    """Quale dei due sbagli non si sa: il pixel resta «non misurato»."""
+async def test_il_fotogramma_pulito_dopo_quello_guasto_vale_intero() -> None:
+    """#429: il salto è in discesa, quindi a sbagliare era il precedente."""
 
     async def _fetch(hours: int) -> RainGrid:
         return _frame(_T - dt.timedelta(minutes=20))
@@ -180,7 +200,7 @@ async def test_anche_il_fotogramma_pulito_dopo_quello_guasto_non_vale_li() -> No
         return _guasto(at)
 
     out = await _step(_fetch, _prima).run(_ctx())
-    assert out.flood_rain_observed_by_cell == {}
+    assert out.flood_rain_observed_by_cell == {"nubifragio": 150.0}
 
 
 async def test_un_nubifragio_vero_cresce_entro_il_tetto_e_passa() -> None:

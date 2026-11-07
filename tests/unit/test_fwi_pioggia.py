@@ -279,3 +279,30 @@ async def test_la_pioggia_osservata_si_chiude_all_ora_del_campione() -> None:
             datetime(2026, 8, 1, soglie.fwi.ora_osservazione_utc, tzinfo=UTC),
         )
     ]
+
+
+async def test_un_cum24_guasto_lascia_il_posto_a_quello_di_mezz_ora_prima(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#429: la catena FWI giudica il fotogramma intero come lo step ObservedRain."""
+    import numpy as np
+    import rasterio
+    from dpc_radar import RainGrid, product
+    from rasterio.crs import CRS
+
+    def _cum(t: datetime, mm: float) -> RainGrid:
+        data = np.full((10, 10), mm)
+        return RainGrid(
+            product("CUM24"),
+            t,
+            data,
+            rasterio.Affine(0.1, 0, 15.0, 0, -0.1, 42.0),
+            CRS.from_epsg(4326),
+        )
+
+    async def _get(hours: int, t: datetime) -> RainGrid:
+        return _cum(t, 12.0 if t.minute == 30 else 900.0)
+
+    monkeypatch.setattr(fwi_pioggia, "get_cum_at", _get)
+    monkeypatch.setattr(fwi_pioggia, "_ora_osservazione", lambda: 12)
+    assert await fwi_pioggia.fonte_dpc(150.0)([(15.55, 41.45)], _G) == [12.0]

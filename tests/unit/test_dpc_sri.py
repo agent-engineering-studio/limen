@@ -118,34 +118,6 @@ def test_parita_con_il_campionamento_di_prima() -> None:
     )
 
 
-def test_i_pixel_che_saltano_oltre_il_tetto_diventano_nodata() -> None:
-    prima = _grid()
-    data = _data()
-    data[5, 5] += 900.0
-    data[5, 6] += 100.0
-    dopo = _grid(data)
-    controllato, scartati = dopo.discard_inconsistent(prima, max_step=150.0)
-    assert scartati == 1
-    assert np.isnan(controllato.data[5, 5])
-    assert controllato.data[5, 6] == dopo.data[5, 6]
-    assert not np.isnan(dopo.data[5, 5]), "il fotogramma in cache non si tocca"
-
-
-def test_un_fotogramma_coerente_torna_identico() -> None:
-    g = _grid()
-    controllato, scartati = g.discard_inconsistent(_grid(), max_step=150.0)
-    assert controllato is g
-    assert scartati == 0
-
-
-def test_griglie_diverse_non_si_confrontano() -> None:
-    g = _grid()
-    altra = RainGrid(g.product, g.time, np.zeros((2, 2)), g.transform, g.crs)
-    controllato, scartati = g.discard_inconsistent(altra, max_step=150.0)
-    assert controllato is g
-    assert scartati == 0
-
-
 async def test_a_cumulative_frame_is_downloaded_once_per_issue(monkeypatch: Any) -> None:
     """Venti regioni chiedono lo stesso file nazionale: si riscarica solo
     quando il DPC ne pubblica uno nuovo."""
