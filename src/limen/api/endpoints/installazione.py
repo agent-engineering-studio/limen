@@ -5,7 +5,8 @@ quali dati servono, a cosa, quanti ce ne sono e cosa manca a ogni pericolo.
 ``POST /api/installazione/download`` cambia qualcosa — mette in coda un
 download che il worker eseguirà — e chiede il token di installazione (#403),
 come ``POST /api/installazione/elabora``, che rimette in coda il caricamento
-nelle celle dei file già scaricati (#405). ``GET /api/installazione/salute``
+nelle celle dei file già scaricati (#405), e ``POST /api/installazione/regioni``,
+che aggiunge regioni da monitorare (#407). ``GET /api/installazione/salute``
 (#408) è la stessa pagina a installazione finita: le fonti, le quote, le
 celle non misurate, il disco, il backup. Pubblica: niente chiavi, niente importi.
 
@@ -27,7 +28,9 @@ from limen.api.schemas import (
     NonMisurate,
     PassoSalute,
     PericoloPronto,
+    RegioneInstallazione,
     RichiestaDownload,
+    RichiestaRegioni,
     RispostaDownload,
     SaluteStato,
     VoceDato,
@@ -38,6 +41,7 @@ from limen.core.installazione import byte_stimati, mancanti, regioni_senza, scar
 from limen.core.models.hazard import HazardType
 from limen.data.repos import copertura_repo, job_runs_repo, salute_repo
 from limen.data.repos import dati_download_repo as coda
+from limen.data.seed.loader import load_regions
 from limen.integrations.openmeteo.flood import pausa_glofas_fino
 from limen.integrations.salute import FONTI
 
@@ -65,6 +69,15 @@ async def stato(settings: SettingsDep) -> InstallazioneStato:
     return InstallazioneStato(
         celle_totali=copertura.celle_totali,
         regioni=copertura.regioni,
+        elenco_regioni=[
+            RegioneInstallazione(
+                id=r.id,
+                nome=r.name,
+                celle=copertura.celle_per_regione.get(r.id, 0),
+                semina=_dto(scaricamenti.get(coda.PREFISSO_REGIONE + r.id)),
+            )
+            for r in sorted(load_regions(), key=lambda r: r.name)
+        ],
         pericoli=[
             PericoloPronto(pericolo=h, pronto=not ids, mancano=ids)
             for h, ids in mancanti(
@@ -171,6 +184,17 @@ async def elabora(_: TokenInstallazioneDep) -> RispostaDownload:
     """Rimette in coda il caricamento nelle celle: senza scaricare niente."""
     accodate = await coda.accoda([coda.ELABORAZIONE], byte_totali={})
     return RispostaDownload(accodate=accodate, gia_in_corso=[] if accodate else [coda.ELABORAZIONE])
+
+
+@router.post("/regioni", response_model=RispostaDownload, status_code=202)
+async def regioni(richiesta: RichiestaRegioni, _: TokenInstallazioneDep) -> RispostaDownload:
+    """Mette in coda la semina delle regioni; poi il worker porta i dati nelle celle."""
+    note = {r.id for r in load_regions()}
+    if ignote := sorted(set(richiesta.regioni) - note):
+        raise HTTPException(status_code=422, detail=f"Regioni sconosciute: {', '.join(ignote)}")
+    voci = [coda.PREFISSO_REGIONE + r for r in dict.fromkeys(richiesta.regioni)]
+    accodate = await coda.accoda(voci, byte_totali={})
+    return RispostaDownload(accodate=accodate, gia_in_corso=sorted(set(voci) - set(accodate)))
 
 
 __all__ = ["router"]

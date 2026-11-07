@@ -319,3 +319,78 @@ async def test_la_catena_fwi_solo_con_un_istanza_propria(
 async def test_il_passo_riporta_il_codice_del_processo() -> None:
     assert await dd._esegui_passo("ok", "true", ambiente={}) is None
     assert await dd._esegui_passo("rotto", "false", ambiente={}) == "rotto"
+
+
+def _fatta(voce: str) -> Any:
+    from datetime import UTC, datetime
+
+    adesso = datetime(2026, 11, 7, tzinfo=UTC)
+    return dd.repo.StatoDownload(
+        voce=voce,
+        stato="fatto",
+        byte_fatti=0,
+        byte_totali=None,
+        richiesto_il=adesso,
+        avviato_il=adesso,
+        aggiornato_il=adesso,
+        finito_il=adesso,
+        errore=None,
+        tentativi=1,
+    )
+
+
+async def test_una_regione_aggiunta_si_semina_e_poi_entra_nelle_celle(
+    coda: _Coda, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#407: una regione aggiunta dalla pagina ha celle vuote finché
+    l'elaborazione non le riempie; e se l'inventario frane c'era, servono
+    anche i suoi file."""
+    import limen.cli.seed as seed
+
+    seminate: list[str] = []
+
+    async def semina(aois: Any) -> None:
+        seminate.extend(a.id for a in aois)
+
+    async def elenco() -> list[Any]:
+        return [_fatta("iffi")]
+
+    monkeypatch.setattr(seed, "semina", semina)
+    monkeypatch.setattr(dd.repo, "elenco", elenco)
+    coda.voci[:] = ["regione:it-lazio"]
+    giri: list[int] = []
+
+    async def elabora() -> None:
+        giri.append(1)
+
+    consumatore = dd.ConsumatoreDownload(
+        da_procurare={"iffi": dd.Procuratore(_niente, list)}, elabora=elabora
+    )
+    await consumatore.svuota_coda()
+
+    assert seminate == ["it-lazio"]
+    assert coda.chiuse["regione:it-lazio"] is None
+    assert coda.accodate[0] == "iffi"
+    assert coda.chiuse["iffi"] is None
+    assert giri == [1]
+
+
+async def test_una_regione_sconosciuta_si_chiude_in_errore_e_non_elabora(
+    coda: _Coda, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def elenco() -> list[Any]:
+        return []
+
+    monkeypatch.setattr(dd.repo, "elenco", elenco)
+    coda.voci[:] = ["regione:it-atlantide"]
+    consumatore = dd.ConsumatoreDownload(da_procurare={}, elabora=_nessuna_elaborazione)
+    await consumatore.svuota_coda()
+    assert "it-atlantide" in (coda.chiuse["regione:it-atlantide"] or "")
+    assert coda.accodate == []
+
+
+def test_le_aree_iffi_seguono_le_regioni_e_il_trentino_ha_due_province() -> None:
+    from limen.integrations.idrogeo.geodati import AREE, aree_iffi
+
+    assert aree_iffi([16, 4]) == ("puglia", "bolzano", "trento")
+    assert set(aree_iffi(range(1, 21))) == set(AREE)

@@ -3813,6 +3813,16 @@ html[lang="en"] .app-nav a { white-space: nowrap; }
 .installazione-token input {
   max-width: 100%;
 }
+.installazione-regioni-elenco,
+.installazione-regioni-scelta {
+  list-style: none;
+  padding: 0;
+}
+.installazione-regioni-scelta {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: 0.25rem 1rem;
+}
 .installazione-nota {
   color: var(--muted);
   font-size: 0.9rem;

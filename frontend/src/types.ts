@@ -756,9 +756,18 @@ export interface PericoloPronto {
   mancano: string[];
 }
 
+/** Una regione del seme, monitorata (`celle` > 0) o da aggiungere (#407). */
+export interface RegioneInstallazione {
+  id: string;
+  nome: string;
+  celle: number;
+  semina: DownloadDato | null;
+}
+
 export interface InstallazioneStato {
   celle_totali: number;
   regioni: number;
+  elenco_regioni: RegioneInstallazione[];
   pericoli: PericoloPronto[];
   voci: VoceDato[];
   elaborazione: DownloadDato | null;

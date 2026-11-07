@@ -1296,11 +1296,26 @@ class InstallazioneSettings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     token: SecretStr | None = None
+    #: Le regioni da seminare (#407), separate da virgole: ``it-puglia`` o solo
+    #: ``puglia``. Vuoto o ``tutte`` ⇒ tutta Italia. Una Protezione Civile regionale non ha
+    #: bisogno delle 312.550 celle delle venti regioni; le altre si aggiungono
+    #: dopo dalla pagina, e costano solo la regione aggiunta.
+    regioni: str = ""
 
     @property
     def abilitato(self) -> bool:
         """Le azioni sono aperte solo con un token non vuoto: fail-closed."""
         return self.token is not None and bool(self.token.get_secret_value().strip())
+
+    @property
+    def regioni_scelte(self) -> list[str] | None:
+        """Gli id delle regioni scelte, ``None`` per tutta Italia."""
+        ids = [
+            r if r.startswith("it-") else f"it-{r}"
+            for r in (p.strip().lower() for p in self.regioni.replace(" ", ",").split(","))
+            if r and r != "tutte"
+        ]
+        return ids or None
 
 
 class Settings(BaseSettings):

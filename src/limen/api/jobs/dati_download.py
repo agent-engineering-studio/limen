@@ -66,33 +66,49 @@ class Procuratore:
     file: Callable[[], Iterable[Path]]
 
 
-def _idrogeo(scelti: Callable[[], list[Dataset]]) -> Callable[[], Awaitable[None]]:
+def _idrogeo(
+    scelti: Callable[[], Awaitable[list[Dataset]]],
+) -> Callable[[], Awaitable[None]]:
     async def scarica() -> None:
         from limen.integrations.idrogeo.geodati import scarica_idrogeo
 
         dove = cartella_geoserver()
         dove.mkdir(parents=True, exist_ok=True)
-        esito = await scarica_idrogeo(scelti(), get_settings().geodati, dove)
+        file = await scelti()
+        esito = await scarica_idrogeo(file, get_settings().geodati, dove)
         if esito.falliti:
             primo = next(iter(esito.falliti.values()))
             raise DownloadFallitoError(
-                f"{len(esito.falliti)} file su {len(scelti())} non sono arrivati da IdroGEO "
+                f"{len(esito.falliti)} file su {len(file)} non sono arrivati da IdroGEO "
                 f"(il primo: {primo[:150]}). Riprova: quelli già scaricati non si riscaricano."
             )
 
     return scarica
 
 
-def _mosaico(nome: Mosaic) -> list[Dataset]:
-    from ispra_idrogeo import mosaic
+def _mosaico(nome: Mosaic) -> Callable[[], Awaitable[list[Dataset]]]:
+    async def scelti() -> list[Dataset]:
+        from ispra_idrogeo import mosaic
 
-    return [mosaic(nome)]
+        return [mosaic(nome)]
+
+    return scelti
 
 
-def _iffi() -> list[Dataset]:
-    from limen.integrations.idrogeo.geodati import iffi
+async def _iffi() -> list[Dataset]:
+    """I file IFFI delle sole regioni seminate (#407): sono per regione."""
+    from limen.data.repos.aoi_repo import list_aoi_ids
+    from limen.data.seed.loader import load_regions
+    from limen.integrations.idrogeo.geodati import aree_iffi, iffi
 
-    return list(iffi())
+    seminate = set(await list_aoi_ids())
+    if not seminate:
+        raise DownloadFallitoError(
+            "Nessuna regione seminata: l'inventario frane si scarica regione per regione. "
+            "Esegui prima `limen seed`."
+        )
+    codici = [int(a.metadata["cod_reg"]) for a in load_regions() if a.id in seminate]
+    return iffi(aree_iffi(codici))
 
 
 async def _dtm() -> None:
@@ -194,10 +210,10 @@ def procuratori() -> dict[str, Procuratore]:
     return {
         "iffi": Procuratore(_idrogeo(_iffi), gs("*_opendata.zip*")),
         "pai_frana": Procuratore(
-            _idrogeo(lambda: _mosaico("pai_frane")), gs(f"{MOSAICS['pai_frane']}.zip*")
+            _idrogeo(_mosaico("pai_frane")), gs(f"{MOSAICS['pai_frane']}.zip*")
         ),
         "idraulica": Procuratore(
-            _idrogeo(lambda: _mosaico("idraulica")), gs(f"{MOSAICS['idraulica']}.zip*")
+            _idrogeo(_mosaico("idraulica")), gs(f"{MOSAICS['idraulica']}.zip*")
         ),
         "dtm": Procuratore(_dtm, gs("dtm/HRDTM5m.tif*")),
         "corine": Procuratore(_corine, gs("clc2018_it", "clc2018_it.part")),
@@ -386,6 +402,9 @@ class ConsumatoreDownload:
                 # Chiesta a mano durante un download: copre anche quel download.
                 arrivato = False
                 await self.elabora()
+            elif voce.startswith(repo.PREFISSO_REGIONE):
+                # Una regione nuova va portata nelle celle anche senza download.
+                arrivato = await self.semina(voce) or arrivato
             elif await self.esegui(voce):
                 arrivato = True
 
@@ -418,6 +437,45 @@ class ConsumatoreDownload:
                 )
             await repo.chiudi(repo.ELABORAZIONE, errore=errore)
             log.info("dati_elaborazione.fine", ok=errore is None)
+
+    async def semina(self, voce: str) -> bool:
+        """Semina la regione della voce (#407); ``True`` se ora ha celle da riempire.
+
+        I fattori per cella hanno l'impronta per ``(aoi_id, passo)`` (#101),
+        quindi l'elaborazione che segue calcola la regione nuova e salta le
+        altre. Se l'inventario frane era già scaricato, si scaricano anche i
+        file della regione nuova: sono per regione, e gli altri restano.
+        """
+        from limen.cli.seed import scegli
+        from limen.cli.seed import semina as semina_aoi
+
+        aoi_id = voce.removeprefix(repo.PREFISSO_REGIONE)
+        errore: str | None = None
+        try:
+            await semina_aoi(scegli([aoi_id]))
+        except KeyError:
+            errore = f"La regione {aoi_id} non è nel seme di Limen."
+        except Exception as exc:
+            errore = f"Errore imprevisto ({type(exc).__name__}): il dettaglio è nei log del worker."
+            log.warning(
+                "dati_regione.errore",
+                aoi_id=aoi_id,
+                error=str(exc)[:300],
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
+        await repo.chiudi(voce, errore=errore)
+        log.info("dati_regione.fine", aoi_id=aoi_id, ok=errore is None)
+        if errore is not None:
+            return False
+        iffi = next((r for r in await repo.elenco() if r.voce == "iffi"), None)
+        if iffi is not None and iffi.stato == "fatto":
+            from limen.core.installazione import byte_stimati
+
+            await repo.accoda(
+                ["iffi"], byte_totali=byte_stimati(self._catalogo or carica_catalogo())
+            )
+        return True
 
     async def esegui(self, voce: str) -> bool:
         """Scarica la voce; ``True`` se ora c'è qualcosa da portare nelle celle."""

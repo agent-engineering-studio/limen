@@ -407,6 +407,15 @@ export class ApiClient {
     });
   }
 
+  /** Mette in coda la semina di regioni da monitorare (#407). */
+  aggiungiRegioni(regioni: string[], token: string): Promise<RispostaDownload> {
+    return this.request<RispostaDownload>("/api/installazione/regioni", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Limen-Token": token },
+      body: JSON.stringify({ regioni }),
+    });
+  }
+
   avviaElaborazione(token: string): Promise<RispostaDownload> {
     return this.request<RispostaDownload>("/api/installazione/elabora", {
       method: "POST",

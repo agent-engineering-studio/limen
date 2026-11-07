@@ -15,6 +15,7 @@ import type { JSX } from "react";
 import { ApiClientError, defaultApiClient } from "../lib/api-client";
 import { NOMI_PERICOLO } from "../lib/hazard";
 import { testi, useLingua, useTesti } from "../lib/i18n";
+import RegioniInstallazione from "./RegioniInstallazione";
 import SalutePanel from "./SalutePanel";
 import type {
   DownloadDato,
@@ -261,6 +262,12 @@ export function InstallazionePage(): JSX.Element {
       return t.accodate(r.accodate.length);
     });
 
+  const aggiungiRegioni = (ids: string[]): Promise<void> =>
+    azione(async () => {
+      await defaultApiClient.aggiungiRegioni(ids, token);
+      return null;
+    });
+
   const elabora = (): Promise<void> =>
     azione(async () => {
       await defaultApiClient.avviaElaborazione(token);
@@ -399,6 +406,12 @@ export function InstallazionePage(): JSX.Element {
         )}
         {messaggio && <p role="status">{messaggio}</p>}
       </section>
+
+      <RegioniInstallazione
+        regioni={stato.elenco_regioni}
+        puoAgire={puoAgire}
+        onAggiungi={aggiungiRegioni}
+      />
 
       <section>
         <h2>{t.dati}</h2>
