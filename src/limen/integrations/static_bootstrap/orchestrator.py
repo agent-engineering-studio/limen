@@ -30,6 +30,10 @@ _BUFFER_DEG_500M_AT_41N = 500.0 / 111_320.0  # ≈ 0.00449
 # Maximum distance (m) we consider for distance_to_iffi_m; further than
 # this the cell is "not near any landslide" and we record this cap.
 _DISTANCE_CAP_M = 50_000.0
+# Lo stesso tetto in gradi, per l'impronta di IFFI: una frana entro 50 km
+# dal confine cambia la distanza delle celle di confine. 75 km è un grado di
+# longitudine alla punta nord dell'Italia, quindi il margine è per eccesso.
+_DISTANCE_CAP_DEG = _DISTANCE_CAP_M / 75_000.0
 
 # Per-statement timeout (s) for the batch spatial aggregations. Well above
 # the pool's operational default; a one-shot bootstrap over the full grid
@@ -422,7 +426,9 @@ async def bootstrap_static_for_aoi(aoi_id: str, *, force: bool = False) -> Boots
         result_seed = await conn.execute(_SEED_CELLS_SQL, aoi_id)
         log.info("static_bootstrap.seed_cells", aoi_id=aoi_id, result=result_seed)
 
-    iffi_fp = await fingerprint.of_tables("iffi_landslides")
+    iffi_fp = await fingerprint.of_tables(
+        "iffi_landslides", aoi_id=aoi_id, margine_gradi=_DISTANCE_CAP_DEG
+    )
     if await gate.needs("iffi", iffi_fp):
         # Outside the factors transaction: the backfill's work stays committed
         # even if a later aggregation times out and rolls back.
@@ -438,7 +444,9 @@ async def bootstrap_static_for_aoi(aoi_id: str, *, force: bool = False) -> Boots
             )
         await gate.done("iffi", **iffi_fp.details)
 
-    pai_fp = await fingerprint.of_tables("pai_hazard")
+    pai_fp = await fingerprint.of_sync("pai", aoi_id) or await fingerprint.of_tables(
+        "pai_hazard", aoi_id=aoi_id
+    )
     if await gate.needs("pai", pai_fp):
         async with acquire() as conn:
             await conn.execute(_PAI_SUBDIV_BACKFILL_SQL, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
@@ -446,7 +454,9 @@ async def bootstrap_static_for_aoi(aoi_id: str, *, force: bool = False) -> Boots
             await conn.execute(_PAI_CLASS_SQL, aoi_id, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)
         await gate.done("pai", **pai_fp.details)
 
-    flood_fp = await fingerprint.of_tables("flood_hazard")
+    flood_fp = await fingerprint.of_sync("flood", aoi_id) or await fingerprint.of_tables(
+        "flood_hazard", aoi_id=aoi_id
+    )
     if await gate.needs("flood_hazard", flood_fp):
         async with acquire() as conn:
             await conn.execute(_FLOOD_SUBDIV_BACKFILL_SQL, timeout=_BOOTSTRAP_STMT_TIMEOUT_S)

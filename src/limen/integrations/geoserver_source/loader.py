@@ -10,6 +10,7 @@ operational ``iffi_landslides`` / ``pai_hazard`` tables, so the existing
 from __future__ import annotations
 
 import re
+from collections.abc import Awaitable, Callable
 
 import asyncpg
 
@@ -260,6 +261,33 @@ async def _load_idraulica(
     return items
 
 
+async def _se_cambiato(
+    dataset: str, aoi_id: str, righe: list[bytes], scrivi: Callable[[], Awaitable[int]]
+) -> int:
+    """Scrive solo se le righe dell'AOI non sono quelle dell'ultimo sync.
+
+    Il sync gira due volte per regione a ogni `load_static_data.sh` (il passo
+    «Sorgenti» e poi il bootstrap) e riscriveva ogni volta tutto: 14.685
+    poligoni idraulici della Puglia sono nove minuti di ST_Subdivide (#407).
+    Le righe si **ordinano** prima dell'hash: la query non ha ORDER BY, e la
+    versione dell'alluvione, che già c'era, cambiava a ogni giro su Puglia.
+    """
+    if not righe:
+        return 0
+    versione = content_hash(sorted(righe))
+    if await find("geoserver", f"{dataset}:{aoi_id}", versione):
+        log.info("geoserver_source.unchanged", aoi_id=aoi_id, dataset=dataset, items=len(righe))
+        return 0
+    n = await scrivi()
+    await record(
+        source="geoserver",
+        dataset=f"{dataset}:{aoi_id}",
+        version=versione,
+        metadata={"items": len(righe)},
+    )
+    return n
+
+
 async def sync_geoserver_source_for_aoi(aoi_id: str) -> dict[str, int]:
     """Sync IFFI + PAI for ``aoi_id`` from GeoServer PostGIS.
 
@@ -290,27 +318,26 @@ async def sync_geoserver_source_for_aoi(aoi_id: str) -> dict[str, int]:
     finally:
         await conn.close()
 
-    iffi_n = await iffi_upsert(iffi_items)
-    pai_n = await pai_upsert(pai_items)
+    iffi_n = await _se_cambiato(
+        "iffi",
+        aoi_id,
+        [f"{i.id}|{i.movement_type}".encode() + i.geom.wkb for i in iffi_items],
+        lambda: iffi_upsert(iffi_items),
+    )
+    pai_n = await _se_cambiato(
+        "pai",
+        aoi_id,
+        [f"{i.id}|{i.hazard_class}".encode() + i.geom.wkb for i in pai_items],
+        lambda: pai_upsert(pai_items),
+    )
     # Flood upsert is the slow step (ST_Subdivide over Po-plain mega-polygons,
-    # minutes per region) and the mosaic is static: skip it entirely when the
-    # fetched payload is byte-identical to the last synced version (the same
-    # dataset_versions idempotency pattern as the ISPRA sync jobs).
-    flood_n = 0
-    if flood_items:
-        flood_version = content_hash(
-            [f"{i.id}|{i.hazard_class}".encode() + i.geom.wkb for i in flood_items]
-        )
-        if await find("geoserver", f"flood:{aoi_id}", flood_version):
-            log.info("geoserver_source.flood_unchanged", aoi_id=aoi_id, items=len(flood_items))
-        else:
-            flood_n = await flood_upsert(flood_items)
-            await record(
-                source="geoserver",
-                dataset=f"flood:{aoi_id}",
-                version=flood_version,
-                metadata={"items": len(flood_items)},
-            )
+    # minutes per region).
+    flood_n = await _se_cambiato(
+        "flood",
+        aoi_id,
+        [f"{i.id}|{i.hazard_class}".encode() + i.geom.wkb for i in flood_items],
+        lambda: flood_upsert(flood_items),
+    )
     log.info(
         "geoserver_source.synced",
         aoi_id=aoi_id,
