@@ -88,6 +88,12 @@ def stubbed(monkeypatch: pytest.MonkeyPatch) -> None:
     async def esposizione() -> dict[str, object]:
         return {"esito": "invariata", "comuni": 0}
 
+    async def backup(_deps: object) -> dict[str, object]:
+        # Un .env con BACKUP__BUCKET (installa.sh lo imposta) farebbe partire
+        # pg_dump dal test.
+        return {"status": "skipped"}
+
+    monkeypatch.setattr(nightly, "_backup", backup)
     monkeypatch.setattr(nightly, "_glofas", glofas)
     monkeypatch.setattr(nightly, "_effis_perimetri", effis)
     monkeypatch.setattr(nightly, "_ems_alluvioni", ems)

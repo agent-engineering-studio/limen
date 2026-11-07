@@ -258,6 +258,12 @@ if [ "$MODO" = "--solo-stack" ]; then
       make --no-print-directory meteo-up || stop "Open-Meteo locale non è partito: guarda sopra, poi rilancia"
       ;;
   esac
+  case "$(dotenv BACKUP__ENDPOINT_URL)" in
+    http://minio:*)
+      say "MinIO locale per il backup (make backup-up)"
+      make --no-print-directory backup-up || stop "MinIO del backup non è partito: guarda sopra, poi rilancia"
+      ;;
+  esac
 else
   say "dati statici (make static-data)"
   make --no-print-directory static-data || no "dati statici incompleti: guarda sopra, poi make static-data"

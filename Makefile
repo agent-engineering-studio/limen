@@ -23,6 +23,7 @@ COMPOSE_DEMO := infra/docker/docker-compose.demo.yml
 COMPOSE_OBS  := infra/docker/docker-compose.observability.yml
 COMPOSE_GEOSERVER := infra/docker/docker-compose.geoserver.yml
 COMPOSE_METEO := infra/docker/docker-compose.meteo.yml
+COMPOSE_BACKUP := infra/docker/docker-compose.backup.yml
 COMPOSE_SENSORI := infra/docker/docker-compose.sensori.yml
 # Unified stack: operational services + GeoServer, one project, one network.
 # Repo-root .env feeds compose ${VAR} interpolation (e.g. SCORING__MODE);
@@ -44,6 +45,7 @@ COMPOSE_GS   := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_GEOSERVER) -
 # e i container la raggiungono su `host.docker.internal:8085`, come il
 # gateway LiteLLM. Con `-p limen` compose chiamerebbe orfani tutti gli altri.
 COMPOSE_MT   := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_METEO)
+COMPOSE_BK   := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_BACKUP)
 COMPOSE_SN   := $(if $(wildcard .env),--env-file .env) -f $(COMPOSE_SENSORI)
 
 # Il bootstrap GeoServer legge una directory di dataset montata dall'host. Chi
@@ -95,7 +97,7 @@ BUILD_PROFILES ?= --profile geoserver --profile frontend
 
 .PHONY: fetch-static inference-up inference-up-cpu inference-down inference-logs inference-check help install docs-links docs-bundle \
         up down build rebuild pull up-host-ollama \
-        up-dev down-dev logs migrate seed immagine db-up up-stack backup backup-elenco restore bootstrap-static calibrate backtest serve \
+        up-dev down-dev logs migrate seed immagine db-up up-stack backup backup-elenco backup-up backup-down restore bootstrap-static calibrate backtest serve \
         data-status static-data flood-data flood-events backtest-flood fire-history \
         logs-worker \
         demo demo-down demo-walkthrough \
@@ -451,6 +453,13 @@ backup:                      # backup dello stato sullo store BACKUP__* (#304), 
 
 backup-elenco:
 	docker exec limen-worker limen backup elenco
+
+backup-up:                   # MinIO locale per il backup (opt-in, infra/docker/docker-compose.backup.yml)
+	docker compose $(COMPOSE_BK) --profile backup up -d --wait minio
+	docker compose $(COMPOSE_BK) --profile backup run --rm minio-init
+
+backup-down:
+	docker compose $(COMPOSE_BK) --profile backup down
 
 restore:                     # usage: make restore CONFERMA=1 [CHIAVE=backup/<istante>/] — ferma API e worker, sovrascrive il DB
 	@test "$(CONFERMA)" = "1" || { echo "sovrascrive il database: make restore CONFERMA=1, con API e worker fermi"; exit 1; }
