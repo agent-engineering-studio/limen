@@ -39,7 +39,9 @@ Diventa un numero per cella in due modi: contando quante frane cadono entro
 dalla frana censita più vicina (`distance_to_iffi_m`). Il primo dei due è
 l'ingrediente di maggior peso fra i fattori lenti.
 
-Licenza **CC-BY 4.0**, portale <https://idrogeo.isprambiente.it/>.
+Licenza **CC BY-SA 4.0**, portale <https://idrogeo.isprambiente.it/>: chi
+ridistribuisce dati derivati li pubblica con la stessa licenza. Così dice il
+PDF della Valle d'Aosta; le altre regioni sono ancora da verificare una per una.
 
 ## Le aree già perimetrate come pericolose: mosaicature PAI di ISPRA
 
@@ -58,7 +60,8 @@ riportata su una scala da 0 a 1. Quella idraulica alimenta la componente `H`
 del punteggio frane e, soprattutto, è la base del pericolo alluvione: copre
 circa **132.000 celle** italiane.
 
-Licenza **CC-BY 4.0**, stesso portale IdroGeo.
+Licenza **CC BY-SA 4.0**, stesso portale IdroGeo: lo dice il PDF dentro
+ogni ZIP, e i dati derivati si ridistribuiscono con la stessa licenza.
 
 ## La verità storica: il catalogo e-ITALICA del CNR-IRPI
 
