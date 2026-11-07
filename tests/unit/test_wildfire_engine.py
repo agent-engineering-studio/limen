@@ -102,25 +102,31 @@ def test_the_weather_gates_the_score() -> None:
 def test_a_cell_with_nothing_to_burn_still_scores_in_extreme_weather() -> None:
     """Il termine `base` è il motivo per cui non è un prodotto puro.
 
-    Roccia nuda in condizioni estreme non è zero: il fuoco le arriva da
-    fuori. Ma resta ben sotto un versante di conifere, che è il punto.
+    Un ghiacciaio in condizioni estreme non è zero: il fuoco gli arriva da
+    fuori. Ma resta ben sotto un versante di conifere, che è il punto. Non
+    più la roccia nuda: da v1.1.0 (#295) il suo peso viene dagli incendi
+    osservati, e a 100 m la «roccia» ha vegetazione fra le pietre.
     """
     engine = WildfireScoringEngine(_thresholds())
-    rock = engine.score(_bundle(fwi=50.0, landuse="332", slope_deg=0.0))
+    rock = engine.score(_bundle(fwi=50.0, landuse="335", slope_deg=0.0))
     conifer = engine.score(_bundle(fwi=50.0, landuse="312", slope_deg=35.0))
     assert 0.0 < rock.score < conifer.score
     assert rock.level is RiskLevel.Moderate
 
 
-def test_the_reference_cell_scores_exactly_its_normalised_fwi() -> None:
-    """I cutoff di classe sono bande EFFIS, e restano leggibili come tali.
+def test_a_terrain_of_one_scores_exactly_its_normalised_fwi() -> None:
+    """I cutoff di classe sono bande EFFIS per un terreno che vale 1.
 
-    I tre pesi sommano a 1, quindi una cella di conifere su versante saturo
-    vale esattamente `fwi / normalisation_max`: i confini di classe cadono
-    sui valori FWI di EFFIS (6 / 12 / 21 / 38) invece che su un numero
-    che dipende dalla taratura del terreno.
+    I tre pesi sommano a 1, quindi una cella con combustibile 1 su versante
+    saturo vale esattamente `fwi / normalisation_max`: i confini di classe
+    cadono sui valori FWI di EFFIS (6 / 12 / 21 / 38). Da v1.1.0 (#295)
+    nessuna classe CORINE vale 1 — i pesi sono stimati dagli incendi e
+    scalati a combustibile medio invariato — quindi la proprietà si prova su
+    una tabella con le conifere a 1: è del motore, non della taratura.
     """
-    engine = WildfireScoringEngine(_thresholds())
+    t = _thresholds()
+    fuel = t.fuel.model_copy(update={"by_clc_prefix": {**t.fuel.by_clc_prefix, "312": 1.0}})
+    engine = WildfireScoringEngine(t.model_copy(update={"fuel": fuel}))
     for fwi, expected in (
         (6.0, RiskLevel.Low),
         (12.0, RiskLevel.Moderate),
@@ -157,14 +163,18 @@ def test_the_fwi_term_saturates_at_the_configured_maximum() -> None:
     assert way_over.score == at_max.score
 
 
-def test_conifers_outrank_farmland_at_identical_weather() -> None:
-    """La mappatura CORINE deve ordinare il combustibile come la fisica."""
+def test_the_land_cover_order_follows_the_observed_fires() -> None:
+    """Da v1.1.0 (#295) l'ordine è quello degli incendi EFFIS 2021-25.
+
+    Praterie sopra conifere, conifere sopra i mosaici agricoli, acqua in
+    fondo: frequenza di incendio a parità di meteo, non intensità.
+    """
     engine = WildfireScoringEngine(_thresholds())
+    grassland = engine.score(_bundle(landuse="321")).score
     conifer = engine.score(_bundle(landuse="312")).score
-    scrub = engine.score(_bundle(landuse="323")).score
-    farmland = engine.score(_bundle(landuse="211")).score
+    farmland = engine.score(_bundle(landuse="242")).score
     water = engine.score(_bundle(landuse="512")).score
-    assert conifer > scrub > farmland > water
+    assert grassland > conifer > farmland > water
 
 
 def test_unknown_land_cover_is_not_read_as_incombustible() -> None:
@@ -345,8 +355,8 @@ def test_the_red_band_follows_the_fwi_not_the_fuel_table() -> None:
     assert regola.score == _thresholds().classes.very_high.lo
 
 
-def test_rock_stays_out_of_the_red_band() -> None:
-    bundle = _bundle(fwi=50.0, landuse="332", slope_deg=0.0)
+def test_nothing_to_burn_stays_out_of_the_red_band() -> None:
+    bundle = _bundle(fwi=50.0, landuse="335", slope_deg=0.0)
     assert WildfireScoringEngine(_con_soglia()).score(bundle).level is not RiskLevel.VeryHigh
 
 
