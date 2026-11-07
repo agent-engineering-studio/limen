@@ -30,8 +30,13 @@ voci:
     procura_con: make static-data
     fonte: ISPRA IdroGEO — Inventario dei Fenomeni Franosi in Italia
     url: https://idrogeo.isprambiente.it
-    licenza: CC-BY 4.0
-    attribuzione: ISPRA, Inventario dei Fenomeni Franosi in Italia (IFFI)
+    # Una licenza per area, tutte CC BY-SA 4.0 (verificate le 21, #406):
+    # Licenza_Condizioni_Uso_Inventario_IFFI_ISPRA_<Regione_X>.pdf sul CMS di
+    # IdroGEO, non dentro gli ZIP. «Regione» va sostituito con l'ente dell'area.
+    licenza: CC BY-SA 4.0
+    attribuzione: >-
+      ISPRA – Regione, Inventario dei Fenomeni Franosi in Italia (IFFI),
+      idrogeo.isprambiente.it
     peso_gb: 0.84
 
   - id: pai_frana
@@ -45,8 +50,10 @@ voci:
     procura_con: make static-data
     fonte: ISPRA IdroGEO — mosaicatura nazionale PAI frane 2020-2021
     url: https://idrogeo.isprambiente.it
-    licenza: CC-BY 4.0
-    attribuzione: ISPRA, Mosaicatura nazionale della pericolosità da frana (PAI)
+    licenza: CC BY-SA 4.0
+    attribuzione: >-
+      ISPRA - Mosaicatura nazionale delle aree a pericolosità da frana PAI
+      (v. 4.0 – 2020-2021), https://idrogeo.isprambiente.it
     peso_gb: 1.09
 
   - id: idraulica
@@ -60,8 +67,10 @@ voci:
     procura_con: make static-data
     fonte: ISPRA IdroGEO — mosaicatura nazionale della pericolosità idraulica 2020
     url: https://idrogeo.isprambiente.it
-    licenza: CC-BY 4.0
-    attribuzione: ISPRA, Mosaicatura nazionale della pericolosità idraulica
+    licenza: CC BY-SA 4.0
+    attribuzione: >-
+      ISPRA - Mosaicatura delle aree a pericolosità idraulica (v. 5.0 – 2020),
+      https://idrogeo.isprambiente.it
     peso_gb: 0.70
 
   - id: dtm
@@ -93,10 +102,10 @@ voci:
     procura_con: make static-data
     fonte: CORINE Land Cover 2018 (SINAnet / ISPRA)
     url: https://groupware.sinanet.isprambiente.it
-    licenza: CC-BY
+    licenza: Copernicus, accesso libero (Reg. UE 1159/2013)
     attribuzione: >-
-      Contiene dati Copernicus Land Monitoring Service, CORINE Land Cover 2018,
-      distribuiti da ISPRA
+      Generated using European Union's Copernicus Land Monitoring Service
+      information (CORINE Land Cover 2018), distribuiti da ISPRA
     peso_gb: 0.25
 
   - id: impermeabilizzazione
@@ -111,9 +120,10 @@ voci:
     procura_con: make imperviousness-data
     fonte: Copernicus Land Monitoring Service — Imperviousness Density 2018 (EEA)
     url: https://land.copernicus.eu
-    licenza: Copernicus Land open licence
+    licenza: Copernicus, accesso libero (Reg. UE 1159/2013)
     attribuzione: >-
-      Contiene dati Copernicus Land Monitoring Service, Imperviousness Density 2018
+      Generated using European Union's Copernicus Land Monitoring Service
+      information (Imperviousness Density 2018)
     peso_gb: 0.005
 
   - id: comuni
@@ -127,7 +137,7 @@ voci:
     procura_con: make static-data
     fonte: ISTAT — Confini delle unità amministrative 2023
     url: https://www.istat.it/it/archivio/222527
-    licenza: CC-BY 3.0 IT
+    licenza: CC-BY 4.0
     attribuzione: ISTAT, Confini delle unità amministrative a fini statistici
     peso_gb: 0.02
 
@@ -187,6 +197,6 @@ voci:
     procura_con: make static-data
     fonte: EFFIS — European Forest Fire Information System (JRC)
     url: https://effis.jrc.ec.europa.eu
-    licenza: Copernicus EFFIS terms
-    attribuzione: European Forest Fire Information System (EFFIS), Copernicus EMS
+    licenza: CC-BY 4.0
+    attribuzione: © European Union, European Forest Fire Information System (EFFIS), Copernicus EMS
     peso_gb: 0.01
