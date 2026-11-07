@@ -116,3 +116,41 @@ def test_il_tag_vecchio_segue_il_commit(clone: Path) -> None:
         assert "sha-vecchio" in testo
         assert "resto su sha-vecchio" in esito.stdout
     assert prefisso in testo
+
+
+def _env(clone: Path) -> dict[str, str]:
+    righe = (clone / ".env").read_text().splitlines()
+    return dict(r.split("=", 1) for r in righe if "=" in r and not r.startswith("#"))
+
+
+def test_senza_bucket_il_backup_va_su_minio_locale(clone: Path) -> None:
+    (clone / ".env").write_text(_COMPLETO)
+    esito = _lancia(clone)
+    assert "PARTITO" in esito.stdout, esito.stderr
+    env = _env(clone)
+    assert env["BACKUP__BUCKET"] == "limen-backup"
+    assert env["BACKUP__ENDPOINT_URL"] == "http://minio:9000"
+    assert env["LIMEN_BACKUP_DIR"] == str(clone.parent / "limen-backup")
+    assert (clone.parent / "limen-backup").is_dir()
+    segreti = [env["BACKUP__SECRET_ACCESS_KEY"], env["LIMEN_MINIO_ROOT_PASSWORD"]]
+    assert all(len(s) == 48 for s in segreti)
+    assert not any(s in esito.stdout + esito.stderr for s in segreti)
+
+
+def test_i_segreti_di_minio_non_si_rigenerano(clone: Path) -> None:
+    (clone / ".env").write_text(_COMPLETO)
+    _lancia(clone)
+    prima = _env(clone)
+    _lancia(clone)
+    dopo = _env(clone)
+    for chiave in ("BACKUP__SECRET_ACCESS_KEY", "LIMEN_MINIO_ROOT_PASSWORD"):
+        assert dopo[chiave] == prima[chiave]
+
+
+def test_un_bucket_esterno_non_si_tocca(clone: Path) -> None:
+    esterno = "BACKUP__BUCKET=fuori\nBACKUP__ENDPOINT_URL=https://s3.esempio.it\n"
+    (clone / ".env").write_text(f"{_COMPLETO}{esterno}")
+    _lancia(clone)
+    env = _env(clone)
+    assert env["BACKUP__ENDPOINT_URL"] == "https://s3.esempio.it"
+    assert "LIMEN_MINIO_ROOT_PASSWORD" not in env

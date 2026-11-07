@@ -1,0 +1,81 @@
+# Limen — MinIO locale per il backup notturno (#304).
+#
+# Opt-in, come Open-Meteo: `installa.sh` lo configura solo se BACKUP__BUCKET
+# è vuoto, e `nuovo_host.sh` lo avvia quando BACKUP__ENDPOINT_URL punta qui.
+# Un bucket esterno (Aruba, R2, B2) resta la scelta migliore: questo MinIO sta
+# sulla stessa macchina, quindi protegge da un errore o da un database rotto,
+# non da un guasto del disco. LIMEN_BACKUP_DIR su un disco esterno lo avvicina.
+#
+#   make backup-up       avvia MinIO e prepara bucket e utente del backup
+#   make backup          un backup adesso, dal worker
+#   make backup-elenco   i backup completi sul bucket
+#
+# L'immagine è `pgsty/minio`, il fork che compila MinIO dai sorgenti: dal 2025
+# MinIO non pubblica più `minio/minio` né `quay.io/minio/minio` (pull negato).
+
+name: limen-backup
+
+x-minio: &minio
+  image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+  profiles: ["backup"]
+  networks: [limen]
+
+services:
+
+  minio:
+    <<: *minio
+    container_name: limen-minio
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${LIMEN_MINIO_ROOT_USER:?manca nel .env, rilancia installa.sh}
+      MINIO_ROOT_PASSWORD: ${LIMEN_MINIO_ROOT_PASSWORD:?manca nel .env, rilancia installa.sh}
+    volumes:
+      - ${LIMEN_BACKUP_DIR:?manca nel .env, rilancia installa.sh}:/data
+    ports:
+      # Loopback come ogni porta pubblicata (Docker scavalca ufw). Il worker
+      # lo raggiunge sulla rete dello stack come `minio:9000`.
+      - "${LIMEN_MINIO_BIND:-127.0.0.1}:9000:9000"
+      - "${LIMEN_MINIO_BIND:-127.0.0.1}:9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      retries: 8
+
+  # Bucket, policy e utente del backup: idempotente, si rilancia a ogni avvio.
+  # L'utente di Limen scrive solo nel suo bucket; le chiavi di root restano a
+  # MinIO.
+  minio-init:
+    <<: *minio
+    container_name: limen-minio-init
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${LIMEN_MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${LIMEN_MINIO_ROOT_PASSWORD}
+      BUCKET: ${BACKUP__BUCKET:?manca nel .env, rilancia installa.sh}
+      CHIAVE: ${BACKUP__ACCESS_KEY_ID:?manca nel .env, rilancia installa.sh}
+      SEGRETO: ${BACKUP__SECRET_ACCESS_KEY:?manca nel .env, rilancia installa.sh}
+    entrypoint: ["sh", "-ec"]
+    command:
+      - |
+        mc alias set l http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null
+        mc mb --ignore-existing "l/$$BUCKET"
+        cat >/tmp/policy.json <<EOF
+        {"Version": "2012-10-17", "Statement": [
+          {"Effect": "Allow", "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
+           "Resource": ["arn:aws:s3:::$$BUCKET"]},
+          {"Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+           "Resource": ["arn:aws:s3:::$$BUCKET/*"]}]}
+        EOF
+        mc admin policy create l limen-backup /tmp/policy.json >/dev/null
+        mc admin user add l "$$CHIAVE" "$$SEGRETO" >/dev/null
+        mc admin policy attach l limen-backup --user "$$CHIAVE" >/dev/null 2>&1 || true
+        echo "bucket $$BUCKET pronto"
+
+networks:
+  limen:
+    name: limen_default
+    external: true

@@ -139,6 +139,26 @@ imposta OPENMETEO__FORECAST_URL http://openmeteo:8080/v1/forecast
 imposta OPENMETEO__ARCHIVE_URL http://openmeteo:8080/v1/archive
 imposta OPENMETEO__MODELS ecmwf_ifs025
 
+# Backup notturno: senza un bucket non se ne fa nessuno. Se non ce n'è uno
+# esterno, un MinIO locale (make backup-up): protegge da errori e da un
+# database rotto, non da un guasto del disco. I segreti non si stampano.
+genera() {  # genera NOME
+  grep -qs "^$1=..*" .env || { scrivi "$1" "$(openssl rand -hex 24)" >/dev/null && ok "$1 generata"; }
+}
+if [ -z "$(valore BACKUP__BUCKET)" ] || [ "$(valore BACKUP__ENDPOINT_URL)" = http://minio:9000 ]; then
+  imposta BACKUP__BUCKET limen-backup
+  imposta BACKUP__ENDPOINT_URL http://minio:9000
+  imposta BACKUP__ACCESS_KEY_ID limen-backup
+  genera BACKUP__SECRET_ACCESS_KEY
+  imposta LIMEN_MINIO_ROOT_USER limen-admin
+  genera LIMEN_MINIO_ROOT_PASSWORD
+  imposta LIMEN_BACKUP_DIR "$HOME/limen-backup"
+  case "$(valore LIMEN_BACKUP_DIR)" in
+    /*) mkdir -p "$(valore LIMEN_BACKUP_DIR)" ;;
+    *) stop "LIMEN_BACKUP_DIR nel .env deve essere un percorso assoluto" ;;
+  esac
+fi
+
 if [ -n "$(valore GEOSERVER_SOURCE__DB_DSN)" ] && [ "$(valore LIMEN_GEOSERVER)" != 1 ]; then
   nota "GEOSERVER_SOURCE__DB_DSN nel .env vale per i comandi dall'host: senza GeoServer, toglila."
 fi

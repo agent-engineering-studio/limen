@@ -933,6 +933,7 @@ chain, the GloFAS references). Measured on production data: a **202 MB** dump
 in **41 s**, restored and verified in **62 s**.
 
 ```sh
+make backup-up                   # local MinIO for the bucket (installa.sh sets it up when BACKUP__BUCKET is empty)
 make backup                      # a backup now, from the worker
 make backup-elenco               # list complete backups on the bucket
 make restore CONFERMA=1          # restore the latest (API and worker stopped)
