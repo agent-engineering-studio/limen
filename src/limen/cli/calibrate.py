@@ -323,7 +323,7 @@ async def run() -> int:
                 cells=cal.cells,
                 susc_rows=cal.susc_rows_available,
                 s_correlation=cal.s_correlation,
-                gate=cal.s_correlation_ok,
+                gate=_gate(cal, thresholds.calibration.s_vs_ispra_correlation_min),
                 report=str(cal.report_path),
             )
             if cal.susc_rows_available >= 3 and not cal.s_correlation_ok:
@@ -335,6 +335,15 @@ async def run() -> int:
                 )
                 exit_code = 1
         return exit_code
+
+
+def _gate(cal: _AoiCalibration, gate_min: float | None) -> str:
+    """Il cancello S↔ISPRA come si legge: un `True` senza misura passava per superato."""
+    if gate_min is None:
+        return "off"
+    if cal.s_correlation is None:
+        return "non misurato"
+    return "pass" if cal.s_correlation_ok else "fail"
 
 
 def main() -> int:
