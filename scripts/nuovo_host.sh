@@ -306,3 +306,24 @@ if [ -n "$token" ]; then
 else
   printf '\nLo stato dei dati, dal browser: %s/#/installazione\n' "$base"
 fi
+
+# Su localhost Caddy firma il certificato con una CA sua, che il browser non
+# conosce: finché non la si rende attendibile la mappa non arriva alle API e
+# dice «Connessione assente». La porta 5173 non è un'alternativa: è il backend
+# del proxy, e lì /api non c'è.
+if [ "$dominio" = localhost ]; then
+  ca="$RADICE/caddy-localhost-ca.crt"
+  if docker cp limen-proxy:/data/caddy/pki/authorities/local/root.crt "$ca" >/dev/null 2>&1; then
+    case "$(uname -s)" in
+      Darwin) fidati="sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain $ca" ;;
+      *) fidati="sudo cp $ca /usr/local/share/ca-certificates/ && sudo update-ca-certificates" ;;
+    esac
+    cat <<FINE
+
+Il certificato di https://localhost è di una CA locale di Caddy. Una volta sola:
+  $fidati
+poi chiudi e riapri il browser (Firefox ha un archivio suo: Impostazioni,
+Certificati, Importa). Usa https://localhost, non la porta 5173.
+FINE
+  fi
+fi

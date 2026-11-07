@@ -286,6 +286,9 @@ services:
       NOWCAST__MIN_INTENSITY_MMH: ${NOWCAST__MIN_INTENSITY_MMH:-30}
       REPORT__ENABLED: ${REPORT__ENABLED:-true}
       REPORT__HOUR_UTC: ${REPORT__HOUR_UTC:-6}
+      # Il default `site` è relativo alla cartella di lavoro, /app, che è di
+      # root: il job orario falliva con «Permission denied: 'site'».
+      REPORT__HTML_OUTPUT_DIR: ${REPORT__HTML_OUTPUT_DIR:-/var/lib/limen/reports/site}
       # Registry su Postgres, non su SQLite (#78): il file store è deprecato e
       # il registry dei modelli non ci funziona, quindi il cancello di
       # promozione non avrebbe dove scrivere. Il database `mlflow` lo crea
