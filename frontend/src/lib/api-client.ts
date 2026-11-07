@@ -7,6 +7,7 @@ import type {
   ForecastAlertsResponse,
   InstallazioneStato,
   RispostaDownload,
+  SaluteStato,
   ForecastSchedule,
   LegendResponse,
   NationalReportResponse,
@@ -390,6 +391,11 @@ export class ApiClient {
   /** Cosa serve a Limen e a che punto è (#404): pubblico. */
   getInstallazioneStato(signal?: AbortSignal): Promise<InstallazioneStato> {
     return this.request<InstallazioneStato>("/api/installazione/stato", {}, signal);
+  }
+
+  /** Fonti, quote, non misurato, disco e backup (#408): pubblico. */
+  getSalute(signal?: AbortSignal): Promise<SaluteStato> {
+    return this.request<SaluteStato>("/api/installazione/salute", {}, signal);
   }
 
   /** Mette in coda dei download per il worker: chiede il token (#403). */

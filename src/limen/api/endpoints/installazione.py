@@ -5,7 +5,9 @@ quali dati servono, a cosa, quanti ce ne sono e cosa manca a ogni pericolo.
 ``POST /api/installazione/download`` cambia qualcosa — mette in coda un
 download che il worker eseguirà — e chiede il token di installazione (#403),
 come ``POST /api/installazione/elabora``, che rimette in coda il caricamento
-nelle celle dei file già scaricati (#405).
+nelle celle dei file già scaricati (#405). ``GET /api/installazione/salute``
+(#408) è la stessa pagina a installazione finita: le fonti, le quote, le
+celle non misurate, il disco, il backup. Pubblica: niente chiavi, niente importi.
 
 Nessuna logica qui: catalogo, copertura, coda e prontezza stanno in
 ``config``, ``data/repos`` e ``core``.
@@ -16,18 +18,28 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from limen.api.dependencies import SettingsDep, TokenInstallazioneDep
+from limen.api.jobs.ids import JOB_NIGHTLY, JOB_WORKER_HEARTBEAT
 from limen.api.schemas import (
+    DiscoSalute,
     DownloadDato,
+    FonteSalute,
     InstallazioneStato,
+    NonMisurate,
+    PassoSalute,
     PericoloPronto,
     RichiestaDownload,
     RispostaDownload,
+    SaluteStato,
     VoceDato,
 )
 from limen.config.catalogo_dati import carica_catalogo
+from limen.core import salute as regole
 from limen.core.installazione import byte_stimati, mancanti, regioni_senza, scaricabili
-from limen.data.repos import copertura_repo
+from limen.core.models.hazard import HazardType
+from limen.data.repos import copertura_repo, job_runs_repo, salute_repo
 from limen.data.repos import dati_download_repo as coda
+from limen.integrations.openmeteo.flood import pausa_glofas_fino
+from limen.integrations.salute import FONTI
 
 router = APIRouter(prefix="/api/installazione", tags=["installazione"])
 
@@ -80,6 +92,65 @@ async def stato(settings: SettingsDep) -> InstallazioneStato:
         ],
         elaborazione=_dto(scaricamenti.get(coda.ELABORAZIONE)),
         azioni_abilitate=settings.installazione.abilitato,
+    )
+
+
+_DISCHI = {"dati": "Dati (LIMEN_DATA_ROOT)", "docker": "Docker (volume di Postgres)"}
+
+
+def _passo(run: job_runs_repo.JobRun) -> PassoSalute:
+    stato, nota = regole.passo(run)
+    return PassoSalute(
+        nome=run.scope or run.job_id, stato=stato, finito_il=run.finished_at, nota=nota
+    )
+
+
+@router.get("/salute", response_model=SaluteStato)
+async def salute(settings: SettingsDep) -> SaluteStato:
+    righe = [r for r in await salute_repo.fonti() if r.fonte in FONTI]
+    fonti = [
+        FonteSalute(
+            id=r.fonte,
+            nome=FONTI[r.fonte].nome,
+            pericoli=list(FONTI[r.fonte].pericoli),
+            ultimo_ok=r.ultimo_ok,
+            ultimo_errore=r.ultimo_errore,
+            errore=r.errore,
+            in_errore=regole.in_errore(r.ultimo_ok, r.ultimo_errore),
+        )
+        for r in sorted(righe, key=lambda r: list(FONTI).index(r.fonte))
+    ]
+    guaste = [f.id for f in fonti if f.in_errore]
+    battiti = await job_runs_repo.recent(JOB_WORKER_HEARTBEAT, limit=1)
+    battito = battiti[0] if battiti else None
+    m = battito.metrics if battito else {}
+    notturno = [_passo(r) for r in await job_runs_repo.latest_per_scope(JOB_NIGHTLY)]
+    return SaluteStato(
+        fonti=fonti,
+        openmeteo="locale" if settings.openmeteo.forecast_url else "pubblica",
+        glofas_in_pausa_fino=await pausa_glofas_fino(),
+        non_misurate=[
+            NonMisurate(
+                pericolo=HazardType(p),
+                celle=c.non_misurate,
+                totali=c.totali,
+                cause=regole.cause(HazardType(p), guaste) if c.non_misurate else [],
+            )
+            for p, c in sorted((await salute_repo.misurate()).items())
+        ],
+        dischi=[
+            DiscoSalute(
+                nome=nome,
+                libero_gb=float(m[f"disco_{k}_libero_gb"]),
+                totale_gb=float(m[f"disco_{k}_totale_gb"]),
+            )
+            for k, nome in _DISCHI.items()
+            if f"disco_{k}_libero_gb" in m
+        ],
+        db_gb=await salute_repo.dimensione_db_gb(),
+        battito=battito.started_at if battito else None,
+        backup=next((p for p in notturno if p.nome == "backup"), None),
+        notturno=notturno,
     )
 
 

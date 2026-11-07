@@ -3864,3 +3864,37 @@ html[lang="en"] .app-nav a { white-space: nowrap; }
 .installazione-elaborazione {
   margin-block: 1rem;
 }
+
+/* Salute (#408): la stessa grammatica del semaforo, una riga per fonte o passo. */
+.salute {
+  border: 1px solid var(--panel-border);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem 1rem;
+  margin-block: 1.5rem;
+}
+.salute > h2 {
+  margin-top: 0;
+}
+.salute h3 {
+  font-size: 1rem;
+  margin: 1.25rem 0 0.5rem;
+}
+.salute-righe {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.salute-riga {
+  border: 1px solid var(--panel-border);
+  border-left-width: 0.4rem;
+  border-radius: 0.5rem;
+  background: var(--panel);
+  padding: 0.5rem 0.75rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.salute-riga p {
+  margin: 0.25rem 0 0;
+}

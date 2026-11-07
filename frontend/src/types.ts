@@ -769,3 +769,48 @@ export interface RispostaDownload {
   accodate: string[];
   gia_in_corso: string[];
 }
+
+// --- Salute, dopo l'installazione (#408) ---
+export interface FonteSalute {
+  id: string;
+  nome: string;
+  pericoli: HazardType[];
+  ultimo_ok: string | null;
+  ultimo_errore: string | null;
+  errore: string | null;
+  in_errore: boolean;
+}
+
+export interface NonMisurate {
+  pericolo: HazardType;
+  celle: number;
+  totali: number;
+  cause: string[];
+}
+
+export interface DiscoSalute {
+  nome: string;
+  libero_gb: number;
+  totale_gb: number;
+}
+
+export type StatoPasso = "ok" | "avviso" | "errore" | "saltato" | "in_corso";
+
+export interface PassoSalute {
+  nome: string;
+  stato: StatoPasso;
+  finito_il: string | null;
+  nota: string | null;
+}
+
+export interface SaluteStato {
+  fonti: FonteSalute[];
+  openmeteo: "locale" | "pubblica";
+  glofas_in_pausa_fino: string | null;
+  non_misurate: NonMisurate[];
+  dischi: DiscoSalute[];
+  db_gb: number | null;
+  battito: string | null;
+  backup: PassoSalute | null;
+  notturno: PassoSalute[];
+}
