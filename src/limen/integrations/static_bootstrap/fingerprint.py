@@ -126,35 +126,82 @@ def of_env_file(env_var: str) -> Fingerprint:
     )
 
 
-async def of_tables(*tables: str, require_rows: bool = True) -> Fingerprint:
+async def of_tables(
+    *tables: str,
+    require_rows: bool = True,
+    aoi_id: str | None = None,
+    margine_gradi: float = 0.0,
+) -> Fingerprint:
     """Impronta di una o più tabelle sorgente: conteggio e ultimo inserimento.
+
+    Con ``aoi_id`` conta solo le righe nel riquadro dell'AOI allargato di
+    ``margine_gradi``: le tabelle ISPRA sono nazionali e si riempiono una
+    regione alla volta, e contarle intere faceva ricalcolare il Molise quando
+    arrivava la Puglia (#407). Il riquadro e non il confine: `&&` usa solo
+    l'indice, `ST_DWithin` sul poligono della Puglia costava due minuti.
 
     ``require_rows`` distingue due casi che sembrano uguali e non lo sono: una
     tabella **vuota** perché il dato non è stato ingerito (skip pulito) da una
     tabella vuota che è una risposta legittima — `fire_events` senza hotspot
-    significa "nessun incendio", e la densità a zero è un'informazione.
+    significa "nessun incendio", e la densità a zero è un'informazione. Si
+    guarda la tabella intera, non il riquadro: un AOI senza frane vicine ha
+    densità zero, non una sorgente mancante.
     """
     parts: list[str] = []
     total = 0
+    caricate = False
     async with acquire() as conn:
         for table in tables:
             exists = await conn.fetchval("SELECT to_regclass($1) IS NOT NULL", f"public.{table}")
             if not exists:
                 return missing(f"tabella assente: {table}")
-            n = int(await conn.fetchval(f"SELECT count(*) FROM {table}") or 0)
             has_created = await conn.fetchval(
                 "SELECT count(*) FROM information_schema.columns "
                 "WHERE table_name = $1 AND column_name = 'created_at'",
                 table,
             )
-            last = (
-                await conn.fetchval(f"SELECT max(created_at) FROM {table}") if has_created else None
-            )
+            ultimo = "max(t.created_at)" if has_created else "NULL"
+            if aoi_id is None:
+                riga = await conn.fetchrow(f"SELECT count(*) AS n, {ultimo} AS last FROM {table} t")
+            else:
+                riga = await conn.fetchrow(
+                    f"SELECT count(*) AS n, {ultimo} AS last FROM {table} t "
+                    "JOIN aoi a ON a.id = $1 AND t.geom && ST_Expand(a.bbox, $2)",
+                    aoi_id,
+                    margine_gradi,
+                )
+            n = int(riga["n"] or 0)
+            last = riga["last"]
             parts.append(f"{table}:{n}:{last or '-'}")
             total += n
-    if require_rows and total == 0:
+            caricate = (
+                caricate
+                or n > 0
+                or bool(await conn.fetchval(f"SELECT EXISTS (SELECT 1 FROM {table})"))
+            )
+    if require_rows and not caricate:
         return missing(f"nessuna riga in {', '.join(tables)}")
     return Fingerprint(parts=tuple(parts), details={"rows": total})
+
+
+async def of_sync(dataset: str, aoi_id: str) -> Fingerprint | None:
+    """L'ultima versione che il sync ISPRA ha scritto per questo AOI, se c'è.
+
+    È l'insieme dei poligoni che toccano il riquadro dell'AOI (`pai:it-puglia`,
+    `flood:it-puglia`, da `geoserver_source`): esattamente ciò che il passo
+    legge, e una sola lettura invece di un'intersezione con i poligoni del
+    mosaico. ``None`` se le tabelle le ha riempite altro: allora decide
+    ``of_tables``.
+    """
+    async with acquire() as conn:
+        versione = await conn.fetchval(
+            "SELECT version FROM dataset_versions WHERE source = 'geoserver' "
+            "AND dataset = $1 ORDER BY fetched_at DESC, id DESC LIMIT 1",
+            f"{dataset}:{aoi_id}",
+        )
+    if versione is None:
+        return None
+    return Fingerprint(parts=(f"geoserver:{dataset}:{versione}",), details={"sync": versione[:12]})
 
 
 @dataclass

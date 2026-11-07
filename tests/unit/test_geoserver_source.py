@@ -93,3 +93,30 @@ async def test_trentino_alto_adige_legge_le_due_province(
     assert sum("_bolzano_" in t for t in lette) == famiglie
     assert sum("_trento_" in t for t in lette) == famiglie
     assert len({f.id for f in frane}) == len(frane)
+
+
+async def test_lo_stesso_insieme_in_altro_ordine_non_si_riscrive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """La query non ha ORDER BY: senza ordinare, la Puglia si riscriveva ogni giro (#407)."""
+    versioni: set[tuple[str, str]] = set()
+    scritture: list[int] = []
+
+    async def trova(_fonte: str, dataset: str, versione: str) -> object | None:
+        return object() if (dataset, versione) in versioni else None
+
+    async def registra(*, source: str, dataset: str, version: str, metadata: object) -> None:
+        versioni.add((dataset, version))
+
+    async def scrivi() -> int:
+        scritture.append(1)
+        return 2
+
+    monkeypatch.setattr(loader, "find", trova)
+    monkeypatch.setattr(loader, "record", registra)
+
+    assert await loader._se_cambiato("flood", "it-puglia", [b"a", b"b"], scrivi) == 2
+    assert await loader._se_cambiato("flood", "it-puglia", [b"b", b"a"], scrivi) == 0
+    assert await loader._se_cambiato("flood", "it-molise", [b"b", b"a"], scrivi) == 2
+    assert await loader._se_cambiato("flood", "it-puglia", [b"a", b"c"], scrivi) == 2
+    assert len(scritture) == 3

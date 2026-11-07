@@ -15,6 +15,7 @@ from shapely.geometry import LineString, MultiPolygon, Point, Polygon
 from limen.data.db import acquire
 from limen.data.repos.aoi_repo import upsert_aoi
 from limen.data.repos.cell_static_factors_repo import count_factors, get_for_cell
+from limen.data.repos.dataset_versions_repo import record
 from limen.data.repos.flood_repo import FloodHazard
 from limen.data.repos.flood_repo import upsert_many as upsert_flood
 from limen.data.repos.grid_repo import count_grid_cells, generate_and_store_grid
@@ -591,3 +592,57 @@ async def test_a_new_aoi_does_not_touch_the_others(reset_db: None) -> None:
 
     unchanged = await bootstrap_static_for_aoi(_AOI_ID)
     assert unchanged.recomputed == 0
+
+
+async def test_le_righe_di_unaltra_regione_non_ricalcolano_la_prima(reset_db: None) -> None:
+    """Il sync riempie le tabelle ISPRA una regione alla volta (#407).
+
+    Contate intere, le righe della Puglia cambiavano l'impronta del Molise.
+    """
+    await _seed(reset_db)
+    await bootstrap_static_for_aoi(_AOI_ID)
+
+    lontano = Polygon([(9.0, 45.5), (9.1, 45.5), (9.1, 45.6), (9.0, 45.6), (9.0, 45.5)])
+    await upsert_iffi(
+        [
+            IFFILandslide(
+                id="iffi-lombardia",
+                movement_type="crollo",
+                state="attivo",
+                velocity_class=None,
+                occurrence_date=None,
+                geom=Point(9.05, 45.55),
+                attributes={"src": "test"},
+            )
+        ]
+    )
+    await upsert_pai(
+        [
+            PAIHazard(
+                id="pai-lombardia",
+                hazard_class="P3",
+                authority="test",
+                geom=MultiPolygon([lontano]),
+                attributes={"src": "test"},
+            )
+        ]
+    )
+    await upsert_flood(
+        [FloodHazard(id="idr-lombardia", hazard_class="P2", geom=MultiPolygon([lontano]))]
+    )
+
+    again = await bootstrap_static_for_aoi(_AOI_ID)
+    assert again.recomputed == 0, again.summary
+
+
+async def test_una_nuova_versione_del_sync_ricalcola_solo_il_suo_passo(reset_db: None) -> None:
+    """PAI e alluvione si confrontano con la versione che il sync ha scritto per l'AOI."""
+    await _seed(reset_db)
+    await record(source="geoserver", dataset=f"pai:{_AOI_ID}", version="v1", metadata={})
+    await bootstrap_static_for_aoi(_AOI_ID)
+    assert (await bootstrap_static_for_aoi(_AOI_ID)).recomputed == 0
+
+    await record(source="geoserver", dataset=f"pai:{_AOI_ID}", version="v2", metadata={})
+    again = await bootstrap_static_for_aoi(_AOI_ID)
+    assert again.recomputed == 1, again.summary
+    assert "pai" in again.summary
