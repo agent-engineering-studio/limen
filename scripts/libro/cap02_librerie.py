@@ -31,16 +31,41 @@ MAPPA, MISURA, ML = "mappa", "misura", "ml"
 
 # (libreria, cosa fa in parole, fonte, {pericolo: uso})
 RIGHE = [
-    ("fwi-chain", "indice meteo degli incendi", "calcolo sul meteo (Open-Meteo)", {"incendio": MAPPA}),
+    (
+        "fwi-chain",
+        "indice meteo degli incendi",
+        "calcolo sul meteo (Open-Meteo)",
+        {"incendio": MAPPA},
+    ),
     ("effis-client", "aree bruciate in Europa", "EFFIS, Copernicus", {"incendio": MISURA}),
     ("firms-client", "fuochi visti dal satellite", "NASA FIRMS", {"frana": MAPPA, "incendio": ML}),
     ("rainfall-thresholds", "pioggia che fa franare", "soglie del CNR-IRPI", {"frana": MAPPA}),
     ("ingv-shakemap", "quanto ha tremato il suolo", "INGV", {"frana": MAPPA}),
     ("egms-client", "terreno che si muove", "EGMS, Copernicus", {"frana": ML}),
-    ("ispra-idrogeo", "frane censite, aree allagabili", "ISPRA IdroGEO", {"frana": MAPPA, "alluvione": MAPPA}),
-    ("dpc-radar", "pioggia che sta cadendo", "radar della Protezione civile", {"frana": MISURA, "alluvione": MAPPA}),
-    ("glofas-ewds", "portata dei fiumi", "GloFAS, Copernicus", {"alluvione": MAPPA, "incendio": MISURA}),
-    ("imageserver-export", "suolo impermeabilizzato", "Agenzia Europea dell'Ambiente", {"alluvione": MAPPA}),
+    (
+        "ispra-idrogeo",
+        "frane censite, aree allagabili",
+        "ISPRA IdroGEO",
+        {"frana": MAPPA, "alluvione": MAPPA},
+    ),
+    (
+        "dpc-radar",
+        "pioggia che sta cadendo",
+        "radar della Protezione civile",
+        {"frana": MISURA, "alluvione": MAPPA},
+    ),
+    (
+        "glofas-ewds",
+        "portata dei fiumi",
+        "GloFAS, Copernicus",
+        {"alluvione": MAPPA, "incendio": MISURA},
+    ),
+    (
+        "imageserver-export",
+        "suolo impermeabilizzato",
+        "Agenzia Europea dell'Ambiente",
+        {"alluvione": MAPPA},
+    ),
     ("copernicus-ems", "dove è arrivata l'acqua", "Copernicus EMS", {"alluvione": MISURA}),
 ]
 PERICOLI = ["frana", "alluvione", "incendio"]
@@ -52,11 +77,21 @@ def segno(ax, x: float, y: float, uso: str) -> None:
     if uso == MAPPA:
         ax.scatter([x], [y], s=150, marker="o", color=COLORE, zorder=3)
     elif uso == MISURA:
-        ax.scatter([x], [y], s=150, marker="o", facecolor="white", edgecolor=COLORE,
-                   linewidths=2, zorder=3)
+        ax.scatter(
+            [x], [y], s=150, marker="o", facecolor="white", edgecolor=COLORE, linewidths=2, zorder=3
+        )
     else:
-        ax.scatter([x], [y], s=120, marker="D", facecolor="white", edgecolor=COLORE,
-                   linewidths=1.6, hatch="////", zorder=3)
+        ax.scatter(
+            [x],
+            [y],
+            s=120,
+            marker="D",
+            facecolor="white",
+            edgecolor=COLORE,
+            linewidths=1.6,
+            hatch="////",
+            zorder=3,
+        )
 
 
 def main() -> None:
@@ -91,8 +126,14 @@ def main() -> None:
     segno(ax, 7.6, y, ML)
     ax.text(7.85, y, "solo il modello in prova", fontsize=8.8, color=INK, va="center")
 
-    fig.text(0.01, 0.975, "Le undici librerie: quale fonte leggono, a quale pericolo servono",
-             fontsize=12, color=INK, va="top")
+    fig.text(
+        0.01,
+        0.975,
+        "Le undici librerie: quale fonte leggono, a quale pericolo servono",
+        fontsize=12,
+        color=INK,
+        va="top",
+    )
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     OUT.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUT / "librerie-fonti-pericoli.svg", facecolor="white")

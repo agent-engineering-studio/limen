@@ -168,6 +168,9 @@ ignore = []
 "src/limen/core/models/risk.py" = ["RUF002", "RUF003"]
 "tests/unit/test_caine_model.py" = ["RUF002"]
 "tests/unit/test_scoring_engine.py" = ["RUF002"]
+# Le figure del libro scrivono titoli e didascalie in italiano tipografico
+# (–, ×, α, frasi intere): spezzarli renderebbe le frasi illeggibili nel codice.
+"scripts/libro/**" = ["E501", "RUF001", "RUF002", "RUF003", "N806"]
 
 [tool.ruff.format]
 quote-style = "double"

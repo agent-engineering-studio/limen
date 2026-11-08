@@ -21,19 +21,19 @@
  </defs>
  <g id="figure_1">
   <g id="patch_1">
-   <path d="M 0 338.51493 
-L 494.525781 338.51493 
-L 494.525781 0 
-L 0 0 
+   <path d="M 0 338.51493
+L 494.525781 338.51493
+L 494.525781 0
+L 0 0
 z
 " style="fill: #ffffff"/>
   </g>
   <g id="axes_1">
    <g id="patch_2">
-    <path d="M 40.925781 300.314148 
-L 487.325781 300.314148 
-L 487.325781 34.202148 
-L 40.925781 34.202148 
+    <path d="M 40.925781 300.314148
+L 487.325781 300.314148
+L 487.325781 34.202148
+L 40.925781 34.202148
 z
 " style="fill: #ffffff"/>
    </g>
@@ -41,8 +41,8 @@ z
     <g id="xtick_1">
      <g id="line2d_1">
       <defs>
-       <path id="m4b74e3984e" d="M 0 0 
-L 0 3.5 
+       <path id="m4b74e3984e" d="M 0 0
+L 0 3.5
 " style="stroke: #000000; stroke-width: 0.8"/>
       </defs>
       <g>
@@ -121,8 +121,8 @@ L 0 3.5
     <g id="ytick_1">
      <g id="line2d_8">
       <defs>
-       <path id="m3cc8dc1271" d="M 0 0 
-L -3.5 0 
+       <path id="m3cc8dc1271" d="M 0 0
+L -3.5 0
 " style="stroke: #000000; stroke-width: 0.8"/>
       </defs>
       <g>
@@ -219,15 +219,15 @@ L -3.5 0
    </g>
    <g id="line2d_17">
     <defs>
-     <path id="m8d0406aa85" d="M 0 3 
-C 0.795609 3 1.55874 2.683901 2.12132 2.12132 
-C 2.683901 1.55874 3 0.795609 3 0 
-C 3 -0.795609 2.683901 -1.55874 2.12132 -2.12132 
-C 1.55874 -2.683901 0.795609 -3 0 -3 
-C -0.795609 -3 -1.55874 -2.683901 -2.12132 -2.12132 
-C -2.683901 -1.55874 -3 -0.795609 -3 0 
-C -3 0.795609 -2.683901 1.55874 -2.12132 2.12132 
-C -1.55874 2.683901 -0.795609 3 0 3 
+     <path id="m8d0406aa85" d="M 0 3
+C 0.795609 3 1.55874 2.683901 2.12132 2.12132
+C 2.683901 1.55874 3 0.795609 3 0
+C 3 -0.795609 2.683901 -1.55874 2.12132 -2.12132
+C 1.55874 -2.683901 0.795609 -3 0 -3
+C -0.795609 -3 -1.55874 -2.683901 -2.12132 -2.12132
+C -2.683901 -1.55874 -3 -0.795609 -3 0
+C -3 0.795609 -2.683901 1.55874 -2.12132 2.12132
+C -1.55874 2.683901 -0.795609 3 0 3
 z
 " style="stroke: #555555"/>
     </defs>
@@ -259,102 +259,102 @@ z
    <g id="line2d_23"/>
    <g id="line2d_24"/>
    <g id="patch_3">
-    <path d="M 40.925781 300.314148 
-L 40.925781 34.202148 
+    <path d="M 40.925781 300.314148
+L 40.925781 34.202148
 " style="fill: none; stroke: #000000; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
    </g>
    <g id="patch_4">
-    <path d="M 40.925781 300.314148 
-L 487.325781 300.314148 
+    <path d="M 40.925781 300.314148
+L 487.325781 300.314148
 " style="fill: none; stroke: #000000; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
    </g>
    <g id="patch_5">
-    <path d="M 218.250535 156.548836 
-Q 255.172138 142.372905 290.423748 128.838163 
+    <path d="M 218.250535 156.548836
+Q 255.172138 142.372905 290.423748 128.838163
 " style="fill: none; stroke: #b9770e; stroke-width: 1.6; stroke-linecap: round"/>
-    <path d="M 285.972659 128.404795 
-L 290.423748 128.838163 
-L 287.4064 132.139013 
+    <path d="M 285.972659 128.404795
+L 290.423748 128.838163
+L 287.4064 132.139013
 " style="fill: none; stroke: #b9770e; stroke-width: 1.6; stroke-linecap: round"/>
    </g>
    <g id="patch_6">
-    <path d="M 214.477425 157.877345 
-Q 201.463248 162.053202 190.152388 165.682515 
+    <path d="M 214.477425 157.877345
+Q 201.463248 162.053202 190.152388 165.682515
 " style="fill: none; stroke: #1f618d; stroke-width: 1.6; stroke-linecap: round"/>
-    <path d="M 194.572176 166.364774 
-L 190.152388 165.682515 
-L 193.350068 162.556041 
+    <path d="M 194.572176 166.364774
+L 190.152388 165.682515
+L 193.350068 162.556041
 " style="fill: none; stroke: #1f618d; stroke-width: 1.6; stroke-linecap: round"/>
    </g>
    <g id="text_19">
     <text style="font-size: 8px; font-family: 'DejaVu Sans'; text-anchor: end" x="210.382466" y="151.266075" transform="rotate(-0 210.382466 151.266075)">Emilia-Romagna</text>
    </g>
    <g id="patch_7">
-    <path d="M 242.093235 137.015029 
-Q 273.080047 123.725932 302.422817 111.141904 
+    <path d="M 242.093235 137.015029
+Q 273.080047 123.725932 302.422817 111.141904
 " style="fill: none; stroke: #b9770e; stroke-width: 1.6; stroke-linecap: round"/>
-    <path d="M 297.958333 110.880391 
-L 302.422817 111.141904 
-L 299.534916 114.556583 
+    <path d="M 297.958333 110.880391
+L 302.422817 111.141904
+L 299.534916 114.556583
 " style="fill: none; stroke: #b9770e; stroke-width: 1.6; stroke-linecap: round"/>
    </g>
    <g id="patch_8">
-    <path d="M 238.275503 138.114893 
-Q 228.31647 139.680949 220.124575 140.969122 
+    <path d="M 238.275503 138.114893
+Q 228.31647 139.680949 220.124575 140.969122
 " style="fill: none; stroke: #1f618d; stroke-width: 1.6; stroke-linecap: round"/>
-    <path d="M 224.386701 142.32348 
-L 220.124575 140.969122 
-L 223.765337 138.372037 
+    <path d="M 224.386701 142.32348
+L 220.124575 140.969122
+L 223.765337 138.372037
 " style="fill: none; stroke: #1f618d; stroke-width: 1.6; stroke-linecap: round"/>
    </g>
    <g id="text_20">
     <text style="font-size: 8px; font-family: 'DejaVu Sans'; text-anchor: end" x="234.254123" y="131.803755" transform="rotate(-0 234.254123 131.803755)">Lombardia</text>
    </g>
    <g id="patch_9">
-    <path d="M 355.547353 98.069463 
-Q 401.386782 83.215851 445.524467 68.913665 
+    <path d="M 355.547353 98.069463
+Q 401.386782 83.215851 445.524467 68.913665
 " style="fill: none; stroke: #b9770e; stroke-width: 1.6; stroke-linecap: round"/>
-    <path d="M 441.102741 68.244083 
-L 445.524467 68.913665 
-L 442.335766 72.049297 
+    <path d="M 441.102741 68.244083
+L 445.524467 68.913665
+L 442.335766 72.049297
 " style="fill: none; stroke: #b9770e; stroke-width: 1.6; stroke-linecap: round"/>
    </g>
    <g id="patch_10">
-    <path d="M 351.717237 99.231075 
-Q 320.819902 107.968681 291.643915 116.219499 
+    <path d="M 351.717237 99.231075
+Q 320.819902 107.968681 291.643915 116.219499
 " style="fill: none; stroke: #1f618d; stroke-width: 1.6; stroke-linecap: round"/>
-    <path d="M 296.03721 117.055532 
-L 291.643915 116.219499 
-L 294.948719 113.206482 
+    <path d="M 296.03721 117.055532
+L 291.643915 116.219499
+L 294.948719 113.206482
 " style="fill: none; stroke: #1f618d; stroke-width: 1.6; stroke-linecap: round"/>
    </g>
    <g id="text_21">
     <text style="font-size: 8px; font-family: 'DejaVu Sans'; text-anchor: end" x="347.644498" y="92.686056" transform="rotate(-0 347.644498 92.686056)">Sardegna</text>
    </g>
    <g id="patch_11">
-    <path d="M 465.037311 46.298148 
-Q 449.133191 46.298148 435.017926 46.298148 
+    <path d="M 465.037311 46.298148
+Q 449.133191 46.298148 435.017926 46.298148
 " style="fill: none; stroke: #1f618d; stroke-width: 1.6; stroke-linecap: round"/>
-    <path d="M 439.017926 48.298148 
-L 435.017926 46.298148 
-L 439.017926 44.298148 
+    <path d="M 439.017926 48.298148
+L 435.017926 46.298148
+L 439.017926 44.298148
 " style="fill: none; stroke: #1f618d; stroke-width: 1.6; stroke-linecap: round"/>
    </g>
    <g id="text_22">
     <text style="font-size: 8px; font-family: 'DejaVu Sans'; text-anchor: end" x="461.034872" y="40.298148" transform="rotate(-0 461.034872 40.298148)">Molise</text>
    </g>
    <g id="patch_12">
-    <path d="M 63.19185 287.897443 
-Q 105.976466 280.950525 146.995352 274.290308 
+    <path d="M 63.19185 287.897443
+Q 105.976466 280.950525 146.995352 274.290308
 " style="fill: none; stroke: #b9770e; stroke-width: 1.6; stroke-linecap: round"/>
-    <path d="M 142.726518 272.957244 
-L 146.995352 274.290308 
-L 143.3676 276.905537 
+    <path d="M 142.726518 272.957244
+L 146.995352 274.290308
+L 143.3676 276.905537
 " style="fill: none; stroke: #b9770e; stroke-width: 1.6; stroke-linecap: round"/>
    </g>
    <g id="patch_13">
-    <path d="M 61.21669 288.218148 
-Q 61.21669 288.218148 61.21669 288.218148 
+    <path d="M 61.21669 288.218148
+Q 61.21669 288.218148 61.21669 288.218148
 " style="fill: none; stroke: #1f618d; stroke-width: 1.6; stroke-linecap: round"/>
    </g>
    <g id="text_23">
@@ -366,18 +366,18 @@ Q 61.21669 288.218148 61.21669 288.218148
    </g>
    <g id="legend_1">
     <g id="line2d_25">
-     <path d="M 307.469766 262.145828 
-L 315.969766 262.145828 
-L 324.469766 262.145828 
+     <path d="M 307.469766 262.145828
+L 315.969766 262.145828
+L 324.469766 262.145828
 " style="fill: none; stroke: #b9770e; stroke-width: 1.6; stroke-linecap: square"/>
     </g>
     <g id="text_25">
      <text style="font-size: 8.5px; font-family: 'DejaVu Sans'; text-anchor: start" x="331.269766" y="265.120828" transform="rotate(-0 331.269766 265.120828)">A: alza e abbassa le zone mappate</text>
     </g>
     <g id="line2d_26">
-     <path d="M 307.469766 274.896492 
-L 315.969766 274.896492 
-L 324.469766 274.896492 
+     <path d="M 307.469766 274.896492
+L 315.969766 274.896492
+L 324.469766 274.896492
 " style="fill: none; stroke: #1f618d; stroke-width: 1.6; stroke-linecap: square"/>
     </g>
     <g id="text_26">

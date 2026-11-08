@@ -44,7 +44,13 @@ PETROLIO, GRIGIO = "#2a6f77", "#9aa5a8"
 
 
 def main() -> None:
-    plt.rcParams.update({"font.family": "sans-serif", "font.sans-serif": ["DejaVu Sans", "Helvetica", "Arial"], "svg.fonttype": "none"})
+    plt.rcParams.update(
+        {
+            "font.family": "sans-serif",
+            "font.sans-serif": ["DejaVu Sans", "Helvetica", "Arial"],
+            "svg.fonttype": "none",
+        }
+    )
     fig, (a1, a2) = plt.subplots(
         1, 2, figsize=(11, 4.4), facecolor="white", gridspec_kw={"width_ratios": [1.35, 1]}
     )
@@ -57,7 +63,7 @@ def main() -> None:
         ax.set_axisbelow(True)
 
     n = len(DISCO)
-    for i, (voce, gb, mappa) in enumerate(DISCO):
+    for i, (_voce, gb, mappa) in enumerate(DISCO):
         y = n - 1 - i
         a1.barh(y, gb, color=PETROLIO if mappa else GRIGIO, height=0.6)
         a1.text(gb + 1, y, f"{gb:g} GB".replace(".", ","), va="center", fontsize=10)
@@ -68,7 +74,7 @@ def main() -> None:
     a1.set_title("Disco: circa 100 GB per la mappa", fontsize=11, loc="left")
 
     m = len(MEMORIA)
-    for i, (voce, gb) in enumerate(MEMORIA):
+    for i, (_voce, gb) in enumerate(MEMORIA):
         y = m - 1 - i
         a2.barh(y, gb, color=PETROLIO, height=0.6)
         a2.text(gb + 0.1, y, f"{gb:g} GB".replace(".", ","), va="center", fontsize=10)

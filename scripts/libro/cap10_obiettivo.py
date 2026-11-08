@@ -54,7 +54,13 @@ SPOSTA = {  # posizione delle etichette, in punti
 
 
 def main() -> None:
-    plt.rcParams.update({"font.family": "sans-serif", "font.sans-serif": ["DejaVu Sans", "Helvetica", "Arial"], "svg.fonttype": "none"})
+    plt.rcParams.update(
+        {
+            "font.family": "sans-serif",
+            "font.sans-serif": ["DejaVu Sans", "Helvetica", "Arial"],
+            "svg.fonttype": "none",
+        }
+    )
     fig, ax = plt.subplots(figsize=(9, 5.6), facecolor="white")
     ax.set_facecolor("white")
     ax.add_patch(Rectangle((0, 90), 10, 12, color="#4c9a2a", alpha=0.18, lw=0))
@@ -64,7 +70,9 @@ def main() -> None:
         ax.annotate(et, (x, y), xytext=SPOSTA[et], textcoords="offset points", fontsize=9.5)
     ax.set_xlim(0, 50)
     ax.set_ylim(0, 105)
-    ax.set_xlabel("Quanta parte del territorio era in allerta, % dei giorni (meno è meglio)", fontsize=10)
+    ax.set_xlabel(
+        "Quanta parte del territorio era in allerta, % dei giorni (meno è meglio)", fontsize=10
+    )
     ax.set_ylabel("Eventi veri già in allerta prima, % (più è meglio)", fontsize=10)
     for s in ("top", "right"):
         ax.spines[s].set_visible(False)

@@ -60,17 +60,24 @@ def main() -> None:
     fig.patch.set_facecolor("white")
     ax.set_facecolor("white")
     h = 0.36
-    for i, (nome, presi, comunque) in enumerate(reversed(MISURE)):
+    for i, (_nome, presi, comunque) in enumerate(reversed(MISURE)):
         y = i
         ax.barh(y + h / 2 + 0.02, presi, height=h, color=PRESI)
         ax.barh(y - h / 2 - 0.02, max(comunque, 0.4), height=h, color=COMUNQUE)
         ax.text(presi + 1.2, y + h / 2 + 0.02, pct(presi), va="center", fontsize=9, color=INK)
-        ax.text(max(comunque, 0.4) + 1.2, y - h / 2 - 0.02, pct(comunque), va="center",
-                fontsize=9, color=INK2)
+        ax.text(
+            max(comunque, 0.4) + 1.2,
+            y - h / 2 - 0.02,
+            pct(comunque),
+            va="center",
+            fontsize=9,
+            color=INK2,
+        )
     ax.set_yticks(range(len(MISURE)), [m[0] for m in reversed(MISURE)], fontsize=9.5, color=INK)
     ax.set_xlim(0, 112)
-    ax.set_xticks([0, 25, 50, 75, 100], ["0 %", "25 %", "50 %", "75 %", "100 %"],
-                  fontsize=8.5, color=INK2)
+    ax.set_xticks(
+        [0, 25, 50, 75, 100], ["0 %", "25 %", "50 %", "75 %", "100 %"], fontsize=8.5, color=INK2
+    )
     ax.tick_params(axis="y", length=0)
     ax.tick_params(axis="x", length=0)
     ax.grid(axis="x", color="#e6e5e0", linewidth=0.8)
@@ -79,18 +86,42 @@ def main() -> None:
         ax.spines[lato].set_visible(False)
     ax.spines["bottom"].set_color("#cfcec8")
 
-    fig.text(0.01, 0.965, "Quanti eventi veri prende la classe alta,\n"
-             "e quanto spesso si accende comunque", fontsize=11.5, color=INK, va="top")
+    fig.text(
+        0.01,
+        0.965,
+        "Quanti eventi veri prende la classe alta,\ne quanto spesso si accende comunque",
+        fontsize=11.5,
+        color=INK,
+        va="top",
+    )
     ax.text(0, 1.035, "■", transform=ax.transAxes, color=PRESI, fontsize=11, va="bottom")
-    ax.text(0.025, 1.035, "eventi veri presi in anticipo", transform=ax.transAxes,
-            color=INK, fontsize=9, va="bottom")
+    ax.text(
+        0.025,
+        1.035,
+        "eventi veri presi in anticipo",
+        transform=ax.transAxes,
+        color=INK,
+        fontsize=9,
+        va="bottom",
+    )
     ax.text(0.33, 1.035, "■", transform=ax.transAxes, color=COMUNQUE, fontsize=11, va="bottom")
-    ax.text(0.355, 1.035, "momenti qualunque con l'allerta accesa (tasso di base)",
-            transform=ax.transAxes, color=INK, fontsize=9, va="bottom")
-    fig.text(0.01, 0.01,
-             "Fonti: README di Limen (incendio); backtest alluvione dell'8/11/2026; "
-             "issue #122, 8/10/2026 (frana).",
-             fontsize=7.5, color=INK2)
+    ax.text(
+        0.355,
+        1.035,
+        "momenti qualunque con l'allerta accesa (tasso di base)",
+        transform=ax.transAxes,
+        color=INK,
+        fontsize=9,
+        va="bottom",
+    )
+    fig.text(
+        0.01,
+        0.01,
+        "Fonti: README di Limen (incendio); backtest alluvione dell'8/11/2026; "
+        "issue #122, 8/10/2026 (frana).",
+        fontsize=7.5,
+        color=INK2,
+    )
     fig.tight_layout(rect=(0, 0.04, 1, 0.86))
     fig.savefig(OUT / "misure.svg", facecolor="white")
     print(f"scritto {OUT / 'misure.svg'}")

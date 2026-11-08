@@ -79,7 +79,19 @@ RIGHE = [
 
 def query(sql: str) -> list[list[str]]:
     out = subprocess.run(
-        ["docker", "exec", "-i", "limen-postgres", "psql", "-U", "limen", "-d", "limen", "-q", "-At"],
+        [
+            "docker",
+            "exec",
+            "-i",
+            "limen-postgres",
+            "psql",
+            "-U",
+            "limen",
+            "-d",
+            "limen",
+            "-q",
+            "-At",
+        ],
         input=sql,
         capture_output=True,
         text=True,
@@ -125,7 +137,8 @@ def figura_giornata() -> None:
     ax.tick_params(axis="y", length=0)
     ax.set_title(
         "Una giornata vera: le mappe ogni ora, la previsione quattro volte, la notte una volta",
-        fontsize=11.5, loc="left",
+        fontsize=11.5,
+        loc="left",
     )
     fig.tight_layout()
     fig.savefig(OUT / "giornata.svg", bbox_inches="tight")
@@ -138,12 +151,17 @@ def figura_sweep() -> None:
     fig, ax = plt.subplots(figsize=(9, 3.6), facecolor="white")
     ax.axhline(60, color="#D55E00", linewidth=1.2, linestyle="--")
     ax.text(
-        mdates.date2num(ok[0][0]), 61.5, "il tempo a disposizione: 60 minuti",
-        color="#D55E00", fontsize=9,
+        mdates.date2num(ok[0][0]),
+        61.5,
+        "il tempo a disposizione: 60 minuti",
+        color="#D55E00",
+        fontsize=9,
     )
     ax.bar(
-        [mdates.date2num(t) for t, _ in ok], [m for _, m in ok],
-        width=0.03, color="#0072B2",
+        [mdates.date2num(t) for t, _ in ok],
+        [m for _, m in ok],
+        width=0.03,
+        color="#0072B2",
     )
     ax.xaxis_date()
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%d/%m %H:%M"))
@@ -154,7 +172,8 @@ def figura_sweep() -> None:
     mediana = sorted(m for _, m in ok)[len(ok) // 2]
     ax.set_title(
         f"Il calcolo di tutta Italia sta dentro l'ora: metà delle corse dura meno di {mediana:.0f} minuti",
-        fontsize=11, loc="left",
+        fontsize=11,
+        loc="left",
     )
     fig.autofmt_xdate()
     fig.tight_layout()

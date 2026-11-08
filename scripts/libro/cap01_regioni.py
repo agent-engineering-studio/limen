@@ -54,9 +54,25 @@ ROLLBACK;
 
 def leggi_db() -> dict:
     out = subprocess.run(
-        ["docker", "exec", "-i", "limen-postgres", "psql", "-U", "limen", "-d", "limen",
-         "-At", "-q", "-v", "ON_ERROR_STOP=1"],
-        input=SQL, capture_output=True, text=True, check=True,
+        [
+            "docker",
+            "exec",
+            "-i",
+            "limen-postgres",
+            "psql",
+            "-U",
+            "limen",
+            "-d",
+            "limen",
+            "-At",
+            "-q",
+            "-v",
+            "ON_ERROR_STOP=1",
+        ],
+        input=SQL,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout
     riga = next(r for r in out.splitlines() if r.startswith("{"))
     return json.loads(riga)
@@ -83,7 +99,10 @@ SPOSTA = {
     "it-campania": (-0.25, 0.0),
 }
 
-NOMI_BREVI = {"it-friuli-venezia-giulia": "Friuli V. G.", "it-trentino-alto-adige": "Trentino-A. A."}
+NOMI_BREVI = {
+    "it-friuli-venezia-giulia": "Friuli V. G.",
+    "it-trentino-alto-adige": "Trentino-A. A.",
+}
 
 
 def main() -> None:
@@ -105,9 +124,17 @@ def main() -> None:
         p = g.representative_point()
         dx, dy = SPOSTA.get(f["properties"]["id"], (0.0, 0.0))
         nome = NOMI_BREVI.get(f["properties"]["id"], f["properties"]["nome"])
-        ax.text(p.x + dx, p.y + dy, f"{nome}\n{n:,}".replace(",", "."),
-                ha="center", va="center", fontsize=6.6, linespacing=1.1, color="#111111",
-                path_effects=[pe.withStroke(linewidth=2.2, foreground="white")])
+        ax.text(
+            p.x + dx,
+            p.y + dy,
+            f"{nome}\n{n:,}".replace(",", "."),
+            ha="center",
+            va="center",
+            fontsize=6.6,
+            linespacing=1.1,
+            color="#111111",
+            path_effects=[pe.withStroke(linewidth=2.2, foreground="white")],
+        )
 
     ax.set_xlim(6.4, 18.8)
     ax.set_ylim(35.4, 47.2)
@@ -115,11 +142,19 @@ def main() -> None:
     ax.axis("off")
     ax.set_title(
         "Venti regioni, " + f"{totale:,}".replace(",", ".") + " celle da un chilometro quadrato",
-        fontsize=12, loc="left", color="#111111",
+        fontsize=12,
+        loc="left",
+        color="#111111",
     )
-    ax.text(6.4, 35.55, "Colore più chiaro = più celle (regione più grande).\n"
-            "Fonte: database di Limen, 8 novembre 2026.",
-            fontsize=7.5, color="#444444", va="bottom")
+    ax.text(
+        6.4,
+        35.55,
+        "Colore più chiaro = più celle (regione più grande).\n"
+        "Fonte: database di Limen, 8 novembre 2026.",
+        fontsize=7.5,
+        color="#444444",
+        va="bottom",
+    )
     fig.tight_layout()
     fig.savefig(OUT / "regioni.svg", facecolor="white")
     print(f"scritto {OUT / 'regioni.svg'} ({totale} celle)")

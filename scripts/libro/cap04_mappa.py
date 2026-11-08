@@ -56,15 +56,26 @@ ETICHETTE = {
 
 def sql(query: str) -> list[dict[str, str]]:
     """Esegue una COPY in sola lettura e restituisce le righe come dizionari."""
-    comando = (
-        "BEGIN READ ONLY; "
-        f"COPY ({query}) TO STDOUT WITH CSV HEADER; "
-        "ROLLBACK;"
-    )
+    comando = f"BEGIN READ ONLY; COPY ({query}) TO STDOUT WITH CSV HEADER; ROLLBACK;"
     uscita = subprocess.run(
-        ["docker", "exec", "limen-postgres", "psql", "-U", "limen", "-d", "limen",
-         "-q", "-v", "ON_ERROR_STOP=1", "-c", comando],
-        check=True, capture_output=True, text=True,
+        [
+            "docker",
+            "exec",
+            "limen-postgres",
+            "psql",
+            "-U",
+            "limen",
+            "-d",
+            "limen",
+            "-q",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-c",
+            comando,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout
     righe = [r for r in uscita.splitlines() if r not in ("BEGIN", "ROLLBACK")]
     return list(csv.DictReader(io.StringIO("\n".join(righe))))
@@ -78,11 +89,15 @@ def main() -> None:
         f"FROM latest_risk l JOIN grid_cells g ON g.id = l.cell_id "
         f"WHERE g.aoi_id = '{AOI}' AND l.hazard_type IN ('landslide', 'flood')"
     )
-    confine = sql(f"SELECT ST_AsText(ST_Simplify(geom, 0.002)) AS wkt FROM aoi WHERE id = '{AOI}'")[0]["wkt"]
+    confine = sql(f"SELECT ST_AsText(ST_Simplify(geom, 0.002)) AS wkt FROM aoi WHERE id = '{AOI}'")[
+        0
+    ]["wkt"]
     quando = max(c["computed_at"] for c in celle)[:16]
 
     fig, assi = plt.subplots(2, 1, figsize=(9, 8.4))
-    for ax, (pericolo, titolo) in zip(assi, [("landslide", "Frana"), ("flood", "Alluvione")]):
+    for ax, (pericolo, titolo) in zip(
+        assi, [("landslide", "Frana"), ("flood", "Alluvione")], strict=False
+    ):
         ax.margins(0.01)
         sue = [c for c in celle if c["pericolo"] == pericolo]
         poligoni, colori = [], []
@@ -102,7 +117,8 @@ def main() -> None:
         n = len(sue)
         riga = ", ".join(
             f"{ETICHETTE[k]} {100 * conta[k] / n:.0f} %".replace(".", ",")
-            for k in ETICHETTE if conta.get(k)
+            for k in ETICHETTE
+            if conta.get(k)
         )
         ax.set_title(f"{titolo}: {riga}", fontsize=10, loc="left")
 
@@ -112,7 +128,9 @@ def main() -> None:
     fig.subplots_adjust(hspace=0.12, top=0.93, bottom=0.06, left=0.01, right=0.99)
     fig.suptitle(
         f"Liguria, stessa ora, due pericoli (punteggi del {quando[:10]}, ore {quando[11:16]} UTC)",
-        x=0.02, ha="left", fontsize=11,
+        x=0.02,
+        ha="left",
+        fontsize=11,
     )
     fig.patch.set_facecolor("white")
     fig.savefig(OUT / "mappa_liguria.png", dpi=160, bbox_inches="tight", facecolor="white")

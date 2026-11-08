@@ -90,30 +90,70 @@ PUNTI = [
 def figura_presi_vs_base() -> None:
     fig, ax = plt.subplots(figsize=(8.2, 5.6))
     x = np.logspace(-1, 2.1, 200)
-    for k, stile, et in [(1, "-", "come il caso"), (3, "--", "3 volte il caso"), (10, ":", "10 volte il caso"),
-                         (50, "-.", "50 volte")]:
+    for k, stile, et in [
+        (1, "-", "come il caso"),
+        (3, "--", "3 volte il caso"),
+        (10, ":", "10 volte il caso"),
+        (50, "-.", "50 volte"),
+    ]:
         ax.plot(x, k * x, color="#999", lw=1, ls=stile)
         xt = 0.55 * 100 / k
-        ax.text(xt, k * xt, et, fontsize=7.5, color="#555", ha="center", va="center",
-                bbox={"boxstyle": "round,pad=0.15", "fc": "white", "ec": "none"})
+        ax.text(
+            xt,
+            k * xt,
+            et,
+            fontsize=7.5,
+            color="#555",
+            ha="center",
+            va="center",
+            bbox={"boxstyle": "round,pad=0.15", "fc": "white", "ec": "none"},
+        )
     ax.plot([100], [100], "X", ms=10, color=COL["ipotesi"])
-    ax.annotate("«sempre in allerta»:\nprende tutto, non distingue niente", (100, 100), xytext=(20, 4),
-                fontsize=8, color=COL["ipotesi"], arrowprops={"arrowstyle": "->", "color": COL["ipotesi"]})
+    ax.annotate(
+        "«sempre in allerta»:\nprende tutto, non distingue niente",
+        (100, 100),
+        xytext=(20, 4),
+        fontsize=8,
+        color=COL["ipotesi"],
+        arrowprops={"arrowstyle": "->", "color": COL["ipotesi"]},
+    )
     etichette = {
-        "Basilicata 2024": (-62, 4), "Basilicata 2025": (-30, -14),
-        "Liguria 2019, «moderato»": (-40, 9), "Liguria 2019, «alto»": (6, 0),
-        "Emilia-Romagna": (-40, -13), "Lombardia": (-52, 0), "Sardegna": (-12, 8),
+        "Basilicata 2024": (-62, 4),
+        "Basilicata 2025": (-30, -14),
+        "Liguria 2019, «moderato»": (-40, 9),
+        "Liguria 2019, «alto»": (6, 0),
+        "Emilia-Romagna": (-40, -13),
+        "Lombardia": (-52, 0),
+        "Sardegna": (-12, 8),
         "Puglia 2025": (6, -2),
     }
     for et, presi, base, per, mk in PUNTI:
         ax.plot([base], [presi], mk, color=COL[per], ms=7, mec="white", mew=0.6)
         if et in etichette:
-            ax.annotate(et, (base, presi), xytext=etichette[et], textcoords="offset points", fontsize=7.5,
-                        color="#333")
-    ax.annotate("Sicilia, Calabria", (3, 8.5), xytext=(4, 2.2), fontsize=7.5, color="#333",
-                arrowprops={"arrowstyle": "-", "color": "#999"})
-    ax.annotate("Sicilia, Puglia, Calabria", (30, 62), xytext=(7, 30), fontsize=7.5, color="#333",
-                arrowprops={"arrowstyle": "-", "color": "#999"})
+            ax.annotate(
+                et,
+                (base, presi),
+                xytext=etichette[et],
+                textcoords="offset points",
+                fontsize=7.5,
+                color="#333",
+            )
+    ax.annotate(
+        "Sicilia, Calabria",
+        (3, 8.5),
+        xytext=(4, 2.2),
+        fontsize=7.5,
+        color="#333",
+        arrowprops={"arrowstyle": "-", "color": "#999"},
+    )
+    ax.annotate(
+        "Sicilia, Puglia, Calabria",
+        (30, 62),
+        xytext=(7, 30),
+        fontsize=7.5,
+        color="#333",
+        arrowprops={"arrowstyle": "-", "color": "#999"},
+    )
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlim(0.1, 130)
@@ -126,22 +166,37 @@ def figura_presi_vs_base() -> None:
     ax.set_ylabel("eventi veri presi in tempo (%)")
     leg = [
         plt.Line2D([], [], marker="o", ls="", color=COL["incendio"], label="incendio, «alto»"),
-        plt.Line2D([], [], marker="D", ls="", color=COL["incendio"], label="incendio, «molto alto»"),
+        plt.Line2D(
+            [], [], marker="D", ls="", color=COL["incendio"], label="incendio, «molto alto»"
+        ),
         plt.Line2D([], [], marker="s", ls="", color=COL["alluvione"], label="alluvione, «alto»"),
         plt.Line2D([], [], marker="^", ls="", color=COL["frana"], label="frana, «alto»"),
         plt.Line2D([], [], marker="v", ls="", color=COL["frana"], label="frana, «moderato»"),
     ]
     ax.legend(handles=leg, frameon=False, fontsize=8, loc="upper left")
-    ax.set_title("Quanti eventi presi, e a quale prezzo:\npiù il punto sta sopra la diagonale, più il motore distingue",
-                 loc="left", fontsize=10)
+    ax.set_title(
+        "Quanti eventi presi, e a quale prezzo:\npiù il punto sta sopra la diagonale, più il motore distingue",
+        loc="left",
+        fontsize=10,
+    )
     salva(fig, "presi_vs_base.svg")
 
 
 def frecce(ax, righe, colore):
     for et, c0, c1, h0, h1 in righe:
-        ax.annotate("", (c1, h1), (c0, h0), arrowprops={"arrowstyle": "->", "color": colore, "lw": 1.6})
+        ax.annotate(
+            "", (c1, h1), (c0, h0), arrowprops={"arrowstyle": "->", "color": colore, "lw": 1.6}
+        )
         ax.plot([c0], [h0], "o", color="#888", ms=5)
-        ax.annotate(et, (c0, h0), xytext=(-4, 5), textcoords="offset points", fontsize=7.5, ha="right", color="#333")
+        ax.annotate(
+            et,
+            (c0, h0),
+            xytext=(-4, 5),
+            textcoords="offset points",
+            fontsize=7.5,
+            ha="right",
+            color="#333",
+        )
 
 
 def figura_carico_295() -> None:
@@ -162,17 +217,29 @@ def figura_carico_295() -> None:
     ]
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(10, 4.2), sharey=True)
     frecce(a1, bocciata, "#a93226")
-    a1.set_title("Pesi stimati per tutte le coperture:\nil rosso si svuota (bocciata)", loc="left", fontsize=10)
+    a1.set_title(
+        "Pesi stimati per tutte le coperture:\nil rosso si svuota (bocciata)",
+        loc="left",
+        fontsize=10,
+    )
     frecce(a2, promossa, "#117864")
-    a2.set_title("Variante E, solo praterie e vegetazione rada:\npiù incendi presi, poco carico in più (promossa)",
-                 loc="left", fontsize=10)
+    a2.set_title(
+        "Variante E, solo praterie e vegetazione rada:\npiù incendi presi, poco carico in più (promossa)",
+        loc="left",
+        fontsize=10,
+    )
     for ax in (a1, a2):
         ax.set_xlim(-0.1, 2.7)
         ax.set_ylim(-0.5, 12.5)
         ax.set_xlabel("territorio in «molto alto» (% delle giornate-cella)")
     a1.set_ylabel("incendi presi in «molto alto» (%)")
-    fig.suptitle("Incendio, classe «molto alto», estati 2024 e 2025: da oggi (punto grigio) alla variante (freccia)",
-                 x=0.01, ha="left", fontsize=10.5, y=1.04)
+    fig.suptitle(
+        "Incendio, classe «molto alto», estati 2024 e 2025: da oggi (punto grigio) alla variante (freccia)",
+        x=0.01,
+        ha="left",
+        fontsize=10.5,
+        y=1.04,
+    )
     salva(fig, "carico_295.svg")
 
 
@@ -188,18 +255,34 @@ def figura_carico_420() -> None:
     fig, ax = plt.subplots(figsize=(8, 4.8))
     for reg, n, o, a, b in dati:
         po, pa, pb = (100 * v[1] / n for v in (o, a, b))
-        ax.annotate("", (a[0], pa), (o[0], po), arrowprops={"arrowstyle": "->", "color": "#b9770e", "lw": 1.6})
-        ax.annotate("", (b[0], pb), (o[0], po), arrowprops={"arrowstyle": "->", "color": "#1f618d", "lw": 1.6})
+        ax.annotate(
+            "",
+            (a[0], pa),
+            (o[0], po),
+            arrowprops={"arrowstyle": "->", "color": "#b9770e", "lw": 1.6},
+        )
+        ax.annotate(
+            "",
+            (b[0], pb),
+            (o[0], po),
+            arrowprops={"arrowstyle": "->", "color": "#1f618d", "lw": 1.6},
+        )
         ax.plot([o[0]], [po], "o", color="#555", ms=6)
-        ax.annotate(reg, (o[0], po), xytext=(-6, 6), textcoords="offset points", fontsize=8, ha="right")
+        ax.annotate(
+            reg, (o[0], po), xytext=(-6, 6), textcoords="offset points", fontsize=8, ha="right"
+        )
     ax.plot([], [], color="#b9770e", lw=1.6, label="A: alza e abbassa le zone mappate")
     ax.plot([], [], color="#1f618d", lw=1.6, label="B: solo verso il basso")
     ax.plot([], [], "o", color="#555", label="oggi (flood-v1.3.0)")
     ax.legend(frameon=False, fontsize=8.5, loc="lower right")
     ax.set_xlabel("allerte «alto» nei giorni qualunque (% delle celle-giorno)")
     ax.set_ylabel("celle allagate prese in tempo (%)")
-    ax.set_title("Alluvione, acqua temporanea dal satellite: A prende di più perché allerta di più,\n"
-                 "B allerta di meno ma perde allagamenti veri. Nessuna delle due passa.", loc="left", fontsize=10)
+    ax.set_title(
+        "Alluvione, acqua temporanea dal satellite: A prende di più perché allerta di più,\n"
+        "B allerta di meno ma perde allagamenti veri. Nessuna delle due passa.",
+        loc="left",
+        fontsize=10,
+    )
     salva(fig, "carico_420.svg")
 
 

@@ -69,7 +69,7 @@ def psql_copy(sql: str) -> str:
         text=True,
         check=True,
     )
-    return "\n".join(l for l in res.stdout.splitlines() if l not in ("BEGIN", "ROLLBACK"))
+    return "\n".join(r for r in res.stdout.splitlines() if r not in ("BEGIN", "ROLLBACK"))
 
 
 # --- 1. copertura ---------------------------------------------------------------
@@ -86,7 +86,11 @@ VOCI = [
     ("Aree a pericolo di frana dei Piani di bacino", "count(f.pai_class_norm)", "aree"),
     ("Aree che possono allagarsi (ISPRA)", "count(f.flood_hazard_norm)", "aree"),
     ("Incendi passati visti dal satellite", "count(*) FILTER (WHERE f.fire_density > 0)", "mai"),
-    ("Vicinanza a città e infrastrutture", "count(*) FILTER (WHERE f.near_urban OR f.near_infra)", "mai"),
+    (
+        "Vicinanza a città e infrastrutture",
+        "count(*) FILTER (WHERE f.near_urban OR f.near_infra)",
+        "mai",
+    ),
     ("Umidità del terreno dalla forma del versante", "count(f.twi)", "mai"),
     ("Distanza dalle faglie", "count(f.dist_faults_m)", "mai"),
     ("Popolazione ed edifici", "count(f.population_count)", "mai"),
@@ -115,8 +119,10 @@ def figura_copertura() -> pd.DataFrame:
     fig, ax = plt.subplots(figsize=(9.2, 6.0))
     y = np.arange(len(df))[::-1]
     ax.barh(y, df["pct"], color=[colori[g] for g in df["gruppo"]], height=0.66, edgecolor="white")
-    for yi, p in zip(y, df["pct"]):
-        ax.text(min(p, 100) + 1, yi, f"{p:.0f} %".replace(".", ","), va="center", fontsize=9, color=INK)
+    for yi, p in zip(y, df["pct"], strict=False):
+        ax.text(
+            min(p, 100) + 1, yi, f"{p:.0f} %".replace(".", ","), va="center", fontsize=9, color=INK
+        )
     ax.set_yticks(y, df["voce"])
     ax.set_xlim(0, 118)
     ax.set_xticks([0, 25, 50, 75, 100], ["0 %", "25 %", "50 %", "75 %", "100 %"])
@@ -128,7 +134,10 @@ def figura_copertura() -> pd.DataFrame:
     ax.legend(
         handles=[
             Patch(color=colori["ovunque"], label="caricato su tutta Italia"),
-            Patch(color=colori["aree"], label="c'è solo dentro le aree mappate dall'ente (fuori vale «nessuna area»)"),
+            Patch(
+                color=colori["aree"],
+                label="c'è solo dentro le aree mappate dall'ente (fuori vale «nessuna area»)",
+            ),
             Patch(color=colori["mai"], label="previsto ma mai calcolato su questa installazione"),
         ],
         loc="lower center",
@@ -136,7 +145,11 @@ def figura_copertura() -> pd.DataFrame:
         frameon=False,
         fontsize=8.5,
     )
-    ax.set_title("Quasi tutto il territorio è descritto; cinque dati previsti mancano", loc="left", fontsize=11)
+    ax.set_title(
+        "Quasi tutto il territorio è descritto; cinque dati previsti mancano",
+        loc="left",
+        fontsize=11,
+    )
     fig.tight_layout()
     fig.savefig(OUT / "copertura.svg", transparent=False, facecolor="white", bbox_inches="tight")
     plt.close(fig)
@@ -202,10 +215,14 @@ def figura_pendenza(df: pd.DataFrame, anelli: list[np.ndarray]) -> None:
     v = df["pendenza"].to_numpy(dtype=float)
     img, ext = raster(df, v)
     fig, ax = base_mappa(anelli)
-    im = ax.imshow(img, origin="lower", extent=ext, cmap="cividis_r", vmin=0, vmax=35, interpolation="nearest")
+    im = ax.imshow(
+        img, origin="lower", extent=ext, cmap="cividis_r", vmin=0, vmax=35, interpolation="nearest"
+    )
     cb = fig.colorbar(im, ax=ax, shrink=0.45, pad=0.01, extend="max")
     cb.set_label("pendenza media della cella (gradi)")
-    ax.set_title("Dove il terreno è ripido: Alpi e Appennino si leggono da soli", loc="left", fontsize=11)
+    ax.set_title(
+        "Dove il terreno è ripido: Alpi e Appennino si leggono da soli", loc="left", fontsize=11
+    )
     fig.tight_layout()
     fig.savefig(OUT / "mappa-pendenza.svg", facecolor="white", bbox_inches="tight")
     plt.close(fig)
@@ -223,7 +240,10 @@ def figura_idraulica(df: pd.DataFrame, anelli: list[np.ndarray]) -> None:
     n = df["idraulica"].value_counts()
     ax.legend(
         handles=[
-            Patch(color="#c8432f", label=f"alta probabilità (P3): {n.get('P3', 0):,} celle".replace(",", ".")),
+            Patch(
+                color="#c8432f",
+                label=f"alta probabilità (P3): {n.get('P3', 0):,} celle".replace(",", "."),
+            ),
             Patch(color="#e8c547", label=f"media (P2): {n.get('P2', 0):,} celle".replace(",", ".")),
             Patch(color="#3a8a8c", label=f"bassa (P1): {n.get('P1', 0):,} celle".replace(",", ".")),
             Patch(color="#ececec", label="nessuna area mappata nella cella"),

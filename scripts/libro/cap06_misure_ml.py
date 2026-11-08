@@ -80,7 +80,9 @@ def main() -> None:
     )
     fig.suptitle(
         "Il modello batte la formula, ma resta lontano dalla perfezione",
-        fontsize=12, x=0.01, ha="left",
+        fontsize=12,
+        x=0.01,
+        ha="left",
     )
     fig.tight_layout()
     fig.savefig(OUT / "misure_ml.svg", bbox_inches="tight")

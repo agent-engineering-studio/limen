@@ -60,7 +60,13 @@ GRIGIO = "#d9d9d9"
 
 
 def main() -> None:
-    plt.rcParams.update({"font.family": "sans-serif", "font.sans-serif": ["DejaVu Sans", "Helvetica", "Arial"], "svg.fonttype": "none"})
+    plt.rcParams.update(
+        {
+            "font.family": "sans-serif",
+            "font.sans-serif": ["DejaVu Sans", "Helvetica", "Arial"],
+            "svg.fonttype": "none",
+        }
+    )
     n = len(RIGHE)
     fig, ax = plt.subplots(figsize=(10, 7.4), facecolor="white")
     ax.set_facecolor("white")

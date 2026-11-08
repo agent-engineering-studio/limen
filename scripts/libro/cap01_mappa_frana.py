@@ -55,9 +55,27 @@ ROLLBACK;
 
 def leggi_db() -> tuple[np.ndarray, np.ndarray, list[str], str]:
     out = subprocess.run(
-        ["docker", "exec", "-i", "limen-postgres", "psql", "-U", "limen", "-d", "limen",
-         "-At", "-q", "-F", "\t", "-v", "ON_ERROR_STOP=1"],
-        input=SQL, capture_output=True, text=True, check=True,
+        [
+            "docker",
+            "exec",
+            "-i",
+            "limen-postgres",
+            "psql",
+            "-U",
+            "limen",
+            "-d",
+            "limen",
+            "-At",
+            "-q",
+            "-F",
+            "\t",
+            "-v",
+            "ON_ERROR_STOP=1",
+        ],
+        input=SQL,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout
     righe = [r.split("\t") for r in out.splitlines() if r.count("\t") == 3]
     x = np.array([float(r[0]) for r in righe])
@@ -85,17 +103,35 @@ def main() -> None:
     ax.axis("off")
 
     voci = [
-        Patch(facecolor=col, edgecolor="#8b949e", linewidth=0.4,
-              label=f"{nome}: {conta.get(c, 0):,}".replace(",", "."))
+        Patch(
+            facecolor=col,
+            edgecolor="#8b949e",
+            linewidth=0.4,
+            label=f"{nome}: {conta.get(c, 0):,}".replace(",", "."),
+        )
         for c, nome, col in [*CLASSI, IGNOTO]
     ]
-    leg = ax.legend(handles=voci, loc="lower left", frameon=False, fontsize=8,
-                    title="Classe di pericolo frana\n(numero di celle)", title_fontsize=8.5,
-                    labelcolor="#e6edf3", alignment="left")
+    leg = ax.legend(
+        handles=voci,
+        loc="lower left",
+        frameon=False,
+        fontsize=8,
+        title="Classe di pericolo frana\n(numero di celle)",
+        title_fontsize=8.5,
+        labelcolor="#e6edf3",
+        alignment="left",
+    )
     leg.get_title().set_color("#e6edf3")
     ax.set_title("Pericolo frana, cella per cella", loc="left", fontsize=12, color="#e6edf3")
-    ax.text(18.8, 35.45, f"Calcolo orario del {quando} UTC.\nFonte: database di Limen.",
-            ha="right", va="bottom", fontsize=7, color="#8b949e")
+    ax.text(
+        18.8,
+        35.45,
+        f"Calcolo orario del {quando} UTC.\nFonte: database di Limen.",
+        ha="right",
+        va="bottom",
+        fontsize=7,
+        color="#8b949e",
+    )
     fig.tight_layout()
     fig.savefig(OUT / "mappa-frana.png", facecolor=FONDO)
     print(f"scritto {OUT / 'mappa-frana.png'}: {dict(conta)} alle {quando}")

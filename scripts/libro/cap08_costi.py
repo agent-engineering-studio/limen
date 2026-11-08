@@ -41,11 +41,17 @@ VOCI = [
 
 
 def main() -> None:
-    plt.rcParams.update({"font.family": "sans-serif", "font.sans-serif": ["DejaVu Sans", "Helvetica", "Arial"], "svg.fonttype": "none"})
+    plt.rcParams.update(
+        {
+            "font.family": "sans-serif",
+            "font.sans-serif": ["DejaVu Sans", "Helvetica", "Arial"],
+            "svg.fonttype": "none",
+        }
+    )
     fig, ax = plt.subplots(figsize=(10, 4.6), facecolor="white")
     ax.set_facecolor("white")
     n = len(VOCI)
-    for i, (et, lo, hi, col) in enumerate(VOCI):
+    for i, (_et, lo, hi, col) in enumerate(VOCI):
         y = n - 1 - i
         larghezza = max(hi - lo, 0.0)
         ax.barh(y, hi, color=col, alpha=0.25, height=0.55)

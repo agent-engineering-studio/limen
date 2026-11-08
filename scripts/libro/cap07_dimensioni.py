@@ -68,7 +68,19 @@ NOMI = {
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     out = subprocess.run(
-        ["docker", "exec", "-i", "limen-postgres", "psql", "-U", "limen", "-d", "limen", "-q", "-At"],
+        [
+            "docker",
+            "exec",
+            "-i",
+            "limen-postgres",
+            "psql",
+            "-U",
+            "limen",
+            "-d",
+            "limen",
+            "-q",
+            "-At",
+        ],
         input=SQL,
         capture_output=True,
         text=True,
@@ -87,8 +99,10 @@ def main() -> None:
     voci = voci[::-1]
     fig, ax = plt.subplots(figsize=(8.6, 4.8), facecolor="white")
     ax.barh(
-        [v[0] for v in voci], [v[1] for v in voci],
-        color=["#0072B2" if v[2] else "#D55E00" for v in voci], height=0.65,
+        [v[0] for v in voci],
+        [v[1] for v in voci],
+        color=["#0072B2" if v[2] else "#D55E00" for v in voci],
+        height=0.65,
     )
     for y, v in enumerate(voci):
         etichetta = f"{v[1]:.1f} GB" if v[1] >= 1 else f"{v[1] * 1000:.0f} MB"
@@ -101,7 +115,8 @@ def main() -> None:
         f"{totale / 1e9:.0f} GB in tutto, quasi tutti ricalcolabili (blu);\n"
         "ciò che va salvato ogni notte sta in una copia da "
         f"{backup / 1e6:.0f} MB (arancio)",
-        fontsize=11, loc="left",
+        fontsize=11,
+        loc="left",
     )
     fig.tight_layout()
     fig.savefig(OUT / "dimensioni.svg", bbox_inches="tight")

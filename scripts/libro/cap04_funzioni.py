@@ -85,8 +85,14 @@ def bande(ax, classi: dict, alpha: float = 0.13) -> None:
         lo, hi = classi[k]
         ax.axhspan(lo, hi, color=RAMPA[k], alpha=alpha if k != "none" else 0.06, lw=0)
         ax.text(
-            1.005, (lo + hi) / 2, ETICHETTE[k], transform=ax.get_yaxis_transform(),
-            va="center", ha="left", fontsize=8, color="#333",
+            1.005,
+            (lo + hi) / 2,
+            ETICHETTE[k],
+            transform=ax.get_yaxis_transform(),
+            va="center",
+            ha="left",
+            fontsize=8,
+            color="#333",
         )
 
 
@@ -101,22 +107,43 @@ def salva(fig, nome: str) -> None:
 # --------------------------------------------------------------- classi
 def figura_classi() -> None:
     fig, ax = plt.subplots(figsize=(8, 2.6))
-    righe = [("Frana", FRANA["classes"]), ("Alluvione", ALLUV["classes"]), ("Incendio", INCEN["classes"])]
-    for i, (nome, cl) in enumerate(reversed(righe)):
+    righe = [
+        ("Frana", FRANA["classes"]),
+        ("Alluvione", ALLUV["classes"]),
+        ("Incendio", INCEN["classes"]),
+    ]
+    for i, (_nome, cl) in enumerate(reversed(righe)):
         for k in ORDINE:
             lo, hi = cl[k]
             ax.barh(i, hi - lo, left=lo, color=RAMPA[k], edgecolor="white", height=0.6)
             colore_testo = "white" if k in ("none", "low") else "#111"
             if hi - lo >= 0.12:
-                ax.text((lo + hi) / 2, i, ETICHETTE[k], ha="center", va="center", fontsize=8, color=colore_testo)
+                ax.text(
+                    (lo + hi) / 2,
+                    i,
+                    ETICHETTE[k],
+                    ha="center",
+                    va="center",
+                    fontsize=8,
+                    color=colore_testo,
+                )
         for k in ORDINE[1:]:
-            ax.text(cl[k][0], i + 0.36, f"{cl[k][0]:.2f}".replace(".", ","), ha="center", fontsize=7, color="#444")
+            ax.text(
+                cl[k][0],
+                i + 0.36,
+                f"{cl[k][0]:.2f}".replace(".", ","),
+                ha="center",
+                fontsize=7,
+                color="#444",
+            )
     ax.set_yticks(range(3), [r[0] for r in reversed(righe)])
     ax.set_xlim(0, 1)
     ax.set_xlabel("punteggio della cella (da 0 a 1)")
     ax.spines["left"].set_visible(False)
     ax.tick_params(axis="y", length=0)
-    ax.set_title("Dove il punteggio cambia classe: tre pericoli, tre scale", loc="left", fontsize=11)
+    ax.set_title(
+        "Dove il punteggio cambia classe: tre pericoli, tre scale", loc="left", fontsize=11
+    )
     salva(fig, "classi.svg")
 
 
@@ -131,16 +158,26 @@ def figura_frana_soglie() -> None:
     }
     d = np.linspace(1, 120, 400)
     fig, ax = plt.subplots(figsize=(7.5, 4.2))
-    for (k, et), col in zip(nomi.items(), LINEE):
+    for (k, et), col in zip(nomi.items(), LINEE, strict=False):
         a, b = macro[k]["alpha"], macro[k]["beta"]
         mm = a * d ** (1 - b)  # intensità α·D^-β per la durata D = millimetri cumulati
-        ax.plot(d, mm, color=col, lw=2 if k != "italy_default" else 1.4, ls="-" if k != "italy_default" else "--", label=et)
+        ax.plot(
+            d,
+            mm,
+            color=col,
+            lw=2 if k != "italy_default" else 1.4,
+            ls="-" if k != "italy_default" else "--",
+            label=et,
+        )
     a, b = macro["southern_italy"]["alpha"], macro["southern_italy"]["beta"]
     v72 = a * 72 ** (1 - b)
     ax.plot([72], [v72], "o", color="#111")
     ax.annotate(
-        f"Sud, 3 giorni: {v72:.0f} mm".replace(".", ","), (72, v72), xytext=(78, v72 - 14),
-        fontsize=8.5, arrowprops={"arrowstyle": "-", "color": "#555"},
+        f"Sud, 3 giorni: {v72:.0f} mm".replace(".", ","),
+        (72, v72),
+        xytext=(78, v72 - 14),
+        fontsize=8.5,
+        arrowprops={"arrowstyle": "-", "color": "#555"},
     )
     ax.set_xlabel("durata della pioggia (ore)")
     ax.set_ylabel("pioggia caduta dall'inizio (mm)")
@@ -149,7 +186,8 @@ def figura_frana_soglie() -> None:
     ax.legend(frameon=False, fontsize=8.5, loc="upper left")
     ax.set_title(
         "Quanta pioggia serve perché le frane comincino: più dura, più millimetri, ma ogni ora può essere più debole",
-        loc="left", fontsize=10.5,
+        loc="left",
+        fontsize=10.5,
     )
     salva(fig, "frana_soglie.svg")
 
@@ -172,24 +210,35 @@ def figura_frana_terreno_pioggia() -> None:
     ax.plot([0.676], [0.468], "o", ms=7, mfc="white", mec="#111")
     ax.annotate(
         "Marche, maggio 2014:\nla cella tipica con una frana\n(punteggio 0,42, «moderato»)",
-        (0.676, 0.468), xytext=(0.04, 0.80), fontsize=8.3, color="#111",
+        (0.676, 0.468),
+        xytext=(0.04, 0.80),
+        fontsize=8.3,
+        color="#111",
         bbox={"boxstyle": "round", "fc": "white", "ec": "#888", "alpha": 0.9},
         arrowprops={"arrowstyle": "->", "color": "#111"},
     )
     ax.text(
-        0.98, 0.985, "«molto alto» (0,75) solo con tutto al massimo,\nsenza un terremoto o un incendio recente",
-        ha="right", va="top", fontsize=7.5, color="#111",
+        0.98,
+        0.985,
+        "«molto alto» (0,75) solo con tutto al massimo,\nsenza un terremoto o un incendio recente",
+        ha="right",
+        va="top",
+        fontsize=7.5,
+        color="#111",
         bbox={"boxstyle": "round", "fc": "white", "ec": "#888", "alpha": 0.9},
     )
     ax.set_xlabel("quanto è fragile il terreno (0 = stabile, 1 = massimo)")
     ax.set_ylabel("quanto pesa la pioggia (0 = niente, 1 = massimo)")
     ax.legend(
         handles=[Patch(color=RAMPA[k], label=ETICHETTE[k]) for k in ORDINE],
-        loc="lower right", fontsize=8, framealpha=0.9,
+        loc="lower right",
+        fontsize=8,
+        framealpha=0.9,
     )
     ax.set_title(
         "Frana: per arrivare ad «alto» servono terreno fragile e pioggia forte insieme",
-        loc="left", fontsize=10,
+        loc="left",
+        fontsize=10,
     )
     salva(fig, "frana_terreno_pioggia.svg")
 
@@ -225,10 +274,15 @@ def figura_alluvione_inneschi() -> None:
     r = np.linspace(0, 12, 500)
     a2.plot(r, rampa(r, f["normal_ratio"], f["saturation_ratio"]), color=LINEE[1], lw=2)
     a2.axvspan(0, 1.63, color="#999", alpha=0.12, lw=0)
-    a2.text(0.1, 0.9, "9 giorni qualunque\nsu 10 stanno qui\n(sotto 1,63)", fontsize=8, color="#444")
+    a2.text(
+        0.1, 0.9, "9 giorni qualunque\nsu 10 stanno qui\n(sotto 1,63)", fontsize=8, color="#444"
+    )
     a2.plot([6.39], [rampa(6.39, f["normal_ratio"], f["saturation_ratio"])], "o", color="#111")
     a2.annotate(
-        "giorno di piena tipico\n(Romagna 2023-24): 6,4", (6.39, 0.57), xytext=(7.2, 0.3), fontsize=8,
+        "giorno di piena tipico\n(Romagna 2023-24): 6,4",
+        (6.39, 0.57),
+        xytext=(7.2, 0.3),
+        fontsize=8,
         arrowprops={"arrowstyle": "-", "color": "#555"},
     )
     a2.set_xlabel("portata del fiume / sua piena ordinaria")
@@ -249,8 +303,13 @@ def figura_alluvione_punteggio() -> None:
     for et, susc, col in [
         ("zona a pericolosità alta nel piano di bacino (0,80)", 0.80, LINEE[0]),
         ("zona a pericolosità media (0,50)", 0.50, LINEE[1]),
-        (f"cella fuori dalle mappe ufficiali ({ALLUV['susceptibility']['unmapped']:.2f})".replace(".", ","),
-         ALLUV["susceptibility"]["unmapped"], LINEE[2]),
+        (
+            f"cella fuori dalle mappe ufficiali ({ALLUV['susceptibility']['unmapped']:.2f})".replace(
+                ".", ","
+            ),
+            ALLUV["susceptibility"]["unmapped"],
+            LINEE[2],
+        ),
     ]:
         ax.plot(mm, susc * innesco, color=col, lw=2, label=et)
     ax.set_xlabel("pioggia in 3 giorni, su suolo zuppo (mm)")
@@ -260,7 +319,8 @@ def figura_alluvione_punteggio() -> None:
     ax.legend(frameon=False, fontsize=8, loc="upper left")
     ax.set_title(
         "Alluvione: la stessa pioggia pesa di più dove l'acqua sa già dove andare",
-        loc="left", fontsize=10,
+        loc="left",
+        fontsize=10,
     )
     salva(fig, "alluvione_punteggio.svg")
 
@@ -290,10 +350,15 @@ def figura_incendio() -> None:
     ]
     fig, ax = plt.subplots(figsize=(7.8, 4.4))
     bande(ax, cl)
-    for (cod, et), col in zip(coperture, LINEE):
+    for (cod, et), col in zip(coperture, LINEE, strict=False):
         terreno = w["base"] + w["fuel"] * peso_combustibile(cod)  # pendenza nulla
-        ax.plot(fwi, np.minimum(fwi_norm * terreno, 1), color=col, lw=2,
-                label=f"{et} (combustibile {peso_combustibile(cod):.2f})".replace(".", ","))
+        ax.plot(
+            fwi,
+            np.minimum(fwi_norm * terreno, 1),
+            color=col,
+            lw=2,
+            label=f"{et} (combustibile {peso_combustibile(cod):.2f})".replace(".", ","),
+        )
     ax.axvline(fwi_max, color="#999", lw=0.8, ls=":")
     ax.text(fwi_max + 0.5, 0.03, "FWI 50:\n«estremo»", fontsize=8, color="#555")
     ax.set_xlabel("indice meteo degli incendi (FWI)")
@@ -303,7 +368,8 @@ def figura_incendio() -> None:
     ax.legend(frameon=False, fontsize=8, loc="upper left")
     ax.set_title(
         "Incendio: il tempo decide quanto, il bosco decide fin dove si può arrivare",
-        loc="left", fontsize=10,
+        loc="left",
+        fontsize=10,
     )
     salva(fig, "incendio_fwi.svg")
 

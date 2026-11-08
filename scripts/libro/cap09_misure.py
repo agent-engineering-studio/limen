@@ -32,15 +32,38 @@ import matplotlib.pyplot as plt
 OUT = Path(__file__).resolve().parents[2] / "docs" / "book" / "figure" / "cap09"
 INK = "#333333"
 
-plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 10, "text.color": INK,
-                     "axes.labelcolor": INK, "xtick.color": INK, "ytick.color": INK,
-                     "svg.fonttype": "none"})
+plt.rcParams.update(
+    {
+        "font.family": "DejaVu Sans",
+        "font.size": 10,
+        "text.color": INK,
+        "axes.labelcolor": INK,
+        "xtick.color": INK,
+        "ytick.color": INK,
+        "svg.fonttype": "none",
+    }
+)
 
 PROVE = [
     ("Frana · umidità del suolo europea (EDO)", 0.001, "scartato: non aggiunge nulla", "#b0b0b0"),
-    ("Incendio · prati e chiome a 10 m (Copernicus)", 0.02, "scartato: troppo poco per il costo", "#b0b0b0"),
-    ("Alluvione · acqua temporanea, Emilia-Romagna", 0.08, "segnale vero; nel motore il backtest non passa", "#1f6f78"),
-    ("Alluvione · acqua temporanea, resto d'Italia", 0.10, "segnale vero; nel motore il backtest non passa", "#1f6f78"),
+    (
+        "Incendio · prati e chiome a 10 m (Copernicus)",
+        0.02,
+        "scartato: troppo poco per il costo",
+        "#b0b0b0",
+    ),
+    (
+        "Alluvione · acqua temporanea, Emilia-Romagna",
+        0.08,
+        "segnale vero; nel motore il backtest non passa",
+        "#1f6f78",
+    ),
+    (
+        "Alluvione · acqua temporanea, resto d'Italia",
+        0.10,
+        "segnale vero; nel motore il backtest non passa",
+        "#1f6f78",
+    ),
 ]
 
 
@@ -48,20 +71,30 @@ def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(9.0, 3.6))
     y = list(range(len(PROVE)))[::-1]
-    for yi, (nome, g, esito, col) in zip(y, PROVE):
+    for yi, (_nome, g, esito, col) in zip(y, PROVE, strict=False):
         ax.barh(yi, g, color=col, height=0.6)
-        ax.text(g + 0.002, yi, (f"+{g:.3f}" if g < 0.01 else f"+{g:.2f}").replace(".", ",") + f"   {esito}",
-                va="center", fontsize=9)
+        ax.text(
+            g + 0.002,
+            yi,
+            (f"+{g:.3f}" if g < 0.01 else f"+{g:.2f}").replace(".", ",") + f"   {esito}",
+            va="center",
+            fontsize=9,
+        )
     ax.set_yticks(y, [p[0] for p in PROVE])
     ax.set_xlim(0, 0.30)
     ax.set_xticks([0, 0.05, 0.10], ["0", "+0,05", "+0,10"])
-    ax.set_xlabel("Quanto il dato migliora la capacità di distinguere dove l'evento è avvenuto (guadagno di AUC)")
+    ax.set_xlabel(
+        "Quanto il dato migliora la capacità di distinguere dove l'evento è avvenuto (guadagno di AUC)"
+    )
     for s in ("top", "right"):
         ax.spines[s].set_visible(False)
     ax.grid(axis="x", color="#dddddd", linewidth=0.6)
     ax.set_axisbelow(True)
-    ax.set_title("Tre dati nuovi, misurati prima di usarli: due scartati, uno promettente",
-                 loc="left", fontsize=11)
+    ax.set_title(
+        "Tre dati nuovi, misurati prima di usarli: due scartati, uno promettente",
+        loc="left",
+        fontsize=11,
+    )
     fig.tight_layout()
     fig.savefig(OUT / "guadagno-dati-provati.svg", facecolor="white", bbox_inches="tight")
     plt.close(fig)

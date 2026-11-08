@@ -55,7 +55,19 @@ ROLLBACK;
 
 def leggi_centroidi() -> np.ndarray:
     out = subprocess.run(
-        ["docker", "exec", "-i", "limen-postgres", "psql", "-U", "limen", "-d", "limen", "-q", "-At"],
+        [
+            "docker",
+            "exec",
+            "-i",
+            "limen-postgres",
+            "psql",
+            "-U",
+            "limen",
+            "-d",
+            "limen",
+            "-q",
+            "-At",
+        ],
         input=SQL,
         capture_output=True,
         text=True,
@@ -83,8 +95,13 @@ def figura_italia(xy: np.ndarray, folds: dict[str, int]) -> None:
         x, y = (int(v) for v in b.split("|"))
         ax.add_patch(
             Rectangle(
-                (x * EDGE, y * EDGE), EDGE, EDGE,
-                facecolor=COLORI[f], edgecolor="white", linewidth=0.6, alpha=0.78,
+                (x * EDGE, y * EDGE),
+                EDGE,
+                EDGE,
+                facecolor=COLORI[f],
+                edgecolor="white",
+                linewidth=0.6,
+                alpha=0.78,
             )
         )
     ax.set_xlim(6.4, 18.8)
@@ -97,16 +114,21 @@ def figura_italia(xy: np.ndarray, folds: dict[str, int]) -> None:
     ax.set_title(
         "Cinque gruppi di riquadri: a turno, uno fa da esame\n"
         "e gli altri quattro da libro di studio",
-        fontsize=12, loc="left",
+        fontsize=12,
+        loc="left",
     )
     ax.legend(
         handles=[Patch(color=c, label=f"gruppo {i + 1}") for i, c in enumerate(COLORI)],
-        loc="upper right", frameon=False, fontsize=9,
+        loc="upper right",
+        frameon=False,
+        fontsize=9,
     )
     ax.text(
-        6.5, 35.6,
+        6.5,
+        35.6,
         f"{len(folds)} riquadri di circa 50 km di lato, {len(xy):,} celle".replace(",", "."),
-        fontsize=8.5, color="#444444",
+        fontsize=8.5,
+        color="#444444",
     )
     fig.savefig(OUT / "cv_blocchi_italia.svg", bbox_inches="tight")
     plt.close(fig)
@@ -125,8 +147,16 @@ def figura_confronto(xy: np.ndarray, folds: dict[str, int]) -> None:
 
     fig, axes = plt.subplots(1, 2, figsize=(10, 3.9), facecolor="white")
     for ax, test, titolo in (
-        (axes[0], casuale, "Divisione casuale: ogni cella d'esame\nha le vicine nel libro di studio"),
-        (axes[1], a_blocchi, "Divisione a blocchi: l'esame è un\nterritorio intero, mai visto prima"),
+        (
+            axes[0],
+            casuale,
+            "Divisione casuale: ogni cella d'esame\nha le vicine nel libro di studio",
+        ),
+        (
+            axes[1],
+            a_blocchi,
+            "Divisione a blocchi: l'esame è un\nterritorio intero, mai visto prima",
+        ),
     ):
         ax.scatter(sub[~test, 0], sub[~test, 1], s=1.2, c="#c9c9c9", linewidths=0, rasterized=True)
         ax.scatter(sub[test, 0], sub[test, 1], s=1.2, c="#D55E00", linewidths=0, rasterized=True)
@@ -143,7 +173,11 @@ def figura_confronto(xy: np.ndarray, folds: dict[str, int]) -> None:
             Patch(color="#c9c9c9", label="celle per imparare"),
             Patch(color="#D55E00", label="celle per l'esame"),
         ],
-        loc="lower center", ncol=2, frameon=False, fontsize=9, bbox_to_anchor=(0.5, -0.04),
+        loc="lower center",
+        ncol=2,
+        frameon=False,
+        fontsize=9,
+        bbox_to_anchor=(0.5, -0.04),
     )
     fig.savefig(OUT / "cv_casuale_vs_blocchi.svg", bbox_inches="tight")
     plt.close(fig)
