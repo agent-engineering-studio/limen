@@ -387,22 +387,22 @@ calcolare il punteggio di oggi.
 
 | Fonte | Cosa prende Limen | Per cosa | Licenza | Chiave? |
 |---|---|---|---|---|
-| [**Open-Meteo**](https://open-meteo.com) (ECMWF IFS, ICON-EU, ERA5, ERA5-Land) | pioggia oraria, umidità del suolo, temperatura, umidità, vento; previsione e archivio | tutti e tre i pericoli | CC-BY 4.0 (dati: Copernicus / DWD / ECMWF) | no |
+| [**Open-Meteo**](https://open-meteo.com) (ECMWF IFS, ICON-EU, ERA5, ERA5-Land) | pioggia oraria, umidità del suolo, temperatura, umidità, vento; previsione e archivio | tutti e tre i pericoli | CC BY 4.0 (dati: Copernicus / DWD / ECMWF; dati aperti ECMWF CC BY 4.0 + Terms of Use ECMWF) | no |
 | [**Piattaforma radar DPC**](https://radar.protezionecivile.it) | SRI nazionale (1 km, 5 min) e cumulate «Merging» radar + pluviometri | innesco nowcast; pioggia già caduta per gli allagamenti | CC-BY-SA 4.0 | no |
 | [**Copernicus EMS — GloFAS**](https://ewds.climate.copernicus.eu) | previsione di portata per nodo; piena ordinaria di ogni nodo dallo storico pluriennale | allagamento (ramo fluviale) | licenza CEMS-Floods, attribuzione obbligatoria | chiave EWDS gratuita (o via Open-Meteo) |
-| [**ISPRA IdroGEO**](https://idrogeo.isprambiente.it) | inventario frane IFFI (721.365 frane), mosaici PAI di pericolosità da frana e idraulica | terreno per le frane; suscettibilità agli allagamenti | CC-BY 4.0 | no |
-| **HR-DTM 5 m** (IRPI-CNR, Zenodo) o **TINITALY 10 m** (INGV) | quota → pendenza, esposizione, curvatura | frana, incendio | CC-BY 4.0 | no |
-| [**CORINE Land Cover 2018**](https://groupware.sinanet.isprambiente.it) (SINAnet/ISPRA) | uso del suolo → tipo di combustibile | incendio | CC-BY | no |
-| **Carta geolitologica d'Italia 1:500k** (PCN/MASE) | tipo di roccia e di terreno | frana | CC-BY 4.0 | no |
+| [**ISPRA IdroGEO**](https://idrogeo.isprambiente.it) | inventario frane IFFI (721.365 frane), mosaici PAI di pericolosità da frana e idraulica | terreno per le frane; suscettibilità agli allagamenti | CC BY-SA 4.0 (IFFI: una licenza per area, verificate tutte le 21) | no |
+| [**HR-DTM 5 m v1.2**](https://zenodo.org/records/18921767) (CNR-IRPI, Panza et al.; predefinito) o **TINITALY 10 m** (INGV) | quota → pendenza, esposizione, curvatura | frana, incendio | CC BY 4.0 | no |
+| [**CORINE Land Cover 2018**](https://groupware.sinanet.isprambiente.it) (SINAnet/ISPRA) | uso del suolo → tipo di combustibile | incendio | accesso libero Copernicus (Reg. UE 1159/2013) | no |
+| [**Carta geolitologica d'Italia 1:500k**](https://gn.mase.gov.it) (MASE, Geoportale Nazionale) | tipo di roccia e di terreno | frana | CC BY 4.0 | no |
 | [**Copernicus Land — impermeabilizzazione**](https://land.copernicus.eu) | suolo sigillato (%) | allagamento (deflusso urbano) | licenza aperta Copernicus Land | no |
 | [**OpenStreetMap**](https://www.openstreetmap.org) | strade, ferrovie; mappa di base | esposizione; mappa | ODbL | no |
 | [**Copernicus Land — EGMS**](https://egms.land.copernicus.eu) | velocità del suolo da InSAR Sentinel-1 (Ortho L3, 100 m) | feature ML (non ancora la mappa) | licenza aperta Copernicus Land | chiave di servizio CLMS gratuita |
 | [**INGV**](https://terremoti.ingv.it) | terremoti (FDSN), ShakeMap | frana (termine sismico) | CC-BY 4.0 | no |
-| [**NASA FIRMS**](https://firms.modaps.eosdis.nasa.gov) | fuochi attivi (VIIRS 375 m, MODIS 1 km), archivio dal 2000 | storico incendi; termine post-incendio delle frane; innesco | dati aperti NASA, con citazione | MAP_KEY gratuita (solo tempo reale) |
-| [**EFFIS**](https://effis.jrc.ec.europa.eu) | perimetri delle aree bruciate; FWI ufficiale | verità a terra e confronto per gli incendi | condizioni Copernicus EFFIS | no |
+| [**NASA FIRMS**](https://firms.modaps.eosdis.nasa.gov) | fuochi attivi (VIIRS 375 m, MODIS 1 km), archivio dal 2000 | storico incendi; termine post-incendio delle frane; innesco | CC0 (dati aperti NASA), citazione raccomandata | MAP_KEY gratuita (solo tempo reale) |
+| [**EFFIS**](https://effis.jrc.ec.europa.eu) | perimetri delle aree bruciate; FWI ufficiale | verità a terra e confronto per gli incendi | CC BY 4.0 (© Unione europea) | no |
 | [**Copernicus EMS Rapid Mapping**](https://rapidmapping.emergency.copernicus.eu) | aree allagate osservate + dove il satellite ha guardato | verità a terra per gli allagamenti | © UE, libero con attribuzione | no |
 | [**e-ITALICA**](https://doi.org/10.5281/zenodo.14204473) (CNR-IRPI) | frane datate innescate da pioggia, in tutta Italia | taratura e backtest delle frane | CC-BY 4.0 | no |
-| **ISTAT** | confini comunali, provinciali, regionali (2023) | griglia, classifiche per comune | CC-BY | no |
+| **ISTAT** | confini comunali, provinciali, regionali (2023) | griglia, classifiche per comune | CC BY 4.0 | no |
 
 Dove ogni fonte si configura, si aggiorna e si salva su disco è in
 [`data/README.md`](./data/README.md); la guida
@@ -1017,12 +1017,27 @@ I contributi esterni richiedono il CLA descritto in
 L'attribuzione è **obbligatoria** quando si pubblicano la mappa, le sintesi o
 qualsiasi cosa ne derivi:
 
-* **ISPRA IdroGEO** (IFFI, mosaici PAI frane e idraulica) — © ISPRA,
-  CC-BY 4.0. <https://idrogeo.isprambiente.it>
+* **ISPRA IdroGEO** (IFFI) — CC BY-SA 4.0, una licenza per area, verificate
+  tutte le 21 (#406): «ISPRA – Regione …, Inventario dei Fenomeni Franosi in
+  Italia (IFFI), idrogeo.isprambiente.it». <https://idrogeo.isprambiente.it>
+* **Mosaici di pericolosità ISPRA** — CC BY-SA 4.0, come dice il PDF dentro
+  ogni download: i dati derivati si distribuiscono con la stessa licenza.
+  Citazioni: «ISPRA - Mosaicatura nazionale delle aree a pericolosità da frana
+  PAI (v. 4.0 – 2020-2021), https://idrogeo.isprambiente.it» e «ISPRA -
+  Mosaicatura delle aree a pericolosità idraulica (v. 5.0 – 2020),
+  https://idrogeo.isprambiente.it». Sono elaborati tecnico-scientifici: hanno
+  valore legale le carte delle Autorità di bacino distrettuali.
 * **e-ITALICA** (CNR-IRPI) — CC-BY 4.0, DOI
   [10.5281/zenodo.14204473](https://doi.org/10.5281/zenodo.14204473).
-* **Open-Meteo** (ECMWF, DWD, Copernicus ERA5 / CERRA) — CC-BY 4.0.
-  <https://open-meteo.com>
+* **Open-Meteo** (ECMWF, DWD, Copernicus ERA5 / CERRA) — CC BY 4.0: «Weather
+  data by Open-Meteo.com». <https://open-meteo.com>
+* **Dati aperti ECMWF** (IFS 0,25°, serviti dall'istanza Open-Meteo ospitata
+  in casa) — CC BY 4.0 e Terms of Use ECMWF: «© [anno] ECMWF» e la frase
+  obbligatoria **«ECMWF does not accept any liability whatsoever for any error
+  or omission in the data»**. Limen le scrive sulla mappa, nel piè di pagina
+  della home, nella previsione della cella e nella pagina Fonti
+  (`frontend/src/lib/attribuzioni.ts`).
+  <https://www.ecmwf.int/en/forecasts/datasets/open-data>
 * **Copernicus EMS — GloFAS** — licenza CEMS-Floods: chi pubblica dati
   derivati deve riportare **«Contains modified Copernicus Emergency
   Management Service information [anno]»** e non deve presentarli come
@@ -1038,16 +1053,24 @@ qualsiasi cosa ne derivi:
   Copernicus Land (Reg. UE 2021/696): citare «Generated using European Union's
   Copernicus Land Monitoring Service information» e indicare le modifiche.
   <https://egms.land.copernicus.eu>
-* **INGV** (eventi FDSN, ShakeMap, TINITALY) — CC-BY 4.0. <https://terremoti.ingv.it>
-* **EFFIS** (perimetri delle aree bruciate, FWI) — condizioni Copernicus EFFIS.
-* **NASA FIRMS** — uso libero con citazione: «We acknowledge the use of data
-  and imagery from LANCE FIRMS operated by NASA's Earth Science Data and
-  Information System (ESDIS) with funding provided by NASA Headquarters.»
+* **HR-DTM Italia 5 m v1.2** (CNR-IRPI) — CC BY 4.0: «Panza et al., CNR-IRPI,
+  HR-DTM of Italy 5 m v1.2, doi:10.5281/zenodo.18921767», più le modifiche.
+  <https://zenodo.org/records/18921767>
+* **INGV** (eventi FDSN, ShakeMap; TINITALY se usato al posto dell'HR-DTM) —
+  CC BY 4.0. <https://terremoti.ingv.it>
+* **EFFIS** (perimetri delle aree bruciate, FWI) — CC BY 4.0: «© European
+  Union, European Forest Fire Information System (EFFIS), Copernicus EMS».
+* **NASA FIRMS** — CC0 salvo restrizioni indicate, con la citazione
+  raccomandata: «We acknowledge the use of data from NASA LANCE FIRMS
+  (https://earthdata.nasa.gov/firms), part of NASA ESDIS.»
   <https://firms.modaps.eosdis.nasa.gov>
 * **Piattaforma radar DPC** (SRI, «Merging») — CC-BY-SA 4.0.
-* **CORINE Land Cover 2018 Italia** (SINAnet/ISPRA) — CC-BY.
-* **Carta geolitologica d'Italia 1:500k** (PCN/MASE) — CC-BY 4.0.
-* **ISTAT** (confini amministrativi 2023) — CC-BY.
+* **CORINE Land Cover 2018 Italia** (SINAnet/ISPRA) — accesso libero Copernicus
+  (Reg. UE 1159/2013): «Generated using European Union's Copernicus Land
+  Monitoring Service information».
+* **Carta geolitologica d'Italia 1:500k** — CC BY 4.0: «Ministero dell'Ambiente
+  e della Sicurezza Energetica, Geoportale Nazionale». <https://gn.mase.gov.it>
+* **ISTAT** (confini amministrativi 2023) — CC BY 4.0.
 * **OpenStreetMap** (mappa di base, strade, ferrovie) — © OpenStreetMap
   contributors, ODbL.
 

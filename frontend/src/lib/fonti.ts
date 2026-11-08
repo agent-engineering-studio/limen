@@ -4,8 +4,9 @@
 // delle tre probabilità, cosa serve a verificarle, cosa è solo contesto sulla
 // mappa. Per ognuna **come si legge** (protocollo, cadenza, dove finisce) e
 // **come la usa Limen** (la trasformazione e i numeri, dai YAML dei pericoli:
-// cambiare un peso là senza cambiarlo qui rende la pagina falsa). Le licenze
-// stanno qui e non in una seconda tabella.
+// cambiare un peso là senza cambiarlo qui rende la pagina falsa). Licenza e
+// titolare dei dati del territorio ripetono `src/limen/config/dati.yaml`, il
+// catalogo: `tests/unit/test_attribuzioni_spa.py` fallisce se divergono (#491).
 //
 // I loghi solo dove le regole del titolare li concedono a chi usa i dati: oggi
 // OpenStreetMap, e solo come link al progetto. Copernicus li concede dopo una
@@ -14,6 +15,7 @@
 // gli altri, il nome.
 
 import type { HazardType } from "../types";
+import { meteoEcmwf } from "./attribuzioni";
 import type { Lingua } from "./i18n";
 
 export type RuoloFonte = "calcolo" | "verifica" | "contesto" | "base" | "valutazione";
@@ -112,6 +114,10 @@ const COPERNICUS_C3S = t(
   "Contains modified Copernicus Climate Change Service information",
 );
 const OPEN_METEO = t("Weather data by Open-Meteo.com", "Weather data by Open-Meteo.com");
+const COPERNICUS_CLMS = t(
+  "Generated using European Union's Copernicus Land Monitoring Service information",
+  "Generated using European Union's Copernicus Land Monitoring Service information",
+);
 
 export const FONTI: readonly Fonte[] = [
   // --- calcolo: il tempo -----------------------------------------------------
@@ -137,7 +143,7 @@ export const FONTI: readonly Fonte[] = [
       "Landslide, weather component M = 0.45 rain above the Caine threshold (curves for North, Centre, South) + 0.30 rain of the last 30 days + 0.25 soil moisture, plus rain on snow (up to +0.15). Flood: 72-hour rain per node, from 40 mm (onset) to 120 mm (full), damped when the soil is dry. Wildfire: the inputs of the Canadian FWI chain (Van Wagner 1987).",
     ),
     licenza: "CC BY 4.0",
-    attribuzione: OPEN_METEO,
+    attribuzione: t(meteoEcmwf(undefined, "it"), meteoEcmwf(undefined, "en")),
     url: "https://open-meteo.com",
   },
   {
@@ -254,7 +260,11 @@ export const FONTI: readonly Fonte[] = [
       "Quante frane cadono entro 500 m dalla cella, saturando a 8. È il peso più grande della suscettibilità S delle frane: 0,375.",
       "How many landslides fall within 500 m of the cell, saturating at 8. It is the largest weight of the landslide susceptibility S: 0.375.",
     ),
-    licenza: "CC BY 4.0",
+    licenza: "CC BY-SA 4.0",
+    attribuzione: t(
+      "ISPRA – Regione, Inventario dei Fenomeni Franosi in Italia (IFFI), idrogeo.isprambiente.it",
+      "ISPRA – Regione, Inventario dei Fenomeni Franosi in Italia (IFFI), idrogeo.isprambiente.it",
+    ),
     url: "https://idrogeo.isprambiente.it",
   },
   {
@@ -279,6 +289,10 @@ export const FONTI: readonly Fonte[] = [
       "The highest class touching the cell: attention areas 0.20, P1 0.40, P2 0.60, P3 0.80, P4 1.00. Weight in susceptibility S: 0.225.",
     ),
     licenza: "CC BY-SA 4.0",
+    attribuzione: t(
+      "ISPRA - Mosaicatura nazionale delle aree a pericolosità da frana PAI (v. 4.0 – 2020-2021), https://idrogeo.isprambiente.it",
+      "ISPRA - Mosaicatura nazionale delle aree a pericolosità da frana PAI (v. 4.0 – 2020-2021), https://idrogeo.isprambiente.it",
+    ),
     url: "https://idrogeo.isprambiente.it",
   },
   {
@@ -300,13 +314,17 @@ export const FONTI: readonly Fonte[] = [
       "Flood susceptibility: P3 0.80, P2 0.60, P1 0.40; an unstudied cell is 0.15 (unstudied does not mean it cannot flood), below 0.05 water does not reach and the score is zero. It multiplies the push of rain and river. In landslides it weighs 0.03 in term H.",
     ),
     licenza: "CC BY-SA 4.0",
+    attribuzione: t(
+      "ISPRA - Mosaicatura delle aree a pericolosità idraulica (v. 5.0 – 2020), https://idrogeo.isprambiente.it",
+      "ISPRA - Mosaicatura delle aree a pericolosità idraulica (v. 5.0 – 2020), https://idrogeo.isprambiente.it",
+    ),
     url: "https://idrogeo.isprambiente.it",
     facoltativa: true,
   },
   {
-    id: "ispra-geologia",
-    ente: "ISPRA",
-    dataset: t("Carta geolitologica d'Italia", "Geolithological map of Italy"),
+    id: "mase-geologia",
+    ente: "Ministero dell'Ambiente e della Sicurezza Energetica, Geoportale Nazionale",
+    dataset: t("Carta geolitologica d'Italia 1:500.000", "Geolithological map of Italy 1:500,000"),
     ruolo: "calcolo",
     pericoli: ["landslide"],
     cosa: t("La roccia sotto la cella.", "The rock under the cell."),
@@ -316,13 +334,20 @@ export const FONTI: readonly Fonte[] = [
       "The lithology covering most of the cell, with a weight: clays and chaotic complexes 0.85, flysch 0.80, marls 0.70, limestones 0.30, granites 0.20; unknown 0.5. Weight in susceptibility S: 0.10.",
     ),
     licenza: "CC BY 4.0",
-    url: "https://www.isprambiente.gov.it",
+    attribuzione: t(
+      "Ministero dell'Ambiente e della Sicurezza Energetica, Geoportale Nazionale",
+      "Ministero dell'Ambiente e della Sicurezza Energetica, Geoportale Nazionale",
+    ),
+    url: "https://gn.mase.gov.it",
     facoltativa: true,
   },
   {
-    id: "ingv-tinitaly",
-    ente: "INGV",
-    dataset: t("Modello digitale del terreno TINITALY", "TINITALY digital elevation model"),
+    id: "cnr-irpi-dtm",
+    ente: "CNR-IRPI",
+    dataset: t(
+      "HR-DTM Italia 5 m, versione 1.2 (Panza et al.); in alternativa TINITALY 10 m (INGV)",
+      "HR-DTM of Italy 5 m, version 1.2 (Panza et al.); TINITALY 10 m (INGV) as an alternative",
+    ),
     ruolo: "calcolo",
     pericoli: ["landslide", "wildfire", "flood"],
     cosa: t("La forma del terreno.", "The shape of the ground."),
@@ -335,7 +360,11 @@ export const FONTI: readonly Fonte[] = [
       "Landslide: slope / 45°, weight 0.30 in susceptibility. Wildfire: slope / 35°, weight 0.15 (fire runs uphill). Flood: where the ground is flat (below 15°) and built up, an unstudied cell rises up to 0.80.",
     ),
     licenza: "CC BY 4.0",
-    url: "https://tinitaly.pi.ingv.it",
+    attribuzione: t(
+      "Panza et al., CNR-IRPI, HR-DTM of Italy 5 m v1.2, doi:10.5281/zenodo.18921767",
+      "Panza et al., CNR-IRPI, HR-DTM of Italy 5 m v1.2, doi:10.5281/zenodo.18921767",
+    ),
+    url: "https://zenodo.org/records/18921767",
     facoltativa: true,
   },
   {
@@ -353,7 +382,8 @@ export const FONTI: readonly Fonte[] = [
       "Incendio, combustibile (peso 0,60): conifere 1,00, macchia e sclerofille 0,85-0,90, praterie 0,79, vegetazione rada 0,73, boschi di latifoglie 0,65, prati 0,64, coltivi 0,35, città 0,05, rocce nude 0,05, acque 0. Incendio = FWI normalizzato × (0,25 + 0,60 combustibile + 0,15 pendenza). Città e infrastrutture vicine alzano la priorità di un'allerta, non il punteggio.",
       "Wildfire, fuel (weight 0.60): conifers 1.00, scrub and sclerophyll 0.85-0.90, grassland 0.79, sparse vegetation 0.73, broadleaf woods 0.65, meadows 0.64, crops 0.35, towns 0.05, bare rock 0.05, water 0. Wildfire = normalised FWI × (0.25 + 0.60 fuel + 0.15 slope). Nearby towns and infrastructure raise an alert's priority, not the score.",
     ),
-    licenza: "Copernicus, uso libero con attribuzione",
+    licenza: "Copernicus, accesso libero (Reg. UE 1159/2013)",
+    attribuzione: COPERNICUS_CLMS,
     url: "https://land.copernicus.eu/en/products/corine-land-cover",
     facoltativa: true,
     copernicus: "CLMS",
@@ -373,7 +403,8 @@ export const FONTI: readonly Fonte[] = [
       "Solo il ramo pluviale dell'alluvione: la pioggia vale fino a 1,6 volte dove il suolo è tutto sigillato (1 + 0,6 × quota impermeabile); e una cella non studiata, piatta e costruita per almeno il 30 %, ha suscettibilità fino a 0,80.",
       "Only the pluvial branch of floods: rain counts up to 1.6 times where the soil is fully sealed (1 + 0.6 × sealed share); and an unstudied cell that is flat and at least 30% built up has susceptibility up to 0.80.",
     ),
-    licenza: "Copernicus, uso libero con attribuzione",
+    licenza: "Copernicus, accesso libero (Reg. UE 1159/2013)",
+    attribuzione: COPERNICUS_CLMS,
     url: "https://land.copernicus.eu/en/products/high-resolution-layer-imperviousness",
     facoltativa: true,
     copernicus: "CLMS",
@@ -397,6 +428,7 @@ export const FONTI: readonly Fonte[] = [
       "Velocity per cell (90th percentile) and number of measured points: only for the machine-learning challenger, not for the map.",
     ),
     licenza: "Copernicus, uso libero con attribuzione",
+    attribuzione: COPERNICUS_CLMS,
     url: "https://egms.land.copernicus.eu",
     facoltativa: true,
     copernicus: "CLMS",
@@ -456,6 +488,10 @@ export const FONTI: readonly Fonte[] = [
       "Landslide, component F (weight 0.07): a burnt slope is weaker, peaking around the sixth month and lasting two years, stronger after a severe fire. Flood: for 18 months rain on a burnt area counts up to 1.6 times. Wildfire: the truth of the backtest (high alert in the 72 hours before?).",
     ),
     licenza: "CC BY 4.0",
+    attribuzione: t(
+      "© European Union, European Forest Fire Information System (EFFIS), Copernicus EMS",
+      "© European Union, European Forest Fire Information System (EFFIS), Copernicus EMS",
+    ),
     url: "https://forest-fire.emergency.copernicus.eu",
     copernicus: "EFFIS",
   },
@@ -477,10 +513,10 @@ export const FONTI: readonly Fonte[] = [
       "Due punti caldi in 24 ore fanno ricalcolare la regione e aprono la finestra post-incendio prima del perimetro EFFIS. La potenza radiativa dentro il perimetro dà la severità dell'incendio. Non entra nel pericolo incendio, che guarda il tempo.",
       "Two hotspots in 24 hours trigger a recomputation and open the post-fire window before the EFFIS perimeter. The radiative power inside the perimeter gives the fire's severity. It does not enter the wildfire hazard, which looks at the weather.",
     ),
-    licenza: "Dati NASA, uso libero con attribuzione",
+    licenza: "CC0 (dati NASA, salvo restrizioni indicate)",
     attribuzione: t(
-      "We acknowledge the use of data and/or imagery from NASA's LANCE, part of NASA's ESDIS",
-      "We acknowledge the use of data and/or imagery from NASA's LANCE, part of NASA's ESDIS",
+      "We acknowledge the use of data from NASA LANCE FIRMS (https://earthdata.nasa.gov/firms), part of NASA ESDIS.",
+      "We acknowledge the use of data from NASA LANCE FIRMS (https://earthdata.nasa.gov/firms), part of NASA ESDIS.",
     ),
     url: "https://firms.modaps.eosdis.nasa.gov",
     facoltativa: true,
@@ -654,6 +690,10 @@ export const FONTI: readonly Fonte[] = [
       "Each cell belongs to a municipality; the municipalities list and the regional summary come from here. No weight in the score.",
     ),
     licenza: "CC BY 4.0",
+    attribuzione: t(
+      "ISTAT, Confini delle unità amministrative a fini statistici",
+      "ISTAT, Confini delle unità amministrative a fini statistici",
+    ),
     url: "https://www.istat.it",
   },
   {

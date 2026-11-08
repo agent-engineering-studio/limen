@@ -387,22 +387,22 @@ score.
 
 | Source | What Limen takes | Used for | Licence | Key? |
 |---|---|---|---|---|
-| [**Open-Meteo**](https://open-meteo.com) (ECMWF IFS, ICON-EU, ERA5, ERA5-Land) | hourly rain, soil moisture, temperature, humidity, wind; forecast and archive | all three hazards | CC-BY 4.0 (data: Copernicus / DWD / ECMWF) | no |
+| [**Open-Meteo**](https://open-meteo.com) (ECMWF IFS, ICON-EU, ERA5, ERA5-Land) | hourly rain, soil moisture, temperature, humidity, wind; forecast and archive | all three hazards | CC BY 4.0 (data: Copernicus / DWD / ECMWF; ECMWF open data CC BY 4.0 + ECMWF Terms of Use) | no |
 | [**DPC radar platform**](https://radar.protezionecivile.it) | national SRI (1 km, 5 min) and «Merging» radar + rain-gauge accumulations | nowcast trigger; rain already fallen for floods | CC-BY-SA 4.0 | no |
 | [**Copernicus EMS — GloFAS**](https://ewds.climate.copernicus.eu) | river discharge forecast per node; each node's ordinary high flow from the multi-year history | flood (fluvial branch) | CEMS-Floods licence, attribution required | free EWDS key (or via Open-Meteo) |
 | [**ISPRA IdroGEO**](https://idrogeo.isprambiente.it) | IFFI landslide inventory (721,365 landslides), PAI landslide and hydraulic hazard mosaics | landslide terrain; flood susceptibility | CC BY-SA 4.0 (IFFI: one licence per region, all 21 checked) | no |
-| **HR-DTM 5 m** (IRPI-CNR, Zenodo) or **TINITALY 10 m** (INGV) | elevation → slope, aspect, curvature | landslide, wildfire | CC-BY 4.0 | no |
+| [**HR-DTM 5 m v1.2**](https://zenodo.org/records/18921767) (CNR-IRPI, Panza et al.; default) or **TINITALY 10 m** (INGV) | elevation → slope, aspect, curvature | landslide, wildfire | CC BY 4.0 | no |
 | [**CORINE Land Cover 2018**](https://groupware.sinanet.isprambiente.it) (SINAnet/ISPRA) | land cover → fuel type | wildfire | Copernicus open access (EU Reg. 1159/2013) | no |
-| **Geolithological Map of Italy 1:500k** (PCN/MASE) | rock and soil type | landslide | CC-BY 4.0 | no |
+| [**Geolithological Map of Italy 1:500k**](https://gn.mase.gov.it) (MASE, Geoportale Nazionale) | rock and soil type | landslide | CC BY 4.0 | no |
 | [**Copernicus Land — imperviousness**](https://land.copernicus.eu) | sealed soil (%) | flood (urban runoff) | Copernicus Land open licence | no |
 | [**OpenStreetMap**](https://www.openstreetmap.org) | roads, railways; basemap | exposure; map | ODbL | no |
 | [**Copernicus Land — EGMS**](https://egms.land.copernicus.eu) | ground velocity from Sentinel-1 InSAR (Ortho L3, 100 m) | ML features (not yet the map) | Copernicus Land open licence | free CLMS service key |
 | [**INGV**](https://terremoti.ingv.it) | earthquakes (FDSN), ShakeMap | landslide (seismic term) | CC-BY 4.0 | no |
-| [**NASA FIRMS**](https://firms.modaps.eosdis.nasa.gov) | active fires (VIIRS 375 m, MODIS 1 km), archive since 2000 | wildfire history; post-fire landslide term; fire trigger | NASA open data, acknowledgement | free MAP_KEY (live only) |
-| [**EFFIS**](https://effis.jrc.ec.europa.eu) | burnt-area perimeters; official FWI | wildfire truth set and comparison | Copernicus EFFIS terms | no |
+| [**NASA FIRMS**](https://firms.modaps.eosdis.nasa.gov) | active fires (VIIRS 375 m, MODIS 1 km), archive since 2000 | wildfire history; post-fire landslide term; fire trigger | CC0 (NASA open data), acknowledgement recommended | free MAP_KEY (live only) |
+| [**EFFIS**](https://effis.jrc.ec.europa.eu) | burnt-area perimeters; official FWI | wildfire truth set and comparison | CC BY 4.0 (© European Union) | no |
 | [**Copernicus EMS Rapid Mapping**](https://rapidmapping.emergency.copernicus.eu) | observed flooded areas + where the satellite looked | flood truth set | © EU, free with attribution | no |
 | [**e-ITALICA**](https://doi.org/10.5281/zenodo.14204473) (CNR-IRPI) | dated, rainfall-triggered landslides across Italy | landslide calibration and backtest | CC-BY 4.0 | no |
-| **ISTAT** | municipal, provincial, regional borders (2023) | grid, rankings per comune | CC-BY 4.0 | no |
+| **ISTAT** | municipal, provincial, regional borders (2023) | grid, rankings per comune | CC BY 4.0 | no |
 
 Where each source is configured, refreshed and stored on disk is in
 [`data/README.md`](./data/README.md); the Italian guide
@@ -1085,9 +1085,10 @@ External contributions require the CLA in
 Attribution is **mandatory** when you publish the map, the summaries or
 anything derived from them:
 
-* **ISPRA IdroGEO** (IFFI) — © ISPRA, CC BY-SA 4.0 (checked for Valle d'Aosta; other regions still to verify, #406).
-  <https://idrogeo.isprambiente.it>
-* **ISPRA hazard mosaics** — CC BY SA 4.0, as stated by the licence PDF in each
+* **ISPRA IdroGEO** (IFFI) — CC BY-SA 4.0, one licence per area, all 21 checked
+  (#406): «ISPRA – Regione …, Inventario dei Fenomeni Franosi in Italia (IFFI),
+  idrogeo.isprambiente.it». <https://idrogeo.isprambiente.it>
+* **ISPRA hazard mosaics** — CC BY-SA 4.0, as stated by the licence PDF in each
   download: data derived from them must be distributed under the same licence.
   Citations: «ISPRA - Mosaicatura nazionale delle aree a pericolosità da frana
   PAI (v. 4.0 – 2020-2021), https://idrogeo.isprambiente.it» and «ISPRA -
@@ -1096,8 +1097,15 @@ anything derived from them:
   the maps with legal value are those of the basin district authorities.
 * **e-ITALICA** (CNR-IRPI) — CC-BY 4.0, DOI
   [10.5281/zenodo.14204473](https://doi.org/10.5281/zenodo.14204473).
-* **Open-Meteo** (ECMWF, DWD, Copernicus ERA5 / CERRA) — CC-BY 4.0.
-  <https://open-meteo.com>
+* **Open-Meteo** (ECMWF, DWD, Copernicus ERA5 / CERRA) — CC BY 4.0: «Weather
+  data by Open-Meteo.com». <https://open-meteo.com>
+* **ECMWF open data** (IFS 0.25°, served by the self-hosted Open-Meteo
+  instance) — CC BY 4.0 and the ECMWF Terms of Use: «© [year] ECMWF», and the
+  mandatory sentence **«ECMWF does not accept any liability whatsoever for any
+  error or omission in the data»**. Limen writes both on the map, the home
+  footer, the cell forecast and the Sources page
+  (`frontend/src/lib/attribuzioni.ts`).
+  <https://www.ecmwf.int/en/forecasts/datasets/open-data>
 * **Copernicus EMS — GloFAS** — CEMS-Floods licence: publishers of derived
   data must state **«Contains modified Copernicus Emergency Management
   Service information [year]»** and must not present it as a flood warning.
@@ -1112,16 +1120,22 @@ anything derived from them:
   (Reg. EU 2021/696): cite «Generated using European Union's Copernicus Land
   Monitoring Service information» and state the modifications.
   <https://egms.land.copernicus.eu>
-* **INGV** (FDSN events, ShakeMap, TINITALY) — CC-BY 4.0. <https://terremoti.ingv.it>
-* **EFFIS** (burnt-area perimeters, FWI) — Copernicus EFFIS terms.
-* **NASA FIRMS** — free use with acknowledgement: «We acknowledge the use of
-  data and imagery from LANCE FIRMS operated by NASA's Earth Science Data and
-  Information System (ESDIS) with funding provided by NASA Headquarters.»
+* **HR-DTM of Italy 5 m v1.2** (CNR-IRPI) — CC BY 4.0: «Panza et al., CNR-IRPI,
+  HR-DTM of Italy 5 m v1.2, doi:10.5281/zenodo.18921767», plus the
+  modifications. <https://zenodo.org/records/18921767>
+* **INGV** (FDSN events, ShakeMap; TINITALY if used instead of the HR-DTM) —
+  CC BY 4.0. <https://terremoti.ingv.it>
+* **EFFIS** (burnt-area perimeters, FWI) — CC BY 4.0: «© European Union,
+  European Forest Fire Information System (EFFIS), Copernicus EMS».
+* **NASA FIRMS** — CC0 unless otherwise stated, with the recommended
+  acknowledgement: «We acknowledge the use of data from NASA LANCE FIRMS
+  (https://earthdata.nasa.gov/firms), part of NASA ESDIS.»
   <https://firms.modaps.eosdis.nasa.gov>
 * **DPC radar platform** (SRI, «Merging») — CC-BY-SA 4.0.
 * **CORINE Land Cover 2018 Italy** (SINAnet/ISPRA) — Copernicus open access (EU Reg. 1159/2013): «Generated using European Union's Copernicus Land Monitoring Service information».
-* **Geolithological Map of Italy 1:500k** (PCN/MASE) — CC-BY 4.0.
-* **ISTAT** (2023 administrative boundaries) — CC-BY 4.0.
+* **Geolithological Map of Italy 1:500k** — CC BY 4.0: «Ministero dell'Ambiente e
+  della Sicurezza Energetica, Geoportale Nazionale». <https://gn.mase.gov.it>
+* **ISTAT** (2023 administrative boundaries) — CC BY 4.0.
 * **OpenStreetMap** (basemap, roads, railways) — © OpenStreetMap
   contributors, ODbL.
 

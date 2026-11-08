@@ -1236,6 +1236,7 @@ h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
   font-size: 12.5px;
 }
 .rain-outlook .eyebrow { display: block; font-size: 10px; }
+.rain-outlook .fonte-meteo { display: block; margin-top: 4px; font-size: 10px; opacity: 0.7; }
 
 /* Toggle overlay ISPRA sulla mappa */
 .overlay-control {

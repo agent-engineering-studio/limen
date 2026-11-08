@@ -169,8 +169,10 @@ urbanistico si verifica sul piano ufficiale.
 **Le previsioni meteo europee.** L'istanza meteo che Limen tiene in casa usa
 i dati aperti del Centro europeo per le previsioni meteorologiche a medio
 termine (ECMWF), che chiede l'attribuzione e una frase di non
-responsabilità per eventuali errori. Oggi Limen la scrive nella pagina delle
-fonti ma non riporta quella frase: è uno dei gap del capitolo.
+responsabilità per eventuali errori: «*ECMWF does not accept any liability
+whatsoever for any error or omission in the data*». Limen la scrive dove
+mostra la pioggia prevista: sulla mappa, nella scheda della cella, nel piè di
+pagina e nella pagina delle fonti.
 
 **I satelliti di Copernicus per il suolo.** L'uso del suolo (CORINE) e il
 suolo impermeabilizzato chiedono la frase «*Generated using European Union's
@@ -523,12 +525,13 @@ quella, e una prova automatica ferma ogni modifica che riaprisse una porta.
 
 Che cosa manca, in breve. Il dettaglio tecnico sta nella issue indicata.
 
-- **Alcune attribuzioni sulla mappa sono sbagliate o mancano.** Gli strati
-  ISPRA delle frane censite e delle aree a pericolo di frana sono attribuiti
-  come «CC BY» invece di «CC BY-SA», e la pagina delle fonti fa lo stesso per
-  le frane censite; i tipi di roccia sono attribuiti a ISPRA invece che al
-  Ministero dell'Ambiente; la frase di non responsabilità chiesta da ECMWF non
-  compare. Conta perché un errore di licenza si propaga a chi riusa i dati.
+- **Corretto: alcune attribuzioni sulla mappa erano sbagliate o mancavano.**
+  Gli strati ISPRA delle frane censite e delle aree a pericolo erano
+  attribuiti come «CC BY» invece di «CC BY-SA», i tipi di roccia a ISPRA
+  invece che al Ministero dell'Ambiente, e mancava la frase di non
+  responsabilità chiesta da ECMWF. Ora la mappa, la pagina delle fonti e il
+  piè di pagina dicono quello che dice il catalogo dei dati, e un controllo
+  automatico fallisce se tornano a divergere.
   ([#491](https://github.com/agent-engineering-studio/limen/issues/491))
 - **La licenza dei tipi di roccia è ambigua.** Il Ministero dell'Ambiente
   pubblica la carta geolitologica con licenza CC BY 4.0, ma le note legali

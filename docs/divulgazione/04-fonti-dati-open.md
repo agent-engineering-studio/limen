@@ -40,8 +40,10 @@ dalla frana censita più vicina (`distance_to_iffi_m`). Il primo dei due è
 l'ingrediente di maggior peso fra i fattori lenti.
 
 Licenza **CC BY-SA 4.0**, portale <https://idrogeo.isprambiente.it/>: chi
-ridistribuisce dati derivati li pubblica con la stessa licenza. Così dice il
-PDF della Valle d'Aosta; le altre regioni sono ancora da verificare una per una.
+ridistribuisce dati derivati li pubblica con la stessa licenza. Ogni area ha
+il suo PDF di licenza, e li abbiamo letti tutti e ventuno: dicono la stessa
+cosa. Citazione: «ISPRA – Regione …, Inventario dei Fenomeni Franosi in
+Italia (IFFI), idrogeo.isprambiente.it».
 
 ## Le aree già perimetrate come pericolose: mosaicature PAI di ISPRA
 
@@ -105,9 +107,15 @@ l'indice di pioggia antecedente, l'umidità del suolo per la curva a S.
 
 Interfacce: <https://api.open-meteo.com/v1/forecast>,
 <https://archive-api.open-meteo.com/v1/archive>,
-<https://flood-api.open-meteo.com/v1/flood>. Uso gratuito per impieghi non
-commerciali; licenza esatta: `TODO(verificare)` — il repository non la
-registra.
+<https://flood-api.open-meteo.com/v1/flood>. I dati sono sotto licenza
+**CC BY 4.0**, con la citazione «Weather data by Open-Meteo.com»; l'API
+pubblica è gratuita per impieghi non commerciali, ed è anche per questo che
+Limen tiene un'istanza propria. Quell'istanza scarica i **dati aperti del
+Centro europeo (ECMWF)**, anch'essi CC BY 4.0, che chiedono «© [anno] ECMWF» e
+una frase precisa: «*ECMWF does not accept any liability whatsoever for any
+error or omission in the data*», cioè il Centro non risponde di errori od
+omissioni nei dati. Limen la scrive dove mostra la pioggia prevista: sulla
+mappa, nella scheda della cella, nel piè di pagina e nella pagina Fonti.
 
 ## Il passato del tempo: gli archivi ERA5 e CERRA
 
@@ -126,8 +134,8 @@ modello. È un punto delicato e va detto: la pioggia con cui si verifica il
 sistema *non è* quella con cui il sistema lavora ogni giorno, e su un
 temporale localizzato le due possono differire parecchio.
 
-Licenza: `TODO(verificare)` — il repository non la registra; i prodotti
-Copernicus sono in genere riusabili con attribuzione.
+Licenza: quella del **Copernicus Climate Change Service**, riuso libero
+citando «Contains modified Copernicus Climate Change Service information».
 
 ## I terremoti: INGV
 
@@ -147,8 +155,7 @@ lo si fa decadere col tempo trascorso, si tiene il massimo e lo si passa in
 una curva a S.
 
 Interfacce: <https://webservices.ingv.it/fdsnws/event/1/query> e
-<https://shakemap.ingv.it/>. Licenza: `TODO(verificare)` — il repository non
-la registra.
+<https://shakemap.ingv.it/>. Licenza **CC BY 4.0**.
 
 ## Gli incendi, dopo: i perimetri EFFIS
 
@@ -171,8 +178,9 @@ difetto era nel nostro programma, non in un accreditamento mancante. È il
 genere di errore che si commette quando si dà per scontato che un dato
 pubblico sia difficile da ottenere.
 
-Servizio: <https://maps.effis.emergency.copernicus.eu/gwis>. Licenza:
-`TODO(verificare)`.
+Servizio: <https://maps.effis.emergency.copernicus.eu/gwis>. Licenza
+**CC BY 4.0**, con la citazione «© European Union, European Forest Fire
+Information System (EFFIS), Copernicus EMS».
 
 ## Gli incendi, durante: i punti caldi NASA FIRMS
 
@@ -181,9 +189,9 @@ satelliti hanno rilevato una sorgente di calore anomala.
 
 Contiene le singole rilevazioni con posizione, data, potenza radiativa e un
 codice che distingue un incendio di vegetazione da un impianto industriale o
-da un vulcano. Nell'archivio italiano: **391.987 rilevazioni**, che diventano
-**224.156** eventi cella-giorno e una misura di frequenza del fuoco su
-**65.771 celle**.
+da un vulcano. L'archivio italiano parte dal 2000 e conta centinaia di
+migliaia di rilevazioni: quante ne restano dopo i filtri dipende
+dall'installazione e dagli anni caricati, e `limen data-status` lo dice.
 
 Lo leggiamo **a ciclo continuo** per l'uso in tempo reale, e una volta sola
 per l'archivio storico.
@@ -197,8 +205,10 @@ cella più "incendiata" d'Italia risultava essere l'acciaieria di Taranto, con
 3.308 giorni di fuoco — perché un altoforno è una sorgente di calore molto
 affidabile.
 
-Servizio: <https://firms.modaps.eosdis.nasa.gov/>. Licenza:
-`TODO(verificare)`.
+Servizio: <https://firms.modaps.eosdis.nasa.gov/>. I dati NASA sono
+**CC0**, salvo restrizioni indicate, con la citazione raccomandata «We
+acknowledge the use of data from NASA LANCE FIRMS
+(https://earthdata.nasa.gov/firms), part of NASA ESDIS.»
 
 ## Le alluvioni realmente avvenute: Copernicus EMS
 
@@ -237,10 +247,13 @@ dentro il calcolo come misura di pioggia è una delle cose che mancano.
 
 Licenza **CC-BY-SA 4.0**, servizio <https://radar-api.protezionecivile.it>.
 
-## La forma del terreno: il modello digitale TINITALY
+## La forma del terreno: il modello digitale HR-DTM del CNR-IRPI
 
-Il modello digitale del terreno nazionale prodotto dall'**INGV**, alla base
-di ogni calcolo di pendenza.
+Il modello digitale del terreno di tutta Italia a **5 metri**, pubblicato
+dall'**Istituto di Ricerca per la Protezione Idrogeologica del CNR** (Panza e
+colleghi) su Zenodo: è quello che l'installazione scarica, nella versione
+1.2. Chi preferisce può usare al suo posto **TINITALY** a 10 metri
+dell'INGV, con la stessa licenza.
 
 Contiene la quota del suolo su una griglia regolare fitta.
 
@@ -249,11 +262,14 @@ Lo leggiamo **una volta sola**, in fase di preparazione dei dati.
 Diventa la pendenza media della cella (`slope_deg`), e in prospettiva
 l'esposizione del versante, la curvatura e l'indice di umidità topografica.
 
-Licenza: `TODO(verificare)`.
+Licenza **CC BY 4.0**, citazione «Panza et al., CNR-IRPI, HR-DTM of Italy 5 m
+v1.2, doi:10.5281/zenodo.18921767»; record <https://zenodo.org/records/18921767>.
 
-## Il tipo di roccia: Carta Geologica ISPRA
+## Il tipo di roccia: la carta geolitologica del Geoportale Nazionale
 
-La cartografia geologica nazionale in scala 1:500.000, sempre di ISPRA.
+La carta geolitologica d'Italia in scala 1:500.000, pubblicata dal
+**Ministero dell'Ambiente e della Sicurezza Energetica** sul Geoportale
+Nazionale.
 
 Contiene i poligoni delle unità litologiche e le faglie principali.
 
@@ -263,7 +279,11 @@ Diventa il peso litologico della cella: per ogni cella si prende la classe
 dominante per area e la si traduce in un numero tramite una tabella di
 conversione esplicita, leggibile nel codice.
 
-Licenza: `TODO(verificare)`.
+Licenza **CC BY 4.0** per i dati del servizio di download, citazione
+«Ministero dell'Ambiente e della Sicurezza Energetica, Geoportale Nazionale»;
+portale <https://gn.mase.gov.it>. Le note legali parlano anche di «utilizzi
+istituzionali»: finché il Ministero non chiarisce, Limen non ridistribuisce i
+valori ricavati da questa carta e li ricalcola in ogni installazione.
 
 ## La copertura del suolo: CORINE Land Cover
 
@@ -280,7 +300,9 @@ riconoscimento del tessuto urbano per calcolare l'esposizione — cioè quanto
 vale allertare per una cella, che non dipende solo da quanto è pericolosa ma
 anche da chi e cosa c'è dentro.
 
-Licenza: `TODO(verificare)`; catalogo
+Licenza: la politica dei dati di **Copernicus** (Reg. UE 1159/2013), accesso
+libero e gratuito, con la citazione «Generated using European Union's
+Copernicus Land Monitoring Service information»; catalogo
 <https://land.copernicus.eu/>.
 
 ## Il suolo impermeabilizzato: Imperviousness Density
@@ -293,7 +315,8 @@ pluviale del pericolo alluvione**: il cemento non fa crescere un fiume, fa
 scorrere in superficie la stessa pioggia che altrove si infiltrerebbe. È il
 meccanismo dell'allagamento urbano improvviso.
 
-Lettura una volta sola. Licenza: `TODO(verificare)`.
+Lettura una volta sola. Licenza: la stessa di CORINE, con la stessa
+citazione.
 
 ## Strade, ferrovie, edifici: OpenStreetMap
 
@@ -323,7 +346,8 @@ Diventano il modo in cui la mappa parla la lingua delle persone: il punteggio
 è calcolato per cella, ma la classifica che leggi è per **comune**, perché
 nessuno sa dire a memoria in che cella abita.
 
-Licenza: `TODO(verificare)`; portale <https://www.istat.it/>.
+Licenza **CC BY 4.0**, citazione «ISTAT, Confini delle unità amministrative a
+fini statistici»; portale <https://www.istat.it/>.
 
 ## Il movimento del terreno: EGMS
 
@@ -335,7 +359,9 @@ elenchiamo qui per completezza e perché è, potenzialmente, l'ingrediente più
 interessante di tutti — un versante che scende di qualche millimetro all'anno
 lo dice prima di cedere.
 
-Aggiornamento annuale. Licenza: `TODO(verificare)`.
+Aggiornamento annuale. Licenza: quella di **Copernicus Land**, uso libero
+con la citazione «Generated using European Union's Copernicus Land Monitoring
+Service information».
 
 ## Il punto, per intero
 

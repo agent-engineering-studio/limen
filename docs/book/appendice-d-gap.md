@@ -48,7 +48,7 @@ gap si chiude dentro Limen.
 | 3 | La licenza della carta delle rocce è ambigua. | — | [#495](https://github.com/agent-engineering-studio/limen/issues/495), [#406](https://github.com/agent-engineering-studio/limen/issues/406) |
 | 3 | Manca la chiave per i dati ufficiali dei fiumi: il confronto fra le due serie della piena ordinaria è fermo. | — | [#448](https://github.com/agent-engineering-studio/limen/issues/448) |
 | 3 | Bosco e città compaiono come codici, non come nomi. | la legenda ufficiale CORINE in italiano (Copernicus, ISPRA) | [#470](https://github.com/agent-engineering-studio/limen/issues/470) |
-| 3 | Le pagine sulle fonti non sono allineate al catalogo (licenze e fonti vecchie). | — | [#491](https://github.com/agent-engineering-studio/limen/issues/491) |
+| 3 | **Corretto.** Le pagine sulle fonti non erano allineate al catalogo (licenze e fonti vecchie); ora un controllo automatico le confronta. | — | [#491](https://github.com/agent-engineering-studio/limen/issues/491) |
 | 3 | Il controllo di prontezza conta anche gli zeri: una regione senza frane sembra a posto. | — | [#467](https://github.com/agent-engineering-studio/limen/issues/467) |
 | 3 | Popolazione, edifici, umidità dalla forma del versante e distanza dalle faglie hanno un posto ma nessun calcolo. | griglia europea della popolazione a 1 km ([Eurostat GEOSTAT](https://ec.europa.eu/eurostat/web/gisco/geodata/population-distribution/geostat)) o [GHSL del JRC](https://human-settlement.emergency.copernicus.eu/), licenze da verificare | [#466](https://github.com/agent-engineering-studio/limen/issues/466) |
 | 3 | È uscita una versione nuova del modello del terreno: va misurato quanto cambiano le pendenze. | [HR-DTM 5 m del CNR-IRPI](https://zenodo.org/records/18921767), versione 1.3 | [#468](https://github.com/agent-engineering-studio/limen/issues/468) |
@@ -107,7 +107,7 @@ gap si chiude dentro Limen.
 
 | Capitolo | Gap | Proposta di open data | Issue |
 |---|---|---|---|
-| 8 | Alcune attribuzioni sulla mappa sono sbagliate o mancano. | — | [#491](https://github.com/agent-engineering-studio/limen/issues/491) |
+| 8 | **Corretto.** Alcune attribuzioni sulla mappa erano sbagliate o mancavano, compresa la frase di non responsabilità di ECMWF. | — | [#491](https://github.com/agent-engineering-studio/limen/issues/491) |
 | 8 | La licenza dei tipi di roccia è ambigua. | — | [#495](https://github.com/agent-engineering-studio/limen/issues/495), [#406](https://github.com/agent-engineering-studio/limen/issues/406) |
 | 8 | Il pacchetto rapido non è ancora provato su un server pulito. | — | [#406](https://github.com/agent-engineering-studio/limen/issues/406), [#307](https://github.com/agent-engineering-studio/limen/issues/307) |
 | 8 | Le misure non sono sempre archiviate con i loro ingredienti. | depositare ogni rapporto di misura su [Zenodo](https://zenodo.org), con un DOI | [#481](https://github.com/agent-engineering-studio/limen/issues/481) |
