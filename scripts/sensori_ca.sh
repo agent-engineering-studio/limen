@@ -30,7 +30,19 @@ if [ -f "$RADICE/.env" ]; then
 fi
 
 DIR="${LIMEN_SENSORI_DIR:?imposta LIMEN_SENSORI_DIR (vedi .env.example)}"
-HOST="${LIMEN_SENSORI_HOST:-limen.agentengineering.it}"
+# Il nome del broker nel certificato del server, cioe' l'host a cui si
+# collegano i sensori: LIMEN_SENSORI_HOST, altrimenti l'host di PUBBLICO__URL
+# (#517). Serve solo a `init`; senza, `init` si ferma invece di firmare un
+# certificato per il server di un'altra installazione.
+if [ -z "${LIMEN_SENSORI_HOST:-}${PUBBLICO__URL:-}" ] && [ -f "$RADICE/.env" ]; then
+  PUBBLICO__URL="$(grep -E '^PUBBLICO__URL=' "$RADICE/.env" | tail -n 1 | cut -d= -f2- | tr -d "\"'" || true)"
+fi
+HOST="${LIMEN_SENSORI_HOST:-}"
+if [ -z "$HOST" ] && [ -n "${PUBBLICO__URL:-}" ]; then
+  HOST="${PUBBLICO__URL#*://}"
+  HOST="${HOST%%/*}"
+  HOST="$(printf '%s' "${HOST%%:*}" | tr '[:upper:]' '[:lower:]')"
+fi
 CA="$DIR/ca"
 BROKER="$DIR/broker"
 CLIENT="$DIR/client"
@@ -116,6 +128,11 @@ emetti_locale() {
 }
 
 cmd_init() {
+  if [ -z "$HOST" ]; then
+    log "manca l'indirizzo pubblico dell'installazione: imposta PUBBLICO__URL nel .env"
+    log "(o LIMEN_SENSORI_HOST=<host del broker>) e rilancia. Senza, i sensori non si offrono."
+    exit 2
+  fi
   mkdir -p "$CA/emessi" "$BROKER" "$CLIENT" "$DIR/data"
   chmod 700 "$DIR" "$CA"
   [ -f "$CA/index.txt" ] || : >"$CA/index.txt"

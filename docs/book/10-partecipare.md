@@ -235,7 +235,10 @@ misurare bene.
   arrotondata a circa un chilometro (capitolo 8).
 
 **Come iniziare.** La pagina «Sensori» della mappa: scegli un progetto,
-costruiscilo, registralo. Il confronto sistematico fra le stazioni dei
+costruiscilo, registralo. Il sensore si collega all'installazione di Limen che
+lo ha approvato: il suo indirizzo arriva nella mail di approvazione e si
+scrive nel sensore, che senza non si collega. Un'installazione senza un
+indirizzo pubblico non accetta sensori, e lo dice. Il confronto sistematico fra le stazioni dei
 cittadini e il radar (#250) è ancora da fare: i primi sensori sono quelli che
 lo renderanno possibile.
 
@@ -244,6 +247,9 @@ lo renderanno possibile.
       `docs/guida/sensori.md`; firmware di esempio in `firmware/limen-sensore`.
     - Broker MQTT con mTLS e CA privata; protocollo v2; ingresso HTTP
       firmato e LoRaWAN da The Things Network (si accendono con la rete).
+    - Broker e webhook TTN si ricavano da `PUBBLICO__URL` (#517); il
+      firmware non ha un broker compilato e lo legge dalla NVS
+      (`broker=` sulla seriale).
 
 ### Finanziatori, fondazioni, amministrazioni
 

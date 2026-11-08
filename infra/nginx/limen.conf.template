@@ -1,4 +1,7 @@
-# limen.agentengineering.it — reverse proxy di Limen sul suo dominio
+# Reverse proxy di Limen per l'nginx dell'host — modello, non configurazione
+# di un server preciso (#517). Lo riempie infra/nginx/attiva-limen.sh dal .env:
+# il segnaposto DOMINIO (fra due @) con l'host di PUBBLICO__URL, TILES_DIR con
+# LIMEN_DEM_TILES_DIR (le tile del rilievo, #318).
 #
 #   /            -> limen-frontend-static (127.0.0.1:5173)
 #   /api/        -> limen-api             (127.0.0.1:8080)  rotte gia' sotto /api
@@ -7,16 +10,14 @@
 #   /sensori/v2/ -> limen-worker          (127.0.0.1:8087)  ingresso HTTP firmato dei sensori (#265)
 #                                                           e webhook di The Things Network (#266)
 #
-# Le stesse rotte di office-gdc.w3pro.it, senza /inference. Il frontend e'
-# costruito con VITE_API_URL=/ e VITE_TILESERV_URL=/tiles: chiama l'API sul
-# dominio da cui e' stato aperto, quindi la stessa build serve entrambi.
+# Il frontend e' costruito con VITE_API_URL=/ e VITE_TILESERV_URL=/tiles:
+# chiama l'API sul dominio da cui e' stato aperto, quindi la stessa build
+# serve qualunque installazione.
 #
-# Attivazione: lo script infra/nginx/attiva-limen-agentengineering.sh, dopo
-# il CNAME limen.agentengineering.it -> office-gdc.w3pro.it (IP dinamico). Il file in sites-enabled e' un
-# symlink, non una copia, come per office-gdc.
-#
-# Richiede /etc/nginx/snippets/office-gdc-proxy.conf e la map
-# $connection_upgrade in /etc/nginx/conf.d/upgrade.conf.
+# L'alternativa senza nginx sull'host e' Caddy in compose (LIMEN_DOMINIO,
+# profilo `proxy`), con le stesse rotte. Richiede
+# /etc/nginx/snippets/limen-proxy.conf e la map $connection_upgrade: lo
+# script di attivazione le installa se mancano.
 
 # Per IP, prima che il worker legga la firma: la chiave si cerca nel database
 # e un client che martella con firme false non deve arrivarci. Un sensore
@@ -32,7 +33,7 @@ limit_req_zone $binary_remote_addr zone=limen_sensori_ttn_ip:10m rate=600r/m;
 server {
     listen 80;
     listen [::]:80;
-    server_name limen.agentengineering.it;
+    server_name @DOMINIO@;
 
     location /.well-known/acme-challenge/ {
         root /var/www/html;
@@ -47,11 +48,11 @@ server {
     listen 443 ssl;
     listen [::]:443 ssl;
     http2 on;
-    server_name limen.agentengineering.it;
+    server_name @DOMINIO@;
 
-    ssl_certificate     /etc/letsencrypt/live/limen.agentengineering.it/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/limen.agentengineering.it/privkey.pem;
-    ssl_trusted_certificate /etc/letsencrypt/live/limen.agentengineering.it/chain.pem;
+    ssl_certificate     /etc/letsencrypt/live/@DOMINIO@/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/@DOMINIO@/privkey.pem;
+    ssl_trusted_certificate /etc/letsencrypt/live/@DOMINIO@/chain.pem;
 
     ssl_protocols       TLSv1.2 TLSv1.3;
     ssl_ciphers         ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
@@ -77,15 +78,15 @@ server {
 
     location /api/ {
         proxy_pass http://127.0.0.1:8080;
-        include /etc/nginx/snippets/office-gdc-proxy.conf;
+        include /etc/nginx/snippets/limen-proxy.conf;
         proxy_buffering off;
         proxy_read_timeout 900s;
     }
 
-    location = /health       { proxy_pass http://127.0.0.1:8080; include /etc/nginx/snippets/office-gdc-proxy.conf; }
-    location = /openapi.json { proxy_pass http://127.0.0.1:8080; include /etc/nginx/snippets/office-gdc-proxy.conf; }
-    location = /docs         { proxy_pass http://127.0.0.1:8080; include /etc/nginx/snippets/office-gdc-proxy.conf; }
-    location = /redoc        { proxy_pass http://127.0.0.1:8080; include /etc/nginx/snippets/office-gdc-proxy.conf; }
+    location = /health       { proxy_pass http://127.0.0.1:8080; include /etc/nginx/snippets/limen-proxy.conf; }
+    location = /openapi.json { proxy_pass http://127.0.0.1:8080; include /etc/nginx/snippets/limen-proxy.conf; }
+    location = /docs         { proxy_pass http://127.0.0.1:8080; include /etc/nginx/snippets/limen-proxy.conf; }
+    location = /redoc        { proxy_pass http://127.0.0.1:8080; include /etc/nginx/snippets/limen-proxy.conf; }
 
     location /sensori/v2/ {
         limit_req zone=limen_sensori_http burst=20 nodelay;
@@ -93,7 +94,7 @@ server {
         # Il worker rifiuta già oltre i 2 KiB; qui si taglia prima di leggerlo.
         client_max_body_size 4k;
         proxy_pass http://127.0.0.1:8087;
-        include /etc/nginx/snippets/office-gdc-proxy.conf;
+        include /etc/nginx/snippets/limen-proxy.conf;
         proxy_read_timeout 30s;
     }
 
@@ -105,13 +106,13 @@ server {
         # rifiuta oltre IOT__CITTADINI__TTN_MAX_CORPO_BYTES (64 KiB).
         client_max_body_size 64k;
         proxy_pass http://127.0.0.1:8087;
-        include /etc/nginx/snippets/office-gdc-proxy.conf;
+        include /etc/nginx/snippets/limen-proxy.conf;
         proxy_read_timeout 30s;
     }
 
     location /tiles/ {
         proxy_pass http://127.0.0.1:7800/;
-        include /etc/nginx/snippets/office-gdc-proxy.conf;
+        include /etc/nginx/snippets/limen-proxy.conf;
         proxy_read_timeout 60s;
         proxy_buffering on;
     }
@@ -123,7 +124,7 @@ server {
     location = /geoserver/ispra/wms {
         limit_except GET { deny all; }
         proxy_pass http://127.0.0.1:8081;
-        include /etc/nginx/snippets/office-gdc-proxy.conf;
+        include /etc/nginx/snippets/limen-proxy.conf;
         proxy_read_timeout 60s;
     }
 
@@ -132,13 +133,13 @@ server {
     # `add_header`, che qui dentro cancellerebbe gli header del server.
     location /rilievo/ {
         limit_except GET { deny all; }
-        alias /srv/data/limen-tiles/;
+        alias @TILES_DIR@/;
         expires 7d;
     }
 
     location / {
         proxy_pass http://127.0.0.1:5173;
-        include /etc/nginx/snippets/office-gdc-proxy.conf;
+        include /etc/nginx/snippets/limen-proxy.conf;
         proxy_read_timeout 60s;
     }
 }

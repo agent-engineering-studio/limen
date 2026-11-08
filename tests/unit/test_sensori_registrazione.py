@@ -20,6 +20,7 @@ from limen.config.settings import (
     EmailChannelSettings,
     IotCittadiniSettings,
     IotSettings,
+    PubblicoSettings,
     SensoriRegistrazioneSettings,
     Settings,
 )
@@ -135,13 +136,20 @@ class _Posta:
         return True
 
 
-def _client(monkeypatch: pytest.MonkeyPatch, posta: _Posta, **registrazione: Any) -> TestClient:
+def _client(
+    monkeypatch: pytest.MonkeyPatch,
+    posta: _Posta,
+    *,
+    url_pubblico: str = "https://limen.example.org",
+    **registrazione: Any,
+) -> TestClient:
     monkeypatch.setattr(sensori_ep, "invia_testo", posta.invia)
     monkeypatch.setattr(reg, "LIMITATORE", contributi.Limitatore())
     app = FastAPI()
     app.state.deps = _Deps(
         Settings(
             contributi=ContributiSettings(destinatari=["cura@example.org"]),
+            pubblico=PubblicoSettings(url=url_pubblico),
             iot=IotSettings(
                 cittadini=IotCittadiniSettings(
                     registrazione=SensoriRegistrazioneSettings(**registrazione)
@@ -156,11 +164,36 @@ def _client(monkeypatch: pytest.MonkeyPatch, posta: _Posta, **registrazione: Any
 def test_chiusa_per_default(monkeypatch: pytest.MonkeyPatch) -> None:
     posta = _Posta()
     client = _client(monkeypatch, posta)
-    assert client.get("/api/sensori/registrazione").json() == {"aperta": False}
+    assert client.get("/api/sensori/registrazione").json() == {
+        "aperta": False,
+        "indirizzo_pubblico": True,
+    }
     r = client.post("/api/sensori/registrazione", json=modulo())
     assert r.status_code == 503
     assert "non sono ancora aperte" in r.json()["detail"]
     assert posta.mail == []
+
+
+def test_senza_url_pubblico_i_sensori_non_sono_disponibili(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    posta = _Posta()
+    client = _client(monkeypatch, posta, url_pubblico="", aperta=True)
+    assert client.get("/api/sensori/registrazione").json() == {
+        "aperta": False,
+        "indirizzo_pubblico": False,
+    }
+    r = client.post("/api/sensori/registrazione", json=modulo())
+    assert r.status_code == 503
+    assert posta.mail == []
+
+
+def test_con_url_pubblico_il_modulo_si_apre(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch, _Posta(), aperta=True)
+    assert client.get("/api/sensori/registrazione").json() == {
+        "aperta": True,
+        "indirizzo_pubblico": True,
+    }
 
 
 @pytest.mark.parametrize(
@@ -275,3 +308,30 @@ def test_un_modo_solo(dati: dict[str, Any]) -> None:
 def test_lorawan_non_valido(device_id: str, dev_eui: str, app: str, motivo: str) -> None:
     with pytest.raises(reg.LorawanNonValidoError, match=motivo):
         reg.leggi_lorawan(device_id, dev_eui, app)
+
+
+@pytest.mark.parametrize(
+    ("dati", "registrazione", "chiusa"),
+    [
+        (modulo(), {"webhook_ttn_pubblico": "https://x.example.org/sensori/v2/ttn"}, True),
+        (modulo(), {"broker_pubblico": "mqtts://x.example.org:8883"}, False),
+        (_lorawan(), {"broker_pubblico": "mqtts://x.example.org:8883"}, True),
+        (_lorawan(), {"webhook_ttn_pubblico": "https://x.example.org/sensori/v2/ttn"}, False),
+    ],
+)
+async def test_ogni_tipo_chiede_il_suo_indirizzo_pubblico(
+    dati: dict[str, Any], registrazione: dict[str, str], chiusa: bool
+) -> None:
+    """#517: un sensore MQTT senza broker, o LoRaWAN senza webhook, non si registra."""
+    # Compilato troppo in fretta: oltre il controllo dell'indirizzo si scarta
+    # senza toccare il database, e l'esito dice da che parte è passato.
+    posta = _Posta()
+    esito = await reg.ricevi(
+        reg.RichiestaSensoreIn.model_validate({**dati, "compilato_in_ms": 3_000}),
+        ip="203.0.113.7",
+        settings=SensoriRegistrazioneSettings(aperta=True, **registrazione),
+        destinatari=["cura@example.org"],
+        invia=posta.invia,
+        limitatore=contributi.Limitatore(),
+    )
+    assert isinstance(esito, reg.Chiusa if chiusa else reg.Scartata)

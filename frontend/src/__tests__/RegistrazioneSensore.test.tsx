@@ -10,9 +10,10 @@ import { ApiClientError, defaultApiClient } from "../lib/api-client";
 const CSR =
   "-----BEGIN CERTIFICATE REQUEST-----\nMIIB\n-----END CERTIFICATE REQUEST-----";
 
-function aperta(valore: boolean): void {
+function aperta(valore: boolean, indirizzoPubblico = true): void {
   vi.spyOn(defaultApiClient, "getRegistrazioneSensori").mockResolvedValue({
     aperta: valore,
+    indirizzo_pubblico: indirizzoPubblico,
   });
 }
 
@@ -48,6 +49,13 @@ describe("RegistrazioneSensore", () => {
     aperta(false);
     render(<RegistrazioneSensore />);
     expect(await screen.findByText(/non sono ancora aperte/)).toBeTruthy();
+    expect(screen.queryByLabelText(/CSR del dispositivo/)).toBeNull();
+  });
+
+  it("senza indirizzo pubblico: non disponibili su questa installazione", async () => {
+    aperta(false, false);
+    render(<RegistrazioneSensore />);
+    expect(await screen.findByText(/non sono disponibili su questa installazione/)).toBeTruthy();
     expect(screen.queryByLabelText(/CSR del dispositivo/)).toBeNull();
   });
 

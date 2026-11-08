@@ -87,9 +87,11 @@ the webhook channel described in
 
 **A dedicated Mosquitto, reachable from the Internet on port 8883, that
 accepts only devices holding a certificate signed by Limen's sensor CA.** It
-is hosted on Limen's own server, not on a cloud: it costs almost nothing and
-speaks standard MQTT, so a device will not have to change anything if one
-day the broker moves.
+is hosted on the same server as your Limen installation, not on a cloud: it
+costs almost nothing and speaks standard MQTT. Its address is the
+installation's own (`PUBBLICO__URL` in `.env`, port 8883) and comes in the
+approval email; an installation without a public address does not offer
+sensors.
 
 How it is defended:
 
@@ -187,7 +189,7 @@ datalogger that only speaks HTTP. The body is the same SenML array, with its
 registered key:
 
 ```
-POST https://limen.agentengineering.it/sensori/v2/pluvio-matera-01/obs
+POST https://<your-installation>/sensori/v2/pluvio-matera-01/obs
 X-Limen-Tempo: 1792065600
 X-Limen-Firma: <base64 signature>
 ```
@@ -228,7 +230,7 @@ fingerprint. On the console add a custom webhook:
 | Field | Value |
 |---|---|
 | Format | JSON |
-| Base URL | `https://limen.agentengineering.it/sensori/v2/ttn` |
+| Base URL | `https://<your-installation>/sensori/v2/ttn` (it is in the email) |
 | Header | `Authorization: Bearer <secret>` |
 | Uplink message | enabled, empty path |
 
@@ -374,8 +376,8 @@ pio run -e pluviometro -t upload     # or umidita_suolo, idrometro
 pio device monitor                   # the serial console, at 115200
 ```
 
-There is no secret in the program: network, id and certificates are given
-on the serial console and stay in the device memory. The commands are in
+There is no secret and no address in the program: network, id, broker and
+certificates are given on the serial console and stay in the device memory. The commands are in
 Italian, like the rest of Limen:
 
 ```
@@ -389,7 +391,9 @@ csr
 `csr` creates the device key the first time and prints the request to paste
 into the registration form. When the email with the two certificates
 arrives, type `cert` and paste the device one, then `ca` and paste the CA
-one, then `riavvia` (restart). The firmware refuses a certificate that does
+one, then `broker=mqtts://<your-installation>:8883` with the address written
+in the email, then `riavvia` (restart). Without a broker the sensor does not
+connect and says so on the serial console. The firmware refuses a certificate that does
 not match its key or that is for another id. Every setting, calibrations
 included, takes effect at the next restart. `stato` tells what is missing.
 
@@ -427,7 +431,7 @@ From a Raspberry Pi, or from a computer for a test, a message is sent like
 this (the sequence must grow at every send):
 
 ```sh
-mosquitto_pub -h limen.agentengineering.it -p 8883 -q 1 \
+mosquitto_pub -h <your-installation> -p 8883 -q 1 \
   --cafile ca.crt --cert dispositivo.crt --key dispositivo.key \
   -t limen/v2/pluvio-matera-01/obs \
   -m "[{\"bn\":\"pluvio-matera-01/\",\"bt\":$(date +%s),\"n\":\"rainfall\",\"u\":\"mm\",\"v\":0.0},{\"n\":\"seq\",\"v\":1}]"

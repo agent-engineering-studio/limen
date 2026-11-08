@@ -47,9 +47,9 @@ export const bool = (raw: string | undefined, fallback: boolean): boolean => {
 
 /** Un percorso (`/`, `/tiles`) diventa un URL sull'origine della pagina.
  *
- *  Così la stessa build serve più domini — office-gdc.w3pro.it e
- *  limen.agentengineering.it — senza chiamare l'API dell'altro, che vorrebbe
- *  dire CORS e un dominio che non risponde quando l'altro cade. Assoluto
+ *  Così la stessa build serve qualunque installazione, e più domini della
+ *  stessa, senza chiamare l'API di un altro, che vorrebbe dire CORS e un
+ *  dominio che non risponde quando l'altro cade. Assoluto
  *  comunque, e non relativo: MapLibre carica le tile in un worker, dove un
  *  URL relativo non si risolve. */
 export const sullOrigine = (raw: string, origine?: string): string => {

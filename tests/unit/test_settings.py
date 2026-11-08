@@ -78,3 +78,49 @@ def test_fast_gateway_models_are_accepted_on_sync_roles() -> None:
 def test_llamacpp_role_timeout_rejects_non_positive() -> None:
     with pytest.raises(ValueError, match=r"positive ceiling"):
         _make_settings(llm={"llamacpp_role_timeout_seconds": {"Briefing": 0.0}})
+
+
+def test_senza_url_pubblico_niente_broker_ne_webhook(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#517: nessun default verso il server di un'altra installazione."""
+    monkeypatch.delenv("PUBBLICO__URL", raising=False)
+    s = _make_settings()
+    assert s.pubblico.host is None
+    assert s.iot.cittadini.registrazione.broker_pubblico == ""
+    assert s.iot.cittadini.registrazione.webhook_ttn_pubblico == ""
+    assert not _make_settings(
+        iot={"cittadini": {"registrazione": {"aperta": True}}}
+    ).iot.cittadini.registrazione.disponibile
+
+
+@pytest.mark.parametrize(
+    "url", ["https://limen.example.org", "https://Limen.Example.org:443/", "limen.example.org"]
+)
+def test_broker_e_webhook_si_ricavano_dall_url_pubblico(url: str) -> None:
+    s = _make_settings(pubblico={"url": url})
+    r = s.iot.cittadini.registrazione
+    assert r.broker_pubblico == "mqtts://limen.example.org:8883"
+    assert r.webhook_ttn_pubblico == "https://limen.example.org/sensori/v2/ttn"
+
+
+def test_url_pubblico_dall_ambiente(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PUBBLICO__URL", "https://rischio.example.it")
+    s = _make_settings(iot={"cittadini": {"registrazione": {"aperta": True}}})
+    assert s.iot.cittadini.registrazione.broker_pubblico == "mqtts://rischio.example.it:8883"
+    assert s.iot.cittadini.registrazione.disponibile
+
+
+def test_broker_e_webhook_espliciti_vincono_sull_url() -> None:
+    s = _make_settings(
+        pubblico={"url": "https://limen.example.org"},
+        iot={
+            "cittadini": {
+                "registrazione": {
+                    "broker_pubblico": "mqtts://sensori.example.org:8883",
+                    "webhook_ttn_pubblico": "https://ttn.example.org/hook",
+                }
+            }
+        },
+    )
+    r = s.iot.cittadini.registrazione
+    assert r.broker_pubblico == "mqtts://sensori.example.org:8883"
+    assert r.webhook_ttn_pubblico == "https://ttn.example.org/hook"

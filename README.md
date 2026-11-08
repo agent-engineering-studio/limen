@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  🗺️ <a href="https://limen.agentengineering.it/?lang=en"><b>Open the live map</b></a> ·
+  📚 <a href="https://limen-docs.agentengineering.it/"><b>Read the book</b></a> (Italian) ·
   📖 <a href="#how-it-works">How it works</a> ·
   🚀 <a href="#quick-start-run-it-on-your-laptop">Quick start</a> ·
   🛰️ <a href="#the-data-every-source-and-its-licence">Data sources</a> ·
@@ -29,7 +29,7 @@
 </p>
 
 <p align="center">
-  <a href="https://limen.agentengineering.it/?lang=en"><img src="docs/images/screenshots/home.webp" alt="Limen home page: 'Territorial risk, cell by cell' — 312,550 cells monitored, 20 regions, updated every hour, 1 km² grid" width="100%"></a>
+  <img src="docs/images/screenshots/home.webp" alt="Limen home page: 'Territorial risk, cell by cell' — 312,550 cells monitored, 20 regions, updated every hour, 1 km² grid" width="100%">
 </p>
 
 ---
@@ -93,9 +93,10 @@ Three things make Limen different:
 > *where inside it, why, and what comes next*.
 
 **Not a developer?** The plain-language pages in
-[`docs/divulgazione/`](./docs/divulgazione/README.md) (Italian) and the
-**How it works** page on the [live site](https://limen.agentengineering.it/?lang=en#/come-funziona)
-explain everything without jargon.
+[`docs/divulgazione/`](./docs/divulgazione/README.md) and the
+[Limen book](https://limen-docs.agentengineering.it/) (both in Italian) explain
+everything without jargon; once installed, so does the **How it works** page
+(`#/come-funziona`) of your own installation.
 
 ---
 
@@ -103,8 +104,8 @@ explain everything without jargon.
 
 <table>
 <tr>
-<td width="50%"><a href="https://limen.agentengineering.it/?lang=en#/dashboard"><img src="docs/images/screenshots/dashboard-italy.webp" alt="Dashboard: the whole of Italy coloured by estimated hazard, with counts of high-class areas per hazard and a 72-hour timeline"></a></td>
-<td width="50%"><a href="https://limen.agentengineering.it/?lang=en#/dashboard"><img src="docs/images/screenshots/dashboard-cells.webp" alt="Zoomed into Puglia: individual 1 km cells, with flood cells along the rivers of the Tavoliere in red and the municipalities outlined"></a></td>
+<td width="50%"><img src="docs/images/screenshots/dashboard-italy.webp" alt="Dashboard: the whole of Italy coloured by estimated hazard, with counts of high-class areas per hazard and a 72-hour timeline"></td>
+<td width="50%"><img src="docs/images/screenshots/dashboard-cells.webp" alt="Zoomed into Puglia: individual 1 km cells, with flood cells along the rivers of the Tavoliere in red and the municipalities outlined"></td>
 </tr>
 <tr>
 <td><b>The whole country.</b> Pick a hazard (or all of them), see how many
@@ -115,7 +116,7 @@ hours</b>.</td>
 Each cell opens a breakdown of its score.</td>
 </tr>
 <tr>
-<td colspan="2"><a href="https://limen.agentengineering.it/?lang=en#/regioni"><img src="docs/images/screenshots/regions-to-watch.webp" alt="Regions to watch: regions ordered by estimated hazard, the official warning on each row, and a short AI-written summary per hazard"></a></td>
+<td colspan="2"><img src="docs/images/screenshots/regions-to-watch.webp" alt="Regions to watch: regions ordered by estimated hazard, the official warning on each row, and a short AI-written summary per hazard"></td>
 </tr>
 <tr>
 <td colspan="2"><b>Regions to watch.</b> Regions ranked by the numbers, with
@@ -346,6 +347,7 @@ All of these are **free**. None is needed to start.
 | `LIMEN_ITALICA_CSV` | _empty_ | Local e-ITALICA CSV; if absent, auto-download from Zenodo. |
 | `LIMEN_IMAGE_PREFIX` / `LIMEN_IMAGE_TAG` | _empty_ | Pull images from GHCR instead of building them ([below](#images-built-here-or-pulled-from-ghcr)). |
 | `LIMEN_DOMINIO` | _empty_ | Your domain: `make up` adds Caddy with Let's Encrypt certificates. |
+| `PUBBLICO__URL` | _empty_ | This installation's public https address, asked by `nuovo_host.sh`. Sensor broker and TTN webhook derive from it; empty ⇒ sensors are not offered. |
 | `BACKUP__*` | _empty_ | S3-compatible bucket for the nightly backup ([below](#backup-and-restore)). |
 | `LIMEN_*_BIND` | `127.0.0.1` | Bind address of every published port ([below](#published-ports-docker-bypasses-ufw)). |
 
@@ -908,7 +910,9 @@ a deterministic text: **the map and the alerts never depend on an LLM.** See
 
 Set `LIMEN_DOMINIO` and `make up` adds Caddy on 80 and 443 with Let's Encrypt
 certificates and the same routes as
-[`infra/nginx/`](./infra/nginx/). Without it, use your own proxy.
+[`infra/nginx/`](./infra/nginx/). Without it, use your own proxy: for nginx on
+the host, `sudo infra/nginx/attiva-limen.sh` fills
+`infra/nginx/limen.conf.template` from `PUBBLICO__URL` and gets the certificate.
 
 </details>
 
@@ -1131,7 +1135,7 @@ when an open map of the danger is most useful.
 
 * ⭐ **Star** this repository (and the [libraries](#the-companion-libraries)):
   it helps people working on civil protection, geology and open data find it.
-* 🔁 **Share** the [live map](https://limen.agentengineering.it/?lang=en) and
+* 🔁 **Share** the [book](https://limen-docs.agentengineering.it/) and
   tell us, with an issue, where the estimated danger does not look right.
 * ☕ **Buy us a coffee**: it covers the server, the weather archives and the
   time to tune the engine on real data.

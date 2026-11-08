@@ -310,6 +310,10 @@ async def ricevi(
     limitatore = limitatore or LIMITATORE
     if not settings.aperta:
         return Chiusa()
+    if not (settings.broker_pubblico if dati.csr is not None else settings.webhook_ttn_pubblico):
+        # Senza un indirizzo pubblico il sensore non saprebbe dove mandare.
+        log.warning("sensori.registrazione.senza_indirizzo_pubblico", csr=dati.csr is not None)
+        return Chiusa()
     if dati.sito_web:
         log.info("sensori.registrazione.scartata", motivo="campo_nascosto")
         return Scartata()

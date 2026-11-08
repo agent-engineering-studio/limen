@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  🗺️ <a href="https://limen.agentengineering.it/"><b>Apri la mappa</b></a> ·
+  📚 <a href="https://limen-docs.agentengineering.it/"><b>Leggi il libro</b></a> ·
   📖 <a href="#come-funziona">Come funziona</a> ·
   🚀 <a href="#avvio-rapido-sul-tuo-computer">Avvio rapido</a> ·
   🛰️ <a href="#i-dati-ogni-fonte-e-la-sua-licenza">Fonti dei dati</a> ·
@@ -33,7 +33,7 @@
 </p>
 
 <p align="center">
-  <a href="https://limen.agentengineering.it/"><img src="docs/images/screenshots/home.it.webp" alt="Home di Limen: «Il rischio del territorio, cella per cella» — 312.550 celle monitorate, 20 regioni, aggiornamento ogni ora, griglia di 1 km²" width="100%"></a>
+  <img src="docs/images/screenshots/home.it.webp" alt="Home di Limen: «Il rischio del territorio, cella per cella» — 312.550 celle monitorate, 20 regioni, aggiornamento ogni ora, griglia di 1 km²" width="100%">
 </p>
 
 ---
@@ -97,8 +97,9 @@ Tre cose rendono Limen diverso:
 
 **Non sei uno sviluppatore?** Le pagine divulgative in
 [`docs/divulgazione/`](./docs/divulgazione/README.md) e la pagina
-**Come funziona** del [sito](https://limen.agentengineering.it/#/come-funziona)
-spiegano tutto senza gergo tecnico.
+**Come funziona** della tua installazione (`#/come-funziona`), insieme al
+[libro di Limen](https://limen-docs.agentengineering.it/), spiegano tutto
+senza gergo tecnico.
 
 ---
 
@@ -106,8 +107,8 @@ spiegano tutto senza gergo tecnico.
 
 <table>
 <tr>
-<td width="50%"><a href="https://limen.agentengineering.it/#/dashboard"><img src="docs/images/screenshots/dashboard-italy.it.webp" alt="Dashboard: tutta l'Italia colorata per pericolo stimato, con il numero di aree in classe alta per pericolo e la timeline a 72 ore"></a></td>
-<td width="50%"><a href="https://limen.agentengineering.it/#/dashboard"><img src="docs/images/screenshots/dashboard-cells.it.webp" alt="Ingrandimento sulla Puglia: le singole celle da 1 km, con le celle di allagamento lungo i fiumi del Tavoliere in rosso e i confini dei comuni"></a></td>
+<td width="50%"><img src="docs/images/screenshots/dashboard-italy.it.webp" alt="Dashboard: tutta l'Italia colorata per pericolo stimato, con il numero di aree in classe alta per pericolo e la timeline a 72 ore"></td>
+<td width="50%"><img src="docs/images/screenshots/dashboard-cells.it.webp" alt="Ingrandimento sulla Puglia: le singole celle da 1 km, con le celle di allagamento lungo i fiumi del Tavoliere in rosso e i confini dei comuni"></td>
 </tr>
 <tr>
 <td><b>Tutto il Paese.</b> Scegli un pericolo (o tutti), guarda quante aree
@@ -117,7 +118,7 @@ le fasce allagabili lungo i fiumi si accendono, cella per cella. Ogni cella
 apre la scomposizione del suo punteggio.</td>
 </tr>
 <tr>
-<td colspan="2"><a href="https://limen.agentengineering.it/#/regioni"><img src="docs/images/screenshots/regions-to-watch.it.webp" alt="Regioni da monitorare: regioni ordinate per pericolo stimato, l'allerta ufficiale su ogni riga e una breve sintesi scritta dall'AI per ogni pericolo"></a></td>
+<td colspan="2"><img src="docs/images/screenshots/regions-to-watch.it.webp" alt="Regioni da monitorare: regioni ordinate per pericolo stimato, l'allerta ufficiale su ogni riga e una breve sintesi scritta dall'AI per ogni pericolo"></td>
 </tr>
 <tr>
 <td colspan="2"><b>Regioni da monitorare.</b> Le regioni ordinate dai numeri,
@@ -346,6 +347,7 @@ Sono tutte **gratuite**. Nessuna serve per partire.
 | `LIMEN_ITALICA_CSV` | _vuoto_ | CSV e-ITALICA locale; se manca, si scarica da Zenodo. |
 | `LIMEN_IMAGE_PREFIX` / `LIMEN_IMAGE_TAG` | _vuoto_ | Scarica le immagini da GHCR invece di costruirle ([più sotto](#immagini-costruite-qui-o-scaricate-da-ghcr)). |
 | `LIMEN_DOMINIO` | _vuoto_ | Il tuo dominio: `make up` aggiunge Caddy con i certificati Let's Encrypt. |
+| `PUBBLICO__URL` | _vuoto_ | L'indirizzo https pubblico di questa installazione, chiesto da `nuovo_host.sh`. Da lì si ricavano broker dei sensori e webhook TTN; vuoto ⇒ i sensori non si offrono. |
 | `BACKUP__*` | _vuoto_ | Bucket S3-compatibile per il backup notturno ([più sotto](#backup-e-ripristino)). |
 | `LIMEN_*_BIND` | `127.0.0.1` | Indirizzo di ogni porta pubblicata ([più sotto](#porte-pubblicate-docker-scavalca-ufw)). |
 
@@ -836,7 +838,9 @@ mai da un LLM.** Vedi [`docs/inference.md`](./docs/inference.md).
 
 Imposta `LIMEN_DOMINIO` e `make up` aggiunge Caddy su 80 e 443 con i
 certificati Let's Encrypt e le stesse rotte di
-[`infra/nginx/`](./infra/nginx/). Senza, usa il tuo proxy.
+[`infra/nginx/`](./infra/nginx/). Senza, usa il tuo proxy: per l'nginx
+dell'host, `sudo infra/nginx/attiva-limen.sh` riempie
+`infra/nginx/limen.conf.template` da `PUBBLICO__URL` e prende il certificato.
 
 </details>
 
@@ -1058,7 +1062,7 @@ in cui una mappa aperta del pericolo serve di più.
 * ⭐ **Metti una stella** a questo repository (e alle
   [librerie](#le-librerie-collegate)): aiuta chi lavora su protezione civile,
   geologia e dati aperti a trovarlo.
-* 🔁 **Condividi** la [mappa](https://limen.agentengineering.it/) e dicci, con
+* 🔁 **Condividi** il [libro](https://limen-docs.agentengineering.it/) e dicci, con
   una issue, dove il pericolo stimato non ti sembra giusto.
 * ☕ **Offrici un caffè**: copre il server, gli archivi meteo e il tempo per
   tarare il motore sui dati reali.

@@ -399,6 +399,21 @@ download chiede una parola d'ordine unica, scritta nella configurazione del
 server. Non è un login: non ci sono account, ruoli o sessioni. Se la parola
 d'ordine non è impostata, quelle azioni sono semplicemente spente.
 
+### L'indirizzo dell'installazione
+
+Ogni installazione di Limen ha il suo indirizzo, quello con cui la si
+raggiunge da internet, e lo scrive **una sola volta** nella configurazione: il
+programma d'installazione lo chiede. Da lì Limen ricava tutto ciò che un
+dispositivo esterno deve conoscere, come l'indirizzo a cui un sensore manda le
+sue misure. Nel codice non c'è scritto l'indirizzo di nessun server: chi
+installa Limen non si ritrova i suoi sensori collegati al computer di
+qualcun altro.
+
+L'indirizzo si può lasciare vuoto, per esempio su un computer usato solo in
+ufficio. In quel caso la mappa funziona come sempre, ma i sensori non si
+possono registrare: la pagina «Sensori» dice che non sono disponibili su
+questa installazione.
+
 ??? note "Per chi sviluppa"
     - Ogni `ports:` usa una variabile `LIMEN_*_BIND` con default
       `127.0.0.1`; solo `LIMEN_PROXY_BIND` è `0.0.0.0` (porte 80 e 443).
@@ -406,6 +421,15 @@ d'ordine non è impostata, quelle azioni sono semplicemente spente.
       a tempo costante, mai nei log (`TokenInstallazioneDep` in
       `src/limen/api/dependencies.py`, #403). Generato da
       `scripts/nuovo_host.sh`. Lo stesso schema vale per `MCP_ADMIN_TOKEN`.
+    - Indirizzo: `PUBBLICO__URL` (`PubblicoSettings` in
+      `src/limen/config/settings.py`, #517), chiesto da `nuovo_host.sh`. Ne
+      derivano `IOT__CITTADINI__REGISTRAZIONE__BROKER_PUBBLICO`
+      (`mqtts://<host>:8883`) e `…__WEBHOOK_TTN_PUBBLICO`
+      (`https://<host>/sensori/v2/ttn`), se non impostati; il nome nel
+      certificato del broker (`scripts/sensori_ca.sh`) e il vhost nginx
+      (`infra/nginx/limen.conf.template`, riempito da
+      `infra/nginx/attiva-limen.sh`). Vuoto ⇒ `GET /api/sensori/registrazione`
+      risponde `indirizzo_pubblico: false`.
     - Niente autenticazione utente (epic #69): non reintrodurla per
       un'area operatore ipotetica.
 

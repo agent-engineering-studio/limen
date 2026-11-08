@@ -706,6 +706,8 @@ export type TipoSensore = "pluviometro" | "umidita_suolo";
 
 export interface RegistrazioneSensoriStato {
   aperta: boolean;
+  /** Falso se l'installazione non ha un indirizzo pubblico (#517). */
+  indirizzo_pubblico: boolean;
 }
 
 export type CollegamentoSensore = "certificato" | "lorawan";

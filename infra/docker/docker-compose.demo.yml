@@ -681,7 +681,7 @@ services:
     # Il reverse proxy in compose (#306), al posto dell'nginx dell'host: Caddy
     # prende e rinnova da sé i certificati di LIMEN_DOMINIO (Let's Encrypt,
     # porte 80 e 443 raggiungibili da fuori). Le rotte sono quelle di
-    # infra/nginx/limen.agentengineering.it, e la configurazione sta qui sotto
+    # infra/nginx/limen.conf.template, e la configurazione sta qui sotto
     # (`configs`), non in un file del repo: su un host che ha solo i compose e
     # il .env (#303) il proxy funziona lo stesso.
     #
