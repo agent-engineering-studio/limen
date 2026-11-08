@@ -241,7 +241,10 @@ DEPLOY_DIR ?= $(abspath $(CURDIR)/../limen-deploy)
 DEPLOY_REF ?= origin/main
 DEPLOY_SERVICES ?= api worker mcp
 # Il fetch passa da HTTPS: su questo host SSH verso GitHub non è autorizzato.
-ORIGIN_HTTPS := $(shell git remote get-url origin 2>/dev/null | sed -E 's#^git@github.com:#https://github.com/#')
+# `|` e non `#` come separatore del sed: GNU make prima della 4.3 (quella di
+# macOS è la 3.81) legge `#` dentro $(shell …) come un commento, e il Makefile
+# intero non si caricava più.
+ORIGIN_HTTPS := $(shell git remote get-url origin 2>/dev/null | sed -E 's|^git@github.com:|https://github.com/|')
 COMPOSE_DEPLOY := --env-file $(CURDIR)/.env -f infra/docker/docker-compose.demo.yml \
   -f infra/docker/docker-compose.geoserver.yml \
   $(if $(COMPOSE_SENSORI_WORKER),-f infra/docker/docker-compose.sensori-worker.yml) \

@@ -93,16 +93,21 @@ fi
 if [ "$MODO" = docker ]; then
   : "${LIMEN_COMPOSE:?lancialo da make (make static-data): serve LIMEN_COMPOSE}"
   CONTAINER=()
-  declare -A MONTATE=()
+  # Una stringa e non `declare -A`: il bash di macOS è il 3.2, senza array
+  # associativi, e lo script si fermava prima di definire `limen`.
+  MONTATE=$'\n'
   for v in LIMEN_DEM_RASTER LIMEN_CORINE_RASTER LIMEN_GEOLOGICAL_SHAPEFILE \
     LIMEN_OSM_ROADS LIMEN_OSM_RAILWAYS LIMEN_IMPERVIOUSNESS_RASTER; do
     [ -n "${!v:-}" ] && [ -e "${!v}" ] || continue
     assoluto="$(cd "$(dirname "${!v}")" && pwd)/$(basename "${!v}")"
     cartella="$(dirname "$assoluto")"
-    if [ -z "${MONTATE[$cartella]:-}" ]; then
-      CONTAINER+=(-v "$cartella:$cartella:ro")
-      MONTATE[$cartella]=1
-    fi
+    case "$MONTATE" in
+      *$'\n'"$cartella"$'\n'*) ;;
+      *)
+        CONTAINER+=(-v "$cartella:$cartella:ro")
+        MONTATE+="$cartella"$'\n'
+        ;;
+    esac
     CONTAINER+=(-e "$v=$assoluto")
   done
   # Le manopole dei comandi passano anche loro (Codex, #329): con l'ambiente
@@ -135,7 +140,7 @@ if [ "$MODO" = docker ]; then
     # shellcheck disable=SC2086 # LIMEN_COMPOSE sono opzioni da dividere
     env -i PATH="$PATH" HOME="$HOME" ${DOCKER_HOST:+DOCKER_HOST="$DOCKER_HOST"} \
       docker compose $LIMEN_COMPOSE run --rm --no-deps -T --user "$(id -u):$(id -g)" \
-      "${CONTAINER[@]}" worker limen "$@"
+      ${CONTAINER[@]+"${CONTAINER[@]}"} worker limen "$@"
   }
 elif [ "$MODO" = qui ]; then
   limen() { command limen "$@"; }
