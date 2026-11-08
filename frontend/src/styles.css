@@ -3118,6 +3118,16 @@ html[lang="en"] .app-nav a { white-space: nowrap; }
 .lettura-incendio p { margin: 0 0 4px; color: var(--ink-soft); }
 .lettura-incendio p:last-child { margin-bottom: 0; }
 
+/* I dati di base della cella con la fonte accanto (#422). */
+.dati-di-base { margin: 10px 0 0; font-size: 12px; line-height: 1.45; }
+.dati-di-base .eyebrow { display: block; font-size: 10px; margin: 0 0 4px; }
+.dati-di-base ul { margin: 0; padding: 0; list-style: none; }
+.dati-di-base li { margin: 0 0 5px; }
+.dati-di-base .db-nome { color: var(--muted); }
+.dati-di-base .db-fonte { display: block; font-size: 10.5px; color: var(--muted); }
+.dati-di-base .db-fonte a { color: inherit; }
+.dati-di-base .is-vuoto { color: var(--muted); font-style: italic; }
+
 /* L'allerta ufficiale DPC nella riga del comune: colori della Protezione
    Civile, un pallino e non un chip, perché è un'altra fonte. */
 .cb-allerta-punto {
