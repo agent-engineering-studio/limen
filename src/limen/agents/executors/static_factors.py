@@ -20,6 +20,7 @@ SELECT c.cell_id,
        c.distance_to_iffi_m, c.iffi_density_500,
        c.pai_class_norm,
        c.flood_hazard_norm,
+       c.quota_sul_fondo_m,
        c.imperviousness_norm,
        s.score AS susc_ispra
 FROM cell_static_factors c
@@ -69,6 +70,9 @@ class StaticFactorsExecutor(Executor):
                 ),
                 flood_hazard_norm=(
                     float(r["flood_hazard_norm"]) if r["flood_hazard_norm"] is not None else None
+                ),
+                quota_sul_fondo_m=(
+                    float(r["quota_sul_fondo_m"]) if r["quota_sul_fondo_m"] is not None else None
                 ),
                 imperviousness_norm=(
                     float(r["imperviousness_norm"])

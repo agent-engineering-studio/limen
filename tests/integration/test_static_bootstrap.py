@@ -759,3 +759,55 @@ async def test_una_nuova_versione_del_sync_ricalcola_solo_il_suo_passo(reset_db:
     again = await bootstrap_static_for_aoi(_AOI_ID)
     assert again.recomputed == 1, again.summary
     assert "pai" in again.summary
+
+
+async def test_quota_sul_fondo_valle(reset_db: None, pg_pool: object) -> None:
+    """La quota della cella meno la più bassa entro tre righe e colonne (#469).
+
+    Dentro la stessa regione, come la misura contro gli eventi EMS; una cella
+    senza quota resta NULL, cioè ignota.
+    """
+    from limen.integrations.static_bootstrap.orchestrator import (
+        compute_quota_sul_fondo_for_aoi,
+    )
+
+    aoi = "fondo-test"
+    quote = {0: 100.0, 1: 140.0, 2: 260.0, 3: 500.0, 4: 520.0, 5: None}
+    async with acquire() as conn:
+        await conn.execute(
+            "INSERT INTO aoi (id, name, kind, geom) VALUES ($1,'F','region',"
+            "ST_Multi(ST_MakeEnvelope(16.0, 41.0, 16.1, 41.1, 4326)))",
+            aoi,
+        )
+        for i, q in quote.items():
+            x = 16.0 + i * 0.01
+            cid = f"{aoi}|0|{i}"
+            await conn.execute(
+                "INSERT INTO grid_cells (id, aoi_id, row_idx, col_idx, geom, area_km2) "
+                "VALUES ($1,$2,0,$3, ST_MakeEnvelope($4,41.0,$5,41.01,4326), 1.0)",
+                cid,
+                aoi,
+                i,
+                x,
+                x + 0.01,
+            )
+            await conn.execute(
+                "INSERT INTO cell_static_factors (cell_id, elevation_m) VALUES ($1,$2)", cid, q
+            )
+
+    await compute_quota_sul_fondo_for_aoi(aoi)
+
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT col_idx, quota_sul_fondo_m FROM cell_static_factors f "
+            "JOIN grid_cells g ON g.id = f.cell_id WHERE g.aoi_id = $1",
+            aoi,
+        )
+    q = {r["col_idx"]: r["quota_sul_fondo_m"] for r in rows}
+    assert q[0] == 0.0
+    assert q[1] == 40.0
+    assert q[2] == 160.0
+    assert q[3] == 400.0
+    # La 4 vede le colonne 1-5: il minimo è la 1 (140 m); la 0 è fuori finestra.
+    assert q[4] == 380.0
+    assert q[5] is None

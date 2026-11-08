@@ -406,6 +406,47 @@ async def compute_exposure_neighbourhood_for_aoi(aoi_id: str) -> None:
         log.info("static_bootstrap.vicinanza.done", aoi_id=aoi_id, aggiornate=esito)
 
 
+# Quota sul fondo valle (#469): la quota della cella meno la più bassa entro
+# `_FONDO_CELLE` righe e colonne, nella stessa regione. Gli indici e non la
+# geometria, come il WUI: la griglia è regolare. Dentro la regione e non oltre
+# il confine perché è la definizione misurata contro gli eventi EMS; cambiarla,
+# o cambiare il raggio, vuol dire rifare la misura e incrementare
+# `STEP_VERSION["quota_sul_fondo"]`.
+_QUOTA_SUL_FONDO_SQL = """
+UPDATE cell_static_factors f
+SET quota_sul_fondo_m = v.q, updated_at = now()
+FROM (
+    SELECT g.id, fc.elevation_m - min(fu.elevation_m) AS q
+    FROM grid_cells g
+    JOIN cell_static_factors fc ON fc.cell_id = g.id AND fc.elevation_m IS NOT NULL
+    JOIN grid_cells u
+      ON u.aoi_id = g.aoi_id
+     AND u.row_idx BETWEEN g.row_idx - $2 AND g.row_idx + $2
+     AND u.col_idx BETWEEN g.col_idx - $2 AND g.col_idx + $2
+    JOIN cell_static_factors fu ON fu.cell_id = u.id AND fu.elevation_m IS NOT NULL
+    WHERE g.aoi_id = $1
+    GROUP BY g.id, fc.elevation_m
+) v
+WHERE f.cell_id = v.id
+  AND f.quota_sul_fondo_m IS DISTINCT FROM v.q
+"""
+
+_FONDO_CELLE = 3
+
+
+async def compute_quota_sul_fondo_for_aoi(aoi_id: str) -> None:
+    """Fill ``quota_sul_fondo_m`` for one AOI from ``elevation_m``.
+
+    Without the DTM the column stays NULL: unknown, which the flood engine's
+    terrain block ignores rather than reading as "on the valley floor".
+    """
+    async with acquire() as conn:
+        esito = await conn.execute(
+            _QUOTA_SUL_FONDO_SQL, aoi_id, _FONDO_CELLE, timeout=_BOOTSTRAP_STMT_TIMEOUT_S
+        )
+    log.info("static_bootstrap.quota_sul_fondo.done", aoi_id=aoi_id, aggiornate=esito)
+
+
 async def compute_osm_distances_for_aoi(aoi_id: str) -> None:
     """Fill distance_to_road_m / distance_to_rail_m for one AOI.
 
@@ -562,6 +603,11 @@ async def bootstrap_static_for_aoi(aoi_id: str, *, force: bool = False) -> Boots
                 rows_written=dem_written,
             )
         await gate.done("dem", rows_written=dem_written, **dem_fp.details)
+    # Dopo il DEM, perché legge `elevation_m`; la sua impronta è quella del DEM,
+    # come il WUI con CORINE: il dato deriva da lì e va rifatto solo con lui.
+    if await gate.needs("quota_sul_fondo", dem_fp):
+        await compute_quota_sul_fondo_for_aoi(aoi_id)
+        await gate.done("quota_sul_fondo")
     # CORINE Land Cover — runs when LIMEN_CORINE_RASTER points at a
     # categorical GeoTIFF (e.g. CLC2018 100 m mosaic).
     from limen.integrations.corine import sync_corine_for_aois

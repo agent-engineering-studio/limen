@@ -222,6 +222,7 @@ async def _fetch_cells(
         rows = await conn.fetch(
             """
             SELECT c.cell_id, c.flood_hazard_norm, c.imperviousness_norm, c.slope_deg,
+                   c.quota_sul_fondo_m,
                    ST_X(ST_Centroid(g.geom)) AS lon,
                    ST_Y(ST_Centroid(g.geom)) AS lat
             FROM cell_static_factors c
@@ -247,6 +248,11 @@ async def _fetch_cells(
             # La pendenza serve alla suscettibilità pluviale (#198): senza, il
             # backtest misurerebbe un motore diverso da quello in produzione.
             slope_deg=float(r["slope_deg"]) if r["slope_deg"] is not None else None,
+            # Il blocco `terrain` di flood.yaml la legge (#469): senza, il
+            # backtest misurerebbe un motore diverso.
+            quota_sul_fondo_m=(
+                float(r["quota_sul_fondo_m"]) if r["quota_sul_fondo_m"] is not None else None
+            ),
         )
         out.append((static, float(r["lon"]), float(r["lat"])))
     return out
