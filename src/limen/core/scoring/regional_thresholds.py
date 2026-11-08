@@ -31,7 +31,7 @@ from functools import cache
 from importlib import resources
 from itertools import pairwise
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator, model_validator
@@ -839,6 +839,34 @@ class SusceptibilityBlock(_StrictModel):
     floor: float = Field(..., ge=0.0, le=1.0)
 
 
+class TerrainBlock(_StrictModel):
+    """Abbassa la classe idraulica dove la cella sta alta sul fondo valle (#469).
+
+    Il mosaico ISPRA dà alla cella la classe più grave dei poligoni che la
+    toccano; dove le aree P3 sono strisce sul reticolo minore (Calabria: 98 %
+    delle celle in P3) la suscettibilità è al massimo quasi ovunque. Dentro le
+    aree P3 le celle allagate negli eventi EMS stanno in mediana 4 m sopra il
+    fondo valle, quelle rimaste asciutte 15 m. La classe non si azzera: scende
+    di ``class_step``, così una cella alta con pioggia forte resta in gioco.
+    """
+
+    #: Oltre questa quota sul fondo la classe scende di ``class_step``.
+    cut_m: float = Field(..., gt=0.0)
+    #: Di quanto scende, sulla scala dei ``hazard_class_norm`` (0,2 = una classe).
+    class_step: float = Field(..., ge=0.0, le=1.0)
+    #: La classe più bassa a cui ``cut_m`` fa scendere (P1 = 0,4).
+    min_norm: float = Field(..., ge=0.0, le=1.0)
+    #: Oltre questa quota la suscettibilità diventa quella di una cella non
+    #: mappata (``susceptibility.unmapped``), qualunque sia la classe. Assente ⇒ mai.
+    unmapped_above_m: float | None = Field(default=None, gt=0.0)
+
+    @model_validator(mode="after")
+    def _ordine(self) -> Self:
+        if self.unmapped_above_m is not None and self.unmapped_above_m <= self.cut_m:
+            raise ValueError("terrain: unmapped_above_m deve stare sopra cut_m")
+        return self
+
+
 class PluvialSusceptibilityBlock(_StrictModel):
     """How exposed a cell is to *rain* flooding, apart from the river map (#198).
 
@@ -954,9 +982,9 @@ class FluvialBlock(_StrictModel):
     trailing month it did not, and the filter that tried to repair it
     silenced 101 nodes out of 105 in Emilia-Romagna (#108). Against a
     percentile of the node's own multi-year series it does, and no filter is
-    needed. EFAS return periods (2/5/20 y) would still be the better signal
-    -- they need a CDS account and a NetCDF dependency, so a client for them
-    could not be exercised here.
+    needed. GloFAS v4 return periods (2/5/20 y) were measured against it on
+    2026-11-08 (#522): same AUC on the 2023-2024 EMS floods, a small gain at
+    equal load -- not enough to replace it without a forecast-path backtest.
     """
 
     #: Ratio at or below which the river is behaving normally. Not ``>= 1``:
@@ -997,10 +1025,35 @@ class FloodThresholds(HazardThresholds):
     imperviousness: ImperviousnessBlock
     #: Absent ⇒ the pluvial branch uses the river-map susceptibility, as before #198.
     pluvial_susceptibility: PluvialSusceptibilityBlock | None = None
+    #: Absent ⇒ the hydraulic class is used as the mosaic gives it, as before #469.
+    terrain: TerrainBlock | None = None
     calibration: CalibrationBlock | None = None
+
+    @model_validator(mode="after")
+    def _terreno_sopra_il_floor(self) -> Self:
+        # Sotto `floor` il motore va a zero: una cella mappata declassata lì
+        # sarebbe dipinta calma, l'errore rassicurante che il motore non deve fare.
+        t = self.terrain
+        if t is not None and t.min_norm < self.susceptibility.floor:
+            raise ValueError("terrain.min_norm sotto susceptibility.floor")
+        return self
+
+    def mapped_class(
+        self, flood_hazard_norm: float | None, quota_sul_fondo_m: float | None
+    ) -> float | None:
+        """La classe idraulica della cella dopo il blocco ``terrain``; ``None`` = non mappata."""
+        t = self.terrain
+        if t is None or flood_hazard_norm is None or quota_sul_fondo_m is None:
+            return flood_hazard_norm
+        if t.unmapped_above_m is not None and quota_sul_fondo_m > t.unmapped_above_m:
+            return None
+        if quota_sul_fondo_m > t.cut_m:
+            return max(flood_hazard_norm - t.class_step, min(t.min_norm, flood_hazard_norm))
+        return flood_hazard_norm
 
     def model_card(self) -> dict[str, Any]:
         return {
+            "terrain": None if self.terrain is None else self.terrain.model_dump(),
             "susceptibility": {
                 "unmapped": self.susceptibility.unmapped,
                 "floor": self.susceptibility.floor,

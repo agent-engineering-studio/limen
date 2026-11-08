@@ -73,6 +73,10 @@ class StaticFactors(_Frozen):
     # unknown as H = 0, the flood engine as its `susceptibility.unmapped`
     # floor -- "not studied" is not "not floodable".
     flood_hazard_norm: float | None = Field(default=None, ge=0.0, le=1.0)
+    # #469 — quanto la cella sta sopra il fondo valle (quota meno la minima
+    # entro ~3 km). NULL = DTM assente: ignoto, e il blocco `terrain` del
+    # motore alluvione non la usa.
+    quota_sul_fondo_m: float | None = Field(default=None, ge=0.0)
     # Fase 3a (#63) — CLMS Imperviousness Density, frazione di suolo
     # impermeabilizzato. Amplifica il solo ramo pluviale: il cemento non fa
     # crescere un fiume, fa scorrere la stessa pioggia invece di lasciarla

@@ -24,6 +24,33 @@ susceptibility:
   # crinale non si allaga, qualunque pioggia faccia.
   floor: 0.05
 
+# Classe idraulica modulata dalla quota sul fondo valle (#469) — PRONTA, NON
+# ATTIVA. Il mosaico dà a una cella la classe più grave dei poligoni che la
+# toccano: in Calabria il 98 % delle celle è P3. Dentro le aree P3 le celle
+# allagate negli eventi EMS stanno in mediana 4 m sopra il punto più basso
+# entro ~3 km, quelle rimaste asciutte 15 m (AUC 0,751 contro 0,704 della
+# frazione d'area). Backtest-flood del 2026-11-08 (previsione come emessa, solo
+# ramo pluviale, 9 regioni): con cut_m 52 e unmapped_above_m 172 le celle
+# allagate colte passano da 1.358 a 1.353 e le allerte calano del 9,5 %
+# (Molise −55 %, Puglia −51 %, Sardegna −26 %). 52 e 172 m sono il 95° e il
+# 99° percentile delle celle P3 allagate: tarati sulla stessa verità, quindi
+# ottimisti, e su pianure — nelle regioni collinari del Sud il 10-15 % delle
+# celle allagate sta sopra il taglio. Attivarlo cambia anche dei tetti: una
+# P3 sopra cut_m vale al più 0,6, quindi «molto alto» (0,70) diventa
+# irraggiungibile lì; una P2 sopra cut_m resta al più «moderato», e a 0,4 non
+# passa il gate degli avvisi sotto «alto» (min_static_s 0,5), che il backtest
+# non applica. Sulle fiumare la quota sul fondo misura anche la discesa lungo
+# l'asta (3 % ≈ 90 m in 3 km): l'alveo nel tratto medio-alto può superare il
+# taglio. Si attiva (flood-v1.4.0) solo dopo un backtest con il ramo fluviale,
+# a livello «alto» e «moderato», con i tagli validati lasciando fuori una
+# regione alla volta, e una verità calabrese (GFM). Dettagli nella issue #469.
+#
+# terrain:
+#   cut_m: 52.0
+#   class_step: 0.2
+#   min_norm: 0.4
+#   unmapped_above_m: 172.0
+
 pluvial:
   # Soglia intensità-durata per l'allagamento. Stessa meccanica della soglia
   # di Caine e numeri suoi: la pioggia che satura un versante non è quella
@@ -157,10 +184,11 @@ fluvial:
   # (GloFAS via Open-Meteo: picco dei prossimi 7 giorni / q90 della sua serie
   # giornaliera su due anni).
   #
-  # Le soglie di tempo di ritorno di EFAS (2/5/20 anni) sarebbero il segnale
-  # migliore, ma richiedono un account CDS e una dipendenza NetCDF: un client
-  # che non si può eseguire non è un client. Il rapporto è ciò che è
-  # disponibile senza credenziali, ed è già ingerito.
+  # Le soglie dei periodi di ritorno GloFAS v4 (2/5/20 anni) sono state
+  # misurate contro questo rapporto il 2026-11-08 (#522): stessa AUC (0,952
+  # contro 0,953 sulle alluvioni EMS 2023-2024 di Emilia-Romagna e Toscana),
+  # +4,9 punti a parità di carico. Non abbastanza per sostituirlo senza un
+  # backtest sul percorso della previsione.
   #
   # **Il denominatore è cambiato (#108), e con esso le due soglie.** Prima era
   # la media dei 31 giorni precedenti, che rende il numero incomparabile fra

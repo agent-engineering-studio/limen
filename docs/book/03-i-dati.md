@@ -632,8 +632,14 @@ corrispondente.
   «vale l'area più grave che tocca la cella», il 98 % della Calabria risulta ad
   alta probabilità di alluvione, mentre le aree che lo sono davvero coprono
   meno di un quinto della regione. Conta perché quel valore moltiplica il
-  punteggio dell'alluvione. La correzione è pesare l'area per la parte di
-  cella che copre, e misurarla nel backtest prima di adottarla.
+  punteggio dell'alluvione. Pesare l'area per la parte di cella che copre è
+  stato provato e scartato: toglie allerte ma perde alluvioni vere. Funziona
+  meglio guardare **quanto la cella sta sopra il fondo valle**: dentro le aree
+  più pericolose le celle allagate stanno in media 4 metri sopra il punto più
+  basso dei dintorni, quelle rimaste asciutte 15. Abbassando di una classe le
+  celle alte, le allerte calano del 10 % (della metà in Molise e Puglia) quasi
+  senza perdere alluvioni. Il calcolo è pronto ma spento: prima va provato
+  sulle fiumare calabresi, con le mappe d'acqua viste dal satellite.
   *([#469](https://github.com/agent-engineering-studio/limen/issues/469))*
 - **La vicinanza a centri abitati e infrastrutture non era mai stata
   ricalcolata** *(chiuso)*. Fu calcolata una volta sola, quando Limen copriva

@@ -43,6 +43,7 @@ def _bundle(
     soil: float | None = 0.35,
     imperviousness: float | None = None,
     slope: float | None = None,
+    quota_sul_fondo: float | None = None,
 ) -> CellFeatureBundle:
     return CellFeatureBundle(
         aoi_id="aoi",
@@ -52,6 +53,7 @@ def _bundle(
             flood_hazard_norm=susceptibility,
             imperviousness_norm=imperviousness,
             slope_deg=slope,
+            quota_sul_fondo_m=quota_sul_fondo,
         ),
         dynamic=DynamicInputs(
             valuation_time=dt.datetime(2026, 11, 3, 12, tzinfo=dt.UTC),
@@ -267,6 +269,87 @@ def test_without_the_block_the_pluvial_branch_uses_the_river_map() -> None:
     scored = engine.score(b)
     assert scored.breakdown.pluvial_susceptibility == scored.breakdown.susceptibility
     assert scored.score == pytest.approx(t.susceptibility.unmapped * scored.breakdown.pluvial)
+
+
+# ---------------------------------------------------------------------------
+# Quota sul fondo valle (#469)
+# ---------------------------------------------------------------------------
+def _con_terreno() -> FloodThresholds:
+    from limen.core.scoring.regional_thresholds import TerrainBlock
+
+    blocco = TerrainBlock(cut_m=52.0, class_step=0.2, min_norm=0.4, unmapped_above_m=172.0)
+    return _thresholds().model_copy(update={"terrain": blocco})
+
+
+def test_without_the_terrain_block_the_engine_is_unchanged() -> None:
+    """Il blocco non è attivo in flood.yaml: la quota sul fondo non sposta nulla."""
+    assert _thresholds().terrain is None
+    engine = FloodScoringEngine(_thresholds())
+    alta = engine.score(_bundle(rain_mm=120.0, quota_sul_fondo=300.0))
+    bassa = engine.score(_bundle(rain_mm=120.0, quota_sul_fondo=2.0))
+    assert alta.score == bassa.score
+    assert alta.breakdown.susceptibility == 0.8
+
+
+@pytest.mark.parametrize(
+    ("quota", "attesa"),
+    [(2.0, 0.8), (52.0, 0.8), (80.0, 0.6), (172.0, 0.6)],
+)
+def test_a_cell_high_above_the_valley_floor_drops_one_class(quota: float, attesa: float) -> None:
+    """P3 sul fondo valle resta P3; sul versante scende a P2, non a zero."""
+    engine = FloodScoringEngine(_con_terreno())
+    scored = engine.score(_bundle(rain_mm=120.0, quota_sul_fondo=quota))
+    assert scored.breakdown.susceptibility == pytest.approx(attesa)
+    assert scored.breakdown.mapped
+
+
+def test_never_below_the_lowest_mapped_class() -> None:
+    engine = FloodScoringEngine(_con_terreno())
+    scored = engine.score(_bundle(susceptibility=0.4, rain_mm=120.0, quota_sul_fondo=100.0))
+    assert scored.breakdown.susceptibility == pytest.approx(0.4)
+
+
+def test_far_above_the_floor_the_cell_weighs_as_unmapped_but_stays_mapped() -> None:
+    """Pesa come una non mappata, ma il mosaico la mappa: il riquadro della cella
+    non deve dire «fuori dalle zone mappate» di un poligono P3."""
+    t = _con_terreno()
+    scored = FloodScoringEngine(t).score(_bundle(rain_mm=120.0, quota_sul_fondo=400.0))
+    assert scored.breakdown.mapped
+    assert scored.breakdown.susceptibility == t.susceptibility.unmapped
+
+
+def test_a_demoted_cell_does_not_take_the_town_boost() -> None:
+    """La spinta urbana (#198) è tarata sulle celle fuori mosaico: una P3 alta,
+    costruita e piana non deve finire sopra una P3 intermedia."""
+    engine = FloodScoringEngine(_con_terreno())
+    alta = engine.score(
+        _bundle(rain_mm=120.0, quota_sul_fondo=400.0, imperviousness=0.9, slope=0.5)
+    )
+    intermedia = engine.score(
+        _bundle(rain_mm=120.0, quota_sul_fondo=80.0, imperviousness=0.9, slope=0.5)
+    )
+    assert alta.breakdown.pluvial_susceptibility == alta.breakdown.susceptibility
+    assert alta.score <= intermedia.score
+
+
+def test_the_terrain_block_refuses_incoherent_settings() -> None:
+    from pydantic import ValidationError
+
+    from limen.core.scoring.regional_thresholds import TerrainBlock
+
+    with pytest.raises(ValidationError):
+        TerrainBlock(cut_m=52.0, class_step=0.2, min_norm=0.4, unmapped_above_m=40.0)
+    sotto_il_floor = TerrainBlock(cut_m=52.0, class_step=0.2, min_norm=0.0)
+    with pytest.raises(ValidationError):
+        FloodThresholds.model_validate(
+            {**_thresholds().model_dump(), "terrain": sotto_il_floor.model_dump()}
+        )
+
+
+def test_unknown_height_is_not_the_valley_floor_nor_the_ridge() -> None:
+    """Senza DTM la quota è ignota: la classe resta quella del mosaico."""
+    scored = FloodScoringEngine(_con_terreno()).score(_bundle(rain_mm=120.0, quota_sul_fondo=None))
+    assert scored.breakdown.susceptibility == 0.8
 
 
 # ---------------------------------------------------------------------------

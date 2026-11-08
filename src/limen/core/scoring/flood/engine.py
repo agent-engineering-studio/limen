@@ -65,11 +65,10 @@ class FloodScoringEngine(ScoringEngine[FloodBreakdown]):
         # An unmapped cell is not a safe cell: the mosaic covers the basins
         # that were officially studied, and "not studied" is not "not
         # floodable". It gets a low floor rather than a zero.
-        susceptibility = (
-            t.susceptibility.unmapped
-            if static.flood_hazard_norm is None
-            else static.flood_hazard_norm
-        )
+        # Il blocco `terrain` (#469) abbassa la classe dove la cella sta alta sul
+        # fondo valle; senza il blocco è la classe del mosaico, com'era.
+        mappa = t.mapped_class(static.flood_hazard_norm, static.quota_sul_fondo_m)
+        susceptibility = t.susceptibility.unmapped if mappa is None else mappa
 
         # La finestra comincia adesso, quindi un nubifragio in corso esce dalla
         # previsione mentre cade (#199): a Melito la previsione dava 20 mm, il
@@ -106,6 +105,9 @@ class FloodScoringEngine(ScoringEngine[FloodBreakdown]):
         # allarmi dal 43 al 49%. Il ramo fluviale non cambia.
         susc_pioggia = susceptibility
         cfg = t.pluvial_susceptibility
+        # Solo le celle davvero fuori dal mosaico (#198, tarato su quelle): una P3
+        # declassata dal terreno (#469) non riprende la spinta urbana, o una
+        # cella più alta finirebbe sopra una intermedia.
         if cfg is not None and static.flood_hazard_norm is None:
             citta = min(1.0, (static.imperviousness_norm or 0.0) / cfg.impervious_full)
             piano = (
@@ -130,6 +132,8 @@ class FloodScoringEngine(ScoringEngine[FloodBreakdown]):
                 pluvial_susceptibility=susc_pioggia,
                 pluvial=pluvial,
                 fluvial=fluvial,
+                # Il mosaico la mappa: dirlo «fuori dalle zone mappate» sarebbe falso,
+                # anche quando il terreno ne abbassa la classe (#469).
                 mapped=static.flood_hazard_norm is not None,
                 discharge_ratio=dyn.river_discharge_ratio,
                 rain_mm=rain,

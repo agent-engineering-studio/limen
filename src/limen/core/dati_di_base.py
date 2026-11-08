@@ -93,6 +93,7 @@ _LETTURE: dict[str, Callable[[float | str, str | None], str]] = {
     "pai_class_norm": _classe_con_nome(_CLASSI_PAI),
     "flood_hazard_norm": _classe_con_nome(_CLASSI_IDRAULICHE),
     "slope_deg": lambda v, _c: f"pendenza {_numero(float(v), 1)}°",
+    "quota_sul_fondo_m": lambda v, _c: f"{round(float(v))} m sopra il fondo valle",
     "landuse_code": lambda v, _c: f"classe CORINE {v}",
     "imperviousness_norm": lambda v, _c: f"suolo impermeabilizzato al {round(float(v) * 100)} %",
     "wui_proximity_norm": lambda v, _c: (

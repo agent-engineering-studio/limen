@@ -90,6 +90,21 @@ voci:
     attribuzione: Panza et al., CNR-IRPI, HR-DTM of Italy 5 m v1.2, doi:10.5281/zenodo.18921767
     peso_gb: 22.1
 
+  - id: quota_sul_fondo
+    nome: quota sul fondo valle
+    a_cosa_serve: >-
+      Quanti metri la cella sta sopra il punto più basso nel raggio di circa
+      tre chilometri. Dentro le aree a pericolo idraulico distingue il fondo
+      valle, che si allaga, dal versante, che resta asciutto. Si calcola dal
+      modello del terreno.
+    pericoli: [flood]
+    livello: consigliato
+    misura: {colonna: quota_sul_fondo_m}
+    deriva_da: dtm
+    fonte: calcolata da Limen sul modello del terreno (DTM)
+    licenza: come il DTM
+    peso_gb: 0
+
   - id: corine
     nome: copertura del suolo (CORINE)
     a_cosa_serve: >-
