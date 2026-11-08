@@ -9,7 +9,7 @@
 site_name = "Limen, spiegato per gradi"
 site_description = "Il libro di Limen: frane, alluvioni e incendi in Italia, dalle librerie al cuore del sistema"
 site_author = "Limen"
-site_url = "https://agent-engineering-studio.github.io/limen/"
+site_url = "https://limen-docs.agentengineering.it/"
 repo_url = "https://github.com/agent-engineering-studio/limen"
 repo_name = "agent-engineering-studio/limen"
 edit_uri = "edit/main/docs/book/"
