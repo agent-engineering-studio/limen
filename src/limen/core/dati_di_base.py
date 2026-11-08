@@ -98,6 +98,9 @@ _LETTURE: dict[str, Callable[[float | str, str | None], str]] = {
     "wui_proximity_norm": lambda v, _c: (
         f"vicinanza all'interfaccia urbano-foresta {_numero(float(v), 2)} su 1"
     ),
+    "near_urban": lambda v, _c: (
+        "case entro circa 2 km" if float(v) else "nessun abitato entro circa 2 km"
+    ),
     "distance_to_road_m": lambda v, _c: f"strada più vicina a {_metri(float(v))}",
     "litho_weight": lambda v, c: (
         f"{c} (peso {_numero(float(v), 2)})" if c else f"peso litologico {_numero(float(v), 2)}"

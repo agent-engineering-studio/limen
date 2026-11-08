@@ -102,7 +102,7 @@ RISORSE: tuple[Risorsa, ...] = (
         id="cc-by",
         licenza="CC BY 4.0",
         url_licenza="https://creativecommons.org/licenses/by/4.0/",
-        voci=("dtm", "corine", "wui", "impermeabilizzazione"),
+        voci=("dtm", "corine", "wui", "vicinanza", "impermeabilizzazione"),
         colonne=(
             "slope_deg",
             "aspect_deg",

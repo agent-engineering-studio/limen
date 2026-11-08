@@ -505,6 +505,119 @@ async def test_wui_is_skipped_without_land_cover(reset_db: None, pg_pool: object
     assert val is None
 
 
+async def test_vicinanza_ad_abitati_e_infrastrutture(reset_db: None, pg_pool: object) -> None:
+    """`near_urban` / `near_infra` dal bootstrap, non solo dalla migrazione 021 (#473).
+
+    La 021 le riempiva una volta, prima di CORINE su un'installazione nuova:
+    `false` ovunque per sempre. Il catalogo conta solo i `true`, così una
+    regione mai calcolata risulta «non caricata» e non «niente vicino».
+    """
+    from limen.config.catalogo_dati import carica_catalogo
+    from limen.data.repos import copertura_repo
+    from limen.integrations.static_bootstrap.orchestrator import (
+        compute_exposure_neighbourhood_for_aoi,
+    )
+
+    aoi = "vicinanza-test"
+    # Una fila di celle da 0,01°: 0 urbana, 6 strada (122), il resto bosco.
+    # Raggio 0,02°: la 2 è vicina all'abitato, la 3 no; la 4 è vicina alla
+    # strada, la 3 no.
+    codici = {0: "112", 1: "312", 2: "312", 3: "312", 4: "312", 5: "312", 6: "122"}
+    async with acquire() as conn:
+        await conn.execute(
+            "INSERT INTO aoi (id, name, kind, geom) VALUES ($1,'V','region',"
+            "ST_Multi(ST_MakeEnvelope(16.0, 41.0, 16.1, 41.1, 4326)))",
+            aoi,
+        )
+        for i, code in codici.items():
+            x = 16.0 + i * 0.01
+            cid = f"{aoi}|0|{i}"
+            await conn.execute(
+                "INSERT INTO grid_cells (id, aoi_id, row_idx, col_idx, geom, area_km2) "
+                "VALUES ($1,$2,0,$3, ST_MakeEnvelope($4,41.0,$5,41.01,4326), 1.0)",
+                cid,
+                aoi,
+                i,
+                x + 0.0005,
+                x + 0.0095,
+            )
+            await conn.execute(
+                "INSERT INTO cell_static_factors (cell_id, landuse_code) VALUES ($1,$2)",
+                cid,
+                code,
+            )
+
+    prima = await copertura_repo.leggi(carica_catalogo())
+    assert prima.per_regione[aoi]["vicinanza"] == 0
+
+    await compute_exposure_neighbourhood_for_aoi(aoi)
+
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT col_idx, near_urban, near_infra FROM cell_static_factors f "
+            "JOIN grid_cells g ON g.id = f.cell_id WHERE g.aoi_id = $1",
+            aoi,
+        )
+    urb = {r["col_idx"] for r in rows if r["near_urban"]}
+    inf = {r["col_idx"] for r in rows if r["near_infra"]}
+    assert urb == {0, 1, 2}
+    assert inf == {4, 5, 6}
+
+    dopo = await copertura_repo.leggi(carica_catalogo())
+    assert dopo.per_regione[aoi]["vicinanza"] == 3
+
+
+async def test_vicinanza_non_dipende_dall_ordine_delle_regioni(
+    reset_db: None, pg_pool: object
+) -> None:
+    """Il paese oltre il confine conta anche se la sua regione arriva dopo (#473).
+
+    A passa quando B non ha ancora CORINE, quindi la sua cella di confine resta
+    `false`; poi B carica CORINE e passa: deve correggere il confine di A, perché
+    l'impronta di A (quella di CORINE) non cambia e A non ripasserebbe più.
+    """
+    from limen.integrations.static_bootstrap.orchestrator import (
+        compute_exposure_neighbourhood_for_aoi,
+    )
+
+    async with acquire() as conn:
+        for aoi, x0 in (("vic-a", 16.0), ("vic-b", 16.01)):
+            await conn.execute(
+                "INSERT INTO aoi (id, name, kind, geom) VALUES ($1,$1,'region',"
+                "ST_Multi(ST_MakeEnvelope($2, 41.0, $3, 41.01, 4326)))",
+                aoi,
+                x0,
+                x0 + 0.01,
+            )
+            await conn.execute(
+                "INSERT INTO grid_cells (id, aoi_id, row_idx, col_idx, geom, area_km2) "
+                "VALUES ($1,$2,0,0, ST_MakeEnvelope($3,41.0,$4,41.01,4326), 1.0)",
+                f"{aoi}|0|0",
+                aoi,
+                x0,
+                x0 + 0.01,
+            )
+        await conn.execute(
+            "INSERT INTO cell_static_factors (cell_id, landuse_code) VALUES ('vic-a|0|0', '312')"
+        )
+        await conn.execute("INSERT INTO cell_static_factors (cell_id) VALUES ('vic-b|0|0')")
+
+    await compute_exposure_neighbourhood_for_aoi("vic-a")
+    async with acquire() as conn:
+        assert not await conn.fetchval(
+            "SELECT near_urban FROM cell_static_factors WHERE cell_id = 'vic-a|0|0'"
+        )
+        await conn.execute(
+            "UPDATE cell_static_factors SET landuse_code = '112' WHERE cell_id = 'vic-b|0|0'"
+        )
+
+    await compute_exposure_neighbourhood_for_aoi("vic-b")
+    async with acquire() as conn:
+        assert await conn.fetchval(
+            "SELECT near_urban FROM cell_static_factors WHERE cell_id = 'vic-a|0|0'"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Idempotenza sul costo (#101)
 # ---------------------------------------------------------------------------

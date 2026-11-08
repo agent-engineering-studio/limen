@@ -62,6 +62,7 @@ STEP_VERSION: dict[str, int] = {
     "dem": 1,
     "corine": 1,
     "wui": 1,
+    "vicinanza": 1,
     "imperviousness": 1,
     # 2: la litologia si legge da `legenda_li` e non più dalla prima colonna
     # di testo (`gml_id`), che dava «unknown» a ogni cella d'Italia.

@@ -98,6 +98,7 @@ async def stato(settings: SettingsDep) -> InstallazioneStato:
                 peso_gb=v.peso_gb,
                 deriva_da=v.deriva_da,
                 copertura=copertura.totali.get(v.id, 0),
+                conta=v.misura.conta,
                 regioni_senza=senza.get(v.id, []),
                 download=_dto(scaricamenti.get(v.id)),
             )

@@ -764,6 +764,8 @@ export interface VoceDato {
   attribuzione: string | null;
   peso_gb: number;
   deriva_da: string | null;
+  /** «veri»: `copertura` conta le celle a vero (es. vicinanza ad abitati), non quelle coperte. */
+  conta?: "valori" | "veri";
   copertura: number;
   /** Le regioni seminate dove il dato manca (solo per i dati per cella). */
   regioni_senza: string[];

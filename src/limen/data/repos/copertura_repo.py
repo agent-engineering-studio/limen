@@ -30,7 +30,11 @@ class Copertura:
 
 async def leggi(catalogo: CatalogoDati) -> Copertura:
     colonne = {v.id: v.misura.colonna for v in catalogo.voci if v.misura.colonna is not None}
-    conte = ", ".join(f"count(f.{col}) AS {id_}" for id_, col in colonne.items())
+    veri = {v.id for v in catalogo.voci if v.misura.conta == "veri"}
+    conte = ", ".join(
+        f"count(*) FILTER (WHERE f.{col}) AS {id_}" if id_ in veri else f"count(f.{col}) AS {id_}"
+        for id_, col in colonne.items()
+    )
     async with acquire() as conn:
         righe = await conn.fetch(
             f"SELECT g.aoi_id, count(*) AS celle, {conte} "

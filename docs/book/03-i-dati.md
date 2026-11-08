@@ -635,10 +635,12 @@ corrispondente.
   punteggio dell'alluvione. La correzione è pesare l'area per la parte di
   cella che copre, e misurarla nel backtest prima di adottarla.
   *([#469](https://github.com/agent-engineering-studio/limen/issues/469))*
-- **La vicinanza a centri abitati e infrastrutture non è mai stata
-  ricalcolata.** Fu calcolata una volta sola, quando Limen copriva solo
-  Puglia e Basilicata; oggi vale «no» in tutte le celle d'Italia, e gli
-  avvisi perdono una parte del loro ordine di urgenza.
+- **La vicinanza a centri abitati e infrastrutture non era mai stata
+  ricalcolata** *(chiuso)*. Fu calcolata una volta sola, quando Limen copriva
+  solo Puglia e Basilicata, e valeva «no» in tutte le celle d'Italia. Ora si
+  ricalcola a ogni caricamento della copertura del suolo: su tutta Italia
+  una cella su tre ha case entro circa 2 km, una su nove una strada, una
+  ferrovia o una zona industriale (misura dell'8 novembre 2026).
   *([#473](https://github.com/agent-engineering-studio/limen/issues/473))*
 - **Gli incendi passati visti dal satellite non sono nel catalogo dei dati.**
   L'archivio NASA 2000-2024 (35 MB, nessuna chiave) non viene scaricato da

@@ -93,6 +93,7 @@ const T = testi(
       avanzato: "Servono alle verifiche e al modello sperimentale, non alla mappa.",
     },
     copertura: (n: number) => `Presente su ${n.toLocaleString("it-IT")} celle`,
+    calcolata: "Calcolata",
     righe: (n: number) => `${n.toLocaleString("it-IT")} elementi`,
     assente: "Non ancora presente",
     mancaIn: (n: number) => `manca in ${n} ${n === 1 ? "regione" : "regioni"}`,
@@ -152,6 +153,7 @@ const T = testi(
       avanzato: "Used by the verification and the experimental model, not by the map.",
     },
     copertura: (n: number) => `Present on ${n.toLocaleString("en-GB")} cells`,
+    calcolata: "Computed",
     righe: (n: number) => `${n.toLocaleString("en-GB")} items`,
     assente: "Not present yet",
     mancaIn: (n: number) => `missing in ${n} ${n === 1 ? "region" : "regions"}`,
@@ -474,7 +476,9 @@ function RigaVoce({
           {presente
             ? voce.id === "perimetri_effis"
               ? t.righe(voce.copertura)
-              : t.copertura(voce.copertura)
+              : voce.conta === "veri"
+                ? t.calcolata
+                : t.copertura(voce.copertura)
             : t.assente}
           {presente && voce.regioni_senza.length > 0 && ` · ${t.mancaIn(voce.regioni_senza.length)}`}
         </span>
