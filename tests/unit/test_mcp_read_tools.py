@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 
+from limen.core.dati_di_base import DatoDiBase, StatoDato
 from limen.core.models.hazard import HazardType
 from limen.mcp import tools
 
@@ -138,9 +139,28 @@ async def test_cell_breakdown_found_and_missing(monkeypatch: pytest.MonkeyPatch)
         "explanation": {"briefing_it": "testo"},
     }
     _use(monkeypatch, _Conn({"LIMIT 1": row}))
+
+    async def _dati(_catalogo: Any, cell_id: str, pericolo: HazardType) -> list[DatoDiBase]:
+        return [
+            DatoDiBase(
+                id="impermeabilizzazione",
+                nome="suolo",
+                colonna="imperviousness_norm",
+                stato=StatoDato.PRESENTE,
+                valore=0.42,
+                lettura="suolo impermeabilizzato al 42 %",
+                fonte="CLMS",
+                licenza="libera",
+                attribuzione="EEA",
+            )
+        ]
+
+    monkeypatch.setattr(tools.dati_di_base_repo, "leggi", _dati)
     out = await tools.cell_breakdown("c1")
     assert out["factors"] == {"s": 0.2}
     assert out["explanation"] == {"briefing_it": "testo"}
+    assert out["dati_di_base"][0]["lettura"] == "suolo impermeabilizzato al 42 %"
+    assert out["dati_di_base"][0]["attribuzione"] == "EEA"
 
     _use(monkeypatch, _Conn({"LIMIT 1": None}))
     assert "error" in await tools.cell_breakdown("sconosciuta")

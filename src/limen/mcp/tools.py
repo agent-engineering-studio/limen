@@ -16,9 +16,11 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
 
+from limen.config.catalogo_dati import carica_catalogo
 from limen.core.logging import get_logger
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.data.db import acquire
+from limen.data.repos import dati_di_base_repo
 
 log = get_logger(__name__)
 
@@ -161,6 +163,7 @@ async def cell_breakdown(cell_id: str, hazard: str | None = None) -> dict[str, A
         )
     if row is None:
         return {"error": f"no assessment for cell {cell_id!r}"}
+    dati = await dati_di_base_repo.leggi(carica_catalogo(), cell_id, _coerce_hazard(hazard))
     return {
         "cell_id": str(row["cell_id"]),
         "computed_at": row["computed_at"].isoformat(),
@@ -168,6 +171,7 @@ async def cell_breakdown(cell_id: str, hazard: str | None = None) -> dict[str, A
         "level": str(row["class"]),
         "factors": _coerce_json(row["factors"]),
         "explanation": _coerce_json(row["explanation"]),
+        "dati_di_base": [d.model_dump(mode="json") for d in dati],
     }
 
 

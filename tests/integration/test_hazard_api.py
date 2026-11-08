@@ -188,6 +188,49 @@ async def test_the_filter_selects_the_requested_hazard(client: httpx.AsyncClient
     assert [p["score"] for p in hist.json()["observed"]] == [pytest.approx(0.42)]
 
 
+async def test_the_breakdown_carries_the_base_data_with_its_source(
+    client: httpx.AsyncClient,
+) -> None:
+    """#422: il dato di base arriva con la fonte, e una colonna vuota dice se
+    il dato manca in regione o se la cella ne è fuori — mai uno zero."""
+    cell_id = await _seed_two_hazard_rows()
+    async with acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO grid_cells (id, aoi_id, row_idx, col_idx, geom, area_km2)
+            VALUES ('hz-api-cell-2', 'hz-api-aoi', 0, 1,
+                    ST_MakeEnvelope(16.82, 41.11, 16.83, 41.12, 4326), 1.0)
+            ON CONFLICT (id) DO NOTHING
+            """
+        )
+        await conn.execute(
+            """
+            INSERT INTO cell_static_factors (cell_id, imperviousness_norm)
+            VALUES ($1, 0.42)
+            ON CONFLICT (cell_id) DO UPDATE SET imperviousness_norm = 0.42,
+                                                flood_hazard_norm = NULL
+            """,
+            cell_id,
+        )
+        await conn.execute(
+            """
+            INSERT INTO cell_static_factors (cell_id, flood_hazard_norm, flood_hazard_class)
+            VALUES ('hz-api-cell-2', 0.8, 'P3')
+            ON CONFLICT (cell_id) DO UPDATE SET flood_hazard_norm = 0.8, flood_hazard_class = 'P3'
+            """
+        )
+    quoted = cell_id.replace("|", "%7C")
+
+    res = await client.get(f"/api/cell/{quoted}/breakdown?hazard={HazardType.FLOOD.value}")
+    assert res.status_code == 200
+    dati = {d["id"]: d for d in res.json()["dati_di_base"]}
+    assert dati["impermeabilizzazione"]["lettura"] == "suolo impermeabilizzato al 42 %"
+    assert dati["impermeabilizzazione"]["attribuzione"]
+    assert dati["idraulica"]["stato"] == "assente_qui"
+    assert dati["idraulica"]["valore"] is None
+    assert "dtm" not in dati
+
+
 async def test_alerts_of_a_hazard_without_a_yaml_degrade_instead_of_failing(
     client: httpx.AsyncClient,
 ) -> None:

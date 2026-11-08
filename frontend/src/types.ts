@@ -238,6 +238,24 @@ export interface CellBreakdownResponse {
    *  è zero per assenza di misura, non per quiete. È qui che la domanda
    *  nasce — chi clicca una cella grigia vuole sapere perché. */
   measured: boolean;
+  /** Il dato di base di ogni ingrediente, con fonte e attribuzione (#422). */
+  dati_di_base?: DatoDiBase[];
+}
+
+/** Un dato di base della cella. `valore` null non è zero: `stato` dice se
+ *  il dato non è caricato in regione o se la cella ne è fuori. */
+export interface DatoDiBase {
+  id: string;
+  nome: string;
+  colonna: string;
+  stato: "presente" | "assente_qui" | "non_caricato";
+  valore: number | string | null;
+  classe: string | null;
+  lettura: string;
+  fonte: string;
+  licenza: string;
+  attribuzione: string | null;
+  url: string | null;
 }
 
 export interface AlertItem {

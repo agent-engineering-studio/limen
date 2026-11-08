@@ -6,6 +6,7 @@ import { useHazard } from "../lib/hazard";
 import { locale, testi, useLingua, useTesti, type Lingua } from "../lib/i18n";
 import ComeNasce from "./ComeNasce";
 import ContributoEsperto from "./ContributoEsperto";
+import DatiDiBase from "./DatiDiBase";
 import { RISK_COLOR_BY_LEVEL, RISK_SCURE, useEtichetteRischio } from "../lib/risk-colors";
 import type {
   CellBreakdownResponse,
@@ -781,6 +782,7 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
         <p className="verdict verdict-neutral" role="status">
           {t.spiegaNonMisurato}
         </p>
+        <DatiDiBase dati={data.dati_di_base} />
         <ContributoEsperto key={`${data.cell_id}|${rowHazard}`} cellId={data.cell_id} hazard={rowHazard} />
       </aside>
     );
@@ -858,6 +860,7 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
           <span className="mono">{outlook.peak_mmh.toFixed(1)} mm/h</span>
         </p>
       ) : null}
+      <DatiDiBase dati={data.dati_di_base} />
       <ComeNasce cellId={data.cell_id} hazard={rowHazard} />
       <ContributoEsperto key={`${data.cell_id}|${rowHazard}`} cellId={data.cell_id} hazard={rowHazard} />
 

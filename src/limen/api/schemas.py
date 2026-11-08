@@ -13,6 +13,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from limen.config.catalogo_dati import Livello
+from limen.core.dati_di_base import DatoDiBase
 from limen.core.models.context import (
     CellRiskRecord,
     RiskAnalysisDTO,
@@ -106,6 +107,8 @@ class CellBreakdownResponse(BaseModel):
     #: (#143). È il posto in cui la domanda nasce — chi clicca una cella
     #: grigia vuole sapere perché.
     measured: bool = True
+    #: Il dato di base di ogni ingrediente, con fonte e attribuzione (#422).
+    dati_di_base: list[DatoDiBase] = Field(default_factory=list)
 
 
 class AlertItem(BaseModel):

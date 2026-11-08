@@ -17,6 +17,7 @@ from limen.api.schemas import (
     CellBreakdownResponse,
     LatestAssessmentResponse,
 )
+from limen.config.catalogo_dati import carica_catalogo
 from limen.config.settings import ScoringMode
 from limen.core.models.context import RiskAnalysisDTO
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
@@ -26,7 +27,7 @@ from limen.core.models.risk import (
 from limen.core.scoring.regional_thresholds import WildfireThresholds, load_hazard_thresholds
 from limen.core.scoring.wildfire.climatology import percentile
 from limen.data.db import acquire
-from limen.data.repos import fwi_climatology_repo, spiegazioni_repo
+from limen.data.repos import dati_di_base_repo, fwi_climatology_repo, spiegazioni_repo
 from limen.data.repos.assessment_repo import record_from_row
 from limen.integrations.openmeteo.previous_runs import MODELLI as MODELLI_PIOGGIA
 from limen.integrations.openmeteo.previous_runs import NODI_CORRETTORE
@@ -202,6 +203,7 @@ async def cell_breakdown(
         factors=_coerce_json(row["factors"]),
         explanation=_coerce_json(row["explanation"]),
         measured=bool(row["measured"]),
+        dati_di_base=await dati_di_base_repo.leggi(carica_catalogo(), cell_id, hazard),
     )
 
 
