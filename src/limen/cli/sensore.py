@@ -179,6 +179,18 @@ def _segreto() -> tuple[str, bytes]:
     return segreto, hashlib.sha256(segreto.encode()).digest()
 
 
+def _manca_indirizzo(indirizzo: str, *, voce: str) -> bool:
+    """Vero, e lo dice, se l'installazione non ha l'indirizzo da scrivere nella mail (#517)."""
+    if indirizzo:
+        return False
+    log.error(
+        "sensore.indirizzo_pubblico_mancante",
+        voce=voce,
+        rimedio="imposta PUBBLICO__URL nel .env (o la voce IOT__CITTADINI__REGISTRAZIONE__*)",
+    )
+    return True
+
+
 async def _approva_lorawan(r: repo.Richiesta, *, settings: Settings) -> int:
     assert r.ttn_applicazione is not None
     segreto: str | None = None
@@ -242,6 +254,9 @@ async def _approva_lorawan(r: repo.Richiesta, *, settings: Settings) -> int:
 
 
 async def ttn_segreto(applicazione: str, *, settings: Settings) -> int:
+    webhook = settings.iot.cittadini.registrazione.webhook_ttn_pubblico
+    if _manca_indirizzo(webhook, voce="webhook_ttn_pubblico"):
+        return 1
     segreto, impronta = _segreto()
     email = await repo.ruota_segreto_ttn(applicazione, impronta)
     if email is None:
@@ -254,7 +269,7 @@ async def ttn_segreto(applicazione: str, *, settings: Settings) -> int:
             "",
             *_istruzioni_webhook(
                 applicazione,
-                webhook=settings.iot.cittadini.registrazione.webhook_ttn_pubblico,
+                webhook=webhook,
                 segreto=segreto,
             ),
         ]
@@ -284,8 +299,13 @@ async def approva(richiesta_id: int, *, settings: Settings, ca: CaSensori) -> in
     if r.stato == "respinta":
         log.error("sensore.richiesta_respinta", richiesta=richiesta_id)
         return 1
+    registrazione = settings.iot.cittadini.registrazione
     if r.csr is None:
+        if _manca_indirizzo(registrazione.webhook_ttn_pubblico, voce="webhook_ttn_pubblico"):
+            return 1
         return await _approva_lorawan(r, settings=settings)
+    if _manca_indirizzo(registrazione.broker_pubblico, voce="broker_pubblico"):
+        return 1
     csr = r.csr
     certificato = r.certificato
     if r.stato == "in_attesa":

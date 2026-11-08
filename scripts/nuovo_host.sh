@@ -14,6 +14,7 @@
 # Variabili:
 #   NUOVO_HOST_DISCO_GB      spazio libero minimo sotto LIMEN_DATA_ROOT (50)
 #   NUOVO_HOST_FSYNC_MS_MAX  latenza massima di una scrittura sincrona (20)
+#   NUOVO_HOST_URL_PUBBLICO  l'URL pubblico (PUBBLICO__URL) senza chiederlo
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -28,7 +29,7 @@ stop() { no "$*"; exit 1; }
 
 case "$MODO" in
   --controlla | --ripristina | --da-zero | --solo-stack) ;;
-  *) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+  *) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
 esac
 
 # --- 1. Prerequisiti ----------------------------------------------------------
@@ -101,6 +102,35 @@ segreto() {  # segreto NOME "commento per la riga aggiunta"
 segreto DB__TILES_PASSWORD "Generata da nuovo_host.sh (#269): la password del ruolo di pg_tileserv."
 segreto INSTALLAZIONE__TOKEN \
   "Generato da nuovo_host.sh (#403): il token delle azioni della pagina di installazione."
+
+# L'indirizzo pubblico dell'installazione (#517): da qui Limen ricava broker e
+# webhook dei sensori. Si chiede una volta; vuoto è una risposta valida, e
+# vuol dire che i sensori su questa installazione non si offrono.
+if grep -qs '^PUBBLICO__URL=' .env; then
+  url="$(dotenv PUBBLICO__URL)"
+  ok "PUBBLICO__URL=${url:-(vuoto: niente sensori)}"
+elif [ "$MODO" = "--controlla" ]; then
+  no "manca PUBBLICO__URL: le altre modalità la chiedono (vuota = niente sensori)"
+else
+  dominio="$(dotenv LIMEN_DOMINIO)"
+  proposta=""
+  case "$dominio" in "" | localhost) ;; *) proposta="https://$dominio" ;; esac
+  if [ -n "${NUOVO_HOST_URL_PUBBLICO+x}" ]; then
+    url="$NUOVO_HOST_URL_PUBBLICO"
+  elif [ -t 0 ]; then
+    printf '  URL pubblico di questa installazione, es. https://limen.example.org\n'
+    printf '  (Invio per %s; «-» per lasciarlo vuoto): ' "${proposta:-lasciarlo vuoto}"
+    read -r url || url=""
+    [ -n "$url" ] || url="$proposta"
+    [ "$url" != "-" ] || url=""
+  else
+    url="$proposta"
+  fi
+  case "$url" in "" | https://*) ;; *) stop "PUBBLICO__URL deve cominciare con https://: $url" ;; esac
+  printf '\n# Chiesto da nuovo_host.sh (#517): vuoto = i sensori non si offrono.\nPUBBLICO__URL=%s\n' \
+    "$url" >>.env
+  ok "PUBBLICO__URL=${url:-(vuoto: niente sensori)}"
+fi
 
 # Lo spazio dove andranno i dati: la radice, o la cartella più vicina che esiste.
 dove="$RADICE"

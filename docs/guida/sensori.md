@@ -87,9 +87,11 @@ oppure il canale webhook, descritto in
 
 **Un Mosquitto dedicato, raggiungibile da Internet sulla porta 8883, che
 accetta solo dispositivi con un certificato firmato dalla CA dei sensori di
-Limen.** È ospitato sullo stesso server di Limen, non su un cloud: costa
-quasi nulla e parla MQTT standard, quindi un dispositivo non deve cambiare
-nulla se un giorno il broker si sposterà.
+Limen.** È ospitato sullo stesso server della tua installazione di Limen,
+non su un cloud: costa quasi nulla e parla MQTT standard. Il suo indirizzo è
+quello dell'installazione (`PUBBLICO__URL` nel `.env`, porta 8883), e arriva
+nella mail di approvazione; un'installazione senza indirizzo pubblico non
+offre i sensori.
 
 Come è difeso:
 
@@ -188,7 +190,7 @@ stesso array SenML, con il suo `seq`; al posto del certificato c'è una firma
 fatta con la chiave registrata:
 
 ```
-POST https://limen.agentengineering.it/sensori/v2/pluvio-matera-01/obs
+POST https://<la-tua-installazione>/sensori/v2/pluvio-matera-01/obs
 X-Limen-Tempo: 1792065600
 X-Limen-Firma: <firma in base64>
 ```
@@ -229,7 +231,7 @@ conserva solo l'impronta. Sulla console aggiungi un webhook personalizzato:
 | Campo | Valore |
 |---|---|
 | Formato | JSON |
-| URL base | `https://limen.agentengineering.it/sensori/v2/ttn` |
+| URL base | `https://<la-tua-installazione>/sensori/v2/ttn` (è nella mail) |
 | Header | `Authorization: Bearer <segreto>` |
 | Uplink message | attivo, percorso vuoto |
 
@@ -378,8 +380,8 @@ pio run -e pluviometro -t upload     # oppure umidita_suolo, idrometro
 pio device monitor                   # la seriale, a 115200
 ```
 
-Nel programma non c'è nessun segreto: rete, id e certificati si danno dalla
-seriale e restano nella memoria del dispositivo.
+Nel programma non c'è nessun segreto e nessun indirizzo: rete, id, broker e
+certificati si danno dalla seriale e restano nella memoria del dispositivo.
 
 ```
 ssid=LaMiaRete
@@ -392,7 +394,9 @@ csr
 `csr` crea la chiave del dispositivo la prima volta e stampa la richiesta da
 incollare nel modulo di registrazione. Quando arriva la mail con i due
 certificati si scrive `cert` e si incolla quello del dispositivo, poi `ca` e
-si incolla quello della CA, poi `riavvia`. Il firmware rifiuta un
+si incolla quello della CA, poi `broker=mqtts://<la-tua-installazione>:8883`
+con l'indirizzo scritto nella mail, poi `riavvia`. Senza broker il sensore non
+si collega e lo dice sulla seriale. Il firmware rifiuta un
 certificato che non corrisponde alla sua chiave o che è per un altro id.
 Ogni impostazione, calibrazioni comprese, vale dal riavvio successivo.
 `stato` dice cosa manca.
@@ -430,7 +434,7 @@ Da un Raspberry Pi, o da un computer per una prova, un messaggio si manda
 così (la sequenza deve crescere a ogni invio):
 
 ```sh
-mosquitto_pub -h limen.agentengineering.it -p 8883 -q 1 \
+mosquitto_pub -h <la-tua-installazione> -p 8883 -q 1 \
   --cafile ca.crt --cert dispositivo.crt --key dispositivo.key \
   -t limen/v2/pluvio-matera-01/obs \
   -m "[{\"bn\":\"pluvio-matera-01/\",\"bt\":$(date +%s),\"n\":\"rainfall\",\"u\":\"mm\",\"v\":0.0},{\"n\":\"seq\",\"v\":1}]"

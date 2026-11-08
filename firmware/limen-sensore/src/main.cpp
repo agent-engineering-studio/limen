@@ -19,7 +19,10 @@
 // Per questo il firmware sta largo sotto il limite: nel conto entrano anche
 // `online`, il last will e ogni ritrasmissione.
 //
-// Si configura dalla seriale, a 115200: scrivi `aiuto`.
+// Si configura dalla seriale, a 115200: scrivi `aiuto`. Il broker non è
+// scritto qui: è quello dell'installazione di Limen che ha approvato il
+// sensore, nella mail di approvazione, e si imposta con `broker=` (#517).
+// Senza, il sensore non si collega e lo dice.
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -44,7 +47,6 @@ constexpr int RITRASMISSIONE_MS = 20000;
 // Dopo una riconnessione l'outbox di esp-mqtt ha già buttato il messaggio
 // (30 s): lo si rimanda noi, con gli stessi byte.
 constexpr uint32_t ATTESA_CONFERMA_MS = 35000;
-constexpr const char* BROKER = "mqtts://limen.agentengineering.it:8883";
 
 struct Campione {
   time_t t;
@@ -150,7 +152,7 @@ void avvia_mqtt() {
   ca = identita::leggi("ca");
   cert = identita::leggi("cert");
   chiave = identita::leggi("chiave");
-  uri = identita::leggi("broker", BROKER);
+  uri = identita::leggi("broker");
   topic_obs = "limen/v2/" + id + "/obs";
   topic_status = "limen/v2/" + id + "/status";
 
@@ -259,7 +261,8 @@ void aiuto() {
       "  csr          crea la chiave (la prima volta) e stampa la CSR da mandare a Limen\n"
       "  cert         poi incolla il certificato del dispositivo ricevuto per mail\n"
       "  ca           poi incolla il certificato della CA ricevuto per mail\n"
-      "  intervallo=<secondi>  broker=<mqtts://host:porta>\n"
+      "  broker=<mqtts://host:8883>  il broker della tua installazione, dalla mail\n"
+      "  intervallo=<secondi>\n"
       "  grezza       la lettura grezza del sensore, per calibrarlo\n"
       "  stato        riavvia      (le impostazioni valgono dal riavvio)");
   sensore::descrivi_calibrazione();
@@ -272,6 +275,8 @@ void stato() {
                 identita::leggi("chiave").isEmpty() ? "no" : "sì",
                 identita::leggi("cert").isEmpty() ? "no" : "sì",
                 identita::leggi("ca").isEmpty() ? "no" : "sì");
+  const String broker = identita::leggi("broker");
+  Serial.printf("broker '%s'\n", broker.isEmpty() ? "non impostato" : broker.c_str());
   Serial.printf("Wi-Fi %s, broker %s, orologio %s, in coda %u\n",
                 WiFi.isConnected() ? "connesso" : "no", connesso ? "connesso" : "no",
                 time(nullptr) >= OROLOGIO_VALIDO ? "ok" : "non ancora", static_cast<unsigned>(quanti));
@@ -384,7 +389,11 @@ void setup() {
   configTime(0, 0, "time.inrim.it", "pool.ntp.org");
 
   Serial.printf("\nLimen · sensore %s\n", sensore::TIPO);
-  if (identita::pronta()) {
+  if (identita::leggi("broker").isEmpty()) {
+    Serial.println(
+        "Broker non impostato: il sensore non si collega. Scrivi "
+        "`broker=mqtts://<host>:8883` con l'indirizzo della mail di approvazione.");
+  } else if (identita::pronta()) {
     avvia_mqtt();
   } else {
     Serial.println("Configurazione incompleta: scrivi `aiuto`.");

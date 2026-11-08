@@ -20,6 +20,9 @@ router = APIRouter(tags=["sensori"])
 
 class RegistrazioneStato(BaseModel):
     aperta: bool
+    # False quando l'installazione non ha un indirizzo pubblico (#517): i
+    # sensori qui non sono disponibili, non «non ancora aperti».
+    indirizzo_pubblico: bool
 
 
 class RegistrazioneRisposta(BaseModel):
@@ -38,7 +41,13 @@ async def stazioni(response: Response, hazard: HazardType | None = None) -> dict
 @router.get("/api/sensori/registrazione", response_model=RegistrazioneStato)
 async def stato_registrazione(deps: DepsDep) -> RegistrazioneStato:
     """Se il modulo accetta richieste: chiuso, la pagina non lo mostra."""
-    return RegistrazioneStato(aperta=deps.settings.iot.cittadini.registrazione.aperta)
+    registrazione = deps.settings.iot.cittadini.registrazione
+    return RegistrazioneStato(
+        aperta=registrazione.disponibile,
+        indirizzo_pubblico=bool(
+            registrazione.broker_pubblico or registrazione.webhook_ttn_pubblico
+        ),
+    )
 
 
 @router.post(

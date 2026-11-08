@@ -537,11 +537,17 @@ class SensoriRegistrazioneSettings(BaseSettings):
     # la chiave della CA, mai in un container.
     ca_script: str = "scripts/sensori_ca.sh"
     giorni_certificato: int = Field(default=730, ge=1)
-    # Dove si collega il dispositivo, scritto nella mail di approvazione.
-    broker_pubblico: str = "mqtts://limen.agentengineering.it:8883"
-    # Il webhook di The Things Network, scritto nella mail di un sensore
-    # LoRaWAN (#266).
-    webhook_ttn_pubblico: str = "https://limen.agentengineering.it/sensori/v2/ttn"
+    # Dove si collega il dispositivo, scritto nella mail di approvazione, e il
+    # webhook di The Things Network per un sensore LoRaWAN (#266). Vuoti ⇒ si
+    # ricavano da ``PUBBLICO__URL``; vuoto anche quello ⇒ quel tipo di sensore
+    # non si registra su questa installazione (#517).
+    broker_pubblico: str = ""
+    webhook_ttn_pubblico: str = ""
+
+    @property
+    def disponibile(self) -> bool:
+        """Il modulo si offre solo se è aperto e almeno un ingresso è raggiungibile."""
+        return self.aperta and bool(self.broker_pubblico or self.webhook_ttn_pubblico)
 
 
 class IotCittadiniSettings(BaseSettings):
@@ -1318,6 +1324,27 @@ class InstallazioneSettings(BaseSettings):
         return ids or None
 
 
+class PubblicoSettings(BaseSettings):
+    """L'indirizzo con cui questa installazione si raggiunge da fuori (#517).
+
+    Uno per installazione, chiesto da ``nuovo_host.sh``: da qui si ricavano il
+    broker MQTT e il webhook TTN dei sensori, e nginx il ``server_name``. Vuoto
+    ⇒ le funzioni che vanno raggiunte da fuori non si offrono: un default qui
+    manderebbe i sensori di chi installa sul server di qualcun altro.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    url: str = ""
+
+    @property
+    def host(self) -> str | None:
+        """L'host dell'URL, senza schema, porta né percorso; ``None`` se manca."""
+        resto = self.url.strip().split("://", 1)[-1]
+        host = resto.split("/", 1)[0].rsplit("@", 1)[-1].split(":", 1)[0].strip().lower()
+        return host or None
+
+
 class Settings(BaseSettings):
     """Top-level application settings."""
 
@@ -1356,6 +1383,7 @@ class Settings(BaseSettings):
     openmeteo: OpenMeteoSettings = Field(default_factory=OpenMeteoSettings)
     kg: KgSettings = Field(default_factory=KgSettings)
     geoserver_source: GeoServerSourceSettings = Field(default_factory=GeoServerSourceSettings)
+    pubblico: PubblicoSettings = Field(default_factory=PubblicoSettings)
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_json: bool = False
@@ -1389,6 +1417,17 @@ class Settings(BaseSettings):
     azure_ai_api_key: SecretStr | None = None
     anthropic_foundry_endpoint: str | None = None
     anthropic_foundry_api_key: SecretStr | None = None
+
+    @model_validator(mode="after")
+    def _ingressi_sensori_da_url_pubblico(self) -> Settings:
+        registrazione = self.iot.cittadini.registrazione
+        host = self.pubblico.host
+        if host is not None:
+            registrazione.broker_pubblico = registrazione.broker_pubblico or f"mqtts://{host}:8883"
+            registrazione.webhook_ttn_pubblico = (
+                registrazione.webhook_ttn_pubblico or f"https://{host}/sensori/v2/ttn"
+            )
+        return self
 
 
 @lru_cache(maxsize=1)

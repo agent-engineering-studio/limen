@@ -5,7 +5,8 @@
 // sua chiave privata e riceve per mail il certificato firmato. Un sensore
 // LoRaWAN (#266) non ha CSR: manda id, DevEUI e applicazione TTN, e riceve il
 // segreto del webhook. Chiuso, il modulo non si mostra: dice solo che le
-// registrazioni apriranno.
+// registrazioni apriranno, o, se l'installazione non ha un indirizzo pubblico
+// (#517), che qui i sensori non sono disponibili.
 
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, JSX } from "react";
@@ -20,6 +21,9 @@ const T = testi(
     chiusa:
       "Le registrazioni dei sensori non sono ancora aperte: questa pagina " +
       "spiega già come costruirne uno e cosa dovrà mandare.",
+    senzaIndirizzo:
+      "I sensori non sono disponibili su questa installazione: non ha un " +
+      "indirizzo pubblico a cui un dispositivo possa collegarsi.",
     nota:
       "La richiesta arriva per mail a chi cura Limen e la legge una persona. " +
       "Se la approva, ricevi il certificato del dispositivo all'indirizzo che " +
@@ -80,6 +84,9 @@ const T = testi(
     chiusa:
       "Sensor registration is not open yet: this page already explains how " +
       "to build one and what it will have to send.",
+    senzaIndirizzo:
+      "Sensors are not available on this installation: it has no public " +
+      "address a device could connect to.",
     nota:
       "The request is emailed to the Limen maintainers and a person reads it. " +
       "If they approve it, you receive the device certificate at the address " +
@@ -173,6 +180,7 @@ function base64(file: File): Promise<string> {
 export default function RegistrazioneSensore(): JSX.Element | null {
   const t = useTesti(T);
   const [aperta, setAperta] = useState<boolean | null>(null);
+  const [indirizzo, setIndirizzo] = useState(true);
   const [stato, setStato] = useState<Stato>("modulo");
   const [errore, setErrore] = useState<{ e: unknown } | null>(null);
   const apertoAlle = useRef(Date.now());
@@ -197,7 +205,10 @@ export default function RegistrazioneSensore(): JSX.Element | null {
     const ctl = new AbortController();
     defaultApiClient
       .getRegistrazioneSensori(ctl.signal)
-      .then((r) => setAperta(r.aperta))
+      .then((r) => {
+        setIndirizzo(r.indirizzo_pubblico);
+        setAperta(r.aperta);
+      })
       .catch(() => setAperta(false));
     return () => ctl.abort();
   }, []);
@@ -206,7 +217,7 @@ export default function RegistrazioneSensore(): JSX.Element | null {
   if (!aperta) {
     return (
       <section className="contributo" aria-label={t.sezione}>
-        <p className="contributo-nota">{t.chiusa}</p>
+        <p className="contributo-nota">{indirizzo ? t.chiusa : t.senzaIndirizzo}</p>
       </section>
     );
   }

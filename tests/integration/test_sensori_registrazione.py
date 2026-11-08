@@ -26,6 +26,7 @@ from limen.config.settings import (
     IotCittadiniSettings,
     IotSettings,
     SensoriRegistrazioneSettings,
+    Settings,
     get_settings,
 )
 from limen.core import contributi
@@ -91,8 +92,21 @@ async def cella(reset_db: None) -> str:
     return cell_id
 
 
+BROKER = "mqtts://limen.example.org:8883"
+WEBHOOK = "https://limen.example.org/sensori/v2/ttn"
+
+
 def _settings(**registrazione: Any) -> SensoriRegistrazioneSettings:
-    return SensoriRegistrazioneSettings(aperta=True, **registrazione)
+    return SensoriRegistrazioneSettings(
+        aperta=True, broker_pubblico=BROKER, webhook_ttn_pubblico=WEBHOOK, **registrazione
+    )
+
+
+def _impostazioni() -> Settings:
+    s = get_settings().model_copy(deep=True)
+    s.iot.cittadini.registrazione.broker_pubblico = BROKER
+    s.iot.cittadini.registrazione.webhook_ttn_pubblico = WEBHOOK
+    return s
 
 
 async def _ricevi(
@@ -141,7 +155,7 @@ async def test_richiesta_approva_osserva_revoca(
     ca = _CaFinta()
     posta_cli = _Posta()
     monkeypatch.setattr(sensore, "invia_testo", posta_cli.invia)
-    assert await sensore.approva(rid, settings=get_settings(), ca=ca) == 0
+    assert await sensore.approva(rid, settings=_impostazioni(), ca=ca) == 0
     dispositivo = await sensor_devices_repo.get_device(ID)
     assert dispositivo is not None
     assert (dispositivo.livello, dispositivo.status, dispositivo.cell_id) == (0, "offline", cella)
@@ -160,7 +174,7 @@ async def test_richiesta_approva_osserva_revoca(
     assert ca.revocati == [ID]
     assert await ingestore.gestisci(topic=f"limen/v2/{ID}/obs", payload=_obs(2)) is Esito.QUARANTENA
     # Rilanciare `approva` non rimanda un certificato revocato.
-    assert await sensore.approva(rid, settings=get_settings(), ca=ca) == 1
+    assert await sensore.approva(rid, settings=_impostazioni(), ca=ca) == 1
     assert len(posta_cli.mail) == 1
     # Un LWT «online» non toglie la revoca.
     await ingestore.gestisci(topic=f"limen/v2/{ID}/status", payload=b"online")
@@ -176,8 +190,8 @@ async def test_approva_due_volte_rimanda_lo_stesso_certificato(
     ca = _CaFinta()
     posta = _Posta()
     monkeypatch.setattr(sensore, "invia_testo", posta.invia)
-    assert await sensore.approva(rid, settings=get_settings(), ca=ca) == 0
-    assert await sensore.approva(rid, settings=get_settings(), ca=ca) == 0
+    assert await sensore.approva(rid, settings=_impostazioni(), ca=ca) == 0
+    assert await sensore.approva(rid, settings=_impostazioni(), ca=ca) == 0
     assert len(ca.firmate) == 1
     assert posta.mail[0]["allegati"][0][2] == posta.mail[1]["allegati"][0][2]
 
@@ -190,11 +204,11 @@ async def test_rilanciare_approva_aggiunge_la_chiave_mancante(
     rid = await _richiesta_id()
     ca = _CaFinta()
     monkeypatch.setattr(sensore, "invia_testo", _Posta().invia)
-    assert await sensore.approva(rid, settings=get_settings(), ca=ca) == 0
+    assert await sensore.approva(rid, settings=_impostazioni(), ca=ca) == 0
     chiave = await sensor_devices_repo.chiave_pubblica(ID)
     async with acquire() as conn:
         await conn.execute("UPDATE sensor_devices SET chiave_pubblica = NULL WHERE id = $1", ID)
-    assert await sensore.approva(rid, settings=get_settings(), ca=ca) == 0
+    assert await sensore.approva(rid, settings=_impostazioni(), ca=ca) == 0
     assert await sensor_devices_repo.chiave_pubblica(ID) == chiave
 
 
@@ -204,7 +218,7 @@ async def test_mail_non_partita_rimanda_alla_cli(
     await _ricevi(_Posta())
     rid = await _richiesta_id()
     monkeypatch.setattr(sensore, "invia_testo", _Posta(parte=False).invia)
-    assert await sensore.approva(rid, settings=get_settings(), ca=_CaFinta()) == 1
+    assert await sensore.approva(rid, settings=_impostazioni(), ca=_CaFinta()) == 1
     # Il dispositivo esiste: rilanciare `approva` rimanda solo la mail.
     assert await sensor_devices_repo.get_device(ID) is not None
 
@@ -224,7 +238,7 @@ async def test_id_gia_usato_da_un_altro_non_si_approva(
         )
     monkeypatch.setattr(sensore, "invia_testo", _Posta().invia)
     ca = _CaFinta()
-    assert await sensore.approva(rid, settings=get_settings(), ca=ca) == 1
+    assert await sensore.approva(rid, settings=_impostazioni(), ca=ca) == 1
     assert ca.firmate == []
 
 
@@ -233,7 +247,7 @@ async def test_respinta_non_si_approva(cella: str) -> None:
     rid = await _richiesta_id()
     assert await sensore.respingi(rid) == 0
     assert await sensore.respingi(rid) == 0
-    assert await sensore.approva(rid, settings=get_settings(), ca=_CaFinta()) == 1
+    assert await sensore.approva(rid, settings=_impostazioni(), ca=_CaFinta()) == 1
 
 
 async def test_se_la_mail_non_parte_non_resta_niente(cella: str) -> None:
@@ -266,7 +280,7 @@ async def test_cancella_registrante(cella: str, monkeypatch: pytest.MonkeyPatch)
     await _ricevi(_Posta(), csr=csr_pem("pluvio-matera-02"))
     monkeypatch.setattr(sensore, "invia_testo", _Posta().invia)
     ca = _CaFinta()
-    assert await sensore.approva(await _richiesta_id(), settings=get_settings(), ca=ca) == 0
+    assert await sensore.approva(await _richiesta_id(), settings=_impostazioni(), ca=ca) == 0
 
     assert await sensore.cancella_registrante("Maker@example.org", ca=ca) == 0
     assert await sensore.cancella_registrante(MAIL, ca=ca) == 0
@@ -294,7 +308,7 @@ async def test_cancella_registrante(cella: str, monkeypatch: pytest.MonkeyPatch)
 async def test_quarantena_per_registrante(cella: str, monkeypatch: pytest.MonkeyPatch) -> None:
     await _ricevi(_Posta())
     monkeypatch.setattr(sensore, "invia_testo", _Posta().invia)
-    await sensore.approva(await _richiesta_id(), settings=get_settings(), ca=_CaFinta())
+    await sensore.approva(await _richiesta_id(), settings=_impostazioni(), ca=_CaFinta())
     assert await sensore.quarantena(None, registrante=MAIL) == 0
     dispositivo = await sensor_devices_repo.get_device(ID)
     assert dispositivo is not None and dispositivo.status == "quarantined"
@@ -368,7 +382,7 @@ async def test_lorawan_richiesta_approva_webhook(
     ca = _CaFinta()
     posta_cli = _Posta()
     monkeypatch.setattr(sensore, "invia_testo", posta_cli.invia)
-    assert await sensore.approva(rid, settings=get_settings(), ca=ca) == 0
+    assert await sensore.approva(rid, settings=_impostazioni(), ca=ca) == 0
     assert ca.firmate == []
     [consegna] = posta_cli.mail
     segreto = _segreto_nella_mail(consegna["testo"])
@@ -389,17 +403,17 @@ async def test_lorawan_richiesta_approva_webhook(
     assert (risposta.status_code, risposta.json()) == (200, {"esito": "salvato"})
 
     # Rilanciare `approva` rimanda la mail, ma un segreto non si rimanda.
-    assert await sensore.approva(rid, settings=get_settings(), ca=ca) == 0
+    assert await sensore.approva(rid, settings=_impostazioni(), ca=ca) == 0
     assert _segreto_nella_mail(posta_cli.mail[1]["testo"]) is None
 
     # Un segreto perso si sostituisce: il vecchio smette di valere.
-    assert await sensore.ttn_segreto("pluviometri-matera", settings=get_settings()) == 0
+    assert await sensore.ttn_segreto("pluviometri-matera", settings=_impostazioni()) == 0
     nuovo = _segreto_nella_mail(posta_cli.mail[2]["testo"])
     assert nuovo is not None and nuovo != segreto
     assert posta_cli.mail[2]["destinatari"] == [MAIL]
     assert (await _uplink(ingestore, segreto)).status_code == 401
     assert (await _uplink(ingestore, nuovo)).status_code == 202  # stessa seq: doppione
-    assert await sensore.ttn_segreto("non-esiste", settings=get_settings()) == 1
+    assert await sensore.ttn_segreto("non-esiste", settings=_impostazioni()) == 1
 
 
 async def test_lorawan_seconda_applicazione_e_applicazione_altrui(
@@ -408,7 +422,9 @@ async def test_lorawan_seconda_applicazione_e_applicazione_altrui(
     posta_cli = _Posta()
     monkeypatch.setattr(sensore, "invia_testo", posta_cli.invia)
     await _ricevi(_Posta(), **LORA)
-    assert await sensore.approva(await _richiesta_id(), settings=get_settings(), ca=_CaFinta()) == 0
+    assert (
+        await sensore.approva(await _richiesta_id(), settings=_impostazioni(), ca=_CaFinta()) == 0
+    )
 
     # Un secondo dispositivo nella stessa applicazione: vale il segreto già dato.
     await _ricevi(
@@ -418,7 +434,7 @@ async def test_lorawan_seconda_applicazione_e_applicazione_altrui(
     )
     assert (
         await sensore.approva(
-            await _richiesta_id("pluvio-matera-02"), settings=get_settings(), ca=_CaFinta()
+            await _richiesta_id("pluvio-matera-02"), settings=_impostazioni(), ca=_CaFinta()
         )
         == 0
     )
@@ -433,7 +449,7 @@ async def test_lorawan_seconda_applicazione_e_applicazione_altrui(
     )
     assert (
         await sensore.approva(
-            await _richiesta_id("pluvio-matera-03"), settings=get_settings(), ca=_CaFinta()
+            await _richiesta_id("pluvio-matera-03"), settings=_impostazioni(), ca=_CaFinta()
         )
         == 1
     )
@@ -452,7 +468,9 @@ async def test_lorawan_dev_eui_gia_registrato(cella: str, monkeypatch: pytest.Mo
     assert isinstance(await _ricevi(_Posta(), **LORA), reg.Ricevuta)
     doppio = await _ricevi(_Posta(), ip="203.0.113.8", **{**LORA, "device_id": "pluvio-matera-02"})
     assert isinstance(doppio, reg.NonValida) and "DevEUI" in doppio.motivo
-    assert await sensore.approva(await _richiesta_id(), settings=get_settings(), ca=_CaFinta()) == 0
+    assert (
+        await sensore.approva(await _richiesta_id(), settings=_impostazioni(), ca=_CaFinta()) == 0
+    )
     dopo = await _ricevi(_Posta(), ip="203.0.113.9", **{**LORA, "device_id": "pluvio-matera-04"})
     assert isinstance(dopo, reg.NonValida) and "DevEUI" in dopo.motivo
 
@@ -480,7 +498,9 @@ async def test_cancella_registrante_lorawan(cella: str, monkeypatch: pytest.Monk
     posta_cli = _Posta()
     monkeypatch.setattr(sensore, "invia_testo", posta_cli.invia)
     await _ricevi(_Posta(), **LORA)
-    assert await sensore.approva(await _richiesta_id(), settings=get_settings(), ca=_CaFinta()) == 0
+    assert (
+        await sensore.approva(await _richiesta_id(), settings=_impostazioni(), ca=_CaFinta()) == 0
+    )
     segreto = _segreto_nella_mail(posta_cli.mail[0]["testo"])
     assert segreto is not None
 
