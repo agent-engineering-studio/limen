@@ -455,22 +455,24 @@ rule stays in Limen. The numbers that tune a hazard stay in
 
 | Package | Pin in Limen | Licence |
 |---|---|---|
-| [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) | `~=0.7.1` | Apache-2.0 |
-| [`egms-client`](https://pypi.org/project/egms-client/) | `~=0.7.0` | Apache-2.0 |
-| [`firms-client`](https://pypi.org/project/firms-client/) | `~=0.5.0` | Apache-2.0 |
-| [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) | `~=0.7.0` | Apache-2.0 |
-| [`fwi-chain`](https://pypi.org/project/fwi-chain/) | `~=1.0.0` | Apache-2.0 |
-| [`effis-client`](https://pypi.org/project/effis-client/) | `~=0.1.2` | Apache-2.0 |
-| [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |
-| [`imageserver-export`](https://pypi.org/project/imageserver-export/) | `~=0.2.0` | Apache-2.0 |
-| [`dpc-radar`](https://pypi.org/project/dpc-radar/) | `~=0.2.1` | Apache-2.0 |
-| [`glofas-ewds`](https://pypi.org/project/glofas-ewds/) | `~=0.1.0` | Apache-2.0 |
-| [`mcp-geo-server`](https://github.com/agent-engineering-studio/mcp-geo-server) | Docker image, pinned commit | MIT |
+| [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) · [docs](https://agentengineering.it/copernicus-ems/) | `~=0.7.1` | Apache-2.0 |
+| [`egms-client`](https://pypi.org/project/egms-client/) · [docs](https://agentengineering.it/egms-client/) | `~=0.7.0` | Apache-2.0 |
+| [`firms-client`](https://pypi.org/project/firms-client/) · [docs](https://agentengineering.it/firms-client/) | `~=0.5.0` | Apache-2.0 |
+| [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) · [docs](https://agentengineering.it/ispra-idrogeo/) | `~=0.7.0` | Apache-2.0 |
+| [`fwi-chain`](https://pypi.org/project/fwi-chain/) · [docs](https://agentengineering.it/fwi-chain/) | `~=1.0.0` | Apache-2.0 |
+| [`effis-client`](https://pypi.org/project/effis-client/) · [docs](https://agentengineering.it/effis-client/) | `~=0.1.2` | Apache-2.0 |
+| [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) · [docs](https://agentengineering.it/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |
+| [`imageserver-export`](https://pypi.org/project/imageserver-export/) · [docs](https://agentengineering.it/imageserver-export/) | `~=0.2.0` | Apache-2.0 |
+| [`ingv-shakemap`](https://pypi.org/project/ingv-shakemap/) · [docs](https://agentengineering.it/ingv-shakemap/) | `~=0.2.0` | Apache-2.0 |
+| [`dpc-radar`](https://pypi.org/project/dpc-radar/) · [docs](https://agentengineering.it/dpc-radar/) | `~=0.2.1` | Apache-2.0 |
+| [`glofas-ewds`](https://pypi.org/project/glofas-ewds/) · [docs](https://agentengineering.it/glofas-ewds/) | `~=0.2.0` | Apache-2.0 |
+| [`mcp-geo-server`](https://github.com/agent-engineering-studio/mcp-geo-server) · [docs](https://agentengineering.it/mcp-geo-server/) | Docker image, pinned commit | MIT |
 
 ### copernicus-ems
 
 [![PyPI](https://img.shields.io/pypi/v/copernicus-ems)](https://pypi.org/project/copernicus-ems/) ·
-[GitHub](https://github.com/agent-engineering-studio/copernicus-ems) · Apache-2.0
+[GitHub](https://github.com/agent-engineering-studio/copernicus-ems) ·
+[Docs](https://agentengineering.it/copernicus-ems/) · Apache-2.0
 
 **What it does.** Reads [Copernicus EMS Rapid Mapping](https://rapidmapping.emergency.copernicus.eu/),
 the service that maps disasters from satellite images within hours. It lists
@@ -511,7 +513,8 @@ percentile of the velocity and the number of valid pixels
 ### firms-client
 
 [![PyPI](https://img.shields.io/pypi/v/firms-client)](https://pypi.org/project/firms-client/) ·
-[GitHub](https://github.com/agent-engineering-studio/firms-client) · Apache-2.0
+[GitHub](https://github.com/agent-engineering-studio/firms-client) ·
+[Docs](https://agentengineering.it/firms-client/) · Apache-2.0
 
 **What it does.** Reads [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov/):
 every active fire seen from space since 2000. It downloads the **open
@@ -534,7 +537,8 @@ Code: [`integrations/firms/`](./src/limen/integrations/firms/).
 ### ispra-idrogeo
 
 [![PyPI](https://img.shields.io/pypi/v/ispra-idrogeo)](https://pypi.org/project/ispra-idrogeo/) ·
-[GitHub](https://github.com/agent-engineering-studio/ispra-idrogeo) · Apache-2.0
+[GitHub](https://github.com/agent-engineering-studio/ispra-idrogeo) ·
+[Docs](https://agentengineering.it/ispra-idrogeo/) · Apache-2.0
 
 **What it does.** Downloads from [IdroGEO](https://idrogeo.isprambiente.it/),
 the platform where ISPRA publishes what Italy knows about landslides and
@@ -613,7 +617,8 @@ around Sarno, and what is the tree cover upslope?"*.
 
 ### mcp-geo-server
 
-[GitHub](https://github.com/agent-engineering-studio/mcp-geo-server) · MIT
+[GitHub](https://github.com/agent-engineering-studio/mcp-geo-server) ·
+[Docs](https://agentengineering.it/mcp-geo-server/) · MIT
 
 **What it does.** A ready-to-run GIS stack in Docker: **PostGIS + GeoServer**
 plus a one-shot bootstrap that loads shapefiles from a folder and publishes
@@ -644,9 +649,9 @@ Nothing in the hourly scoring path waits on GeoServer. Compose file:
 
 | Library | What it does | Used in Limen for |
 |---|---|---|
-| [`fwi-chain`](https://pypi.org/project/fwi-chain/) | The Canadian Fire Weather Index (Van Wagner 1987), pure and verified against the published reference day to 1e-9 | the wildfire engine, one chain per weather node |
-| [`effis-client`](https://pypi.org/project/effis-client/) | EFFIS burnt-area perimeters and the official FWI maps (a MapServer with many surprises) | wildfire truth set; `limen fwi-confronto` |
-| [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | Rainfall events and intensity–duration thresholds (Caine) | the landslide rain term |
+| [`fwi-chain`](https://pypi.org/project/fwi-chain/) · [docs](https://agentengineering.it/fwi-chain/) | The Canadian Fire Weather Index (Van Wagner 1987), pure and verified against the published reference day to 1e-9 | the wildfire engine, one chain per weather node |
+| [`effis-client`](https://pypi.org/project/effis-client/) · [docs](https://agentengineering.it/effis-client/) | EFFIS burnt-area perimeters and the official FWI maps (a MapServer with many surprises) | wildfire truth set; `limen fwi-confronto` |
+| [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) · [docs](https://agentengineering.it/rainfall-thresholds/) | Rainfall events and intensity–duration thresholds (Caine) | the landslide rain term |
 | [`glofas-ewds`](https://pypi.org/project/glofas-ewds/) ([site](https://agentengineering.it/glofas-ewds/)) | GloFAS 4 discharge and the Copernicus FWI from the EWDS, read on the cell Open-Meteo serves (the declared one, one step east): requests, monthly re-runnable downloads, readers per node, a river's own reference | `limen glofas-ewds` (node references), the daily GloFAS forecast run, `limen fwi-confronto` |
 
 ---

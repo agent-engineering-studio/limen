@@ -454,21 +454,24 @@ una libreria.
 
 | Pacchetto | Versione in Limen | Licenza |
 |---|---|---|
-| [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) | `~=0.4.0` | Apache-2.0 |
-| [`egms-client`](https://pypi.org/project/egms-client/) | `~=0.7.0` | Apache-2.0 |
-| [`firms-client`](https://pypi.org/project/firms-client/) | `~=0.4.0` | Apache-2.0 |
-| [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) | `~=0.7.0` | Apache-2.0 |
-| [`fwi-chain`](https://pypi.org/project/fwi-chain/) | `~=1.0.0` | Apache-2.0 |
-| [`effis-client`](https://pypi.org/project/effis-client/) | `~=0.1.2` | Apache-2.0 |
-| [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |
-| [`imageserver-export`](https://pypi.org/project/imageserver-export/) | `~=0.2.0` | Apache-2.0 |
-| [`glofas-ewds`](https://pypi.org/project/glofas-ewds/) | `~=0.1.0` | Apache-2.0 |
-| [`mcp-geo-server`](https://github.com/agent-engineering-studio/mcp-geo-server) | immagine Docker, commit fissato | MIT |
+| [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) · [documentazione](https://agentengineering.it/copernicus-ems/) | `~=0.7.1` | Apache-2.0 |
+| [`egms-client`](https://pypi.org/project/egms-client/) · [documentazione](https://agentengineering.it/egms-client/) | `~=0.7.0` | Apache-2.0 |
+| [`firms-client`](https://pypi.org/project/firms-client/) · [documentazione](https://agentengineering.it/firms-client/) | `~=0.5.0` | Apache-2.0 |
+| [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) · [documentazione](https://agentengineering.it/ispra-idrogeo/) | `~=0.7.0` | Apache-2.0 |
+| [`fwi-chain`](https://pypi.org/project/fwi-chain/) · [documentazione](https://agentengineering.it/fwi-chain/) | `~=1.0.0` | Apache-2.0 |
+| [`effis-client`](https://pypi.org/project/effis-client/) · [documentazione](https://agentengineering.it/effis-client/) | `~=0.1.2` | Apache-2.0 |
+| [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) · [documentazione](https://agentengineering.it/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |
+| [`imageserver-export`](https://pypi.org/project/imageserver-export/) · [documentazione](https://agentengineering.it/imageserver-export/) | `~=0.2.0` | Apache-2.0 |
+| [`ingv-shakemap`](https://pypi.org/project/ingv-shakemap/) · [documentazione](https://agentengineering.it/ingv-shakemap/) | `~=0.2.0` | Apache-2.0 |
+| [`dpc-radar`](https://pypi.org/project/dpc-radar/) · [documentazione](https://agentengineering.it/dpc-radar/) | `~=0.2.1` | Apache-2.0 |
+| [`glofas-ewds`](https://pypi.org/project/glofas-ewds/) · [documentazione](https://agentengineering.it/glofas-ewds/) | `~=0.2.0` | Apache-2.0 |
+| [`mcp-geo-server`](https://github.com/agent-engineering-studio/mcp-geo-server) · [documentazione](https://agentengineering.it/mcp-geo-server/) | immagine Docker, commit fissato | MIT |
 
 ### copernicus-ems
 
 [![PyPI](https://img.shields.io/pypi/v/copernicus-ems)](https://pypi.org/project/copernicus-ems/) ·
-[GitHub](https://github.com/agent-engineering-studio/copernicus-ems) · Apache-2.0
+[GitHub](https://github.com/agent-engineering-studio/copernicus-ems) ·
+[Documentazione](https://agentengineering.it/copernicus-ems/) · Apache-2.0
 
 **Cosa fa.** Legge [Copernicus EMS Rapid Mapping](https://rapidmapping.emergency.copernicus.eu/),
 il servizio che mappa i disastri da immagini satellitari entro poche ore.
@@ -510,7 +513,8 @@ oggi alimenta le feature ML, non la mappa. Codice:
 ### firms-client
 
 [![PyPI](https://img.shields.io/pypi/v/firms-client)](https://pypi.org/project/firms-client/) ·
-[GitHub](https://github.com/agent-engineering-studio/firms-client) · Apache-2.0
+[GitHub](https://github.com/agent-engineering-studio/firms-client) ·
+[Documentazione](https://agentengineering.it/firms-client/) · Apache-2.0
 
 **Cosa fa.** Legge [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov/): ogni
 fuoco attivo visto dallo spazio dal 2000. Scarica gli **archivi annuali per
@@ -534,7 +538,8 @@ Codice: [`integrations/firms/`](./src/limen/integrations/firms/).
 ### ispra-idrogeo
 
 [![PyPI](https://img.shields.io/pypi/v/ispra-idrogeo)](https://pypi.org/project/ispra-idrogeo/) ·
-[GitHub](https://github.com/agent-engineering-studio/ispra-idrogeo) · Apache-2.0
+[GitHub](https://github.com/agent-engineering-studio/ispra-idrogeo) ·
+[Documentazione](https://agentengineering.it/ispra-idrogeo/) · Apache-2.0
 
 **Cosa fa.** Scarica da [IdroGEO](https://idrogeo.isprambiente.it/), la
 piattaforma dove l'ISPRA pubblica quello che l'Italia sa di frane e
@@ -577,7 +582,8 @@ Codice: [`integrations/idrogeo/`](./src/limen/integrations/idrogeo/).
 
 ### mcp-geo-server
 
-[GitHub](https://github.com/agent-engineering-studio/mcp-geo-server) · MIT
+[GitHub](https://github.com/agent-engineering-studio/mcp-geo-server) ·
+[Documentazione](https://agentengineering.it/mcp-geo-server/) · MIT
 
 **Cosa fa.** Uno stack GIS pronto in Docker: **PostGIS + GeoServer**, più un
 bootstrap che carica gli shapefile di una cartella e li pubblica come strati
@@ -607,9 +613,9 @@ aspetta GeoServer. File compose:
 
 | Libreria | Cosa fa | In Limen serve per |
 |---|---|---|
-| [`fwi-chain`](https://pypi.org/project/fwi-chain/) | Il Fire Weather Index canadese (Van Wagner 1987), puro e verificato sul giorno di riferimento pubblicato fino a 1e-9 | il motore degli incendi, una catena per punto meteo |
-| [`effis-client`](https://pypi.org/project/effis-client/) | I perimetri delle aree bruciate EFFIS e le carte ufficiali del FWI (un MapServer pieno di sorprese) | la verità a terra degli incendi; `limen fwi-confronto` |
-| [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) | Eventi di pioggia e soglie intensità–durata (Caine) | il termine pioggia delle frane |
+| [`fwi-chain`](https://pypi.org/project/fwi-chain/) · [documentazione](https://agentengineering.it/fwi-chain/) | Il Fire Weather Index canadese (Van Wagner 1987), puro e verificato sul giorno di riferimento pubblicato fino a 1e-9 | il motore degli incendi, una catena per punto meteo |
+| [`effis-client`](https://pypi.org/project/effis-client/) · [documentazione](https://agentengineering.it/effis-client/) | I perimetri delle aree bruciate EFFIS e le carte ufficiali del FWI (un MapServer pieno di sorprese) | la verità a terra degli incendi; `limen fwi-confronto` |
+| [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) · [documentazione](https://agentengineering.it/rainfall-thresholds/) | Eventi di pioggia e soglie intensità–durata (Caine) | il termine pioggia delle frane |
 | [`glofas-ewds`](https://pypi.org/project/glofas-ewds/) ([sito](https://agentengineering.it/glofas-ewds/)) | La portata GloFAS 4 e l'FWI Copernicus dall'EWDS, letti sulla cella che serve Open-Meteo (quella dichiarata, un passo a est): richieste, download mensili rilanciabili, lettura per nodo, il riferimento proprio di ogni fiume | `limen glofas-ewds` (i riferimenti dei nodi), la corsa giornaliera della previsione GloFAS, `limen fwi-confronto` |
 | [`imageserver-export`](https://pypi.org/project/imageserver-export/) ([sito](https://agentengineering.it/imageserver-export/)) | Un'area di qualunque ImageServer ArcGIS come un solo GeoTIFF: pixel allineati, valori «nessun dato» intatti, errori mandati con «200 OK» intercettati, file scritto solo quando è completo, con la provenienza nei tag del GeoTIFF; un download interrotto riparte dalle tessere già arrivate. Con `[mcp]` anche un server MCP, `imageserver-mcp` (valore in un punto, sintesi di un riquadro, export), in cui ogni numero lo calcola la libreria e non il modello. Prima applicazione: gli strati aperti di Copernicus Land che l'EEA pubblica senza account | il raster del suolo sigillato (`limen imperviousness-fetch`), che amplifica l'innesco pluviale delle alluvioni; `.mcp.json` collega `imageserver-mcp` a Claude Code tramite `uvx`, come `idrogeo-mcp` |
 

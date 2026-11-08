@@ -25,17 +25,17 @@ solo per scelta.
 
 | Libreria | Versione | A cosa serve in Limen | Link |
 |---|---|---|---|
-| fwi-chain | ~= 1.0.0 | calcola l'indice meteo degli incendi, giorno dopo giorno | [GitHub](https://github.com/agent-engineering-studio/fwi-chain) |
-| effis-client | ~= 0.1.2 | scarica le aree bruciate in Europa e le mappe ufficiali dell'indice degli incendi | [GitHub](https://github.com/agent-engineering-studio/effis-client) |
-| rainfall-thresholds | ~= 0.1.0 | dice se una pioggia ha superato la soglia che fa franare | [GitHub](https://github.com/agent-engineering-studio/rainfall-thresholds) |
-| ispra-idrogeo | ~= 0.7.0 | scarica le frane censite e le aree a pericolo di ISPRA | [GitHub](https://github.com/agent-engineering-studio/ispra-idrogeo) |
-| copernicus-ems | ~= 0.7.1 | scarica le aree allagate cartografate dal satellite dopo un disastro | [GitHub](https://github.com/agent-engineering-studio/copernicus-ems) |
-| egms-client | ~= 0.7.0 | scarica le mappe europee del terreno che si muove | [GitHub](https://github.com/agent-engineering-studio/egms-client) |
-| firms-client | ~= 0.5.0 | scarica i fuochi visti dal satellite e separa gli incendi dalle fonti di calore fisse | [GitHub](https://github.com/agent-engineering-studio/firms-client) |
-| imageserver-export | ~= 0.2.0 | ricompone le mappe europee del suolo (cemento, alberi, acqua) | [GitHub](https://github.com/agent-engineering-studio/imageserver-export) |
-| ingv-shakemap | ~= 0.2.0 | legge quanto ha tremato il suolo dopo un terremoto | [GitHub](https://github.com/agent-engineering-studio/ingv-shakemap) |
-| dpc-radar | ~= 0.2.1 | legge la pioggia del radar della Protezione civile e i bollettini | [GitHub](https://github.com/agent-engineering-studio/dpc-radar) |
-| glofas-ewds | ~= 0.2.0 | scarica la portata prevista e storica dei fiumi | [GitHub](https://github.com/agent-engineering-studio/glofas-ewds) |
+| fwi-chain | ~= 1.0.0 | calcola l'indice meteo degli incendi, giorno dopo giorno | [documentazione](https://agentengineering.it/fwi-chain/) · [GitHub](https://github.com/agent-engineering-studio/fwi-chain) |
+| effis-client | ~= 0.1.2 | scarica le aree bruciate in Europa e le mappe ufficiali dell'indice degli incendi | [documentazione](https://agentengineering.it/effis-client/) · [GitHub](https://github.com/agent-engineering-studio/effis-client) |
+| rainfall-thresholds | ~= 0.1.0 | dice se una pioggia ha superato la soglia che fa franare | [documentazione](https://agentengineering.it/rainfall-thresholds/) · [GitHub](https://github.com/agent-engineering-studio/rainfall-thresholds) |
+| ispra-idrogeo | ~= 0.7.0 | scarica le frane censite e le aree a pericolo di ISPRA | [documentazione](https://agentengineering.it/ispra-idrogeo/) · [GitHub](https://github.com/agent-engineering-studio/ispra-idrogeo) |
+| copernicus-ems | ~= 0.7.1 | scarica le aree allagate cartografate dal satellite dopo un disastro | [documentazione](https://agentengineering.it/copernicus-ems/) · [GitHub](https://github.com/agent-engineering-studio/copernicus-ems) |
+| egms-client | ~= 0.7.0 | scarica le mappe europee del terreno che si muove | [documentazione](https://agentengineering.it/egms-client/) · [GitHub](https://github.com/agent-engineering-studio/egms-client) |
+| firms-client | ~= 0.5.0 | scarica i fuochi visti dal satellite e separa gli incendi dalle fonti di calore fisse | [documentazione](https://agentengineering.it/firms-client/) · [GitHub](https://github.com/agent-engineering-studio/firms-client) |
+| imageserver-export | ~= 0.2.0 | ricompone le mappe europee del suolo (cemento, alberi, acqua) | [documentazione](https://agentengineering.it/imageserver-export/) · [GitHub](https://github.com/agent-engineering-studio/imageserver-export) |
+| ingv-shakemap | ~= 0.2.0 | legge quanto ha tremato il suolo dopo un terremoto | [documentazione](https://agentengineering.it/ingv-shakemap/) · [GitHub](https://github.com/agent-engineering-studio/ingv-shakemap) |
+| dpc-radar | ~= 0.2.1 | legge la pioggia del radar della Protezione civile e i bollettini | [documentazione](https://agentengineering.it/dpc-radar/) · [GitHub](https://github.com/agent-engineering-studio/dpc-radar) |
+| glofas-ewds | ~= 0.2.0 | scarica la portata prevista e storica dei fiumi | [documentazione](https://agentengineering.it/glofas-ewds/) · [GitHub](https://github.com/agent-engineering-studio/glofas-ewds) |
 
 ??? note "Per chi sviluppa: dove sono usate"
     | Libreria | Extra installati | File principale in Limen |
