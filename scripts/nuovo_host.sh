@@ -239,12 +239,24 @@ limen() { docker exec limen-worker limen "$@"; }
 # minuti invece di ore, e senza i raster. Senza snapshot, o con uno di
 # un'altra migrazione o griglia, si prosegue con il bootstrap; con le impronte
 # dello snapshot il bootstrap salta i passi le cui sorgenti sono le stesse.
+# Con LIMEN_PACCHETTO_URL (il manifest.json di una release, #406) i fattori
+# vengono dal pacchetto pubblico invece che dallo snapshot sullo store.
 if [ "$MODO" = "--da-zero" ]; then
-  say "snapshot statico (limen static-snapshot import)"
-  if limen static-snapshot import; then
-    ok "fattori per cella dallo snapshot"
+  pacchetto="$(dotenv LIMEN_PACCHETTO_URL)"
+  if [ -n "$pacchetto" ]; then
+    say "pacchetto rapido (limen static-snapshot import --da-url)"
+    if limen static-snapshot import --da-url "$pacchetto"; then
+      ok "fattori per cella dal pacchetto: poi bootstrap (litologia) e calibrate"
+    else
+      no "pacchetto non importato (guarda sopra): restano i dati statici"
+    fi
   else
-    no "snapshot statico non importato (guarda sopra): restano i dati statici"
+    say "snapshot statico (limen static-snapshot import)"
+    if limen static-snapshot import; then
+      ok "fattori per cella dallo snapshot"
+    else
+      no "snapshot statico non importato (guarda sopra): restano i dati statici"
+    fi
   fi
 fi
 

@@ -18,7 +18,7 @@ Usage:
     limen dati               Download dei dati statici, eseguiti dal worker: stato | scarica (#402).
     limen backup             Backup dello stato fuori dal server; `elenco` li elenca (#304).
     limen restore            Ripristina un backup (`--conferma`: sovrascrive il database).
-    limen static-snapshot    Fattori per cella senza i raster: export | import | elenco (#305).
+    limen static-snapshot    Fattori per cella senza raster: export|import|elenco|pacchetto (#406).
     limen radar-archivio     Salva il radar DPC «Merging» prima che il DPC lo perda.
     limen fwi-pioggia        Rifà la catena FWI con la pioggia misurata dal DPC.
     limen ingest-fire-history  FIRMS country archive (2000+), fire_density + truth set.
