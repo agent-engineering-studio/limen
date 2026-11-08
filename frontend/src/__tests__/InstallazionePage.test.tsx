@@ -203,6 +203,16 @@ describe("InstallazionePage", () => {
     await waitFor(() => expect(rifai).toHaveBeenCalledWith("segreto"));
   });
 
+  it("segnala la regione caricata ma tutta a zero, col nome (#467)", async () => {
+    const s = stato();
+    s.voci[0] = voce("dtm", { regioni_da_verificare: ["it-basilicata"] });
+    vi.spyOn(defaultApiClient, "getInstallazioneStato").mockResolvedValue(s);
+    render(<InstallazionePage />);
+    expect(
+      await screen.findByText("quasi tutto a zero in: Basilicata — da verificare"),
+    ).toBeInTheDocument();
+  });
+
   it("senza token sul server non mostra pulsanti", async () => {
     sessionStorage.setItem("limen-installazione-token", "qualsiasi");
     vi.spyOn(defaultApiClient, "getInstallazioneStato").mockResolvedValue(

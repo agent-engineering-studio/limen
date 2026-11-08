@@ -670,9 +670,13 @@ corrispondente.
   già verificate. Ora pagina, scheda e README ripetono il catalogo, e un
   controllo automatico confronta la pagina «Fonti» con il catalogo a ogni
   modifica. *([#491](https://github.com/agent-engineering-studio/limen/issues/491))*
-- **Contare «ha il dato» non basta.** Il controllo di prontezza conta i valori
-  presenti, anche zero: così una regione con zero frane ovunque sembrava a
-  posto. Serve un controllo per regione sui valori positivi.
+- **Contare «ha il dato» non bastava** *(chiuso)*. Il controllo di prontezza
+  contava i valori presenti, anche zero: così una regione con zero frane
+  ovunque sembrava a posto. Ora per le frane censite, le aree a pericolo,
+  la mappa idraulica, il suolo impermeabilizzato e l'interfaccia urbano-bosco
+  si contano anche i valori positivi, e una regione molto sotto le altre
+  compare come «da verificare». Il confine è il 5 % della quota tipica: la
+  Puglia, con poche frane vere (6,8 % delle celle), non viene segnalata.
   *([#467](https://github.com/agent-engineering-studio/limen/issues/467))*
 - **Dati previsti e mai riempiti.** Popolazione, edifici, umidità del terreno
   dalla forma del versante e distanza dalle faglie hanno un posto nella

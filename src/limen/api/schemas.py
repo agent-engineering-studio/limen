@@ -372,6 +372,8 @@ class VoceDato(BaseModel):
     conta: Literal["valori", "veri"] = "valori"
     #: Le regioni seminate dove il dato manca (solo per i dati per cella).
     regioni_senza: list[str]
+    #: Regioni dove il dato c'è ma è quasi tutto a zero: da controllare (#467).
+    regioni_da_verificare: list[str] = []
     download: DownloadDato | None
 
 

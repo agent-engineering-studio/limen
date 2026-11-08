@@ -48,6 +48,11 @@ class Misura(_Rigido):
     #: un valore anche quando il passo non è mai girato (#473), quindi conta
     #: solo il ``true``.
     conta: Literal["valori", "veri"] = "valori"
+    #: ``positivi``: la colonna può essere scritta a zero su un'intera regione
+    #: per un errore di caricamento (IFFI in Trentino, #454), e un conteggio dei
+    #: valori non la distingue da una caricata bene. Si contano anche i valori
+    #: > 0, per segnalare le regioni con una quota anomala (#467).
+    informativo: Literal["positivi"] | None = None
 
     @model_validator(mode="after")
     def _una_sola(self) -> Self:

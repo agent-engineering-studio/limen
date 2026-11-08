@@ -769,6 +769,8 @@ export interface VoceDato {
   copertura: number;
   /** Le regioni seminate dove il dato manca (solo per i dati per cella). */
   regioni_senza: string[];
+  /** Regioni con il dato presente ma quasi tutto a zero: da verificare (#467). */
+  regioni_da_verificare?: string[];
   download: DownloadDato | null;
 }
 

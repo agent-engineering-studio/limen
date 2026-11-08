@@ -3838,6 +3838,10 @@ html[lang="en"] .app-nav a { white-space: nowrap; }
   color: var(--muted);
   font-size: 0.9rem;
 }
+.installazione-avviso {
+  color: var(--warn);
+  font-size: 0.9rem;
+}
 .installazione-voci {
   list-style: none;
   padding: 0;
