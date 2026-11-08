@@ -329,6 +329,7 @@ Sono tutte **gratuite**. Nessuna serve per partire.
 | `LLM__LLAMACPP_BASE_URL` | `http://127.0.0.1:8091` | Il gateway d'inferenza LiteLLM (non `:8081`, che è GeoServer). Da un container: `host.docker.internal`. |
 | `SCORING__MODE` | `champion_only` | `shadow` fa girare anche lo sfidante ML di notte, scrivendo solo in `model_runs`. |
 | `FORECAST__ENABLED` | `true` | Giro previsionale e avvisi «PREVISIONE». |
+| `FORECAST__HOURS_UTC` | `[2, 8, 14, 20]` | Quando partono gli avvisi di previsione (UTC, al minuto `FORECAST__MINUTE`, default 50). |
 | `NOWCAST__*` | attivo | Innesco dal radar DPC: pioggia intensa vista dal radar fa partire subito un calcolo. |
 | `LOG_LEVEL` / `LOG_JSON` | `INFO` / `false` | Log strutturati. |
 

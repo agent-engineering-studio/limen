@@ -1,6 +1,6 @@
 """Scheduled predictive sweep — the event-driven forecast pipeline.
 
-Every ``FORECAST__INTERVAL_HOURS`` the job re-scores each AOI at
+At ``FORECAST__HOURS_UTC`` (minute ``FORECAST__MINUTE``) the job re-scores each AOI at
 ``now + FORECAST__HORIZON_HOURS`` using forecast rain. When the champion
 predicts cells at/above ``FORECAST__MIN_LEVEL``, a *predictive* alert is
 dispatched through the same notification channels as operational alerts

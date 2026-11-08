@@ -1,6 +1,6 @@
 """Scheduled forecast-trend persistence (issue #41).
 
-Every ``FORECAST__INTERVAL_HOURS`` sweep each AOI at +24/+48/+72 h and store the
+At ``SCHEDULER__FORECAST_CELLS_HOURS_UTC`` sweep each AOI at +24/+48/+72 h and store the
 ≥Moderate cells in ``risk_assessments`` (horizon ``+Hh``) so the sidebar and
 report can draw the past+forecast trend. Idempotent (delete-prior); no alerts,
 no LLM. Best-effort: a failure is logged, never raised into the scheduler.
