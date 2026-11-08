@@ -108,9 +108,14 @@ Servizi esposti:
 | pg_tileserv | 7800 | Vector tile, come ruolo `limen_tiles` (#269): password in `DB__TILES_PASSWORD`, `make up` si ferma se manca. |
 | Mosquitto | 1883 | Broker MQTT locale. |
 | Frontend (`--profile frontend`) | 5173 | Vite dev server. |
-| Grafana | 3000 | Quando è attivo anche il compose di observability. |
-| OTLP gRPC | 4317 | Ingress del collector OpenTelemetry. |
+| Grafana | 3000 | Quando è attivo anche il compose di observability. Su loopback (`LIMEN_GRAFANA_BIND`). |
+| OTLP gRPC | 4317 | Ingress del collector OpenTelemetry. Su loopback (`LIMEN_OTLP_BIND`): l'API lo raggiunge sulla rete dello stack. |
 | OTLP HTTP | 4318 | Come sopra. |
+
+Tutte sono pubblicate su `127.0.0.1` (una variabile `LIMEN_*_BIND` per servizio,
+elencate in `.env.example`): Docker scavalca ufw, quindi da fuori si passa
+dal reverse proxy su 443. `tests/unit/test_compose_porte.py` fallisce se un
+compose pubblica una porta senza indirizzo esplicito.
 
 ### Hardening di produzione
 

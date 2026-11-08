@@ -113,7 +113,7 @@ gap si chiude dentro Limen.
 | 8 | Le misure non sono sempre archiviate con i loro ingredienti. | depositare ogni rapporto di misura su [Zenodo](https://zenodo.org), con un DOI | [#481](https://github.com/agent-engineering-studio/limen/issues/481) |
 | 8 | Alcuni documenti hanno informazioni superate (licenza, cloud, tetto di spesa). | — | [#493](https://github.com/agent-engineering-studio/limen/issues/493) |
 | 8 | Il costo di oggi non è misurato. | — | [#492](https://github.com/agent-engineering-studio/limen/issues/492) |
-| 8 | Una porta del monitoraggio è aperta verso l'esterno. | — | [#496](https://github.com/agent-engineering-studio/limen/issues/496) |
+| 8 | Una porta del monitoraggio era aperta verso l'esterno. **Corretto**: le porte ora si aprono solo verso il server, e una prova automatica le controlla tutte. | — | [#496](https://github.com/agent-engineering-studio/limen/issues/496) |
 | 8 | Manca un'informativa privacy unica e pubblica. | — | [#494](https://github.com/agent-engineering-studio/limen/issues/494) |
 
 ## Capitolo 9. [Cosa manca](09-cosa-manca.md)

@@ -496,8 +496,9 @@ il pubblico arriva alla mappa da un'unica porta sicura, quella del sito web
 cifrato (HTTPS), attraverso un intermediario che smista le richieste. La
 regola esiste perché Docker, che fa girare i contenitori, scavalca il
 firewall del server: una porta aperta per sbaglio sarebbe raggiungibile da
-internet anche se il firewall dice di no. Un controllo ha trovato
-un'eccezione, il pannello di monitoraggio facoltativo: è nei gap.
+internet anche se il firewall dice di no. Un controllo aveva trovato
+un'eccezione, il pannello di monitoraggio facoltativo: ora è chiusa anche
+quella, e una prova automatica ferma ogni modifica che riaprisse una porta.
 
 ??? note "Per chi sviluppa"
     - Token: `INSTALLAZIONE__TOKEN`, header `X-Limen-Token`, confronto a
@@ -505,9 +506,11 @@ un'eccezione, il pannello di monitoraggio facoltativo: è nei gap.
       `src/limen/api/dependencies.py`); `MCP_ADMIN_TOKEN` per gli strumenti
       MCP che modificano lo stato. Variabile assente ⇒ azioni spente.
     - Porte: ogni `ports:` nei compose usa una variabile `LIMEN_*_BIND` con
-      default `127.0.0.1`. Eccezione trovata:
-      `infra/docker/docker-compose.observability.yml` pubblica 3000, 4317 e
-      4318 su tutte le interfacce.
+      default `127.0.0.1`; l'osservabilità usa `LIMEN_GRAFANA_BIND` (3000)
+      e `LIMEN_OTLP_BIND` (4317, 4318). `tests/unit/test_compose_porte.py`
+      legge tutti i compose e fallisce su una porta senza indirizzo
+      esplicito; l'unica eccezione ammessa è il proxy Caddy, che esiste per
+      essere l'ingresso pubblico.
     - Contributi: `src/limen/api/endpoints/contributi.py` e
       `src/limen/core/contributi.py` (inviati per mail, non salvati; limite
       di invii per indirizzo). Sensori: `docs/guida/sensori.md`, sezione
@@ -552,9 +555,11 @@ Che cosa manca, in breve. Il dettaglio tecnico sta nella issue indicata.
   il traffico reale della mappa e il volume mensile di testo generato: senza,
   nessuna offerta a un ente e nessuna domanda di finanziamento ha una base.
   ([#492](https://github.com/agent-engineering-studio/limen/issues/492))
-- **Una porta del monitoraggio è aperta verso l'esterno.** Il pannello
-  facoltativo di monitoraggio pubblica tre porte su tutte le interfacce,
-  contro la regola delle porte chiuse. ([#496](https://github.com/agent-engineering-studio/limen/issues/496))
+- **Una porta del monitoraggio era aperta verso l'esterno.** Il pannello
+  facoltativo di monitoraggio pubblicava tre porte su tutte le interfacce,
+  contro la regola delle porte chiuse. **Corretto**: ora si aprono solo
+  verso il server stesso, e una prova automatica controlla ogni porta di
+  ogni file di avvio. ([#496](https://github.com/agent-engineering-studio/limen/issues/496))
 - **Manca un'informativa privacy unica e pubblica.** Le regole sui dati
   personali sono scritte bene, ma sparse fra la guida dei sensori e il modulo
   dei contributi; non c'è una pagina che dica chi è il titolare del
