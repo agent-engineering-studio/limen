@@ -9,7 +9,8 @@ import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
 import { defaultApiClient } from "../lib/api-client";
-import { testi, useTesti } from "../lib/i18n";
+import { meteoEcmwf } from "../lib/attribuzioni";
+import { testi, useLingua, useTesti } from "../lib/i18n";
 import type {
   HazardType,
   ProvenienzaResponse,
@@ -101,6 +102,7 @@ export function RigaProvenienza(): JSX.Element | null {
 
 function Forbice({ dati }: { dati: RainModelsResponse }): JSX.Element | null {
   const t = useTesti(T);
+  const { lingua } = useLingua();
   const modelli = dati.modelli;
   if (modelli.length < 2) return null;
   const max = Math.max(...modelli.map((m) => m.mm), 1);
@@ -128,6 +130,7 @@ function Forbice({ dati }: { dati: RainModelsResponse }): JSX.Element | null {
           : t.concordi(primo.mm.toFixed(0), ultimo.mm.toFixed(0))}{" "}
         {t.riferimento}
       </p>
+      <p className="cn-nota">{meteoEcmwf(undefined, lingua)}</p>
     </div>
   );
 }

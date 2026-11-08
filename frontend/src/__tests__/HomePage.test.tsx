@@ -64,7 +64,8 @@ describe("HomePage", () => {
     expect(testo).toContain("0.35 S + 0.40 M");
     expect(testo).toContain("not affiliated with Anthropic");
     expect(testo).toContain("Contains modified Copernicus Emergency Management Service information");
-    expect(testo).toContain("CC-BY 4.0");
+    expect(testo).toContain("ISPRA IdroGEO (CC BY-SA 4.0)");
+    expect(testo).toContain("ECMWF does not accept any liability whatsoever for any error or omission in the data");
     expect(testo).not.toContain("Apri la dashboard");
   });
 

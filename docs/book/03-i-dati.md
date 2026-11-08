@@ -661,11 +661,13 @@ corrispondente.
   «CORINE class 312» invece di «Boschi di conifere». *Proposta di open data:*
   la legenda ufficiale CORINE, pubblicata da Copernicus e da ISPRA in
   italiano. *([#470](https://github.com/agent-engineering-studio/limen/issues/470))*
-- **Le pagine sulle fonti non sono allineate al catalogo.** La pagina «Fonti»
-  della mappa dà ancora l'inventario delle frane come CC BY 4.0 (è CC BY-SA
-  4.0) e il modello del terreno come quello dell'INGV (oggi è quello del
-  CNR-IRPI); la scheda divulgativa sulle fonti ha ancora licenze «da
-  verificare» già verificate. *([#491](https://github.com/agent-engineering-studio/limen/issues/491))*
+- **Corretto: le pagine sulle fonti non erano allineate al catalogo.** La
+  pagina «Fonti» della mappa dava l'inventario delle frane come CC BY 4.0 (è
+  CC BY-SA 4.0) e il modello del terreno come quello dell'INGV (è quello del
+  CNR-IRPI); la scheda divulgativa sulle fonti aveva licenze «da verificare»
+  già verificate. Ora pagina, scheda e README ripetono il catalogo, e un
+  controllo automatico confronta la pagina «Fonti» con il catalogo a ogni
+  modifica. *([#491](https://github.com/agent-engineering-studio/limen/issues/491))*
 - **Contare «ha il dato» non basta.** Il controllo di prontezza conta i valori
   presenti, anche zero: così una regione con zero frane ovunque sembrava a
   posto. Serve un controllo per regione sui valori positivi.

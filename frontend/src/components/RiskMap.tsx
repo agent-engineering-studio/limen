@@ -4,7 +4,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Protocol } from "pmtiles";
 
-import { copernicusModificato } from "../lib/attribuzioni";
+import { copernicusModificato, meteoEcmwf } from "../lib/attribuzioni";
 import { BASEMAP_LAYER, BASEMAP_SOURCE } from "../lib/basemap";
 import { config } from "../lib/env";
 import { NOMI_PERICOLO, useHazard } from "../lib/hazard";
@@ -183,7 +183,7 @@ const T = testi(
     assente: "Il livello del rischio non è disponibile.",
     assenteSpiega:
       " Questa è solo la cartografia di base: le celle colorate mancano, non sono assenti perché il rischio è nullo.",
-    fonteIdraulica: "ISPRA pericolosità idraulica (CC-BY-4.0)",
+    fonteIdraulica: "ISPRA pericolosità idraulica (CC BY-SA 4.0)",
     fonteDpc: "Protezione Civile, bollettino di criticità (CC-BY 4.0)",
   },
   {
@@ -194,7 +194,7 @@ const T = testi(
     assente: "The risk layer is unavailable.",
     assenteSpiega:
       " This is only the base map: the coloured cells are missing, not absent because the risk is zero.",
-    fonteIdraulica: "ISPRA hydraulic hazard (CC-BY-4.0)",
+    fonteIdraulica: "ISPRA hydraulic hazard (CC BY-SA 4.0)",
     fonteDpc: "Civil Protection, criticality bulletin (CC-BY 4.0)",
   },
 );
@@ -455,9 +455,13 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       [SOURCE_ID]: {
         type: "vector",
         tiles: [tilesUrl],
-        // L'alluvione (anche nella vista d'insieme) è calcolata dalla portata
-        // GloFAS: la licenza CEMS-Floods chiede di dirlo sulla mappa.
-        ...(multi || hazard === "flood" ? { attribution: copernicusModificato(undefined, lingua) } : {}),
+        // Ogni punteggio è calcolato sul meteo previsto (ECMWF via Open-Meteo),
+        // e l'alluvione (anche nella vista d'insieme) dalla portata GloFAS: le
+        // due licenze chiedono di dirlo sulla mappa.
+        attribution: [
+          ...(multi || hazard === "flood" ? [copernicusModificato(undefined, lingua)] : []),
+          meteoEcmwf(undefined, lingua),
+        ].join(" · "),
         // La sorgente parte dallo stesso zoom del livello che la disegna.
         // Prima partiva da 5: il browser scaricava tile da 1,85 MB che poi
         // non mostrava a nessuno, e intanto il tile server andava in timeout.
@@ -514,13 +518,13 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         type: "raster",
         tiles: [wmsTileUrl(config.geoserverWmsUrl, WMS_PAI_LAYER)],
         tileSize: 256,
-        attribution: "ISPRA PAI (CC-BY-4.0)",
+        attribution: "ISPRA PAI (CC BY-SA 4.0)",
       },
       "wms-iffi": {
         type: "raster",
         tiles: [wmsTileUrl(config.geoserverWmsUrl, WMS_IFFI_LAYERS)],
         tileSize: 256,
-        attribution: "ISPRA IFFI (CC-BY-4.0)",
+        attribution: "ISPRA IFFI (CC BY-SA 4.0)",
       },
     };
     if (config.demPmtilesUrl) {
@@ -888,7 +892,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       sources[PAI_SOURCE_ID] = {
         type: "vector",
         url: `pmtiles://${config.paiPmtilesUrl}`,
-        attribution: "ISPRA IdroGEO — PAI mosaic (CC-BY-4.0)",
+        attribution: "ISPRA IdroGEO — PAI mosaic (CC BY-SA 4.0)",
       };
       layers.push({
         id: PAI_LAYER_ID,
@@ -908,7 +912,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       sources[IFFI_SOURCE_ID] = {
         type: "vector",
         url: `pmtiles://${config.iffiPmtilesUrl}`,
-        attribution: "ISPRA IdroGEO — IFFI inventory (CC-BY-4.0)",
+        attribution: "ISPRA IdroGEO — IFFI inventory (CC BY-SA 4.0)",
       };
       layers.push({
         id: IFFI_LAYER_ID,

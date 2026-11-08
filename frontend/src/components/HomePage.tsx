@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
-import { AVVISO_DI_PIENA, copernicusModificato } from "../lib/attribuzioni";
+import { AVVISO_DI_PIENA, copernicusModificato, meteoEcmwf } from "../lib/attribuzioni";
 import { defaultApiClient } from "../lib/api-client";
 import { BMC_PAGINA } from "../lib/buymeacoffee";
 import { testi, useLocale, useTesti } from "../lib/i18n";
@@ -153,11 +153,12 @@ const T = testi(
       "Protezione Civile. Segui sempre le indicazioni del tuo Comune.",
     ctaBottone: "Apri la dashboard →",
     crediti:
-      "Dati: ISPRA IdroGEO (CC-BY 4.0) · e-ITALICA CNR-IRPI (CC-BY 4.0) · " +
-      "Open-Meteo (CC-BY 4.0) · GloFAS e CEMS Fire · INGV (CC-BY 4.0) · " +
-      "EFFIS · NASA FIRMS · CORINE Land Cover · © OpenStreetMap contributors " +
+      "Dati: ISPRA IdroGEO (CC BY-SA 4.0) · e-ITALICA e HR-DTM CNR-IRPI (CC BY 4.0) · " +
+      "Open-Meteo (CC BY 4.0) · GloFAS e CEMS Fire · INGV (CC BY 4.0) · " +
+      "EFFIS (CC BY 4.0) · NASA FIRMS · CORINE Land Cover · © OpenStreetMap contributors " +
       "(ODbL). Codice EUPL-1.2.",
     copernicus: (): string => copernicusModificato(),
+    ecmwf: (): string => meteoEcmwf(),
     nonAvviso: AVVISO_DI_PIENA.it,
     claude:
       "Limen è sviluppato con Claude Code fin dal primo commit, e i racconti " +
@@ -272,11 +273,12 @@ const T = testi(
       "Protection. Always follow the instructions of your municipality.",
     ctaBottone: "Open the dashboard →",
     crediti:
-      "Data: ISPRA IdroGEO (CC-BY 4.0) · e-ITALICA CNR-IRPI (CC-BY 4.0) · " +
-      "Open-Meteo (CC-BY 4.0) · GloFAS and CEMS Fire · INGV (CC-BY 4.0) · " +
-      "EFFIS · NASA FIRMS · CORINE Land Cover · © OpenStreetMap contributors " +
+      "Data: ISPRA IdroGEO (CC BY-SA 4.0) · e-ITALICA and HR-DTM CNR-IRPI (CC BY 4.0) · " +
+      "Open-Meteo (CC BY 4.0) · GloFAS and CEMS Fire · INGV (CC BY 4.0) · " +
+      "EFFIS (CC BY 4.0) · NASA FIRMS · CORINE Land Cover · © OpenStreetMap contributors " +
       "(ODbL). Code EUPL-1.2.",
     copernicus: (): string => copernicusModificato(undefined, "en"),
+    ecmwf: (): string => meteoEcmwf(undefined, "en"),
     nonAvviso: AVVISO_DI_PIENA.en,
     claude:
       "Limen has been built with Claude Code since the first commit, and the " +
@@ -428,7 +430,7 @@ export function HomePage(): JSX.Element {
       <footer className="home-footer">
         <p>{t.crediti}</p>
         <p>
-          {t.copernicus()}. {t.nonAvviso}
+          {t.copernicus()}. {t.nonAvviso} {t.ecmwf()}
         </p>
         <p>{t.claude}</p>
         <p className="home-sostieni">
