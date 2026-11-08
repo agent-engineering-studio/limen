@@ -280,7 +280,8 @@ services:
       # Event-driven predictive sweep (forecast rain → predictive alerts).
       FORECAST__ENABLED: ${FORECAST__ENABLED:-true}
       FORECAST__HORIZON_HOURS: ${FORECAST__HORIZON_HOURS:-48}
-      FORECAST__INTERVAL_HOURS: ${FORECAST__INTERVAL_HOURS:-6}
+      FORECAST__HOURS_UTC: ${FORECAST__HOURS_UTC:-[2,8,14,20]}
+      FORECAST__MINUTE: ${FORECAST__MINUTE:-50}
       FORECAST__MIN_LEVEL: ${FORECAST__MIN_LEVEL:-High}
       # DPC radar nowcast trigger (SRI 1 km / 5 min, CC-BY-SA).
       NOWCAST__ENABLED: ${NOWCAST__ENABLED:-true}

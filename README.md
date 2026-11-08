@@ -329,6 +329,7 @@ All of these are **free**. None is needed to start.
 | `LLM__LLAMACPP_BASE_URL` | `http://127.0.0.1:8091` | The LiteLLM inference gateway (not `:8081`, which is GeoServer). From a container: `host.docker.internal`. |
 | `SCORING__MODE` | `champion_only` | `shadow` also runs the ML challenger at night, writing only to `model_runs`. |
 | `FORECAST__ENABLED` | `true` | Predictive sweep and "FORECAST" alerts. |
+| `FORECAST__HOURS_UTC` | `[2, 8, 14, 20]` | When the forecast alerts run (UTC, at minute `FORECAST__MINUTE`, default 50). |
 | `NOWCAST__*` | on | DPC radar trigger: heavy rain seen by radar starts a run at once. |
 | `LOG_LEVEL` / `LOG_JSON` | `INFO` / `false` | Structured logs. |
 

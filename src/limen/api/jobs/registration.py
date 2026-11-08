@@ -32,6 +32,7 @@ from limen.api.jobs.nightly import run_nightly_pipeline
 from limen.api.jobs.nowcast_monitoring import run_nowcast_monitoring
 from limen.api.jobs.partitions import run_partitions_job
 from limen.api.jobs.raccolta_eventi import run_raccolta_eventi
+from limen.config.settings import ForecastSettings
 from limen.core.logging import get_logger
 
 log = get_logger(__name__)
@@ -96,6 +97,22 @@ def _deferred_interval(
     )
 
 
+def _forecast_alerts_trigger(
+    forecast: ForecastSettings, *, start_time: datetime | None = None
+) -> CronTrigger:
+    """Gli avvisi di previsione a orari fissi UTC (#489).
+
+    La prossima corsa dipende solo dall'orologio: un riavvio del worker non la
+    sposta, e non parte niente al boot. ``start_time`` serve ai test.
+    """
+    return CronTrigger(
+        hour=",".join(str(h) for h in sorted(set(forecast.hours_utc))),
+        minute=forecast.minute,
+        timezone=UTC,
+        start_time=start_time if start_time is not None else datetime.now(UTC),
+    )
+
+
 async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> list[str]:
     """Schedule every Limen periodic job. Returns the list of job ids registered."""
     cfg = deps.settings.scheduler
@@ -122,7 +139,7 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
         await scheduler.add_schedule(
             track_job(JOB_FORECAST_MONITORING)(run_forecast_monitoring),
             args=(deps,),
-            trigger=_deferred_interval(hours=deps.settings.forecast.interval_hours),
+            trigger=_forecast_alerts_trigger(deps.settings.forecast),
             id=JOB_FORECAST_MONITORING,
             conflict_policy=ConflictPolicy.replace,
         )
@@ -130,7 +147,8 @@ async def register_jobs(scheduler: AsyncScheduler, deps: AppDependencies) -> lis
         log.info(
             "scheduler.registered",
             job=JOB_FORECAST_MONITORING,
-            interval_hours=deps.settings.forecast.interval_hours,
+            hours_utc=sorted(set(deps.settings.forecast.hours_utc)),
+            minute=deps.settings.forecast.minute,
             horizon_hours=deps.settings.forecast.horizon_hours,
         )
 

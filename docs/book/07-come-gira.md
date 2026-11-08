@@ -110,7 +110,8 @@ coprire tutta Italia.
       `SCHEDULER__FORECAST_CELLS_HOURS_UTC` (02/08/14/20, minuto 20).
     - Altri lavori: `limen-nowcast-monitoring` (radar DPC, ogni
       `NOWCAST__INTERVAL_MINUTES`, 15), `limen-forecast-monitoring` (avvisi
-      PREVISIONE a 48 h, ogni `FORECAST__INTERVAL_HOURS`, 6),
+      PREVISIONE a 48 h, a `FORECAST__HOURS_UTC`, 02/08/14/20, minuto
+      `FORECAST__MINUTE`, 50),
       `limen-dpc-bollettini`, `limen-html-report`, `limen-daily-report`
       (`REPORT__HOUR_UTC`, 6), `limen-raccolta-eventi`,
       `limen-fedelta-racconti` (21 UTC), `limen-alert-digest`,
@@ -506,7 +507,9 @@ Che cosa manca, in breve. Il dettaglio tecnico sta nella issue indicata.
   ore a contare dall'avvio» invece che a orari fissi: dopo i riavvii del 7
   novembre non sono partiti per 19 ore, dalle 8:05 alle 3:05 del giorno
   dopo. La previsione della mappa, che usa orari fissi, non ha questo
-  problema. ([#489](https://github.com/agent-engineering-studio/limen/issues/489))
+  problema. *Corretto:* ora partono anch'essi a orari fissi, mezz'ora dopo
+  la previsione della mappa (2:50, 8:50, 14:50, 20:50 UTC), e un riavvio non
+  li sposta più. ([#489](https://github.com/agent-engineering-studio/limen/issues/489))
 - **Il pacchetto rapido non è pubblicato né proposto dalla pagina di
   installazione.** Aspetta la verifica delle licenze regione per regione.
   *Proposta di dati aperti:* pubblicarlo su Zenodo, l'archivio aperto che dà

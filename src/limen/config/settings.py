@@ -1156,8 +1156,14 @@ class ForecastSettings(BaseSettings):
     enabled: bool = True
     # Predictive horizon: score at now + this many hours with forecast rain.
     horizon_hours: int = Field(default=48, ge=1, le=384)
-    # How often the scheduled job re-runs the forecast sweep.
-    interval_hours: int = Field(default=6, ge=1)
+    # A orari fissi UTC, non «ogni sei ore dall'avvio» (#489): con
+    # l'intervallo ogni riavvio del worker spostava la corsa successiva, e il
+    # 7-8 novembre 2026 sono passate 19 ore senza avvisi. Stesse ore della
+    # previsione per cella, trenta minuti dopo: quella corsa (12-22 minuti,
+    # dalle :20) scarica la previsione GloFAS dall'EWDS che l'alluvione di
+    # questo job legge da `glofas_previsione`.
+    hours_utc: list[int] = Field(default=[2, 8, 14, 20], min_length=1)
+    minute: int = Field(default=50, ge=0, le=59)
     # Minimum champion level a forecast cell must reach to trigger an alert.
     min_level: Literal["Low", "Moderate", "High", "VeryHigh"] = "High"
     # Repeat predictive alerts for the same (AOI, horizon) are suppressed
@@ -1165,6 +1171,12 @@ class ForecastSettings(BaseSettings):
     dedup_window_hours: int = Field(default=24, ge=0)
     # Optional cap on cells per AOI (smoke/dev); None = full grid.
     cell_limit: int | None = None
+
+    @property
+    def interval_hours(self) -> int:
+        """Il buco più lungo fra due corse, giro di mezzanotte compreso."""
+        ore = sorted(set(self.hours_utc))
+        return max((b - a) % 24 or 24 for a, b in zip(ore, ore[1:] + ore[:1], strict=True))
 
 
 class NowcastSettings(BaseSettings):

@@ -16,6 +16,7 @@ regioni → `ingest-events` (truth set e-ITALICA da Zenodo) →
 | Cosa | Quando | Owner |
 |---|---|---|
 | Workflow di monitoraggio orario | APScheduler in-process ogni `SCHEDULER__HOURLY_MONITORING_MINUTES` (default 60) | Container API |
+| Avvisi di previsione (`limen-forecast-monitoring`) | APScheduler cron a orari fissi UTC `FORECAST__HOURS_UTC` (default 02/08/14/20) al minuto `FORECAST__MINUTE` (default 50), trenta minuti dopo la previsione per cella: un riavvio del worker non sposta la corsa (#489) | Container worker |
 | Sync ISPRA IdroGEO | APScheduler cron settimanale (lun 03:15 UTC) | Container API |
 | Pulizia cache | APScheduler ogni `SCHEDULER__CACHE_CLEANUP_INTERVAL_SECONDS` (default 300) quando `SCHEDULER__CACHE_CLEANUP=apscheduler` | Container API |
 | Refresh `mv_latest_risk` | In coda a ogni chiamata `PersistResultExecutor` | Workflow |

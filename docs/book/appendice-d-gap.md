@@ -98,7 +98,7 @@ gap si chiude dentro Limen.
 | 7 | La copia di sicurezza resta sullo stesso computer. | — | [#490](https://github.com/agent-engineering-studio/limen/issues/490) |
 | 7 | Il ripristino non è mai stato provato su una macchina pulita. | — | [#307](https://github.com/agent-engineering-studio/limen/issues/307) |
 | 7 | Un solo ufficio calcoli: ogni riavvio interrompe il lavoro. | — | [#308](https://github.com/agent-engineering-studio/limen/issues/308) |
-| 7 | Gli avvisi di previsione slittano a ogni riavvio. | — | [#489](https://github.com/agent-engineering-studio/limen/issues/489) |
+| 7 | Gli avvisi di previsione slittano a ogni riavvio. *Corretto: ora partono a orari fissi.* | — | [#489](https://github.com/agent-engineering-studio/limen/issues/489) |
 | 7 | Il pacchetto rapido non è pubblicato né proposto dalla pagina di installazione. | pubblicarlo su [Zenodo](https://zenodo.org) con un identificativo permanente | [#406](https://github.com/agent-engineering-studio/limen/issues/406) |
 | 7 | La macchina di oggi non è un server. | — | [#308](https://github.com/agent-engineering-studio/limen/issues/308) |
 | 7 | Alcuni documenti tecnici descrivono il sistema di prima. | — | [#493](https://github.com/agent-engineering-studio/limen/issues/493) |
