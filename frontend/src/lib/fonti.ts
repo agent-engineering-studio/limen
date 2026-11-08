@@ -410,6 +410,29 @@ export const FONTI: readonly Fonte[] = [
     copernicus: "CLMS",
   },
   {
+    id: "water-wetness",
+    ente: "Copernicus Land Monitoring Service",
+    dataset: t("HRL Water and Wetness 2018", "HRL Water and Wetness 2018"),
+    ruolo: "calcolo",
+    pericoli: ["flood"],
+    cosa: t(
+      "Dove il satellite ha visto acqua o terreno umido solo per una parte dell'anno (2009-2015).",
+      "Where satellites saw water or wet ground for only part of the year (2009-2015).",
+    ),
+    accesso: t(
+      "Servizio ImageServer dell'Agenzia europea dell'ambiente, aperto e senza account, a 50 m; poi il bootstrap conta la quota per cella.",
+      "European Environment Agency ImageServer, open and without an account, at 50 m; then the bootstrap computes the share per cell.",
+    ),
+    interpretazione: t(
+      "Solo dentro le aree a pericolo idraulico: la suscettibilità della classe ISPRA va da 0,925 volte, dove l'acqua temporanea non si è mai vista, a 1,25 volte, dove copre almeno il 15 % della cella. Fuori dalla mappa non cambia niente.",
+      "Only inside hydraulic hazard areas: the ISPRA class susceptibility ranges from 0.925 times, where temporary water was never seen, to 1.25 times, where it covers at least 15% of the cell. Outside the map nothing changes.",
+    ),
+    licenza: "Copernicus, uso libero con attribuzione",
+    url: "https://land.copernicus.eu/en/products/high-resolution-layer-water-and-wetness",
+    facoltativa: true,
+    copernicus: "CLMS",
+  },
+  {
     id: "egms",
     ente: "Copernicus Land Monitoring Service",
     dataset: t(

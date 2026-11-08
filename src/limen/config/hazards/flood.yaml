@@ -292,6 +292,52 @@ pluvial_susceptibility:
   impervious_full: 0.3
   flat_slope_deg: 15.0
 
+# SPENTO (#420): NO-GO dell'8/11/2026, da accendere solo dopo
+# `limen backtest-flood` contro main, e accenderlo è flood-v1.4.0. Il dato si
+# carica comunque (`limen water-wetness-fetch`, passo `water_wetness` del
+# bootstrap), così la misura si può rifare in ogni momento.
+#
+# water_wetness:
+  # Dentro la mappa ISPRA le classi sono tre, e migliaia di celle hanno la
+  # stessa suscettibilità. L'HRL WaterWetness 2018 di Copernicus (immagini
+  # 2009-2015) dice in quali l'acqua si è vista solo per una parte dell'anno:
+  # golene, greti, piane che si allagano. È quello che distingue, a parità di
+  # classe, le celle che l'acqua la tengono davvero (#420).
+  #
+  #   fattore = min_factor + (max_factor − min_factor) · min(temp / full, 1)
+  #   suscettibilità = min(1, classe ISPRA × fattore)
+  #
+  # `temp` = quota della cella con acqua o umido temporanei (classi 2 e 4)
+  # sui pixel classificati. **Solo per le celle mappate**: fuori la
+  # suscettibilità resta quella di ripiego e la #198.
+  #
+  # Misura del 2026-11-08, verità EMS 2023-2026, 28.837 celle nei nodi in cui
+  # EMS ha osservato qualcosa, 2.632 allagate, il 99 % dentro un'area PAI.
+  # Osservate/attese dentro PAI per quota di temporaneo, a parità di nodo
+  # meteo × fascia di quota:
+  #
+  #   temporaneo     0     0-1 %   1-5 %   5-15 %   > 15 %
+  #   O/A          0,42    0,71    0,93    1,07     1,23
+  #
+  # * `full` = 0,15: sopra il 15 % la curva è piatta.
+  # * `min_factor` è scelto perché la suscettibilità media delle 129.104
+  #   celle mappate resti la stessa: il termine riordina, non alza il carico.
+  # * AUC dentro nodo × quota, classe PAI → classe PAI con il termine:
+  #   Emilia-Romagna 0,606 → 0,671, resto d'Italia 0,677 → 0,771.
+  #
+  # Fuori dalla mappa EMS ha visto solo 31 celle allagate: non si misura
+  # niente, ed è per questo che il termine non le tocca. Una cautela: EMS e
+  # WaterWetness vedono entrambi l'acqua dal satellite, quindi una parte del
+  # guadagno può essere che vedono meglio gli stessi posti (gli anni però non
+  # si sovrappongono). La promozione dipende da `limen backtest-flood` contro
+  # `main` a parità di carico.
+  #
+  # Senza `LIMEN_WATER_WETNESS_RASTER` la colonna resta NULL e il motore si
+  # comporta come la v1.3.0.
+#   full: 0.15
+#   min_factor: 0.925
+#   max_factor: 1.25
+
 imperviousness:
   # Suolo impermeabilizzato: amplifica **solo** il ramo pluviale. Il cemento
   # non fa crescere un fiume, fa scorrere la stessa pioggia invece di

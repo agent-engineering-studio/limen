@@ -654,6 +654,21 @@ async def bootstrap_static_for_aoi(aoi_id: str, *, force: bool = False) -> Boots
             )
         await gate.done("imperviousness", rows_written=imperv_written, **imperv_fp.details)
 
+    # HRL WaterWetness (#420) — stesso contratto: senza raster, skip pulito.
+    from limen.integrations.water_wetness import sync_water_wetness_for_aois
+    from limen.integrations.water_wetness.sync_job import WATER_WETNESS_RASTER_ENV
+
+    ww_fp = fingerprint.of_env_file(WATER_WETNESS_RASTER_ENV)
+    if await gate.needs("water_wetness", ww_fp):
+        ww_written = await sync_water_wetness_for_aois(aoi_ids=[aoi_id])
+        if ww_written:
+            log.info(
+                "static_bootstrap.water_wetness_done",
+                aoi_id=aoi_id,
+                rows_written=ww_written,
+            )
+        await gate.done("water_wetness", rows_written=ww_written, **ww_fp.details)
+
     # ISPRA Carta Geologica — vector shapefile + faults; runs when
     # LIMEN_GEOLOGICAL_SHAPEFILE points at a polygon file.
     from limen.integrations.geological import sync_geological_for_aois

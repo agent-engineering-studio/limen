@@ -930,6 +930,25 @@ class PluvialSusceptibilityBlock(_StrictModel):
     flat_slope_deg: float = Field(..., gt=0.0)
 
 
+class WaterWetnessBlock(_StrictModel):
+    """How the HRL WaterWetness layer reorders cells *inside* the hydraulic map (#420).
+
+    The ISPRA mosaic has three classes, so thousands of cells share the same
+    susceptibility. The share of temporary water and wetness a satellite saw
+    in a cell (2009-2015) says which of them actually holds water: within the
+    same PAI class the cells with the most of it flooded three times as often
+    as the cells with none. Mapped cells only -- outside the map EMS observed
+    too few floods to measure anything.
+    """
+
+    #: Temporary share at which the factor reaches ``max_factor``; linear below.
+    full: float = Field(..., gt=0.0, le=1.0)
+    #: Factor for a mapped cell where no temporary water was ever seen.
+    min_factor: float = Field(..., gt=0.0, le=1.0)
+    #: Factor at ``full`` and above. The result is capped at 1.
+    max_factor: float = Field(..., ge=1.0)
+
+
 class ImperviousnessBlock(_StrictModel):
     """Sealed-soil amplification of the *pluvial* branch only.
 
@@ -1130,6 +1149,8 @@ class FloodThresholds(HazardThresholds):
     pluvial_susceptibility: PluvialSusceptibilityBlock | None = None
     #: Absent ⇒ the hydraulic class is used as the mosaic gives it, as before #469.
     terrain: TerrainBlock | None = None
+    #: Absent ⇒ the mapped susceptibility is the ISPRA class alone, as before #420.
+    water_wetness: WaterWetnessBlock | None = None
     calibration: CalibrationBlock | None = None
 
     @model_validator(mode="after")
@@ -1175,6 +1196,9 @@ class FloodThresholds(HazardThresholds):
                 self.pluvial_susceptibility.model_dump()
                 if self.pluvial_susceptibility is not None
                 else None
+            ),
+            "water_wetness": (
+                self.water_wetness.model_dump() if self.water_wetness is not None else None
             ),
         }
 

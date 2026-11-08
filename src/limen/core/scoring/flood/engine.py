@@ -74,6 +74,15 @@ class FloodScoringEngine(ScoringEngine[FloodBreakdown]):
         # fondo valle; senza il blocco è la classe del mosaico, com'era.
         mappa = t.mapped_class(static.flood_hazard_norm, static.quota_sul_fondo_m)
         susceptibility = t.susceptibility.unmapped if mappa is None else mappa
+        # Dentro la mappa le classi ISPRA sono tre, e migliaia di celle hanno
+        # la stessa suscettibilità. L'acqua temporanea vista dal satellite dice
+        # quali di loro l'acqua la tengono davvero (#420). Solo le mappate:
+        # fuori EMS ha osservato troppo poco per misurare.
+        ww = t.water_wetness
+        temp = static.water_wetness_temp
+        if ww is not None and mappa is not None and temp is not None:
+            fattore = ww.min_factor + (ww.max_factor - ww.min_factor) * min(1.0, temp / ww.full)
+            susceptibility = min(1.0, susceptibility * fattore)
 
         # La finestra comincia adesso, quindi un nubifragio in corso esce dalla
         # previsione mentre cade (#199): a Melito la previsione dava 20 mm, il

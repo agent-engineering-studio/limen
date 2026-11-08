@@ -27,6 +27,7 @@ from limen.integrations.corine import sync_job as corine_sync
 from limen.integrations.corine import zonal as corine_zonal
 from limen.integrations.dem import sync_job as dem
 from limen.integrations.imperviousness import sync_job as imperv
+from limen.integrations.water_wetness import sync_job as ww
 
 #: 10x10 pixel da 0,001° con origine in alto a sinistra a (16.00, 41.01):
 #: copre il quadrato 16.00-16.01 E, 41.00-41.01 N.
@@ -148,6 +149,77 @@ async def test_sync_imperviousness_without_a_source_is_a_no_op(
 def test_imperviousness_path_comes_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(imperv.IMPERVIOUSNESS_RASTER_ENV, "/dati/imd.tif")
     assert imperv._resolve_raster_path(None) == Path("/dati/imd.tif")
+
+
+# ---------------------------------------------------------------------------
+# Acqua e umido temporanei (#420)
+# ---------------------------------------------------------------------------
+def _ww_band() -> np.ndarray:
+    """Dentro `_INSIDE` (colonne 1-8): 8 px di acqua temporanea (2), 8 di umido
+    temporaneo (4), 8 non classificati (255), 40 asciutti (0)."""
+    band = np.zeros((10, 10))
+    band[:, :2] = 2
+    band[:, 2] = 4
+    band[:, 3] = 255
+    return band
+
+
+def test_the_temporary_share_counts_classes_two_and_four_over_classified_pixels(
+    tmp_path: Path,
+) -> None:
+    raster = _geotiff(tmp_path / "ww.tif", _ww_band())
+    shares = ww.cell_shares(raster_path=raster, cells={"dentro": _INSIDE}, min_pixels=10)
+    assert shares == {"dentro": pytest.approx(16 / 56)}
+
+
+def test_permanent_water_is_not_temporary(tmp_path: Path) -> None:
+    band = np.full((10, 10), 1.0)
+    band[:, 5:] = 3
+    raster = _geotiff(tmp_path / "ww.tif", band)
+    assert ww.cell_shares(raster_path=raster, cells={"dentro": _INSIDE}, min_pixels=10) == {
+        "dentro": 0.0
+    }
+
+
+def test_a_cell_with_too_few_classified_pixels_stays_unknown(tmp_path: Path) -> None:
+    """Sotto `min_pixels` la quota poggerebbe su una manciata di pixel: NULL, non 0."""
+    raster = _geotiff(tmp_path / "ww.tif", _ww_band())
+    cells = {"dentro": _INSIDE, "fuori": _OUTSIDE}
+    assert ww.cell_shares(raster_path=raster, cells=cells, min_pixels=57) == {}
+    assert set(ww.cell_shares(raster_path=raster, cells=cells, min_pixels=56)) == {"dentro"}
+
+
+async def test_sync_water_wetness_writes_covered_cells(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Pixel da 0,0005°: `_INSIDE` ne contiene 256, sopra il `MIN_PIXELS` di produzione.
+    raster = tmp_path / "ww.tif"
+    with rasterio.open(
+        raster,
+        "w",
+        driver="GTiff",
+        width=20,
+        height=20,
+        count=1,
+        dtype="uint8",
+        crs="EPSG:4326",
+        transform=from_origin(_ORIGIN[0], _ORIGIN[1], _PIX / 2, _PIX / 2),
+    ) as dst:
+        dst.write(np.full((20, 20), 4, dtype="uint8"), 1)
+    conn = _Conn({"dentro": _INSIDE, "fuori": _OUTSIDE})
+    _use(monkeypatch, ww, conn)
+    assert await ww.sync_water_wetness_for_aois(aoi_ids=["it-x"], raster_path=raster) == 1
+    assert conn.updates == [("dentro", pytest.approx(1.0))]
+
+
+async def test_sync_water_wetness_without_a_source_is_a_no_op(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(ww.WATER_WETNESS_RASTER_ENV, raising=False)
+    assert await ww.sync_water_wetness_for_aois(aoi_ids=["it-x"]) == 0
+    assert (
+        await ww.sync_water_wetness_for_aois(aoi_ids=["it-x"], raster_path=tmp_path / "x.tif") == 0
+    )
 
 
 # ---------------------------------------------------------------------------

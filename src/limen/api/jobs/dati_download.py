@@ -169,6 +169,24 @@ def _cartella_impermeabilizzazione() -> list[Path]:
     return [_resolve_dest(None).parent]
 
 
+async def _acqua_temporanea() -> None:
+    from limen.integrations.water_wetness.fetch import _resolve_dest, fetch_water_wetness
+
+    if _resolve_dest(None).exists():
+        return
+    if await fetch_water_wetness() is None:
+        raise DownloadFallitoError(
+            "Nessuna regione seminata: il riquadro da scaricare viene dalle regioni. "
+            "Esegui prima `limen seed`."
+        )
+
+
+def _cartella_acqua_temporanea() -> list[Path]:
+    from limen.integrations.water_wetness.fetch import _resolve_dest
+
+    return [_resolve_dest(None).parent]
+
+
 async def _strade() -> None:
     from limen.cli.fetch_static import OSM_PBF_URL, OSM_PBF_URL_ENV, _leggi, _scrivi, osm
 
@@ -249,6 +267,7 @@ def procuratori() -> dict[str, Procuratore]:
         "litologia": Procuratore(_litologia, gs("carta_geolitologica*")),
         "comuni": Procuratore(_confini_comuni, gs("Limiti01012023_g*")),
         "impermeabilizzazione": Procuratore(_impermeabilizzazione, _cartella_impermeabilizzazione),
+        "acqua_temporanea": Procuratore(_acqua_temporanea, _cartella_acqua_temporanea),
         "strade": Procuratore(_strade, lambda: [radice_dati() / "osm"]),
         "perimetri_effis": Procuratore(_perimetri_effis, list),
         "catasti_incendi": Procuratore(_catasti_incendi, _cartella_catasti),

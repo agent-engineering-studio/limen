@@ -141,6 +141,25 @@ voci:
       information (Imperviousness Density 2018)
     peso_gb: 0.005
 
+  - id: acqua_temporanea
+    nome: acqua e umido temporanei (HRL WaterWetness)
+    a_cosa_serve: >-
+      Dove il satellite ha visto acqua o terreno umido solo per una parte
+      dell'anno. Dentro le aree a pericolo idraulico distingue le celle che
+      l'acqua la tengono davvero. Senza, celle della stessa classe valgono uguale.
+    pericoli: [flood]
+    livello: consigliato
+    misura: {colonna: water_wetness_temp}
+    variabile: LIMEN_WATER_WETNESS_RASTER
+    procura_con: make water-wetness-data
+    fonte: Copernicus Land Monitoring Service — Water and Wetness 2018 (EEA)
+    url: https://land.copernicus.eu
+    licenza: Copernicus, accesso libero (Reg. UE 1159/2013)
+    attribuzione: >-
+      © European Union, Copernicus Land Monitoring Service 2018, European
+      Environment Agency (EEA)
+    peso_gb: 0.007
+
   - id: comuni
     nome: confini dei comuni (ISTAT)
     a_cosa_serve: >-

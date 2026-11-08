@@ -82,6 +82,9 @@ class StaticFactors(_Frozen):
     # crescere un fiume, fa scorrere la stessa pioggia invece di lasciarla
     # infiltrare. NULL = ignoto, che non è 0 (= suolo tutto permeabile).
     imperviousness_norm: float | None = Field(default=None, ge=0.0, le=1.0)
+    # #420 — HRL WaterWetness 2018, quota di acqua e umido temporanei nella
+    # cella. Modula la suscettibilità delle sole celle mappate. NULL = ignoto.
+    water_wetness_temp: float | None = Field(default=None, ge=0.0, le=1.0)
     # #243 — quantile climatologico della cumulata di pioggia al nodo della
     # cella (`limen clima-pioggia`): il metro dell'innesco `cumulata`. NULL =
     # nessun riferimento, e l'innesco resta su Caine.

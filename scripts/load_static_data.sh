@@ -43,7 +43,7 @@ fi
 
 # Una sola radice per i dati (#302): una sorgente non impostata si cerca lì,
 # al nome che le producono `make dtm-vrt`, `make osm-data` e
-# `make imperviousness-data`. Una variabile impostata vince sempre.
+# `make imperviousness-data` e `make water-wetness-data`. Una variabile impostata vince sempre.
 RADICE="${LIMEN_DATA_ROOT:-$(pwd)/data}"
 # I dati di GeoServer stanno dove li monta il compose.
 GEOSERVER_DATI="${GEOSERVER_SHAPEFILE_DIR:-$RADICE/geoserver}"
@@ -59,6 +59,7 @@ predefinito LIMEN_GEOLOGICAL_SHAPEFILE "$GEOSERVER_DATI/carta_geolitologica/cart
 predefinito LIMEN_OSM_ROADS "$RADICE/osm/osm_roads.gpkg"
 predefinito LIMEN_OSM_RAILWAYS "$RADICE/osm/osm_rails.gpkg"
 predefinito LIMEN_IMPERVIOUSNESS_RASTER "$RADICE/sealing/clms_imd_2018/imd_2018_100m.tif"
+predefinito LIMEN_WATER_WETNESS_RASTER "$RADICE/water_wetness/hrl_ww_2018/ww_2018_50m.tif"
 # Le tile EGMS si tengono sotto la radice e non in /tmp (il default di
 # EgmsSettings): con il container usa e getta qui sotto ogni `make up`
 # riscaricherebbe ~7 GB. Con le tile già lì, un sync ripetuto non va in rete
@@ -108,7 +109,7 @@ if [ "$MODO" = docker ]; then
   # associativi, e lo script si fermava prima di definire `limen`.
   MONTATE=$'\n'
   for v in LIMEN_DEM_RASTER LIMEN_CORINE_RASTER LIMEN_GEOLOGICAL_SHAPEFILE \
-    LIMEN_OSM_ROADS LIMEN_OSM_RAILWAYS LIMEN_IMPERVIOUSNESS_RASTER; do
+    LIMEN_OSM_ROADS LIMEN_OSM_RAILWAYS LIMEN_IMPERVIOUSNESS_RASTER LIMEN_WATER_WETNESS_RASTER; do
     [ -n "${!v:-}" ] && [ -e "${!v}" ] || continue
     assoluto="$(cd "$(dirname "${!v}")" && pwd)/$(basename "${!v}")"
     cartella="$(dirname "$assoluto")"
@@ -171,7 +172,7 @@ skip() { printf '  [manca]   %s\n' "$*"; }
 
 say "1/7  Cosa è configurato in questo ambiente (comandi: $MODO)"
 
-have_geoserver=0; have_dem=0; have_imperv=0; have_corine=0
+have_geoserver=0; have_dem=0; have_imperv=0; have_ww=0; have_corine=0
 gs_risponde() { timeout 3 bash -c "</dev/tcp/${gs_host:?}/${gs_port:?}" 2>/dev/null; }
 # La sorgente che i comandi `limen` leggeranno davvero: nel container non è
 # GEOSERVER_SOURCE__DB_DSN del .env (che è per l'host, `localhost:55433`) ma
@@ -230,6 +231,14 @@ else
   skip "LIMEN_IMPERVIOUSNESS_RASTER non impostata o file assente"
   echo "            → 'make imperviousness-data' lo scarica: l'EEA serve lo stesso"
   echo "              prodotto CLMS senza account. Poi punta la variabile al file."
+fi
+
+if [ -n "${LIMEN_WATER_WETNESS_RASTER:-}" ] && [ -e "${LIMEN_WATER_WETNESS_RASTER}" ]; then
+  have_ww=1
+  ok "HRL WaterWetness — ordina le celle dentro il mosaico idraulico (#420)"
+else
+  skip "LIMEN_WATER_WETNESS_RASTER non impostata o file assente"
+  echo "            → 'make water-wetness-data' lo scarica dall'EEA, senza account."
 fi
 
 if [ -n "${LIMEN_CORINE_RASTER:-}" ] && [ -e "${LIMEN_CORINE_RASTER}" ]; then
