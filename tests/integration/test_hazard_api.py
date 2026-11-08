@@ -228,6 +228,10 @@ async def test_the_breakdown_carries_the_base_data_with_its_source(
     assert dati["impermeabilizzazione"]["attribuzione"]
     assert dati["idraulica"]["stato"] == "assente_qui"
     assert dati["idraulica"]["valore"] is None
+    # Vicinanza mai calcolata nella regione: tutto `false` di default, che è
+    # «non caricato» e non «nessun abitato vicino» (#473).
+    assert dati["vicinanza"]["stato"] == "non_caricato"
+    assert dati["vicinanza"]["valore"] is None
     assert "dtm" not in dati
 
 

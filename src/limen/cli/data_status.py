@@ -78,6 +78,7 @@ HAZARD_NEEDS: dict[str, tuple[str, ...]] = {
     for h, nome in _NOMI_PERICOLO.items()
 }
 _PERIMETRI = _CATALOGO.voce("perimetri_effis")
+_CONTATE_SUI_VERI = frozenset(v.id for v in _CATALOGO.voci if v.misura.conta == "veri")
 
 
 def _bar(pct: float, width: int = 20) -> str:
@@ -109,7 +110,15 @@ async def run() -> int:
         gate = layer.gate or (
             f"deriva da {layer.derived_from}" if layer.derived_from else layer.fetch_with or ""
         )
-        print(f"  {layer.label:34s} {n:>10,}  {_bar(pct)}  {gate}".replace(",", "."))
+        # Contate sui `true` (#473): il numero è quante celle hanno un abitato
+        # vicino, non quanta Italia è coperta, e una barra al 31 % si leggerebbe
+        # come un caricamento a metà.
+        barra = (
+            _bar(pct)
+            if voce_di[layer.column] not in _CONTATE_SUI_VERI
+            else (f"{'calcolato' if n else 'non calcolato':20s}")
+        )
+        print(f"  {layer.label:34s} {n:>10,}  {barra}  {gate}".replace(",", "."))
     print(f"\n  {_PERIMETRI.nome:34s} {perimeters:>10,}".replace(",", "."))
     # Le tile del rilievo non sono un fattore per cella: servono alla vista
     # «Rilievo» della mappa, e mancano senza che lo score se ne accorga.

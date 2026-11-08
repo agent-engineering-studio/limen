@@ -349,9 +349,16 @@ async def compute_wui_proximity_for_aoi(aoi_id: str) -> None:
 # Vicinanza ad abitati (CORINE 11x) e infrastrutture (12x), per l'esposizione
 # degli avvisi (#473). Era solo nell'UPDATE della migrazione 021, che su
 # un'installazione nuova gira prima di CORINE: `false` su ogni cella d'Italia,
-# per sempre. Stesso raggio della 021 (0,02°, ~2 km). Le celle urbane si
-# cercano anche fuori dall'AOI: un paese oltre il confine regionale è vicino
-# quanto uno dentro.
+# per sempre. Stesso raggio della 021 (0,02°, ~2 km): cambiarlo vuol dire
+# incrementare `STEP_VERSION["vicinanza"]`.
+#
+# Le celle urbane si cercano anche fuori dall'AOI (un paese oltre il confine è
+# vicino quanto uno dentro), e per la stessa ragione il passo riscrive anche le
+# celle delle regioni accanto che cadono nel suo riquadro allargato. Le regioni
+# si caricano una alla volta: senza questo, una regione calcolata prima che
+# CORINE arrivasse nella vicina terrebbe `false` sul confine, e la sua impronta
+# (che è quella di CORINE) non cambierebbe mai più. Così l'esito non dipende
+# dall'ordine: l'ultima delle due regioni a passare corregge il confine.
 _VICINANZA_SQL = """
 UPDATE cell_static_factors f
 SET near_urban = v.urb, near_infra = v.inf, updated_at = now()
@@ -364,7 +371,8 @@ FROM (
                    JOIN cell_static_factors uf ON uf.cell_id = u.id
                    WHERE ST_DWithin(u.geom, n.geom, $2) AND uf.landuse_code LIKE '12%') AS inf
     FROM grid_cells n
-    WHERE n.aoi_id = $1
+    JOIN aoi a ON a.id = $1
+    WHERE n.geom && ST_Expand(a.bbox, $2)
 ) v
 WHERE f.cell_id = v.id
   AND (f.near_urban, f.near_infra) IS DISTINCT FROM (v.urb, v.inf)

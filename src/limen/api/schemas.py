@@ -367,6 +367,9 @@ class VoceDato(BaseModel):
     deriva_da: str | None
     #: Celle con il dato, o righe della sua tabella.
     copertura: int
+    #: ``veri``: ``copertura`` conta le celle a ``true`` di una colonna booleana
+    #: (es. vicinanza ad abitati), non le celle coperte (#473).
+    conta: Literal["valori", "veri"] = "valori"
     #: Le regioni seminate dove il dato manca (solo per i dati per cella).
     regioni_senza: list[str]
     download: DownloadDato | None
