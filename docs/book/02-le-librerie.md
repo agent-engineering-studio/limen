@@ -57,6 +57,8 @@ una libreria arriva in Limen solo per scelta, non da solo.
 
 ### fwi-chain: l'indice meteo degli incendi
 
+*Documentazione: [agentengineering.it/fwi-chain](https://agentengineering.it/fwi-chain/) · codice su [GitHub](https://github.com/agent-engineering-studio/fwi-chain).*
+
 **Il problema.** Il servizio forestale canadese ha costruito negli anni
 Ottanta un indice che dice quanto il tempo favorisce un incendio: il *Fire
 Weather Index* (FWI). Oggi è lo standard internazionale, usato anche dal
@@ -75,6 +77,8 @@ delle formule stanno nella libreria perché sono uno standard pubblicato, non
 una scelta di Limen.
 
 ### effis-client: le aree bruciate in Europa
+
+*Documentazione: [agentengineering.it/effis-client](https://agentengineering.it/effis-client/) · codice su [GitHub](https://github.com/agent-engineering-studio/effis-client).*
 
 **Il problema.** Per sapere se Limen prevede bene gli incendi servono gli
 incendi veri. Il sistema europeo d'informazione sugli incendi boschivi
@@ -99,6 +103,8 @@ conclusione.
 
 ### rainfall-thresholds: la pioggia che fa franare
 
+*Documentazione: [agentengineering.it/rainfall-thresholds](https://agentengineering.it/rainfall-thresholds/) · codice su [GitHub](https://github.com/agent-engineering-studio/rainfall-thresholds).*
+
 **Il problema.** Una frana superficiale parte quando piove abbastanza forte
 per abbastanza tempo. Un temporale di un'ora e una pioggia di tre giorni
 fanno danni diversi. Nel 1980 il geografo Nel Caine ha disegnato la curva che
@@ -113,6 +119,8 @@ ora e dice se hanno superato la soglia, o la ricalcola sui dati.
 soglie diverse per Nord, Centro e Sud.
 
 ### ispra-idrogeo: frane censite e aree allagabili
+
+*Documentazione: [agentengineering.it/ispra-idrogeo](https://agentengineering.it/ispra-idrogeo/) · codice su [GitHub](https://github.com/agent-engineering-studio/ispra-idrogeo).*
 
 **Il problema.** ISPRA pubblica sulla piattaforma IdroGEO quello che l'Italia
 sa di frane e alluvioni: l'archivio delle 721.365 frane censite, le mappe
@@ -130,6 +138,8 @@ censite e le aree a pericolo di ogni regione: sono la parte del punteggio che
 dice quanto *il posto* è fragile.
 
 ### copernicus-ems: dove è arrivata davvero l'acqua
+
+*Documentazione: [agentengineering.it/copernicus-ems](https://agentengineering.it/copernicus-ems/) · codice su [GitHub](https://github.com/agent-engineering-studio/copernicus-ems).*
 
 **Il problema.** Per misurare il punteggio dell'alluvione servono le aree
 allagate vere. Il servizio europeo di mappatura delle emergenze (Copernicus
@@ -150,6 +160,8 @@ calcio[^piemonte].
 
 ### egms-client: il terreno che si muove
 
+*Documentazione: [agentengineering.it/egms-client](https://agentengineering.it/egms-client/) · codice su [GitHub](https://github.com/agent-engineering-studio/egms-client).*
+
 **Il problema.** I satelliti radar europei misurano di quanti millimetri
 all'anno si muove il suolo, punto per punto. Il servizio europeo di
 monitoraggio dei movimenti del terreno (EGMS) pubblica questo archivio, ma
@@ -164,6 +176,8 @@ tiene i punti che si muovono di più. Oggi questo dato alimenta solo il modello
 che impara, non la mappa.
 
 ### firms-client: i fuochi visti dallo spazio
+
+*Documentazione: [agentengineering.it/firms-client](https://agentengineering.it/firms-client/) · codice su [GitHub](https://github.com/agent-engineering-studio/firms-client).*
 
 **Il problema.** La NASA pubblica con il servizio FIRMS ogni fuoco acceso
 visto dai satelliti dal 2000. Ma un punto caldo non è sempre un incendio: può
@@ -182,6 +196,8 @@ aspettare l'ora successiva.
 
 ### imageserver-export: le mappe europee del suolo
 
+*Documentazione: [agentengineering.it/imageserver-export](https://agentengineering.it/imageserver-export/) · codice su [GitHub](https://github.com/agent-engineering-studio/imageserver-export).*
+
 **Il problema.** L'Agenzia Europea dell'Ambiente pubblica le mappe del
 territorio del programma Copernicus con un dettaglio di 10 metri: dove il
 suolo è coperto di cemento e asfalto, dove ci sono alberi, prati, acqua. Ma
@@ -199,6 +215,8 @@ temporale allaga più facilmente.
 
 ### ingv-shakemap: quanto ha tremato il suolo
 
+*Documentazione: [agentengineering.it/ingv-shakemap](https://agentengineering.it/ingv-shakemap/) · codice su [GitHub](https://github.com/agent-engineering-studio/ingv-shakemap).*
+
 **Il problema.** Dopo un terremoto forte i versanti sono più fragili. L'INGV
 pubblica per ogni terremoto una mappa di quanto ha tremato il suolo punto per
 punto, chiamata ShakeMap.
@@ -210,6 +228,8 @@ punto quanto forte è stata la scossa.
 e per studiare i mesi dopo il terremoto del Centro Italia del 2016.
 
 ### dpc-radar: il radar della Protezione civile
+
+*Documentazione: [agentengineering.it/dpc-radar](https://agentengineering.it/dpc-radar/) · codice su [GitHub](https://github.com/agent-engineering-studio/dpc-radar).*
 
 **Il problema.** Il radar meteo nazionale della Protezione civile vede la
 pioggia ogni pochi minuti, con un dettaglio di un chilometro. È il dato che
@@ -227,6 +247,8 @@ un errore del prodotto mostrava 7.348 millimetri di pioggia in un giorno, più
 di quanto cade in cinque anni in molte città italiane.
 
 ### glofas-ewds: la portata dei fiumi
+
+*Documentazione: [agentengineering.it/glofas-ewds](https://agentengineering.it/glofas-ewds/) · codice su [GitHub](https://github.com/agent-engineering-studio/glofas-ewds).*
 
 **Il problema.** Il sistema europeo GloFAS prevede quanta acqua porteranno i
 fiumi di tutto il mondo. I suoi dati stanno nell'archivio delle allerte del

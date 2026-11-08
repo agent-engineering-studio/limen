@@ -618,7 +618,7 @@ Una sequenza che usa tutto quello che Limen sa fare:
 | Mappe | pg_tileserv (tile vettoriali dalle viste e dalle funzioni SQL); MapLibre |
 | Interfaccia | React 19, Mantine 9, TypeScript, Vite |
 | Inferenza | Gateway LiteLLM, llama.cpp/llama-swap su GPU, Claude via API con un tetto di spesa mensile |
-| Librerie aperte | Le parti che parlano con le fonti sono pacchetti Python a sé, Apache-2.0, usabili anche senza Limen: `fwi-chain` (indice incendi), `effis-client`, `firms-client`, `egms-client`, `copernicus-ems`, `ispra-idrogeo`, `rainfall-thresholds` (soglie di Caine); `mcp-geo-server` (MIT) tiene i grandi strati statici in GeoServer |
+| Librerie aperte | Le parti che parlano con le fonti sono pacchetti Python a sé, Apache-2.0, usabili anche senza Limen: [`fwi-chain`](https://agentengineering.it/fwi-chain/) (indice incendi), [`effis-client`](https://agentengineering.it/effis-client/), [`firms-client`](https://agentengineering.it/firms-client/), [`egms-client`](https://agentengineering.it/egms-client/), [`copernicus-ems`](https://agentengineering.it/copernicus-ems/), [`ispra-idrogeo`](https://agentengineering.it/ispra-idrogeo/), [`rainfall-thresholds`](https://agentengineering.it/rainfall-thresholds/) (soglie di Caine); [`mcp-geo-server`](https://agentengineering.it/mcp-geo-server/) (MIT) tiene i grandi strati statici in GeoServer |
 | Esercizio | Docker Compose su un solo server, porte sul loopback dietro un reverse proxy; nessun cloud provider |
 
 Tutto è riproducibile: codice EUPL-1.2, dati pubblici, configurazioni
