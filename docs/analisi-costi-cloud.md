@@ -11,6 +11,16 @@
 fissano «self-hosted VPS + Docker, no cloud providers». Una migrazione richiede
 di rivedere esplicitamente quell'invariante, non di aggirarlo.
 
+> **Nota dell'8/11/2026 — valori superati.** La misura qui sotto resta com'era
+> il giorno della stesura. Da allora sono cambiate due cose:
+> - **tetto di spesa LLM**: il `max_budget` del gateway (50 $/30 giorni) non
+>   è applicato, perché il gateway non ha un database. Il tetto unico è
+>   `LLM__ANTHROPIC_BUDGET_MENSILE_USD` = 10 $ al mese, controllato da Limen a
+>   ogni chiamata su tutta la spesa Claude (gateway e revisore batch);
+> - **modelli locali**: GLM-5.2 (colibrì) è stato rimosso il 2026-10-28, dopo
+>   aver esaurito la memoria dell'host. I 423 GB di `/srv/models` erano quasi
+>   tutti suoi; i ruoli `quality-*` vanno su Claude Sonnet 5.5.
+
 ---
 
 ## 1. Footprint misurato (server attuale, 2026-10-11)

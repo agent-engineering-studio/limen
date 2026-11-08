@@ -553,7 +553,13 @@ Che cosa manca, in breve. Il dettaglio tecnico sta nella issue indicata.
   pubblica amministrazione dice ancora che Limen è Apache 2.0; la guida per
   chi contribuisce rimanda a un file di configurazione che non esiste più e
   a un flusso di pubblicazione su Azure, in contrasto con la scelta «nessun
-  cloud»; l'analisi dei costi cita il vecchio tetto di spesa. ([#493](https://github.com/agent-engineering-studio/limen/issues/493))
+  cloud»; l'analisi dei costi cita il vecchio tetto di spesa. *Corretto:*
+  l'analisi di offerta dice EUPL 1.2 con il patto per chi contribuisce (e
+  quindi la doppia licenza possibile), il tetto è ovunque quello unico di
+  10 $ al mese, l'analisi dei costi ha una nota datata sui valori superati, la
+  guida per chi contribuisce rimanda ai file di configurazione per pericolo, e
+  il flusso di pubblicazione su Azure è stato tolto: Limen non ha un rilascio
+  in cloud. ([#493](https://github.com/agent-engineering-studio/limen/issues/493))
 - **Il costo di oggi non è misurato.** Mancano il costo del server attuale,
   il traffico reale della mappa e il volume mensile di testo generato: senza,
   nessuna offerta a un ente e nessuna domanda di finanziamento ha una base.

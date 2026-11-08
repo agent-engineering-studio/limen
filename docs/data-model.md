@@ -111,12 +111,34 @@ One row per scored cell per workflow run.
 | `pipeline_version` | text | |
 | `dataset_versions` | bigint[] | links back to `dataset_versions` (V1.5+) |
 
-### `mv_latest_risk` (matview, Phase 6)
+### `latest_risk` (migration 048)
 
-`grid_cells ⨝ latest risk_assessments per cell`. UNIQUE index on
-`cell_id` so `REFRESH MATERIALIZED VIEW CONCURRENTLY` doesn't block
-readers. Always refreshed via the SQL function
-`refresh_mv_latest_risk()` — never `REFRESH` directly.
+The current state: one row per **(cell, hazard)**, primary key
+`(cell_id, hazard_type)`, same columns as `risk_assessments` plus
+`measured` (migration 053). The step that persists a sweep upserts it
+with the rows it has just written (`INSERT … ON CONFLICT`), so nobody
+has to scan the history to find the latest score.
+
+### `mv_latest_risk` (plain view since migration 048)
+
+Despite the prefix it is **not** materialised any more (`relkind = 'v'`,
+#125): until 2026-09-20 it was a matview built with `ROW_NUMBER()` over
+all of `risk_assessments`, and at ~19 million rows a day the refresh
+took longer than twenty minutes. Now it is
+`grid_cells CROSS JOIN hazards (enabled) LEFT JOIN latest_risk`: one row
+per cell per enabled hazard, empty score where that hazard has not been
+evaluated yet. A score is on the map the moment it is persisted; there
+is nothing to refresh.
+
+### `mv_comune_risk` (matview)
+
+The per-comune rollup (one row per comune and hazard since migration
+051, attention index since 052, `measured` since 053). This one *is*
+materialised, and it is refreshed through
+`refresh_mv_latest_risk()` — the name stayed for its callers: today it
+only refreshes `mv_comune_risk`, debounced to once every 5 minutes
+(returns 1 done, 0 skipped, -1 failed). Never `REFRESH MATERIALIZED
+VIEW` it directly.
 
 ### `alert_dispatches` (Phase 7)
 

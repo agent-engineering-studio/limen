@@ -56,8 +56,8 @@ for context.
 * Changes to applied migration files. **Always add a new migration**
   — the migration runner verifies the SHA-256 checksum of every
   applied file.
-* Magic numbers inside the scoring engine code (must land in
-  [`regional_thresholds.yaml`](./src/limen/config/regional_thresholds.yaml)).
+* Magic numbers inside the scoring engine code (they belong in the
+  hazard's own YAML, [`src/limen/config/hazards/<hazard>.yaml`](./src/limen/config/hazards/)).
 * Endpoints with business logic. Endpoints call workflows / repos.
 * `print()` — use `structlog.get_logger(__name__)`.
 
@@ -133,4 +133,6 @@ applies to all spaces (issues, PRs, discussions, chat).
 * `CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/).
 * Tagged releases trigger the CI image push to GHCR; deploys are
   manual: `git pull && make up` on the self-hosted host (see
-  `docs/deployment.md`, «Deploy da CI»), or the `deploy-azure` workflow.
+  `docs/deployment.md`, «Deploy da CI»). There is no cloud deploy: Limen
+  runs on a self-hosted host with Docker, and the old `deploy-azure`
+  workflow was removed (#493).

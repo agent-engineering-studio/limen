@@ -64,7 +64,7 @@ gap si chiude dentro Limen.
 | 4 | Pochi dati sui nubifragi in città. | un catalogo aperto e datato degli allagamenti urbani (Comuni, vigili del fuoco), oggi non disponibile a livello nazionale | [#475](https://github.com/agent-engineering-studio/limen/issues/475) |
 | 4 | L'incendio al Nord e d'inverno è poco misurato. | — | [#476](https://github.com/agent-engineering-studio/limen/issues/476) |
 | 4 | Una soglia unica, mai misurata, per gli avvisi sotto «alto». | — | [#477](https://github.com/agent-engineering-studio/limen/issues/477) |
-| 4 | La documentazione tecnica del motore frana non è aggiornata. | — | [#493](https://github.com/agent-engineering-studio/limen/issues/493) |
+| 4 | ~~La documentazione tecnica del motore frana non è aggiornata.~~ Chiuso: `scoring-model.md` e `warning-logic.md` seguono `landslide.yaml`, e un test confronta i pesi di S scritti nel documento con quelli del file. | — | [#493](https://github.com/agent-engineering-studio/limen/issues/493) |
 
 ## Capitolo 5. [Misurare prima di cambiare](05-misurare.md)
 
@@ -101,7 +101,7 @@ gap si chiude dentro Limen.
 | 7 | Gli avvisi di previsione slittano a ogni riavvio. *Corretto: ora partono a orari fissi.* | — | [#489](https://github.com/agent-engineering-studio/limen/issues/489) |
 | 7 | Il pacchetto rapido non è pubblicato né proposto dalla pagina di installazione. | pubblicarlo su [Zenodo](https://zenodo.org) con un identificativo permanente | [#406](https://github.com/agent-engineering-studio/limen/issues/406) |
 | 7 | La macchina di oggi non è un server. | — | [#308](https://github.com/agent-engineering-studio/limen/issues/308) |
-| 7 | Alcuni documenti tecnici descrivono il sistema di prima. | — | [#493](https://github.com/agent-engineering-studio/limen/issues/493) |
+| 7 | ~~Alcuni documenti tecnici descrivono il sistema di prima.~~ Chiuso: la guida operativa elenca i lavori a orario come sono registrati, e la vista della mappa è descritta come vista normale. | — | [#493](https://github.com/agent-engineering-studio/limen/issues/493) |
 
 ## Capitolo 8. [Trasparenza, licenze, costi](08-trasparenza.md)
 
@@ -111,7 +111,7 @@ gap si chiude dentro Limen.
 | 8 | La licenza dei tipi di roccia è ambigua. | — | [#495](https://github.com/agent-engineering-studio/limen/issues/495), [#406](https://github.com/agent-engineering-studio/limen/issues/406) |
 | 8 | Il pacchetto rapido non è ancora provato su un server pulito. | — | [#406](https://github.com/agent-engineering-studio/limen/issues/406), [#307](https://github.com/agent-engineering-studio/limen/issues/307) |
 | 8 | Le misure non sono sempre archiviate con i loro ingredienti. | depositare ogni rapporto di misura su [Zenodo](https://zenodo.org), con un DOI | [#481](https://github.com/agent-engineering-studio/limen/issues/481) |
-| 8 | Alcuni documenti hanno informazioni superate (licenza, cloud, tetto di spesa). | — | [#493](https://github.com/agent-engineering-studio/limen/issues/493) |
+| 8 | ~~Alcuni documenti hanno informazioni superate (licenza, cloud, tetto di spesa).~~ Chiuso: EUPL 1.2 con il patto per chi contribuisce, tetto unico di 10 $ al mese, flusso di pubblicazione su Azure tolto. | — | [#493](https://github.com/agent-engineering-studio/limen/issues/493) |
 | 8 | Il costo di oggi non è misurato. | — | [#492](https://github.com/agent-engineering-studio/limen/issues/492) |
 | 8 | Una porta del monitoraggio era aperta verso l'esterno. **Corretto**: le porte ora si aprono solo verso il server, e una prova automatica le controlla tutte. | — | [#496](https://github.com/agent-engineering-studio/limen/issues/496) |
 | 8 | Manca un'informativa privacy unica e pubblica. | — | [#494](https://github.com/agent-engineering-studio/limen/issues/494) |

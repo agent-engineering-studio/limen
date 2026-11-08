@@ -11,9 +11,13 @@
 
 ## 0. Cosa si vende
 
-Limen è Apache-2.0: **la licenza non si vende**. Qualunque PA può
-riusarlo gratis (CAD artt. 68-69), e qualunque integratore può installarlo.
-Il ricavo viene da ciò che il codice non dà:
+Limen è EUPL-1.2 dal 2026-10-11 (fino a `v0.6.0-impl-complete` era
+Apache-2.0, e quelle versioni restano tali). Qualunque PA può riusarlo gratis
+(CAD artt. 68-69), e qualunque integratore può installarlo, a patto di
+redistribuire con la stessa licenza le modifiche al codice. Il ricavo viene
+soprattutto da ciò che il codice non dà; con il CLA di `CONTRIBUTING.md`
+resta possibile anche una **licenza commerciale** per chi non può accettare
+il copyleft (per esempio chi integra Limen in un prodotto chiuso):
 
 - **gestione del servizio** (SaaS) o **installazione e manutenzione** (self-host);
 - **calibrazione regionale** delle soglie (`macroregion_by_aoi`, curve Caine,
@@ -22,8 +26,9 @@ Il ricavo viene da ciò che il codice non dà:
 - **responsabilità contrattuale**: un fornitore identificato che risponde.
 
 L'open source è un vantaggio commerciale verso la PA (riuso, nessun lock-in,
-pubblicabile su Developers Italia), ma toglie la rendita da licenza: il
-margine sta nel servizio.
+pubblicabile su Developers Italia), ma verso la PA toglie la rendita da
+licenza: il margine sta nel servizio, e la doppia licenza conta solo verso i
+privati.
 
 ---
 
@@ -81,7 +86,7 @@ marginale per cliente è quasi zero**: è il punto di forza del SaaS.
 | Produzione in HA su cloud qualificato ACN | 10–12 k | scenario B con DB in HA di `analisi-costi-cloud.md` (~850 $/mese) |
 | Ambiente di staging | 3–4 k | scenario A ridotto |
 | Backup fuori sede, monitoraggio, dominio, certificati | 1–2 k | |
-| LLM (Claude via gateway) | < 1 k | tetto attuale 50 $/30 gg |
+| LLM (Claude via gateway) | < 1 k | tetto unico `LLM__ANTHROPIC_BUDGET_MENSILE_USD` = 10 $ al mese (aggiornato l'8/11/2026; alla stesura era 50 $/30 gg sul gateway) |
 | Piano commerciale Open-Meteo | da quotare | |
 | Personale: 1 FTE dev/ops | 60–70 k | costo azienda, senior |
 | Personale: 0,3 FTE assistenza e dati | 18–22 k | |

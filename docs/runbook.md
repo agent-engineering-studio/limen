@@ -13,17 +13,67 @@ regioni → `ingest-events` (truth set e-ITALICA da Zenodo) →
 
 ## Ciclo di una giornata normale
 
-| Cosa | Quando | Owner |
-|---|---|---|
-| Workflow di monitoraggio orario | APScheduler in-process ogni `SCHEDULER__HOURLY_MONITORING_MINUTES` (default 60) | Container API |
-| Avvisi di previsione (`limen-forecast-monitoring`) | APScheduler cron a orari fissi UTC `FORECAST__HOURS_UTC` (default 02/08/14/20) al minuto `FORECAST__MINUTE` (default 50), trenta minuti dopo la previsione per cella: un riavvio del worker non sposta la corsa (#489) | Container worker |
-| Sync ISPRA IdroGEO | APScheduler cron settimanale (lun 03:15 UTC) | Container API |
-| Pulizia cache | APScheduler ogni `SCHEDULER__CACHE_CLEANUP_INTERVAL_SECONDS` (default 300) quando `SCHEDULER__CACHE_CLEANUP=apscheduler` | Container API |
-| Refresh `mv_latest_risk` | In coda a ogni chiamata `PersistResultExecutor` | Workflow |
+I job periodici girano con APScheduler nel processo **`limen worker`**
+(container `worker`, una sola replica), non nell'API: il container `api`
+ha `SCHEDULER__ENABLED=false` ed è HTTP puro (#77). La tabella è quella di
+`src/limen/api/jobs/registration.py`; gli orari sono UTC. I job «ogni N»
+partono la prima volta dopo un intervallo intero dal boot (lo sweep orario
+dopo due minuti), quelli a orario fisso solo all'orario: un riavvio del
+worker non li sposta.
 
-La sorgente dei dati statici ISPRA è il **PostGIS di GeoServer**
-(`mcp-geoserver`). Il componente H è attivo a partire dal mosaico di
-pericolosità idraulica.
+| Job | Cosa fa | Quando (env, default) | Condizione |
+|---|---|---|---|
+| `limen-hourly-monitoring` | Sweep V1 di ogni regione e pericolo: persiste, aggiorna `latest_risk`, manda gli alert. Niente LLM, niente shadow | ogni `SCHEDULER__HOURLY_MONITORING_MINUTES` (60) | `SCHEDULER__ENABLE_HOURLY_MONITORING` (true) |
+| `limen-nowcast-monitoring` | Innesco radar DPC: le regioni dove il radar vede pioggia intensa fanno subito lo sweep, senza aspettare l'ora | ogni `NOWCAST__INTERVAL_MINUTES` (15) | `NOWCAST__ENABLED` (true) |
+| `limen-firms-monitoring` | Innesco FIRMS: salva i fuochi attivi e fa subito lo sweep delle regioni con abbastanza focolai | ogni `FIRMS__INTERVAL_MINUTES` (45) | solo con `FIRMS__MAP_KEY` |
+| `limen-forecast-history` | Previsione per cella a +24/+48/+72 h (celle ≥ Moderato); prima scarica la portata GloFAS EWDS | `SCHEDULER__FORECAST_CELLS_HOURS_UTC` (02/08/14/20) al minuto `SCHEDULER__FORECAST_CELLS_MINUTE` (20) | sempre |
+| `limen-forecast-monitoring` | Avvisi di previsione, dopo che la previsione per cella ha rinfrescato `glofas_previsione` | `FORECAST__HOURS_UTC` (02/08/14/20) al minuto `FORECAST__MINUTE` (50), cron e non intervallo dal boot (#489) | `FORECAST__ENABLED` (true) |
+| `limen-briefing-enrichment` | Racconto LLM delle regioni salite di classe, in `spiegazioni_regione` | ogni `LLM__BRIEFING_INTERVAL_MINUTES` (10) | sempre (senza candidati è una query) |
+| `limen-alert-digest` | Svuota la coda degli alert trattenuti dal rate limit in un messaggio riepilogativo | ogni `NOTIFICATIONS__RATE_LIMIT__DIGEST_INTERVAL_MINUTES` (60) | `NOTIFICATIONS__RATE_LIMIT__ENABLED` (true) |
+| `limen-dpc-bollettini` | Bollettino di criticità della Protezione Civile, riscritto solo se cambiato | ogni `SCHEDULER__DPC_BOLLETTINI_MINUTES` (60) | `SCHEDULER__ENABLE_DPC_BOLLETTINI` (true) |
+| `limen-ingv-sync` | Terremoti INGV della settimana e scuotimento per cella (componente E delle frane) | ogni `SCHEDULER__INGV_SYNC_MINUTES` (60) | `SCHEDULER__ENABLE_INGV_SYNC` (false) |
+| `limen-daily-report` | Report nazionale del mattino sui canali di notifica | alle `REPORT__HOUR_UTC` (06):00 | `REPORT__ENABLED` (true) |
+| `limen-html-report` | Report HTML statico | ogni `REPORT__HTML_INTERVAL_HOURS` (1) | `REPORT__HTML_ENABLED` (true) |
+| `limen-raccolta-eventi` | Notizie di frane, alluvioni e incendi → estrattore Claude → `verifiche_eventi` (#347) | alle `LLM__EVENTI_ORA_UTC` (06):10 | sempre; senza `LLM__MODELS__EVENTI` lo dice e finisce |
+| `limen-fedelta-racconti` | Revisore di fedeltà dei racconti della giornata (Message Batch Claude) | alle `LLM__FEDELTA_ORA_UTC` (21):00 | sempre; senza `LLM__MODELS__FEDELTA` lo dice e finisce |
+| `limen-partitions` | Crea le partizioni dei prossimi giorni di `risk_assessments`/`model_runs` e lascia cadere quelle scadute | ogni `SCHEDULER__PARTITIONS_INTERVAL_HOURS` (6) | sempre |
+| `limen-nightly` | La notte in un job solo, passi in ordine (sotto) | alle `SCHEDULER__NIGHTLY_HOUR_UTC` (02):00 | sempre |
+| `limen-iot-rollup` | Aggregato orario per cella dei sensori in situ | ogni `IOT__ROLLUP_MINUTES` (10) | `ENABLE_INSITU` (false) |
+| `limen-iot-partition-rollover` | Partizioni mensili di `sensor_observations` | il 2 del mese alle 02:00 | `ENABLE_INSITU` o `IOT__CITTADINI__ENABLED` |
+
+I passi di `limen-nightly` (`nightly.STEPS`), ognuno con la sua riga in
+`job_runs` (`scope=<passo>`); un passo che fallisce non ferma i successivi:
+`fwi_pioggia_osservata` (gli ultimi giorni della catena FWI rifatti con la
+pioggia DPC osservata), `shadow_ml`, `drift_monitor`, `retrain` (solo se il
+drift lo chiede e `TRAINING__AUTO_RETRAIN` è vero), `partitions_maintain`,
+`retention` (purga della cache, se `SCHEDULER__CACHE_CLEANUP=apscheduler`;
+sotto pg_cron la fa il database), `storage` (peso del database), `backup`,
+`egms_release`, `radar_archivio`, `effis_perimetri`, `ems_alluvioni`,
+`esposizione_ispra`, `glofas_riferimenti` (portata ordinaria dei nodi
+GloFAS, entro `SCHEDULER__GLOFAS_CHIAMATE_PER_NOTTE`).
+
+Fuori dallo scheduler il worker scrive ogni tanto `limen-worker-heartbeat`
+in `job_runs` (lo legge `limen worker --health`). Non esistono più il sync
+settimanale ISPRA IdroGEO (il WFS risponde 401 agli anonimi, vedi «Mancano
+dati ISPRA»), né schedule autonomi per pulizia cache, drift o previsione:
+reintrodurne uno lo fa girare due volte. Cosa ha girato e quanto è durato:
+`uv run limen jobs` (`LIMEN_JOBS_JOB=limen-nightly`, `LIMEN_JOBS_PER_AOI=1`
+per le regioni di uno sweep, `LIMEN_JOBS_LIMIT`).
+
+La mappa non ha un refresh da aspettare: `mv_latest_risk` è una vista
+normale su `latest_risk` (migrazione 048), che il passo di persistenza
+aggiorna con le righe che scrive. Il `PersistResultExecutor` chiama poi
+`refresh_mv_latest_risk()`, che oggi rigenera solo il rollup per comune
+`mv_comune_risk`, al massimo una volta ogni cinque minuti.
+
+I vettori ISPRA (IFFI, mosaici PAI e idraulico) e i confini dei comuni
+stanno nel database di Limen, schema `sorgenti`: `limen geodati-sync` li
+scarica, `limen carica-vettori` li carica (#426), `limen geoserver-sync` ne
+riempie `iffi_landslides` e `pai_hazard` (con `GEOSERVER_SOURCE__DB_DSN`
+al database di Limen e `GEOSERVER_SOURCE__SCHEMA_NAME=sorgenti`).
+GeoServer è facoltativo: serve solo a chi vuole pubblicare gli strati come
+servizio. Il componente H è attivo a partire dal
+mosaico di pericolosità idraulica.
 
 ## Sonde di salute
 
@@ -218,21 +268,27 @@ layer e nessuna tabella grezza.
    utente anonimo. I dati arrivano dai download open data, che
    `limen geodati-sync` scarica in `GEOSERVER_SHAPEFILE_DIR` (passo 3/7 di
    `make init` / `make up` / `make static-data`).
-2. `geoserver-init` li carica nel PostGIS di GeoServer, `limen geoserver-sync`
-   li porta in Limen. Un layer già in PostGIS non si ricarica da solo: dopo un
-   aggiornamento, `GEO_INIT_FORCE=true make geoserver-init`.
+2. `limen carica-vettori` li carica nel database di Limen, schema
+   `sorgenti` (#426), e `limen geoserver-sync` ne riempie `iffi_landslides` e
+   `pai_hazard`. Salta gli shapefile non cambiati: per ricaricarli,
+   `LIMEN_VETTORI_FORZA=1` o `--forza`. GeoServer non serve; chi lo tiene per
+   pubblicare gli strati li ricarica nel suo PostGIS con
+   `GEO_INIT_FORCE=true make geoserver-init`.
 3. Un file che non è arrivato lo dice il log `geodati.file_fallito` (o
    `geodati.base_fallito`); il giro dopo lo riprova.
 
 ### "La mappa è vuota"
 
-1. Verificare che pg_tileserv raggiunga la matview:
+1. Verificare che pg_tileserv raggiunga le viste delle tile:
    `curl http://pg_tileserv:7800/index.json | jq '.[] | .name'`.
-2. Verificare che la matview abbia righe:
-   `SELECT COUNT(*) FROM mv_latest_risk WHERE aoi_id = 'it-puglia';`.
-3. Se 0, eseguire `SELECT refresh_mv_latest_risk();` o innescare un
-   ciclo di monitoraggio (il `PersistResultExecutor` fa il refresh in
-   uscita).
+2. `mv_latest_risk` è una vista normale (migrazione 048): ha una riga per
+   cella e pericolo anche senza punteggi. Quello che conta è `latest_risk`:
+   `SELECT hazard_type, COUNT(*) FROM latest_risk l JOIN grid_cells g ON
+   g.id = l.cell_id WHERE g.aoi_id = 'it-puglia' GROUP BY 1;`.
+3. Se 0, non c'è niente da rinfrescare: manca lo sweep. Guardare
+   `uv run limen jobs` (`LIMEN_JOBS_JOB=limen-hourly-monitoring`) e il
+   worker, o innescare un ciclo con `limen monitor-once`.
+   `SELECT refresh_mv_latest_risk();` rigenera solo il rollup per comune.
 4. Verificare che `API__PG_TILESERV_URL` sia impostata nell'env del
    container API.
 
