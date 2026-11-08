@@ -13,6 +13,7 @@ nella CLI, che le traducono in un 422 o in un messaggio d'errore.
 
 from __future__ import annotations
 
+import statistics
 from collections.abc import Mapping, Sequence
 
 from limen.config.catalogo_dati import CatalogoDati
@@ -28,6 +29,46 @@ def regioni_senza(
         for v in catalogo.voci
         if v.misura.colonna is not None
     }
+
+
+#: Una regione è «da verificare» quando la sua quota di celle con un valore > 0
+#: sta sotto questa frazione della mediana delle regioni. Misura del 2026-11-08
+#: (#467): la quota più bassa vera è IFFI in Puglia, 6,8 % contro una mediana
+#: del 70 % (rapporto 0,097), e una regione caricata a zero vale 0. Il 5 % sta
+#: fra le due: la Puglia, pianeggiante e con poche frane, non è un errore.
+QUOTA_MINIMA_SULLA_MEDIANA = 0.05
+
+
+def regioni_da_verificare(
+    catalogo: CatalogoDati,
+    per_regione: Mapping[str, Mapping[str, int]],
+    informativi: Mapping[str, Mapping[str, int]],
+    celle: Mapping[str, int],
+) -> dict[str, list[str]]:
+    """Per le voci ``informativo``, le regioni caricate ma quasi tutte a zero.
+
+    Non toglie la prontezza: è un controllo di plausibilità, non una misura.
+    Lo scopo è il caso Trentino (#454) — IFFI caricato, densità zero ovunque —
+    che il conteggio dei valori non vede, perché zero è un valore.
+    """
+    out: dict[str, list[str]] = {}
+    for v in catalogo.voci:
+        if v.misura.informativo is None:
+            continue
+        quote = {
+            aoi: informativi.get(aoi, {}).get(v.id, 0) / celle[aoi]
+            for aoi, conte in per_regione.items()
+            if conte.get(v.id, 0) > 0 and celle.get(aoi)
+        }
+        if not quote:
+            out[v.id] = []
+            continue
+        mediana = statistics.median(quote.values())
+        # Mediana zero: il dato è a zero quasi ovunque, e il confronto con le
+        # altre regioni non regge più. Da verificare ogni regione a zero.
+        soglia = QUOTA_MINIMA_SULLA_MEDIANA * mediana
+        out[v.id] = sorted(aoi for aoi, q in quote.items() if q < soglia or q == 0)
+    return out
 
 
 def mancanti(
@@ -72,4 +113,11 @@ def byte_stimati(catalogo: CatalogoDati) -> dict[str, int]:
     return {v.id: round(v.peso_gb * 1e9) for v in catalogo.voci if v.peso_gb > 0}
 
 
-__all__ = ["byte_stimati", "mancanti", "regioni_senza", "scaricabili"]
+__all__ = [
+    "QUOTA_MINIMA_SULLA_MEDIANA",
+    "byte_stimati",
+    "mancanti",
+    "regioni_da_verificare",
+    "regioni_senza",
+    "scaricabili",
+]

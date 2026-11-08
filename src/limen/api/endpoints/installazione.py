@@ -37,7 +37,13 @@ from limen.api.schemas import (
 )
 from limen.config.catalogo_dati import carica_catalogo
 from limen.core import salute as regole
-from limen.core.installazione import byte_stimati, mancanti, regioni_senza, scaricabili
+from limen.core.installazione import (
+    byte_stimati,
+    mancanti,
+    regioni_da_verificare,
+    regioni_senza,
+    scaricabili,
+)
 from limen.core.models.hazard import HazardType
 from limen.data.repos import copertura_repo, job_runs_repo, salute_repo
 from limen.data.repos import dati_download_repo as coda
@@ -66,6 +72,12 @@ async def stato(settings: SettingsDep) -> InstallazioneStato:
     copertura = await copertura_repo.leggi(catalogo)
     scaricamenti = {r.voce: r for r in await coda.elenco()}
     senza = regioni_senza(catalogo, copertura.per_regione)
+    sospette = regioni_da_verificare(
+        catalogo,
+        copertura.per_regione,
+        copertura.informativi_per_regione,
+        copertura.celle_per_regione,
+    )
     return InstallazioneStato(
         celle_totali=copertura.celle_totali,
         regioni=copertura.regioni,
@@ -100,6 +112,7 @@ async def stato(settings: SettingsDep) -> InstallazioneStato:
                 copertura=copertura.totali.get(v.id, 0),
                 conta=v.misura.conta,
                 regioni_senza=senza.get(v.id, []),
+                regioni_da_verificare=sospette.get(v.id, []),
                 download=_dto(scaricamenti.get(v.id)),
             )
             for v in catalogo.voci

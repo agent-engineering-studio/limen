@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 from limen.cli.dem_tiles import cartella_tile
 from limen.config.catalogo_dati import CatalogoDati, carica_catalogo
-from limen.core.installazione import regioni_senza
+from limen.core.installazione import regioni_da_verificare, regioni_senza
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
 from limen.data.db import lifespan_pool
@@ -142,6 +142,20 @@ async def run() -> int:
             print(f"  {hazard:11s} tutto presente")
         else:
             print(f"  {hazard:11s} manca: {', '.join(missing)}")
+
+    sospette = regioni_da_verificare(
+        _CATALOGO,
+        copertura.per_regione,
+        copertura.informativi_per_regione,
+        copertura.celle_per_regione,
+    )
+    if any(sospette.values()):
+        # Caricato ma quasi tutto a zero: è il caso Trentino della #454, che il
+        # conteggio dei valori non vede perché zero è un valore (#467).
+        print("\nDa verificare: dato presente ma quasi tutto a zero\n")
+        for v in _CATALOGO.voci:
+            if sospette.get(v.id):
+                print(f"  {v.nome:34s} {', '.join(sospette[v.id])}")
 
     unset = sorted(
         {

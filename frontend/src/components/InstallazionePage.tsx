@@ -97,6 +97,7 @@ const T = testi(
     righe: (n: number) => `${n.toLocaleString("it-IT")} elementi`,
     assente: "Non ancora presente",
     mancaIn: (n: number) => `manca in ${n} ${n === 1 ? "regione" : "regioni"}`,
+    daVerificare: (regioni: string) => `quasi tutto a zero in: ${regioni} — da verificare`,
     derivato: (da: string) => `Si calcola da «${da}»: non si scarica.`,
     pesoCirca: (p: string) => `circa ${p}`,
     statoDl: {
@@ -157,6 +158,7 @@ const T = testi(
     righe: (n: number) => `${n.toLocaleString("en-GB")} items`,
     assente: "Not present yet",
     mancaIn: (n: number) => `missing in ${n} ${n === 1 ? "region" : "regions"}`,
+    daVerificare: (regioni: string) => `almost all zero in: ${regioni} — to be checked`,
     derivato: (da: string) => `Computed from «${da}»: not downloaded.`,
     pesoCirca: (p: string) => `about ${p}`,
     statoDl: { in_coda: "Queued", in_corso: "Downloading", fatto: "Downloaded", errore: "Error" },
@@ -289,6 +291,7 @@ export function InstallazionePage(): JSX.Element {
   }
 
   const nomeVoce = new Map(stato.voci.map((v) => [v.id, v.nome]));
+  const nomeRegione = new Map(stato.elenco_regioni.map((r) => [r.id, r.nome]));
   const essenzialiMancanti = stato.voci.filter(
     (v) =>
       v.livello === "essenziale" &&
@@ -439,6 +442,9 @@ export function InstallazionePage(): JSX.Element {
                     key={v.id}
                     voce={v}
                     derivataDa={v.deriva_da ? (nomeVoce.get(v.deriva_da) ?? v.deriva_da) : null}
+                    daVerificare={(v.regioni_da_verificare ?? []).map(
+                      (id) => nomeRegione.get(id) ?? id,
+                    )}
                     puoAgire={puoAgire}
                     onScarica={() => void scarica([v.id])}
                   />
@@ -455,11 +461,13 @@ export function InstallazionePage(): JSX.Element {
 function RigaVoce({
   voce,
   derivataDa,
+  daVerificare,
   puoAgire,
   onScarica,
 }: {
   voce: VoceDato;
   derivataDa: string | null;
+  daVerificare: string[];
   puoAgire: boolean;
   onScarica: () => void;
 }): JSX.Element {
@@ -483,6 +491,11 @@ function RigaVoce({
           {presente && voce.regioni_senza.length > 0 && ` · ${t.mancaIn(voce.regioni_senza.length)}`}
         </span>
       </div>
+      {daVerificare.length > 0 && (
+        <p className="installazione-avviso" role="note">
+          {t.daVerificare(daVerificare.join(", "))}
+        </p>
+      )}
       <p>{voce.a_cosa_serve}</p>
       <p className="installazione-nota">
         {t.fonte}:{" "}

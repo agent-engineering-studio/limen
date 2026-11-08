@@ -10,7 +10,7 @@ pacchetto, validati come identificatori al caricamento, non da un input.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from limen.config.catalogo_dati import CatalogoDati
 from limen.data.db import acquire
@@ -26,6 +26,9 @@ class Copertura:
     per_regione: dict[str, dict[str, int]]
     #: Le celle di ogni regione seminata.
     celle_per_regione: dict[str, int]
+    #: Per regione e id di voce, le celle con un valore > 0 (solo le voci con
+    #: ``informativo``): una colonna scritta a zero ovunque non è un dato.
+    informativi_per_regione: dict[str, dict[str, int]] = field(default_factory=dict)
 
 
 async def leggi(catalogo: CatalogoDati) -> Copertura:
@@ -34,6 +37,14 @@ async def leggi(catalogo: CatalogoDati) -> Copertura:
     conte = ", ".join(
         f"count(*) FILTER (WHERE f.{col}) AS {id_}" if id_ in veri else f"count(f.{col}) AS {id_}"
         for id_, col in colonne.items()
+    )
+    positivi = {
+        v.id: v.misura.colonna
+        for v in catalogo.voci
+        if v.misura.colonna is not None and v.misura.informativo == "positivi"
+    }
+    conte += "".join(
+        f", count(*) FILTER (WHERE f.{col} > 0) AS i_{id_}" for id_, col in positivi.items()
     )
     async with acquire() as conn:
         righe = await conn.fetch(
@@ -60,6 +71,9 @@ async def leggi(catalogo: CatalogoDati) -> Copertura:
         totali=totali,
         per_regione=per_regione,
         celle_per_regione={str(r["aoi_id"]): int(r["celle"]) for r in righe},
+        informativi_per_regione={
+            str(r["aoi_id"]): {id_: int(r[f"i_{id_}"]) for id_ in positivi} for r in righe
+        },
     )
 
 

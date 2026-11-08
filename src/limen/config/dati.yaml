@@ -26,7 +26,7 @@ voci:
       delle 721.365 frane censite, Limen non sa quali versanti hanno una storia.
     pericoli: [landslide]
     livello: essenziale
-    misura: {colonna: iffi_density_500}
+    misura: {colonna: iffi_density_500, informativo: positivi}
     procura_con: make static-data
     fonte: ISPRA IdroGEO — Inventario dei Fenomeni Franosi in Italia
     url: https://idrogeo.isprambiente.it
@@ -46,7 +46,7 @@ voci:
       a ogni area. Senza, Limen ignora la valutazione ufficiale del territorio.
     pericoli: [landslide]
     livello: essenziale
-    misura: {colonna: pai_class_norm}
+    misura: {colonna: pai_class_norm, informativo: positivi}
     procura_con: make static-data
     fonte: ISPRA IdroGEO — mosaicatura nazionale PAI frane 2020-2021
     url: https://idrogeo.isprambiente.it
@@ -63,7 +63,7 @@ voci:
       ogni cella vale lo stesso valore di riserva e la mappa alluvione è uniforme.
     pericoli: [flood]
     livello: essenziale
-    misura: {colonna: flood_hazard_norm}
+    misura: {colonna: flood_hazard_norm, informativo: positivi}
     procura_con: make static-data
     fonte: ISPRA IdroGEO — mosaicatura nazionale della pericolosità idraulica 2020
     url: https://idrogeo.isprambiente.it
@@ -115,7 +115,7 @@ voci:
       si infiltra e scorre. Senza, le aree urbane sono stimate meno bene.
     pericoli: [flood]
     livello: essenziale
-    misura: {colonna: imperviousness_norm}
+    misura: {colonna: imperviousness_norm, informativo: positivi}
     variabile: LIMEN_IMPERVIOUSNESS_RASTER
     procura_con: make imperviousness-data
     fonte: Copernicus Land Monitoring Service — Imperviousness Density 2018 (EEA)
@@ -148,7 +148,7 @@ voci:
       minaccia per le persone. Si calcola dalla copertura del suolo.
     pericoli: [wildfire]
     livello: consigliato
-    misura: {colonna: wui_proximity_norm}
+    misura: {colonna: wui_proximity_norm, informativo: positivi}
     deriva_da: corine
     fonte: calcolata da Limen su CORINE Land Cover 2018
     licenza: come CORINE
