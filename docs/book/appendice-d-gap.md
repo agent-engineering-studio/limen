@@ -129,7 +129,7 @@ gap si chiude dentro Limen.
 | 9 | Il movimento del suolo è usato solo in parte. | accelerazione e stagionalità da [EGMS](https://egms.land.copernicus.eu) | [#380](https://github.com/agent-engineering-studio/limen/issues/380) |
 | 9 | L'umidità del suolo a 1 km non è mai stata provata. | umidità del suolo da radar Sentinel-1, [Copernicus Land](https://land.copernicus.eu/en/products/soil-moisture) (licenza da verificare) | [#507](https://github.com/agent-engineering-studio/limen/issues/507) |
 | 9 | Le reti di pluviometri dei cittadini non sono acquisibili. | [MeteoNetwork](https://www.meteonetwork.it) (CC BY 4.0), se concede l'accesso per regione | [#249](https://github.com/agent-engineering-studio/limen/issues/249), [#250](https://github.com/agent-engineering-studio/limen/issues/250) |
-| 9 | I periodi di ritorno delle piene europee (EFAS) non sono usati. | [EFAS](https://www.efas.eu), Copernicus (licenza CEMS) | da aprire |
+| 9 | I periodi di ritorno delle piene europee (EFAS) non sono usati. | [EFAS](https://www.efas.eu), Copernicus (licenza CEMS); soglie di piena GloFAS aperte | [#522](https://github.com/agent-engineering-studio/limen/issues/522) |
 | 9 | Limen non esporta i suoi avvisi in un formato standard. | — | [#499](https://github.com/agent-engineering-studio/limen/issues/499) |
 | 9 | Le interfacce di Limen non seguono gli standard OGC moderni. | — | [#503](https://github.com/agent-engineering-studio/limen/issues/503) |
 | 9 | Il pacchetto dei dati non è nel catalogo nazionale. | — | [#504](https://github.com/agent-engineering-studio/limen/issues/504) |

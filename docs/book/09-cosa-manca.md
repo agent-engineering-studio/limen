@@ -103,7 +103,7 @@ casella vuota a una disponibilità inventata.
 | **Idrometri regionali** (livello dei fiumi) | Centri Funzionali, agenzie regionali | varia; da verificare | ogni stazione ha il suo «zero»: un livello non dice nulla senza la storia di quella stazione | trattarli come i fiumi di GloFAS: alto rispetto al solito *di quella stazione* | [#501](https://github.com/agent-engineering-studio/limen/issues/501) |
 | **Idrometri dei cittadini** su torrenti minori | cittadini, associazioni | sensori di Limen, CC BY 4.0 | servono anni di storia per stazione | analisi «si o no» prima di qualunque codice | #259 |
 | **Acqua temporanea e zone umide** | Copernicus Land | griglie a 10-20 m; dati Copernicus | dentro il motore il backtest non passa | un uso diverso: ordinare le celle dentro le aree già mappate | #420 |
-| **Periodi di ritorno delle piene europee** (EFAS) | Copernicus | file scientifici (NetCDF); licenza CEMS | serve un account e un formato in più; non implementato di proposito | confronto con il rapporto sulla piena ordinaria usato oggi | da aprire |
+| **Periodi di ritorno delle piene europee** (EFAS) | Copernicus | file scientifici (NetCDF); licenza CEMS | le previsioni EFAS in tempo reale sono riservate agli enti partner; le soglie di piena di GloFAS sono aperte | confronto con il rapporto sulla piena ordinaria usato oggi | [#522](https://github.com/agent-engineering-studio/limen/issues/522) |
 | **Aree allagabili aggiornate** | Autorità di bacino distrettuale | il mosaico nazionale è del 2020 | aggiornamenti per distretto, in tempi diversi | ricalcolo e confronto con le aree allagate viste dal satellite | da verificare |
 
 ### Per l'incendio
@@ -139,9 +139,10 @@ casella vuota a una disponibilità inventata.
       Sensor.Community senza pioggia), #249, #250; gli idrometri #259.
     - Le fonti «in valutazione» della pagina Fonti della mappa sono in
       `frontend/src/lib/fonti.ts` (ruolo `valutazione`).
-    - I periodi di ritorno EFAS non sono implementati di proposito: servono un
-      account CDS e una dipendenza NetCDF (vedi la sezione *Phase boundary* di
-      `CLAUDE.md`).
+    - I periodi di ritorno non sono ancora usati. Il vecchio ostacolo (account
+      CDS e dipendenza NetCDF) non c'è più: `COPERNICUS__EWDS_KEY` ed earthkit
+      servono già la previsione GloFAS. La misura da fare (soglie GloFAS v4
+      RL2/RL5/RL20 contro il q90 del nodo) e l'accesso EFAS sono nella #522.
 
 ## Parte 2. Standard, formati e schemi da diffondere
 
