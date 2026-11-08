@@ -523,7 +523,12 @@ Che cosa manca, in breve. Il dettaglio tecnico sta nella issue indicata.
   operativa dice ancora che i lavori a orario girano nello sportello dati e
   li elenca con le cadenze vecchie; la guida di progetto chiama «vista
   materializzata» quella che dal settembre 2026 è una vista normale. Chi
-  riprende il lavoro parte da informazioni sbagliate. ([#493](https://github.com/agent-engineering-studio/limen/issues/493))
+  riprende il lavoro parte da informazioni sbagliate. *Corretto:* la guida
+  operativa elenca ora i lavori a orario come li registra davvero l'ufficio
+  calcoli, uno per riga, con la cadenza e l'impostazione che la cambia; la
+  guida di progetto e la descrizione dell'archivio dicono che la mappa legge
+  una vista normale e che l'unico rollup materializzato è quello per comune.
+  ([#493](https://github.com/agent-engineering-studio/limen/issues/493))
 
 ## Per approfondire
 

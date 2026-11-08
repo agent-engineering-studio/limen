@@ -117,6 +117,12 @@ l'evento eccezionale *in silenzio*. Il floor è a sua volta condizionato
 all'umidità antecedente: una cella secca non viene ripescata alla stessa soglia
 di una satura.
 
+**Stato al 2026-11-08: la maschera non è ancora in funzione.** Lo sweep orario
+valuta tutte le celle; il predicato del floor
+(`MultiFactorScoringEngine.is_rescued_by_floor`) esiste ed è testato, ma nessun
+passo del workflow lo chiama. Questa sezione e lo schema qui sotto descrivono come
+dovrà funzionare la selezione quando verrà introdotta.
+
 ## 6. Dall'Italia intera alla singola allerta
 
 L'intero percorso è un imbuto: si parte da tutte le celle del territorio e si
@@ -177,10 +183,18 @@ L'onestà sui limiti è parte del contratto di fiducia:
 - **I temporali-lampo sfuggono.** Un nubifragio di mezz'ora su un solo paese è
   troppo piccolo e veloce per i dati meteo attuali; servono i radar (cantiere futuro).
 
-**Quanto è affidabile, in numeri.** Sul truth set storico Limen riconosce almeno al
-livello «Moderato» circa il **63–77%** delle frane reali, con obiettivi di
-calibrazione **hit rate ≥ 70%**, **FAR ≤ 30%** e **anticipo medio ≥ 18 ore** (§2.5;
-dettaglio e metodo in [`docs/scoring-model.md`](./scoring-model.md#accettazione-del-backtest-25)).
+**Quanto è affidabile, in numeri.** Una quota di frane colte non dice niente
+senza la quota di territorio messa in allerta per coglierle: chi allerta tutto le
+coglie tutte. Sulla Liguria di novembre 2019 (#122) il livello «Moderato» copre il
+75–91 % delle frane reali, ma con il 67–70 % delle ore-cella in allerta: un rapporto
+di 1,1–1,3, cioè appena meglio del caso. Il livello «Alto» coglie poche frane (3,8 %)
+con lo 0,08 % delle ore-cella, circa 50 volte il caso. Per questo il backtest non usa
+più come gate l'hit rate ≥ 70 % né il FAR ≤ 30 % (a 1 km² non li passerebbe nemmeno un
+oracolo): misura la **discriminazione** (≥ 2), le frane colte a parità di carico
+(5 % delle celle), l'**anticipo medio** (≥ 18 ore) e, per comune, gli eventi colti
+nelle 72 ore prima con al più il 10 % dei comuni-giorno in allerta (obiettivo 90 %).
+Valori in `calibration.backtest` di `landslide.yaml`; dettaglio e metodo in
+[`docs/scoring-model.md`](./scoring-model.md#accettazione-del-backtest-25).
 
 ---
 
