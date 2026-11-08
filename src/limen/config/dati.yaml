@@ -154,6 +154,20 @@ voci:
     licenza: come CORINE
     peso_gb: 0
 
+  - id: vicinanza
+    nome: vicinanza ad abitati e infrastrutture
+    a_cosa_serve: >-
+      Se entro circa due chilometri ci sono case, strade, ferrovie o zone
+      industriali. Non cambia il punteggio: decide quale avviso viene prima,
+      perché una frana vicino a un paese conta più di una in un bosco.
+    pericoli: [landslide, flood, wildfire]
+    livello: consigliato
+    misura: {colonna: near_urban, conta: veri}
+    deriva_da: corine
+    fonte: calcolata da Limen su CORINE Land Cover 2018
+    licenza: come CORINE
+    peso_gb: 0
+
   - id: strade
     nome: distanza dalla rete stradale
     a_cosa_serve: >-

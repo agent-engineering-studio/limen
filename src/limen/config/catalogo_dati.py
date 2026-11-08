@@ -11,7 +11,7 @@ from __future__ import annotations
 from enum import StrEnum
 from functools import cache
 from importlib import resources
-from typing import Annotated, Self
+from typing import Annotated, Literal, Self
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
@@ -44,6 +44,10 @@ class Misura(_Rigido):
 
     colonna: _Identificatore | None = None
     tabella: _Identificatore | None = None
+    #: ``veri`` per le colonne booleane con default ``false``: lì ogni cella ha
+    #: un valore anche quando il passo non è mai girato (#473), quindi conta
+    #: solo il ``true``.
+    conta: Literal["valori", "veri"] = "valori"
 
     @model_validator(mode="after")
     def _una_sola(self) -> Self:

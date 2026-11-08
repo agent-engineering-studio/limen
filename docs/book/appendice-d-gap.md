@@ -42,7 +42,7 @@ gap si chiude dentro Limen.
 | Capitolo | Gap | Proposta di open data | Issue |
 |---|---|---|---|
 | 3 | Le aree allagabili risultano «gonfiate» (Calabria, Valle d'Aosta) perché vale l'area più grave che tocca la cella. | — | [#469](https://github.com/agent-engineering-studio/limen/issues/469) |
-| 3 | La vicinanza a centri abitati e strade non è mai stata ricalcolata per tutta Italia. | — | [#473](https://github.com/agent-engineering-studio/limen/issues/473) |
+| 3 | ~~La vicinanza a centri abitati e strade non è mai stata ricalcolata per tutta Italia.~~ Chiuso: si ricalcola a ogni caricamento di CORINE. | — | [#473](https://github.com/agent-engineering-studio/limen/issues/473) |
 | 3 | Gli incendi passati visti dal satellite non sono nel catalogo dei dati. | l'archivio storico [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov) 2000-2024, libero con citazione | [#472](https://github.com/agent-engineering-studio/limen/issues/472) |
 | 3 | La tabella delle rocce non riconosce il 30 % delle celle. | le carte geologiche CARG 1:50.000 di ISPRA (copertura e licenza da verificare) | [#471](https://github.com/agent-engineering-studio/limen/issues/471) |
 | 3 | La licenza della carta delle rocce è ambigua. | — | [#495](https://github.com/agent-engineering-studio/limen/issues/495), [#406](https://github.com/agent-engineering-studio/limen/issues/406) |

@@ -346,6 +346,58 @@ async def compute_wui_proximity_for_aoi(aoi_id: str) -> None:
         log.info("static_bootstrap.wui.done", aoi_id=aoi_id, cells_with_landuse=coded)
 
 
+# Vicinanza ad abitati (CORINE 11x) e infrastrutture (12x), per l'esposizione
+# degli avvisi (#473). Era solo nell'UPDATE della migrazione 021, che su
+# un'installazione nuova gira prima di CORINE: `false` su ogni cella d'Italia,
+# per sempre. Stesso raggio della 021 (0,02°, ~2 km). Le celle urbane si
+# cercano anche fuori dall'AOI: un paese oltre il confine regionale è vicino
+# quanto uno dentro.
+_VICINANZA_SQL = """
+UPDATE cell_static_factors f
+SET near_urban = v.urb, near_infra = v.inf, updated_at = now()
+FROM (
+    SELECT n.id,
+           EXISTS (SELECT 1 FROM grid_cells u
+                   JOIN cell_static_factors uf ON uf.cell_id = u.id
+                   WHERE ST_DWithin(u.geom, n.geom, $2) AND uf.landuse_code LIKE '11%') AS urb,
+           EXISTS (SELECT 1 FROM grid_cells u
+                   JOIN cell_static_factors uf ON uf.cell_id = u.id
+                   WHERE ST_DWithin(u.geom, n.geom, $2) AND uf.landuse_code LIKE '12%') AS inf
+    FROM grid_cells n
+    WHERE n.aoi_id = $1
+) v
+WHERE f.cell_id = v.id
+  AND (f.near_urban, f.near_infra) IS DISTINCT FROM (v.urb, v.inf)
+"""
+
+_VICINANZA_GRADI = 0.02
+
+
+async def compute_exposure_neighbourhood_for_aoi(aoi_id: str) -> None:
+    """Fill ``near_urban`` / ``near_infra`` for one AOI from ``landuse_code``.
+
+    Without CORINE the step is a no-op: the columns keep their default
+    ``false``, and the catalogue counts only ``true`` cells, so the layer
+    reads as missing rather than as "nothing nearby".
+    """
+    async with acquire() as conn:
+        coded = await conn.fetchval(
+            """
+            SELECT count(*) FROM cell_static_factors c
+            JOIN grid_cells g ON g.id = c.cell_id
+            WHERE g.aoi_id = $1 AND c.landuse_code IS NOT NULL
+            """,
+            aoi_id,
+        )
+        if not coded:
+            log.info("static_bootstrap.vicinanza.skip", aoi_id=aoi_id, reason="no landuse_code")
+            return
+        esito = await conn.execute(
+            _VICINANZA_SQL, aoi_id, _VICINANZA_GRADI, timeout=_BOOTSTRAP_STMT_TIMEOUT_S
+        )
+        log.info("static_bootstrap.vicinanza.done", aoi_id=aoi_id, aggiornate=esito)
+
+
 async def compute_osm_distances_for_aoi(aoi_id: str) -> None:
     """Fill distance_to_road_m / distance_to_rail_m for one AOI.
 
@@ -527,6 +579,9 @@ async def bootstrap_static_for_aoi(aoi_id: str, *, force: bool = False) -> Boots
     if await gate.needs("wui", corine_fp):
         await compute_wui_proximity_for_aoi(aoi_id)
         await gate.done("wui")
+    if await gate.needs("vicinanza", corine_fp):
+        await compute_exposure_neighbourhood_for_aoi(aoi_id)
+        await gate.done("vicinanza")
 
     # CLMS Imperviousness — gira quando LIMEN_IMPERVIOUSNESS_RASTER punta a un
     # GeoTIFF; senza, no-op pulito con log strutturato, come DEM e CORINE.

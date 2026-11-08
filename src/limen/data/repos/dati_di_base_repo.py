@@ -18,15 +18,18 @@ _NORM_TO_PAI = {round(v, 2): k for k, v in PAI_CLASS_TO_NORM.items()}
 
 
 async def leggi(catalogo: CatalogoDati, cell_id: str, pericolo: HazardType) -> list[DatoDiBase]:
-    colonne = [
-        v.misura.colonna
-        for v in catalogo.voci
-        if v.misura.colonna is not None and pericolo in v.pericoli
-    ]
+    voci = [v for v in catalogo.voci if v.misura.colonna is not None and pericolo in v.pericoli]
+    colonne = [str(v.misura.colonna) for v in voci]
     if not colonne:
         return []
+    # Una colonna booleana con default `false` ha un valore anche dove il passo
+    # non è mai girato: la regione è «caricata» solo se ha almeno un `true`.
+    veri = {str(v.misura.colonna) for v in voci if v.misura.conta == "veri"}
     valori_sql = ", ".join(f"f.{c} AS v_{c}" for c in colonne)
-    caricati_sql = ", ".join(f"bool_or(x.{c} IS NOT NULL) AS c_{c}" for c in colonne)
+    caricati_sql = ", ".join(
+        f"bool_or(x.{c}) AS c_{c}" if c in veri else f"bool_or(x.{c} IS NOT NULL) AS c_{c}"
+        for c in colonne
+    )
     async with acquire() as conn:
         riga = await conn.fetchrow(
             f"SELECT {valori_sql}, f.flood_hazard_class, f.lithology, k.* "
@@ -50,6 +53,8 @@ async def leggi(catalogo: CatalogoDati, cell_id: str, pericolo: HazardType) -> l
         "pai_class_norm": (_NORM_TO_PAI.get(round(pai, 2)) if isinstance(pai, float) else None),
     }
     caricati = {c: bool(riga[f"c_{c}"]) for c in colonne}
+    for c in veri - {c for c, presente in caricati.items() if presente}:
+        valori[c] = None
     return dati_di_base(catalogo, pericolo, valori, classi, caricati)
 
 
