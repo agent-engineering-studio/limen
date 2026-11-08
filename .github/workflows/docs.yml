@@ -1,0 +1,66 @@
+name: docs
+
+# Il libro di Limen (docs/book/, zensical.toml) su GitHub Pages.
+# Su una PR che lo tocca: solo il build --strict, come controllo.
+# Su main: build e pubblicazione.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/book/**"
+      - "zensical.toml"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "docs/book/**"
+      - "zensical.toml"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      UV_NO_PROGRESS: "1"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v7
+
+      # Solo il gruppo docs: il libro non ha bisogno di GDAL né del resto del progetto.
+      - name: Install Zensical
+        run: uv sync --frozen --only-group docs
+
+      - name: Build
+        run: uv run --no-sync zensical build --strict --clean
+
+      - if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v6
+
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

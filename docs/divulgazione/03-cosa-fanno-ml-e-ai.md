@@ -217,17 +217,25 @@ esercizio, quindi il motore frane — il campione di produzione, quello
 descritto in queste pagine — **non era mai stato misurato**. Caricato il
 catalogo (6.312 frane datate fra il 1996 e il 2021) e rigiocata la finestra
 più densa disponibile, la Liguria fra il 1° novembre e il 5 dicembre 2019, su
-5.884 celle e 131 frane datate, il risultato è questo:
+5.884 celle e 131 frane datate, la prima misura (18 settembre 2026) dava
+questo:
 
 - frane anticipate: **7,6%** contro un obiettivo del 70%;
 - allarmi caduti nel vuoto: **95,6%** contro un obiettivo del 30%;
 - anticipo medio: **17,9 ore** contro un obiettivo di 18.
 
-Dieci frane anticipate su centotrentuno. Il motore, in pratica, quasi non
-allerta mai. Il perché è in parte già spiegato nella pagina precedente — la
-classe alta è aritmeticamente difficile da raggiungere, e le soglie regionali
-ricalibrate non vengono applicate perché la macroregione non viene mai
-assegnata — e in parte è ancora aperto. Tutto è tracciato pubblicamente nella
+Dieci frane anticipate su centotrentuno. La misura è stata poi rifatta l'8
+ottobre 2026, dopo aver corretto tre cose: la macroregione delle soglie di
+pioggia ora viene assegnata, il backtest legge la pioggia dell'archivio ERA5
+(il modello usato prima non era servito dall'istanza meteo propria, e i
+valori mancanti venivano letti come zero; #184) e calcola la pioggia
+antecedente come in produzione (#186). Sulla stessa finestra il risultato è **10,7%**
+delle frane anticipate (14 su 131), con lo **0,17%** delle ore-cella in
+allerta. Meglio, ma lontanissimo dall'obiettivo: il motore, in pratica, quasi
+non allerta mai. Il perché è in gran parte capito — la classe alta è
+aritmeticamente difficile da raggiungere: nelle Marche, nelle 72 ore prima di
+ciascuna delle 172 frane del maggio 2014, nessuna cella è arrivata alla soglia
+dell'«alto» — e il resto è ancora aperto. Tutto è tracciato pubblicamente nella
 issue #122 del progetto, con i comandi per riprodurre la misura.
 
 Scriviamo questo numero nella documentazione divulgativa per la stessa

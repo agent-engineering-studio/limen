@@ -2,77 +2,98 @@
 
 **Limen** (in latino «soglia») è un sistema aperto che, ogni ora, stima
 quanto ogni chilometro quadrato d'Italia è esposto a **frane, alluvioni e
-incendi boschivi**. Divide il Paese in 312.550 celle, unisce dati pubblici sul
-territorio (pendenze, frane già censite, aree allagabili, boschi) con il meteo
-osservato e previsto, e disegna una mappa a cinque classi con una previsione a
-72 ore. Ogni numero ha una formula scritta e una fonte. Il codice è libero
-(EUPL-1.2) e gira su un solo server, senza servizi cloud.
+incendi boschivi**. Divide il Paese in 312.550 quadrati da un chilometro di
+lato, che chiamiamo **celle**. Per ognuna mette insieme quello che si sa del
+posto (quanto è ripido, se è già franato, se può allagarsi, quanto bosco c'è)
+con il tempo che fa e che farà. Il risultato è una mappa a cinque colori, con
+uno sguardo ai tre giorni successivi. Ogni numero ha una regola scritta e una
+fonte dichiarata. Il programma è libero e gira su un solo computer del
+progetto, senza affittare servizi dai grandi fornitori di cloud.
 
-Questo libro racconta come funziona, partendo dai mattoni più piccoli (le
-librerie che parlano con le fonti dei dati) fino al cuore del sistema (i
-motori di calcolo, la misura, l'apprendimento automatico).
+## Che cosa vuole diventare
+
+L'obiettivo di Limen è uno solo: **previsioni di altissima affidabilità**,
+costruite con calcoli e modelli **messi alla prova** sugli eventi veri, così
+da poter essere usato come strumento di monitoraggio per la **protezione del
+territorio**. E vuole arrivarci usando modelli e dati che esistono già, aperti
+e pubblici, invece di reinventarli.
+
+L'affidabilità non si dichiara: si misura. Per questo il libro mette accanto a
+ogni promessa la misura che dice quanto siamo vicini o lontani, e i risultati
+scomodi accanto a quelli buoni.
 
 !!! warning "Prima di tutto"
     Limen **non è un sistema di allertamento ufficiale**. Le allerte che
     contano le emettono il Dipartimento della Protezione Civile e i Centri
-    Funzionali regionali. Limen è uno strumento di supporto, aperto e
-    ispezionabile: i suoi avvisi non hanno valore legale.
+    Funzionali delle Regioni. Limen è uno strumento di supporto, aperto e
+    controllabile da chiunque: i suoi avvisi non hanno valore legale.
 
-## A chi è rivolto e come leggerlo
+## Perché questo libro
 
-Il libro è scritto in italiano semplice: ogni termine tecnico viene spiegato
-la prima volta che compare e raccolto nel glossario. Ogni capitolo si apre con
-un riquadro **«In breve»** e si chiude con **«Per approfondire»**, dove stanno i
-link e la bibliografia tecnica. I riquadri **«Per chi sviluppa»** indicano i
-file del codice da cui viene ciò che si racconta: chi non scrive codice può
-saltarli senza perdere il filo.
+Il libro ha due scopi.
 
-Tre percorsi di lettura, a seconda di chi sei:
+Il primo è **spiegare** come funziona Limen a chiunque: un assessore
+comunale, un volontario di Protezione civile, un insegnante, un giornalista,
+chi finanzia progetti per il territorio. Non serve sapere di informatica, di
+statistica o di geologia. Ogni parola difficile viene spiegata la prima volta
+che compare e raccolta nel glossario.
+
+Il secondo è **cercare compagni di strada**. Limen migliora solo se ha dati
+migliori e persone che li controllano. Ogni capitolo si chiude con una
+sezione **«Gap e come chiuderli»**: che cosa manca ancora, perché conta e,
+quando c'è, quale dato aperto lo colmerebbe. È un invito esplicito a enti,
+ricercatori, aziende e cittadini: se avete sensori, studi o archivi di eventi,
+condividerli come dati aperti rende migliore Limen e chiunque altro lavori sul
+rischio.
+
+## Come leggerlo
+
+Ogni capitolo si apre con un riquadro **«In breve»** e si chiude con
+**«Per approfondire»** (link e letture) e con i **gap**. I riquadri chiusi
+**«Per chi sviluppa»** contengono i dettagli tecnici (nomi dei file, comandi,
+formule): chi non scrive programmi può ignorarli senza perdere il filo.
 
 | Se sei… | Leggi | Perché |
 |---|---|---|
-| **Chi decide o finanzia** (un ente, una fondazione, un'amministrazione) | 1 → 5 → 8 → 9 | cosa fa Limen, come si misura se funziona, quanto costa, come partecipare |
-| **Chi lavora sul territorio** (un Comune, la Protezione civile locale, un tecnico, un ricercatore) | 1 → 3 → 4 → 5 | da dove vengono i dati, come diventano un punteggio, dove sbaglia |
-| **Chi sviluppa** (programmatori, data scientist, chi vuole contribuire) | tutto, in ordine | dalle librerie al cuore: è l'ordine in cui il sistema è costruito |
+| **Chi decide o finanzia** (un ente, una fondazione, un'amministrazione) | 1 → 5 → 9 → 10 | cosa fa Limen, come si misura se funziona, cosa manca, come partecipare |
+| **Chi lavora sul territorio** (un Comune, la Protezione civile, un tecnico, un ricercatore) | 1 → 3 → 4 → 5 → 9 | da dove vengono i dati, come diventano un colore, dove sbaglia, quali dati servono |
+| **Chi sviluppa** (programmatori, analisti di dati, chi vuole contribuire) | tutto, in ordine | dai mattoni al cuore: è l'ordine in cui il sistema è costruito |
 
 ## Indice
 
-| # | Capitolo | Di che cosa parla | Stato |
-|---|---|---|---|
-| 1 | [Il problema e cosa fa Limen](01-il-problema.md) | il rischio in Italia, cosa fa Limen e cosa non fa, i principi, a che punto siamo | scritto |
-| 2 | [I mattoni: le librerie e perché ci sono](02-le-librerie.md) | le undici librerie estratte da Limen e le dipendenze di terze parti, per ruolo | scritto |
-| 3 | I dati: cosa misurano, da dove vengono, con quale licenza | territorio, meteo, satelliti, eventi veri; licenze e attribuzioni | da scrivere |
-| 4 | Dal dato al punteggio: frana, alluvione, incendio | le tre formule, le cinque classi, perché il meteo «comanda» e il territorio «modula» | da scrivere |
-| 5 | Misurare prima di cambiare | backtest, tasso di base, carico; tre esempi veri: i pesi del combustibile (#295), gli strati HRL (#419), l'acqua temporanea (#420) | da scrivere |
-| 6 | Machine learning e intelligenza artificiale | il modello in ombra, la validazione spaziale, il drift; l'LLM che riformula e non calcola | da scrivere |
-| 7 | Come gira | worker, tre cadenze, database, mappa, avvisi | da scrivere |
-| 8 | Trasparenza, licenze, riproducibilità, costi | come rifare tutto da zero, come verificare un punteggio, quanto costa tenerlo acceso | da scrivere |
-| 9 | Partecipare | collaboratori, enti, finanziatori; la roadmap | da scrivere |
-| A | Glossario | ogni parola non ovvia | da scrivere (si parte dal [glossario esistente](https://github.com/agent-engineering-studio/limen/blob/main/docs/divulgazione/glossario.md)) |
-| B | Bibliografia | articoli, rapporti, dataset, con DOI | da scrivere (raccoglie i «Per approfondire» dei capitoli) |
-| C | Indice delle librerie | una scheda per libreria e dipendenza | da scrivere (parte dal capitolo 2) |
-
-### Da dove arriva il materiale
-
-Il repository ha già molta documentazione: il libro non la ricopia, la
-riordina in un percorso unico e rimanda all'originale per i dettagli.
-
-| Documento esistente | Confluisce in |
-|---|---|
-| [Limen in una pagina](https://github.com/agent-engineering-studio/limen/blob/main/docs/divulgazione/01-limen-in-una-pagina.md) | capitolo 1 |
-| [Come si calcola il rischio della tua cella](https://github.com/agent-engineering-studio/limen/blob/main/docs/divulgazione/02-come-si-calcola-il-rischio.md), [`scoring-model.md`](https://github.com/agent-engineering-studio/limen/blob/main/docs/scoring-model.md) | capitolo 4 |
-| [Cosa fanno ML e AI, e cosa no](https://github.com/agent-engineering-studio/limen/blob/main/docs/divulgazione/03-cosa-fanno-ml-e-ai.md), [`ml.md`](https://github.com/agent-engineering-studio/limen/blob/main/docs/ml.md) | capitoli 5 e 6 |
-| [Le fonti dati](https://github.com/agent-engineering-studio/limen/blob/main/docs/divulgazione/04-fonti-dati-open.md), il catalogo [`dati.yaml`](https://github.com/agent-engineering-studio/limen/blob/main/src/limen/config/dati.yaml) | capitolo 3 |
-| [L'AI gira in casa](https://github.com/agent-engineering-studio/limen/blob/main/docs/divulgazione/05-ai-che-gira-in-casa.md), [`inference.md`](https://github.com/agent-engineering-studio/limen/blob/main/docs/inference.md) | capitolo 6 |
-| [Trasparenza e riproducibilità](https://github.com/agent-engineering-studio/limen/blob/main/docs/divulgazione/06-trasparenza-e-riproducibilita.md) | capitolo 8 |
-| [`architecture.md`](https://github.com/agent-engineering-studio/limen/blob/main/docs/architecture.md), [`runbook.md`](https://github.com/agent-engineering-studio/limen/blob/main/docs/runbook.md) | capitolo 7 |
-| [Come funziona](https://github.com/agent-engineering-studio/limen/blob/main/docs/guida/limen.md) (la guida nella mappa) | capitoli 4 e 7 |
-| [README](https://github.com/agent-engineering-studio/limen/blob/main/README.md): librerie, misure, licenze | capitoli 2, 5 e 8 |
+| # | Capitolo | Di che cosa parla |
+|---|---|---|
+| 1 | [Il problema e cosa fa Limen](01-il-problema.md) | il rischio in Italia, cosa fa Limen e cosa non fa, i principi, a che punto siamo |
+| 2 | [I mattoni: le librerie e perché ci sono](02-le-librerie.md) | i pezzi di programma che parlano con le fonti dei dati, e gli strumenti liberi su cui Limen si appoggia |
+| 3 | [I dati: cosa misurano, da dove vengono, con quale licenza](03-i-dati.md) | territorio, meteo, satelliti, eventi veri; licenze e attribuzioni |
+| 4 | [Dal dato al punteggio: frana, alluvione, incendio](04-i-motori.md) | come un dato diventa un colore; perché il meteo «comanda» e il territorio «modula» |
+| 5 | [Misurare prima di cambiare](05-misurare.md) | come si controlla una previsione sugli eventi veri, con tre esempi di questo autunno |
+| 6 | [Machine learning e intelligenza artificiale](06-ml-e-ai.md) | il modello che impara e resta in prova; l'intelligenza artificiale che scrive e non calcola |
+| 7 | [Come gira](07-come-gira.md) | il ritmo orario, notturno e dei tre giorni; l'archivio, la mappa, gli avvisi |
+| 8 | [Trasparenza, licenze, riproducibilità, costi](08-trasparenza.md) | come rifare tutto da zero, come controllare un punteggio, quanto costa tenerlo acceso |
+| 9 | [Cosa manca: dati da aggiungere, standard e formati da diffondere](09-cosa-manca.md) | i dati che renderebbero Limen più affidabile, chi li ha, e i formati comuni per scambiarli |
+| 10 | [Partecipare](10-partecipare.md) | collaboratori, enti, cittadini, finanziatori; la strada davanti |
+| A | [Glossario](appendice-a-glossario.md) | ogni parola non ovvia |
+| B | [Bibliografia](appendice-b-bibliografia.md) | articoli, rapporti, dati |
+| C | [Indice delle librerie](appendice-c-librerie.md) | una riga per ogni libreria, con licenza e link |
+| D | [Registro dei gap](appendice-d-gap.md) | tutti i gap del libro, con la proposta di open data e la issue |
 
 ## Una promessa sui numeri
 
 Ogni cifra di questo libro viene dal codice, dai file di configurazione o dai
-report di misura del repository, e accanto c'è scritto dove controllarla. Dove
-un numero non è verificabile non c'è. I risultati scomodi stanno accanto a
-quelli buoni: un sistema di supporto alle decisioni che nasconde i propri
-errori non merita fiducia.
+rapporti di misura del progetto, e accanto c'è scritto dove controllarla e
+quando è stata misurata. Dove un numero non è verificabile non c'è. Un sistema
+di supporto alle decisioni che nasconde i propri errori non merita fiducia.
+
+??? note "Per chi sviluppa"
+    - Sorgente del libro: `docs/book/`; configurazione del sito:
+      `zensical.toml` (Zensical). Anteprima locale:
+      `uv run --group docs zensical serve`; costruzione come nella CI:
+      `uv run --group docs zensical build --strict`.
+    - Le figure si rifanno con gli script in `scripts/libro/` (uno per
+      figura, con fonte e data dei dati in testa).
+    - Il libro riordina materiale che esiste già nel repository:
+      `docs/divulgazione/` (sei schede e un glossario), `docs/guida/`,
+      `docs/scoring-model.md`, `docs/ml.md`, `docs/architecture.md`,
+      `docs/runbook.md`, il `README.md` e i commenti degli YAML in
+      `src/limen/config/hazards/`.

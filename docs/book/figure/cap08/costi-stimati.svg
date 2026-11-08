@@ -1,0 +1,340 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="720pt" height="331.2pt" viewBox="0 0 720 331.2" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-11-08T11:00:08.707856</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.11.2, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 331.2 
+L 720 331.2 
+L 720 0 
+L 0 0 
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 251.9 275.829656 
+L 702.72 275.829656 
+L 702.72 54.55493 
+L 251.9 54.55493 
+z
+" style="fill: #ffffff"/>
+   </g>
+   <g id="matplotlib.axis_1">
+    <g id="xtick_1">
+     <g id="line2d_1">
+      <path d="M 251.9 275.829656 
+L 251.9 54.55493 
+" clip-path="url(#p8753380d19)" style="fill: none; stroke: #eeeeee; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_2">
+      <defs>
+       <path id="mba9d2f5cce" d="M 0 0 
+L 0 3.5 
+" style="stroke: #000000; stroke-width: 0.8"/>
+      </defs>
+      <g>
+       <use xlink:href="#mba9d2f5cce" x="251.9" y="275.829656" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_1">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: middle" x="251.9" y="290.427312" transform="rotate(-0 251.9 290.427312)">0</text>
+     </g>
+    </g>
+    <g id="xtick_2">
+     <g id="line2d_3">
+      <path d="M 316.302857 275.829656 
+L 316.302857 54.55493 
+" clip-path="url(#p8753380d19)" style="fill: none; stroke: #eeeeee; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_4">
+      <g>
+       <use xlink:href="#mba9d2f5cce" x="316.302857" y="275.829656" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_2">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: middle" x="316.302857" y="290.427312" transform="rotate(-0 316.302857 290.427312)">2</text>
+     </g>
+    </g>
+    <g id="xtick_3">
+     <g id="line2d_5">
+      <path d="M 380.705714 275.829656 
+L 380.705714 54.55493 
+" clip-path="url(#p8753380d19)" style="fill: none; stroke: #eeeeee; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_6">
+      <g>
+       <use xlink:href="#mba9d2f5cce" x="380.705714" y="275.829656" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_3">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: middle" x="380.705714" y="290.427312" transform="rotate(-0 380.705714 290.427312)">4</text>
+     </g>
+    </g>
+    <g id="xtick_4">
+     <g id="line2d_7">
+      <path d="M 445.108571 275.829656 
+L 445.108571 54.55493 
+" clip-path="url(#p8753380d19)" style="fill: none; stroke: #eeeeee; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_8">
+      <g>
+       <use xlink:href="#mba9d2f5cce" x="445.108571" y="275.829656" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_4">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: middle" x="445.108571" y="290.427312" transform="rotate(-0 445.108571 290.427312)">6</text>
+     </g>
+    </g>
+    <g id="xtick_5">
+     <g id="line2d_9">
+      <path d="M 509.511429 275.829656 
+L 509.511429 54.55493 
+" clip-path="url(#p8753380d19)" style="fill: none; stroke: #eeeeee; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_10">
+      <g>
+       <use xlink:href="#mba9d2f5cce" x="509.511429" y="275.829656" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_5">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: middle" x="509.511429" y="290.427312" transform="rotate(-0 509.511429 290.427312)">8</text>
+     </g>
+    </g>
+    <g id="xtick_6">
+     <g id="line2d_11">
+      <path d="M 573.914286 275.829656 
+L 573.914286 54.55493 
+" clip-path="url(#p8753380d19)" style="fill: none; stroke: #eeeeee; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_12">
+      <g>
+       <use xlink:href="#mba9d2f5cce" x="573.914286" y="275.829656" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_6">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: middle" x="573.914286" y="290.427312" transform="rotate(-0 573.914286 290.427312)">10</text>
+     </g>
+    </g>
+    <g id="xtick_7">
+     <g id="line2d_13">
+      <path d="M 638.317143 275.829656 
+L 638.317143 54.55493 
+" clip-path="url(#p8753380d19)" style="fill: none; stroke: #eeeeee; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_14">
+      <g>
+       <use xlink:href="#mba9d2f5cce" x="638.317143" y="275.829656" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_7">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: middle" x="638.317143" y="290.427312" transform="rotate(-0 638.317143 290.427312)">12</text>
+     </g>
+    </g>
+    <g id="xtick_8">
+     <g id="line2d_15">
+      <path d="M 702.72 275.829656 
+L 702.72 54.55493 
+" clip-path="url(#p8753380d19)" style="fill: none; stroke: #eeeeee; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_16">
+      <g>
+       <use xlink:href="#mba9d2f5cce" x="702.72" y="275.829656" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_8">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: middle" x="702.72" y="290.427312" transform="rotate(-0 702.72 290.427312)">14</text>
+     </g>
+    </g>
+    <g id="text_9">
+     <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: middle" x="477.31" y="304.428094" transform="rotate(-0 477.31 304.428094)">Costo all'anno, migliaia di dollari USA (listino, ottobre 2026)</text>
+    </g>
+   </g>
+   <g id="matplotlib.axis_2">
+    <g id="ytick_1">
+     <g id="line2d_17"/>
+     <g id="text_10">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: end" x="248.4" y="259.603603" transform="rotate(-0 248.4 259.603603)">C2 · come B + un server con scheda grafica</text>
+     </g>
+    </g>
+    <g id="ytick_2">
+     <g id="line2d_18"/>
+     <g id="text_11">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: end" x="248.4" y="223.558766" transform="rotate(-0 248.4 223.558766)">B · con database duplicato (alta affidabilità)</text>
+     </g>
+    </g>
+    <g id="ytick_3">
+     <g id="line2d_19"/>
+     <g id="text_12">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: end" x="248.4" y="187.11393" transform="rotate(-0 248.4 187.11393)">C1 · come B + modelli AI a consumo</text>
+     </g>
+    </g>
+    <g id="ytick_4">
+     <g id="line2d_20"/>
+     <g id="text_13">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: end" x="248.4" y="150.869093" transform="rotate(-0 248.4 150.869093)">B · server + database gestito dal provider</text>
+     </g>
+    </g>
+    <g id="ytick_5">
+     <g id="line2d_21"/>
+     <g id="text_14">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: end" x="248.4" y="114.624257" transform="rotate(-0 248.4 114.624257)">A · un solo server in cloud, come quello di oggi</text>
+     </g>
+    </g>
+    <g id="ytick_6">
+     <g id="line2d_22"/>
+     <g id="text_15">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: end" x="248.4" y="78.379421" transform="rotate(-0 248.4 78.379421)">Tetto della spesa per l'AI in cloud (Claude)</text>
+     </g>
+    </g>
+   </g>
+   <g id="patch_3">
+    <path d="M 251.9 84.547532 
+L 255.764171 84.547532 
+L 255.764171 64.612872 
+L 251.9 64.612872 
+z
+" clip-path="url(#p8753380d19)" style="fill: #c9821b; opacity: 0.25"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 255.764171 84.547532 
+L 258.340286 84.547532 
+L 258.340286 64.612872 
+L 255.764171 64.612872 
+z
+" clip-path="url(#p8753380d19)" style="fill: #c9821b"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 251.9 120.792368 
+L 393.586286 120.792368 
+L 393.586286 100.857708 
+L 251.9 100.857708 
+z
+" clip-path="url(#p8753380d19)" style="fill: #2a6f77; opacity: 0.25"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 377.485571 120.792368 
+L 393.586286 120.792368 
+L 393.586286 100.857708 
+L 377.485571 100.857708 
+z
+" clip-path="url(#p8753380d19)" style="fill: #2a6f77"/>
+   </g>
+   <g id="patch_7">
+    <path d="M 251.9 157.037205 
+L 454.769 157.037205 
+L 454.769 137.102545 
+L 251.9 137.102545 
+z
+" clip-path="url(#p8753380d19)" style="fill: #2a6f77; opacity: 0.25"/>
+   </g>
+   <g id="patch_8">
+    <path d="M 425.787714 157.037205 
+L 454.769 157.037205 
+L 454.769 137.102545 
+L 425.787714 137.102545 
+z
+" clip-path="url(#p8753380d19)" style="fill: #2a6f77"/>
+   </g>
+   <g id="patch_9">
+    <path d="M 251.9 193.282041 
+L 461.209286 193.282041 
+L 461.209286 173.347381 
+L 251.9 173.347381 
+z
+" clip-path="url(#p8753380d19)" style="fill: #2a6f77; opacity: 0.25"/>
+   </g>
+   <g id="patch_10">
+    <path d="M 429.007857 193.282041 
+L 461.209286 193.282041 
+L 461.209286 173.347381 
+L 429.007857 173.347381 
+z
+" clip-path="url(#p8753380d19)" style="fill: #2a6f77"/>
+   </g>
+   <g id="patch_11">
+    <path d="M 251.9 229.526878 
+L 583.574714 229.526878 
+L 583.574714 209.592218 
+L 251.9 209.592218 
+z
+" clip-path="url(#p8753380d19)" style="fill: #2a6f77; opacity: 0.25"/>
+   </g>
+   <g id="patch_12">
+    <path d="M 522.392 229.526878 
+L 583.574714 229.526878 
+L 583.574714 209.592218 
+L 522.392 209.592218 
+z
+" clip-path="url(#p8753380d19)" style="fill: #2a6f77"/>
+   </g>
+   <g id="patch_13">
+    <path d="M 251.9 265.771714 
+L 638.317143 265.771714 
+L 638.317143 245.837054 
+L 251.9 245.837054 
+z
+" clip-path="url(#p8753380d19)" style="fill: #2a6f77; opacity: 0.25"/>
+   </g>
+   <g id="patch_14">
+    <path d="M 615.776143 265.771714 
+L 638.317143 265.771714 
+L 638.317143 245.837054 
+L 615.776143 245.837054 
+z
+" clip-path="url(#p8753380d19)" style="fill: #2a6f77"/>
+   </g>
+   <g id="patch_15">
+    <path d="M 251.9 275.829656 
+L 702.72 275.829656 
+" style="fill: none; stroke: #000000; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="text_16">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: start" x="262.204457" y="77.178249" transform="rotate(-0 262.204457 77.178249)">120 $</text>
+   </g>
+   <g id="text_17">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: start" x="400.026571" y="113.423085" transform="rotate(-0 400.026571 113.423085)">3,9–4,4 k$</text>
+   </g>
+   <g id="text_18">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: start" x="461.209286" y="149.667922" transform="rotate(-0 461.209286 149.667922)">5,4–6,3 k$</text>
+   </g>
+   <g id="text_19">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: start" x="467.649571" y="185.912758" transform="rotate(-0 467.649571 185.912758)">5,5–6,5 k$</text>
+   </g>
+   <g id="text_20">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: start" x="590.015" y="222.157595" transform="rotate(-0 590.015 222.157595)">8,4–10,3 k$</text>
+   </g>
+   <g id="text_21">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: start" x="644.757429" y="258.402431" transform="rotate(-0 644.757429 258.402431)">11,3–12,0 k$</text>
+   </g>
+  </g>
+  <g id="text_22">
+   <text style="font-weight: 700; font-size: 12.5px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: start" x="14.4" y="16.622047" transform="rotate(-0 14.4 16.622047)">Il costo vero è il server: l'AI in cloud pesa al massimo 120 $ l'anno</text>
+  </g>
+  <g id="text_23">
+   <text style="font-size: 8.5px; font-family: 'DejaVu Sans', 'Helvetica', 'Arial', sans-serif; text-anchor: start; fill: #555555" x="14.4" y="326.232" transform="rotate(-0 14.4 326.232)">Parte scura = intervallo fra AWS, Azure e Google Cloud. Il costo del server dedicato di oggi non è documentato.  Fonte: docs/analisi-costi-cloud.md (2026-10-11).</text>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p8753380d19">
+   <rect x="251.9" y="54.55493" width="450.82" height="221.274727"/>
+  </clipPath>
+ </defs>
+</svg>

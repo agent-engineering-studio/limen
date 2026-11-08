@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="683.34375pt" height="252.079297pt" viewBox="0 0 683.34375 252.079297" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-11-08T11:09:07.273562</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.11.2, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 252.079297 
+L 683.34375 252.079297 
+L 683.34375 0 
+L 0 0 
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 252.320312 213.478516 
+L 627.370312 213.478516 
+L 627.370312 21.558281 
+L 252.320312 21.558281 
+z
+" style="fill: #ffffff"/>
+   </g>
+   <g id="matplotlib.axis_1">
+    <g id="xtick_1">
+     <g id="line2d_1">
+      <path d="M 252.320312 213.478516 
+L 252.320312 21.558281 
+" clip-path="url(#p3a48a1e201)" style="fill: none; stroke: #dddddd; stroke-width: 0.6; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_2">
+      <defs>
+       <path id="m6e0f3b0597" d="M 0 0 
+L 0 3.5 
+" style="stroke: #333333; stroke-width: 0.8"/>
+      </defs>
+      <g>
+       <use xlink:href="#m6e0f3b0597" x="252.320312" y="213.478516" style="fill: #333333; stroke: #333333; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_1">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #333333" x="252.320312" y="228.076172" transform="rotate(-0 252.320312 228.076172)">0</text>
+     </g>
+    </g>
+    <g id="xtick_2">
+     <g id="line2d_3">
+      <path d="M 314.828646 213.478516 
+L 314.828646 21.558281 
+" clip-path="url(#p3a48a1e201)" style="fill: none; stroke: #dddddd; stroke-width: 0.6; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_4">
+      <g>
+       <use xlink:href="#m6e0f3b0597" x="314.828646" y="213.478516" style="fill: #333333; stroke: #333333; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_2">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #333333" x="314.828646" y="228.076172" transform="rotate(-0 314.828646 228.076172)">+0,05</text>
+     </g>
+    </g>
+    <g id="xtick_3">
+     <g id="line2d_5">
+      <path d="M 377.336979 213.478516 
+L 377.336979 21.558281 
+" clip-path="url(#p3a48a1e201)" style="fill: none; stroke: #dddddd; stroke-width: 0.6; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_6">
+      <g>
+       <use xlink:href="#m6e0f3b0597" x="377.336979" y="213.478516" style="fill: #333333; stroke: #333333; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_3">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #333333" x="377.336979" y="228.076172" transform="rotate(-0 377.336979 228.076172)">+0,10</text>
+     </g>
+    </g>
+    <g id="text_4">
+     <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #333333" x="439.845312" y="242.476953" transform="rotate(-0 439.845312 242.476953)">Quanto il dato migliora la capacità di distinguere dove l'evento è avvenuto (guadagno di AUC)</text>
+    </g>
+   </g>
+   <g id="matplotlib.axis_2">
+    <g id="ytick_1">
+     <g id="line2d_7">
+      <defs>
+       <path id="m71ba192f6c" d="M 0 0 
+L -3.5 0 
+" style="stroke: #333333; stroke-width: 0.8"/>
+      </defs>
+      <g>
+       <use xlink:href="#m71ba192f6c" x="252.320312" y="44.82134" style="fill: #333333; stroke: #333333; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_5">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #333333" x="245.320312" y="48.820559" transform="rotate(-0 245.320312 48.820559)">Frana · umidità del suolo europea (EDO)</text>
+     </g>
+    </g>
+    <g id="ytick_2">
+     <g id="line2d_8">
+      <g>
+       <use xlink:href="#m71ba192f6c" x="252.320312" y="93.286046" style="fill: #333333; stroke: #333333; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_6">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #333333" x="245.320312" y="97.085264" transform="rotate(-0 245.320312 97.085264)">Incendio · prati e chiome a 10 m (Copernicus)</text>
+     </g>
+    </g>
+    <g id="ytick_3">
+     <g id="line2d_9">
+      <g>
+       <use xlink:href="#m71ba192f6c" x="252.320312" y="141.750751" style="fill: #333333; stroke: #333333; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_7">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #333333" x="245.320312" y="145.54997" transform="rotate(-0 245.320312 145.54997)">Alluvione · acqua temporanea, Emilia-Romagna</text>
+     </g>
+    </g>
+    <g id="ytick_4">
+     <g id="line2d_10">
+      <g>
+       <use xlink:href="#m71ba192f6c" x="252.320312" y="190.215457" style="fill: #333333; stroke: #333333; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_8">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #333333" x="245.320312" y="194.014676" transform="rotate(-0 245.320312 194.014676)">Alluvione · acqua temporanea, resto d'Italia</text>
+     </g>
+    </g>
+   </g>
+   <g id="patch_3">
+    <path d="M 252.320312 59.360752 
+L 253.570479 59.360752 
+L 253.570479 30.281928 
+L 252.320312 30.281928 
+z
+" clip-path="url(#p3a48a1e201)" style="fill: #b0b0b0"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 252.320312 107.825457 
+L 277.323646 107.825457 
+L 277.323646 78.746634 
+L 252.320312 78.746634 
+z
+" clip-path="url(#p3a48a1e201)" style="fill: #b0b0b0"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 252.320312 156.290163 
+L 352.333646 156.290163 
+L 352.333646 127.21134 
+L 252.320312 127.21134 
+z
+" clip-path="url(#p3a48a1e201)" style="fill: #1f6f78"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 252.320312 204.754869 
+L 377.336979 204.754869 
+L 377.336979 175.676045 
+L 252.320312 175.676045 
+z
+" clip-path="url(#p3a48a1e201)" style="fill: #1f6f78"/>
+   </g>
+   <g id="patch_7">
+    <path d="M 252.320312 213.478516 
+L 252.320312 21.558281 
+" style="fill: none; stroke: #000000; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="patch_8">
+    <path d="M 252.320312 213.478516 
+L 627.370312 213.478516 
+" style="fill: none; stroke: #000000; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="text_9">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #333333" x="256.070812" y="47.159582" transform="rotate(-0 256.070812 47.159582)">+0,001   scartato: non aggiunge nulla</text>
+   </g>
+   <g id="text_10">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #333333" x="279.823979" y="95.624288" transform="rotate(-0 279.823979 95.624288)">+0,02   scartato: troppo poco per il costo</text>
+   </g>
+   <g id="text_11">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #333333" x="354.833979" y="144.088993" transform="rotate(-0 354.833979 144.088993)">+0,08   segnale vero; nel motore il backtest non passa</text>
+   </g>
+   <g id="text_12">
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #333333" x="379.837312" y="192.553699" transform="rotate(-0 379.837312 192.553699)">+0,10   segnale vero; nel motore il backtest non passa</text>
+   </g>
+   <g id="text_13">
+    <text style="font-size: 11px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #333333" x="252.320312" y="15.558281" transform="rotate(-0 252.320312 15.558281)">Tre dati nuovi, misurati prima di usarli: due scartati, uno promettente</text>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p3a48a1e201">
+   <rect x="252.320312" y="21.558281" width="375.05" height="191.920234"/>
+  </clipPath>
+ </defs>
+</svg>

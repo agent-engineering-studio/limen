@@ -61,8 +61,8 @@ dependencies = [
 limen = "limen.cli.main:main"
 
 [project.urls]
-Homepage = "https://github.com/gzileni/limen"
-Issues = "https://github.com/gzileni/limen/issues"
+Homepage = "https://github.com/agent-engineering-studio/limen"
+Issues = "https://github.com/agent-engineering-studio/limen/issues"
 
 [dependency-groups]
 dev = [
@@ -116,9 +116,9 @@ report = [
     "jinja2>=3.1",
     "reportlab>=5.0.1",
 ]
-# Il libro (`docs/book/`, `mkdocs.yml`): `uv run --group docs mkdocs serve`.
+# Il libro (`docs/book/`, `zensical.toml`): `uv run --group docs zensical serve`.
 docs = [
-    "mkdocs-material>=9.5",
+    "zensical>=0.1.0",
 ]
 # `limen glofas-ewds`: lo storico GloFAS dall'Early Warning Data Store di
 # Copernicus. Gira sull'host, una volta: l'immagine del worker non lo installa.
