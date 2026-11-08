@@ -19,9 +19,12 @@ services:
     container_name: limen-otel-lgtm
     restart: unless-stopped
     ports:
-      - "3000:3000"   # Grafana UI
-      - "4317:4317"   # OTLP gRPC ingress
-      - "4318:4318"   # OTLP HTTP ingress
+      # Loopback come ogni porta pubblicata: Docker scrive le sue catene
+      # iptables prima di ufw. L'API ci arriva sulla rete dello stack come
+      # `observability:4318`, non da qui.
+      - "${LIMEN_GRAFANA_BIND:-127.0.0.1}:3000:3000"   # Grafana UI
+      - "${LIMEN_OTLP_BIND:-127.0.0.1}:4317:4317"      # OTLP gRPC ingress
+      - "${LIMEN_OTLP_BIND:-127.0.0.1}:4318:4318"      # OTLP HTTP ingress
     volumes:
       # Datasources + dashboards provisioned as code so a fresh container
       # boots with everything in place.
