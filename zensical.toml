@@ -1,0 +1,94 @@
+# Il libro di Limen, costruito con Zensical (https://zensical.org/docs/).
+#
+#   uv run --group docs zensical serve            # anteprima su localhost:8000
+#   uv run --group docs zensical build --strict   # come in CI
+#
+# Il workflow .github/workflows/docs.yml lo pubblica su GitHub Pages.
+
+[project]
+site_name = "Limen, spiegato per gradi"
+site_description = "Il libro di Limen: frane, alluvioni e incendi in Italia, dalle librerie al cuore del sistema"
+site_author = "Limen"
+site_url = "https://agent-engineering-studio.github.io/limen/"
+repo_url = "https://github.com/agent-engineering-studio/limen"
+repo_name = "agent-engineering-studio/limen"
+edit_uri = "edit/main/docs/book/"
+docs_dir = "docs/book"
+site_dir = "site"
+copyright = "Testo e codice di Limen: EUPL-1.2. Le fonti dei dati hanno ciascuna la propria licenza (capitolo 3)."
+
+# Un capitolo nuovo = una riga qui, nell'ordine dell'indice di index.md.
+nav = [
+  { "Introduzione e indice" = "index.md" },
+  { "1. Il problema e cosa fa Limen" = "01-il-problema.md" },
+  { "2. I mattoni: le librerie" = "02-le-librerie.md" },
+  { "3. I dati" = "03-i-dati.md" },
+  { "4. Dal dato al punteggio" = "04-i-motori.md" },
+  { "5. Misurare prima di cambiare" = "05-misurare.md" },
+  { "6. Machine learning e AI" = "06-ml-e-ai.md" },
+  { "7. Come gira" = "07-come-gira.md" },
+  { "8. Trasparenza, licenze, costi" = "08-trasparenza.md" },
+  { "9. Cosa manca" = "09-cosa-manca.md" },
+  { "10. Partecipare" = "10-partecipare.md" },
+  { "Appendici" = [
+    { "A. Glossario" = "appendice-a-glossario.md" },
+    { "B. Bibliografia" = "appendice-b-bibliografia.md" },
+    { "C. Indice delle librerie" = "appendice-c-librerie.md" },
+    { "D. Registro dei gap" = "appendice-d-gap.md" },
+  ] },
+]
+
+[project.theme]
+language = "it"
+logo = "assets/logo.png"
+favicon = "assets/logo.png"
+features = [
+  "content.action.edit",
+  "content.code.copy",
+  "content.footnote.tooltips",
+  "content.tooltips",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+  "toc.follow",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Passa al tema chiaro"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "teal"
+accent = "deep-orange"
+toggle.icon = "lucide/sun"
+toggle.name = "Passa al tema scuro"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "teal"
+accent = "deep-orange"
+toggle.icon = "lucide/moon"
+toggle.name = "Segui il sistema"
+
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+tables = {}
+toc.permalink = true
+pymdownx.details = {}
+pymdownx.superfences.custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]

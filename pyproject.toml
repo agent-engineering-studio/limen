@@ -61,8 +61,8 @@ dependencies = [
 limen = "limen.cli.main:main"
 
 [project.urls]
-Homepage = "https://github.com/gzileni/limen"
-Issues = "https://github.com/gzileni/limen/issues"
+Homepage = "https://github.com/agent-engineering-studio/limen"
+Issues = "https://github.com/agent-engineering-studio/limen/issues"
 
 [dependency-groups]
 dev = [
@@ -116,6 +116,10 @@ report = [
     "jinja2>=3.1",
     "reportlab>=5.0.1",
 ]
+# Il libro (`docs/book/`, `zensical.toml`): `uv run --group docs zensical serve`.
+docs = [
+    "zensical>=0.1.0",
+]
 # `limen glofas-ewds`: lo storico GloFAS dall'Early Warning Data Store di
 # Copernicus. Gira sull'host, una volta: l'immagine del worker non lo installa.
 copernicus = [
@@ -164,6 +168,9 @@ ignore = []
 "src/limen/core/models/risk.py" = ["RUF002", "RUF003"]
 "tests/unit/test_caine_model.py" = ["RUF002"]
 "tests/unit/test_scoring_engine.py" = ["RUF002"]
+# Le figure del libro scrivono titoli e didascalie in italiano tipografico
+# (–, ×, α, frasi intere): spezzarli renderebbe le frasi illeggibili nel codice.
+"scripts/libro/**" = ["E501", "RUF001", "RUF002", "RUF003", "N806"]
 
 [tool.ruff.format]
 quote-style = "double"
