@@ -233,7 +233,7 @@ async def test_exposure_boosts_priority(reset_db: None) -> None:
 
 
 async def test_moderate_alerts_only_on_susceptible_slopes(reset_db: None) -> None:
-    """Below-High cells pass only with S >= min_static_s (susceptible slope)."""
+    """Below-High cells pass only with S >= alerts.min_predisposition (0.5)."""
     cell_ids = await _seed_aoi_with_cells()
     cells = [
         _cell(cell_ids[0], score=0.40, level=RiskLevel.Moderate),  # s=0.40 < gate
@@ -242,9 +242,7 @@ async def test_moderate_alerts_only_on_susceptible_slopes(reset_db: None) -> Non
     capture = _CaptureChannel()
     executor = AlertDispatchExecutor(
         dispatcher=NotificationDispatcher([capture]),
-        alert_settings=AlertSettings(
-            min_level="Moderate", min_static_s=0.5, dedup_window_minutes=60
-        ),
+        alert_settings=AlertSettings(min_level="Moderate", dedup_window_minutes=60),
     )
     result = await executor.run(_ctx(cells))
 

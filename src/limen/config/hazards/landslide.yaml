@@ -361,6 +361,17 @@ exposure:
   infra_near_fallback: 0.3    # CORINE 12x entro ~2 km
   cap:                 2.0
 
+# Avvisi sotto «Alto» (#477): la cella avvisa solo se la sua predisposizione
+# statica — qui S, la suscettibilità del versante — arriva a questa soglia.
+# «Alto», «Molto alto» e l'escalation cinematica passano sempre. Era
+# ALERT__MIN_STATIC_S in settings.py, unica per tre pericoli.
+# Misura del 2026-11-09: a 0,5 passa il 45 % delle celle d'Italia e il 79,5 %
+# delle celle con frane datate (0,3: 57 % / 90 %; 0,7: 28 % / 57 %). Il
+# 99,4 % delle righe «Moderato» degli ultimi tre giorni la passa comunque: il
+# Moderato della frana è già statico (#122), e il gate filtra poco.
+alerts:
+  min_predisposition: 0.5
+
 # Mapping presentazionale verso la scala di allerta della Protezione
 # Civile (verde/gialla/arancione/rossa). Solo etichette per API,
 # legenda e notifiche: gli score e le classi NON cambiano.
