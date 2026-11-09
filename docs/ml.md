@@ -186,6 +186,38 @@ A threshold breach OR enough new IFFI events triggers
 **only signals**; operators still run `limen train` and re-apply the
 promotion gate manually.
 
+## Offline measurements (`limen misura`, #480)
+
+Before a new per-cell signal enters an engine or the feature set, measure
+whether it separates events at all — read-only, with one command:
+
+```bash
+uv run limen misura --pericolo wildfire --feature slope_deg \
+    --stima 2021-2023 --verifica 2024-2026
+uv run limen misura --pericolo flood --feature quota_sul_fondo_m \
+    --stima 2023-2024 --verifica 2025-2026
+```
+
+- **Truth**: wildfire = cells covered ≥ 25 % by EFFIS perimeters in the period;
+  flood = cells covered ≥ 1 % by Copernicus EMS flooded areas, over the cells
+  inside an EMS observation mask only (outside nobody looked). `--copertura`
+  overrides.
+- **Strata**: 0.25° weather node × elevation band (200 / 500 / 1000 m). The
+  AUC is computed inside each stratum with both classes and averaged with the
+  number of positive-negative pairs as weight: a feature that only tells the
+  North from the South scores 0.5.
+- **Observed/expected** per feature class, with expected = the base rate of
+  each cell's stratum. Classes are quantiles of the **estimation** period and
+  are applied unchanged to the **verification** period.
+- The feature must be a numeric column of `cell_static_factors`. Report in
+  `LIMEN_REPORTS_DIR` (default `reports/`); nothing is written to the DB.
+- Code: `limen.ml.misure` (pure numpy), `data/repos/misure_repo.py`,
+  `cli/misura.py`.
+
+Not covered yet: scoring a cell through the real engine offline (needs the
+weather of each day), and the old #295/#419/#420 tables, whose session scripts
+are gone — re-measure with this command rather than trust their numbers.
+
 ## Where things live
 
 | Path | Purpose |
