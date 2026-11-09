@@ -54,6 +54,12 @@ function GrigliaCelle(): JSX.Element {
   );
 }
 
+// I canali pubblici di contatto (#508): le discussioni del repository per ciò
+// che può stare in pubblico, la mail del curatore per enti e finanziatori.
+export const DISCUSSIONI =
+  "https://github.com/agent-engineering-studio/limen/discussions";
+export const EMAIL_PROGETTO = "gzileni@agentengineering.it";
+
 const T = testi(
   {
     pericoli: [
@@ -187,6 +193,14 @@ const T = testi(
       "Limen è gratuito e aperto a tutti. Se ti è utile, aiutaci a tenere " +
       "acceso il server.",
     privacyLink: "Dati personali",
+    contattiTitolo: "Contatti",
+    contattiDomande: "Domande, idee, segnalazioni pubbliche:",
+    contattiDiscussioni: "le discussioni del progetto",
+    contattiEnti: "Enti, Protezione civile, ricerca e finanziatori:",
+    contattiTempi:
+      "Limen ha un solo curatore: di solito rispondiamo entro una settimana, non sempre in giornata.",
+    contattiEmergenza:
+      "Non è un canale di emergenza. Se sei in pericolo chiama il 112 e segui le indicazioni della Protezione civile e del tuo Comune.",
     disclaimer:
       "Limen è uno strumento di supporto al monitoraggio: non sostituisce le " +
       "valutazioni delle autorità di protezione civile.",
@@ -323,6 +337,14 @@ const T = testi(
       "Limen is free and open to everyone. If you find it useful, help us " +
       "keep the server running.",
     privacyLink: "Personal data",
+    contattiTitolo: "Contact",
+    contattiDomande: "Questions, ideas, public reports:",
+    contattiDiscussioni: "the project discussions",
+    contattiEnti: "Public bodies, civil protection, research and funders:",
+    contattiTempi:
+      "Limen has a single maintainer: we usually reply within a week, not always the same day.",
+    contattiEmergenza:
+      "This is not an emergency channel. If you are in danger call 112 and follow the instructions of Civil Protection and your municipality.",
     disclaimer:
       "Limen is a monitoring support tool: it does not replace the " +
       "assessments of the civil protection authorities.",
@@ -479,6 +501,21 @@ export function HomePage(): JSX.Element {
             />
           </a>
         </p>
+        <section className="home-contatti" aria-labelledby="home-contatti">
+          <h3 id="home-contatti">{t.contattiTitolo}</h3>
+          <p>
+            {t.contattiDomande}{" "}
+            <a href={DISCUSSIONI}>{t.contattiDiscussioni}</a>
+          </p>
+          <p>
+            {t.contattiEnti}{" "}
+            <a href={`mailto:${EMAIL_PROGETTO}`}>{EMAIL_PROGETTO}</a>
+          </p>
+          <p>{t.contattiTempi}</p>
+          <p className="home-emergenza">
+            <strong>{t.contattiEmergenza}</strong>
+          </p>
+        </section>
         <p>
           <a href="#/privacy">{t.privacyLink}</a>
         </p>

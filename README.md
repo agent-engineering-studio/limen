@@ -1164,6 +1164,20 @@ when an open map of the danger is most useful.
 * 🏛️ **Public bodies, municipalities, universities**: for trials on your
   territory, write to us from [agentengineering.it](https://www.agentengineering.it).
 
+### Contact
+
+* **Questions, ideas, public reports**: the
+  [project discussions](https://github.com/agent-engineering-studio/limen/discussions)
+  (Q&A for questions, Announcements for news). Bugs and code proposals stay
+  in the issues.
+* **Public bodies, civil protection, research and funders**:
+  [gzileni@agentengineering.it](mailto:gzileni@agentengineering.it).
+* **Security vulnerabilities**: see [`SECURITY.md`](./SECURITY.md), never a
+  public issue or discussion.
+* Limen has a single maintainer: we usually reply within a week.
+* **This is not an emergency channel.** If you are in danger, call **112**
+  and follow Civil Protection and your municipality.
+
 ## How it was built
 
 Limen has been developed with [Claude Code](https://claude.com/claude-code)

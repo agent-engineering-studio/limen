@@ -425,9 +425,12 @@ issue indicata.
   in inglese e parla solo di codice. Un ricercatore, un ufficio comunale o un
   cittadino non trova scritto come dare un evento, una misura o un parere.
   ([#511](https://github.com/agent-engineering-studio/limen/issues/511))
-- **Manca un canale di contatto pubblico.** Le discussioni sul repository
-  sono spente, non c'è una pagina «contatti»; restano l'email della sicurezza
-  e il modulo per gli esperti nella scheda di una cella. ([#508](https://github.com/agent-engineering-studio/limen/issues/508))
+- ~~**Manca un canale di contatto pubblico.**~~ Chiuso: le
+  [discussioni del repository](https://github.com/agent-engineering-studio/limen/discussions)
+  sono aperte per domande e annunci, e una sezione «Contatti» nella home e nel
+  README dà la mail per enti e finanziatori, i tempi di risposta (un solo
+  curatore: di solito entro una settimana) e l'avviso che non è un canale di
+  emergenza. ([#508](https://github.com/agent-engineering-studio/limen/issues/508))
 - ~~**Nessun primo lavoro facile è segnalato.**~~ Chiuso: sei issue
   `good first issue` aperte (#536-#541: la descrizione della riga di comando,
   tre traduzioni in inglese, due gruppi di variabili da documentare), ognuna
