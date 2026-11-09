@@ -335,10 +335,7 @@ async def _agreement() -> list[tuple[int, dict[str, int]]]:
     ]
 
 
-async def scarica_e_ingerisci() -> int:
-    """Scarica e scrive, dentro un pool già aperto e senza chiudere il client
-    HTTP condiviso: la usa anche il worker per i download della pagina di
-    installazione (#472), dove il client serve ancora dopo."""
+async def _raccogli() -> tuple[list[FireHotspot], str, int, int]:
     country = os.getenv("LIMEN_FIRE_HISTORY_COUNTRY", DEFAULT_COUNTRY)
     lo, hi = _year_bounds()
     local = await _from_local_csv()
@@ -349,17 +346,30 @@ async def scarica_e_ingerisci() -> int:
     )
     if not hotspots:
         log.warning("fire_history.empty", country=country, years=[lo, hi])
+    return hotspots, country, lo, hi
+
+
+async def scarica_e_ingerisci() -> int:
+    """Scarica e scrive dentro un pool già aperto, senza chiudere il client
+    HTTP condiviso: la usa il worker per i download della pagina di
+    installazione (#472), dove il client serve ancora dopo."""
+    hotspots, country, lo, hi = await _raccogli()
+    if not hotspots:
         return 1
     return await _ingerisci(hotspots, country=country, lo=lo, hi=hi)
 
 
 async def run() -> int:
+    # Prima la rete, poi il database: un archivio vuoto esce senza aprire il pool.
     try:
-        async with lifespan_pool():
-            await run_migrations()
-            return await scarica_e_ingerisci()
+        hotspots, country, lo, hi = await _raccogli()
     finally:
         await SharedHttpClient.aclose()
+    if not hotspots:
+        return 1
+    async with lifespan_pool():
+        await run_migrations()
+        return await _ingerisci(hotspots, country=country, lo=lo, hi=hi)
 
 
 async def _ingerisci(hotspots: list[FireHotspot], *, country: str, lo: int, hi: int) -> int:
