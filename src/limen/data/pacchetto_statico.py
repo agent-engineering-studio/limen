@@ -49,6 +49,7 @@ from limen import __version__
 from limen.config.catalogo_dati import CatalogoDati
 from limen.core.logging import get_logger
 from limen.data.backup import BackupError, _conta, _livello, _sha256
+from limen.data.dcat import dcat_ap_it
 from limen.data.static_snapshot import _griglia
 from limen.integrations._http import SharedHttpClient, call_with_retry, fetch_with_retry
 from limen.integrations.static_bootstrap.fingerprint import SOURCE as BOOTSTRAP_SOURCE
@@ -57,6 +58,7 @@ from limen.integrations.static_bootstrap.fingerprint import STEP_VERSION
 log = get_logger(__name__)
 
 MANIFEST = "manifest.json"
+DCAT = "catalogo-dcat-ap_it.ttl"
 TABELLA = "public.cell_static_factors"
 CHIAVE = "cell_id"
 
@@ -207,7 +209,12 @@ async def _copia_fuori(conn: asyncpg.Connection, query: str, dest: Path) -> None
 
 
 async def esporta_pacchetto(
-    *, conn: asyncpg.Connection, catalogo: CatalogoDati, uscita: Path, adesso: datetime
+    *,
+    conn: asyncpg.Connection,
+    catalogo: CatalogoDati,
+    uscita: Path,
+    adesso: datetime,
+    url_base: str | None = None,
 ) -> dict[str, Any]:
     """Scrive il pacchetto in ``uscita`` e ne restituisce il manifest."""
     uscita.mkdir(parents=True, exist_ok=True)
@@ -285,6 +292,12 @@ async def esporta_pacchetto(
         "impronte": impronte,
         "file": file,
     }
+    # I metadati per i cataloghi (#504) descrivono i file con dimensione e
+    # SHA-256, quindi vengono dopo di loro; il manifest li nomina e resta l'ultimo.
+    (uscita / DCAT).write_text(
+        dcat_ap_it(manifest, catalogo, risorse=RISORSE, url_base=url_base), encoding="utf-8"
+    )
+    manifest["metadati"] = {"dcat-ap_it": DCAT}
     # Il manifest per ultimo: è lui a dire che il pacchetto è completo.
     (uscita / MANIFEST).write_text(json.dumps(manifest, indent=1), encoding="utf-8")
     log.info(

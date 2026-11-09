@@ -6,6 +6,7 @@
     limen static-snapshot import --chiave statico/2026-10-26T14-00-00Z/ --forza
 
     limen static-snapshot pacchetto --uscita DIR      il pacchetto rapido in tre licenze (#406)
+                                    [--url-base URL]  con i metadati DCAT-AP_IT (#504)
     limen static-snapshot import --da-url URL         scarica manifest e file, poi importa
     limen static-snapshot import --da-cartella DIR    importa un pacchetto già scaricato
 
@@ -46,6 +47,10 @@ def build_subparser(top: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     s.add_argument("--chiave", help="statico/<istante>/ (default: l'ultimo completo)")
     s.add_argument("--forza", action="store_true", help="sostituisci i fattori già calcolati qui")
     s.add_argument("--uscita", type=Path, help="pacchetto: la cartella in cui scriverlo")
+    s.add_argument(
+        "--url-base",
+        help="pacchetto: l'URL della release da cui si scaricano i file (metadati DCAT)",
+    )
     s.add_argument("--da-url", help="import del pacchetto: l'URL del suo manifest.json")
     s.add_argument("--da-cartella", type=Path, help="import di un pacchetto già scaricato")
 
@@ -62,6 +67,7 @@ async def _pacchetto(args: argparse.Namespace) -> int:
                     catalogo=carica_catalogo(),
                     uscita=args.uscita,
                     adesso=datetime.now(UTC),
+                    url_base=args.url_base,
                 )
                 return 0
             with tempfile.TemporaryDirectory(prefix="limen-pacchetto-") as d:

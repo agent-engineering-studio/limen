@@ -572,7 +572,9 @@ e la licenza accanto[^422].
       Formato CSV compresso da `COPY`, un `manifest.json` con versioni,
       `STEP_VERSION`, impronte e licenze, e un file `ATTRIBUZIONI-<risorsa>`
       generato da `dati.yaml`. Una colonna nuova senza licenza assegnata
-      ferma l'export.
+      ferma l'export. Con il pacchetto esce `catalogo-dcat-ap_it.ttl`, i
+      metadati per i cataloghi di dati (#504, `src/limen/data/dcat.py`);
+      `--url-base <URL della release>` vi aggiunge gli indirizzi di download.
     - Le attribuzioni Copernicus sulla mappa: `frontend/src/lib/attribuzioni.ts`;
       nel PDF delle regioni: `src/limen/report/regioni_pdf.py`.
 
