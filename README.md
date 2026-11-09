@@ -1040,16 +1040,13 @@ source (GloFAS from the EWDS, EGMS from the CLMS archive); a «Regions to
 watch» page with PDF reports; DPC radar nowcast and NASA FIRMS fire
 triggers; an ML challenger in nightly shadow mode with public diagnostics;
 MCP and A2A interfaces for AI agents; webhook alerts; an open sensors
-network; nightly off-site backups.
+network; nightly backups (off the server: #490).
 
-**Next:**
-- **The rainfall signal for landslides** (#122): hourly intensity vs.
-  accumulation, the 48-hour window, Caine thresholds per macro-region —
-  always tuned on one group of regions and checked on the others.
-- **Shadow verdict** of the ML challenger (`limen shadow-report`); promotion
-  stays manual.
-- **Reliability plot** for the ML diagnostics, once there are enough real
-  events (#30).
+**Next:** the goal is epic #345 (90 % of reported events forecast within
+72 hours, with at most 10 % of municipality-days on alert). The current
+priorities are a wider truth set, the right rainfall as input, fewer flood
+false alarms and the ML challengers back on the current installation; the
+horizons and their issues are in [`ROADMAP.md`](./ROADMAP.md).
 
 See [`ROADMAP.md`](./ROADMAP.md) and [`CHANGELOG.md`](./CHANGELOG.md).
 

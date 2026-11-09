@@ -438,9 +438,10 @@ issue indicata.
 - **Un solo curatore.** Su 311 modifiche accettate, una sola viene da fuori
   (novembre 2026). È il rischio più serio per un sistema che vuole essere usato per
   proteggere il territorio. ([#514](https://github.com/agent-engineering-studio/limen/issues/514))
-- **La roadmap scritta nel repository è vecchia.** Parla solo di frane e
-  considera futura l'alluvione, che invece è attiva da mesi; la roadmap vera
-  è nelle issue. ([#513](https://github.com/agent-engineering-studio/limen/issues/513))
+- ~~**La roadmap scritta nel repository è vecchia.**~~ Chiuso: `ROADMAP.md`
+  parte dall'obiettivo #345, dà lo stato misurato di ciascun pericolo e tre
+  orizzonti (adesso / poi / più avanti) con i numeri delle issue, senza date
+  non decise; `OSS_IMPACT.md` parla dei tre pericoli. ([#513](https://github.com/agent-engineering-studio/limen/issues/513))
 - **Non c'è un modo semplice per un ente di consegnare i propri eventi.**
   Oggi un evento verificato si registra solo da terminale. *Proposta di dati
   aperti:* chiedere alle Regioni e ai Centri Funzionali di pubblicare gli
