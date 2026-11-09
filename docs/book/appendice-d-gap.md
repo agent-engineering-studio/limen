@@ -63,7 +63,7 @@ gap si chiude dentro Limen.
 | 4 | La «piena ordinaria» del fiume viene da due fonti diverse. | — | [#448](https://github.com/agent-engineering-studio/limen/issues/448) |
 | 4 | Pochi dati sui nubifragi in città. | un catalogo aperto e datato degli allagamenti urbani (Comuni, vigili del fuoco), oggi non disponibile a livello nazionale | [#475](https://github.com/agent-engineering-studio/limen/issues/475) |
 | 4 | L'incendio al Nord e d'inverno è poco misurato. | — | [#476](https://github.com/agent-engineering-studio/limen/issues/476) |
-| 4 | Una soglia unica, mai misurata, per gli avvisi sotto «alto». | — | [#477](https://github.com/agent-engineering-studio/limen/issues/477) |
+| 4 | ~~Una soglia unica, mai misurata, per gli avvisi sotto «alto».~~ Chiuso: una soglia per pericolo nel suo YAML, con la misura accanto. | — | [#477](https://github.com/agent-engineering-studio/limen/issues/477) |
 | 4 | ~~La documentazione tecnica del motore frana non è aggiornata.~~ Chiuso: `scoring-model.md` e `warning-logic.md` seguono `landslide.yaml`, e un test confronta i pesi di S scritti nel documento con quelli del file. | — | [#493](https://github.com/agent-engineering-studio/limen/issues/493) |
 
 ## Capitolo 5. [Misurare prima di cambiare](05-misurare.md)

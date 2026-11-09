@@ -161,6 +161,18 @@ classes:
   high:      [0.42, 0.76]   # FWI 21-38    — High
   very_high: [0.76, 1.00]   # FWI ≥ 38     — Very high / Extreme
 
+# Avvisi sotto «Alto» (#477): la cella avvisa solo se il suo peso del
+# combustibile CORINE arriva a questa soglia. Era ALERT__MIN_STATIC_S, unica
+# per tre pericoli.
+# Misura del 2026-11-09: a 0,5 passa il 41 % delle celle d'Italia ma solo il
+# 32 % delle celle bruciate EFFIS (0,3: 91 % / 97 %; 0,7: 19 % / 19 %). Il gate
+# lavora contro il segnale — gli incendi stanno anche su prati e coltivi, a
+# peso basso — ma toglie poco: il punteggio moltiplica già il combustibile, e
+# il 98,7 % delle righe «Moderato» degli ultimi tre giorni lo passa. Abbassarlo
+# è una scelta da fare con un replay degli avvisi d'estate (#477).
+alerts:
+  min_predisposition: 0.5
+
 # Mappatura presentazionale sulla scala di allerta della Protezione Civile.
 pc_alert:
   none:      verde

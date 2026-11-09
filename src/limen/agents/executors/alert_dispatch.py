@@ -218,6 +218,7 @@ class AlertDispatchExecutor(Executor):
 
         alert_settings = self._settings(None)
         threshold = _resolve_threshold(alert_settings.min_level)
+        min_predisposition = load_hazard_thresholds(self._hazard).alerts.min_predisposition
 
         # V1.5 — hard-escalation cells (acceleration ≥ alarm OR inverse-velocity
         # ≤ alarm) bypass the level threshold entirely. The kinematic regime
@@ -232,11 +233,10 @@ class AlertDispatchExecutor(Executor):
             # "moderate rain on a susceptible slope", not "moderate rain
             # anywhere". Which component carries the predisposition is the
             # hazard's business — S for a slope, fuel for a wildfire — so the
-            # gate asks the breakdown instead of naming one. High+ and hard
-            # escalation bypass it.
+            # gate asks the breakdown instead of naming one, and the threshold
+            # is the hazard's (#477). High+ and hard escalation bypass it.
             selective = (
-                level_at_least(r.level, RiskLevel.High)
-                or r.predisposition >= alert_settings.min_static_s
+                level_at_least(r.level, RiskLevel.High) or r.predisposition >= min_predisposition
             )
             if r.hard_escalation or (level_at_least(r.level, threshold) and selective):
                 above_threshold.append(r)

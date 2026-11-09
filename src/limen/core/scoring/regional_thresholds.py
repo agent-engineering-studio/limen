@@ -398,6 +398,19 @@ class KinematicBlock(_StrictModel):
     weights: KinematicWeights
 
 
+class AlertsBlock(_StrictModel):
+    """Alert policy that depends on the hazard's own scale (#477).
+
+    Below «Alto» a cell alerts only if its static predisposition reaches
+    ``min_predisposition``: «moderate rain on a susceptible slope», not
+    «moderate rain anywhere». Predisposition is S for a landslide, the fuel
+    weight for a wildfire, the hydraulic susceptibility for a flood — three
+    different scales, so the threshold lives with each hazard.
+    """
+
+    min_predisposition: float = Field(..., ge=0.0, le=1.0)
+
+
 class ExposureBlock(_StrictModel):
     """Alert-priority exposure multiplier — NOT a scoring-engine input.
 
@@ -534,6 +547,7 @@ class HazardThresholds(_StrictModel):
 
     model_version: str = Field(..., min_length=1)
     classes: ClassCutoffs
+    alerts: AlertsBlock
     # Alert-priority knob (not scoring) — older YAMLs without it validate.
     exposure: ExposureBlock = Field(default_factory=lambda: ExposureBlock())
     # Optional presentational block — older YAMLs without it validate.

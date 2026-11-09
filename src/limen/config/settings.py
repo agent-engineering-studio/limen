@@ -1134,12 +1134,8 @@ class AlertSettings(BaseSettings):
     # Default Moderate: the §2.5 gauge-rain validation measured that real
     # landslides reach High in only ~3% of cases even with perfect rain, so a
     # High-only pipeline is effectively silent. Sub-High dispatches are gated
-    # by `min_static_s` below to keep them selective.
+    # by each hazard's `alerts.min_predisposition` (#477) to keep them selective.
     min_level: Literal["Low", "Moderate", "High", "VeryHigh"] = "Moderate"
-    # Below-High cells must also sit on a genuinely susceptible slope
-    # (S component ≥ this) to alert — "moderate rain on a susceptible slope",
-    # not "moderate rain anywhere". High/VeryHigh and hard escalation bypass.
-    min_static_s: float = Field(default=0.5, ge=0.0, le=1.0)
     # Window during which a repeat alert for the same cell is suppressed.
     dedup_window_minutes: int = Field(default=180, ge=0)
     # How many top-priority cells to mention explicitly in the payload.
