@@ -655,10 +655,13 @@ corrispondente.
   una cella su tre ha case entro circa 2 km, una su nove una strada, una
   ferrovia o una zona industriale (misura dell'8 novembre 2026).
   *([#473](https://github.com/agent-engineering-studio/limen/issues/473))*
-- **Gli incendi passati visti dal satellite non sono nel catalogo dei dati.**
-  L'archivio NASA 2000-2024 (35 MB, nessuna chiave) non viene scaricato da
-  un'installazione nuova, così la storia degli incendi di ogni cella è vuota e
-  il modello in ombra dell'incendio non ha le sue etichette.
+- ~~**Gli incendi passati visti dal satellite non sono nel catalogo dei dati.**~~
+  Chiuso nel codice: lo storico NASA FIRMS è la voce `firms_storico` del
+  catalogo, e lo scaricano sia `make static-data` sia la pagina di
+  installazione (35 MB, nessuna chiave). Riscrive `fire_events` e la
+  frequenza degli incendi per cella; un archivio non cambiato salta le
+  scritture. Su un'installazione già avviata basta lanciare
+  `limen ingest-fire-history` una volta.
   *([#472](https://github.com/agent-engineering-studio/limen/issues/472))*
 - **La tabella delle rocce** *(chiuso)*. Riconosceva il 30 % delle celle
   solo per sottostringa, e i pesi stavano nel codice. Ora stanno in

@@ -229,3 +229,21 @@ voci:
     licenza: CC-BY 4.0
     attribuzione: © European Union, European Forest Fire Information System (EFFIS), Copernicus EMS
     peso_gb: 0.01
+
+  - id: firms_storico
+    nome: storico degli incendi FIRMS (2000 a oggi)
+    a_cosa_serve: >-
+      Venticinque anni di fuochi rilevati dai satelliti, giorno per giorno: la
+      frequenza degli incendi per cella e le etichette dello sfidante ML
+      dell'incendio. Il punteggio della mappa non lo usa.
+    pericoli: [wildfire]
+    livello: avanzato
+    misura: {tabella: fire_events}
+    procura_con: make static-data
+    fonte: NASA FIRMS — archivio per paese (MODIS e VIIRS)
+    url: https://firms.modaps.eosdis.nasa.gov/country/
+    licenza: CC0 (dati NASA, salvo restrizioni indicate)
+    attribuzione: >-
+      We acknowledge the use of data from NASA LANCE FIRMS
+      (https://earthdata.nasa.gov/firms), part of NASA ESDIS.
+    peso_gb: 0.035

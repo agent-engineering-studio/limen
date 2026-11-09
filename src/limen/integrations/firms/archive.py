@@ -86,10 +86,13 @@ ARCHIVE_PRODUCTS: tuple[ArchiveProduct, ...] = (
 DEFAULT_COUNTRY = "Italy"
 
 
+def cartella_cache() -> Path:
+    """La cartella della cache. Layout theme-first: `data/fires/firms/`."""
+    return Path(os.getenv("LIMEN_DATA_DIR", "./data")).expanduser() / "fires" / "firms"
+
+
 def _cache_path(*, product: ArchiveProduct, year: int, country: str) -> Path:
-    """File di cache. Layout theme-first: `data/fires/firms/`."""
-    root = Path(os.getenv("LIMEN_DATA_DIR", "./data")).expanduser()
-    return root / "fires" / "firms" / firms.archive_filename(product.product, year, country)
+    return cartella_cache() / firms.archive_filename(product.product, year, country)
 
 
 async def fetch_archive_year(
