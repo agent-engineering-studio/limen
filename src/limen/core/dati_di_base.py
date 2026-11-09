@@ -23,6 +23,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict
 
 from limen.config.catalogo_dati import CatalogoDati, VoceDato
+from limen.config.corine import legenda_corine
 from limen.core.models.hazard import HazardType
 
 
@@ -44,6 +45,9 @@ class DatoDiBase(BaseModel):
     valore: float | str | None
     #: La classe, dove il dato è una classe (P3, il codice CORINE, la litologia).
     classe: str | None = None
+    #: Il nome inglese della classe, dove una legenda lo dà (CORINE): la SPA
+    #: scrive la lettura inglese da sé, e una legenda non si copia nel frontend.
+    nome_classe_en: str | None = None
     lettura: str
     fonte: str
     licenza: str
@@ -77,6 +81,11 @@ def _metri(x: float) -> str:
     return f"{_numero(x / 1000, 1)} km" if x >= 1000 else f"{round(x)} m"
 
 
+def _corine_it(codice: float | str) -> str:
+    nome = legenda_corine().nome(str(codice))
+    return f"{nome.it} (CORINE {codice})" if nome else f"classe CORINE {codice}"
+
+
 def _classe_con_nome(nomi: Mapping[str, str]) -> Callable[[float | str, str | None], str]:
     def leggi(_valore: float | str, classe: str | None) -> str:
         if classe is None:
@@ -94,7 +103,7 @@ _LETTURE: dict[str, Callable[[float | str, str | None], str]] = {
     "flood_hazard_norm": _classe_con_nome(_CLASSI_IDRAULICHE),
     "slope_deg": lambda v, _c: f"pendenza {_numero(float(v), 1)}°",
     "quota_sul_fondo_m": lambda v, _c: f"{round(float(v))} m sopra il fondo valle",
-    "landuse_code": lambda v, _c: f"classe CORINE {v}",
+    "landuse_code": lambda v, _c: _corine_it(v),
     "imperviousness_norm": lambda v, _c: f"suolo impermeabilizzato al {round(float(v) * 100)} %",
     "wui_proximity_norm": lambda v, _c: (
         f"vicinanza all'interfaccia urbano-foresta {_numero(float(v), 2)} su 1"
@@ -151,6 +160,10 @@ def _dato(
         lettura = _ASSENTE_QUI.get(colonna, "nessun valore per questa cella")
     else:
         stato, lettura = StatoDato.NON_CARICATO, "non caricato"
+    nome_en = None
+    if colonna == "landuse_code" and valore is not None:
+        nome = legenda_corine().nome(str(valore))
+        nome_en = nome.en if nome else None
     return DatoDiBase(
         id=voce.id,
         nome=voce.nome,
@@ -158,6 +171,7 @@ def _dato(
         stato=stato,
         valore=valore,
         classe=classe if valore is not None else None,
+        nome_classe_en=nome_en,
         lettura=lettura,
         fonte=voce.fonte,
         licenza=voce.licenza,

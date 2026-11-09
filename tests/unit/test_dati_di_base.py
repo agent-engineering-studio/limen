@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from limen.config.catalogo_dati import carica_catalogo
+from limen.config.corine import legenda_corine
 from limen.core.dati_di_base import StatoDato, dati_di_base
 from limen.core.models.hazard import HazardType
 
@@ -41,7 +42,7 @@ def test_letture_deterministiche() -> None:
     assert letture["imperviousness_norm"] == "suolo impermeabilizzato al 42 %"
     assert letture["flood_hazard_norm"] == "P3 elevata"
     assert letture["slope_deg"] == "pendenza 18,3°"
-    assert letture["landuse_code"] == "classe CORINE 311"
+    assert letture["landuse_code"] == "Boschi di latifoglie (CORINE 311)"
     assert letture["distance_to_road_m"] == "strada più vicina a 1,2 km"
     assert letture["litho_weight"] == "Argille (peso 0,85)"
     assert letture["iffi_density_500"] == "3 frane censite entro 500 m"
@@ -67,3 +68,76 @@ def test_la_fonte_accompagna_sempre_il_valore() -> None:
             voce = CAT.voce(d.id)
             assert d.fonte == voce.fonte and d.licenza == voce.licenza
             assert d.attribuzione == voce.attribuzione
+
+
+#: I 44 codici del terzo livello CORINE: i 42 presenti oggi nel database e
+#: 423, 522, che in Italia non compaiono alla risoluzione di 1 km (#470).
+_CODICI_CORINE = [
+    "111",
+    "112",
+    "121",
+    "122",
+    "123",
+    "124",
+    "131",
+    "132",
+    "133",
+    "141",
+    "142",
+    "211",
+    "212",
+    "213",
+    "221",
+    "222",
+    "223",
+    "231",
+    "241",
+    "242",
+    "243",
+    "244",
+    "311",
+    "312",
+    "313",
+    "321",
+    "322",
+    "323",
+    "324",
+    "331",
+    "332",
+    "333",
+    "334",
+    "335",
+    "411",
+    "412",
+    "421",
+    "422",
+    "423",
+    "511",
+    "512",
+    "521",
+    "522",
+    "523",
+]
+
+
+def test_ogni_codice_corine_ha_un_nome_in_due_lingue() -> None:
+    legenda = legenda_corine()
+    assert set(legenda.classi) == set(_CODICI_CORINE)
+    assert all(n.it and n.en for n in legenda.classi.values())
+
+
+def test_corine_ha_il_nome_inglese_per_la_spa() -> None:
+    out = {
+        d.colonna: d
+        for d in dati_di_base(CAT, HazardType.WILDFIRE, {"landuse_code": "312"}, {}, {})
+    }
+    assert out["landuse_code"].nome_classe_en == "Coniferous forest"
+
+
+def test_codice_corine_sconosciuto_resta_leggibile() -> None:
+    out = {
+        d.colonna: d
+        for d in dati_di_base(CAT, HazardType.WILDFIRE, {"landuse_code": "999"}, {}, {})
+    }
+    assert out["landuse_code"].lettura == "classe CORINE 999"
+    assert out["landuse_code"].nome_classe_en is None

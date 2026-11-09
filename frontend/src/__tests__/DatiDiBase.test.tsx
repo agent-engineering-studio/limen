@@ -62,3 +62,30 @@ describe("DatiDiBase in inglese", () => {
     expect(screen.getByText("outside the flood-hazard areas")).toBeInTheDocument();
   });
 });
+
+describe("DatiDiBase, CORINE (#470)", () => {
+  const CORINE: DatoDiBase = {
+    id: "corine",
+    nome: "copertura del suolo (CORINE)",
+    colonna: "landuse_code",
+    stato: "presente",
+    valore: "312",
+    classe: null,
+    nome_classe_en: "Coniferous forest",
+    lettura: "Boschi di conifere (CORINE 312)",
+    fonte: "CORINE Land Cover 2018 (SINAnet / ISPRA)",
+    licenza: "Copernicus, accesso libero",
+    attribuzione: null,
+    url: null,
+  };
+
+  it("mostra il nome della classe, non solo il codice", () => {
+    render(<DatiDiBase dati={[CORINE]} />);
+    expect(screen.getByText("Boschi di conifere (CORINE 312)")).toBeInTheDocument();
+  });
+
+  it("in inglese usa il nome inglese della legenda", () => {
+    render(<DatiDiBase dati={[CORINE]} />, { lingua: "en" });
+    expect(screen.getByText("Coniferous forest (CORINE 312)")).toBeInTheDocument();
+  });
+});
