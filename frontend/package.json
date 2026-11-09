@@ -12,29 +12,29 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@mantine/core": "^9.6.3",
+    "@mantine/core": "^9.7.5",
     "@mantine/hooks": "^9.6.3",
     "maplibre-gl": "^4.7.1",
     "pmtiles": "^3.2.0",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@typescript-eslint/eslint-plugin": "^8.13.0",
-    "@typescript-eslint/parser": "^8.13.0",
+    "@typescript-eslint/eslint-plugin": "^8.72.1",
+    "@typescript-eslint/parser": "^8.72.1",
     "@vitejs/plugin-react": "^4.3.3",
     "eslint": "^9.14.0",
     "eslint-plugin-react": "^7.37.2",
     "eslint-plugin-react-hooks": "^5.0.0",
     "globals": "^15.12.0",
     "jsdom": "^25.0.1",
-    "prettier": "^3.3.3",
+    "prettier": "^3.9.10",
     "typescript": "~5.6.3",
-    "typescript-eslint": "^8.13.0",
+    "typescript-eslint": "^8.72.1",
     "vite": "^5.4.10",
     "vitest": "^2.1.4"
   }
