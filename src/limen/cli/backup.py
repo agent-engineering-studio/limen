@@ -58,24 +58,27 @@ async def _fai(settings: Settings) -> int:
     if store is None:
         return 1
     with tempfile.TemporaryDirectory(prefix="limen-backup-") as d:
-        async with lifespan_pool():
-            # La stessa riga del passo notturno: un backup a mano azzera
-            # l'allarme `backup.stale` come uno di notte.
-            async with tracked(JOB_NIGHTLY, scope="backup") as metrics, acquire() as conn:
-                esito = await esegui_backup(
-                    cfg=settings.backup,
-                    dsn=_dsn(settings),
-                    conn=conn,
-                    store=store,
-                    adesso=datetime.now(UTC),
-                    lavoro=Path(d),
-                    mlflow=mlflow_database(
-                        settings.scoring.mlflow_tracking_uri, settings.db.connection_string
-                    ),
-                )
-                metrics.update(chiave=esito.chiave, byte=esito.byte, a_mano=True)
-                if esito.avvisi:
-                    metrics.update(avvisi=list(esito.avvisi), status="warn")
+        # La stessa riga del passo notturno: un backup a mano azzera
+        # l'allarme `backup.stale` come uno di notte.
+        async with (
+            lifespan_pool(),
+            tracked(JOB_NIGHTLY, scope="backup") as metrics,
+            acquire() as conn,
+        ):
+            esito = await esegui_backup(
+                cfg=settings.backup,
+                dsn=_dsn(settings),
+                conn=conn,
+                store=store,
+                adesso=datetime.now(UTC),
+                lavoro=Path(d),
+                mlflow=mlflow_database(
+                    settings.scoring.mlflow_tracking_uri, settings.db.connection_string
+                ),
+            )
+            metrics.update(chiave=esito.chiave, byte=esito.byte, a_mano=True)
+            if esito.avvisi:
+                metrics.update(avvisi=list(esito.avvisi), status="warn")
     log.info("backup.cli", chiave=esito.chiave, byte=esito.byte, cancellati=len(esito.cancellati))
     return 0
 

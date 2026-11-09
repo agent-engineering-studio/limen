@@ -35,3 +35,17 @@ def test_le_librerie_compagne_sono_tutte_nel_loro_gruppo() -> None:
     assert set(gruppi["librerie-compagne"]["patterns"]) == compagne
     # Il primo gruppo che corrisponde vince: le compagne vanno prima del gruppo generico.
     assert next(iter(gruppi)) == "librerie-compagne"
+
+
+def test_niente_versioni_maggiori_e_un_giro_al_mese() -> None:
+    """Il primo giro aprì dieci PR in un'ora e due PR uv unite in fila
+    ruppero `uv.lock` su main: le maggiori si fanno a mano."""
+    for ecosistema, voce in _config().items():
+        schedule = voce["schedule"]
+        assert isinstance(schedule, dict)
+        assert schedule["interval"] == "monthly", ecosistema
+        if ecosistema == "github-actions":
+            continue
+        ignorate = voce["ignore"]
+        assert isinstance(ignorate, list)
+        assert {"dependency-name": "*", "update-types": ["version-update:semver-major"]} in ignorate

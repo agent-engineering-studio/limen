@@ -1040,7 +1040,7 @@ def descrivi_verita(precisioni: list[str] | None, sorgenti: list[str] | None) ->
     return "; ".join(parti)
 
 
-def soglia_pioggia_da_env(raw: str) -> SogliaPioggiaSismica | None | Literal["yaml"]:
+def soglia_pioggia_da_env(raw: str) -> SogliaPioggiaSismica | Literal["yaml"] | None:
     """``LIMEN_BACKTEST_SOGLIA_SISMICA``: vuota = YAML, ``no`` = senza,
     ``riduzione_max,memoria_giorni`` = quella, letta per ``3·memoria`` giorni.
 
@@ -1067,7 +1067,7 @@ def soglia_pioggia_da_env(raw: str) -> SogliaPioggiaSismica | None | Literal["ya
 
 def soglie_backtest(
     pga_min_g: float | None = None,
-    soglia_pioggia: SogliaPioggiaSismica | None | Literal["yaml"] = "yaml",
+    soglia_pioggia: SogliaPioggiaSismica | Literal["yaml"] | None = "yaml",
 ) -> RegionalThresholds:
     """Le soglie frana del pacchetto, con ``seismic.pga_min_g`` e
     ``seismic.soglia_pioggia`` sovrascritte se date."""
