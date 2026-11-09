@@ -120,7 +120,7 @@ def _objective_factory(
                 continue
             model = lgb.LGBMClassifier(**params)
             model.fit(matrix.X[train_mask], matrix.y[train_mask])
-            proba = model.predict_proba(matrix.X[val_mask])[:, 1]
+            proba = np.asarray(model.predict_proba(matrix.X[val_mask]))[:, 1]
             aucs.append(float(average_precision_score(matrix.y[val_mask], proba)))
         return float(np.mean(aucs)) if aucs else 0.0
 
@@ -165,7 +165,7 @@ def _cv_eval(
         )
         model = lgb.LGBMClassifier(**params)
         model.fit(matrix.X[train_mask], matrix.y[train_mask])
-        proba = model.predict_proba(matrix.X[val_mask])[:, 1]
+        proba = np.asarray(model.predict_proba(matrix.X[val_mask]))[:, 1]
         oof_prob[val_mask] = proba
         if matrix.y[val_mask].sum() > 0:
             aucs.append(auc_pr(matrix.y[val_mask], proba))

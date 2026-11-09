@@ -4,18 +4,32 @@
 # vede subito, ma `fwi-chain` e `rainfall-thresholds` toccano un calcolo e
 # prima del merge vogliono il backtest del pericolo (CONTRIBUTING.md).
 # I messaggi escono come «chore(deps): …», nello stile Conventional Commits.
+#
+# Una volta al mese e niente versioni maggiori (2026-11-09): il primo giro
+# aprì dieci PR in un'ora, e due PR uv unite una dopo l'altra lasciarono
+# `uv.lock` illeggibile su main — ognuna era verde da sola, nessuna con
+# l'altra. Le maggiori (pandas 3, vitest 5, vite 7) sono migrazioni, non
+# aggiornamenti: si fanno a mano, in un branch, con la CI su tutto insieme.
+# testcontainers resta fermo: la 4.15 rompe `tmpfs` nella fixture di PostGIS;
+# asyncpg salta la 0.32.
 version: 2
 updates:
   - package-ecosystem: uv
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
       timezone: Europe/Rome
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
     commit-message:
       prefix: chore
       include: scope
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "testcontainers"
+      # 0.32 va in IndexError nel protocollo su `carica-vettori` (CI di #564).
+      - dependency-name: "asyncpg"
+        versions: ["0.32.x"]
     groups:
       librerie-compagne:
         patterns:
@@ -36,13 +50,15 @@ updates:
   - package-ecosystem: npm
     directory: /frontend
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
       timezone: Europe/Rome
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 1
     commit-message:
       prefix: chore
       include: scope
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       spa-minor-e-patch:
         update-types: ["minor", "patch"]
@@ -50,8 +66,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
       timezone: Europe/Rome
     commit-message:
       prefix: chore

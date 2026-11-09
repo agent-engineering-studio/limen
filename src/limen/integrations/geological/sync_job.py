@@ -59,6 +59,7 @@ def _resolve_path(env_var: str, override: Path | str | None) -> Path | None:
 
 def _read_polygons(shapefile_path: Path, *, field: str) -> list[LithologyPolygon]:
     import geopandas as gpd
+    import pandas as pd
 
     gdf = gpd.read_file(shapefile_path)
     if gdf.crs is None:
@@ -82,7 +83,9 @@ def _read_polygons(shapefile_path: Path, *, field: str) -> list[LithologyPolygon
         if geom is None or geom.is_empty:
             continue
         label = row.get(field)
-        if label is None:
+        # Con pandas 3 una cella vuota di una colonna di testo è NaN, non None:
+        # `str(NaN)` darebbe una litologia «nan» con il peso di ripiego.
+        if label is None or pd.isna(label) or not str(label).strip():
             continue
         out.append(LithologyPolygon(geom=geom, label=str(label)))
     return out
