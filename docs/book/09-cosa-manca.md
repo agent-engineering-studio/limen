@@ -416,12 +416,15 @@ perché conta e, dove c'è, il dato aperto che lo colmerebbe.
 - **Le reti di pluviometri dei cittadini non sono acquisibili.** L'unica rete
   italiana con pluviometri e licenza aperta non ha concesso l'accesso per
   regione. *(issue: #249, #250)*
-- **Limen non esporta i suoi avvisi in un formato standard.** *Proposta:*
-  un'uscita CAP, che i sistemi di allerta già leggono, con la stessa avvertenza
-  che non si tratta di avvisi ufficiali. *([#499](https://github.com/agent-engineering-studio/limen/issues/499))*
-- **Le API di Limen non seguono gli standard OGC moderni.** *Proposta:* una
-  vista OGC API Features dei punteggi per comune e per cella, accanto alle API
-  di oggi. *([#503](https://github.com/agent-engineering-studio/limen/issues/503))*
+- ~~**Limen non esporta i suoi avvisi in un formato standard.**~~ Chiuso:
+  `GET /api/cap` è un feed Atom di messaggi CAP 1.2, uno per comune e pericolo
+  in classe Alta o Molto alta, validi contro lo schema OASIS, con `status`
+  «Exercise» e la nota che non si tratta di avvisi ufficiali. *([#499](https://github.com/agent-engineering-studio/limen/issues/499))*
+- ~~**Le API di Limen non seguono gli standard OGC moderni.**~~ Chiuso per i
+  comuni: `/api/ogc` è un OGC API Features (Core e GeoJSON) con una
+  collezione per pericolo, letta da QGIS e da GDAL. Le celle restano sulle
+  tile vettoriali; la suite di conformità ufficiale (CITE) non è ancora
+  stata eseguita. *([#503](https://github.com/agent-engineering-studio/limen/issues/503))*
 - **Il pacchetto dei dati non è nel catalogo nazionale.** *In parte chiuso:*
   il pacchetto esce con i suoi metadati DCAT-AP_IT (`catalogo-dcat-ap_it.ttl`:
   un dataset per licenza, una distribuzione per file con dimensione e

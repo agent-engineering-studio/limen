@@ -130,8 +130,8 @@ gap si chiude dentro Limen.
 | 9 | L'umidità del suolo a 1 km non è mai stata provata. | umidità del suolo da radar Sentinel-1, [Copernicus Land](https://land.copernicus.eu/en/products/soil-moisture) (licenza da verificare) | [#507](https://github.com/agent-engineering-studio/limen/issues/507) |
 | 9 | Le reti di pluviometri dei cittadini non sono acquisibili. | [MeteoNetwork](https://www.meteonetwork.it) (CC BY 4.0), se concede l'accesso per regione | [#249](https://github.com/agent-engineering-studio/limen/issues/249), [#250](https://github.com/agent-engineering-studio/limen/issues/250) |
 | 9 | I periodi di ritorno delle piene europee (EFAS) non sono usati. | [EFAS](https://www.efas.eu), Copernicus (licenza CEMS); soglie di piena GloFAS aperte | [#522](https://github.com/agent-engineering-studio/limen/issues/522) |
-| 9 | Limen non esporta i suoi avvisi in un formato standard. | — | [#499](https://github.com/agent-engineering-studio/limen/issues/499) |
-| 9 | Le interfacce di Limen non seguono gli standard OGC moderni. | — | [#503](https://github.com/agent-engineering-studio/limen/issues/503) |
+| 9 | ~~Limen non esporta i suoi avvisi in un formato standard.~~ Chiuso: feed CAP 1.2 su `/api/cap`. | — | [#499](https://github.com/agent-engineering-studio/limen/issues/499) |
+| 9 | ~~Le interfacce di Limen non seguono gli standard OGC moderni.~~ Chiuso per i comuni: OGC API Features su `/api/ogc`; suite CITE da eseguire. | — | [#503](https://github.com/agent-engineering-studio/limen/issues/503) |
 | 9 | Il pacchetto dei dati non è nel catalogo nazionale. In parte chiuso: metadati DCAT-AP_IT generati con il pacchetto e validati (DCAT-AP 3.0.1); mancano la release con DOI su Zenodo e un ente che lo raccolga su dati.gov.it. | il pacchetto stesso, CC BY 4.0 / CC BY-SA 4.0 / ODbL | [#504](https://github.com/agent-engineering-studio/limen/issues/504) |
 | 9 | ~~Non c'è un modo guidato per proporre un dato.~~ Chiuso: il modulo «Proposta di dato», con i campi del catalogo, collegato dalla pagina Fonti. | — | [#502](https://github.com/agent-engineering-studio/limen/issues/502) |
 
