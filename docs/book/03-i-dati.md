@@ -279,11 +279,15 @@ Ogni tipo di roccia diventa un peso fra 0 e 1.
 
 **Due limiti.** Il primo è la scala: a 1:500.000 un poligono è largo
 chilometri, e due versanti vicini di roccia diversa finiscono nello stesso
-colore. Il secondo è la tabella che traduce la roccia in peso: copre le
-famiglie principali, ma **93.483 celle (il 30 %)** cadono in tipi di roccia
-che la tabella non riconosce (lave, rocce metamorfiche, formazioni arenacee,
-e perfino i «complessi caotici», scritti al plurale nella carta e al singolare
-nella tabella) e ricevono un valore neutro.
+colore. Il secondo è il peso: la tabella che traduce la roccia in numero sta
+in `landslide.yaml` e ha tutte le 23 classi della carta, ma **15 classi (il
+30 % delle celle)** pesano 0,5, il valore neutro. Non è più una svista: è una
+scelta misurata. Contando dove cadono le frane IFFI, i complessi caotici
+franano 2,6 volte la media e le lave un terzo; eppure, provando questi pesi,
+la suscettibilità statica non distingue meglio le celle delle frane datate
+(0,725 contro 0,729), perché le frane IFFI sono già nel punteggio. Con un
+peso di 0,10 su S, la roccia conta poco, e i numeri non si cambiano per
+avere una tabella più bella.
 
 **Licenza.** La pagina del servizio dice CC BY 4.0, ma le note legali del
 Geoportale parlano anche di uso «ai soli fini istituzionali». Nel dubbio,
@@ -311,7 +315,7 @@ abita, ma tutti sanno in che comune.
       idraulico; i vettori ISPRA si caricano nello schema `sorgenti` con
       `limen carica-vettori`, #426), `dem/` (pendenza, esposizione,
       curvatura; tile del rilievo con `limen dem-tiles`), `corine/`,
-      `imperviousness/`, `geological/` (pesi in `litho_weights.py`),
+      `imperviousness/`, `geological/` (pesi in `landslide.yaml`, `static.lithology`),
       `osm/`.
     - Colonne: `iffi_density_500`, `distance_to_iffi_m`, `pai_class_norm`,
       `flood_hazard_norm`/`flood_hazard_class`, `slope_deg`, `aspect_deg`,
@@ -653,10 +657,11 @@ corrispondente.
   un'installazione nuova, così la storia degli incendi di ogni cella è vuota e
   il modello in ombra dell'incendio non ha le sue etichette.
   *([#472](https://github.com/agent-engineering-studio/limen/issues/472))*
-- **La tabella delle rocce non riconosce il 30 % delle celle.** Lave, rocce
-  metamorfiche, formazioni arenacee e complessi caotici ricevono un valore
-  neutro, e i pesi stanno nel codice invece che nel file di configurazione
-  della frana. *Proposta di open data:* le carte geologiche CARG 1:50.000 di
+- **La tabella delle rocce** *(chiuso)*. Riconosceva il 30 % delle celle
+  solo per sottostringa, e i pesi stavano nel codice. Ora stanno in
+  `landslide.yaml`, con tutte le classi della carta scritte per intero; le 15
+  al valore neutro hanno accanto la misura che lo giustifica. Resta il limite
+  della scala. *Proposta di open data:* le carte geologiche CARG 1:50.000 di
   ISPRA, più dettagliate (copertura e licenza da verificare, vedi il capitolo
   9). *([#471](https://github.com/agent-engineering-studio/limen/issues/471))*
 - **La licenza della carta delle rocce è ambigua.** Finché il Ministero non

@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from limen.core.logging import get_logger
+from limen.core.scoring.regional_thresholds import load_regional_thresholds
 from limen.data.db import acquire
 from limen.data.repos.aoi_repo import get_aoi
 from limen.data.repos.cell_static_factors_repo import count_factors
@@ -660,9 +661,13 @@ async def bootstrap_static_for_aoi(aoi_id: str, *, force: bool = False) -> Boots
 
     geo_fp = fingerprint.of_env_file(LITHO_SHAPEFILE_ENV)
     if geo_fp.available:
-        # La colonna letta fa parte della sorgente: cambiarla deve ricalcolare,
-        # come cambiare il file.
-        geo_fp = replace(geo_fp, parts=(*geo_fp.parts, f"campo={litho_field()}"))
+        # La colonna letta e i pesi di `landslide.yaml` fanno parte della
+        # sorgente: cambiarli deve ricalcolare, come cambiare il file (#471).
+        pesi = load_regional_thresholds().static.lithology
+        geo_fp = replace(
+            geo_fp,
+            parts=(*geo_fp.parts, f"campo={litho_field()}", f"pesi={pesi.model_dump_json()}"),
+        )
     if await gate.needs("geological", geo_fp):
         geo_written = await sync_geological_for_aois(aoi_ids=[aoi_id])
         if geo_written:

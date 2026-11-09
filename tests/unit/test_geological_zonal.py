@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
 from shapely.geometry import LineString, Polygon
 
-from limen.integrations.geological.litho_weights import (
-    DEFAULT_LITHO_WEIGHT,
-    LITHO_WEIGHTS,
-    normalise_litho,
-)
+from limen.core.scoring.regional_thresholds import LithologyWeights, load_regional_thresholds
+from limen.integrations.geological.litho_weights import litho_weight_for
 from limen.integrations.geological.zonal import (
     DISTANCE_CAP_M,
     LithologyPolygon,
@@ -16,36 +15,69 @@ from limen.integrations.geological.zonal import (
     compute_geological_stats,
 )
 
-
 # ---------------------------------------------------------------------------
-# normalise_litho
+# litho_weight_for: la tabella sta in landslide.yaml (#471)
 # ---------------------------------------------------------------------------
-def test_normalise_picks_argille_for_marnose_clays() -> None:
-    key, w = normalise_litho("Argille marnose")
-    assert key == "argille"
-    assert w == LITHO_WEIGHTS["argille"]
+_PESI = load_regional_thresholds().static.lithology
 
 
-def test_normalise_is_case_and_whitespace_tolerant() -> None:
-    a = normalise_litho("  CALCARI  ")
-    b = normalise_litho("calcari")
-    assert a == b
+def test_full_label_matches_exactly() -> None:
+    assert litho_weight_for("Argille") == 0.85
+    assert litho_weight_for("Unita' prevalentemente flyschoidi, torbidi") == 0.80
 
 
-def test_normalise_unknown_returns_neutral_weight() -> None:
-    key, w = normalise_litho("rare exotic stone")
-    assert key == "unknown"
-    assert w == DEFAULT_LITHO_WEIGHT
+def test_match_is_case_and_whitespace_tolerant() -> None:
+    assert litho_weight_for("  ARGILLE  ") == litho_weight_for("Argille")
+    assert litho_weight_for("Marne  e marne\tcalcaree") == 0.70
 
 
-def test_normalise_none_returns_unknown() -> None:
-    key, w = normalise_litho(None)
-    assert key == "unknown"
-    assert w == DEFAULT_LITHO_WEIGHT
+def test_partial_label_is_not_a_substring_match() -> None:
+    assert litho_weight_for("Argille marnose") == _PESI.default
 
 
-def test_litho_weights_are_in_unit_interval() -> None:
-    assert all(0.0 <= w <= 1.0 for w in LITHO_WEIGHTS.values())
+def test_unknown_or_missing_label_takes_yaml_default() -> None:
+    assert litho_weight_for("rare exotic stone") == _PESI.default
+    assert litho_weight_for(None) == _PESI.default
+
+
+def test_every_class_of_the_map_is_in_the_yaml() -> None:
+    legenda = {
+        "Alluvioni e terreni misti",
+        "Calcari e dolomie",
+        "Unita' prevalentemente flyschoidi, torbidi",
+        "Argille",
+        "Sabbie e conglomerati",
+        "Formazioni prevalentemente arenacee",
+        "Lave, piroclastiti ed ignimbriti",
+        "Rocce intrusive",
+        "Metamorfiti di medio grado",
+        "Complessi sedimentari caotici",
+        "Marne e marne calcaree",
+        "Metamorfiti di vario grado",
+        "Metamorfiti di basso grado",
+        "Calcari detritici ed organogeni tipo panchina",
+        "Depositi glaciali",
+        "Laghi e ghiacciai",
+        "Ofioliti e pietre verdi",
+        "Metamorfiti di alto grado",
+        "Gessoso-solfifera, evaporiti",
+        "Conglomerati, brecce e depositi clastici",
+        "Depositi eolici",
+        "Argilloscisti",
+        "Travertini",
+    }
+    assert {k for k in legenda if k.lower() not in _PESI.classes} == set()
+
+
+def test_weights_are_overridden_by_the_yaml() -> None:
+    tabella = LithologyWeights(default=0.1, classes={"Argille": 0.2})
+    assert litho_weight_for("argille", tabella) == 0.2
+    assert litho_weight_for("Calcari e dolomie", tabella) == 0.1
+
+
+def test_weight_outside_unit_interval_is_rejected() -> None:
+    with pytest.raises(ValidationError):
+        LithologyWeights(default=0.5, classes={"Argille": 1.5})
 
 
 # ---------------------------------------------------------------------------
@@ -72,13 +104,13 @@ def test_dominant_lithology_by_intersection_area() -> None:
     stats = compute_geological_stats(
         cells={"c-1": cell},
         lithology_polygons=[
-            LithologyPolygon(geom=argille, label="Argille scagliose"),
-            LithologyPolygon(geom=calcari, label="Calcari massicci"),
+            LithologyPolygon(geom=argille, label="Argille"),
+            LithologyPolygon(geom=calcari, label="Calcari e dolomie"),
         ],
     )
     assert len(stats) == 1
-    assert stats[0].lithology == "Argille scagliose"
-    assert stats[0].litho_weight == LITHO_WEIGHTS["argille"]
+    assert stats[0].lithology == "Argille"
+    assert stats[0].litho_weight == 0.85
 
 
 def test_no_overlap_returns_none_lithology() -> None:

@@ -45,6 +45,42 @@ static:
   # below it discriminate, instead of every IFFI cell saturating at the old
   # hard-coded 3.0 (which flattened S after the ~5x density-query fix).
   iffi_density_saturation: 8.0
+  # Peso di suscettibilità per classe della Carta geolitologica d'Italia
+  # 1:500.000 (MASE), colonna `legenda_li`: etichetta intera, confronto
+  # esatto a meno di maiuscole e spazi. Una classe assente prende `default`.
+  # Misura del 2026-11-08 (#471), 311.874 celle e 4.873 frane datate:
+  # - FR = rapporto di frequenza delle frane IFFI nella classe (quota delle
+  #   frane IFFI / quota delle celle; 1 = come la media italiana);
+  # - la litologia pesa poco su S: l'AUC di S sulle frane datate è 0,729 con
+  #   questi pesi, 0,728 con tutte le classi a 0,5 e 0,725 con i pesi
+  #   ricavati da FR. Nessuna variante migliora S, quindi i valori restano
+  #   quelli in uso: le classi a 0,5 hanno la FR accanto come ragione scritta.
+  lithology:
+    default: 0.5
+    classes:
+      "Argille": 0.85                                          # FR 1,60
+      "Unita' prevalentemente flyschoidi, torbidi": 0.80        # FR 2,19
+      "Argilloscisti": 0.75                                     # FR 0,11 (eventi datati 2,07)
+      "Marne e marne calcaree": 0.70                            # FR 1,29
+      "Sabbie e conglomerati": 0.65                             # FR 0,90
+      "Alluvioni e terreni misti": 0.55                         # FR 0,24
+      "Calcari e dolomie": 0.30                                 # FR 0,96
+      "Calcari detritici ed organogeni tipo panchina": 0.30     # FR 0,11
+      "Complessi sedimentari caotici": 0.50                     # FR 2,60: il più franoso, neutro per la misura sopra
+      "Gessoso-solfifera, evaporiti": 0.50                      # FR 1,98
+      "Conglomerati, brecce e depositi clastici": 0.50          # FR 1,94
+      "Metamorfiti di vario grado": 0.50                        # FR 1,81
+      "Formazioni prevalentemente arenacee": 0.50               # FR 1,73
+      "Metamorfiti di medio grado": 0.50                        # FR 1,48
+      "Depositi glaciali": 0.50                                 # FR 1,36
+      "Ofioliti e pietre verdi": 0.50                           # FR 1,19
+      "Metamorfiti di basso grado": 0.50                        # FR 0,88
+      "Metamorfiti di alto grado": 0.50                         # FR 0,86
+      "Travertini": 0.50                                        # FR 0,47
+      "Rocce intrusive": 0.50                                   # FR 0,40
+      "Laghi e ghiacciai": 0.50                                 # FR 0,38
+      "Lave, piroclastiti ed ignimbriti": 0.50                  # FR 0,37
+      "Depositi eolici": 0.50                                   # FR 0,01
 
 # Sub-weights inside M(c, t) (meteo, time-varying).
 meteo:
