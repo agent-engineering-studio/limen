@@ -129,8 +129,51 @@ class MLScoringEngine(ScoringEngine[ComponentBreakdown]):
             raise MLScoringEngineLoadError(
                 f"No model versions in stage {stage!r} for {registered_model!r}"
             )
-        version = versions[0]
-        model_uri = f"models:/{registered_model}/{stage}"
+        return cls._carica(
+            version=versions[0],
+            model_uri=f"models:/{registered_model}/{stage}",
+            thresholds=thresholds,
+        )
+
+    @classmethod
+    def da_versione(
+        cls,
+        *,
+        tracking_uri: str,
+        registered_model: str,
+        versione: str,
+        thresholds: RegionalThresholds | None = None,
+    ) -> MLScoringEngine:
+        """Una versione precisa, in qualunque stage: è lo sfidante che il
+        backtest misura **prima** che qualcuno lo promuova (#483)."""
+        try:
+            import mlflow
+            from mlflow.tracking import MlflowClient
+        except ImportError as exc:
+            raise MLScoringEngineLoadError(
+                "mlflow not installed — install the `ml` dependency group"
+            ) from exc
+
+        mlflow.set_tracking_uri(tracking_uri)
+        client = MlflowClient(tracking_uri=tracking_uri)
+        try:
+            version = client.get_model_version(registered_model, versione)
+        except Exception as exc:
+            raise MLScoringEngineLoadError(
+                f"MLflow registry lookup failed for {registered_model} v{versione}: {exc}"
+            ) from exc
+        return cls._carica(
+            version=version,
+            model_uri=f"models:/{registered_model}/{versione}",
+            thresholds=thresholds,
+        )
+
+    @classmethod
+    def _carica(
+        cls, *, version: Any, model_uri: str, thresholds: RegionalThresholds | None
+    ) -> MLScoringEngine:
+        import mlflow
+
         try:
             booster = mlflow.lightgbm.load_model(model_uri)
         except Exception as exc:

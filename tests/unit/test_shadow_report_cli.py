@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 
 from limen.cli import shadow_report
-from limen.ml.shadow import AoiShadowStats, ShadowSummary
+from limen.ml.shadow import AoiShadowStats, ConfrontoEsiti, ShadowSummary, confronto_da_righe
 
 SINCE = datetime(2026, 7, 6, 13, tzinfo=UTC)
 
@@ -106,6 +106,15 @@ def _patch_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]
     monkeypatch.setattr(shadow_report, "acquire", _acquire)
     monkeypatch.setattr(shadow_report, "run_migrations", _migrations)
     monkeypatch.setattr(shadow_report, "collect_shadow_summary", _collect)
+
+    async def _confronto(_conn: Any, **_kw: Any) -> ConfrontoEsiti:
+        return confronto_da_righe(
+            carico={"quota": 0.02, "soglia_ml": 0.31, "celle_v1": 40, "celle_ml": 35},
+            truth_rows=[],
+            soglia_v1=0.6,
+        )
+
+    monkeypatch.setattr(shadow_report, "collect_confronto_esiti", _confronto)
     monkeypatch.setattr(shadow_report, "REPORTS_DIR", tmp_path)
     return seen
 
@@ -142,3 +151,44 @@ async def test_a_malformed_cutoff_stops_before_judging(
     monkeypatch.setenv("LIMEN_SHADOW_SINCE", "ieri")
     assert await shadow_report.run() == 1
     assert "since" not in seen
+
+
+def test_il_confronto_per_esito_e_allo_stesso_tasso_di_allerta(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#483: eventi colti e allarmi a vuoto dei due motori, non l'accordo di classe."""
+    eventi = [
+        {"champion_score": 0.7, "ml_probability": 0.05},
+        {"champion_score": 0.2, "ml_probability": 0.40},
+        {"champion_score": 0.65, "ml_probability": 0.50},
+        {"champion_score": None, "ml_probability": None},
+    ]
+    c = confronto_da_righe(
+        carico={"quota": 0.02, "soglia_ml": 0.31, "celle_v1": 40, "celle_ml": 35},
+        truth_rows=eventi,
+        soglia_v1=0.6,
+    )
+    assert (c.colti_v1, c.colti_ml, c.eventi) == (2, 2, 4)
+    assert (c.falsi_v1, c.falsi_ml) == (38, 33)
+
+    monkeypatch.setattr(shadow_report, "REPORTS_DIR", tmp_path)
+    testo = shadow_report._write_report(
+        since=datetime(2026, 8, 1, tzinfo=UTC),
+        aoi_filter=None,
+        stats=[_stats()],
+        truth_rows=[],
+        model_versions=["4"],
+        confronto=c,
+    ).read_text(encoding="utf-8")
+    assert "allo stesso tasso di allerta" in testo
+    assert "| sfidante (ML) | 2/4 | 35 | 33 |" in testo
+    assert "indicativo" in testo
+
+
+def test_senza_allerte_del_campione_non_si_inventa_una_soglia() -> None:
+    c = confronto_da_righe(
+        carico={"quota": 0.0, "soglia_ml": None, "celle_v1": 0, "celle_ml": 0},
+        truth_rows=[{"champion_score": 0.1, "ml_probability": 0.9}],
+        soglia_v1=0.6,
+    )
+    assert c.soglia_ml is None and c.colti_ml == 0

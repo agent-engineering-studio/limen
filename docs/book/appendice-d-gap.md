@@ -82,7 +82,7 @@ gap si chiude dentro Limen.
 
 | Capitolo | Gap | Proposta di open data | Issue |
 |---|---|---|---|
-| 6 | L'esame di promozione del modello che impara non si può superare. | — | [#483](https://github.com/agent-engineering-studio/limen/issues/483) |
+| 6 | ~~L'esame di promozione del modello che impara non si può superare.~~ Chiuso: anticipo, eventi trovati e allarmi a vuoto dal backtest, allo stesso tasso di allerta della formula. | — | [#483](https://github.com/agent-engineering-studio/limen/issues/483) |
 | 6 | Gli esempi e i modelli addestrati non hanno fatto il trasloco sulla macchina attuale. | — | [#486](https://github.com/agent-engineering-studio/limen/issues/486) |
 | 6 | Il modello incendio è rimasto ai vecchi pesi del combustibile. | — | [#485](https://github.com/agent-engineering-studio/limen/issues/485) |
 | 6 | Agli esempi del modello mancano i dati più nuovi (terremoti, radar, movimento del suolo). | [EGMS](https://egms.land.copernicus.eu) (Copernicus, gratuito) | [#380](https://github.com/agent-engineering-studio/limen/issues/380), [#482](https://github.com/agent-engineering-studio/limen/issues/482) |

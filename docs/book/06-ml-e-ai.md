@@ -417,24 +417,37 @@ E anche superandole tutte, il modello riceve solo l'etichetta «idoneo». A
 metterlo in campo è **una persona**, con un comando. Non esiste un percorso
 per cui un modello si promuove da solo durante la notte.
 
-Leggendo il codice per scrivere questo libro abbiamo trovato una cosa che va
-detta: **oggi l'esame non si può superare.** L'anticipo, cioè quante ore
-prima dell'evento il modello lo segnalava, non viene ancora calcolato e il
-programma lo mette a zero, mentre la soglia è 18 ore. Il commento nel codice
-lo dichiara («la risposta onesta finché non arriva la finestra dinamica»),
-ma la conseguenza è che nessun modello può risultare idoneo. Va corretto
-prima di ogni promozione.
+Scrivendo questo libro abbiamo trovato che l'esame, così com'era, **non si
+poteva superare**: l'anticipo non veniva calcolato e valeva zero contro una
+soglia di 18 ore, ed eventi trovati e allarmi a vuoto si misuravano sul
+quaderno di esercizi, dove c'è una frana ogni sei esempi, invece che sulla
+mappa vera. Ora l'esame ha due tempi:
+
+1. **L'addestramento** decide quello che può decidere: se il modello batte la
+   formula, se mette in cima i casi veri, se le sue probabilità sono oneste.
+2. **Il backtest** decide il resto. Lo sfidante si rigioca sugli stessi giorni,
+   sugli stessi eventi e con la stessa pioggia della formula, e va in allerta
+   **sullo stesso numero di celle-ora**: così non può vincere accendendo di
+   più. Da lì escono eventi trovati, allarmi a vuoto e anticipo, con accanto
+   la quota di celle che hanno davvero avuto una frana.
+
+L'etichetta «idoneo» arriva solo se passano entrambi, e il passo in campo
+resta un comando che una persona digita. L'esame nuovo non è ancora stato
+sostenuto da nessun modello: su questa installazione non ce n'è uno
+addestrato (vedi «Gap e come chiuderli»).
 
 ??? note "Per chi sviluppa"
-    - Il controllo è `_check_promotion` in `src/limen/ml/train.py`; le soglie
-      sono `SCORING__PROMOTION_*` in `ScoringSettings`. La chiamata passa
-      `lead_time_hours=0.0` (riga 532), contro
-      `promotion_lead_time_hours_min=18.0`: `promoted` è sempre `False`.
-    - Eventi trovati e allarmi a vuoto sono misurati alla soglia 0,5 sul
-      quaderno con una frana ogni sei esempi, quindi non sono confrontabili
-      con quelli del backtest della formula (capitolo 5). Il confronto
-      corretto è rigiocare il modello nel backtest, sugli stessi giorni e
-      sulle stesse celle della formula.
+    - Le due metà sono `gate_validazione` e `gate_backtest` in
+      `src/limen/ml/promozione.py`; le soglie restano `SCORING__PROMOTION_*`.
+      `limen train` scrive il tag `gate_validazione` e `promoted=False`.
+    - `LIMEN_BACKTEST_SFIDANTE=<versione>` su `limen backtest` carica quella
+      versione del modello frane (`MLScoringEngine.da_versione`, in qualunque
+      stage), la mette in allerta alla quota di celle-ora della V1 e scrive
+      `backtest_*` e `promoted` sul run MLflow. Il report è
+      `backtest_<aoi>_<inizio>_<fine>_sfidante.md`.
+    - `limen shadow-report` confronta i due motori per esito (eventi colti,
+      celle accese, allarmi a vuoto) allo stesso tasso di allerta; l'accordo
+      di classe resta, marcato come indicativo.
     - Promozione vera: `mlflow models transition-stage` e poi
       `SCORING__ENGINE=ml`. Nessun job lo fa.
 
@@ -444,10 +457,9 @@ L'obiettivo di Limen è un'affidabilità altissima ottenuta con calcoli
 **provati**. Per arrivarci con l'apprendimento automatico la strada è chiara,
 e non è breve. In ordine:
 
-1. **Correggere l'esame**: calcolare l'anticipo vero e rigiocare lo sfidante
-   nello stesso backtest della formula, così che i due si confrontino su
-   eventi trovati e allarmi a vuoto, non su numeri diversi. Lavoro di
-   programmazione: alcune settimane.
+1. ~~**Correggere l'esame**~~: fatto (#483). Lo sfidante si rigioca nello
+   stesso backtest della formula, allo stesso tasso di allerta, e l'anticipo
+   è misurato.
 2. **Rimettere insieme il quaderno**: ripristinare o rigenerare i circa
    37.500 esempi di frana e i 30.000 di incendio sull'installazione attuale,
    e riaddestrare l'incendio con i nuovi pesi del combustibile. Lavoro di
@@ -694,7 +706,7 @@ installazione attuale l'8 novembre 2026, in sola lettura.
 | Modello incendio addestrato | misurato in sviluppo (0,35 contro 0,24); non presente; addestrato con i vecchi pesi del combustibile |
 | Sfidante in ombra | spento: il passo notturno risulta «saltato» il 7 e l'8 novembre |
 | Controllo della deriva | gira ogni notte, ma senza sfidante non ha niente da confrontare |
-| Promozione | mai avvenuta; oggi impossibile finché l'esame non calcola l'anticipo |
+| Promozione | mai avvenuta; l'esame ora si può superare, ma non c'è un modello da esaminare |
 | Testi spiegati | 26 su 26 di riserva, senza AI |
 | Revisore di fedeltà | nessun testo da rivedere |
 | Biblioteca di articoli | non attiva |
@@ -713,11 +725,10 @@ installazione attuale l'8 novembre 2026, in sola lettura.
 
 Che cosa manca, in breve. Il dettaglio tecnico sta nella issue indicata.
 
-- **L'esame di promozione non si può superare.** L'anticipo non viene
-  calcolato e vale zero contro una soglia di 18 ore; eventi trovati e allarmi
-  a vuoto sono misurati sul quaderno di esercizi, non sulla mappa vera, e il
-  rapporto in ombra confronta una probabilità con un indice. Finché è così,
-  nessun modello può diventare campione. ([#483](https://github.com/agent-engineering-studio/limen/issues/483))
+- ~~**L'esame di promozione non si può superare.**~~ Chiuso: eventi trovati,
+  allarmi a vuoto e anticipo vengono dal backtest, allo stesso tasso di
+  allerta della formula, e il rapporto in ombra confronta gli esiti invece
+  delle classi. ([#483](https://github.com/agent-engineering-studio/limen/issues/483))
 - **Il quaderno e il registro dei modelli non hanno fatto il trasloco.**
   Sull'installazione attuale mancano i 37.476 esempi di frana, i 30.066 di
   incendio, i modelli addestrati e la storia degli incendi rilevati dai
