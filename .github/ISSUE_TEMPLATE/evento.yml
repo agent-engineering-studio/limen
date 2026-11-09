@@ -1,0 +1,102 @@
+# Segnala un evento (#511): una frana, un'alluvione o un incendio accaduti
+# davvero. I campi sono quelli del file che `limen registra-verifica` legge
+# (vedi «Per chi cura il progetto» in docs/guida/partecipare.md); esito e
+# misura li calcola il fact-check, non chi segnala.
+name: Segnala un evento
+description: Una frana, un'alluvione o un incendio accaduti davvero, con data, luogo e fonte
+title: "evento: "
+labels: ["evento-segnalato"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Non è un canale di emergenza.** Se sei in pericolo chiama il **112**.
+        Questa segnalazione serve a misurare la mappa di Limen: il curatore controlla l'evento su almeno due fonti e lo confronta con quello che Limen diceva nelle 72 ore prima.
+
+  - type: dropdown
+    id: pericolo
+    attributes:
+      label: Pericolo
+      options:
+        - frana (landslide)
+        - alluvione o allagamento (flood)
+        - incendio boschivo (wildfire)
+    validations:
+      required: true
+
+  - type: input
+    id: quando
+    attributes:
+      label: Quando
+      description: Giorno, e ora se la conosci (ora italiana).
+      placeholder: 10/10/2026 verso le 15
+    validations:
+      required: true
+
+  - type: dropdown
+    id: precisione_ora
+    attributes:
+      label: Quanto è precisa l'ora
+      options:
+        - so l'ora (T1)
+        - so se mattina o pomeriggio (T2)
+        - so solo il giorno (T3)
+    validations:
+      required: true
+
+  - type: input
+    id: comuni
+    attributes:
+      label: Comune
+      description: Uno o più Comuni, con la provincia.
+      placeholder: Bagaladi (RC)
+    validations:
+      required: true
+
+  - type: input
+    id: luogo
+    attributes:
+      label: Luogo
+      description: Località, strada, corso d'acqua.
+      placeholder: strada provinciale 3, località San Lorenzo
+
+  - type: input
+    id: coordinate
+    attributes:
+      label: Coordinate (facoltative)
+      description: Latitudine e longitudine, per esempio copiate da una mappa.
+      placeholder: 38.0476, 15.8143
+
+  - type: dropdown
+    id: precisione_luogo
+    attributes:
+      label: Quanto è preciso il luogo
+      options:
+        - il punto esatto (P0)
+        - entro un chilometro circa (P1)
+        - entro una decina di chilometri (P10)
+        - solo il Comune o la zona (P100)
+
+  - type: textarea
+    id: fonti
+    attributes:
+      label: Fonti
+      description: Link ad articoli, comunicati, post ufficiali. Più di una aiuta.
+      placeholder: |
+        https://...
+    validations:
+      required: true
+
+  - type: textarea
+    id: foto
+    attributes:
+      label: Foto (facoltative)
+      description: Trascina qui le foto, e scrivi chi le ha fatte e con quale licenza (per esempio CC BY 4.0). Solo foto tue o con una licenza che ne permette l'uso.
+
+  - type: checkboxes
+    id: conferme
+    attributes:
+      label: Conferme
+      options:
+        - label: L'evento è accaduto davvero e la fonte lo riporta con data e luogo
+          required: true

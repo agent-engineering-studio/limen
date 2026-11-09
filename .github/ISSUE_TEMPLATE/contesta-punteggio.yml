@@ -1,0 +1,72 @@
+# Contesta un punteggio (#511): un conto che non torna o un peso da rivedere.
+# La procedura è in docs/guida/partecipare.md, sezione «Chi fa ricerca».
+name: Contesta un punteggio
+description: Un punteggio della mappa che non torna, con il conto che hai fatto
+title: "punteggio: "
+labels: ["punteggio-contestato"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ogni punteggio si ricalcola: `GET /api/cell/{identificativo}/breakdown?hazard=…` restituisce gli ingredienti, e pesi e soglie sono in `src/limen/config/hazards/<pericolo>.yaml`.
+        Un peso o una soglia nuovi si adottano solo dopo averli provati sugli eventi passati: coglie più eventi senza più allarmi a vuoto?
+
+  - type: input
+    id: cella
+    attributes:
+      label: Identificativo della cella
+      description: Lo mostra la scheda della cella sulla mappa.
+      placeholder: it-toscana|156|158
+    validations:
+      required: true
+
+  - type: dropdown
+    id: pericolo
+    attributes:
+      label: Pericolo
+      options:
+        - frana (landslide)
+        - alluvione (flood)
+        - incendio (wildfire)
+    validations:
+      required: true
+
+  - type: input
+    id: istante
+    attributes:
+      label: Istante
+      description: Data e ora del punteggio, come le mostra la mappa o il campo `computed_at`.
+      placeholder: 2026-11-09 10:00
+    validations:
+      required: true
+
+  - type: input
+    id: valore_mostrato
+    attributes:
+      label: Valore mostrato
+      placeholder: "0,41 (Moderato)"
+    validations:
+      required: true
+
+  - type: input
+    id: valore_atteso
+    attributes:
+      label: Valore che ti aspettavi
+      placeholder: "0,38"
+    validations:
+      required: true
+
+  - type: textarea
+    id: conto
+    attributes:
+      label: Il conto
+      description: Da dove vengono i numeri (risposta del breakdown, YAML, una tua misura) e come li hai combinati. Incolla la risposta dell'API se puoi.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: contesto
+    attributes:
+      label: Contesto (facoltativo)
+      description: Un evento accaduto in quella cella, una carta locale, un dato che Limen non ha.

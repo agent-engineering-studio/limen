@@ -194,6 +194,8 @@ const T = testi(
       "acceso il server.",
     privacyLink: "Dati personali",
     contattiTitolo: "Contatti",
+    partecipa:
+      "Come partecipare: segnalare un evento, contestare un punteggio, proporre un dato",
     contattiDomande: "Domande, idee, segnalazioni pubbliche:",
     contattiDiscussioni: "le discussioni del progetto",
     contattiEnti: "Enti, Protezione civile, ricerca e finanziatori:",
@@ -338,6 +340,8 @@ const T = testi(
       "keep the server running.",
     privacyLink: "Personal data",
     contattiTitolo: "Contact",
+    partecipa:
+      "How to take part: report an event, challenge a score, propose a dataset",
     contattiDomande: "Questions, ideas, public reports:",
     contattiDiscussioni: "the project discussions",
     contattiEnti: "Public bodies, civil protection, research and funders:",
@@ -510,6 +514,9 @@ export function HomePage(): JSX.Element {
           <p>
             {t.contattiEnti}{" "}
             <a href={`mailto:${EMAIL_PROGETTO}`}>{EMAIL_PROGETTO}</a>
+          </p>
+          <p>
+            <a href="#/partecipare">{t.partecipa}</a>
           </p>
           <p>{t.contattiTempi}</p>
           <p className="home-emergenza">

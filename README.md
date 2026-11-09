@@ -1163,6 +1163,11 @@ when an open map of the danger is most useful.
 
 ### Contact
 
+* **Taking part without writing code**: report a real event, challenge a
+  score or propose a dataset — the
+  [«Partecipare» guide](./docs/guida/partecipare.en.md) (also
+  [in Italian](./docs/guida/partecipare.md) and on the map at `#/partecipare`)
+  explains each one, with an example and what happens next.
 * **Questions, ideas, public reports**: the
   [project discussions](https://github.com/agent-engineering-studio/limen/discussions)
   (Q&A for questions, Announcements for news). Bugs and code proposals stay
