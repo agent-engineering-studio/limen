@@ -15,7 +15,7 @@ log = get_logger(__name__)
 _SELECT_SQL = """
 SELECT c.cell_id,
        c.slope_deg, c.aspect_deg, c.elevation_m, c.twi, c.curvature,
-       c.lithology, c.land_cover, c.landuse_code,
+       c.lithology, c.landuse_code,
        c.litho_weight, c.dist_faults_m,
        c.distance_to_iffi_m, c.iffi_density_500,
        c.pai_class_norm,

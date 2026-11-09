@@ -93,7 +93,6 @@ VOCI = [
     ),
     ("Umidità del terreno dalla forma del versante", "count(f.twi)", "mai"),
     ("Distanza dalle faglie", "count(f.dist_faults_m)", "mai"),
-    ("Popolazione ed edifici", "count(f.population_count)", "mai"),
 ]
 
 

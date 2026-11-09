@@ -17,12 +17,16 @@ Currently implemented (no external downloads required):
 Marked as TODO for later prompts (when DEM/raster pipelines and CORINE
 ingest land):
 
-* ``slope_deg``, ``aspect_deg``, ``curvature``, ``twi`` — derived from
-  TINITALY DEM 10 m via rasterio + numpy / scipy.
+* ``slope_deg``, ``aspect_deg``, ``curvature`` — derived from the DTM via
+  rasterio + numpy / scipy.
 * ``elevation_m``       — mean DEM elevation per cell.
-* ``land_cover`` / ``landuse_code`` — CORINE dominant code per cell.
+* ``landuse_code`` — CORINE dominant code per cell.
 * ``lithology`` / ``litho_weight`` / ``dist_faults_m`` — ISPRA Carta
-  Geologica vettoriale.
+  Geologica vettoriale; ``dist_faults_m`` only with ``LIMEN_FAULTS_SHAPEFILE``.
+
+``twi`` has no step (#466): it is a feature of the ML challenger, read as 0
+when NULL, and computing it from the DTM waits for a measurement of its
+signal (AUC on landslides and flooded cells) before it costs a bootstrap.
 """
 
 from limen.integrations.static_bootstrap.orchestrator import bootstrap_static_for_aoi

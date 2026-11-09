@@ -27,7 +27,6 @@ class CellStaticFactors:
     twi: float | None = None
     curvature: float | None = None
     lithology: str | None = None
-    land_cover: str | None = None
     landuse_code: str | None = None
     litho_weight: float | None = None
     dist_faults_m: float | None = None
@@ -64,12 +63,12 @@ async def upsert_many(items: Iterable[CellStaticFactors]) -> int:
                 """
                 INSERT INTO cell_static_factors (
                     cell_id, slope_deg, aspect_deg, elevation_m, twi, curvature,
-                    lithology, land_cover, landuse_code, litho_weight,
+                    lithology, landuse_code, litho_weight,
                     dist_faults_m, distance_to_iffi_m, iffi_density_500,
                     pai_class_norm, flood_hazard_class, flood_hazard_norm, extras
                 ) VALUES (
                     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-                    $14, $15, $16, $17::jsonb
+                    $14, $15, $16::jsonb
                 )
                 ON CONFLICT (cell_id) DO UPDATE
                 SET slope_deg    = COALESCE(EXCLUDED.slope_deg,
@@ -84,8 +83,6 @@ async def upsert_many(items: Iterable[CellStaticFactors]) -> int:
                                             cell_static_factors.curvature),
                     lithology    = COALESCE(EXCLUDED.lithology,
                                             cell_static_factors.lithology),
-                    land_cover   = COALESCE(EXCLUDED.land_cover,
-                                            cell_static_factors.land_cover),
                     landuse_code = COALESCE(EXCLUDED.landuse_code,
                                             cell_static_factors.landuse_code),
                     litho_weight = COALESCE(EXCLUDED.litho_weight,
@@ -112,7 +109,6 @@ async def upsert_many(items: Iterable[CellStaticFactors]) -> int:
                 it.twi,
                 it.curvature,
                 it.lithology,
-                it.land_cover,
                 it.landuse_code,
                 it.litho_weight,
                 it.dist_faults_m,
@@ -138,7 +134,7 @@ async def get_for_cell(cell_id: str) -> CellStaticFactors | None:
         row = await conn.fetchrow(
             """
             SELECT cell_id, slope_deg, aspect_deg, elevation_m, twi, curvature,
-                   lithology, land_cover, landuse_code, litho_weight,
+                   lithology, landuse_code, litho_weight,
                    dist_faults_m, distance_to_iffi_m, iffi_density_500,
                    pai_class_norm, flood_hazard_class, flood_hazard_norm,
                    imperviousness_norm, distance_to_road_m,
@@ -160,7 +156,6 @@ async def get_for_cell(cell_id: str) -> CellStaticFactors | None:
         twi=row["twi"],
         curvature=row["curvature"],
         lithology=row["lithology"],
-        land_cover=row["land_cover"],
         landuse_code=row["landuse_code"],
         litho_weight=row["litho_weight"],
         dist_faults_m=row["dist_faults_m"],
