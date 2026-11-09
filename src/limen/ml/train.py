@@ -40,6 +40,7 @@ from limen.ml.metrics import (
     threshold_sweep,
     tss,
 )
+from limen.ml.promozione import gate_validazione
 
 _log: structlog.stdlib.BoundLogger = get_logger(__name__)
 
@@ -54,7 +55,8 @@ class TrainResult:
     auc_pr_std: float
     brier_mean: float
     baseline_auc_pr: float
-    promoted: bool
+    # La metà del gate che la CV può decidere; `promoted` lo scrive il backtest (#483).
+    validazione_superata: bool
 
 
 def _need_minimum_samples(samples: list[TrainingSample]) -> bool:
@@ -271,28 +273,6 @@ def _compare_algorithms(
     return out
 
 
-def _check_promotion(
-    *,
-    settings: Settings,
-    ml_auc_pr: float,
-    ml_brier: float,
-    baseline_auc_pr: float,
-    hit_rate: float,
-    far: float,
-    lead_time_hours: float,
-) -> bool:
-    """Promotion gate — every floor must clear; ML must beat the baseline."""
-    g = settings.scoring
-    return (
-        ml_auc_pr >= g.promotion_auc_pr_min
-        and ml_brier <= g.promotion_brier_max
-        and hit_rate >= g.promotion_hit_rate_min
-        and far <= g.promotion_far_max
-        and lead_time_hours >= g.promotion_lead_time_hours_min
-        and ml_auc_pr > baseline_auc_pr
-    )
-
-
 async def run_training(
     *, settings: Settings | None = None, hazard: HazardType = DEFAULT_HAZARD
 ) -> TrainResult:
@@ -324,7 +304,7 @@ async def run_training(
             auc_pr_std=0.0,
             brier_mean=0.0,
             baseline_auc_pr=0.0,
-            promoted=False,
+            validazione_superata=False,
         )
 
     # Per l'incendio solo i campioni con il meteo ricostruito: un positivo
@@ -343,7 +323,7 @@ async def run_training(
             auc_pr_std=0.0,
             brier_mean=0.0,
             baseline_auc_pr=0.0,
-            promoted=False,
+            validazione_superata=False,
         )
 
     matrix = to_matrix(samples, hazard=hazard)
@@ -431,7 +411,8 @@ async def run_training(
             **{k: round(v["auc_pr"], 4) for k, v in algorithms.items()},
         )
 
-        # Operational metrics at a sane default threshold (0.5 for probs).
+        # Sul campione caso-controllo (un positivo ogni ~6 righe): utili per
+        # confrontare due run, non con il backtest né con il gate (#483).
         hit_rate, far = hit_rate_far(matrix.y, oof_prob, threshold=0.5)
         tss_05, _, spec_05 = tss(matrix.y, oof_prob, threshold=0.5)
 
@@ -494,7 +475,7 @@ async def run_training(
         registered = s.scoring.mlflow_registered_model
         if hazard is not DEFAULT_HAZARD:
             registered = f"{registered}-{hazard.value}"
-        mlflow.lightgbm.log_model(
+        info = mlflow.lightgbm.log_model(
             final_model.booster_,
             artifact_path="model",
             registered_model_name=registered,
@@ -520,18 +501,16 @@ async def run_training(
                 if p.exists():
                     mlflow.log_artifact(str(p))
 
-        # Lead time defaults to 0 unless we splice in the event times — the
-        # honest answer until the dynamic feature window lands.
-        promoted = _check_promotion(
-            settings=s,
-            ml_auc_pr=auc_pr_mean,
-            ml_brier=brier_calibrated,
-            baseline_auc_pr=baseline_auc,
-            hit_rate=hit_rate,
-            far=far,
-            lead_time_hours=0.0,
+        # Hit rate, falsi allarmi e anticipo non si misurano qui: il campione è
+        # caso-controllo e non sa l'ora dell'evento. Li misura `limen backtest`
+        # con LIMEN_BACKTEST_SFIDANTE, che scrive `promoted` (#483).
+        validazione = gate_validazione(
+            s, ml_auc_pr=auc_pr_mean, ml_brier=brier_calibrated, baseline_auc_pr=baseline_auc
         )
-        mlflow.set_tag("promoted", str(promoted))
+        mlflow.set_tag("gate_validazione", str(validazione))
+        mlflow.set_tag("promoted", "False")
+        versione = info.registered_model_version
+        model_version = str(versione) if versione is not None else None
 
         _log.info(
             "training.done",
@@ -540,17 +519,18 @@ async def run_training(
             n_samples=len(samples),
             auc_pr_mean=auc_pr_mean,
             baseline_auc_pr=baseline_auc,
-            promoted=promoted,
+            validazione_superata=validazione,
+            model_version=model_version,
         )
 
         return TrainResult(
             run_id=run.info.run_id,
-            model_version=None,
+            model_version=model_version,
             auc_pr_mean=auc_pr_mean,
             auc_pr_std=auc_pr_std,
             brier_mean=brier_calibrated,
             baseline_auc_pr=baseline_auc,
-            promoted=promoted,
+            validazione_superata=validazione,
         )
 
 

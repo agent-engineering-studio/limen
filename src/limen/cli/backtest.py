@@ -76,17 +76,26 @@ Configuration knobs (env vars, kept off the dispatcher for parity with
   nodo della cella nel mese, dal file di ``LIMEN_BACKTEST_CLIMA`` (#357).
   Un'AOI che non è nel file ferma il backtest invece di misurarla col
   nazionale.
+* ``LIMEN_BACKTEST_SFIDANTE``    — una versione del modello frane registrata in
+  MLflow (#483). Dopo la V1, ogni AOI si rigioca con lo sfidante sugli stessi
+  eventi e la stessa pioggia, in allerta **allo stesso tasso di celle-ora della
+  V1** (un report `_sfidante.md` accanto). Alla fine hit rate, falsi allarmi e
+  anticipo dello sfidante, sommati sulle AOI, decidono la metà del gate di
+  promozione che la validazione incrociata non può misurare, e il tag
+  ``promoted`` sul run. Lo stage non si sposta: resta un comando dell'operatore.
 """
 
 from __future__ import annotations
 
 import asyncio
+import heapq
 import math
 import os
+from array import array
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError
@@ -104,6 +113,7 @@ from limen.core.models.risk import (
     SeismicHistoryEvent,
     StaticFactors,
 )
+from limen.core.scoring.base import ScoringEngine
 from limen.core.scoring.engine import MultiFactorScoringEngine
 from limen.core.scoring.regional_thresholds import (
     MetricaComuni,
@@ -119,6 +129,7 @@ from limen.integrations._http import SharedHttpClient
 from limen.integrations.openmeteo.client import OpenMeteoHttpClient
 from limen.integrations.openmeteo.dtos import WeatherSample
 from limen.integrations.openmeteo.grid import build_rain_nodes, nearest_node
+from limen.ml.promozione import EsitoBacktest, registra_esito, unisci
 
 if TYPE_CHECKING:
     from limen.integrations.dpc.merging_archive import MergingArchive
@@ -174,6 +185,19 @@ class _BacktestMetrics:
     far: float
     mean_lead_hours: float
     report_path: Path
+    celle: int = 0
+    celle_ore: int = 0
+
+    def esito(self) -> EsitoBacktest:
+        return EsitoBacktest(
+            eventi=self.truth_events,
+            colti=self.hits,
+            falsi_allarmi=self.false_alarms,
+            anticipo_medio_ore=self.mean_lead_hours,
+            celle=self.celle,
+            celle_ore=self.celle_ore,
+            celle_ore_in_allerta=self.alerts_total,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -510,12 +534,22 @@ def _evaluate(
     cella_comune: dict[str, tuple[str, ...]] | None = None,
     api_riferimento: list[Mensile] | None = None,
     thresholds: RegionalThresholds | None = None,
+    engine: ScoringEngine[Any] | None = None,
+    carico: float | None = None,
+    motore: str = "V1",
 ) -> _BacktestMetrics:
     """``antecedenti`` è allineato ai nodi (modalità `nodo`) o lungo 1 (modalità
     `regione`, un valore per tutta l'area come in produzione); ``None`` lascia
-    pioggia antecedente e umidità al valore neutro, come prima."""
+    pioggia antecedente e umidità al valore neutro, come prima.
+
+    ``engine`` sostituisce la V1 (lo sfidante ML, #483). Con ``carico`` la
+    cella-ora è in allerta quando il punteggio sta nella quota ``carico`` più
+    alta della finestra, non quando la classe raggiunge ``alert_level``: una
+    probabilità calibrata e un indice non hanno le stesse classi, e allo stesso
+    tasso di allerta il confronto fra i due motori è sugli esiti."""
     thresholds = thresholds or load_regional_thresholds()
-    engine = MultiFactorScoringEngine(thresholds)
+    engine = engine or MultiFactorScoringEngine(thresholds)
+    per_ora: list[array[float]] = []
     hours = _hourly_window(start, end)
 
     # Assign each cell to its nearest rainfall node once.
@@ -544,6 +578,7 @@ def _evaluate(
         stato = [
             (a.api(t), a.suolo(t)) if a is not None else (None, None) for a in antecedenti or []
         ]
+        bundles: list[CellFeatureBundle] = []
         for i, (sf, _lon, _lat) in enumerate(cells):
             api_mm, suolo = (
                 stato[cell_node[i] if len(stato) == len(nodes) else 0] if stato else (None, None)
@@ -563,18 +598,35 @@ def _evaluate(
                     seismic_history=(scosse or {}).get(sf.cell_id, ()),
                 ),
             )
-            scored = engine.score(bundle)
+            bundles.append(bundle)
+        punteggi = engine.score_many(bundles)
+        if carico is not None:
+            per_ora.append(array("f", (r.score for r in punteggi)))
+        for i, ((sf, _lon, _lat), scored) in enumerate(zip(cells, punteggi, strict=True)):
             punteggi_max[i] = max(punteggi_max[i], scored.score)
             for comune in comune_di[i] if orario else ():
                 serie = orario[comune]
                 serie[h] = max(serie[h], scored.score)
             if sf.cell_id in punteggi_verita:
                 punteggi_verita[sf.cell_id].append((t, scored.score))
-            if _level_at_least(scored.level, alert_level):
+            if carico is None and _level_at_least(scored.level, alert_level):
                 alerts_total += 1
                 alerted_cells.add(sf.cell_id)
                 if sf.cell_id in alert_times:
                     alert_times[sf.cell_id].append(t)
+
+    soglia_carico: float | None = None
+    if carico is not None:
+        soglia_carico = _soglia_quota(per_ora, carico)
+        for h, riga in enumerate(per_ora):
+            for i, v in enumerate(riga):
+                if v >= soglia_carico:
+                    alerts_total += 1
+                    cell_id = cells[i][0].cell_id
+                    alerted_cells.add(cell_id)
+                    if cell_id in alert_times:
+                        alert_times[cell_id].append(hours[h])
+        configurazione += f"; {motore} in allerta a punteggio ≥ {soglia_carico:.4f}"
 
     hits, misses, leads = _match_truth(alert_times, truth, lead_max_hours=lead_max_hours)
 
@@ -630,6 +682,7 @@ def _evaluate(
         a_carico=a_carico,
         comuni=comuni,
         metro_comuni=metro_comuni,
+        motore=motore,
     )
 
     return _BacktestMetrics(
@@ -643,7 +696,28 @@ def _evaluate(
         far=far,
         mean_lead_hours=mean_lead,
         report_path=report,
+        celle=len(cells),
+        celle_ore=len(cells) * len(hours),
     )
+
+
+def _soglia_quota(per_ora: list[array[float]], quota: float) -> float:
+    """Il punteggio che mette in allerta **al massimo** la quota ``quota`` delle celle-ora.
+
+    Un calibratore isotonico dà gradini: molti valori uguali. Se il pari merito
+    sul k-esimo sforerebbe la quota, la soglia sale al valore distinto
+    successivo, così lo sfidante non vince accendendo più della V1 (#483). Una
+    quota zero non accende niente, e nemmeno lo zero.
+    """
+    n = sum(len(r) for r in per_ora)
+    k = round(quota * n)
+    if k == 0:
+        return math.inf
+    primi = heapq.nlargest(k + 1, (v for r in per_ora for v in r))
+    soglia = primi[k - 1]
+    if len(primi) > k and primi[k] == soglia:
+        soglia = min((v for v in primi[:k] if v > soglia), default=math.inf)
+    return soglia if soglia > 0.0 else math.inf
 
 
 def _write_report(
@@ -669,9 +743,11 @@ def _write_report(
     a_carico: tuple[float, float, int] | None = None,
     comuni: PerComune | None = None,
     metro_comuni: MetricaComuni | None = None,
+    motore: str = "V1",
 ) -> Path:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    out = REPORTS_DIR / f"backtest_{aoi_id}_{start.date()}_{end.date()}.md"
+    suffisso = "" if motore == "V1" else "_sfidante"
+    out = REPORTS_DIR / f"backtest_{aoi_id}_{start.date()}_{end.date()}{suffisso}.md"
     if thresholds_hit_min is None:
         riga_hit = f"- **Hit rate**: {hit_rate:.2%} (non è un gate, vedi #243)"
     else:
@@ -696,7 +772,7 @@ def _write_report(
     pass_lead = "PASS" if mean_lead >= thresholds_lead_min else "FAIL"
 
     lines = [
-        f"# Limen backtest report — AOI `{aoi_id}`",
+        f"# Limen backtest report — AOI `{aoi_id}` — {motore}",
         "",
         f"Window: **{start.isoformat()} → {end.isoformat()}**",
         f"Generated: {datetime.now(UTC).isoformat()}",
@@ -1125,6 +1201,26 @@ async def run() -> int:
 
     from limen.integrations.ingv.shakemap_client import IngvNonDisponibileError
 
+    versione_sfidante = os.getenv("LIMEN_BACKTEST_SFIDANTE", "").strip() or None
+    sfidante: ScoringEngine[Any] | None = None
+    if versione_sfidante is not None:
+        from limen.config.settings import get_settings
+        from limen.core.scoring.ml_engine import MLScoringEngine, MLScoringEngineLoadError
+
+        cfg_scoring = get_settings().scoring
+        try:
+            sfidante = MLScoringEngine.da_versione(
+                tracking_uri=cfg_scoring.mlflow_tracking_uri,
+                registered_model=cfg_scoring.mlflow_registered_model,
+                versione=versione_sfidante,
+                thresholds=soglie,
+            )
+        except MLScoringEngineLoadError as exc:
+            log.error("backtest.sfidante.non_caricato", versione=versione_sfidante, error=str(exc))
+            return 1
+    esiti_v1: list[EsitoBacktest] = []
+    esiti_sfidante: list[EsitoBacktest] = []
+
     try:
         async with lifespan_pool():
             await run_migrations()
@@ -1265,6 +1361,50 @@ async def run() -> int:
                     far=metrics.far,
                     mean_lead_hours=metrics.mean_lead_hours,
                     report=str(metrics.report_path),
+                )
+                esiti_v1.append(metrics.esito())
+                if sfidante is not None:
+                    m_sf = _evaluate(
+                        aoi_id=aoi_id,
+                        cells=cells,
+                        nodes=nodes,
+                        node_rainfall=node_rainfall,
+                        truth=truth,
+                        start=start,
+                        end=end,
+                        alert_level=alert_level,
+                        lead_max_hours=lead_max,
+                        antecedenti=antecedenti,
+                        configurazione=configurazione,
+                        scosse=scosse,
+                        api_riferimento=api_riferimento,
+                        thresholds=soglie,
+                        engine=sfidante,
+                        carico=metrics.esito().quota_allertate,
+                        motore=f"sfidante v{versione_sfidante}",
+                    )
+                    log.info(
+                        "backtest.sfidante.done",
+                        aoi_id=aoi_id,
+                        hit_rate=m_sf.hit_rate,
+                        far=m_sf.far,
+                        mean_lead_hours=m_sf.mean_lead_hours,
+                        report=str(m_sf.report_path),
+                    )
+                    esiti_sfidante.append(m_sf.esito())
+            if sfidante is not None and versione_sfidante is not None and esiti_sfidante:
+                from limen.config.settings import get_settings
+
+                impostazioni = get_settings()
+                registra_esito(
+                    finestra=f"{start.isoformat()}/{end.isoformat()}",
+                    aoi=[str(a) for a in aois],
+                    tracking_uri=impostazioni.scoring.mlflow_tracking_uri,
+                    registered_model=impostazioni.scoring.mlflow_registered_model,
+                    versione=versione_sfidante,
+                    sfidante=unisci(esiti_sfidante),
+                    campione=unisci(esiti_v1),
+                    settings=impostazioni,
                 )
     except IngvNonDisponibileError as exc:
         log.error("backtest.sismica.non_disponibile", error=str(exc))

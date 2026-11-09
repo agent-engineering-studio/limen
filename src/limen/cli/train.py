@@ -78,6 +78,7 @@ async def run() -> int:
             run_id=result.run_id,
             auc_pr_mean=result.auc_pr_mean,
             baseline_auc_pr=result.baseline_auc_pr,
-            promoted=result.promoted,
+            model_version=result.model_version,
+            validazione_superata=result.validazione_superata,
         )
     return 0

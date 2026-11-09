@@ -122,6 +122,95 @@ ORDER BY ev.event_time
 """
 
 
+# Confronto per esito (#483): la quota di coppie in cui il campione è almeno
+# «Alto», e la probabilità che mette lo sfidante in allerta sulla stessa quota.
+# Le classi dei due motori non si confrontano: una è un indice, l'altra una
+# probabilità calibrata, e l'accordo di classe misura soprattutto questo.
+_CARICO_SQL = f"""
+WITH p AS (SELECT m.cell_id, m.probability, r.score {_PAIR_LATERAL}),
+q AS (SELECT avg((score >= $4)::int)::float8 AS quota FROM p),
+s AS (
+    SELECT CASE WHEN q.quota > 0 THEN
+        (SELECT percentile_disc(q.quota) WITHIN GROUP (ORDER BY probability DESC) FROM p)
+    END AS soglia_ml
+    FROM q
+)
+SELECT q.quota, s.soglia_ml,
+       (SELECT count(DISTINCT cell_id) FROM p WHERE score >= $4)            AS celle_v1,
+       (SELECT count(DISTINCT cell_id) FROM p WHERE probability >= s.soglia_ml) AS celle_ml
+FROM q, s
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class ConfrontoEsiti:
+    """Eventi colti e celle accese dai due motori, allo stesso tasso di allerta."""
+
+    soglia_v1: float
+    quota_allertate: float
+    soglia_ml: float | None
+    celle_allertate_v1: int
+    celle_allertate_ml: int
+    eventi: int
+    colti_v1: int
+    colti_ml: int
+
+    @property
+    def falsi_v1(self) -> int:
+        return max(0, self.celle_allertate_v1 - self.colti_v1)
+
+    @property
+    def falsi_ml(self) -> int:
+        return max(0, self.celle_allertate_ml - self.colti_ml)
+
+
+def confronto_da_righe(
+    *, carico: dict[str, Any], truth_rows: list[dict[str, Any]], soglia_v1: float
+) -> ConfrontoEsiti:
+    """Puro: dalla riga di `_CARICO_SQL` e dagli eventi della finestra."""
+    soglia_ml = float(carico["soglia_ml"]) if carico.get("soglia_ml") is not None else None
+    colti_v1 = sum(
+        1
+        for r in truth_rows
+        if r["champion_score"] is not None and r["champion_score"] >= soglia_v1
+    )
+    colti_ml = (
+        sum(
+            1
+            for r in truth_rows
+            if r["ml_probability"] is not None and r["ml_probability"] >= soglia_ml
+        )
+        if soglia_ml is not None
+        else 0
+    )
+    return ConfrontoEsiti(
+        soglia_v1=soglia_v1,
+        quota_allertate=float(carico.get("quota") or 0.0),
+        soglia_ml=soglia_ml,
+        celle_allertate_v1=int(carico.get("celle_v1") or 0),
+        celle_allertate_ml=int(carico.get("celle_ml") or 0) if soglia_ml is not None else 0,
+        eventi=len(truth_rows),
+        colti_v1=colti_v1,
+        colti_ml=colti_ml,
+    )
+
+
+async def collect_confronto_esiti(
+    conn: _Conn,
+    *,
+    since: datetime,
+    aoi_filter: str | None,
+    truth_rows: list[dict[str, Any]],
+    hazard: HazardType = DEFAULT_HAZARD,
+) -> ConfrontoEsiti:
+    from limen.core.scoring.regional_thresholds import load_hazard_thresholds
+
+    soglia_v1 = load_hazard_thresholds(hazard).classes.high.lo
+    righe = await conn.fetch(_CARICO_SQL, since, aoi_filter, hazard.value, soglia_v1)
+    carico = dict(righe[0]) if righe else {}
+    return confronto_da_righe(carico=carico, truth_rows=truth_rows, soglia_v1=soglia_v1)
+
+
 class _Conn(Protocol):
     async def fetch(self, query: str, *args: Any) -> list[Any]: ...
 

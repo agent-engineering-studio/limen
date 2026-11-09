@@ -58,15 +58,47 @@ MLflow Model Registry: registered_model with `promoted` tag
 
 ## Promotion gate
 
-Run via `limen train`. The promoted tag is set when EVERY clause holds:
+Il gate ha due metà (#483), perché la validazione incrociata non può misurare
+tutto: gira su un campione caso-controllo (un positivo ogni ~6 righe, quindi
+hit rate e FAR lì sono ottimisti per costruzione) e non conosce l'ora
+dell'evento (quindi niente anticipo). Fino alla #483 l'anticipo era passato
+fisso a 0 contro 18 h: `promoted` era sempre `False`.
+
+**`limen train`** — `gate_validazione` in `limen.ml.promozione`, tag
+`gate_validazione` sul run (e `promoted=False`):
 
 * `auc_pr_mean ≥ SCORING__PROMOTION_AUC_PR_MIN` (default 0.55)
 * `brier_calibrated ≤ SCORING__PROMOTION_BRIER_MAX` (default 0.20)
-* `hit_rate@0.5 ≥ SCORING__PROMOTION_HIT_RATE_MIN` (default 0.70)
-* `far@0.5 ≤ SCORING__PROMOTION_FAR_MAX` (default 0.30)
-* `mean_lead_time_hours ≥ SCORING__PROMOTION_LEAD_TIME_HOURS_MIN` (default 18.0)
-* **`ML AUC-PR > V1 baseline AUC-PR`** — ML must beat the deterministic
-  baseline measured on the SAME spatial-block CV partition.
+* **`ML AUC-PR > V1 baseline AUC-PR`** on the SAME spatial-block CV partition.
+
+`hit_rate_at_0_5` / `far_at_0_5` restano fra le metriche del run, ma sono del
+campione caso-controllo e non entrano nel gate.
+
+**`limen backtest` con `LIMEN_BACKTEST_SFIDANTE=<versione>`** — `gate_backtest`.
+La versione registrata si carica in qualunque stage
+(`MLScoringEngine.da_versione`); ogni AOI si rigioca prima con la V1, poi con lo
+sfidante sugli stessi eventi, la stessa pioggia e gli stessi antecedenti, e lo
+sfidante va in allerta **alla stessa quota di celle-ora della V1** (la sua
+probabilità calibrata e l'indice V1 non hanno le stesse classi). Sommate le AOI:
+
+* `hit_rate ≥ SCORING__PROMOTION_HIT_RATE_MIN` (default 0.70)
+* `far ≤ SCORING__PROMOTION_FAR_MAX` (default 0.30)
+* `anticipo medio ≥ SCORING__PROMOTION_LEAD_TIME_HOURS_MIN` (default 18.0)
+* **eventi colti ≥ quelli della V1**, con una quota di celle-ora in allerta non
+  superiore alla sua: la soglia dello sfidante sale al gradino successivo se il
+  pari merito del calibratore isotonico sforerebbe la quota.
+
+Sul run vanno `backtest_hit_rate`, `backtest_far`, `backtest_anticipo_ore`,
+`backtest_quota_allertate`, `backtest_tasso_base` (celle con evento / celle: un
+hit rate si legge solo accanto a questo) e le stesse tre della V1, più `backtest_finestra`, `backtest_aoi` e
+`backtest_eventi` come tag (un verdetto su due eventi non è un esame); il tag
+`promoted` è `gate_validazione AND gate_backtest`, anche sulla versione del
+modello. Il report dello sfidante è `backtest_<aoi>_<inizio>_<fine>_sfidante.md`.
+
+`limen shadow-report` aggiunge il confronto **per esito** sulla finestra in
+ombra: la quota di coppie in cui il campione è almeno «Alto», la probabilità che
+accende lo sfidante sulla stessa quota, eventi colti, celle accese e allarmi a
+vuoto dei due. L'accordo di classe resta, marcato come indicativo.
 
 Promotion to a stage is then an **operator decision** (`mlflow models
 transition-stage`), not an automatic action — even a passing gate

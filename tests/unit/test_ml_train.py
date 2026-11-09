@@ -6,7 +6,6 @@ import pytest
 
 from limen.ml.train import (
     TrainResult,
-    _check_promotion,
     _need_minimum_samples,
     run_training,
 )
@@ -17,52 +16,6 @@ def settings():  # type: ignore[no-untyped-def]
     from limen.config.settings import Settings
 
     return Settings.model_validate({})
-
-
-def test_promotion_gate_blocks_when_ml_loses(settings) -> None:  # type: ignore[no-untyped-def]
-    """ML below baseline → no promotion even if absolute floors clear."""
-    assert (
-        _check_promotion(
-            settings=settings,
-            ml_auc_pr=0.60,
-            ml_brier=0.10,
-            baseline_auc_pr=0.65,  # baseline beats ML
-            hit_rate=0.80,
-            far=0.20,
-            lead_time_hours=24.0,
-        )
-        is False
-    )
-
-
-def test_promotion_gate_blocks_on_far(settings) -> None:  # type: ignore[no-untyped-def]
-    assert (
-        _check_promotion(
-            settings=settings,
-            ml_auc_pr=0.70,
-            ml_brier=0.10,
-            baseline_auc_pr=0.55,
-            hit_rate=0.85,
-            far=0.50,  # FAR too high
-            lead_time_hours=24.0,
-        )
-        is False
-    )
-
-
-def test_promotion_gate_passes(settings) -> None:  # type: ignore[no-untyped-def]
-    assert (
-        _check_promotion(
-            settings=settings,
-            ml_auc_pr=0.70,
-            ml_brier=0.10,
-            baseline_auc_pr=0.55,
-            hit_rate=0.85,
-            far=0.20,
-            lead_time_hours=24.0,
-        )
-        is True
-    )
 
 
 def test_need_minimum_samples_too_few() -> None:
@@ -103,5 +56,5 @@ async def test_run_training_skips_on_empty_dataset(settings) -> None:  # type: i
     train_mod.fetch_samples = _empty  # type: ignore[assignment]
     result: TrainResult = await run_training(settings=settings)
     assert result.run_id is None
-    assert result.promoted is False
+    assert result.validazione_superata is False
     assert result.auc_pr_mean == 0.0

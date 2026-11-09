@@ -33,6 +33,8 @@ from limen.ml.shadow import (
 )
 from limen.ml.shadow import (
     AoiShadowStats,
+    ConfrontoEsiti,
+    collect_confronto_esiti,
     collect_shadow_summary,
 )
 
@@ -50,6 +52,7 @@ def _write_report(
     stats: list[AoiShadowStats],
     truth_rows: list[dict[str, Any]],
     model_versions: list[str],
+    confronto: ConfrontoEsiti | None = None,
 ) -> Path:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     out = REPORTS_DIR / f"shadow_report_{since.date()}.md"
@@ -79,7 +82,8 @@ def _write_report(
             f"- mean |div| **{s.mean_abs_div:.3f}** · p95 **{s.p95_abs_div:.3f}**"
             f" · max **{s.max_abs_div:.3f}**",
             f"- score correlation (Pearson): **{corr}**",
-            f"- class agreement: **{s.class_agreement:.1%}**",
+            f"- class agreement: **{s.class_agreement:.1%}** (indicativo: un indice e una"
+            " probabilità calibrata non hanno le stesse classi, #483)",
             "",
             "| cell | champion | ml | div |",
             "|------|----------|----|----|",
@@ -109,6 +113,8 @@ def _write_report(
                 f"{r['event_time'].isoformat()} | {ch} | {ml} |"
             )
         lines.append("")
+    if confronto is not None:
+        lines += _righe_confronto(confronto)
     lines += [
         "## Verdict",
         "",
@@ -120,6 +126,26 @@ def _write_report(
     ]
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return out
+
+
+def _righe_confronto(c: ConfrontoEsiti) -> list[str]:
+    righe = [
+        "## Confronto per esito, allo stesso tasso di allerta",
+        "",
+        f"Il campione è in allerta (≥ {c.soglia_v1:g}) nel {c.quota_allertate:.2%} delle coppie;",
+    ]
+    if c.soglia_ml is None:
+        return [*righe, "_il campione non è mai andato in allerta: niente da confrontare._", ""]
+    return [
+        *righe,
+        f"lo sfidante, sulla stessa quota, a probabilità ≥ {c.soglia_ml:.4f}.",
+        "",
+        "| motore | eventi colti | celle accese | allarmi a vuoto |",
+        "|--------|--------------|--------------|-----------------|",
+        f"| campione (V1) | {c.colti_v1}/{c.eventi} | {c.celle_allertate_v1} | {c.falsi_v1} |",
+        f"| sfidante (ML) | {c.colti_ml}/{c.eventi} | {c.celle_allertate_ml} | {c.falsi_ml} |",
+        "",
+    ]
 
 
 async def run() -> int:
@@ -144,6 +170,9 @@ async def run() -> int:
             summary = await collect_shadow_summary(
                 conn, since=since, aoi_filter=aoi_filter, with_top=True
             )
+            confronto = await collect_confronto_esiti(
+                conn, since=since, aoi_filter=aoi_filter, truth_rows=summary.truth_rows
+            )
 
     report = _write_report(
         since=summary.since,
@@ -151,6 +180,7 @@ async def run() -> int:
         stats=summary.stats,
         truth_rows=summary.truth_rows,
         model_versions=summary.model_versions,
+        confronto=confronto,
     )
     log.info(
         "shadow_report.done",
