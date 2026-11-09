@@ -422,9 +422,16 @@ perché conta e, dove c'è, il dato aperto che lo colmerebbe.
 - **Le API di Limen non seguono gli standard OGC moderni.** *Proposta:* una
   vista OGC API Features dei punteggi per comune e per cella, accanto alle API
   di oggi. *([#503](https://github.com/agent-engineering-studio/limen/issues/503))*
-- **Il pacchetto dei dati non è nel catalogo nazionale.** *Proposta:*
-  descriverlo con DCAT-AP_IT e segnalarlo a dati.gov.it, così chi cerca dati
-  sul dissesto lo trova. *([#504](https://github.com/agent-engineering-studio/limen/issues/504))*
+- **Il pacchetto dei dati non è nel catalogo nazionale.** *In parte chiuso:*
+  il pacchetto esce con i suoi metadati DCAT-AP_IT (`catalogo-dcat-ap_it.ttl`:
+  un dataset per licenza, una distribuzione per file con dimensione e
+  SHA-256), validati con le regole europee di DCAT-AP 3.0.1. Restano due passi
+  che non sono codice. Il primo è pubblicare il pacchetto come release con un
+  DOI su Zenodo, che il repository può collegare da solo. Il secondo è
+  dati.gov.it, dove un catalogo entra su richiesta del Responsabile per la
+  transizione digitale di un ente iscritto all'IPA: per un progetto non
+  pubblico la strada è una Regione o un altro ente che lo raccolga nel suo
+  catalogo. *([#504](https://github.com/agent-engineering-studio/limen/issues/504))*
 - ~~**Non c'è un modo guidato per proporre un dato.**~~ Chiuso: la scheda di
   questo capitolo è il modulo «Proposta di dato» del repository, collegato
   dalla pagina Fonti.

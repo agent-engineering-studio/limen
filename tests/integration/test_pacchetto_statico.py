@@ -6,6 +6,7 @@ import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -72,7 +73,7 @@ async def test_ogni_colonna_dello_schema_ha_una_licenza(reset_db: None) -> None:
     assert non_assegnate(colonne) == []
 
 
-async def _esporta(uscita: Path) -> dict[str, object]:
+async def _esporta(uscita: Path) -> dict[str, Any]:
     async with acquire() as conn:
         return await esporta_pacchetto(
             conn=conn, catalogo=carica_catalogo(), uscita=uscita, adesso=ADESSO
@@ -87,6 +88,7 @@ async def test_andata_e_ritorno(strato: None, tmp_path: Path) -> None:
         "ATTRIBUZIONI-cc-by.txt",
         "ATTRIBUZIONI-ispra-by-sa.txt",
         "ATTRIBUZIONI-osm-odbl.txt",
+        "catalogo-dcat-ap_it.ttl",
         "cc-by.cell_static_factors.csv.gz",
         "cc-by.fire_events.csv.gz",
         "ispra-by-sa.cell_static_factors.csv.gz",
@@ -94,6 +96,11 @@ async def test_andata_e_ritorno(strato: None, tmp_path: Path) -> None:
         "osm-odbl.cell_static_factors.csv.gz",
     ]
     assert json.loads((uscita / "manifest.json").read_text())["licenze"] == manifest["licenze"]
+    assert manifest["metadati"] == {"dcat-ap_it": "catalogo-dcat-ap_it.ttl"}
+    dcat = (uscita / "catalogo-dcat-ap_it.ttl").read_text()
+    # Le distribuzioni portano lo SHA-256 del manifest, non uno calcolato a parte.
+    sha = manifest["file"]["osm-odbl.cell_static_factors.csv.gz"]["sha256"]
+    assert f'spdx:checksumValue "{sha}"' in dcat
 
     # Un server nuovo: stessa griglia, niente fattori né impronte.
     async with acquire() as conn:
