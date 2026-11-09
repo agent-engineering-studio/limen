@@ -234,7 +234,8 @@ async def test_anthropic_clients_never_send_temperature(client: Any) -> None:
     async def _create(**kwargs: Any) -> SimpleNamespace:
         sent.update(kwargs)
         return SimpleNamespace(
-            content=[SimpleNamespace(text="ok")],
+            content=[SimpleNamespace(type="text", text="ok")],
+            stop_reason="end_turn",
             usage=SimpleNamespace(input_tokens=1, output_tokens=1),
         )
 
