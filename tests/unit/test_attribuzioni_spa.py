@@ -37,6 +37,7 @@ _CORRISPONDENZE: dict[str, tuple[str, str]] = {
     "strade": ("osm-reti", "OpenStreetMap"),
     "litologia": ("mase-geologia", "Ministero dell'Ambiente e della Sicurezza Energetica"),
     "perimetri_effis": ("effis", "EFFIS"),
+    "firms_storico": ("firms", "NASA"),
 }
 
 _FRASE_ECMWF = (

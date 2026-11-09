@@ -335,89 +335,96 @@ async def _agreement() -> list[tuple[int, dict[str, int]]]:
     ]
 
 
-async def run() -> int:
+async def scarica_e_ingerisci() -> int:
+    """Scarica e scrive, dentro un pool già aperto e senza chiudere il client
+    HTTP condiviso: la usa anche il worker per i download della pagina di
+    installazione (#472), dove il client serve ancora dopo."""
     country = os.getenv("LIMEN_FIRE_HISTORY_COUNTRY", DEFAULT_COUNTRY)
     lo, hi = _year_bounds()
-
-    try:
-        local = await _from_local_csv()
-        hotspots = (
-            local
-            if local is not None
-            else await _download(ARCHIVE_PRODUCTS, lo=lo, hi=hi, country=country)
-        )
-    finally:
-        await SharedHttpClient.aclose()
-
+    local = await _from_local_csv()
+    hotspots = (
+        local
+        if local is not None
+        else await _download(ARCHIVE_PRODUCTS, lo=lo, hi=hi, country=country)
+    )
     if not hotspots:
         log.warning("fire_history.empty", country=country, years=[lo, hi])
         return 1
+    return await _ingerisci(hotspots, country=country, lo=lo, hi=hi)
 
-    async with lifespan_pool():
-        await run_migrations()
-        version = _hotspots_hash(hotspots)
-        existing = await find_version(SOURCE, DATASET, version)
-        if existing is not None:
-            # Il gate di versione protegge le **scritture** — l'upsert delle
-            # detection, la ricostruzione degli eventi, la densità per cella —
-            # non la generazione del report, che è un ricalcolo di secondi su
-            # dati già in tabella. Saltare anche quello significherebbe che
-            # chi rilancia il comando dopo aver corretto il confronto si tiene
-            # il report vecchio, ed è esattamente il caso in cui l'ho scritto.
-            log.info(
-                "fire_history.skip",
-                reason="content unchanged",
-                version=version,
-                version_id=existing.id,
-                fetched=len(hotspots),
-            )
-            report = _write_report(
-                hotspots=0,
-                events=await fire_events_repo.count_events(),
-                country=country,
-                span=await _ingested_span(),
-                agreement=await _agreement(),
-                density=await _density_counts(),
-            )
-            log.info("fire_history.report", report=str(report), rebuilt=False)
-            return 0
 
-        version_id = await record_version(
-            source=SOURCE,
-            dataset=DATASET,
+async def run() -> int:
+    try:
+        async with lifespan_pool():
+            await run_migrations()
+            return await scarica_e_ingerisci()
+    finally:
+        await SharedHttpClient.aclose()
+
+
+async def _ingerisci(hotspots: list[FireHotspot], *, country: str, lo: int, hi: int) -> int:
+    version = _hotspots_hash(hotspots)
+    existing = await find_version(SOURCE, DATASET, version)
+    if existing is not None:
+        # Il gate di versione protegge le **scritture** — l'upsert delle
+        # detection, la ricostruzione degli eventi, la densità per cella —
+        # non la generazione del report, che è un ricalcolo di secondi su
+        # dati già in tabella. Saltare anche quello significherebbe che
+        # chi rilancia il comando dopo aver corretto il confronto si tiene
+        # il report vecchio, ed è esattamente il caso in cui l'ho scritto.
+        log.info(
+            "fire_history.skip",
+            reason="content unchanged",
             version=version,
-            metadata={
-                "country": country,
-                "year_from": lo or None,
-                "year_to": hi,
-                "products": [p.source for p in ARCHIVE_PRODUCTS],
-                "hotspot_count": len(hotspots),
-            },
+            version_id=existing.id,
+            fetched=len(hotspots),
         )
-        written = await upsert_hotspots(hotspots, dataset_version_id=version_id)
-        total = await count_hotspots()
-
-        days = [h.acq_date for h in hotspots]
-        events = await fire_events_repo.rebuild_events(
-            start=min(days), end=max(days), timeout=_STMT_TIMEOUT_S
-        )
-
-        for aoi_id in await list_aoi_ids():
-            await fire_events_repo.refresh_density(aoi_id, timeout=_STMT_TIMEOUT_S)
-
-        # Severità del bruciato per i perimetri EFFIS (#67): hotspot nuovi
-        # cambiano la densità dei perimetri già in tabella.
-        await fire_events_repo.refresh_perimeter_frp(timeout=_STMT_TIMEOUT_S)
-
         report = _write_report(
-            hotspots=written,
-            events=events,
+            hotspots=0,
+            events=await fire_events_repo.count_events(),
             country=country,
             span=await _ingested_span(),
             agreement=await _agreement(),
             density=await _density_counts(),
         )
+        log.info("fire_history.report", report=str(report), rebuilt=False)
+        return 0
 
+    version_id = await record_version(
+        source=SOURCE,
+        dataset=DATASET,
+        version=version,
+        metadata={
+            "country": country,
+            "year_from": lo or None,
+            "year_to": hi,
+            "products": [p.source for p in ARCHIVE_PRODUCTS],
+            "hotspot_count": len(hotspots),
+        },
+    )
+    written = await upsert_hotspots(hotspots, dataset_version_id=version_id)
+    total = await count_hotspots()
+
+    days = [h.acq_date for h in hotspots]
+    events = await fire_events_repo.rebuild_events(
+        start=min(days), end=max(days), timeout=_STMT_TIMEOUT_S
+    )
+
+    for aoi_id in await list_aoi_ids():
+        await fire_events_repo.refresh_density(aoi_id, timeout=_STMT_TIMEOUT_S)
+
+    # Severità del bruciato per i perimetri EFFIS (#67): hotspot nuovi
+    # cambiano la densità dei perimetri già in tabella.
+    await fire_events_repo.refresh_perimeter_frp(timeout=_STMT_TIMEOUT_S)
+
+    report = _write_report(
+        hotspots=written,
+        events=events,
+        country=country,
+        span=await _ingested_span(),
+        agreement=await _agreement(),
+        density=await _density_counts(),
+    )
     log.info(
         "fire_history.done",
         hotspots=written,

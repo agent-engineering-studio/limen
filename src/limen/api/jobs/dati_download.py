@@ -196,6 +196,19 @@ async def _perimetri_effis() -> None:
         )
 
 
+async def _storico_firms() -> None:
+    from limen.cli.ingest_fire_history import scarica_e_ingerisci
+
+    if await scarica_e_ingerisci() != 0:
+        raise DownloadFallitoError("L'archivio FIRMS non ha restituito rilevazioni: riprova.")
+
+
+def _cartella_firms() -> list[Path]:
+    from limen.integrations.firms.archive import cartella_cache
+
+    return [cartella_cache()]
+
+
 def procuratori() -> dict[str, Procuratore]:
     """Come si procura ogni voce del catalogo che si scarica.
 
@@ -222,6 +235,7 @@ def procuratori() -> dict[str, Procuratore]:
         "impermeabilizzazione": Procuratore(_impermeabilizzazione, _cartella_impermeabilizzazione),
         "strade": Procuratore(_strade, lambda: [radice_dati() / "osm"]),
         "perimetri_effis": Procuratore(_perimetri_effis, list),
+        "firms_storico": Procuratore(_storico_firms, _cartella_firms),
     }
 
 
