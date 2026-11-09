@@ -128,7 +128,7 @@ Runner = Callable[[], Coroutine[Any, Any, int]]
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="limen",
-        description="Limen — landslide risk monitoring CLI",
+        description="Limen — landslide, flood and wildfire risk monitoring CLI",
     )
     parser.add_argument("--version", action="version", version=f"limen {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
