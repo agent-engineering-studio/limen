@@ -18,7 +18,7 @@ vi.mock("../lib/api-client", () => ({
   },
 }));
 
-import HomePage from "../components/HomePage";
+import HomePage, { DISCUSSIONI, EMAIL_PROGETTO } from "../components/HomePage";
 import { useLingua } from "../lib/i18n";
 import { fireEvent, render as renderConLingua } from "../test-utils";
 
@@ -59,13 +59,19 @@ describe("HomePage", () => {
       "Territorial risk, cell by cell.",
     );
     expect(screen.getByText("Open the dashboard")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText("312,550")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("312,550")).toBeInTheDocument(),
+    );
     const testo = container.textContent ?? "";
     expect(testo).toContain("0.35 S + 0.40 M");
     expect(testo).toContain("not affiliated with Anthropic");
-    expect(testo).toContain("Contains modified Copernicus Emergency Management Service information");
+    expect(testo).toContain(
+      "Contains modified Copernicus Emergency Management Service information",
+    );
     expect(testo).toContain("ISPRA IdroGEO (CC BY-SA 4.0)");
-    expect(testo).toContain("ECMWF does not accept any liability whatsoever for any error or omission in the data");
+    expect(testo).toContain(
+      "ECMWF does not accept any liability whatsoever for any error or omission in the data",
+    );
     expect(testo).not.toContain("Apri la dashboard");
   });
 
@@ -82,9 +88,32 @@ describe("HomePage", () => {
       );
     }
     renderConLingua(<ConSelettore />);
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/Il rischio del territorio/);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      /Il rischio del territorio/,
+    );
     fireEvent.click(screen.getByText("EN"));
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/Territorial risk/);
-    await waitFor(() => expect(screen.getByText("312,550")).toBeInTheDocument());
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      /Territorial risk/,
+    );
+    await waitFor(() =>
+      expect(screen.getByText("312,550")).toBeInTheDocument(),
+    );
+  });
+
+  it("dice dove scrivere, in quanto si risponde e che non è un canale di emergenza (#508)", () => {
+    render(<HomePage />);
+    expect(
+      screen.getByRole("heading", { name: "Contatti" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "le discussioni del progetto" }),
+    ).toHaveAttribute("href", DISCUSSIONI);
+    expect(screen.getByRole("link", { name: EMAIL_PROGETTO })).toHaveAttribute(
+      "href",
+      `mailto:${EMAIL_PROGETTO}`,
+    );
+    expect(screen.getByText(/Non è un canale di emergenza/)).toHaveTextContent(
+      /112/,
+    );
   });
 });

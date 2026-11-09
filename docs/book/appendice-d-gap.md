@@ -140,7 +140,7 @@ gap si chiude dentro Limen.
 | Capitolo | Gap | Proposta di open data | Issue |
 |---|---|---|---|
 | 10 | Manca una guida per chi non sviluppa. | — | [#511](https://github.com/agent-engineering-studio/limen/issues/511) |
-| 10 | Manca un canale di contatto pubblico. | — | [#508](https://github.com/agent-engineering-studio/limen/issues/508) |
+| 10 | ~~Manca un canale di contatto pubblico.~~ Chiuso: discussioni del repository aperte, sezione «Contatti» nella home e nel README, avviso «non è un canale di emergenza». | — | [#508](https://github.com/agent-engineering-studio/limen/issues/508) |
 | 10 | ~~Nessun primo lavoro facile è segnalato.~~ Chiuso: sei issue `good first issue` aperte, con file, verifica e criterio di accettazione. | — | [#510](https://github.com/agent-engineering-studio/limen/issues/510) |
 | 10 | Un solo curatore. | — | [#514](https://github.com/agent-engineering-studio/limen/issues/514) |
 | 10 | La roadmap scritta nel repository è vecchia. | — | [#513](https://github.com/agent-engineering-studio/limen/issues/513) |
