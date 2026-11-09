@@ -38,7 +38,7 @@ _log: structlog.stdlib.BoundLogger = get_logger(__name__)
 LITHO_SHAPEFILE_ENV = "LIMEN_GEOLOGICAL_SHAPEFILE"
 LITHO_FIELD_ENV = "LIMEN_GEOLOGICAL_FIELD"
 #: La colonna con la litologia nella Carta geolitologica d'Italia: le
-#: etichette che `LITHO_WEIGHTS` riconosce («Calcari…», «Flysch…»).
+#: etichette di `static.lithology` in `landslide.yaml` («Calcari e dolomie»…).
 DEFAULT_LITHO_FIELD = "legenda_li"
 
 

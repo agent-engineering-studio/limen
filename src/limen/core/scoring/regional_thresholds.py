@@ -107,8 +107,38 @@ class StaticWeights(_StrictModel):
         return self
 
 
+class LithologyWeights(_StrictModel):
+    """Peso di suscettibilità (0-1) per classe della carta geolitologica.
+
+    Le chiavi sono le etichette intere della carta: il confronto è esatto, a
+    meno di maiuscole e spazi, perché la corrispondenza per sottostringa
+    lasciava al neutro classi come «Complessi sedimentari caotici» (#471).
+    """
+
+    default: float = Field(..., ge=0.0, le=1.0)
+    classes: dict[str, float]
+
+    @field_validator("classes")
+    @classmethod
+    def _normalised_in_unit_interval(cls, v: dict[str, float]) -> dict[str, float]:
+        fuori = {k: w for k, w in v.items() if not 0.0 <= w <= 1.0}
+        if fuori:
+            raise ValueError(f"lithology weights must be in [0, 1]: {fuori}")
+        return {_normalise_label(k): w for k, w in v.items()}
+
+    def weight_for(self, label: str | None) -> float:
+        if not label:
+            return self.default
+        return self.classes.get(_normalise_label(label), self.default)
+
+
+def _normalise_label(label: str) -> str:
+    return " ".join(label.strip().lower().split())
+
+
 class StaticBlock(_StrictModel):
     weights: StaticWeights
+    lithology: LithologyWeights
     slope_saturation_deg: float = Field(..., gt=0.0, le=90.0)
     # IFFI-density (features within 500 m of a cell) at which the term
     # saturates to 1.0. Was a hard-coded 3.0 in the engine; moved here and

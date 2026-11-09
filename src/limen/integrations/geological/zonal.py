@@ -6,7 +6,7 @@ or as bare ``(geometry, lithology_label)`` tuples) and computes:
 * ``lithology`` — the label whose intersection area with the cell is
   largest. Ties resolve in lexical order.
 * ``litho_weight`` — the susceptibility weight from
-  :func:`normalise_litho`.
+  :func:`litho_weight_for`.
 * ``dist_faults_m`` — geodesic distance from the cell centroid to the
   nearest fault line, capped at ``DISTANCE_CAP_M``.
 
@@ -25,7 +25,7 @@ from shapely.geometry.base import BaseGeometry
 from shapely.strtree import STRtree
 
 from limen.core.logging import get_logger
-from limen.integrations.geological.litho_weights import normalise_litho
+from limen.integrations.geological.litho_weights import litho_weight_for
 
 _log: structlog.stdlib.BoundLogger = get_logger(__name__)
 
@@ -79,10 +79,8 @@ def _dominant_lithology(
             area == best_area and best_label is not None and poly.label < best_label
         ):
             best_area = area
-            label, weight = normalise_litho(poly.label)
             best_label = poly.label
-            best_weight = weight
-            _ = label  # canonical key used inside normalise_litho
+            best_weight = litho_weight_for(poly.label)
     return best_label, best_weight
 
 
