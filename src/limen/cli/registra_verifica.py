@@ -93,10 +93,12 @@ def leggi(path: Path) -> VerificaEvento:
     )
 
 
-def frana_da_verifica(v: VerificaEvento, punto: Point, precisione: str) -> LandslideEvent:
+def frana_da_verifica(
+    v: VerificaEvento, punto: Point, precisione: str, *, sorgente: str = SORGENTE_STAMPA
+) -> LandslideEvent:
     return LandslideEvent(
-        id=f"{SORGENTE_STAMPA}:{v.slug}",
-        source=SORGENTE_STAMPA,
+        id=f"{sorgente}:{v.slug}",
+        source=sorgente,
         event_time=v.evento_at,
         geom=punto,
         temporal_accuracy=v.precisione_ora,

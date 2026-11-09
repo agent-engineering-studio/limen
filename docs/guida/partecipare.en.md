@@ -85,6 +85,34 @@ Limen **is not an official warning system** and does not replace the regional
 Functional Centres or IT-Alert: it is a decision-support tool. Write to
 **gzileni@agentengineering.it**.
 
+### The format of the events file
+
+A spreadsheet saved as CSV (with commas or semicolons, as Excel saves it in
+Italian) or a GeoJSON of points will do. One row per event, with these
+columns; the ones in bold are required:
+
+| Column | What it holds | Example |
+|---|---|---|
+| **`id`** | your identifier for the event, unique in the file | `2025-017` |
+| **`pericolo`** | `frana` (landslide), `alluvione` (flood) or `incendio` (wildfire); the English names work too | `frana` |
+| **`data`** | the day, YYYY-MM-DD | `2025-11-14` |
+| `ora` | the local time, if known | `07:30` |
+| `precisione_ora` | `T1` time known, `T2` half a day, `T3` day only (by default `T1` with a time, otherwise `T3`) | `T2` |
+| **`comuni`** | six-digit ISTAT codes, separated by semicolons | `080006` |
+| **`luogo`** | the place as you write it | `SP 22 per Bagaladi, km 4` |
+| `regione` | the region | `Calabria` |
+| `lon`, `lat` | the point in decimal degrees (WGS84), if known | `15.8312`, `38.0251` |
+| `precisione_luogo` | required with the point: `P0` exact, `P1` within ~1 km, `P10` the municipality, `P100` several municipalities | `P1` |
+| `tipo` | the kind of event, in your own words | `colata di detrito` |
+| **`fonte`** | where it comes from: a report, a record, a link | `verbale 112/2025` |
+| `note` | anything else | |
+
+An [example file](https://github.com/agent-engineering-studio/limen/blob/main/docs/guida/eventi-ente-esempio.csv) has three rows: a landslide dated to the day only, one
+with time and point, a flooding in the morning. Tell us also **under which
+licence** you give them: we recommend CC BY 4.0, which lets anyone reuse them
+with attribution. Dates and places of events are not personal data: do not
+put people's names in the file.
+
 ## If you know a useful dataset: propose it
 
 A regional rain-gauge network, a landslide inventory, a more detailed map:
@@ -113,6 +141,12 @@ the same day. The personal data you send us is handled as explained on the
 [Personal data](#/privacy) page.
 
 ## For the maintainers
+
+An authority's file enters with `limen importa-eventi FILE --ente "Name"
+--licenza "CC BY 4.0"`: it checks every row and ISTAT code first, and if one is
+wrong it writes nothing; then it measures each event like the press
+collection. Running it again is safe: the same file is not read twice, and of
+a growing file only the new rows enter.
 
 An accepted report becomes a fact-check file and then a row of the register
 with `limen registra-verifica FILE`. The fields of the «Report an event» form

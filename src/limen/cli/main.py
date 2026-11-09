@@ -13,6 +13,7 @@ Usage:
     limen registra-verifica  Fact check: un evento verificato entra nel registro (074).
     limen verifiche-report   Eventi verificati contro le previsioni, col tasso di base.
     limen raccolta-eventi    Gli eventi della stampa, dai titoli al registro (#347).
+    limen importa-eventi     Gli eventi datati di un ente (CSV o GeoJSON) nel registro (#509).
     limen anticipo           Quanto prima Limen ha visto un evento, in JSON.
     limen sensore            Registro dei sensori dei cittadini: approva, revoca (#253).
     limen dati               Download dei dati statici, eseguiti dal worker: stato | scarica (#402).
@@ -384,6 +385,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help="salva gli eventi del fact check in verifiche_eventi (e le frane nel truth set)",
     )
     registra.add_argument("files", nargs="+", help="file JSON scritti dalla skill limen-fact-check")
+    importa = sub.add_parser(
+        "importa-eventi",
+        help="gli eventi datati di un ente (CSV o GeoJSON) nel registro delle verifiche (#509)",
+    )
+    importa.add_argument("file", help="CSV (virgola o punto e virgola) o GeoJSON di punti")
+    importa.add_argument("--ente", required=True, help="chi ha fornito gli eventi")
+    importa.add_argument("--licenza", required=True, help="la licenza dei dati, es. «CC BY 4.0»")
     sub.add_parser(
         "raccolta-eventi",
         help="gli eventi della stampa: Google News, estrattore Claude, due testate (#347)",
@@ -570,6 +578,13 @@ def main(argv: list[str] | None = None) -> int:
         from limen.cli.dem_tiles import run as run_dem_tiles
 
         return run_dem_tiles(args.aoi, zoom_max=args.zoom_max)
+    if args.command == "importa-eventi":
+        from limen.cli.importa_eventi import run as run_importa_eventi
+
+        try:
+            return asyncio.run(run_importa_eventi(args.file, ente=args.ente, licenza=args.licenza))
+        except KeyboardInterrupt:  # pragma: no cover
+            return 130
     if args.command == "registra-verifica":
         try:
             return asyncio.run(_run_registra_verifica(args.files))

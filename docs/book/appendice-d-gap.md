@@ -144,7 +144,7 @@ gap si chiude dentro Limen.
 | 10 | ~~Nessun primo lavoro facile è segnalato.~~ Chiuso: sei issue `good first issue` aperte, con file, verifica e criterio di accettazione. | — | [#510](https://github.com/agent-engineering-studio/limen/issues/510) |
 | 10 | Un solo curatore. | — | [#514](https://github.com/agent-engineering-studio/limen/issues/514) |
 | 10 | ~~La roadmap scritta nel repository è vecchia.~~ Chiuso: `ROADMAP.md` con l'obiettivo #345, lo stato per pericolo e tre orizzonti; `OSS_IMPACT.md` multi-pericolo. | — | [#513](https://github.com/agent-engineering-studio/limen/issues/513) |
-| 10 | Non c'è un modo semplice per un ente di consegnare i propri eventi. | eventi datati di Regioni e Centri Funzionali come tabella aperta CC BY 4.0, sul modello di [e-ITALICA](https://doi.org/10.5281/zenodo.14204473) | [#509](https://github.com/agent-engineering-studio/limen/issues/509) |
+| 10 | Non c'è un modo semplice per un ente di consegnare i propri eventi. In parte chiuso: formato nella guida «Partecipare» e `limen importa-eventi`; manca il primo elenco di un ente. | eventi datati di Regioni e Centri Funzionali come tabella aperta CC BY 4.0, sul modello di [e-ITALICA](https://doi.org/10.5281/zenodo.14204473) | [#509](https://github.com/agent-engineering-studio/limen/issues/509) |
 | 10 | Manca un piano di finanziamento scritto. | — | [#512](https://github.com/agent-engineering-studio/limen/issues/512) |
 
 ??? note "Per chi sviluppa: come si aggiorna questo registro"

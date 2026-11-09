@@ -115,6 +115,15 @@ async def esiste(slug: str) -> bool:
         return bool(await conn.fetchval("SELECT 1 FROM verifiche_eventi WHERE slug = $1", slug))
 
 
+async def comuni_noti(codici: list[str]) -> set[str]:
+    """I codici ISTAT fra ``codici`` che Limen conosce."""
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT istat_code FROM comuni WHERE istat_code = ANY($1::text[])", codici
+        )
+    return {str(r["istat_code"]) for r in rows}
+
+
 async def count_by_esito() -> dict[str, int]:
     async with acquire() as conn:
         rows = await conn.fetch("SELECT esito, count(*)::int AS n FROM verifiche_eventi GROUP BY 1")
