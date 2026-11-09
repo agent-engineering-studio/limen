@@ -121,7 +121,11 @@ def registra_esito(
 
     client = MlflowClient(tracking_uri=tracking_uri)
     mv = client.get_model_version(registered_model, versione)
-    run = client.get_run(mv.run_id)
+    run_id = mv.run_id
+    if run_id is None:
+        # Una versione registrata a mano, senza run: non c'è un `gate_validazione` da leggere.
+        raise ValueError(f"{registered_model} v{versione} non ha un run MLflow")
+    run = client.get_run(run_id)
     validazione = run.data.tags.get("gate_validazione") == "True"
     backtest = gate_backtest(settings, sfidante, campione)
     promosso = validazione and backtest
@@ -135,13 +139,13 @@ def registra_esito(
         ("backtest_v1_far", campione.far),
         ("backtest_v1_anticipo_ore", campione.anticipo_medio_ore),
     ):
-        client.log_metric(mv.run_id, nome, valore)
+        client.log_metric(run_id, nome, valore)
     # Da dove viene il verdetto: una finestra di due eventi non è un esame.
-    client.set_tag(mv.run_id, "backtest_finestra", finestra)
-    client.set_tag(mv.run_id, "backtest_aoi", ",".join(aoi))
-    client.set_tag(mv.run_id, "backtest_eventi", str(sfidante.eventi))
-    client.set_tag(mv.run_id, "gate_backtest", str(backtest))
-    client.set_tag(mv.run_id, "promoted", str(promosso))
+    client.set_tag(run_id, "backtest_finestra", finestra)
+    client.set_tag(run_id, "backtest_aoi", ",".join(aoi))
+    client.set_tag(run_id, "backtest_eventi", str(sfidante.eventi))
+    client.set_tag(run_id, "gate_backtest", str(backtest))
+    client.set_tag(run_id, "promoted", str(promosso))
     client.set_model_version_tag(registered_model, versione, "promoted", str(promosso))
     log.info(
         "promozione.esito",
