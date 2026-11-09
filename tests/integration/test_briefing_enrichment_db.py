@@ -290,6 +290,30 @@ async def test_recenti_conta_solo_le_spiegazioni_vere(seeded: None) -> None:
     assert await spiegazioni_repo.recenti(12) == {}
 
 
+async def test_quota_di_ripiego_e_stato_llm(client: httpx.AsyncClient) -> None:
+    """#488: tutto ripiego si vede in /api/status/llm e nel log di degrado."""
+    from structlog.testing import capture_logs
+
+    from limen.api.jobs.briefing_enrichment import _segnala_se_tutto_ripiego
+
+    await _scrivi("Ripiego.", ripiego=True)
+    quota = await spiegazioni_repo.quota_ripiego(24)
+    assert (quota.testi, quota.ripiego, quota.ultimo_dall_ai) == (1, 1, None)
+    body = (await client.get("/api/status/llm")).json()
+    assert (body["testi_24h"], body["ripiego_24h"]) == (1, 1)
+    with capture_logs() as logs:
+        await _segnala_se_tutto_ripiego()
+    assert [e["label"] for e in logs if e["event"] == "integration.degraded"] == ["llm.ripiego"]
+
+    await _scrivi("Scritta dal modello.")
+    quota = await spiegazioni_repo.quota_ripiego(24)
+    assert (quota.testi, quota.ripiego) == (1, 0)
+    assert quota.ultimo_dall_ai is not None
+    with capture_logs() as logs:
+        await _segnala_se_tutto_ripiego()
+    assert not [e for e in logs if e["event"] == "integration.degraded"]
+
+
 async def _scrivi_en(testo: str, *, ripiego: bool = False) -> None:
     await spiegazioni_repo.scrivi(
         aoi_id=_AOI_ID,

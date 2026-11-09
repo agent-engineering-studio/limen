@@ -148,6 +148,38 @@ async def recenti(hours: int) -> dict[tuple[str, str], str]:
 
 
 @dataclass(frozen=True, slots=True)
+class QuotaRipiego:
+    """Quanti testi italiani sono stati scritti nelle ultime ore, e quanti di
+    ripiego (#488): una chiave rifiutata lascia la mappa con i testi
+    deterministici senza che niente lo dica."""
+
+    testi: int
+    ripiego: int
+    ultimo_dall_ai: datetime | None
+
+
+async def quota_ripiego(hours: int) -> QuotaRipiego:
+    async with acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT count(*) FILTER (WHERE scritta > now() - make_interval(hours => $1)) AS testi,
+                   count(*) FILTER (WHERE ripiego
+                                      AND scritta > now() - make_interval(hours => $1)) AS ripiego,
+                   max(scritta) FILTER (WHERE NOT ripiego) AS ultimo_dall_ai
+            FROM spiegazioni_regione
+            WHERE lingua = 'it'
+            """,
+            hours,
+        )
+    assert row is not None
+    return QuotaRipiego(
+        testi=int(row["testi"]),
+        ripiego=int(row["ripiego"]),
+        ultimo_dall_ai=row["ultimo_dall_ai"],
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class DaGiudicare:
     aoi_id: str
     hazard: HazardType

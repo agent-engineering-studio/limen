@@ -257,6 +257,11 @@ def _patch_tracking(monkeypatch: Any) -> list[dict[str, Any]]:
         return []
 
     monkeypatch.setattr(be.spiegazioni_repo, "da_tradurre", _niente_da_tradurre)
+
+    async def _quota(_ore: int) -> spiegazioni_repo.QuotaRipiego:
+        return spiegazioni_repo.QuotaRipiego(testi=0, ripiego=0, ultimo_dall_ai=None)
+
+    monkeypatch.setattr(be.spiegazioni_repo, "quota_ripiego", _quota)
     monkeypatch.setattr(be, "RiskAnalystAgent", lambda _c: _Analyst())
     monkeypatch.setattr(be, "BriefingAgent", lambda _c, grounding=None: _Briefer())
     return rows

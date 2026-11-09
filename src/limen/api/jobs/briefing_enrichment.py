@@ -237,8 +237,26 @@ async def _run(deps: AppDependencies) -> dict[str, int]:
                 metrics["status"] = "skipped"
             out[aoi_id] = out.get(aoi_id, 0) + rows
     log.info("job.briefing_enrichment.summary", aois=len(out), per_aoi=out)
+    await _segnala_se_tutto_ripiego()
     await _traduci(deps, modello or "predefinito")
     return out
+
+
+#: Oltre questa finestra senza un solo testo dell'AI, il ripiego non è più un
+#: incidente ma lo stato dell'installazione (#488).
+_FINESTRA_RIPIEGO_ORE = 24
+
+
+async def _segnala_se_tutto_ripiego() -> None:
+    quota = await spiegazioni_repo.quota_ripiego(_FINESTRA_RIPIEGO_ORE)
+    if quota.testi > 0 and quota.ripiego == quota.testi:
+        log.warning(
+            "integration.degraded",
+            label="llm.ripiego",
+            testi=quota.testi,
+            ore=_FINESTRA_RIPIEGO_ORE,
+            ultimo_dall_ai=quota.ultimo_dall_ai.isoformat() if quota.ultimo_dall_ai else None,
+        )
 
 
 #: Quante traduzioni per tick: tre pericoli per venti regioni sono sessanta

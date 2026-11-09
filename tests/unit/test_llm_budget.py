@@ -15,7 +15,7 @@ from limen.agents.llm_factory import budget
 from limen.agents.llm_factory.base import ChatMessage
 from limen.agents.llm_factory.llamacpp_factory import LlamaCppChatClient
 from limen.api.endpoints import status
-from limen.data.repos import spesa_llm_repo
+from limen.data.repos import spesa_llm_repo, spiegazioni_repo
 from limen.data.repos.spesa_llm_repo import Consumo
 from limen.integrations._http import SharedHttpClient
 
@@ -177,8 +177,13 @@ async def test_la_pagina_pubblica_mostra_i_token_e_non_i_dollari(
     async def _consumi(per: str) -> list[Consumo]:
         return [consumo] if per == "modello" else []
 
+    async def _quota(_ore: int) -> spiegazioni_repo.QuotaRipiego:
+        return spiegazioni_repo.QuotaRipiego(testi=20, ripiego=20, ultimo_dall_ai=None)
+
     monkeypatch.setattr(spesa_llm_repo, "consumi_del_mese", _consumi)
+    monkeypatch.setattr(spiegazioni_repo, "quota_ripiego", _quota)
     out = await status.llm_status(Response())
+    assert (out.testi_24h, out.ripiego_24h) == (20, 20)
     assert out.in_pausa and out.ripresa is not None and out.ripresa.day == 1
     assert (out.richieste, out.input_tokens, out.output_tokens) == (3, 3000, 600)
     assert "costo" not in out.model_dump_json() and "7.5" not in out.model_dump_json()

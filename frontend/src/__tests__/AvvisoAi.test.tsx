@@ -15,14 +15,21 @@ const STATO: LlmStatusResponse = {
   output_tokens: 7890,
   per_giorno: [],
   per_modello: [
-    { chiave: "claude-haiku-5-5", richieste: 40, input_tokens: 120000, output_tokens: 7000 },
+    {
+      chiave: "claude-haiku-5-5",
+      richieste: 40,
+      input_tokens: 120000,
+      output_tokens: 7000,
+    },
     { chiave: "chat-8b", richieste: 2, input_tokens: 3456, output_tokens: 890 },
   ],
 };
 
 describe("AvvisoAi", () => {
   it("non dice niente finché l'AI non è in pausa", async () => {
-    const spia = vi.spyOn(defaultApiClient, "getLlmStatus").mockResolvedValue(STATO);
+    const spia = vi
+      .spyOn(defaultApiClient, "getLlmStatus")
+      .mockResolvedValue(STATO);
     const { container } = render(<AvvisoAi />);
     await waitFor(() => expect(spia).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();
@@ -41,7 +48,9 @@ describe("AvvisoAi", () => {
   });
 
   it("se lo stato non arriva resta muto", async () => {
-    const spia = vi.spyOn(defaultApiClient, "getLlmStatus").mockRejectedValue(new Error("down"));
+    const spia = vi
+      .spyOn(defaultApiClient, "getLlmStatus")
+      .mockRejectedValue(new Error("down"));
     const { container } = render(<AvvisoAi />);
     await waitFor(() => expect(spia).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();
@@ -66,5 +75,35 @@ describe("ConsumiAi", () => {
     });
     render(<ConsumiAi />);
     expect(await screen.findByText(/Nessuna chiamata/)).toBeInTheDocument();
+  });
+
+  it("dice quando tutti i testi delle ultime 24 ore sono di ripiego (#488)", async () => {
+    vi.spyOn(defaultApiClient, "getLlmStatus").mockResolvedValue({
+      ...STATO,
+      richieste: 0,
+      per_modello: [],
+      testi_24h: 26,
+      ripiego_24h: 26,
+    });
+    render(<ConsumiAi />);
+    expect(
+      await screen.findByText(
+        /26 testi delle regioni, 26 di ripiego \(100 %\)/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/l'AI non risponde/)).toBeInTheDocument();
+  });
+
+  it("con l'AI che risponde dà solo la quota", async () => {
+    vi.spyOn(defaultApiClient, "getLlmStatus").mockResolvedValue({
+      ...STATO,
+      testi_24h: 20,
+      ripiego_24h: 1,
+    });
+    render(<ConsumiAi />);
+    expect(
+      await screen.findByText(/20 testi delle regioni, 1 di ripiego \(5 %\)/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/l'AI non risponde/)).toBeNull();
   });
 });

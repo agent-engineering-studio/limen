@@ -25,6 +25,15 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
+#: Haiku 5.5 e i modelli successivi pensano sempre (thinking adattivo), e il
+#: ragionamento consuma `max_tokens` prima del testo: a 1024 il Briefing
+#: tornava con zero parole e 1024 token pagati (#488). Il tetto è largo, il
+#: costo lo decide quanto il modello scrive davvero.
+_MAX_TOKENS_PREDEFINITO = 16000
+#: I ruoli narrativi riformulano numeri già calcolati: non serve ragionare a
+#: lungo, e lo sforzo predefinito di Haiku 5.5 (`medium`) spendeva il tetto.
+_SFORZO = "low"
+
 
 @dataclass
 class AnthropicChatClient:  # Implements the ChatClient Protocol structurally
@@ -65,7 +74,8 @@ class AnthropicChatClient:  # Implements the ChatClient Protocol structurally
         kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": body,
-            "max_tokens": max_tokens or 1024,
+            "max_tokens": max_tokens or _MAX_TOKENS_PREDEFINITO,
+            "output_config": {"effort": _SFORZO},
         }
         if system_parts:
             kwargs["system"] = "\n\n".join(system_parts)
@@ -78,13 +88,29 @@ class AnthropicChatClient:  # Implements the ChatClient Protocol structurally
             input_tokens=response.usage.input_tokens,
             output_tokens=response.usage.output_tokens,
         )
-        # response.content is a list of blocks; concatenate text blocks only.
+        # response.content is a list of blocks; concatenate text blocks only
+        # (thinking blocks come back empty: their display is "omitted").
         parts: list[str] = []
         for block in response.content:
-            text = getattr(block, "text", None)
-            if text:
-                parts.append(str(text))
-        return "".join(parts)
+            if getattr(block, "type", None) == "text":
+                parts.append(str(block.text))
+        testo = "".join(parts)
+        # Un testo vuoto o troncato non è una risposta: chi chiama lo tratta
+        # come un errore del modello e scrive il ripiego, con la ragione vera.
+        if response.stop_reason in {"max_tokens", "refusal"} or not testo.strip():
+            log.warning(
+                "anthropic.risposta_inutilizzabile",
+                model=self.model,
+                ruolo=self.ruolo,
+                stop_reason=response.stop_reason,
+                output_tokens=response.usage.output_tokens,
+                caratteri=len(testo),
+            )
+            raise LlmFactoryError(
+                f"{self.model}: risposta senza testo utilizzabile "
+                f"(stop_reason={response.stop_reason})"
+            )
+        return testo
 
 
 @dataclass

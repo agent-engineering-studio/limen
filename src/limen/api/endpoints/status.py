@@ -24,7 +24,7 @@ from limen.api.schemas import (
     LlmStatusResponse,
     SweepStatus,
 )
-from limen.data.repos import job_runs_repo, spesa_llm_repo
+from limen.data.repos import job_runs_repo, spesa_llm_repo, spiegazioni_repo
 
 router = APIRouter(prefix="/api/status", tags=["status"])
 
@@ -80,6 +80,7 @@ async def llm_status(response: Response) -> LlmStatusResponse:
     per_giorno = await spesa_llm_repo.consumi_del_mese("giorno")
     per_modello = await spesa_llm_repo.consumi_del_mese("modello")
     in_pausa = await budget.superato()
+    quota = await spiegazioni_repo.quota_ripiego(24)
 
     def _pubblico(righe: list[spesa_llm_repo.Consumo]) -> list[ConsumoLlm]:
         return [
@@ -101,4 +102,7 @@ async def llm_status(response: Response) -> LlmStatusResponse:
         output_tokens=sum(r.output_tokens for r in per_modello),
         per_giorno=_pubblico(per_giorno),
         per_modello=_pubblico(per_modello),
+        testi_24h=quota.testi,
+        ripiego_24h=quota.ripiego,
+        ultimo_testo_ai=quota.ultimo_dall_ai,
     )
