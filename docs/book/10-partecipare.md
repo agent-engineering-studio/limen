@@ -445,7 +445,10 @@ issue indicata.
   orizzonti (adesso / poi / più avanti) con i numeri delle issue, senza date
   non decise; `OSS_IMPACT.md` parla dei tre pericoli. ([#513](https://github.com/agent-engineering-studio/limen/issues/513))
 - **Non c'è un modo semplice per un ente di consegnare i propri eventi.**
-  Oggi un evento verificato si registra solo da terminale. *Proposta di dati
+  *In parte chiuso:* il formato è scritto nella guida «Partecipare» (IT + EN),
+  con un file di esempio, e `limen importa-eventi` porta un CSV o un GeoJSON
+  nel registro con la licenza dell'ente, misurato come la cronaca. Manca il
+  primo elenco vero di un ente. *Proposta di dati
   aperti:* chiedere alle Regioni e ai Centri Funzionali di pubblicare gli
   eventi datati (frane, allagamenti) come tabella aperta CC BY 4.0, sul
   modello del catalogo nazionale delle frane innescate da pioggia del CNR

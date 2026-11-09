@@ -86,6 +86,34 @@ Limen **non è un sistema di allertamento ufficiale** e non sostituisce i
 Centri Funzionali né IT-Alert: è uno strumento di supporto alle decisioni.
 Scrivete a **gzileni@agentengineering.it**.
 
+### Il formato del file degli eventi
+
+Va bene un foglio di calcolo salvato in CSV (con la virgola o con il punto e
+virgola, come lo salva Excel in italiano) o un GeoJSON di punti. Una riga per
+evento, con queste colonne; quelle in grassetto sono obbligatorie:
+
+| Colonna | Che cosa contiene | Esempio |
+|---|---|---|
+| **`id`** | il vostro identificativo dell'evento, unico nel file | `2025-017` |
+| **`pericolo`** | `frana`, `alluvione` o `incendio` | `frana` |
+| **`data`** | il giorno, AAAA-MM-GG | `2025-11-14` |
+| `ora` | l'ora locale, se nota | `07:30` |
+| `precisione_ora` | `T1` ora nota, `T2` mezza giornata, `T3` solo il giorno (di default `T1` se c'è l'ora, altrimenti `T3`) | `T2` |
+| **`comuni`** | codici ISTAT a sei cifre, separati da punto e virgola | `080006` |
+| **`luogo`** | la località come la scrivete voi | `SP 22 per Bagaladi, km 4` |
+| `regione` | la regione | `Calabria` |
+| `lon`, `lat` | il punto in gradi decimali (WGS84), se noto | `15.8312`, `38.0251` |
+| `precisione_luogo` | obbligatoria con il punto: `P0` esatto, `P1` entro ~1 km, `P10` il comune, `P100` più comuni | `P1` |
+| `tipo` | il tipo di evento, con le vostre parole | `colata di detrito` |
+| **`fonte`** | da dove viene: un verbale, un rapporto, un link | `verbale 112/2025` |
+| `note` | qualunque altra cosa | |
+
+Un [file di esempio](https://github.com/agent-engineering-studio/limen/blob/main/docs/guida/eventi-ente-esempio.csv) ha tre righe: una frana datata al solo giorno, una
+con ora e punto, un allagamento di mattina. Diteci anche **con quale licenza**
+ce li date: consigliamo la CC BY 4.0, che permette a chiunque di riusarli
+citando la fonte. Le date e i luoghi degli eventi non sono dati personali: non
+mettete nel file nomi di persone.
+
 ## Chi conosce un dato utile: proporlo
 
 Un pluviometro regionale, un inventario di frane, una carta più precisa:
@@ -114,6 +142,12 @@ sempre in giornata. I dati personali che ci mandi sono trattati come spiega la
 pagina [Dati personali](#/privacy).
 
 ## Per chi cura il progetto
+
+Il file di un ente entra con `limen importa-eventi FILE --ente «Nome» --licenza
+«CC BY 4.0»`: controlla prima tutte le righe e i codici ISTAT, e se una è
+sbagliata non scrive niente; poi misura ogni evento come la raccolta della
+stampa. Rilanciarlo è sicuro: lo stesso file non si rilegge, e di un file che
+cresce entrano solo le righe nuove.
 
 Una segnalazione accettata diventa un file del fact-check e poi una riga del
 registro con `limen registra-verifica FILE`. I campi del modulo «Segnala un

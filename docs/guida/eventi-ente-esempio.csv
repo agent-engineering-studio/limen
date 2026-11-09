@@ -1,0 +1,4 @@
+id;pericolo;data;ora;precisione_ora;comuni;luogo;regione;lon;lat;precisione_luogo;tipo;fonte;note
+2025-017;frana;2025-11-14;;;080006;SP 22 per Bagaladi, km 4;Calabria;;;;colata di detrito;Ufficio tecnico comunale, verbale 112/2025;strada chiusa due giorni
+2025-018;frana;2025-11-14;07:30;T1;080006;Località Sant'Elia;Calabria;15.8312;38.0251;P1;scivolamento;Ufficio tecnico comunale, verbale 113/2025;
+2025-021;alluvione;2025-11-22;;T2;080063;Sottopasso di via Nazionale;Calabria;;;;allagamento urbano;https://www.esempio.it/comunicato-22-11;mattina
