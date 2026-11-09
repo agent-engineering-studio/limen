@@ -88,7 +88,7 @@ gap si chiude dentro Limen.
 | 6 | Agli esempi del modello mancano i dati più nuovi (terremoti, radar, movimento del suolo). | [EGMS](https://egms.land.copernicus.eu) (Copernicus, gratuito) | [#380](https://github.com/agent-engineering-studio/limen/issues/380), [#482](https://github.com/agent-engineering-studio/limen/issues/482) |
 | 6 | Le frane con data sono poche e incomplete. | [e-ITALICA](https://doi.org/10.5281/zenodo.14204473) aggiornato oltre il 2021; registri degli interventi di Comuni e Province | [#500](https://github.com/agent-engineering-studio/limen/issues/500) |
 | 6 | Il piccolo modello sulla pioggia non si può addestrare qui e non è collegato a niente. | — | [#487](https://github.com/agent-engineering-studio/limen/issues/487) |
-| 6 | Oggi nessun testo è scritto dall'AI: sono tutti testi di riserva. | — | [#488](https://github.com/agent-engineering-studio/limen/issues/488) |
+| 6 | ~~Oggi nessun testo è scritto dall'AI: sono tutti testi di riserva.~~ Chiuso: chiave valida, tetto di token e sforzo corretti, quota di ripiego in Diagnostica. | — | [#488](https://github.com/agent-engineering-studio/limen/issues/488) |
 | 6 | Il numero sulla mappa non dice quanto è sicuro. | — | [#484](https://github.com/agent-engineering-studio/limen/issues/484) |
 
 ## Capitolo 7. [Come gira](07-come-gira.md)

@@ -331,6 +331,11 @@ class LlmStatusResponse(BaseModel):
     output_tokens: int
     per_giorno: list[ConsumoLlm] = Field(default_factory=list)
     per_modello: list[ConsumoLlm] = Field(default_factory=list)
+    #: Testi delle regioni scritti nelle ultime 24 h, e quanti di ripiego
+    #: deterministico (#488): tutto ripiego vuol dire AI spenta.
+    testi_24h: int = 0
+    ripiego_24h: int = 0
+    ultimo_testo_ai: datetime | None = None
 
 
 # ---------------------------------------------------------------------------

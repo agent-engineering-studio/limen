@@ -558,6 +558,10 @@ export interface LlmStatusResponse {
   output_tokens: number;
   per_giorno: ConsumoLlm[];
   per_modello: ConsumoLlm[];
+  /** Testi delle regioni nelle ultime 24 h e quanti di ripiego (#488). */
+  testi_24h?: number;
+  ripiego_24h?: number;
+  ultimo_testo_ai?: string | null;
 }
 
 /** `GET /api/cell/{id}/rain-outlook` (#159): `outlook` nullo se la fonte

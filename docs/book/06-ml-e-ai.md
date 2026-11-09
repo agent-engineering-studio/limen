@@ -609,8 +609,18 @@ Claude. E qui sta il dato più onesto di questo capitolo: **l'8 novembre 2026
 tutti i 26 testi delle regioni sono il testo di riserva**, scritto senza AI,
 perché la chiave è stata rifiutata dal servizio. La mappa e gli avvisi
 funzionano lo stesso, con le spiegazioni scritte a regole. È esattamente
-quello per cui il sistema è stato progettato, ma vuol dire che oggi la parte
-«intelligente» dei testi è spenta.
+quello per cui il sistema è stato progettato, ma vuol dire che quel giorno la
+parte «intelligente» dei testi era spenta.
+
+Il 9 novembre è arrivata una chiave valida, e i testi sono rimasti di
+riserva lo stesso. La ragione era un'altra: Claude Haiku 5.5 ragiona sempre
+prima di scrivere, e il ragionamento consuma lo stesso tetto di token del
+testo. Con il tetto a 1.024 il modello finiva i token pensando e consegnava
+zero parole: pagate, e buttate. Ora il tetto è largo e lo sforzo di
+ragionamento è «basso», perché riformulare numeri già calcolati non ne ha
+bisogno: alla prova, 226 parole in 681 token. E soprattutto adesso si vede:
+la pagina Diagnostica dice quanti testi delle ultime 24 ore sono di riserva,
+e se lo sono tutti lo dice in chiaro.
 
 ??? note "Per chi sviluppa"
     - Gateway su `:8091`, llama-swap su `:8083`, embedding su `:8082`; dai
@@ -736,10 +746,11 @@ Che cosa manca, in breve. Il dettaglio tecnico sta nella issue indicata.
   macchina, e non è collegato a niente.** La libreria che serve non esiste
   più per i Mac con processore Intel, e il modello finale non viene usato da
   nessun passo del calcolo. ([#487](https://github.com/agent-engineering-studio/limen/issues/487))
-- **Oggi nessun testo è scritto dall'AI.** La chiave del servizio in cloud è
-  rifiutata e la macchina non ha la scheda grafica per il modello locale:
-  tutti i testi sono quelli di riserva. Non cambia nessun numero, ma la
-  spiegazione a parole è spenta. ([#488](https://github.com/agent-engineering-studio/limen/issues/488))
+- **Nessun testo era scritto dall'AI** *(chiuso)*. Prima la chiave rifiutata,
+  poi il tetto di token consumato dal ragionamento del modello. Ora la chiave
+  è valida, il tetto e lo sforzo sono corretti, e la pagina Diagnostica
+  mostra la quota di testi di riserva: se arriva al 100 % per un giorno,
+  Limen lo registra come degrado. ([#488](https://github.com/agent-engineering-studio/limen/issues/488))
 - **Il numero non dice quanto è sicuro.** Una cella con tutti i dati e una
   con metà dei dati mancanti si presentano allo stesso modo; l'addestramento
   calcola già una forbice di incertezza, ma non arriva sulla mappa.
