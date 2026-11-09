@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
-import { AVVISO_DI_PIENA, copernicusModificato, meteoEcmwf } from "../lib/attribuzioni";
+import {
+  AVVISO_DI_PIENA,
+  copernicusModificato,
+  meteoEcmwf,
+} from "../lib/attribuzioni";
 import { defaultApiClient } from "../lib/api-client";
 import { BMC_PAGINA } from "../lib/buymeacoffee";
 import { testi, useLocale, useTesti } from "../lib/i18n";
@@ -114,11 +118,26 @@ const T = testi(
       },
     ],
     fonti: [
-      ["Le frane già avvenute", "L'inventario nazionale IFFI di ISPRA: dove è già franato, franerà ancora."],
-      ["Le mappe ufficiali di pericolosità", "Le aree che i piani di assetto idrogeologico (PAI) e la mosaicatura idraulica ISPRA già classificano."],
-      ["Il meteo, cella per cella", "Pioggia, umidità del suolo e tempo da un'istanza propria di Open-Meteo; le soglie di pioggia tarate sul catalogo e-ITALICA del CNR-IRPI."],
-      ["I fiumi", "La portata prevista dal sistema europeo GloFAS, confrontata con la piena ordinaria di ciascun corso d'acqua."],
-      ["Terremoti e incendi", "Gli eventi INGV, le aree bruciate EFFIS e i fuochi attivi FIRMS."],
+      [
+        "Le frane già avvenute",
+        "L'inventario nazionale IFFI di ISPRA: dove è già franato, franerà ancora.",
+      ],
+      [
+        "Le mappe ufficiali di pericolosità",
+        "Le aree che i piani di assetto idrogeologico (PAI) e la mosaicatura idraulica ISPRA già classificano.",
+      ],
+      [
+        "Il meteo, cella per cella",
+        "Pioggia, umidità del suolo e tempo da un'istanza propria di Open-Meteo; le soglie di pioggia tarate sul catalogo e-ITALICA del CNR-IRPI.",
+      ],
+      [
+        "I fiumi",
+        "La portata prevista dal sistema europeo GloFAS, confrontata con la piena ordinaria di ciascun corso d'acqua.",
+      ],
+      [
+        "Terremoti e incendi",
+        "Gli eventi INGV, le aree bruciate EFFIS e i fuochi attivi FIRMS.",
+      ],
     ] as [string, string][],
     celleRiserva: "312.000+",
     eyebrow: "Frane · allagamenti · incendi — Italia",
@@ -167,6 +186,7 @@ const T = testi(
     sostieni:
       "Limen è gratuito e aperto a tutti. Se ti è utile, aiutaci a tenere " +
       "acceso il server.",
+    privacyLink: "Dati personali",
     disclaimer:
       "Limen è uno strumento di supporto al monitoraggio: non sostituisce le " +
       "valutazioni delle autorità di protezione civile.",
@@ -235,11 +255,26 @@ const T = testi(
       },
     ],
     fonti: [
-      ["Landslides that already happened", "ISPRA's national IFFI inventory: where the ground has failed before, it will fail again."],
-      ["Official hazard maps", "The areas already classified by the hydrogeological plans (PAI) and the ISPRA hydraulic hazard mosaic."],
-      ["Weather, cell by cell", "Rainfall, soil moisture and weather from a self-hosted Open-Meteo instance; rainfall thresholds calibrated on the CNR-IRPI e-ITALICA catalogue."],
-      ["Rivers", "Discharge forecast by the European GloFAS system, compared with each watercourse's ordinary high flow."],
-      ["Earthquakes and wildfires", "INGV events, EFFIS burnt areas and FIRMS active fires."],
+      [
+        "Landslides that already happened",
+        "ISPRA's national IFFI inventory: where the ground has failed before, it will fail again.",
+      ],
+      [
+        "Official hazard maps",
+        "The areas already classified by the hydrogeological plans (PAI) and the ISPRA hydraulic hazard mosaic.",
+      ],
+      [
+        "Weather, cell by cell",
+        "Rainfall, soil moisture and weather from a self-hosted Open-Meteo instance; rainfall thresholds calibrated on the CNR-IRPI e-ITALICA catalogue.",
+      ],
+      [
+        "Rivers",
+        "Discharge forecast by the European GloFAS system, compared with each watercourse's ordinary high flow.",
+      ],
+      [
+        "Earthquakes and wildfires",
+        "INGV events, EFFIS burnt areas and FIRMS active fires.",
+      ],
     ],
     celleRiserva: "312,000+",
     eyebrow: "Landslides · floods · wildfires — Italy",
@@ -287,6 +322,7 @@ const T = testi(
     sostieni:
       "Limen is free and open to everyone. If you find it useful, help us " +
       "keep the server running.",
+    privacyLink: "Personal data",
     disclaimer:
       "Limen is a monitoring support tool: it does not replace the " +
       "assessments of the civil protection authorities.",
@@ -398,8 +434,7 @@ export function HomePage(): JSX.Element {
           <h2 id="home-fonti">{t.fontiTitolo}</h2>
           <p className="home-lede">
             {t.limitiPrima}
-            <a href="#/come-funziona/limiti-dichiarati">{t.limitiLink}</a>
-            .
+            <a href="#/come-funziona/limiti-dichiarati">{t.limitiLink}</a>.
           </p>
         </div>
         <ol className="home-elenco">
@@ -443,6 +478,9 @@ export function HomePage(): JSX.Element {
               height={40}
             />
           </a>
+        </p>
+        <p>
+          <a href="#/privacy">{t.privacyLink}</a>
         </p>
         <p className="footer-disclaimer">{t.disclaimer}</p>
       </footer>
