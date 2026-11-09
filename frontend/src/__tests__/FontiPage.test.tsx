@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import { render, screen } from "../test-utils";
-import FontiPage from "../components/FontiPage";
+import FontiPage, { URL_PROPOSTA_DATO } from "../components/FontiPage";
 import { FONTI, ORDINE_RUOLI } from "../lib/fonti";
 
 describe("fonti dei dati", () => {
@@ -41,17 +41,29 @@ describe("fonti dei dati", () => {
 
   it("la dicitura Copernicus del GloFAS c'è", () => {
     const glofas = FONTI.find((f) => f.id === "glofas");
-    expect(glofas?.attribuzione?.it).toMatch(/Copernicus Emergency Management Service/);
+    expect(glofas?.attribuzione?.it).toMatch(
+      /Copernicus Emergency Management Service/,
+    );
   });
 
   it("mostra i gruppi e dice che Limen non è affiliato", () => {
     render(<FontiPage />);
-    expect(screen.getByRole("heading", { name: "Entrano nel calcolo" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Servono a verificare" })).toBeInTheDocument();
-    expect(screen.getByText(/non vuol dire che l'ente approvi Limen/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Entrano nel calcolo" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Servono a verificare" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/non vuol dire che l'ente approvi Limen/),
+    ).toBeInTheDocument();
     expect(screen.getByAltText("OpenStreetMap")).toBeInTheDocument();
     expect(screen.getAllByRole("listitem")).toHaveLength(FONTI.length);
-    expect(screen.getByRole("heading", { name: /Copernicus: i dati aperti europei/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        name: /Copernicus: i dati aperti europei/,
+      }),
+    ).toBeInTheDocument();
     expect(screen.getAllByText(/Come la usa Limen/)).toHaveLength(FONTI.length);
   });
 
@@ -59,14 +71,29 @@ describe("fonti dei dati", () => {
     const copernicus = FONTI.filter((f) => f.copernicus);
     expect(copernicus.length).toBeGreaterThanOrEqual(8);
     expect(copernicus.map((f) => f.id)).toEqual(
-      expect.arrayContaining(["glofas", "cems-fire", "effis-fwi", "cems-rapid-mapping", "corine"]),
+      expect.arrayContaining([
+        "glofas",
+        "cems-fire",
+        "effis-fwi",
+        "cems-rapid-mapping",
+        "corine",
+      ]),
     );
   });
 
   it("i link della tabella Copernicus restano nella rotta #/fonti", () => {
     // Codex, PR #286: un `#fonte-…` nudo riportava alla home.
     render(<FontiPage />);
-    const link = screen.getByRole("link", { name: /GloFAS, previsione di portata/ });
+    const link = screen.getByRole("link", {
+      name: /GloFAS, previsione di portata/,
+    });
     expect(link.getAttribute("href")).toBe("#/fonti/glofas");
+  });
+
+  it("la pagina porta al modulo per proporre un dato (#502)", () => {
+    render(<FontiPage />);
+    const link = screen.getByRole("link", { name: "Proponi un dato" });
+    expect(link).toHaveAttribute("href", URL_PROPOSTA_DATO);
+    expect(URL_PROPOSTA_DATO).toMatch(/template=proposta-dato\.yml$/);
   });
 });

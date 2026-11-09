@@ -1,0 +1,146 @@
+# Proposta di dato (#502): la scheda del capitolo 9 del libro come modulo.
+# Gli `id` con lo stesso nome di una chiave di `src/limen/config/dati.yaml`
+# (nome, a_cosa_serve, pericoli, livello, fonte, url, licenza, attribuzione,
+# peso_gb) si ricopiano nella voce del catalogo quando la proposta passa la
+# misura; `tests/unit/test_modulo_proposta_dato.py` tiene allineati i due file.
+name: Proposta di dato
+description: Proponi un dato aperto che può migliorare le stime di frane, alluvioni, incendi o gli avvisi
+title: "dato: "
+labels: ["dato-proposto"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Grazie! Limen usa un dato solo dopo averlo **misurato**: si rigioca il passato con e senza, e si tiene solo se coglie più eventi senza più allarmi a vuoto. Anche un dato scartato lascia qui il perché.
+        I campi obbligatori sono quelli senza i quali la proposta non si può valutare: licenza, link, copertura e come misurarlo.
+
+  - type: input
+    id: nome
+    attributes:
+      label: Nome del dato
+      description: Come lo chiameresti nel catalogo, senza sigle se possibile.
+      placeholder: pluviometri della rete regionale della Calabria
+    validations:
+      required: true
+
+  - type: textarea
+    id: a_cosa_serve
+    attributes:
+      label: Che cosa misura, e a cosa servirebbe
+      description: Una frase su cosa misura, poi cosa migliorerebbe e cosa succede oggi senza.
+      placeholder: |
+        Misura la pioggia caduta ogni 10 minuti in 300 stazioni.
+        Migliorerebbe la pioggia nei piccoli bacini, dove il modello meteorologico la sottostima.
+        Oggi senza: Limen usa la pioggia del modello o del radar.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: pericoli
+    attributes:
+      label: Pericoli
+      description: A quali pericoli servirebbe.
+      options:
+        - label: frana (landslide)
+        - label: alluvione (flood)
+        - label: incendio (wildfire)
+        - label: avvisi e verifiche (eventi veri da confrontare con le previsioni)
+
+  - type: dropdown
+    id: livello
+    attributes:
+      label: Quanto è essenziale, secondo te
+      options:
+        - essenziale — senza, il pericolo non distingue un posto dall'altro
+        - consigliato — migliora la precisione, la mappa ha senso anche senza
+        - avanzato — serve al modello in ombra o ai backtest, non alla mappa
+        - non so
+    validations:
+      required: true
+
+  - type: input
+    id: fonte
+    attributes:
+      label: Chi lo produce e chi lo mantiene
+      placeholder: Centro Funzionale Multirischi della Calabria (ARPACAL)
+    validations:
+      required: true
+
+  - type: input
+    id: url
+    attributes:
+      label: Dove si trova (link)
+      description: La pagina del dato o del servizio, non solo il sito dell'ente.
+      placeholder: https://
+    validations:
+      required: true
+
+  - type: input
+    id: licenza
+    attributes:
+      label: Licenza, con il link al testo
+      description: "Se la licenza non è scritta da nessuna parte, dillo: è un'informazione anche quella."
+      placeholder: CC BY 4.0 — https://creativecommons.org/licenses/by/4.0/
+    validations:
+      required: true
+
+  - type: input
+    id: attribuzione
+    attributes:
+      label: Frase di citazione richiesta
+      placeholder: Fonte dati ARPACAL – Centro Funzionale Multirischi
+    validations:
+      required: false
+
+  - type: textarea
+    id: limiti
+    attributes:
+      label: Limiti d'uso
+      description: Uso commerciale, ridistribuzione, dati personali, registrazione obbligatoria.
+
+  - type: textarea
+    id: copertura
+    attributes:
+      label: Copertura, risoluzione e serie storica
+      description: Tutta Italia, regioni o punti; metri o numero di stazioni; da quando esiste e ogni quanto si aggiorna.
+      placeholder: |
+        Calabria, 300 stazioni.
+        Dal 2001, aggiornata ogni 10 minuti.
+    validations:
+      required: true
+
+  - type: input
+    id: formato
+    attributes:
+      label: Formato e sistema di coordinate
+      placeholder: CSV per stazione, coordinate EPSG:4326 / servizio WFS / GeoTIFF EPSG:32633
+
+  - type: input
+    id: peso_gb
+    attributes:
+      label: Quanto pesa (GB), se lo sai
+      placeholder: "0.5"
+
+  - type: textarea
+    id: come_misurarlo
+    attributes:
+      label: Come misurarlo prima di usarlo
+      description: Su quali eventi veri si può provare, cosa ti aspetti di vedere, e quale risultato direbbe «non serve».
+      placeholder: |
+        Eventi: le alluvioni di Calabria 2018-2024.
+        Ci aspettiamo: più celle allagate colte nelle 24 h prima, a parità di allerte.
+        Non serve se: coglie le stesse celle del radar.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evento
+    attributes:
+      label: Un evento passato in cui avrebbe fatto la differenza
+      placeholder: Vibo Valentia, 3 luglio 2006
+
+  - type: input
+    id: proponente
+    attributes:
+      label: Chi propone (facoltativo)
+      description: Nome, ente o gruppo. Non serve per valutare la proposta.

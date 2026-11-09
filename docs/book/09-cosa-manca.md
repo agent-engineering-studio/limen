@@ -319,8 +319,12 @@ scartato, come l'umidità del suolo europea per la frana.
 
 ### La scheda «proposta di dato»
 
-Basta copiarla in una nuova issue del repository di Limen, o mandarla ai
-curatori del progetto.
+Nel repository di Limen è un modulo pronto: [«Proposta di dato»](https://github.com/agent-engineering-studio/limen/issues/new?template=proposta-dato.yml),
+raggiungibile anche dalla pagina Fonti della mappa. Il modulo non si invia
+senza licenza, link, copertura e come misurarlo, e i suoi campi sono le voci
+del catalogo dei dati: una proposta che passa la misura diventa una voce del
+catalogo quasi senza riscriverla. Chi non usa GitHub può copiare la scheda qui
+sotto e mandarla ai curatori del progetto.
 
 ```markdown
 # Proposta di dato: <nome del dato>
@@ -362,6 +366,11 @@ curatori del progetto.
     - Registrazione di un sensore: `POST /api/sensori/registrazione`
       (approvazione manuale, certificato per dispositivo, licenza CC BY 4.0);
       i livelli di fiducia sono la #251, l'epica è la #247.
+    - Il modulo è `.github/ISSUE_TEMPLATE/proposta-dato.yml`, etichetta
+      `dato-proposto`; `tests/unit/test_modulo_proposta_dato.py` controlla che
+      ogni chiave di `dati.yaml` (tranne quelle che scrive solo Limen:
+      `id`, `misura`, `procura_con`, `variabile`, `deriva_da`) abbia il suo
+      campo.
     - Per caricare un dato nuovo nel catalogo: una voce in
       `src/limen/config/dati.yaml`; per misurarlo: i backtest
       (`limen backtest`, `backtest-flood`, `backtest-wildfire`) su un branch,
@@ -416,8 +425,9 @@ perché conta e, dove c'è, il dato aperto che lo colmerebbe.
 - **Il pacchetto dei dati non è nel catalogo nazionale.** *Proposta:*
   descriverlo con DCAT-AP_IT e segnalarlo a dati.gov.it, così chi cerca dati
   sul dissesto lo trova. *([#504](https://github.com/agent-engineering-studio/limen/issues/504))*
-- **Non c'è un modo guidato per proporre un dato.** *Proposta:* la scheda di
-  questo capitolo come modulo per le issue del repository.
+- ~~**Non c'è un modo guidato per proporre un dato.**~~ Chiuso: la scheda di
+  questo capitolo è il modulo «Proposta di dato» del repository, collegato
+  dalla pagina Fonti.
   *([#502](https://github.com/agent-engineering-studio/limen/issues/502))*
 
 ## Per approfondire
