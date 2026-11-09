@@ -111,8 +111,10 @@ lavoro, e il lavoro resta libero per tutti.
       giustificata nella descrizione della PR.
     - Prova in locale dell'intero sistema: `make demo`.
     - Issue aperte: <https://github.com/agent-engineering-studio/limen/issues>.
-      Oggi **nessuna** è etichettata `good first issue` (le tre esistenti sono
-      chiuse da luglio 2026): è uno dei gap del capitolo.
+      I primi lavori sono etichettati
+      [`good first issue`](https://github.com/agent-engineering-studio/limen/labels/good%20first%20issue):
+      da novembre 2026 sono sei (#536-#541), ognuno con i file da toccare,
+      il comando di verifica e il criterio di accettazione.
 
 ### Chi fa ricerca
 
@@ -426,8 +428,10 @@ issue indicata.
 - **Manca un canale di contatto pubblico.** Le discussioni sul repository
   sono spente, non c'è una pagina «contatti»; restano l'email della sicurezza
   e il modulo per gli esperti nella scheda di una cella. ([#508](https://github.com/agent-engineering-studio/limen/issues/508))
-- **Nessun primo lavoro facile è segnalato.** Le tre issue per chi inizia sono
-  chiuse da luglio 2026. ([#510](https://github.com/agent-engineering-studio/limen/issues/510))
+- ~~**Nessun primo lavoro facile è segnalato.**~~ Chiuso: sei issue
+  `good first issue` aperte (#536-#541: la descrizione della riga di comando,
+  tre traduzioni in inglese, due gruppi di variabili da documentare), ognuna
+  con file, verifica e criterio di accettazione. ([#510](https://github.com/agent-engineering-studio/limen/issues/510))
 - **Un solo curatore.** Su 311 modifiche accettate, una sola viene da fuori
   (novembre 2026). È il rischio più serio per un sistema che vuole essere usato per
   proteggere il territorio. ([#514](https://github.com/agent-engineering-studio/limen/issues/514))
