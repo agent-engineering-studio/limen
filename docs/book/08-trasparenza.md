@@ -479,6 +479,16 @@ C'è poi un terzo caso che non riguarda il pubblico: chi installa Limen
 configura gli indirizzi a cui mandare gli avvisi (email, Telegram). Sono
 dati dell'ente che lo usa, non di chi guarda la mappa.
 
+Tutto questo sta in una pagina sola, **«Dati personali»** (`#/privacy`, in
+italiano e in inglese), linkata dal piè di pagina e dai due moduli che chiedono
+dati: chi è il titolare e come scrivergli, perché ogni dato entra e con quale
+base giuridica, per quanto resta (14 giorni il registro del server con gli
+indirizzi IP, un'ora in memoria l'IP di chi manda un contributo, 12 mesi le
+mail ricevute dal curatore), chi altro lo vede e come esercitare i propri
+diritti. Dice anche una cosa che si dimentica spesso: mentre si guarda la
+mappa, il browser scarica lo sfondo da OpenStreetMap e i caratteri da Google
+Fonts, che vedono l'indirizzo IP come per qualunque sito che li usa.
+
 ### Il token d'installazione non è un login
 
 Chi installa Limen su un server scarica i dati e li carica dalla pagina
@@ -569,11 +579,11 @@ Che cosa manca, in breve. Il dettaglio tecnico sta nella issue indicata.
   contro la regola delle porte chiuse. **Corretto**: ora si aprono solo
   verso il server stesso, e una prova automatica controlla ogni porta di
   ogni file di avvio. ([#496](https://github.com/agent-engineering-studio/limen/issues/496))
-- **Manca un'informativa privacy unica e pubblica.** Le regole sui dati
-  personali sono scritte bene, ma sparse fra la guida dei sensori e il modulo
-  dei contributi; non c'è una pagina che dica chi è il titolare del
-  trattamento, per quanto tempo si conservano i dati e come esercitare i
-  propri diritti. Serve prima di ogni uso da parte di un ente. ([#494](https://github.com/agent-engineering-studio/limen/issues/494))
+- ~~**Manca un'informativa privacy unica e pubblica.**~~ Chiuso: la pagina
+  «Dati personali» (`#/privacy`, IT + EN) con titolare, finalità, basi
+  giuridiche, tempi di conservazione verificati nel codice e diritti; i log
+  dei container hanno ora una dimensione fissa. Resta da far rivedere il
+  testo a una persona con competenza GDPR prima che un ente lo adotti. ([#494](https://github.com/agent-engineering-studio/limen/issues/494))
 
 ## Per approfondire
 

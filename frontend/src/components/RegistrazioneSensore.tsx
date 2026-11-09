@@ -64,6 +64,7 @@ const T = testi(
     regole:
       "Ho letto le tre regole di sicurezza di questa pagina e le rispetto",
     informativa: "Ho letto l'informativa sui dati personali di questa pagina",
+    privacyLink: "Informativa completa",
     invio: "invio…",
     invia: "Invia la richiesta",
     grazie:
@@ -126,6 +127,7 @@ const T = testi(
     licenza: "I publish the measurements under the CC BY 4.0 licence",
     regole: "I have read the three safety rules on this page and follow them",
     informativa: "I have read the personal data notice on this page",
+    privacyLink: "Full notice",
     invio: "sending…",
     invia: "Send the request",
     grazie:
@@ -217,7 +219,9 @@ export default function RegistrazioneSensore(): JSX.Element | null {
   if (!aperta) {
     return (
       <section className="contributo" aria-label={t.sezione}>
-        <p className="contributo-nota">{indirizzo ? t.chiusa : t.senzaIndirizzo}</p>
+        <p className="contributo-nota">
+          {indirizzo ? t.chiusa : t.senzaIndirizzo}
+        </p>
       </section>
     );
   }
@@ -452,6 +456,11 @@ export default function RegistrazioneSensore(): JSX.Element | null {
           />
           {t.informativa}
         </label>
+        <p className="contributo-privacy">
+          <a href="#/privacy" target="_blank" rel="noreferrer">
+            {t.privacyLink}
+          </a>
+        </p>
         {errore ? (
           <p className="contributo-errore" role="alert">
             {messaggioErrore(errore.e, t)}

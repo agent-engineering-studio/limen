@@ -114,7 +114,7 @@ gap si chiude dentro Limen.
 | 8 | ~~Alcuni documenti hanno informazioni superate (licenza, cloud, tetto di spesa).~~ Chiuso: EUPL 1.2 con il patto per chi contribuisce, tetto unico di 10 $ al mese, flusso di pubblicazione su Azure tolto. | — | [#493](https://github.com/agent-engineering-studio/limen/issues/493) |
 | 8 | Il costo di oggi non è misurato. | — | [#492](https://github.com/agent-engineering-studio/limen/issues/492) |
 | 8 | Una porta del monitoraggio era aperta verso l'esterno. **Corretto**: le porte ora si aprono solo verso il server, e una prova automatica le controlla tutte. | — | [#496](https://github.com/agent-engineering-studio/limen/issues/496) |
-| 8 | Manca un'informativa privacy unica e pubblica. | — | [#494](https://github.com/agent-engineering-studio/limen/issues/494) |
+| 8 | ~~Manca un'informativa privacy unica e pubblica.~~ Chiuso: la pagina «Dati personali» (`#/privacy`, IT + EN), linkata dal piè di pagina e dai moduli. | — | [#494](https://github.com/agent-engineering-studio/limen/issues/494) |
 
 ## Capitolo 9. [Cosa manca](09-cosa-manca.md)
 

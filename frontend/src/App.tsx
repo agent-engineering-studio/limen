@@ -18,6 +18,7 @@ import HomePage from "./components/HomePage";
 import FontiPage from "./components/FontiPage";
 import InstallazionePage from "./components/InstallazionePage";
 import IntegrationsPage from "./components/IntegrationsPage";
+import PrivacyPage from "./components/PrivacyPage";
 import SensoriPage from "./components/SensoriPage";
 import LegendPanel from "./components/LegendPanel";
 import NationalStrip from "./components/NationalStrip";
@@ -46,6 +47,7 @@ type Page =
   | "shadow"
   | "integrations"
   | "sensori"
+  | "privacy"
   | "fonti"
   | "installazione"
   | "verifiche";
@@ -56,7 +58,10 @@ function pageFromHash(): Page {
   // i suoi link condivisi aprono quella.
   // La query dopo la rotta (`#/dashboard?cella=…`) non cambia la pagina.
   const hash = window.location.hash.split("?")[0] ?? "";
-  if (hash.startsWith("#/come-funziona") || hash.startsWith("#/documentazione")) {
+  if (
+    hash.startsWith("#/come-funziona") ||
+    hash.startsWith("#/documentazione")
+  ) {
     return "guida";
   }
   if (hash.startsWith("#/regioni")) {
@@ -73,6 +78,10 @@ function pageFromHash(): Page {
   }
   if (hash.startsWith("#/fonti")) {
     return "fonti";
+  }
+  // Fuori dal menu: la linkano il piè di pagina e i moduli che chiedono dati.
+  if (hash.startsWith("#/privacy")) {
+    return "privacy";
   }
   // Fuori dal menu: ci si arriva dal link che stampa lo script d'installazione.
   if (hash.startsWith("#/installazione")) {
@@ -103,7 +112,8 @@ const T = testi(
     fra: (h: number) => `fra ${h} h`,
     prossime72: "prossime 72 h",
     adesso: "adesso",
-    notaFuturo: "pericolo stimato, non allerta · previsione per cella, solo sopra soglia, da zoom 7",
+    notaFuturo:
+      "pericolo stimato, non allerta · previsione per cella, solo sopra soglia, da zoom 7",
     notaLettera: " · la lettera dice quale pericolo (A, F, I)",
     nonCalcolata: (nomi: string) => ` · ${nomi}: previsione non calcolata`,
     notaMulti:
@@ -137,7 +147,8 @@ const T = testi(
     fra: (h: number) => `in ${h} h`,
     prossime72: "next 72 h",
     adesso: "now",
-    notaFuturo: "estimated hazard, not a warning · per-cell forecast, above threshold only, from zoom 7",
+    notaFuturo:
+      "estimated hazard, not a warning · per-cell forecast, above threshold only, from zoom 7",
     notaLettera: " · the letter tells which hazard (F, L, W)",
     nonCalcolata: (nomi: string) => ` · ${nomi}: forecast not computed`,
     notaMulti:
@@ -259,7 +270,8 @@ export function posizioneIspettore(
   // Almeno questo spazio sotto: il popup è lungo, e aprirlo a filo del
   // fondo lasciava fuori proprio le barre delle componenti.
   const spazioMinimo = 480;
-  const aDestra = punto.x + scarto + LARGHEZZA_ISPETTORE + margine <= mappa.width;
+  const aDestra =
+    punto.x + scarto + LARGHEZZA_ISPETTORE + margine <= mappa.width;
   const left = aDestra
     ? punto.x + scarto
     : Math.max(margine, punto.x - scarto - LARGHEZZA_ISPETTORE);
@@ -279,14 +291,21 @@ function TestaPrevista({ p }: { p: CellaPrevista }): JSX.Element {
   const etichette = useEtichetteRischio();
   const nome = useNomePericolo()(p.hazard).toLowerCase();
   const quando = p.target
-    ? new Date(p.target).toLocaleString(loc, { weekday: "short", hour: "2-digit", minute: "2-digit" })
+    ? new Date(p.target).toLocaleString(loc, {
+        weekday: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
     : `+${p.orizzonte} h`;
   return (
     <div className="ispettore-previsto" role="note">
       <span className="eyebrow">{t.previsto(p.orizzonte, quando)}</span>
       <span>
         <strong className="mono" style={{ color: RISK_TEXT_BY_LEVEL[p.level] }}>
-          {p.score.toLocaleString(loc, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          {p.score.toLocaleString(loc, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
         </strong>{" "}
         {etichette[p.level].toLowerCase()} · {nome}
       </span>
@@ -348,7 +367,9 @@ export function App(): JSX.Element {
     const aggiorna = (): void => {
       const p = map.project([lon, lat]);
       const c = map.getContainer();
-      setPuntoIspettore(posizioneIspettore(p, { width: c.clientWidth, height: c.clientHeight }));
+      setPuntoIspettore(
+        posizioneIspettore(p, { width: c.clientWidth, height: c.clientHeight }),
+      );
     };
     aggiorna();
     map.on("move", aggiorna);
@@ -362,32 +383,39 @@ export function App(): JSX.Element {
 
   // Dalla colonna alla mappa. Una classifica geografica su cui si clicca e
   // non succede niente è una lista di nomi: il posto è metà dell'informazione.
-  const vaiAlComune = useCallback((c: ComuneRisk) => {
-    // La cella aperta prima resta di un altro posto: con il popup di una
-    // cella del Friuli aperto su Montegiordano, il numero non era di qui.
-    setSelected(null);
-    // Subito verso il centro, poi il confine vero quando arriva: senza, il
-    // clic aspetterebbe la rete prima di muovere la mappa.
-    mapRef.current?.flyTo({ center: [c.lon, c.lat], zoom: 11, duration: 700 });
-    defaultApiClient
-      .getComuneGeometry(c.istat_code)
-      .then((g) => {
-        setEvidenziato(g);
-        // Il comune intero, non uno zoom fisso: a 11 Roma non ci stava e
-        // Atrani era un puntino. Il bordo con la griglia a 1 km è ciò che
-        // dice dove finisce un comune e comincia il vicino.
-        mapRef.current?.fitBounds(
-          [
-            [g.bbox[0], g.bbox[1]],
-            [g.bbox[2], g.bbox[3]],
-          ],
-          { padding: 60, maxZoom: 14, duration: 900 },
-        );
-      })
-      .catch(() => {
-        // Senza confine resta il volo verso il centro: meno chiaro, non rotto.
+  const vaiAlComune = useCallback(
+    (c: ComuneRisk) => {
+      // La cella aperta prima resta di un altro posto: con il popup di una
+      // cella del Friuli aperto su Montegiordano, il numero non era di qui.
+      setSelected(null);
+      // Subito verso il centro, poi il confine vero quando arriva: senza, il
+      // clic aspetterebbe la rete prima di muovere la mappa.
+      mapRef.current?.flyTo({
+        center: [c.lon, c.lat],
+        zoom: 11,
+        duration: 700,
       });
-  }, [setSelected, setEvidenziato]);
+      defaultApiClient
+        .getComuneGeometry(c.istat_code)
+        .then((g) => {
+          setEvidenziato(g);
+          // Il comune intero, non uno zoom fisso: a 11 Roma non ci stava e
+          // Atrani era un puntino. Il bordo con la griglia a 1 km è ciò che
+          // dice dove finisce un comune e comincia il vicino.
+          mapRef.current?.fitBounds(
+            [
+              [g.bbox[0], g.bbox[1]],
+              [g.bbox[2], g.bbox[3]],
+            ],
+            { padding: 60, maxZoom: 14, duration: 900 },
+          );
+        })
+        .catch(() => {
+          // Senza confine resta il volo verso il centro: meno chiaro, non rotto.
+        });
+    },
+    [setSelected, setEvidenziato],
+  );
 
   // Invio nella ricerca: la mappa va sul primo comune trovato.
   const cercaEVai = useCallback(
@@ -406,15 +434,30 @@ export function App(): JSX.Element {
     [page, vaiAlComune],
   );
 
-  const vaiAllaCella = useCallback((c: ComuneCell) => {
-    mapRef.current?.flyTo({ center: [c.lon, c.lat], zoom: 13, duration: 700 });
-    setSelected({ cellId: c.cell_id, lon: c.lon, lat: c.lat });
-  }, [setSelected]);
+  const vaiAllaCella = useCallback(
+    (c: ComuneCell) => {
+      mapRef.current?.flyTo({
+        center: [c.lon, c.lat],
+        zoom: 13,
+        duration: 700,
+      });
+      setSelected({ cellId: c.cell_id, lon: c.lon, lat: c.lat });
+    },
+    [setSelected],
+  );
 
   useEffect(() => {
     if (page !== "dashboard" || !cellaLink) return;
-    mapRef.current?.flyTo({ center: [cellaLink.lon, cellaLink.lat], zoom: 13, duration: 700 });
-    setSelected({ cellId: cellaLink.cellId, lon: cellaLink.lon, lat: cellaLink.lat });
+    mapRef.current?.flyTo({
+      center: [cellaLink.lon, cellaLink.lat],
+      zoom: 13,
+      duration: 700,
+    });
+    setSelected({
+      cellId: cellaLink.cellId,
+      lon: cellaLink.lon,
+      lat: cellaLink.lat,
+    });
   }, [page, cellaLink, setSelected]);
 
   const attiviNomi = OVERLAYS.filter((o) => overlayAttivi.has(o.id)).map(
@@ -426,7 +469,11 @@ export function App(): JSX.Element {
       <aside className="sidebar" aria-label={t.pannello}>
         <NationalStrip />
         <PrevisioneTesta />
-        <ComuniBoard onComune={vaiAlComune} onCella={vaiAllaCella} cerca={cerca} />
+        <ComuniBoard
+          onComune={vaiAlComune}
+          onCella={vaiAllaCella}
+          cerca={cerca}
+        />
         <ShadowPanel />
       </aside>
       <div className="map-area">
@@ -450,12 +497,34 @@ export function App(): JSX.Element {
             />
             {t.soloSoglia}
           </UnstyledButton>
-          <Popover position="bottom-end" width={300} shadow="md" withinPortal={false}>
+          <Popover
+            position="bottom-end"
+            width={300}
+            shadow="md"
+            withinPortal={false}
+          >
             <Popover.Target>
-              <UnstyledButton className="map-bottone" aria-label={t.livelliContesto}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-                  <path d="M12 3l9 5-9 5-9-5 9-5z" stroke="currentColor" strokeWidth="2" />
-                  <path d="M3 13l9 5 9-5" stroke="currentColor" strokeWidth="2" />
+              <UnstyledButton
+                className="map-bottone"
+                aria-label={t.livelliContesto}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  aria-hidden
+                >
+                  <path
+                    d="M12 3l9 5-9 5-9-5 9-5z"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  />
+                  <path
+                    d="M3 13l9 5 9-5"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  />
                 </svg>
                 {t.livelli}
                 <span className="map-conta mono">
@@ -471,7 +540,8 @@ export function App(): JSX.Element {
         {evidenziato ? (
           <div className="comune-chip" role="status">
             <span>
-              <strong>{String(evidenziato.properties?.["name"] ?? "")}</strong> {t.evidenziato}
+              <strong>{String(evidenziato.properties?.["name"] ?? "")}</strong>{" "}
+              {t.evidenziato}
             </span>
             <button
               type="button"
@@ -529,11 +599,18 @@ export function App(): JSX.Element {
           </a>
           <a
             href="#/come-funziona"
-            className={page === "guida" || page === "science" || page === "shadow" ? "on" : ""}
+            className={
+              page === "guida" || page === "science" || page === "shadow"
+                ? "on"
+                : ""
+            }
           >
             {t.navGuida}
           </a>
-          <a href="#/integrazioni" className={page === "integrations" ? "on" : ""}>
+          <a
+            href="#/integrazioni"
+            className={page === "integrations" ? "on" : ""}
+          >
             {t.navIntegrazioni}
           </a>
           <a href="#/sensori" className={page === "sensori" ? "on" : ""}>
@@ -591,6 +668,10 @@ export function App(): JSX.Element {
         ) : page === "sensori" ? (
           <div className="explainer-area">
             <SensoriPage />
+          </div>
+        ) : page === "privacy" ? (
+          <div className="explainer-area">
+            <PrivacyPage />
           </div>
         ) : page === "fonti" ? (
           <div className="explainer-area">

@@ -13,8 +13,18 @@
 
 name: limen-demo
 
+# Log dei container a dimensione fissa (#494): l'API registra ogni richiesta con
+# l'indirizzo del client, e il driver json-file di Docker su Linux non ruota da
+# solo. Tre file da 10 MB per servizio è quanto dichiara `#/privacy`.
+x-log: &log
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
+    logging: *log
     build:
       context: ../postgres
       dockerfile: Dockerfile.db
@@ -71,6 +81,7 @@ services:
       start_period: ${LIMEN_PG_START_PERIOD:-10s}
 
   api:
+    logging: *log
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.api
@@ -343,6 +354,7 @@ services:
       start_period: 20s
 
   worker:
+    logging: *log
     # Il processo dei batch: scheduler APScheduler + ingestor IoT, zero HTTP.
     # Stessa immagine dell'api — è lo stesso codice, cambia solo il comando.
     #
@@ -433,6 +445,7 @@ services:
       start_period: 60s
 
   mcp:
+    logging: *log
     # limen-ops MCP server for agent gateways (OpenClaw & co.). Same image
     # as the api (same tag, so a deploy cannot mix versions); HTTP transport on :8766. The host bind defaults to
     # loopback (same-host OpenClaw); set LIMEN_MCP_BIND=0.0.0.0 only when
@@ -494,6 +507,7 @@ services:
       start_period: 20s
 
   mosquitto:
+    logging: *log
     # Phase 7 — local MQTT broker for the alert pipeline. The API
     # publishes to ``${NOTIFICATIONS__MQTT__BROKER_HOST}`` (default
     # mosquitto:1883); enable the channel by listing "mqtt" in
@@ -558,6 +572,7 @@ services:
       start_period: 15s
 
   frontend:
+    logging: *log
     # Phase 6 — Vite dev server. In production, build with
     # `npm run build` and either copy `dist/` into the api image
     # (FastAPI can serve it statically — see README) or front it with
@@ -611,6 +626,7 @@ services:
   # Stessa porta del dev server, cosi' il reverse proxy non cambia:
   #   docker compose --profile geoserver --profile frontend-static up -d
   frontend-static:
+    logging: *log
     build:
       context: ../../frontend
       dockerfile: Dockerfile
@@ -679,6 +695,7 @@ services:
   # Vedi knowledge-graph#7 (blocco CI) e #6 (provider openai).
 
   proxy:
+    logging: *log
     # Il reverse proxy in compose (#306), al posto dell'nginx dell'host: Caddy
     # prende e rinnova da sé i certificati di LIMEN_DOMINIO (Let's Encrypt,
     # porte 80 e 443 raggiungibili da fuori). Le rotte sono quelle di

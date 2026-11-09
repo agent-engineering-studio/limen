@@ -58,11 +58,13 @@ const T = testi(
     linkedin: "Profilo LinkedIn (in alternativa al nome)",
     email: "Email",
     affiliazione: "Dipartimento o ente (facoltativo)",
-    affiliazioneEsempio: "es. dipartimento universitario, ufficio tecnico comunale, studio",
+    affiliazioneEsempio:
+      "es. dipartimento universitario, ufficio tecnico comunale, studio",
     sitoWeb: "Sito web",
     consenso:
       "Ho letto la nota qui sotto e acconsento al trattamento dei dati per " +
       "questo contributo",
+    privacyLink: "Informativa sui dati personali",
     privacy:
       "Nome, profilo, dipartimento ed email viaggiano solo nella mail a chi " +
       "cura Limen, per ricontattarti su questo contributo: Limen non li salva " +
@@ -108,11 +110,13 @@ const T = testi(
     linkedin: "LinkedIn profile (instead of the name)",
     email: "Email",
     affiliazione: "Department or organisation (optional)",
-    affiliazioneEsempio: "e.g. university department, municipal technical office, firm",
+    affiliazioneEsempio:
+      "e.g. university department, municipal technical office, firm",
     sitoWeb: "Website",
     consenso:
       "I have read the note below and consent to the processing of my data for " +
       "this contribution",
+    privacyLink: "Personal data notice",
     privacy:
       "Name, profile, department and email travel only in the email to the " +
       "Limen maintainers, so they can contact you about this contribution: " +
@@ -128,7 +132,7 @@ type Testi = (typeof T)["it"];
 const MIN_TESTO = 20;
 // Gli stessi vincoli del server, così il browser ferma prima quello che il
 // server rifiuterebbe con un messaggio generico.
-const EMAIL = "[^@\\s<>,;\"]+@[^@\\s<>,;\"]+\\.[^@\\s<>,;\"]{2,}";
+const EMAIL = '[^@\\s<>,;"]+@[^@\\s<>,;"]+\\.[^@\\s<>,;"]{2,}';
 const LINK = "https?://.+";
 // Il server scarta come automatico un modulo compilato in meno di
 // CONTRIBUTI__SECONDI_MINIMI (5 s di default) e risponde comunque 201: chi
@@ -234,7 +238,6 @@ export default function ContributoEsperto({
     }
   };
 
-
   return (
     <section className="contributo" aria-label={t.sezione}>
       <span className="eyebrow">{t.titolo}</span>
@@ -242,7 +245,10 @@ export default function ContributoEsperto({
       <form className="contributo-form" onSubmit={(ev) => void invia(ev)}>
         <label>
           {t.tipo}
-          <select value={tipo} onChange={(e) => setTipo(e.target.value as TipoContributo)}>
+          <select
+            value={tipo}
+            onChange={(e) => setTipo(e.target.value as TipoContributo)}
+          >
             {ORDINE_TIPI.map((v) => (
               <option key={v} value={v}>
                 {t.tipi[v]}
@@ -261,7 +267,9 @@ export default function ContributoEsperto({
             placeholder={t.testoEsempio}
           />
           {mancanoCaratteri > 0 && testo.length > 0 ? (
-            <span className="contributo-aiuto">{t.mancano(mancanoCaratteri)}</span>
+            <span className="contributo-aiuto">
+              {t.mancano(mancanoCaratteri)}
+            </span>
           ) : null}
         </label>
         <label>
@@ -334,7 +342,12 @@ export default function ContributoEsperto({
           />
           {t.consenso}
         </label>
-        <p className="contributo-privacy">{t.privacy}</p>
+        <p className="contributo-privacy">
+          {t.privacy}{" "}
+          <a href="#/privacy" target="_blank" rel="noreferrer">
+            {t.privacyLink}
+          </a>
+        </p>
         {errore ? (
           <p className="contributo-errore" role="alert">
             {messaggioErrore(errore.e, t)}
@@ -343,11 +356,20 @@ export default function ContributoEsperto({
         <div className="contributo-azioni">
           <button
             type="submit"
-            disabled={stato === "invio" || !consenso || mancanoCaratteri > 0 || !chiScrive}
+            disabled={
+              stato === "invio" ||
+              !consenso ||
+              mancanoCaratteri > 0 ||
+              !chiScrive
+            }
           >
             {stato === "invio" ? t.invio : t.invia}
           </button>
-          <button type="button" className="contributo-annulla" onClick={() => setStato("chiuso")}>
+          <button
+            type="button"
+            className="contributo-annulla"
+            onClick={() => setStato("chiuso")}
+          >
             {t.annulla}
           </button>
         </div>
