@@ -103,6 +103,23 @@ pericolo è misurato, `attention` è `null`, non zero.
 | `GET /api/alerts/forecast?hazard=&since_hours=72&limit=50` | Gli avvisi di previsione inviati: regione, pericolo, orizzonte, classe massima, celle coinvolte e testo. Senza `hazard`, tutti i pericoli. |
 | `GET /api/alerts/forecast/schedule` | Quando gira la prossima previsione per cella e quando è girata l'ultima per ogni pericolo. |
 
+### Formati standard: CAP 1.2 e OGC API Features
+
+Per chi ha già un sistema che legge gli standard e non vuole scrivere un
+client per Limen.
+
+| Rotta | Cosa restituisce |
+|---|---|
+| `GET /api/cap` | Feed Atom dei comuni in classe Alta o Molto alta, un messaggio per comune e pericolo, ciascuno con il link al suo CAP. |
+| `GET /api/cap/{identificativo}` | Il messaggio **CAP 1.2** (`application/cap+xml`), valido contro lo schema OASIS: area = il comune con il codice ISTAT, urgenza, gravità e certezza dalla classe (`config/cap.yaml`). Dopo il calcolo successivo l'identificativo vecchio risponde 404, come un avviso scaduto. |
+| `GET /api/ogc` | **OGC API Features** (classi Core e GeoJSON): pagina iniziale, `/conformance`, `/collections`. |
+| `GET /api/ogc/collections/comuni-{pericolo}/items?bbox=&datetime=&limit=&offset=` | I comuni con classe peggiore, punteggio massimo e celle sopra soglia, in GeoJSON con i confini semplificati a ~100 m; `/items/{istat}` un comune solo. In QGIS: *Layer → Aggiungi layer → WFS / OGC API Features* con l'indirizzo `…/api/ogc`. |
+
+Ogni messaggio CAP ha `status` **Exercise** e una nota che dice che Limen non
+è un sistema di allertamento ufficiale: un sistema reale non lo diffonde come
+un avviso. I messaggi e la collezione dell'alluvione portano l'attribuzione
+Copernicus.
+
 ### Spiegazioni e provenienza
 
 | Rotta | Cosa restituisce |

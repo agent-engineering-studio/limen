@@ -1,0 +1,44 @@
+# Uscita CAP 1.2 (OASIS Common Alerting Protocol) dei comuni in allerta (#499).
+#
+# CAP è il formato con cui i sistemi di allertamento si scambiano gli avvisi.
+# Limen non è un sistema di allertamento ufficiale, e il messaggio lo dice in
+# due modi: `status: Exercise` (CAP: «solo per i partecipanti a
+# un'esercitazione»), che un sistema reale non tratta come un avviso da
+# diffondere, e la nota in testa a ogni messaggio. `Actual` è vietato dallo
+# schema di questo file, non solo da questa riga.
+#
+# La mappatura classe → urgenza / gravità / certezza è una scelta di
+# presentazione, non una calibrazione: sta qui per la stessa regola dei pesi,
+# niente costanti nel codice.
+
+sender: limen@agentengineering.it
+sender_name: Limen — mappa aperta del pericolo (non ufficiale)
+status: Exercise
+#: Quanto vale un messaggio dopo il calcolo: lo sweep è orario.
+validita_ore: 3
+nota: >-
+  Limen non è un sistema di allertamento ufficiale e non sostituisce i Centri
+  Funzionali, la Protezione civile né IT-Alert: è uno strumento di supporto
+  alle decisioni. Questo messaggio non è un avviso da diffondere al pubblico.
+
+#: Le classi che producono un messaggio, con i loro campi CAP.
+classi:
+  High:
+    urgency: Expected
+    severity: Moderate
+    certainty: Possible
+  VeryHigh:
+    urgency: Expected
+    severity: Severe
+    certainty: Likely
+
+pericoli:
+  landslide:
+    category: Geo
+    event: Pericolo di frana (Limen)
+  flood:
+    category: Met
+    event: Pericolo di allagamento (Limen)
+  wildfire:
+    category: Fire
+    event: Pericolo di incendio boschivo (Limen)

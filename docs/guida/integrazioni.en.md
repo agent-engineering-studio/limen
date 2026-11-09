@@ -100,6 +100,23 @@ measured, `attention` is `null`, not zero.
 | `GET /api/alerts/forecast?hazard=&since_hours=72&limit=50` | The forecast notices that were sent: region, hazard, horizon, maximum class, cells involved and text. Without `hazard`, all hazards. |
 | `GET /api/alerts/forecast/schedule` | When the next per-cell forecast runs and when the last one ran for each hazard. |
 
+### Standard formats: CAP 1.2 and OGC API Features
+
+For anyone who already has a system that reads the standards and does not
+want to write a client for Limen.
+
+| Route | What it returns |
+|---|---|
+| `GET /api/cap` | Atom feed of the municipalities in class High or Very high, one message per municipality and hazard, each linking to its CAP. |
+| `GET /api/cap/{identifier}` | The **CAP 1.2** message (`application/cap+xml`), valid against the OASIS schema: area = the municipality with its ISTAT code, urgency, severity and certainty from the class (`config/cap.yaml`). After the next computation the old identifier answers 404, like an expired warning. |
+| `GET /api/ogc` | **OGC API Features** (Core and GeoJSON classes): landing page, `/conformance`, `/collections`. |
+| `GET /api/ogc/collections/comuni-{hazard}/items?bbox=&datetime=&limit=&offset=` | Municipalities with worst class, maximum score and cells above threshold, as GeoJSON with boundaries simplified to ~100 m; `/items/{istat}` a single one. In QGIS: *Layer → Add layer → WFS / OGC API Features* with the `…/api/ogc` address. |
+
+Every CAP message has `status` **Exercise** and a note saying that Limen is
+not an official warning system: a real system does not broadcast it as a
+warning. Flood messages and the flood collection carry the Copernicus
+attribution.
+
 ### Explanations and provenance
 
 | Route | What it returns |
