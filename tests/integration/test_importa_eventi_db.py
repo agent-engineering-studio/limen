@@ -50,7 +50,7 @@ async def test_import_registra_frane_e_non_rilegge(
             "SELECT slug, esito, precisione_ora, fonti->0->>'licenza' AS licenza "
             "FROM verifiche_eventi ORDER BY slug"
         )
-        frane = await conn.fetch("SELECT id, source FROM landslide_events")
+        frane = await conn.fetch("SELECT id, source FROM landslide_events WHERE source = 'ente'")
         versioni = await conn.fetchval(
             "SELECT count(*) FROM dataset_versions WHERE source = 'ente' AND dataset = 'comune-ie'"
         )
