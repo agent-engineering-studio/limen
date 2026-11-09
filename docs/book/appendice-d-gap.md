@@ -141,7 +141,7 @@ gap si chiude dentro Limen.
 |---|---|---|---|
 | 10 | Manca una guida per chi non sviluppa. | — | [#511](https://github.com/agent-engineering-studio/limen/issues/511) |
 | 10 | Manca un canale di contatto pubblico. | — | [#508](https://github.com/agent-engineering-studio/limen/issues/508) |
-| 10 | Nessun primo lavoro facile è segnalato. | — | [#510](https://github.com/agent-engineering-studio/limen/issues/510) |
+| 10 | ~~Nessun primo lavoro facile è segnalato.~~ Chiuso: sei issue `good first issue` aperte, con file, verifica e criterio di accettazione. | — | [#510](https://github.com/agent-engineering-studio/limen/issues/510) |
 | 10 | Un solo curatore. | — | [#514](https://github.com/agent-engineering-studio/limen/issues/514) |
 | 10 | La roadmap scritta nel repository è vecchia. | — | [#513](https://github.com/agent-engineering-studio/limen/issues/513) |
 | 10 | Non c'è un modo semplice per un ente di consegnare i propri eventi. | eventi datati di Regioni e Centri Funzionali come tabella aperta CC BY 4.0, sul modello di [e-ITALICA](https://doi.org/10.5281/zenodo.14204473) | [#509](https://github.com/agent-engineering-studio/limen/issues/509) |

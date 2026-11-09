@@ -70,7 +70,11 @@ The "Locked invariants" table in CLAUDE.md is the binding contract.
 ## Where to start
 
 * Browse open issues tagged
-  [`good first issue`](https://github.com/agent-engineering-studio/limen/labels/good%20first%20issue).
+  [`good first issue`](https://github.com/agent-engineering-studio/limen/labels/good%20first%20issue):
+  each one lists the files to touch, the command that verifies it and the
+  acceptance criteria. Comment on the issue before starting, so two people do
+  not take the same one. To propose a new one, use the *Good first issue*
+  template.
 * Know of an open dataset Limen should use? Open a
   [data proposal](https://github.com/agent-engineering-studio/limen/issues/new?template=proposta-dato.yml)
   (*Proposta di dato*, label `dato-proposto`). Licence, link, coverage and a
