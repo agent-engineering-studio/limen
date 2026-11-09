@@ -49,6 +49,20 @@ Conventional Commits is enforced by reviewer + the changelog
 generator, not by a hook. Keep first line ≤ 72 chars; use the body
 for context.
 
+## Dependency updates
+
+Dependabot (`.github/dependabot.yml`) opens one pull request a week per
+ecosystem — Python (`uv`), the SPA (`npm` in `frontend/`) and GitHub
+Actions — and the CI judges it like any other. The eleven companion
+libraries pinned with `~=` in `pyproject.toml` come in their own group.
+
+**An update of `fwi-chain` or `rainfall-thresholds` changes a computation**:
+before merging it, run the backtest of the hazard it feeds
+(`limen backtest-wildfire` for `fwi-chain`, `limen backtest` for
+`rainfall-thresholds`) and write the before/after numbers in the pull
+request. The other companion libraries read data: the CI is enough unless
+the release notes mention a change in what they return.
+
 ## What we *don't* accept
 
 * New runtime dependencies without an explicit justification in the

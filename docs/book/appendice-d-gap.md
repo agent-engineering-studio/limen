@@ -35,7 +35,7 @@ gap si chiude dentro Limen.
 |---|---|---|---|
 | 2 | La piena ordinaria dei fiumi viene da due archivi che non danno gli stessi numeri. | — | [#448](https://github.com/agent-engineering-studio/limen/issues/448) |
 | 2 | Il terreno che si muove entra solo nel modello in prova, e solo come velocità media. | accelerazione e stagionalità già pubblicate da [EGMS](https://egms.land.copernicus.eu) (Copernicus, gratuito) | [#380](https://github.com/agent-engineering-studio/limen/issues/380) |
-| 2 | Nessun controllo automatico segnala versioni nuove o correzioni di sicurezza delle librerie. | — | [#465](https://github.com/agent-engineering-studio/limen/issues/465) |
+| 2 | ~~Nessun controllo automatico segnala versioni nuove o correzioni di sicurezza delle librerie.~~ Chiuso: Dependabot settimanale (uv, npm, Actions) con le librerie compagne in un gruppo, avvisi di sicurezza attivi. | — | [#465](https://github.com/agent-engineering-studio/limen/issues/465) |
 
 ## Capitolo 3. [I dati](03-i-dati.md)
 

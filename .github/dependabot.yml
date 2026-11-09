@@ -1,0 +1,61 @@
+# Aggiornamenti delle dipendenze (#465): una PR a settimana per ecosistema,
+# valutata dalla CI come ogni altra. Le undici librerie compagne, fissate con
+# `~=` in pyproject.toml, stanno in un gruppo a parte: una versione nuova si
+# vede subito, ma `fwi-chain` e `rainfall-thresholds` toccano un calcolo e
+# prima del merge vogliono il backtest del pericolo (CONTRIBUTING.md).
+# I messaggi escono come «chore(deps): …», nello stile Conventional Commits.
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Europe/Rome
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      librerie-compagne:
+        patterns:
+          - "fwi-chain"
+          - "effis-client"
+          - "rainfall-thresholds"
+          - "egms-client"
+          - "firms-client"
+          - "copernicus-ems"
+          - "ispra-idrogeo"
+          - "imageserver-export"
+          - "ingv-shakemap"
+          - "dpc-radar"
+          - "glofas-ewds"
+      python-minor-e-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Europe/Rome
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      spa-minor-e-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Europe/Rome
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      actions:
+        patterns: ["*"]

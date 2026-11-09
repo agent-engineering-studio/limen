@@ -462,10 +462,12 @@ diverso da uno che scivola piano da anni.
 pubblica anche l'accelerazione e la stagionalità del movimento.
 (issue: #380)
 
-**Nessuno avvisa quando una libreria ha una versione nuova.** Limen tiene
-ferme le versioni delle librerie per prudenza, ma nessun controllo automatico
-segnala quando ne esce una nuova, né quando una contiene una correzione di
-sicurezza. Oggi ci si accorge a mano.
+~~**Nessuno avvisa quando una libreria ha una versione nuova.**~~ Chiuso:
+Dependabot apre una proposta di aggiornamento a settimana per le librerie
+Python, per quelle della mappa e per le Actions, con le undici librerie
+compagne in un gruppo a parte, e gli avvisi di sicurezza del repository sono
+attivi. Un aggiornamento di `fwi-chain` o `rainfall-thresholds` cambia un
+calcolo, e prima di accettarlo si rifà il backtest del pericolo.
 ([#465](https://github.com/agent-engineering-studio/limen/issues/465))
 
 ## Per approfondire
