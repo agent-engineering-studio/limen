@@ -1,14 +1,14 @@
 # OSS impact and reuse
 
-Limen is designed as open-source civic and scientific infrastructure for landslide-risk monitoring. It combines public geospatial and environmental datasets with interpretable scoring, PostGIS, APIs, maps and notification workflows.
+Limen is designed as open-source civic and scientific infrastructure for monitoring **landslide, flood and wildfire** danger across Italy. It combines public geospatial and environmental datasets with interpretable scoring, PostGIS, APIs, maps and notification workflows.
 
 ## Why it matters
 
-Landslide-risk information is often distributed across heterogeneous datasets, portals and formats. Limen aims to make that information easier to operationalize by combining:
+Information on landslide, flood and wildfire danger is often distributed across heterogeneous datasets, portals and formats. Limen aims to make that information easier to operationalize by combining:
 
-- a 1 km² grid model over Italian territory;
-- public hazard, morphology, rainfall, soil-moisture, seismic and fire-history signals;
-- interpretable multi-factor scoring;
+- a 1 km² grid model over all twenty Italian regions, one score per cell and hazard, every hour, with a 72-hour forecast;
+- public hazard, morphology, rainfall, river-discharge, fire-weather, soil-moisture, seismic and fire-history signals;
+- interpretable scoring, one engine and one YAML configuration per hazard;
 - PostGIS-native storage and vector-tile serving;
 - API and frontend map access;
 - MCP tools for agentic geospatial workflows;
@@ -36,7 +36,7 @@ Limen is not only an application. Its most reusable OSS parts are:
 
 ## Responsible use
 
-Limen is a monitoring and decision-support framework, not an official emergency-warning system unless validated and adopted by an authorized institution. Public communication should keep uncertainty visible and separate official-source data from derived/modelled indicators.
+Limen is a monitoring and decision-support framework, not an official emergency-warning system unless validated and adopted by an authorized institution. Public communication should keep uncertainty visible and separate official-source data from derived/modelled indicators. A cell whose input was not measured is shown as «not measured», never as «no danger».
 
 ## Claude/AI relevance
 
