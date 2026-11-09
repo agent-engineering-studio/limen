@@ -21,8 +21,7 @@ const T = testi(
   {
     occhiello: "Fonti dei dati",
     titolo: "Da dove vengono i numeri",
-    lede:
-      "Ogni punteggio sulla mappa è calcolato da dati aperti di enti pubblici, programmi europei e progetti comunitari. Qui ci sono tutti, con cosa danno a Limen e con quale licenza.",
+    lede: "Ogni punteggio sulla mappa è calcolato da dati aperti di enti pubblici, programmi europei e progetti comunitari. Qui ci sono tutti, con cosa danno a Limen e con quale licenza.",
     nonAffiliato:
       "Limen è un progetto indipendente: citare una fonte non vuol dire che l'ente approvi Limen o le sue stime. Nomi e marchi appartengono ai rispettivi titolari; il logo compare solo dove le regole del titolare lo permettono.",
     pericoli: "Pericoli",
@@ -36,16 +35,20 @@ const T = testi(
     ruolo: "Ruolo",
     licenza: "Licenza",
     attribuzione: "Attribuzione",
-    facoltativa: "Facoltativa: la usa solo chi ospita Limen con il file o la chiave.",
+    facoltativa:
+      "Facoltativa: la usa solo chi ospita Limen con il file o la chiave.",
     sito: "Sito della fonte",
     regole: "Regole d'uso del logo",
     geografia: "geografia",
+    proponiTitolo: "Conosci un dato che manca?",
+    proponiTesto:
+      "Limen usa un dato solo dopo averlo misurato sugli eventi passati: deve cogliere più eventi senza più allarmi a vuoto. Se conosci un dato aperto che potrebbe servire, proponilo con la scheda: licenza, link, copertura e come misurarlo.",
+    proponiLink: "Proponi un dato",
   },
   {
     occhiello: "Data sources",
     titolo: "Where the numbers come from",
-    lede:
-      "Every score on the map is computed from open data by public bodies, European programmes and community projects. They are all here, with what they give Limen and under which licence.",
+    lede: "Every score on the map is computed from open data by public bodies, European programmes and community projects. They are all here, with what they give Limen and under which licence.",
     nonAffiliato:
       "Limen is an independent project: citing a source does not mean that the body endorses Limen or its estimates. Names and trademarks belong to their owners; a logo appears only where the owner's rules allow it.",
     pericoli: "Hazards",
@@ -59,10 +62,15 @@ const T = testi(
     ruolo: "Role",
     licenza: "Licence",
     attribuzione: "Attribution",
-    facoltativa: "Optional: used only where whoever hosts Limen has the file or the key.",
+    facoltativa:
+      "Optional: used only where whoever hosts Limen has the file or the key.",
     sito: "Source website",
     regole: "Logo usage rules",
     geografia: "geography",
+    proponiTitolo: "Know of a missing dataset?",
+    proponiTesto:
+      "Limen uses a dataset only after measuring it on past events: it must catch more events without more false alarms. If you know of open data that could help, propose it with the form: licence, link, coverage and how to measure it.",
+    proponiLink: "Propose a dataset",
   },
 );
 
@@ -74,7 +82,12 @@ function Marchio({ f }: { f: Fonte }): JSX.Element {
     return (
       <div className="fonte-marchio">
         <a href={f.url} target="_blank" rel="noreferrer">
-          <img src={`${import.meta.env.BASE_URL}${f.logo.file}`} alt={f.ente} width={48} height={48} />
+          <img
+            src={`${import.meta.env.BASE_URL}${f.logo.file}`}
+            alt={f.ente}
+            width={48}
+            height={48}
+          />
         </a>
         <small>
           {f.logo.nota[lingua]}{" "}
@@ -102,7 +115,11 @@ function Scheda({ f }: { f: Fonte }): JSX.Element {
       <div className="fonte-testo">
         <h4>
           {f.dataset[lingua]}
-          {f.copernicus ? <span className="fonte-copernicus">Copernicus · {f.copernicus}</span> : null}
+          {f.copernicus ? (
+            <span className="fonte-copernicus">
+              Copernicus · {f.copernicus}
+            </span>
+          ) : null}
         </h4>
         {f.logo ? <p className="fonte-ente">{f.ente}</p> : null}
         <p>{f.cosa[lingua]}</p>
@@ -132,7 +149,10 @@ function Scheda({ f }: { f: Fonte }): JSX.Element {
           ) : null}
         </dl>
         {f.facoltativa ? <p className="fonte-nota">{t.facoltativa}</p> : null}
-        <a href={f.url} {...(esterno ? { target: "_blank", rel: "noreferrer" } : {})}>
+        <a
+          href={f.url}
+          {...(esterno ? { target: "_blank", rel: "noreferrer" } : {})}
+        >
           {esterno ? t.sito : f.dataset[lingua]}
         </a>
       </div>
@@ -159,7 +179,11 @@ function Copernicus(): JSX.Element {
         <tbody>
           {fontiCopernicus().map((f) => (
             <tr key={f.id}>
-              <td title={f.copernicus ? NOME_SERVIZIO[f.copernicus][lingua] : undefined}>
+              <td
+                title={
+                  f.copernicus ? NOME_SERVIZIO[f.copernicus][lingua] : undefined
+                }
+              >
                 {f.copernicus}
               </td>
               <td>
@@ -180,8 +204,15 @@ function Copernicus(): JSX.Element {
 // nudo cambierebbe l'hash, e `pageFromHash` riporterebbe alla home.
 function scorriAllaScheda(): void {
   const id = /^#\/fonti\/([\w-]+)/.exec(window.location.hash)?.[1];
-  if (id) document.getElementById(`fonte-${id}`)?.scrollIntoView?.({ block: "start" });
+  if (id)
+    document
+      .getElementById(`fonte-${id}`)
+      ?.scrollIntoView?.({ block: "start" });
 }
+
+// Il modulo GitHub della #502: i suoi campi sono quelli del catalogo `dati.yaml`.
+export const URL_PROPOSTA_DATO =
+  "https://github.com/agent-engineering-studio/limen/issues/new?template=proposta-dato.yml";
 
 export function FontiPage(): JSX.Element {
   const { lingua } = useLingua();
@@ -213,6 +244,13 @@ export function FontiPage(): JSX.Element {
           </section>
         );
       })}
+      <section aria-labelledby="proponi-dato">
+        <h3 id="proponi-dato">{t.proponiTitolo}</h3>
+        <p>{t.proponiTesto}</p>
+        <a href={URL_PROPOSTA_DATO} target="_blank" rel="noreferrer">
+          {t.proponiLink}
+        </a>
+      </section>
     </article>
   );
 }

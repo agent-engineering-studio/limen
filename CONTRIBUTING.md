@@ -71,6 +71,13 @@ The "Locked invariants" table in CLAUDE.md is the binding contract.
 
 * Browse open issues tagged
   [`good first issue`](https://github.com/agent-engineering-studio/limen/labels/good%20first%20issue).
+* Know of an open dataset Limen should use? Open a
+  [data proposal](https://github.com/agent-engineering-studio/limen/issues/new?template=proposta-dato.yml)
+  (*Proposta di dato*, label `dato-proposto`). Licence, link, coverage and a
+  measurement plan are required: a dataset enters the scoring only after a
+  backtest shows it catches more events without more false alarms. Its fields
+  are the keys of [`src/limen/config/dati.yaml`](./src/limen/config/dati.yaml),
+  so an accepted proposal becomes a catalogue entry almost verbatim.
 * Read [`docs/scoring-model.md`](./docs/scoring-model.md) to understand
   the V1 engine.
 * Try `make demo` to bring the whole stack up locally.

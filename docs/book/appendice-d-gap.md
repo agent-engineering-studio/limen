@@ -133,7 +133,7 @@ gap si chiude dentro Limen.
 | 9 | Limen non esporta i suoi avvisi in un formato standard. | — | [#499](https://github.com/agent-engineering-studio/limen/issues/499) |
 | 9 | Le interfacce di Limen non seguono gli standard OGC moderni. | — | [#503](https://github.com/agent-engineering-studio/limen/issues/503) |
 | 9 | Il pacchetto dei dati non è nel catalogo nazionale. | — | [#504](https://github.com/agent-engineering-studio/limen/issues/504) |
-| 9 | Non c'è un modo guidato per proporre un dato. | — | [#502](https://github.com/agent-engineering-studio/limen/issues/502) |
+| 9 | ~~Non c'è un modo guidato per proporre un dato.~~ Chiuso: il modulo «Proposta di dato», con i campi del catalogo, collegato dalla pagina Fonti. | — | [#502](https://github.com/agent-engineering-studio/limen/issues/502) |
 
 ## Capitolo 10. [Partecipare](10-partecipare.md)
 
