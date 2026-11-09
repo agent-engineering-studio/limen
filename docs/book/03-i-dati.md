@@ -625,7 +625,8 @@ risultava «caricato»[^454].
     `wui_proximity_norm` e `distance_to_road_m` 312.550; a zero
     `fire_density > 0`, `near_urban`, `near_infra`, `twi`,
     `dist_faults_m`, `population_count`, `buildings_count`,
-    `infra_density_norm`, `land_cover`. Tabelle: `fire_perimeters` 4.097,
+    `infra_density_norm`, `land_cover` (le ultime quattro tolte dalla
+    migrazione 090, #466). Tabelle: `fire_perimeters` 4.097,
     `fire_events` 0, `landslide_events` 6.312, `flood_events` 15.865,
     `comuni` 7.901, `cell_insar_features` 0, `sensor_devices` 0.
 
@@ -676,9 +677,9 @@ corrispondente.
   cella si leggeva «CORINE class 312»; ora si legge «Boschi di conifere
   (CORINE 312)», in italiano e in inglese, dalla legenda ufficiale delle 44
   classi (nomi inglesi di Copernicus, italiani di ISPRA, CC BY 4.0) in
-  `config/corine_classi.yaml`. La colonna `land_cover` resta vuota apposta: il
-  nome si ricava dal codice quando serve, e toglierla cambierebbe il formato
-  del pacchetto rapido. *([#470](https://github.com/agent-engineering-studio/limen/issues/470))*
+  `config/corine_classi.yaml`. La colonna `land_cover`, mai riempita, è stata
+  tolta (migrazione 090, #466): il nome si ricava dal codice quando serve, e
+  nessun pacchetto rapido era ancora uscito con quella colonna. *([#470](https://github.com/agent-engineering-studio/limen/issues/470))*
 - **Corretto: le pagine sulle fonti non erano allineate al catalogo.** La
   pagina «Fonti» della mappa dava l'inventario delle frane come CC BY 4.0 (è
   CC BY-SA 4.0) e il modello del terreno come quello dell'INGV (è quello del
@@ -694,12 +695,13 @@ corrispondente.
   compare come «da verificare». Il confine è il 5 % della quota tipica: la
   Puglia, con poche frane vere (6,8 % delle celle), non viene segnalata.
   *([#467](https://github.com/agent-engineering-studio/limen/issues/467))*
-- **Dati previsti e mai riempiti.** Popolazione, edifici, umidità del terreno
-  dalla forma del versante e distanza dalle faglie hanno un posto nella
-  tabella ma nessun passo che li calcoli. *Proposta di open data:* la griglia
-  europea della popolazione a 1 km (Eurostat, GEOSTAT) o il livello
-  popolazione del JRC (GHSL), licenze da verificare; l'umidità topografica si
-  ricava dal modello del terreno già caricato.
+- ~~**Dati previsti e mai riempiti.**~~ Deciso colonna per colonna
+  (migrazione 090). Popolazione, edifici, densità delle infrastrutture e il
+  nome della classe CORINE sono tolti: nessun codice li leggeva, e
+  l'esposizione viene già dai residenti ISPRA. Restano l'umidità topografica
+  (`twi`), che lo sfidante ML usa e che si calcolerà dal modello del terreno
+  dopo averne misurato il segnale, e la distanza dalle faglie, che il passo
+  geologico riempie quando c'è lo shapefile delle faglie.
   *([#466](https://github.com/agent-engineering-studio/limen/issues/466))*
 - **Nuova versione del modello del terreno.** La 1.3 del CNR-IRPI è uscita il 6
   novembre 2026; Limen usa la 1.2. Prima di cambiare, va misurato quanto

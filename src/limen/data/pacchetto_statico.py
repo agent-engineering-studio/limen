@@ -113,7 +113,6 @@ RISORSE: tuple[Risorsa, ...] = (
             "twi",
             "curvature",
             "landuse_code",
-            "land_cover",
             "near_urban",
             "near_infra",
             "wui_proximity_norm",
@@ -140,9 +139,6 @@ ESCLUSE: dict[str, str] = {
     "exposure_norm": "mescola licenze diverse: la ricalcola limen calibrate",
     "extras": "metadati locali",
     "updated_at": "si scrive all'import",
-    "population_count": "nessun passo la riempie",
-    "buildings_count": "nessun passo la riempie",
-    "infra_density_norm": "nessun passo la riempie",
 }
 
 #: Passi del bootstrap le cui colonne non viaggiano: la loro impronta resta

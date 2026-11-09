@@ -69,13 +69,14 @@ for prioritisation.
 
 | Column | Source | Phase |
 |---|---|---|
-| `slope_deg`, `aspect_deg`, `elevation_m`, `twi`, `curvature` | TINITALY DEM (not yet ingested) | future |
-| `lithology`, `litho_weight`, `dist_faults_m` | ISPRA Carta Geologica (future) | future |
-| `landuse_code` | CORINE (future) | future |
+| `slope_deg`, `aspect_deg`, `elevation_m`, `curvature` | DTM (`LIMEN_DEM_RASTER`) | bootstrap |
+| `twi` | no step yet (#466): ML feature, read as 0 when NULL | to measure |
+| `lithology`, `litho_weight` | Carta geolitologica (`LIMEN_GEOLOGICAL_SHAPEFILE`) | bootstrap |
+| `dist_faults_m` | fault lines (`LIMEN_FAULTS_SHAPEFILE`), NULL without | bootstrap |
+| `landuse_code` | CORINE (`LIMEN_CORINE_RASTER`) | bootstrap |
 | `iffi_density_500`, `distance_to_iffi_m` | `limen bootstrap-static` (PostGIS-only) | Phase 2 |
 | `pai_class_norm` | `limen bootstrap-static` (PostGIS-only) | Phase 2 |
 | `s_static` | `limen calibrate` | Phase 3 |
-| `population_count`, `buildings_count`, `infra_density_norm` | exposure ingest (future) | Phase 7 stub |
 
 ### `seismic_events` (Phase 2)
 
