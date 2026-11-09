@@ -1,0 +1,56 @@
+# Legenda CORINE Land Cover, terzo livello (44 classi), per dare un nome al
+# codice di `cell_static_factors.landuse_code` (#470). Solo presentazione:
+# i pesi per classe stanno negli YAML dei pericoli.
+#
+# Fonti:
+# - nomi inglesi: nomenclatura CLC del Copernicus Land Monitoring Service
+#   (EEA), dati «free, full and open» (Reg. delegato UE 1159/2013), con
+#   attribuzione «© European Union, Copernicus Land Monitoring Service,
+#   European Environment Agency (EEA)»;
+# - nomi italiani: legenda CORINE Land Cover di ISPRA (SINAnet), il cui
+#   CLC Italia è CC BY 4.0 secondo il record INSPIRE di ISPRA.
+classi:
+  "111": {it: "Zone residenziali a tessuto continuo", en: "Continuous urban fabric"}
+  "112": {it: "Zone residenziali a tessuto discontinuo e rado", en: "Discontinuous urban fabric"}
+  "121": {it: "Aree industriali, commerciali e dei servizi pubblici e privati", en: "Industrial or commercial units"}
+  "122": {it: "Reti stradali, ferroviarie e infrastrutture tecniche", en: "Road and rail networks and associated land"}
+  "123": {it: "Aree portuali", en: "Port areas"}
+  "124": {it: "Aeroporti", en: "Airports"}
+  "131": {it: "Aree estrattive", en: "Mineral extraction sites"}
+  "132": {it: "Discariche", en: "Dump sites"}
+  "133": {it: "Cantieri", en: "Construction sites"}
+  "141": {it: "Aree verdi urbane", en: "Green urban areas"}
+  "142": {it: "Aree ricreative e sportive", en: "Sport and leisure facilities"}
+  "211": {it: "Seminativi in aree non irrigue", en: "Non-irrigated arable land"}
+  "212": {it: "Seminativi in aree irrigue", en: "Permanently irrigated land"}
+  "213": {it: "Risaie", en: "Rice fields"}
+  "221": {it: "Vigneti", en: "Vineyards"}
+  "222": {it: "Frutteti e frutti minori", en: "Fruit trees and berry plantations"}
+  "223": {it: "Oliveti", en: "Olive groves"}
+  "231": {it: "Prati stabili (foraggere permanenti)", en: "Pastures"}
+  "241": {it: "Colture temporanee associate a colture permanenti", en: "Annual crops associated with permanent crops"}
+  "242": {it: "Sistemi colturali e particellari complessi", en: "Complex cultivation patterns"}
+  "243": {it: "Aree prevalentemente occupate da colture agrarie con presenza di spazi naturali importanti", en: "Land principally occupied by agriculture, with significant areas of natural vegetation"}
+  "244": {it: "Aree agroforestali", en: "Agro-forestry areas"}
+  "311": {it: "Boschi di latifoglie", en: "Broad-leaved forest"}
+  "312": {it: "Boschi di conifere", en: "Coniferous forest"}
+  "313": {it: "Boschi misti di conifere e latifoglie", en: "Mixed forest"}
+  "321": {it: "Aree a pascolo naturale e praterie", en: "Natural grasslands"}
+  "322": {it: "Brughiere e cespuglieti", en: "Moors and heathland"}
+  "323": {it: "Aree a vegetazione sclerofilla", en: "Sclerophyllous vegetation"}
+  "324": {it: "Aree a vegetazione boschiva e arbustiva in evoluzione", en: "Transitional woodland-shrub"}
+  "331": {it: "Spiagge, dune e sabbie", en: "Beaches, dunes, sands"}
+  "332": {it: "Rocce nude, falesie, rupi, affioramenti", en: "Bare rocks"}
+  "333": {it: "Aree con vegetazione rada", en: "Sparsely vegetated areas"}
+  "334": {it: "Aree percorse da incendi", en: "Burnt areas"}
+  "335": {it: "Ghiacciai e nevi perenni", en: "Glaciers and perpetual snow"}
+  "411": {it: "Paludi interne", en: "Inland marshes"}
+  "412": {it: "Torbiere", en: "Peat bogs"}
+  "421": {it: "Paludi salmastre", en: "Salt marshes"}
+  "422": {it: "Saline", en: "Salines"}
+  "423": {it: "Zone intertidali", en: "Intertidal flats"}
+  "511": {it: "Corsi d'acqua, canali e idrovie", en: "Water courses"}
+  "512": {it: "Bacini d'acqua", en: "Water bodies"}
+  "521": {it: "Lagune", en: "Coastal lagoons"}
+  "522": {it: "Estuari", en: "Estuaries"}
+  "523": {it: "Mari e oceani", en: "Sea and ocean"}

@@ -670,10 +670,13 @@ corrispondente.
 - **La chiave per i dati ufficiali dei fiumi manca.** Senza, Limen usa la
   copia di Open-Meteo, e il confronto fra le due serie della piena ordinaria è
   fermo. *(issue: #448)*
-- **Bosco e città sono codici, non nomi.** Nel riquadro della cella si legge
-  «CORINE class 312» invece di «Boschi di conifere». *Proposta di open data:*
-  la legenda ufficiale CORINE, pubblicata da Copernicus e da ISPRA in
-  italiano. *([#470](https://github.com/agent-engineering-studio/limen/issues/470))*
+- **Bosco e città erano codici, non nomi** *(chiuso)*. Nel riquadro della
+  cella si leggeva «CORINE class 312»; ora si legge «Boschi di conifere
+  (CORINE 312)», in italiano e in inglese, dalla legenda ufficiale delle 44
+  classi (nomi inglesi di Copernicus, italiani di ISPRA, CC BY 4.0) in
+  `config/corine_classi.yaml`. La colonna `land_cover` resta vuota apposta: il
+  nome si ricava dal codice quando serve, e toglierla cambierebbe il formato
+  del pacchetto rapido. *([#470](https://github.com/agent-engineering-studio/limen/issues/470))*
 - **Corretto: le pagine sulle fonti non erano allineate al catalogo.** La
   pagina «Fonti» della mappa dava l'inventario delle frane come CC BY 4.0 (è
   CC BY-SA 4.0) e il modello del terreno come quello dell'INGV (è quello del

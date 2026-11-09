@@ -49,7 +49,10 @@ function letturaEn(d: DatoDiBase): string {
     return "no value for this cell";
   }
   const v = d.valore;
-  if (typeof v !== "number") return d.colonna === "landuse_code" ? `CORINE class ${v}` : String(v);
+  if (typeof v !== "number") {
+    if (d.colonna !== "landuse_code") return String(v);
+    return d.nome_classe_en ? `${d.nome_classe_en} (CORINE ${v})` : `CORINE class ${v}`;
+  }
   switch (d.colonna) {
     case "iffi_density_500":
       return `${Math.round(v)} mapped landslides within 500 m`;

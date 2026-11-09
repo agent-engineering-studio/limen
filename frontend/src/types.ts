@@ -251,6 +251,7 @@ export interface DatoDiBase {
   stato: "presente" | "assente_qui" | "non_caricato";
   valore: number | string | null;
   classe: string | null;
+  nome_classe_en?: string | null;
   lettura: string;
   fonte: string;
   licenza: string;
