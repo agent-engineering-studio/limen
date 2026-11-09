@@ -18,6 +18,7 @@ import HomePage from "./components/HomePage";
 import FontiPage from "./components/FontiPage";
 import InstallazionePage from "./components/InstallazionePage";
 import IntegrationsPage from "./components/IntegrationsPage";
+import PartecipaPage from "./components/PartecipaPage";
 import PrivacyPage from "./components/PrivacyPage";
 import SensoriPage from "./components/SensoriPage";
 import LegendPanel from "./components/LegendPanel";
@@ -48,6 +49,7 @@ type Page =
   | "integrations"
   | "sensori"
   | "privacy"
+  | "partecipare"
   | "fonti"
   | "installazione"
   | "verifiche";
@@ -82,6 +84,9 @@ function pageFromHash(): Page {
   // Fuori dal menu: la linkano il piè di pagina e i moduli che chiedono dati.
   if (hash.startsWith("#/privacy")) {
     return "privacy";
+  }
+  if (hash.startsWith("#/partecipare")) {
+    return "partecipare";
   }
   // Fuori dal menu: ci si arriva dal link che stampa lo script d'installazione.
   if (hash.startsWith("#/installazione")) {
@@ -668,6 +673,10 @@ export function App(): JSX.Element {
         ) : page === "sensori" ? (
           <div className="explainer-area">
             <SensoriPage />
+          </div>
+        ) : page === "partecipare" ? (
+          <div className="explainer-area">
+            <PartecipaPage />
           </div>
         ) : page === "privacy" ? (
           <div className="explainer-area">

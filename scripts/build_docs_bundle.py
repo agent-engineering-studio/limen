@@ -28,6 +28,7 @@ PAGES: tuple[tuple[str, str, str], ...] = (
     ("integrazioni.md", "integrazioni.ts", "INTEGRAZIONI"),
     ("sensori.md", "sensori.ts", "SENSORI"),
     ("privacy.md", "privacy.ts", "PRIVACY"),
+    ("partecipare.md", "partecipare.ts", "PARTECIPARE"),
 )
 
 

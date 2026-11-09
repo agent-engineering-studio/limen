@@ -69,6 +69,11 @@ The "Locked invariants" table in CLAUDE.md is the binding contract.
 
 ## Where to start
 
+Not a developer? The most useful contributions are real events, measurements
+and opinions: see the [«Partecipare» guide](./docs/guida/partecipare.en.md)
+(*Take part*, also [in Italian](./docs/guida/partecipare.md)) and the
+*Report an event* / *Challenge a score* issue forms.
+
 * Browse open issues tagged
   [`good first issue`](https://github.com/agent-engineering-studio/limen/labels/good%20first%20issue):
   each one lists the files to touch, the command that verifies it and the

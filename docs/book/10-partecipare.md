@@ -421,9 +421,11 @@ emergenza e la Protezione civile del tuo Comune.
 Che cosa manca per partecipare facilmente, in breve. Il dettaglio sta nella
 issue indicata.
 
-- **Manca una guida per chi non sviluppa.** La guida per chi contribuisce è
-  in inglese e parla solo di codice. Un ricercatore, un ufficio comunale o un
-  cittadino non trova scritto come dare un evento, una misura o un parere.
+- ~~**Manca una guida per chi non sviluppa.**~~ Chiuso: la pagina
+  «Partecipare» (`#/partecipare`, IT + EN) dice a chi vede un evento, a chi fa
+  ricerca, agli enti, a chi conosce un dato o ha un sensore che cosa può fare,
+  con un esempio e che cosa succede dopo; i moduli «Segnala un evento» e
+  «Contesta un punteggio» hanno i campi che `limen registra-verifica` legge.
   ([#511](https://github.com/agent-engineering-studio/limen/issues/511))
 - ~~**Manca un canale di contatto pubblico.**~~ Chiuso: le
   [discussioni del repository](https://github.com/agent-engineering-studio/limen/discussions)
