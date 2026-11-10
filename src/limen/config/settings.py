@@ -1266,6 +1266,16 @@ class ReportSettings(BaseSettings):
     html_publish: bool = False
 
 
+class McpSettings(BaseSettings):
+    """Server MCP ``limen-ops``."""
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    # L'estensione sperimentale MCP Events (#371), solo poll: spenta finché la
+    # specifica è una bozza. `MCP__EVENTI=true` la annuncia nelle capability.
+    eventi: bool = False
+
+
 class VerifySettings(BaseSettings):
     """Fact-checking of archived report zones vs real events (#17)."""
 
@@ -1394,6 +1404,7 @@ class Settings(BaseSettings):
     kg: KgSettings = Field(default_factory=KgSettings)
     geoserver_source: GeoServerSourceSettings = Field(default_factory=GeoServerSourceSettings)
     pubblico: PubblicoSettings = Field(default_factory=PubblicoSettings)
+    mcp: McpSettings = Field(default_factory=McpSettings)
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_json: bool = False
