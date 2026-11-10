@@ -47,6 +47,9 @@ CANONICAL_FEATURES: tuple[str, ...] = (
     # altre `insar.*` dalla correzione della #568.
     "insar.velocita_verticale_mmy",
     "insar.velocita_est_mmy",
+    # Dal CSV L3 (#380): l'accelerazione riempie `insar.accel_mmy2`, che
+    # prima era sempre NULL.
+    "insar.stagionalita_verticale_mm",
 )
 
 #: Feature dell'incendio (#68). **Lista separata, non in coda alla comune.**

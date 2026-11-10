@@ -440,6 +440,9 @@ async def _build_features(cell_id: str, valuation_time: datetime) -> dict[str, A
             "scatterer_count": insar.scatterer_count if insar is not None else 0,
             "velocita_verticale_mmy": insar.velocita_verticale_mmy if insar is not None else None,
             "velocita_est_mmy": insar.velocita_est_mmy if insar is not None else None,
+            "stagionalita_verticale_mm": (
+                insar.stagionalita_verticale_mm if insar is not None else None
+            ),
         },
     }
     return features

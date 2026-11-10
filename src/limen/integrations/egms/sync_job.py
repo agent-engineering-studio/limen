@@ -21,13 +21,21 @@ from limen.core.logging import get_logger
 from limen.data.db import acquire
 from limen.data.repos import cell_insar_features_repo, dataset_versions_repo
 from limen.integrations.egms import clms
-from limen.integrations.egms.aggregate import PASSO_M, Cella, Griglia, mosaico, per_cella
+from limen.integrations.egms.aggregate import (
+    PASSO_M,
+    Cella,
+    Griglia,
+    mosaico,
+    per_cella,
+    su_griglia,
+)
 
 log = get_logger(__name__)
 
 SOURCE = "copernicus.egms"
 #: Da cambiare quando cambia il modo di aggregare, non il dato.
-VERSIONE_CALCOLO = "ortho-l3-v1"
+#: v2: accelerazione e stagionalità dal CSV della tile (#380).
+VERSIONE_CALCOLO = "ortho-l3-v2"
 
 
 async def _celle(aoi_id: str) -> list[Cella]:
@@ -112,7 +120,7 @@ async def sync_egms(*, aoi_id: str, settings: Settings | None = None) -> int:
         # Una tile già sul disco (o già nota come mare) non chiede niente
         # all'archivio: il secondo sync scarica zero byte.
         async with cancello:
-            return await archivio.fetch_tile(tile, componente, s.release, cartella)
+            return await archivio.fetch_tile(tile, componente, s.release, cartella, attributi=True)
 
     trovate = await asyncio.gather(*(_una(c, t) for c, t in richieste))
     tiff: dict[str, list[Path]] = {c: [] for c in COMPONENTS}
@@ -136,6 +144,21 @@ async def sync_egms(*, aoi_id: str, settings: Settings | None = None) -> int:
         est=est,
         left=math.floor(minx / PASSO_M) * PASSO_M,
         top=math.ceil(maxy / PASSO_M) * PASSO_M,
+    )
+    attributi = {c: [clms.attributi_di(p) for p in tiff[c]] for c in COMPONENTS}
+    forma = verticale.shape
+    angolo = {"forma": forma, "left": griglia.left, "top": griglia.top}
+    griglia = replace(
+        griglia,
+        accelerazione_verticale=await asyncio.to_thread(
+            su_griglia, attributi["U"], "acceleration", **angolo
+        ),
+        accelerazione_est=await asyncio.to_thread(
+            su_griglia, attributi["E"], "acceleration", **angolo
+        ),
+        stagionalita_verticale=await asyncio.to_thread(
+            su_griglia, attributi["U"], "seasonality", **angolo
+        ),
     )
     righe = await asyncio.to_thread(per_cella, celle, griglia)
 

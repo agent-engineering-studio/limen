@@ -365,6 +365,7 @@ def _bundle_to_feature_row(bundle: CellFeatureBundle, *, names: list[str]) -> li
         "insar.scatterer_count": float(bundle.static.insar_scatterer_count or 0),
         "insar.velocita_verticale_mmy": float(bundle.static.velocita_verticale_mmy or 0.0),
         "insar.velocita_est_mmy": float(bundle.static.velocita_est_mmy or 0.0),
+        "insar.stagionalita_verticale_mm": float(bundle.static.stagionalita_verticale_mm or 0.0),
         # Same antecedent-rain aggregates the model trained on (CERRA
         # replay). The monitoring window is 48 h, so rain_72h is a lower
         # bound; the 30-day total comes from the API_30 archive lookup.

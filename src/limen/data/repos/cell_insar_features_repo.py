@@ -29,6 +29,7 @@ class CellInsarFeatures:
     dataset_version_id: int | None = None
     velocita_verticale_mmy: float | None = None
     velocita_est_mmy: float | None = None
+    stagionalita_verticale_mm: float | None = None
 
 
 async def upsert_many(items: Iterable[CellInsarFeatures]) -> int:
@@ -41,8 +42,8 @@ async def upsert_many(items: Iterable[CellInsarFeatures]) -> int:
             INSERT INTO cell_insar_features (
                 cell_id, insar_velocity_mmy, insar_accel_mmy2,
                 scatterer_count, period_start, period_end, dataset_version_id,
-                velocita_verticale_mmy, velocita_est_mmy
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                velocita_verticale_mmy, velocita_est_mmy, stagionalita_verticale_mm
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             ON CONFLICT (cell_id) DO UPDATE
             SET insar_velocity_mmy     = EXCLUDED.insar_velocity_mmy,
                 insar_accel_mmy2       = EXCLUDED.insar_accel_mmy2,
@@ -52,6 +53,7 @@ async def upsert_many(items: Iterable[CellInsarFeatures]) -> int:
                 dataset_version_id     = EXCLUDED.dataset_version_id,
                 velocita_verticale_mmy = EXCLUDED.velocita_verticale_mmy,
                 velocita_est_mmy       = EXCLUDED.velocita_est_mmy,
+                stagionalita_verticale_mm = EXCLUDED.stagionalita_verticale_mm,
                 updated_at             = now()
             """,
             [
@@ -65,6 +67,7 @@ async def upsert_many(items: Iterable[CellInsarFeatures]) -> int:
                     it.dataset_version_id,
                     it.velocita_verticale_mmy,
                     it.velocita_est_mmy,
+                    it.stagionalita_verticale_mm,
                 )
                 for it in rows
             ],
@@ -79,7 +82,7 @@ async def get_for_cell(cell_id: str) -> CellInsarFeatures | None:
             """
             SELECT cell_id, insar_velocity_mmy, insar_accel_mmy2,
                    scatterer_count, period_start, period_end, dataset_version_id,
-                   velocita_verticale_mmy, velocita_est_mmy
+                   velocita_verticale_mmy, velocita_est_mmy, stagionalita_verticale_mm
             FROM cell_insar_features
             WHERE cell_id = $1
             """,
@@ -97,6 +100,7 @@ async def get_for_cell(cell_id: str) -> CellInsarFeatures | None:
         dataset_version_id=row["dataset_version_id"],
         velocita_verticale_mmy=row["velocita_verticale_mmy"],
         velocita_est_mmy=row["velocita_est_mmy"],
+        stagionalita_verticale_mm=row["stagionalita_verticale_mm"],
     )
 
 

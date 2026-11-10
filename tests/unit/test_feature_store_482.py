@@ -61,6 +61,7 @@ def test_lo_schema_frane_si_allunga_solo_in_coda() -> None:
         "static.imperviousness_norm",
         "insar.velocita_verticale_mmy",
         "insar.velocita_est_mmy",
+        "insar.stagionalita_verticale_mm",
     )
 
 
@@ -92,6 +93,7 @@ def _bundle() -> CellFeatureBundle:
             insar_scatterer_count=12,
             velocita_verticale_mmy=-3.9,
             velocita_est_mmy=1.2,
+            stagionalita_verticale_mm=2.5,
         ),
         dynamic=DynamicInputs(
             valuation_time=T,
@@ -129,6 +131,7 @@ def test_ogni_feature_dello_schema_e_servita(schema: tuple[str, ...]) -> None:
         "scatterer_count": statiche.insar_scatterer_count,
         "velocita_verticale_mmy": statiche.velocita_verticale_mmy,
         "velocita_est_mmy": statiche.velocita_est_mmy,
+        "stagionalita_verticale_mm": statiche.stagionalita_verticale_mm,
     }
     for nome in nomi:
         top, _, sub = nome.partition(".")
