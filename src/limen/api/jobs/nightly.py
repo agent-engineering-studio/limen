@@ -57,6 +57,7 @@ STEPS = (
     "effis_perimetri",
     "ems_alluvioni",
     "esposizione_ispra",
+    "qualita_dati",
     "glofas_riferimenti",
 )
 
@@ -225,6 +226,9 @@ async def run_nightly_pipeline(deps: AppDependencies) -> dict[str, Any]:
     out["effis_perimetri"] = await _step("effis_perimetri", _effis_perimetri)
     out["ems_alluvioni"] = await _step("ems_alluvioni", _ems_alluvioni)
     out["esposizione_ispra"] = await _step("esposizione_ispra", _esposizione_ispra)
+    # Dopo gli altri passi, così vede i loro errori di stanotte; prima di
+    # GloFAS, che dura ore e non deve ritardare il riepilogo (#421).
+    out["qualita_dati"] = await _step("qualita_dati", _qualita_dati)
     # Per ultimo: il tetto di GloFAS riparte a mezzanotte UTC, quindi alle due
     # è intero comunque, e il riempimento ora dura un paio d'ore (i lotti si
     # distanziano sotto il limite orario): davanti, terrebbe ferma la retention.
@@ -232,6 +236,12 @@ async def run_nightly_pipeline(deps: AppDependencies) -> dict[str, Any]:
 
     log.info("job.nightly.done", steps={k: v is not None for k, v in out.items()})
     return out
+
+
+async def _qualita_dati() -> dict[str, Any]:
+    from limen.cli.qualita_dati import riepilogo
+
+    return await riepilogo()
 
 
 async def _drift(deps: AppDependencies) -> dict[str, Any]:
