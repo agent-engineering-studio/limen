@@ -45,12 +45,19 @@ giornate-cella della stagione, su **tutte** le celle dell'AOI, in allerta. Il
 rapporto fra hit rate e carico per cella è la discriminazione spaziale, lo
 stesso metro del backtest frane: alzare un peso fa salire l'hit rate, ma se fa
 salire il carico altrettanto non ha insegnato niente.
+
+Sullo stesso conto si misurano i **falsi allarmi** (#479): una giornata-cella
+in allerta è vera se la sua cella brucia entro l'orizzonte di preavviso, falsa
+altrimenti. Senza ``LIMEN_BACKTEST_WILDFIRE_AOI`` il comando gira su tutte le
+AOI e scrive anche ``backtest_wildfire_italia_<inizio>_<fine>.md``, una riga per
+regione con il totale pesato sulle celle bruciate.
 """
 
 from __future__ import annotations
 
 import os
 from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
@@ -137,6 +144,9 @@ class WildfireBacktestMetrics:
     carico_celle: float = 0.0
     picco_celle: float = 0.0
     giorno_picco: date | None = None
+    #: Vero quando il FAR viene dal carico per cella (#479): giornate-cella in
+    #: allerta su celle che non hanno bruciato entro l'orizzonte.
+    far_misurato: bool = False
 
 
 def _at_least(level: RiskLevel, threshold: RiskLevel) -> bool:
@@ -354,8 +364,8 @@ def evaluate(
         leads.append((fire_date - earliest).days * 24.0)
 
     # Un'allerta dentro l'orizzonte è per costruzione un hit, quindi qui i
-    # falsi allarmi sono sempre zero: contarli richiede di rigiocare le celle
-    # che *non* hanno bruciato, che è il limite dichiarato nel report.
+    # falsi allarmi sono sempre zero: si contano su tutte le celle dell'AOI in
+    # `carico_celle` (#479), che `backtest_aoi` riporta nelle metriche.
     false_alarms = 0
     hit_rate = hits / len(truth) if truth else 0.0
     far = false_alarms / (hits + false_alarms) if (hits + false_alarms) else 0.0
@@ -451,6 +461,12 @@ class CaricoCelle:
     #: copre mezza regione: chi riceve le notifiche sì (#301).
     picco: float
     giorno_picco: date | None
+    #: Falsi allarmi per giornata-cella (#479): la quota delle giornate-cella in
+    #: allerta su una cella che **non** ha bruciato entro l'orizzonte di
+    #: preavviso. ``None`` senza allerte, o senza le date degli incendi.
+    far: float | None = None
+    giornate_allerta: int = 0
+    giornate_false: int = 0
 
 
 def carico_celle(
@@ -462,9 +478,17 @@ def carico_celle(
     end: date,
     thresholds: WildfireThresholds,
     alert_level: RiskLevel,
+    bruciate: Mapping[str, date] | None = None,
 ) -> CaricoCelle:
     """Le giornate-cella in ``[start, end]`` con la cella in ``alert_level``
     o oltre, su tutte le celle dell'AOI: in media e nel giorno peggiore.
+
+    Con ``bruciate`` (``{cell_id: giorno del primo incendio}``) conta anche i
+    **falsi allarmi** (#479): un'allerta è vera se la sua cella brucia entro
+    l'orizzonte di preavviso dopo quel giorno, la stessa finestra dell'hit
+    rate; ogni altra è falsa. Con i perimetri EFFIS (incendi grandi) è un
+    numero alto per costruzione: dice quante allerte riceve chi le riceve per
+    ogni incendio che arriva davvero.
 
     Il punteggio è ``min(fwi_norm * terreno, 1)``: il terreno di una cella si
     chiede al motore una volta sola, con il meteo al massimo (``fwi_norm`` = 1),
@@ -479,6 +503,8 @@ def carico_celle(
     pieno = thresholds.fwi.normalisation_max
     soglia = _soglia(alert_level, thresholds)
     per_nodo: dict[int, list[float]] = defaultdict(list)
+    fuoco_per_nodo: dict[int, list[date | None]] = defaultdict(list)
+    orizzonte = timedelta(days=int(_LEAD_MAX_HOURS // 24))
     for cella in celle:
         terreno = engine.score(
             CellFeatureBundle(
@@ -493,9 +519,12 @@ def carico_celle(
                 ),
             )
         ).score
-        per_nodo[nearest_node(cella.lon, cella.lat, nodes)].append(terreno)
+        k = nearest_node(cella.lon, cella.lat, nodes)
+        per_nodo[k].append(terreno)
+        fuoco_per_nodo[k].append((bruciate or {}).get(cella.cell_id))
     giornate = 0
     in_allerta = 0
+    vere = 0
     per_giorno: dict[date, int] = defaultdict(int)
     for k, terreni in per_nodo.items():
         stati = [(d, s.fwi) for d, s in chains[k].items() if start <= d <= end]
@@ -507,7 +536,16 @@ def carico_celle(
         if gate is not None:
             accesa = np.outer(t >= gate.terrain_min, fwi >= gate.fwi_min)
             punteggi = np.where(accesa, np.maximum(punteggi, rosso), punteggi)
-        allerte = np.count_nonzero(punteggi >= soglia, axis=0)
+        accese = punteggi >= soglia
+        allerte = np.count_nonzero(accese, axis=0)
+        for riga, fuoco in enumerate(fuoco_per_nodo[k]):
+            if fuoco is None:
+                continue
+            vere += sum(
+                1
+                for (d, _), on in zip(stati, accese[riga], strict=True)
+                if on and d <= fuoco <= d + orizzonte
+            )
         giornate += punteggi.size
         in_allerta += int(allerte.sum())
         for (d, _), n in zip(stati, allerte, strict=True):
@@ -519,6 +557,9 @@ def carico_celle(
         quota=in_allerta / giornate,
         picco=n / sum(len(t) for t in per_nodo.values()),
         giorno_picco=giorno if n else None,
+        far=(in_allerta - vere) / in_allerta if bruciate is not None and in_allerta else None,
+        giornate_allerta=in_allerta,
+        giornate_false=in_allerta - vere if bruciate is not None else 0,
     )
 
 
@@ -548,8 +589,8 @@ def write_report(
         "",
         f"- Celle bruciate (perimetri EFFIS nella finestra): **{metrics.truth_fires}**",
         f"- Celle con almeno un'allerta: **{metrics.cells_warned}**",
-        f"- Hit: **{metrics.hits}**, falsi allarmi: **{metrics.false_alarms}**, "
-        f"mancati: **{metrics.misses}**",
+        f"- Hit: **{metrics.hits}**, mancati: **{metrics.misses}** (celle bruciate); "
+        f"falsi allarmi: **{metrics.false_alarms}** giornate-cella",
         "",
         "## Metriche §2.5",
         "",
@@ -564,19 +605,25 @@ def write_report(
         f"- **Discriminazione spaziale**: {_lift_spaziale(metrics):.2f} volte il carico per cella",
         f"- **Giorno peggiore**: {metrics.picco_celle:.2%} delle celle dell'AOI in allerta "
         f"insieme ({metrics.giorno_picco or 'nessuno'})",
-        "- **FAR**: non misurato (vedi nota)",
+        (
+            f"- **FAR per giornata-cella**: {metrics.far:.2%} delle giornate-cella in "
+            f"allerta su celle che non hanno bruciato nelle {_LEAD_MAX_HOURS:.0f} h seguenti"
+            if metrics.far_misurato
+            else "- **FAR**: non misurato (nessuna giornata-cella in allerta)"
+        ),
         f"- **Preavviso medio**: {metrics.mean_lead_hours:.1f} h",
         "",
         "> L'hit rate da solo non dice nulla: un modello che dichiara pericolo",
         "> alto tutti i giorni d'estate lo massimizza senza discriminare. Il",
         "> confronto con il tasso di base è ciò che separa la bravura dalla",
         "> frequenza — sotto 1.0 il modello è peggio del caso.",
-        "> Il replay guarda solo le celle che hanno bruciato, e solo",
-        f"> l'orizzonte di {_LEAD_MAX_HOURS:.0f} h prima di ciascun incendio. Hit rate e",
-        "> preavviso sono quindi misurati; il **FAR no**: un falso allarme è",
-        "> per definizione un'allerta su terreno che non ha preso fuoco, e qui",
-        "> quel terreno non viene mai valutato. Misurarlo richiede di rigiocare",
-        "> l'intera AOI per tutta la stagione.",
+        "> Hit rate e preavviso guardano le celle che hanno bruciato, nelle",
+        f"> {_LEAD_MAX_HOURS:.0f} h prima di ciascun incendio. Il FAR guarda **tutte** le",
+        "> celle dell'AOI per tutta la stagione: un'allerta è falsa se la sua cella",
+        "> non brucia nell'orizzonte di preavviso. Con i perimetri EFFIS, che",
+        "> censiscono gli incendi grandi, è alto per costruzione: si legge come",
+        "> quante allerte arrivano per ogni incendio vero, e si confronta fra",
+        "> varianti, non con lo zero.",
         "",
     ]
     if metrics.truth_fires == 0:
@@ -588,6 +635,58 @@ def write_report(
             "costruzione, non zero.",
         )
     provenienza.scrivi_report(out, "\n".join(lines))
+    return out
+
+
+def write_national_report(
+    risultati: Sequence[WildfireBacktestMetrics],
+    *,
+    start: date,
+    end: date,
+    alert_level: RiskLevel,
+) -> Path:
+    """Una riga per regione, sulla stessa finestra e la stessa soglia (#479).
+
+    I totali in fondo sono **pesati sulle celle bruciate** per hit rate e tasso
+    di base, non una media delle righe: una regione con tre incendi non pesa
+    quanto una con trecento.
+    """
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    out = REPORTS_DIR / f"backtest_wildfire_italia_{start}_{end}.md"
+    righe = [
+        "# Limen backtest incendio — Italia",
+        "",
+        f"Finestra: **{start} → {end}**; soglia di allerta **{alert_level.value}**, "
+        f"orizzonte di preavviso **{_LEAD_MAX_HOURS:.0f} h**. Il dettaglio di ogni "
+        "regione è nel suo report.",
+        "",
+        "| AOI | celle bruciate | hit rate | tasso di base | discriminazione "
+        "| carico per cella | FAR (giornate-cella) | preavviso |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for m in sorted(risultati, key=lambda m: m.aoi_id):
+        if m.truth_fires == 0:
+            righe.append(f"| `{m.aoi_id}` | 0 | — | — | — | {m.carico_celle:.1%} | — | — |")
+            continue
+        far = f"{m.far:.1%}" if m.far_misurato else "—"
+        righe.append(
+            f"| `{m.aoi_id}` | {m.truth_fires} | {m.hit_rate:.0%} | {m.base_rate:.0%} "
+            f"| {_lift(m):.2f}x | {m.carico_celle:.1%} | {far} | {m.mean_lead_hours:.0f} h |"
+        )
+    fuochi = sum(m.truth_fires for m in risultati)
+    if fuochi:
+        hit = sum(m.hit_rate * m.truth_fires for m in risultati) / fuochi
+        base = sum(m.base_rate * m.truth_fires for m in risultati) / fuochi
+        righe.append(
+            f"| **Italia** | **{fuochi}** | **{hit:.0%}** | **{base:.0%}** "
+            f"| **{hit / base if base else 0:.2f}x** | | | |"
+        )
+    righe += [
+        "",
+        "Una regione senza celle bruciate non ha hit rate né FAR: non è «zero»,",
+        "è nessun incendio grande censito da EFFIS nella finestra.",
+    ]
+    provenienza.scrivi_report(out, "\n".join(righe))
     return out
 
 
@@ -676,9 +775,13 @@ async def backtest_aoi(
         end=end,
         thresholds=thresholds,
         alert_level=alert_level,
+        bruciate={cella: giorno for cella, (giorno, _lon, _lat) in truth.items()},
     )
     metrics = replace(
         metrics,
+        far=carico.far if carico.far is not None else 0.0,
+        false_alarms=carico.giornate_false,
+        far_misurato=carico.far is not None,
         carico_meteo=carico_meteo(chains, start=start, end=end, thresholds=thresholds),
         carico_celle=carico.quota,
         picco_celle=carico.picco,
@@ -751,7 +854,7 @@ async def run() -> int:
         if not aoi_ids:
             log.warning("backtest_wildfire.no_aoi")
             return 0
-        for aoi_id in aoi_ids:
+        risultati = [
             await backtest_aoi(
                 aoi_id=aoi_id,
                 start=start,
@@ -761,6 +864,11 @@ async def run() -> int:
                 client=client,
                 fonte=fonte,
             )
+            for aoi_id in aoi_ids
+        ]
+    if len(risultati) > 1:
+        nazionale = write_national_report(risultati, start=start, end=end, alert_level=alert_level)
+        log.info("backtest_wildfire.italia.done", aoi=len(risultati), report=str(nazionale))
     await SharedHttpClient.aclose()
     return 0
 
@@ -776,5 +884,6 @@ __all__ = [
     "fetch_burnt_cells",
     "replay_chain",
     "run",
+    "write_national_report",
     "write_report",
 ]

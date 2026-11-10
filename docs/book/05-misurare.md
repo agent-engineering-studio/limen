@@ -122,7 +122,10 @@ racconta per esteso.
     - `limen backtest-wildfire`: hit rate, tasso di base sulla **sola
       stagione** (mai sui giorni di spin-up), discriminazione, carico meteo,
       carico per cella, discriminazione spaziale, giorno peggiore, preavviso.
-      Il FAR non è misurato: il replay guarda solo le celle bruciate.
+      Il FAR si misura per giornata-cella su tutte le celle dell'AOI:
+      un'allerta è falsa se la sua cella non brucia nelle 72 ore seguenti.
+      Lanciato su tutte le regioni scrive anche un riepilogo nazionale, una
+      riga per regione.
     - L'AUC «dentro nodo meteo × fascia di quota» delle misure offline (#295,
       #419, #420) è `limen misura`, in sola lettura.
     - Ogni comando di misura chiude il report con la sezione «Provenienza»
@@ -464,7 +467,7 @@ aneddoto, non una statistica: il primo lavoro è allargare il registro.
 | **Il ramo dei fiumi non si misura nei backtest** | Quando la quota giornaliera del servizio delle portate finisce, la prova misura solo la pioggia, come l'8 novembre. | Chiuso in parte: le portate storiche lette restano su disco per nodo e il backtest le rilegge, chiedendo solo i nodi che mancano; il report dice in testa su quanti nodi il ramo dei fiumi è misurato, o che non lo è. Manca il report Emilia-Romagna e Lombardia con entrambi i rami. | ([#478](https://github.com/agent-engineering-studio/limen/issues/478)) |
 | **I report delle prove non sono nel repository** | Chi arriva non trova i numeri citati nelle issue, e non può confrontare una nuova prova con la precedente. | Chiuso in parte: ogni report dichiara commit, versioni dei motori, comando e ambiente, e `limen archivia-report` lo porta in `docs/misure` con un indice; la PR che cambia una `model_version` lo chiede nel suo modello. Mancano i report di riferimento veri (incendio, alluvione, le dodici finestre della frana), da rifare con la provenienza. | ([#481](https://github.com/agent-engineering-studio/limen/issues/481)) |
 | ~~**Le misure veloci non sono riproducibili**~~ | Chiuso in parte: `limen misura` rifà in sola lettura AUC stratificata per nodo meteo e fascia di quota e osservate/attese, con stima e verifica in anni diversi, per ogni colonna numerica dei fattori per cella contro EFFIS o Copernicus EMS. | Manca il punteggio calcolato dal motore vero, che vuole il meteo di ogni giorno. | ([#480](https://github.com/agent-engineering-studio/limen/issues/480)) |
-| **L'incendio è misurato su poche regioni, solo d'estate** | Tre-quattro regioni del Sud, giugno-settembre; falsi allarmi non misurati; la quota dell'archivio meteo interrompe le prove. | Prova su tutte le venti regioni e tutto l'anno, con il meteo storico salvato una volta. | ([#479](https://github.com/agent-engineering-studio/limen/issues/479)) |
+| **L'incendio è misurato su poche regioni, solo d'estate** | Tre-quattro regioni del Sud, giugno-settembre; la quota dell'archivio meteo interrompe le prove. | Chiuso in parte: falsi allarmi per giornata-cella e riepilogo nazionale con una riga per regione; il meteo storico viene dall'istanza Open-Meteo propria, senza quota. Manca la prova vera su venti regioni e tutto l'anno. | ([#479](https://github.com/agent-engineering-studio/limen/issues/479)) |
 
 ## Per approfondire
 
