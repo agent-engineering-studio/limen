@@ -12,6 +12,7 @@ Usage:
     limen ems-sentinel1      Sentinel-1 / EMS label pairs for flood ML (CDSE, PU budget).
     limen registra-verifica  Fact check: un evento verificato entra nel registro (074).
     limen verifiche-report   Eventi verificati contro le previsioni, col tasso di base.
+    limen qualita-dati       Job fermi o falliti e celle non misurate, in parole (#421).
     limen raccolta-eventi    Gli eventi della stampa, dai titoli al registro (#347).
     limen importa-eventi     Gli eventi datati di un ente (CSV o GeoJSON) nel registro (#509).
     limen anticipo           Quanto prima Limen ha visto un evento, in JSON.
@@ -104,6 +105,7 @@ from limen.cli.misura import build_subparser as _build_misura_subparser
 from limen.cli.misura import run as _run_misura
 from limen.cli.monitor_once import run as _run_monitor_once
 from limen.cli.partitions import run as _run_partitions
+from limen.cli.qualita_dati import run as _run_qualita_dati
 from limen.cli.raccolta_eventi import run as _run_raccolta_eventi
 from limen.cli.radar_archivio import run as _run_radar_archivio
 from limen.cli.rain_climatology import run as _run_rain_climatology
@@ -315,6 +317,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "(RADAR_ARCHIVE__CARTELLA, LIMEN_RADAR_MASSIMO)",
     )
     sub.add_parser(
+        "qualita-dati",
+        help="job fermi o falliti e celle non misurate, in parole (#421; anche ogni notte)",
+    )
+    sub.add_parser(
         "verifiche-report",
         help="eventi verificati contro le previsioni, per pericolo e col tasso di base "
         "(env: LIMEN_VERIFICHE_DAL / _AL)",
@@ -514,6 +520,7 @@ def main(argv: list[str] | None = None) -> int:
         "train": _run_train,
         "shadow-report": _run_shadow_report,
         "verifiche-report": _run_verifiche_report,
+        "qualita-dati": _run_qualita_dati,
         "radar-archivio": _run_radar_archivio,
         "fwi-pioggia": _run_fwi_pioggia,
         # only action is `build`; inspect args.report_command before adding a second.
