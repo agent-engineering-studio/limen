@@ -19,7 +19,9 @@ async def raccogli(adesso: datetime) -> Fatti:
         errori = await conn.fetch(
             """
             SELECT job_id, scope, count(*) AS volte, max(started_at) AS ultimo,
-                   (array_agg(error ORDER BY started_at DESC))[1] AS messaggio
+                   (array_agg(
+                       coalesce(error, metrics->>'error_type') ORDER BY started_at DESC
+                   ))[1] AS messaggio
               FROM job_runs
              WHERE status = 'error' AND started_at > $1::timestamptz - interval '24 hours'
              GROUP BY job_id, scope
@@ -38,9 +40,9 @@ async def raccogli(adesso: datetime) -> Fatti:
                    AND finished_at > $1::timestamptz - interval '30 days'
             )
             SELECT job_id, scope, max(finished_at) AS ultimo,
-                   percentile_cont(0.5) WITHIN GROUP (
+                   percentile_cont(0.9) WITHIN GROUP (
                        ORDER BY extract(epoch FROM finished_at - prima)
-                   ) AS mediana_s,
+                   ) AS tipico_s,
                    count(prima) AS intervalli
               FROM ok
              GROUP BY job_id, scope
@@ -73,7 +75,7 @@ async def raccogli(adesso: datetime) -> Fatti:
                 job_id=r["job_id"],
                 scope=r["scope"],
                 ultimo_successo=r["ultimo"],
-                mediana=timedelta(seconds=float(r["mediana_s"] or 0.0)),
+                intervallo=timedelta(seconds=float(r["tipico_s"] or 0.0)),
                 intervalli=int(r["intervalli"]),
             )
             for r in cadenze
