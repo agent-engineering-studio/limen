@@ -16,6 +16,7 @@ from limen.api.dependencies import DepsDep
 from limen.api.schemas import (
     CellBreakdownResponse,
     LatestAssessmentResponse,
+    PienaOut,
 )
 from limen.config.catalogo_dati import carica_catalogo
 from limen.config.settings import ScoringMode
@@ -26,10 +27,16 @@ from limen.core.models.risk import (
     RiskLevel,
     segnali_da_factors,
 )
+from limen.core.piena import lettura as lettura_piena
 from limen.core.scoring.regional_thresholds import WildfireThresholds, load_hazard_thresholds
 from limen.core.scoring.wildfire.climatology import percentile
 from limen.data.db import acquire
-from limen.data.repos import dati_di_base_repo, fwi_climatology_repo, spiegazioni_repo
+from limen.data.repos import (
+    dati_di_base_repo,
+    fwi_climatology_repo,
+    glofas_repo,
+    spiegazioni_repo,
+)
 from limen.data.repos.assessment_repo import record_from_row
 from limen.integrations.openmeteo.previous_runs import MODELLI as MODELLI_PIOGGIA
 from limen.integrations.openmeteo.previous_runs import NODI_CORRETTORE
@@ -196,6 +203,11 @@ async def cell_breakdown(
         )
     factors = _coerce_json(row["factors"])
     dati = await dati_di_base_repo.leggi(carica_catalogo(), cell_id, hazard)
+    piena = (
+        await glofas_repo.piena_della_cella(cell_id, factors.get("discharge_ratio"))
+        if hazard is HazardType.FLOOD
+        else None
+    )
     return CellBreakdownResponse(
         cell_id=str(row["cell_id"]),
         hazard_type=HazardType(row["hazard_type"]),
@@ -209,6 +221,16 @@ async def cell_breakdown(
         measured=bool(row["measured"]),
         dati_di_base=dati,
         completezza=completezza(dati, segnali_da_factors(hazard, factors)),
+        piena=(
+            PienaOut(
+                anni=piena.anni,
+                picco_m3s=piena.picco_m3s,
+                soglie_m3s=piena.soglie_m3s,
+                lettura=lettura_piena(piena),
+            )
+            if piena is not None
+            else None
+        ),
     )
 
 

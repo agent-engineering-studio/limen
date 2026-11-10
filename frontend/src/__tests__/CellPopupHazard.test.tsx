@@ -115,7 +115,8 @@ describe("CellPopup alluvione", () => {
         rain_mm: 12.0,
       },
       explanation: {},
-  measured: true,
+      measured: true,
+      piena: { anni: 5, picco_m3s: 340, soglie_m3s: { "2": 150, "5": 300 }, lettura: "" },
     });
 
     render(
@@ -129,6 +130,10 @@ describe("CellPopup alluvione", () => {
     );
     expect(screen.getByText("Fiume")).toBeInTheDocument();
     expect(screen.getByText(/viene dal fiume/i)).toBeInTheDocument();
+    // #522: la piena in periodi di ritorno, con l'attribuzione CEMS e l'avviso.
+    expect(screen.getByText(/sopra la piena da 5 anni/)).toBeInTheDocument();
+    expect(screen.getByText(/Copernicus Emergency Management Service/)).toBeInTheDocument();
+    expect(screen.getByText(/non sono un avviso di piena/)).toBeInTheDocument();
     // Nessuna etichetta degli altri due pericoli.
     expect(screen.queryByText("S statico")).toBeNull();
     expect(screen.queryByText("FWI (tempo)")).toBeNull();

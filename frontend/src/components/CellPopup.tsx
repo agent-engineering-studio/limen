@@ -7,7 +7,7 @@ import { locale, testi, useLingua, useTesti, type Lingua } from "../lib/i18n";
 import ComeNasce from "./ComeNasce";
 import ContributoEsperto from "./ContributoEsperto";
 import DatiDiBase from "./DatiDiBase";
-import { meteoEcmwf } from "../lib/attribuzioni";
+import { AVVISO_DI_PIENA, copernicusModificato, meteoEcmwf } from "../lib/attribuzioni";
 import { RISK_COLOR_BY_LEVEL, RISK_SCURE, useEtichetteRischio } from "../lib/risk-colors";
 import type {
   CellBreakdownResponse,
@@ -132,6 +132,10 @@ const T = testi(
         "Nessun segnale in corso: il punteggio riflette solo dove si trova " +
         "la cella, non un pericolo in atto.",
       fiume: "Il segnale viene dal fiume, non dalla pioggia che cade qui.",
+      piena: (anni: number | null) =>
+        anni === null
+          ? "Portata prevista sotto la piena da 2 anni (soglie GloFAS)."
+          : `Portata prevista sopra la piena da ${anni} anni (soglie GloFAS).`,
       locale: "Il segnale viene dalla pioggia locale, non da un fiume in piena.",
       nonMappata:
         "Questa cella è fuori dalle zone idrauliche mappate: il valore di " +
@@ -276,6 +280,10 @@ const T = testi(
         "No active signal: the score only reflects where the cell lies, " +
         "not a hazard in progress.",
       fiume: "The signal comes from the river, not from the rain falling here.",
+      piena: (anni: number | null) =>
+        anni === null
+          ? "Forecast discharge below the 2-year flood (GloFAS thresholds)."
+          : `Forecast discharge above the ${anni}-year flood (GloFAS thresholds).`,
       locale: "The signal comes from local rain, not from a river in flood.",
       nonMappata:
         "This cell is outside the mapped hydraulic zones: the base value " +
@@ -860,6 +868,14 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
           {t.picco}{" "}
           <span className="mono">{outlook.peak_mmh.toFixed(1)} mm/h</span>
           <small className="fonte-meteo">{meteoEcmwf(undefined, lingua)}</small>
+        </p>
+      ) : null}
+      {data.piena ? (
+        <p className="rain-outlook">
+          {t.alluvione.piena(data.piena.anni)}
+          <small className="fonte-meteo">
+            {copernicusModificato(undefined, lingua)}. {AVVISO_DI_PIENA[lingua]}
+          </small>
         </p>
       ) : null}
       <DatiDiBase dati={data.dati_di_base} completezza={data.completezza} />

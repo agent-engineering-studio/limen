@@ -284,3 +284,38 @@ async def test_gli_avvisi_previsionali_senza_pericolo_sono_tutti(
     assert sorted(i["hazard_type"] for i in tutti) == ["landslide", "wildfire"]
     solo = (await client.get("/api/alerts/forecast?hazard=wildfire")).json()["items"]
     assert [i["hazard_type"] for i in solo] == ["wildfire"]
+
+
+async def test_la_piena_prevista_in_periodi_di_ritorno(client: httpx.AsyncClient) -> None:
+    """#522: rapporto 3,5 sul q90 di 100 m³/s fa 350, sopra la piena da 5 anni
+    (300) e sotto quella da 20 (600). Senza soglie del nodo l'etichetta manca,
+    non dice «sotto la piena»."""
+    cell_id = await _seed_two_hazard_rows()
+    quoted = cell_id.replace("|", "%7C")
+    url = f"/api/cell/{quoted}/breakdown?hazard={HazardType.FLOOD.value}"
+    async with acquire() as conn:
+        await conn.execute(
+            "UPDATE latest_risk SET factors = '{\"discharge_ratio\": 3.5}'::jsonb"
+            " WHERE cell_id = $1 AND hazard_type = 'flood'",
+            cell_id,
+        )
+    assert (await client.get(url)).json()["piena"] is None
+    async with acquire() as conn:
+        # Il centroide della cella è (16,815, 41,115): il nodo a 0,1° è (16,8, 41,1).
+        await conn.execute(
+            "INSERT INTO glofas_riferimento (node_lon, node_lat, percentile, window_days, portata)"
+            " VALUES (16.8, 41.1, 0.9, 730, 100.0)"
+            " ON CONFLICT (node_lon, node_lat, percentile, window_days)"
+            " DO UPDATE SET portata = 100.0"
+        )
+        await conn.execute(
+            "INSERT INTO glofas_soglie (node_lon, node_lat, rl2, rl5, rl20, fonte)"
+            " VALUES (16.8, 41.1, 150, 300, 600, 'test')"
+        )
+    piena = (await client.get(url)).json()["piena"]
+    assert piena["anni"] == 5
+    assert piena["picco_m3s"] == pytest.approx(350.0)
+    assert piena["lettura"] == "Portata prevista sopra la piena da 5 anni (soglie GloFAS)."
+    # La frana non ha l'etichetta.
+    frana = await client.get(f"/api/cell/{quoted}/breakdown")
+    assert frana.json()["piena"] is None

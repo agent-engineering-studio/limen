@@ -88,6 +88,18 @@ class LatestAssessmentResponse(BaseModel):
     analysis_en: RiskAnalysisDTO | None = None
 
 
+class PienaOut(BaseModel):
+    """La piena prevista detta in periodi di ritorno (#522)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: 2, 5 o 20; None = sotto la piena da 2 anni.
+    anni: int | None
+    picco_m3s: float
+    soglie_m3s: dict[int, float]
+    lettura: str
+
+
 class CellBreakdownResponse(BaseModel):
     """Per-cell breakdown of the latest scoring run."""
 
@@ -111,6 +123,9 @@ class CellBreakdownResponse(BaseModel):
     dati_di_base: list[DatoDiBase] = Field(default_factory=list)
     #: Su quanti ingredienti poggia il punteggio, a parole (#484).
     completezza: Completezza | None = None
+    #: Alluvione: la piena prevista in periodi di ritorno GloFAS (#522).
+    #: Un'etichetta, non entra nel punteggio. None = non si può dire.
+    piena: PienaOut | None = None
 
 
 class AlertItem(BaseModel):
