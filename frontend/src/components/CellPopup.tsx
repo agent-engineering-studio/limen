@@ -132,10 +132,13 @@ const T = testi(
         "Nessun segnale in corso: il punteggio riflette solo dove si trova " +
         "la cella, non un pericolo in atto.",
       fiume: "Il segnale viene dal fiume, non dalla pioggia che cade qui.",
-      piena: (anni: number | null) =>
-        anni === null
-          ? "Portata prevista sotto la piena da 2 anni (soglie GloFAS)."
-          : `Portata prevista sopra la piena da ${anni} anni (soglie GloFAS).`,
+      piena: (anni: number | null, giorno: string | null) => {
+        const quando = giorno ? `, picco previsto il ${giorno}` : "";
+        const fonte = giorno ? "soglie GloFAS, corsa di controllo" : "soglie GloFAS";
+        return anni === null
+          ? `Portata prevista sotto la piena da 2 anni${quando} (${fonte}).`
+          : `Portata prevista sopra la piena da ${anni} anni${quando} (${fonte}).`;
+      },
       locale: "Il segnale viene dalla pioggia locale, non da un fiume in piena.",
       nonMappata:
         "Questa cella è fuori dalle zone idrauliche mappate: il valore di " +
@@ -280,10 +283,13 @@ const T = testi(
         "No active signal: the score only reflects where the cell lies, " +
         "not a hazard in progress.",
       fiume: "The signal comes from the river, not from the rain falling here.",
-      piena: (anni: number | null) =>
-        anni === null
-          ? "Forecast discharge below the 2-year flood (GloFAS thresholds)."
-          : `Forecast discharge above the ${anni}-year flood (GloFAS thresholds).`,
+      piena: (anni: number | null, giorno: string | null) => {
+        const quando = giorno ? `, peak forecast on ${giorno}` : "";
+        const fonte = giorno ? "GloFAS thresholds, control run" : "GloFAS thresholds";
+        return anni === null
+          ? `Forecast discharge below the 2-year flood${quando} (${fonte}).`
+          : `Forecast discharge above the ${anni}-year flood${quando} (${fonte}).`;
+      },
       locale: "The signal comes from local rain, not from a river in flood.",
       nonMappata:
         "This cell is outside the mapped hydraulic zones: the base value " +
@@ -872,7 +878,16 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
       ) : null}
       {data.piena ? (
         <p className="rain-outlook">
-          {t.alluvione.piena(data.piena.anni)}
+          {t.alluvione.piena(
+            data.piena.anni,
+            data.piena.giorno_picco
+              ? new Date(`${data.piena.giorno_picco}T12:00:00Z`).toLocaleDateString(loc, {
+                  day: "numeric",
+                  month: "long",
+                  timeZone: "UTC",
+                })
+              : null,
+          )}
           <small className="fonte-meteo">
             {copernicusModificato(undefined, lingua)}. {AVVISO_DI_PIENA[lingua]}
           </small>

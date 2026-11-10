@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -64,3 +65,28 @@ def test_la_soglia_si_legge_nella_cella_che_il_nodo_legge(tmp_path: Path) -> Non
         )
     # Il secondo nodo è fuori dal file: None, non la cella del bordo.
     assert leggi(path, [(11.0, 44.5), (0.0, 0.0)]) == [812.0, None]
+
+
+def test_il_giorno_vale_solo_se_il_picco_e_quello_della_corsa() -> None:
+    soglie: dict[int, float | None] = {2: 150.0, 5: 300.0, 20: 600.0}
+    p = piena(3.5, 100.0, soglie, (350.5, date(2026, 11, 14)))
+    assert p is not None and p.giorno == date(2026, 11, 14)
+    assert lettura(p) == (
+        "Portata prevista sopra la piena da 5 anni, picco previsto il 14/11 "
+        "(soglie GloFAS, corsa di controllo)."
+    )
+    # Un picco salvato diverso è un'altra previsione: il giorno non si attacca.
+    altra = piena(3.5, 100.0, soglie, (420.0, date(2026, 11, 14)))
+    assert altra is not None and altra.giorno is None
+    assert piena(3.5, 100.0, soglie, (350.0, None)) is not None
+
+
+def test_il_giorno_del_picco_e_la_corsa_piu_l_anticipo() -> None:
+    from limen.integrations.copernicus.ewds_glofas import giorno_del_picco
+
+    corsa = date(2026, 11, 10)
+    # La corsa del Serchio del 10/11: il massimo al quinto anticipo è il 14.
+    serie = [2.24, 12.27, 85.1, 151.41, 187.8, 85.7, 57.21]
+    assert giorno_del_picco(serie, corsa) == date(2026, 11, 14)
+    assert giorno_del_picco([[1.0, float("nan"), 3.0]], corsa) == date(2026, 11, 12)
+    assert giorno_del_picco([[float("nan")] * 3], corsa) is None
