@@ -365,6 +365,14 @@ def _bundle_to_feature_row(bundle: CellFeatureBundle, *, names: list[str]) -> li
         "rain.rain_72h_mm": rain["rain_72h_mm"],
         "rain.max_i_24h_mmh": rain["max_i_24h_mmh"],
         "rain.rain_30d_mm": float(bundle.dynamic.api_30_mm or rain["rain_30d_mm"]),
+        # #482: `seismic_history` è la finestra di `SeismicCheck`, la stessa
+        # che `feature_store._pga_max_before` rilegge per l'addestramento.
+        "seismic.pga_max_g": max((e.pga_g for e in bundle.dynamic.seismic_history), default=0.0),
+        "static.imperviousness_norm": float(bundle.static.imperviousness_norm or 0.0),
+        # Schema dell'alluvione (`FLOOD_FEATURES`).
+        "static.flood_hazard_norm": float(bundle.static.flood_hazard_norm or 0.0),
+        "static.quota_sul_fondo_m": float(bundle.static.quota_sul_fondo_m or 0.0),
+        "static.elevation_m": float(bundle.static.elevation_m or 0.0),
     }
     if not names:
         # Resolver fallback path: no feature schema → uniform vector,

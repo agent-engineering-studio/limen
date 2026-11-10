@@ -181,6 +181,28 @@ ONNX, and served via `onnxruntime` (in the `ml` group) by
 * **KS** distance between the same;
 * **Prediction drift** (absolute change in mean predicted probability).
 
+PSI and KS are computed for **every feature** of the vector the challenger
+persisted (`MONITORING__DRIFT_FEATURES`, a JSON list, narrows it; #482), and
+the trigger reads the worst one (`drift.peggiore`: a feature over a threshold
+first, then the highest PSI). The log line lists the features over threshold
+and the PSI of each.
+
+## Feature schemas (#482)
+
+`ml/dataset.py` holds one ordered schema per hazard (`FEATURES_BY_HAZARD`):
+landslide `CANONICAL_FEATURES`, wildfire `WILDFIRE_FEATURES`, flood
+`FLOOD_FEATURES` (ISPRA hydraulic class, sealed soil, height above the valley
+floor, elevation, slope, TWI — before #482 flood fell back on the landslide
+schema). New landslide columns go **at the tail** (a registered model reads
+its own `feature_names.json`): `seismic.pga_max_g` — the max PGA of the
+earthquakes that shook the cell in `SeismicCheck`'s window, up to the sample
+time only — and `static.imperviousness_norm`. Every schema name must be
+mapped by `ml_engine._bundle_to_feature_row`, or it is served as a silent
+zero; `tests/unit/test_feature_store_482.py` checks it. Known gap: the
+`insar.*` features are trained on `cell_insar_features` but served as 0,
+because the bundle carries no InSAR — the EGMS vertical/east components are
+not added until it does.
+
 A threshold breach OR enough new IFFI events triggers
 `RetrainingTrigger(should_retrain=True, reason=...)`. The trigger
 **only signals**; operators still run `limen train` and re-apply the

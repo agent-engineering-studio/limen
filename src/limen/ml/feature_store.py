@@ -37,6 +37,7 @@ from limen.core.models.risk import (
 from limen.core.scoring.regional_thresholds import (
     WildfireThresholds,
     load_hazard_thresholds,
+    load_regional_thresholds,
 )
 from limen.data.db import acquire
 from limen.data.repos import (
@@ -44,6 +45,7 @@ from limen.data.repos import (
     cell_static_factors_repo,
     training_samples_repo,
 )
+from limen.data.repos.seismic_repo import scosse_per_cella
 from limen.data.repos.training_samples_repo import LabelSource, TrainingSample
 
 _log: structlog.stdlib.BoundLogger = get_logger(__name__)
@@ -325,12 +327,32 @@ async def _build_flood_features(cell_id: str, valuation_time: datetime) -> dict[
         "static": {
             "flood_hazard_norm": _maybe_float(static.flood_hazard_norm),
             "imperviousness_norm": _maybe_float(static.imperviousness_norm),
+            "quota_sul_fondo_m": _maybe_float(static.quota_sul_fondo_m),
             "elevation_m": _maybe_float(static.elevation_m),
             "slope_deg": _maybe_float(static.slope_deg),
             "twi": _maybe_float(static.twi),
             "distance_to_road_m": _maybe_float(static.distance_to_road_m),
         },
     }
+
+
+async def _pga_max_before(cell_id: str, *, at: datetime) -> float:
+    """La PGA massima che ha scosso la cella nella finestra del motore V1 (#482).
+
+    Stessa finestra, stessa soglia di magnitudo e stessa query dello step
+    `SeismicCheck`, che riempie `seismic_history` del bundle: al servizio lo
+    sfidante prende il massimo di quella lista, e i due numeri devono essere
+    lo stesso numero. Solo eventi fino al campione, mai dopo: un terremoto
+    successivo alla frana non può averla innescata.
+    """
+    cfg = load_regional_thresholds().seismic
+    scosse = await scosse_per_cella(
+        [cell_id],
+        at - timedelta(days=cfg.giorni_da_leggere),
+        at,
+        min_magnitude=cfg.min_magnitude,
+    )
+    return max((s.pga_g for s in scosse), default=0.0)
 
 
 async def _fire_days_before(cell_id: str, *, before: datetime) -> int:
@@ -386,7 +408,7 @@ async def _build_wildfire_features(cell_id: str, valuation_time: datetime) -> di
     }
 
 
-async def _build_features(cell_id: str, valuation_time: datetime) -> dict[str, Any]:  # noqa: ARG001
+async def _build_features(cell_id: str, valuation_time: datetime) -> dict[str, Any]:
     """Pull the static + InSAR + exposure feature vector for one cell.
 
     Meteo / seismic / fire are dynamic and would need an offline replay
@@ -406,7 +428,9 @@ async def _build_features(cell_id: str, valuation_time: datetime) -> dict[str, A
             "curvature": _maybe_float(getattr(static, "curvature", None)),
             "litho_weight": _maybe_float(getattr(static, "litho_weight", None)),
             "pai_class_norm": _maybe_float(getattr(static, "pai_class_norm", None)),
+            "imperviousness_norm": _maybe_float(getattr(static, "imperviousness_norm", None)),
         },
+        "seismic": {"pga_max_g": await _pga_max_before(cell_id, at=valuation_time)},
         "insar": {
             "velocity_mmy": insar.insar_velocity_mmy if insar is not None else None,
             "accel_mmy2": insar.insar_accel_mmy2 if insar is not None else None,
