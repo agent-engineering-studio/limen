@@ -39,7 +39,7 @@ susceptibility:
 # P3 sopra cut_m vale al più 0,6, quindi «molto alto» (0,70) diventa
 # irraggiungibile lì; una P2 sopra cut_m resta al più «moderato», e a 0,4 non
 # passa il gate degli avvisi sotto «alto» (alerts.min_predisposition 0,5), che il backtest
-# non applica. Sulle fiumare la quota sul fondo misura anche la discesa lungo
+# applica come gli avvisi spediti. Sulle fiumare la quota sul fondo misura anche la discesa lungo
 # l'asta (3 % ≈ 90 m in 3 km): l'alveo nel tratto medio-alto può superare il
 # taglio. Si attiva (flood-v1.4.0) solo dopo un backtest con il ramo fluviale,
 # a livello «alto» e «moderato», con i tagli validati lasciando fuori una

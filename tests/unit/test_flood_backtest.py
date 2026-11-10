@@ -350,6 +350,33 @@ def test_replay_alerts_a_mapped_cell_under_heavy_rain() -> None:
     assert tally.truth_alert_days == 1
 
 
+def test_replay_applies_the_alert_gate_below_high() -> None:
+    """#477 nel backtest: una cella «Moderato» poco suscettibile non avvisa in
+    produzione, quindi non deve contare nemmeno qui; ad «Alto» il cancello non vale."""
+    thresholds = _thresholds()
+    debole = StaticFactors(cell_id="debole", flood_hazard_norm=0.4)
+    forte = StaticFactors(cell_id="forte", flood_hazard_norm=1.0)
+    start, end = _day_window()
+
+    tally = _replay(
+        aoi_id="it-test",
+        mode="issued",
+        cells=[(debole, 16.0, 41.0), (forte, 16.0, 41.0)],
+        cell_node=[0, 0],
+        series=[_series(rain=thresholds.pluvial.saturation_mm * 2)],
+        truth={},
+        start=start,
+        end=end,
+        alert_level=RiskLevel.Moderate,
+        thresholds=thresholds,
+        engine=FloodScoringEngine(thresholds),
+    )
+
+    assert thresholds.alerts.min_predisposition > 0.4
+    assert tally.alert_days == {"forte": [D0]}
+    assert tally.gated == 1
+
+
 def test_replay_skips_cells_whose_node_is_below_both_thresholds() -> None:
     """Il pre-filtro per nodo: sotto soglia pluviale e senza portata, ogni
     cella del nodo vale zero, e valutarla sarebbe lavoro per un esito noto."""
