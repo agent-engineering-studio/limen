@@ -59,6 +59,7 @@ STEPS = (
     "esposizione_ispra",
     "qualita_dati",
     "glofas_riferimenti",
+    "glofas_soglie",
 )
 
 
@@ -233,6 +234,9 @@ async def run_nightly_pipeline(deps: AppDependencies) -> dict[str, Any]:
     # è intero comunque, e il riempimento ora dura un paio d'ore (i lotti si
     # distanziano sotto il limite orario): davanti, terrebbe ferma la retention.
     out["glofas_riferimenti"] = await _step("glofas_riferimenti", lambda: _glofas(deps))
+    # Le soglie dei periodi di ritorno dei nodi nuovi (#522): dopo i
+    # riferimenti, che li aggiungono. Scarica i file una volta sola.
+    out["glofas_soglie"] = await _step("glofas_soglie", _glofas_soglie)
 
     log.info("job.nightly.done", steps={k: v is not None for k, v in out.items()})
     return out
@@ -242,6 +246,12 @@ async def _qualita_dati(deps: AppDependencies) -> dict[str, Any]:
     from limen.cli.qualita_dati import riepilogo
 
     return await riepilogo(client=deps.llm_factory.create("Briefing"))
+
+
+async def _glofas_soglie() -> dict[str, Any]:
+    from limen.cli.glofas_soglie import carica
+
+    return {"scritte": await carica()}
 
 
 async def _drift(deps: AppDependencies) -> dict[str, Any]:

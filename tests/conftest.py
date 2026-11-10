@@ -210,6 +210,9 @@ async def reset_db(pg_pool: asyncpg.Pool) -> AsyncIterator[None]:
         # Candidati della raccolta dalla stampa (084): un test che unisce le
         # fonti troverebbe il candidato di quello prima.
         "candidati_eventi",
+        # Soglie dei periodi di ritorno per nodo (092): un test che carica
+        # solo i nodi nuovi troverebbe quelli del test prima.
+        "glofas_soglie",
     ]
     async with acquire() as conn:
         with contextlib.suppress(Exception):

@@ -13,6 +13,7 @@ Usage:
     limen registra-verifica  Fact check: un evento verificato entra nel registro (074).
     limen verifiche-report   Eventi verificati contro le previsioni, col tasso di base.
     limen qualita-dati       Job fermi o falliti e celle non misurate, in parole (#421).
+    limen glofas-soglie      Soglie GloFAS dei periodi di ritorno per nodo (#522).
     limen raccolta-eventi    Gli eventi della stampa, dai titoli al registro (#347).
     limen importa-eventi     Gli eventi datati di un ente (CSV o GeoJSON) nel registro (#509).
     limen anticipo           Quanto prima Limen ha visto un evento, in JSON.
@@ -91,6 +92,7 @@ from limen.cli.geodati_sync import run as _run_geodati_sync
 from limen.cli.geoserver_sync import run as _run_geoserver_sync
 from limen.cli.glofas_ewds import run as _run_glofas_ewds
 from limen.cli.glofas_riferimenti import run as _run_glofas_riferimenti
+from limen.cli.glofas_soglie import run as _run_glofas_soglie
 from limen.cli.imperviousness_fetch import run as _run_imperviousness_fetch
 from limen.cli.ingest_events import run as _run_ingest_events
 from limen.cli.ingest_fire_history import run as _run_ingest_fire_history
@@ -317,6 +319,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "(RADAR_ARCHIVE__CARTELLA, LIMEN_RADAR_MASSIMO)",
     )
     sub.add_parser(
+        "glofas-soglie",
+        help="soglie GloFAS v4 della piena da 2/5/20 anni per nodo, per l'etichetta "
+        "della cella alluvione (#522; scarica ~500 MB una volta)",
+    )
+    sub.add_parser(
         "qualita-dati",
         help="job fermi o falliti e celle non misurate, in parole (#421; anche ogni notte)",
     )
@@ -520,6 +527,7 @@ def main(argv: list[str] | None = None) -> int:
         "train": _run_train,
         "shadow-report": _run_shadow_report,
         "verifiche-report": _run_verifiche_report,
+        "glofas-soglie": _run_glofas_soglie,
         "qualita-dati": _run_qualita_dati,
         "radar-archivio": _run_radar_archivio,
         "fwi-pioggia": _run_fwi_pioggia,

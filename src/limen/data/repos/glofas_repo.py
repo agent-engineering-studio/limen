@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+from limen.core.models.hazard import HazardType
+from limen.core.piena import Piena, piena
 from limen.data.db import acquire
 
 Nodo = tuple[float, float]
@@ -225,3 +227,100 @@ async def picchi(nodes: list[Nodo], *, dal: date) -> dict[Nodo, float] | None:
         if chiave in letti:
             out[n] = letti[chiave]
     return out
+
+
+async def salva_soglie(
+    soglie: dict[Nodo, tuple[float | None, float | None, float | None]], *, fonte: str
+) -> int:
+    """Le soglie dei periodi di ritorno 2/5/20 anni per nodo (#522). Rilanciabile."""
+    if not soglie:
+        return 0
+    async with acquire() as conn:
+        await conn.executemany(
+            """
+            INSERT INTO glofas_soglie (node_lon, node_lat, rl2, rl5, rl20, fonte)
+            VALUES (round($1::numeric, 4), round($2::numeric, 4), $3, $4, $5, $6)
+            ON CONFLICT (node_lon, node_lat) DO UPDATE
+            SET rl2 = EXCLUDED.rl2, rl5 = EXCLUDED.rl5, rl20 = EXCLUDED.rl20,
+                fonte = EXCLUDED.fonte, calcolato = now()
+            """,
+            [(lon, lat, r2, r5, r20, fonte) for (lon, lat), (r2, r5, r20) in soglie.items()],
+        )
+    return len(soglie)
+
+
+async def riferimento_e_soglie(
+    nodo: Nodo, *, percentile: float, window_days: int
+) -> tuple[float | None, dict[int, float | None]] | None:
+    """Il q90 del nodo e le sue soglie 2/5/20; ``None`` se il nodo non ha soglie."""
+    async with acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT s.rl2, s.rl5, s.rl20, r.portata
+            FROM glofas_soglie s
+            LEFT JOIN glofas_riferimento r
+              ON r.node_lon = s.node_lon AND r.node_lat = s.node_lat
+             AND r.percentile = $3::numeric(4,3) AND r.window_days = $4
+            WHERE s.node_lon = round($1::numeric, 4) AND s.node_lat = round($2::numeric, 4)
+            """,
+            nodo[0],
+            nodo[1],
+            percentile,
+            window_days,
+        )
+    if row is None:
+        return None
+    q90 = float(row["portata"]) if row["portata"] is not None else None
+    return q90, {2: row["rl2"], 5: row["rl5"], 20: row["rl20"]}
+
+
+async def nodo_della_cella(cell_id: str) -> Nodo | None:
+    """Il nodo del ramo fluviale che la cella legge: il più vicino sul reticolo a 0,1°.
+
+    Lo stesso che sceglie il motore (``build_snapped_nodes`` + ``nearest_node``
+    in ``openmeteo/flood.py``), ricostruito dal centroide della cella.
+    """
+    from limen.integrations.openmeteo.flood import NODE_SPACING_DEG
+    from limen.integrations.openmeteo.grid import build_snapped_nodes, nearest_node
+
+    async with acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT ST_X(ST_Centroid(geom)) AS lon, ST_Y(ST_Centroid(geom)) AS lat"
+            " FROM grid_cells WHERE id = $1",
+            cell_id,
+        )
+    if row is None:
+        return None
+    lon, lat = float(row["lon"]), float(row["lat"])
+    d = NODE_SPACING_DEG
+    nodi = build_snapped_nodes((lon - d, lat - d, lon + d, lat + d), spacing=d)
+    return nodi[nearest_node(lon, lat, nodi)]
+
+
+async def piena_della_cella(cell_id: str, rapporto: object) -> Piena | None:
+    """La piena prevista della cella in periodi di ritorno (#522), o ``None``."""
+    from limen.core.scoring.regional_thresholds import FloodThresholds, load_hazard_thresholds
+
+    if not isinstance(rapporto, int | float) or isinstance(rapporto, bool):
+        return None
+    nodo = await nodo_della_cella(cell_id)
+    if nodo is None:
+        return None
+    flood = load_hazard_thresholds(HazardType.FLOOD)
+    assert isinstance(flood, FloodThresholds)
+    letto = await riferimento_e_soglie(
+        nodo,
+        percentile=flood.fluvial.reference_percentile,
+        window_days=flood.fluvial.reference_window_days,
+    )
+    if letto is None:
+        return None
+    q90, soglie = letto
+    return piena(float(rapporto), q90, soglie)
+
+
+async def nodi_con_soglie() -> set[Nodo]:
+    """I nodi di cui le soglie sono già state lette (anche se mascherate)."""
+    async with acquire() as conn:
+        rows = await conn.fetch("SELECT node_lon, node_lat FROM glofas_soglie")
+    return {(float(r["node_lon"]), float(r["node_lat"])) for r in rows}

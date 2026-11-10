@@ -99,6 +99,11 @@ def stubbed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(nightly, "_backup", backup)
     monkeypatch.setattr(nightly, "_qualita_dati", qualita)
     monkeypatch.setattr(nightly, "_glofas", glofas)
+
+    async def soglie() -> dict[str, object]:
+        return {"scritte": 0}
+
+    monkeypatch.setattr(nightly, "_glofas_soglie", soglie)
     monkeypatch.setattr(nightly, "_effis_perimetri", effis)
     monkeypatch.setattr(nightly, "_ems_alluvioni", ems)
     monkeypatch.setattr(nightly, "_esposizione_ispra", esposizione)

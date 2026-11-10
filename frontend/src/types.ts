@@ -241,6 +241,18 @@ export interface CellBreakdownResponse {
   /** Il dato di base di ogni ingrediente, con fonte e attribuzione (#422). */
   dati_di_base?: DatoDiBase[];
   completezza?: Completezza | null;
+  /** Alluvione: la piena prevista in periodi di ritorno GloFAS (#522).
+   *  Un'etichetta, non entra nel punteggio; null = non si può dire. */
+  piena?: Piena | null;
+}
+
+/** La piena prevista detta in periodi di ritorno (#522). */
+export interface Piena {
+  /** 2, 5 o 20; null = sotto la piena da 2 anni. */
+  anni: number | null;
+  picco_m3s: number;
+  soglie_m3s: Record<string, number>;
+  lettura: string;
 }
 
 /** Su quanti ingredienti poggia il punteggio (#484): i dati di base non
