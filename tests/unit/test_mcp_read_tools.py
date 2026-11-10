@@ -161,6 +161,9 @@ async def test_cell_breakdown_found_and_missing(monkeypatch: pytest.MonkeyPatch)
     assert out["explanation"] == {"briefing_it": "testo"}
     assert out["dati_di_base"][0]["lettura"] == "suolo impermeabilizzato al 42 %"
     assert out["dati_di_base"][0]["attribuzione"] == "EEA"
+    # Una riga che non si rilegge come breakdown non inventa segnali (#484).
+    assert out["completezza"]["totali"] == 1
+    assert out["completezza"]["segnali_mancanti"] == []
 
     _use(monkeypatch, _Conn({"LIMIT 1": None}))
     assert "error" in await tools.cell_breakdown("sconosciuta")

@@ -13,7 +13,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from limen.config.catalogo_dati import Livello
-from limen.core.dati_di_base import DatoDiBase
+from limen.core.dati_di_base import Completezza, DatoDiBase
 from limen.core.models.context import (
     CellRiskRecord,
     RiskAnalysisDTO,
@@ -109,6 +109,8 @@ class CellBreakdownResponse(BaseModel):
     measured: bool = True
     #: Il dato di base di ogni ingrediente, con fonte e attribuzione (#422).
     dati_di_base: list[DatoDiBase] = Field(default_factory=list)
+    #: Su quanti ingredienti poggia il punteggio, a parole (#484).
+    completezza: Completezza | None = None
 
 
 class AlertItem(BaseModel):

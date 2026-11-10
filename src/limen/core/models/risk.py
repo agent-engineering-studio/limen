@@ -300,6 +300,18 @@ class HazardBreakdown(_Frozen):
         """
         return True
 
+    def segnali(self) -> dict[str, bool]:
+        """Which of the day's input signals arrived, by id (#484).
+
+        The finer-grained sibling of :meth:`measured`: «rain yes, river no»
+        is measured, but on half of what the engine can read. Static inputs
+        are not here -- whether a layer is loaded is a property of the cell,
+        not of the run, and ``core/dati_di_base.py`` already says it. The
+        default is no signals: the landslide breakdown does not record
+        whether its weather arrived.
+        """
+        return {}
+
     @classmethod
     def from_factors(cls, payload: dict[str, Any]) -> Self:
         """Rebuild from a persisted ``factors`` blob.
@@ -421,6 +433,9 @@ class WildfireBreakdown(HazardBreakdown):
         # distinguerlo: è vero anche per una catena corta ma reale.
         return self.fire_weather is not None
 
+    def segnali(self) -> dict[str, bool]:
+        return {"fwi": self.fire_weather is not None}
+
     @classmethod
     def from_factors(cls, payload: dict[str, Any]) -> Self:
         # `day` torna da JSONB come stringa, e il modello è strict: senza
@@ -512,6 +527,9 @@ class FloodBreakdown(HazardBreakdown):
         # un'alluvione misurata a metà, non una non misurata.
         return self.rain_mm is not None or self.discharge_ratio is not None
 
+    def segnali(self) -> dict[str, bool]:
+        return {"pioggia": self.rain_mm is not None, "portata": self.discharge_ratio is not None}
+
 
 #: The concrete breakdowns, discriminated by ``hazard_type``. Pydantic needs
 #: the closed union to round-trip a nested breakdown; the base class alone
@@ -540,6 +558,18 @@ def breakdown_from_factors(hazard: HazardType, payload: dict[str, Any]) -> Hazar
     if cls is None:
         raise ValueError(f"no breakdown class for hazard {hazard.value!r}")
     return cls.from_factors(payload)
+
+
+def segnali_da_factors(hazard: HazardType, payload: dict[str, Any]) -> dict[str, bool]:
+    """:meth:`HazardBreakdown.segnali` of a persisted row (#484).
+
+    A row that does not read back as a breakdown (historical, another shape)
+    does not say which signals it had: no signals beats invented ones.
+    """
+    try:
+        return breakdown_from_factors(hazard, payload).segnali()
+    except ValueError:
+        return {}
 
 
 #: Covariant because :class:`RiskScore` is frozen: a
@@ -600,4 +630,5 @@ __all__: Sequence[str] = (
     "StaticFactors",
     "WildfireBreakdown",
     "breakdown_from_factors",
+    "segnali_da_factors",
 )

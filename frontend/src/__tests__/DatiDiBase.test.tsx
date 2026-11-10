@@ -89,3 +89,31 @@ describe("DatiDiBase, CORINE (#470)", () => {
     expect(screen.getByText("Coniferous forest (CORINE 312)")).toBeInTheDocument();
   });
 });
+
+describe("DatiDiBase, completezza (#484)", () => {
+  const C = {
+    presenti: 7,
+    totali: 9,
+    dati_mancanti: ["dtm"],
+    segnali_mancanti: ["portata"],
+    lettura: "7 ingredienti su 9; mancano: pendenza (DTM), portata del fiume (GloFAS)",
+  };
+
+  it("dice a parole su quanti ingredienti poggia il punteggio", () => {
+    render(<DatiDiBase dati={DATI} completezza={C} />);
+    expect(screen.getByText(C.lettura)).toHaveClass("is-vuoto");
+  });
+
+  it("in inglese ricompone i nomi", () => {
+    render(<DatiDiBase dati={DATI} completezza={C} />, { lingua: "en" });
+    expect(
+      screen.getByText("7 of 9 inputs; missing: slope (DTM), river discharge (GloFAS)"),
+    ).toBeInTheDocument();
+  });
+
+  it("tutto presente non è scritto in grigio", () => {
+    const pieno = { ...C, presenti: 9, dati_mancanti: [], segnali_mancanti: [], lettura: "9 ingredienti su 9, tutti presenti" };
+    render(<DatiDiBase dati={DATI} completezza={pieno} />);
+    expect(screen.getByText(pieno.lettura)).not.toHaveClass("is-vuoto");
+  });
+});

@@ -240,6 +240,17 @@ export interface CellBreakdownResponse {
   measured: boolean;
   /** Il dato di base di ogni ingrediente, con fonte e attribuzione (#422). */
   dati_di_base?: DatoDiBase[];
+  completezza?: Completezza | null;
+}
+
+/** Su quanti ingredienti poggia il punteggio (#484): i dati di base non
+ *  caricati in regione e i segnali del giorno non arrivati. */
+export interface Completezza {
+  presenti: number;
+  totali: number;
+  dati_mancanti: string[];
+  segnali_mancanti: string[];
+  lettura: string;
 }
 
 /** Un dato di base della cella. `valore` null non è zero: `stato` dice se

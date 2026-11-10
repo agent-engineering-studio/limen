@@ -19,10 +19,12 @@ from limen.api.schemas import (
 )
 from limen.config.catalogo_dati import carica_catalogo
 from limen.config.settings import ScoringMode
+from limen.core.dati_di_base import completezza
 from limen.core.models.context import RiskAnalysisDTO
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import (
     RiskLevel,
+    segnali_da_factors,
 )
 from limen.core.scoring.regional_thresholds import WildfireThresholds, load_hazard_thresholds
 from limen.core.scoring.wildfire.climatology import percentile
@@ -192,6 +194,8 @@ async def cell_breakdown(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"no {hazard.value} breakdown for cell {cell_id!r}",
         )
+    factors = _coerce_json(row["factors"])
+    dati = await dati_di_base_repo.leggi(carica_catalogo(), cell_id, hazard)
     return CellBreakdownResponse(
         cell_id=str(row["cell_id"]),
         hazard_type=HazardType(row["hazard_type"]),
@@ -200,10 +204,11 @@ async def cell_breakdown(
         level=str(row["class"]),
         horizon=str(row["horizon"]),
         pipeline_version=str(row["pipeline_version"]),
-        factors=_coerce_json(row["factors"]),
+        factors=factors,
         explanation=_coerce_json(row["explanation"]),
         measured=bool(row["measured"]),
-        dati_di_base=await dati_di_base_repo.leggi(carica_catalogo(), cell_id, hazard),
+        dati_di_base=dati,
+        completezza=completezza(dati, segnali_da_factors(hazard, factors)),
     )
 
 

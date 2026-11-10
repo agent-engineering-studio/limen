@@ -17,8 +17,10 @@ from datetime import UTC, datetime
 from typing import Any
 
 from limen.config.catalogo_dati import carica_catalogo
+from limen.core.dati_di_base import completezza
 from limen.core.logging import get_logger
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
+from limen.core.models.risk import segnali_da_factors
 from limen.data.db import acquire
 from limen.data.repos import dati_di_base_repo
 
@@ -163,15 +165,18 @@ async def cell_breakdown(cell_id: str, hazard: str | None = None) -> dict[str, A
         )
     if row is None:
         return {"error": f"no assessment for cell {cell_id!r}"}
-    dati = await dati_di_base_repo.leggi(carica_catalogo(), cell_id, _coerce_hazard(hazard))
+    pericolo = _coerce_hazard(hazard)
+    dati = await dati_di_base_repo.leggi(carica_catalogo(), cell_id, pericolo)
+    factors = _coerce_json(row["factors"])
     return {
         "cell_id": str(row["cell_id"]),
         "computed_at": row["computed_at"].isoformat(),
         "score": round(float(row["score"]), 3),
         "level": str(row["class"]),
-        "factors": _coerce_json(row["factors"]),
+        "factors": factors,
         "explanation": _coerce_json(row["explanation"]),
         "dati_di_base": [d.model_dump(mode="json") for d in dati],
+        "completezza": completezza(dati, segnali_da_factors(pericolo, factors)).model_dump(),
     }
 
 
