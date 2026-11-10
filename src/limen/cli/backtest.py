@@ -100,6 +100,7 @@ from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError
 
+from limen.cli import provenienza
 from limen.cli.clima_pioggia import Mensile, riferimenti_aoi, riferimenti_api
 from limen.cli.clima_pioggia import leggi as leggi_clima
 from limen.config.percorsi import radice_dati
@@ -799,7 +800,7 @@ def _write_report(
         "",
         *righe_comuni,
     ]
-    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    provenienza.scrivi_report(out, "\n".join(lines))
     return out
 
 

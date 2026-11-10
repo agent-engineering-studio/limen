@@ -35,6 +35,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from limen.cli import provenienza
 from limen.core.logging import get_logger
 from limen.core.models.risk import CellFeatureBundle, DynamicInputs, StaticFactors
 from limen.core.scoring.engine import MultiFactorScoringEngine
@@ -278,7 +279,7 @@ def _write_report(
     else:
         lines.append("_No normalisation statistics recorded (no observations)._")
 
-    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    provenienza.scrivi_report(out, "\n".join(lines))
     return out
 
 

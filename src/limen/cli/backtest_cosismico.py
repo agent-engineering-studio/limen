@@ -54,6 +54,7 @@ import shapely
 from ingv_shakemap import ShakeGrid
 from shapely.geometry.base import BaseGeometry
 
+from limen.cli import provenienza
 from limen.core.logging import get_logger
 from limen.core.scoring.regional_thresholds import load_regional_thresholds
 from limen.data.seed.loader import load_regions
@@ -336,7 +337,7 @@ def write_report(esiti: Sequence[EsitoEvento], *, pga_min_g: float) -> Path:
         "> entra con il modello «ground failure», sulle celle di Limen.",
         "",
     ]
-    out.write_text("\n".join(righe) + "\n", encoding="utf-8")
+    provenienza.scrivi_report(out, "\n".join(righe))
     return out
 
 

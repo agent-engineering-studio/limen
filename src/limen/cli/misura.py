@@ -18,6 +18,7 @@ from pathlib import Path
 
 import numpy as np
 
+from limen.cli import provenienza
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
 from limen.data.db import lifespan_pool
@@ -147,6 +148,6 @@ async def run(args: argparse.Namespace) -> int:
     cartella = Path(os.getenv("LIMEN_REPORTS_DIR", "reports"))
     cartella.mkdir(parents=True, exist_ok=True)
     uscita = cartella / f"misura_{hazard.value}_{args.feature}.md"
-    uscita.write_text(testo + "\n", encoding="utf-8")
+    provenienza.scrivi_report(uscita, testo)
     log.info("misura.done", report=str(uscita), **{k.split()[0]: v for k, v in aucs.items()})
     return 0

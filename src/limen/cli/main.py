@@ -17,6 +17,7 @@ Usage:
     limen anticipo           Quanto prima Limen ha visto un evento, in JSON.
     limen sensore            Registro dei sensori dei cittadini: approva, revoca (#253).
     limen misura             AUC e osservate/attese di una feature per cella (#480).
+    limen archivia-report    Un report di misura e la sua provenienza in docs/misure (#481).
     limen dati               Download dei dati statici, eseguiti dal worker: stato | scarica (#402).
     limen backup             Backup dello stato fuori dal server; `elenco` li elenca (#304).
     limen restore            Ripristina un backup (`--conferma`: sovrascrive il database).
@@ -56,6 +57,8 @@ from typing import Any
 
 from limen import __version__
 from limen.cli.anticipo import run as _run_anticipo
+from limen.cli.archivia_report import build_subparser as _build_archivia_subparser
+from limen.cli.archivia_report import run as _run_archivia
 from limen.cli.backtest import run as _run_backtest
 from limen.cli.backtest_cosismico import run as _run_backtest_cosismico
 from limen.cli.backtest_flood import run as _run_backtest_flood
@@ -444,6 +447,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _build_sensore_subparser(sub)
     _build_misura_subparser(sub)
+    _build_archivia_subparser(sub)
     _build_dati_subparser(sub)
     _build_backup_subparser(sub)
     _build_static_snapshot_subparser(sub)
@@ -541,6 +545,8 @@ def main(argv: list[str] | None = None) -> int:
             return asyncio.run(_run_dati(args))
         except KeyboardInterrupt:  # pragma: no cover
             return 130
+    if args.command == "archivia-report":
+        return _run_archivia(args)
     if args.command == "misura":
         try:
             return asyncio.run(_run_misura(args))

@@ -32,6 +32,7 @@ List the public datasets, standards or references used for verification.
 - [ ] I added tests or explained why tests are not applicable.
 - [ ] I did not commit secrets, private data or large generated files.
 - [ ] I used cautious language for risk and public-safety claims.
+- [ ] If this changes a `model_version`, I re-ran the reference backtests and archived them with `limen archivia-report` (see `docs/misure`).
 
 ## Contributor License Agreement
 

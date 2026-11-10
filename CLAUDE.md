@@ -226,6 +226,7 @@ uv run limen raccolta-eventi    # news → Claude extractor → two outlets → 
 uv run limen misura --pericolo wildfire --feature slope_deg --stima 2021-2023 --verifica 2024-2026
                                 # read-only stratified AUC + observed/expected of a per-cell feature (#480)
 uv run limen importa-eventi F --ente N --licenza L  # an authority's dated events (CSV/GeoJSON) → verifiche_eventi (#509)
+uv run limen archivia-report R.md  # a measurement report + its provenance (commit, model_version, env) → docs/misure (#481)
 uv run limen anticipo 077014 wildfire 2026-10-10T15:00+02:00   # how early Limen saw an event (JSON)
 
 make data-status            # the same report

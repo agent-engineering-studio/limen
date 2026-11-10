@@ -218,6 +218,29 @@ Not covered yet: scoring a cell through the real engine offline (needs the
 weather of each day), and the old #295/#419/#420 tables, whose session scripts
 are gone — re-measure with this command rather than trust their numbers.
 
+## Report provenance and reference reports (#481)
+
+Every measurement command (`backtest`, `backtest-flood`, `backtest-wildfire`,
+`backtest-cosismico`, `calibrate`, `verifiche-report`, `shadow-report`,
+`misura`) writes its report through `limen.cli.provenienza.scrivi_report`: a
+closing **Provenienza** section and a sibling `<report>.provenienza.json` with
+the commit (`LIMEN_COMMIT`, set by the CI image build; the checkout's
+`git rev-parse` locally, `+modifiche` if `src/` is dirty), the `model_version`
+of the three hazards, the command line and the `LIMEN_*` / `SCORING__*` /
+`FORECAST__*` / `BACKTEST__*` variables set — never secrets, and local paths
+shown as `<percorso locale>`.
+
+```bash
+uv run limen archivia-report reports/backtest_wildfire_it-sicilia_2024-06-01_2024-09-30.md
+```
+
+copies report and provenance into `docs/misure/` and rewrites its index
+(`README.md`, newest first). A report without provenance predates #481 and is
+refused: re-run it. A PR that changes a `model_version` re-runs the reference
+backtests and archives them (PR template checklist). Not covered yet: static
+data fingerprints and truth-catalogue versions in the header, and the Zenodo
+deposit.
+
 ## Where things live
 
 | Path | Purpose |

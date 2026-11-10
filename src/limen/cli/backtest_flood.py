@@ -52,6 +52,7 @@ from typing import Literal
 
 from copernicus_ems.ml import Scores
 
+from limen.cli import provenienza
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
 from limen.core.models.risk import (
@@ -1047,7 +1048,7 @@ def _write_report(
                 f"{run.true_days + run.false_days} giorni-cella verificabili "
                 f"su {run.true_days + run.false_days + run.unverifiable_days}."
             )
-    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    provenienza.scrivi_report(out, "\n".join(lines))
     return out
 
 

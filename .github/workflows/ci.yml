@@ -188,7 +188,7 @@ jobs:
           - immagine: api
             context: .
             file: infra/docker/Dockerfile.api
-            build-args: ""
+            build-args: LIMEN_COMMIT=${{ github.sha }}
           - immagine: postgres
             context: infra/postgres
             file: infra/postgres/Dockerfile.db

@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from limen.cli import provenienza
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
 from limen.data.db import lifespan_pool
@@ -154,7 +155,7 @@ def scrivi_report(
             if r.hazard is s.hazard
         ]
         lines.append("")
-    out.write_text("\n".join(lines), encoding="utf-8")
+    provenienza.scrivi_report(out, "\n".join(lines))
     return out
 
 
