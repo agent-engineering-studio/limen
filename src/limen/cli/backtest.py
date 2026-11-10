@@ -126,6 +126,7 @@ from limen.core.scoring.regional_thresholds import (
 from limen.data.db import acquire, lifespan_pool
 from limen.data.migrate import run_migrations
 from limen.data.repos.aoi_repo import get_aoi, list_aoi_ids
+from limen.data.repos.cell_static_factors_repo import fattori_aoi
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.openmeteo.client import OpenMeteoHttpClient
 from limen.integrations.openmeteo.dtos import WeatherSample
@@ -237,41 +238,6 @@ async def _fetch_truth_events(
             sorgenti,
         )
     return {str(r["cell_id"]): r["first_event"] for r in rows}
-
-
-async def _fetch_static_factors(aoi_id: str) -> list[tuple[StaticFactors, float, float]]:
-    """Return ``(static_factors, centroid_lon, centroid_lat)`` per cell.
-
-    The centroid lets the backtest assign each cell the rainfall of its
-    nearest sampling node rather than a single AOI-wide series.
-    """
-    async with acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT c.cell_id, c.iffi_density_500, c.slope_deg, c.pai_class_norm,
-                   c.litho_weight, c.s_static,
-                   ST_X(ST_Centroid(g.geom)) AS lon, ST_Y(ST_Centroid(g.geom)) AS lat
-            FROM cell_static_factors c
-            JOIN grid_cells g ON g.id = c.cell_id
-            WHERE g.aoi_id = $1
-            """,
-            aoi_id,
-        )
-    out: list[tuple[StaticFactors, float, float]] = []
-    for r in rows:
-        sf = StaticFactors(
-            cell_id=str(r["cell_id"]),
-            iffi_density_500=(
-                float(r["iffi_density_500"]) if r["iffi_density_500"] is not None else None
-            ),
-            slope_deg=float(r["slope_deg"]) if r["slope_deg"] is not None else None,
-            pai_class_norm=(
-                float(r["pai_class_norm"]) if r["pai_class_norm"] is not None else None
-            ),
-            litho_weight=float(r["litho_weight"]) if r["litho_weight"] is not None else None,
-        )
-        out.append((sf, float(r["lon"]), float(r["lat"])))
-    return out
 
 
 # ---------------------------------------------------------------------------
@@ -1238,7 +1204,7 @@ async def run() -> int:
                 bbox = tuple(aoi.bbox.bounds)
                 assert len(bbox) == 4
 
-                cells = await _fetch_static_factors(aoi_id)
+                cells = await fattori_aoi(aoi_id)
                 if litologia == "carta":
                     cells = await con_litologia_della_carta(aoi_id, cells)
                 api_riferimento = None

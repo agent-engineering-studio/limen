@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from limen.core.logging import get_logger
+from limen.core.models.risk import StaticFactors
 from limen.data.db import acquire
 
 log = get_logger(__name__)
@@ -174,3 +175,83 @@ async def get_for_cell(cell_id: str) -> CellStaticFactors | None:
         fire_density=int(row["fire_density"] or 0),
         extras=extras or {},
     )
+
+
+_FATTORI_AOI_SQL = """
+SELECT c.cell_id,
+       c.slope_deg, c.aspect_deg, c.elevation_m, c.twi, c.curvature,
+       c.lithology, c.landuse_code,
+       c.litho_weight, c.dist_faults_m,
+       c.distance_to_iffi_m, c.iffi_density_500,
+       c.pai_class_norm,
+       c.flood_hazard_norm,
+       c.quota_sul_fondo_m,
+       c.imperviousness_norm,
+       s.score AS susc_ispra,
+       i.insar_velocity_mmy, i.insar_accel_mmy2, i.scatterer_count,
+       i.velocita_verticale_mmy, i.velocita_est_mmy,
+       ST_X(ST_Centroid(g.geom)) AS lon, ST_Y(ST_Centroid(g.geom)) AS lat
+FROM cell_static_factors c
+JOIN grid_cells g ON g.id = c.cell_id
+LEFT JOIN susceptibility s ON s.cell_id = c.cell_id
+LEFT JOIN cell_insar_features i ON i.cell_id = c.cell_id
+WHERE g.aoi_id = $1
+"""
+
+
+def _float(x: Any) -> float | None:
+    return None if x is None else float(x)
+
+
+async def fattori_aoi(aoi_id: str) -> list[tuple[StaticFactors, float, float]]:
+    """``(StaticFactors, lon, lat)`` per ogni cella dell'AOI, come li legge il motore.
+
+    Lo step ``StaticFactors`` del workflow e ``limen backtest`` leggono da qui:
+    il backtest se ne costruiva una versione sua con i soli campi di cui
+    pensava avesse bisogno la V1, e mancavano la suscettibilità ISPRA (S) e la
+    classe idraulica (H) — la V1 misurata non era quella in produzione — oltre
+    a tutto ciò che legge lo sfidante ML (#568).
+    """
+    async with acquire() as conn:
+        rows = await conn.fetch(_FATTORI_AOI_SQL, aoi_id)
+    out: list[tuple[StaticFactors, float, float]] = []
+    for r in rows:
+        sf = StaticFactors(
+            cell_id=str(r["cell_id"]),
+            susc_ispra=float(r["susc_ispra"]) if r["susc_ispra"] is not None else None,
+            iffi_density_500=(
+                float(r["iffi_density_500"]) if r["iffi_density_500"] is not None else None
+            ),
+            distance_to_iffi_m=(
+                float(r["distance_to_iffi_m"]) if r["distance_to_iffi_m"] is not None else None
+            ),
+            slope_deg=float(r["slope_deg"]) if r["slope_deg"] is not None else None,
+            aspect_deg=float(r["aspect_deg"]) if r["aspect_deg"] is not None else None,
+            elevation_m=float(r["elevation_m"]) if r["elevation_m"] is not None else None,
+            twi=float(r["twi"]) if r["twi"] is not None else None,
+            curvature=float(r["curvature"]) if r["curvature"] is not None else None,
+            lithology=r["lithology"],
+            litho_weight=(float(r["litho_weight"]) if r["litho_weight"] is not None else None),
+            landuse_code=r["landuse_code"],
+            pai_class_norm=(
+                float(r["pai_class_norm"]) if r["pai_class_norm"] is not None else None
+            ),
+            flood_hazard_norm=(
+                float(r["flood_hazard_norm"]) if r["flood_hazard_norm"] is not None else None
+            ),
+            quota_sul_fondo_m=(
+                float(r["quota_sul_fondo_m"]) if r["quota_sul_fondo_m"] is not None else None
+            ),
+            imperviousness_norm=(
+                float(r["imperviousness_norm"]) if r["imperviousness_norm"] is not None else None
+            ),
+            insar_velocity_mmy=_float(r["insar_velocity_mmy"]),
+            insar_accel_mmy2=_float(r["insar_accel_mmy2"]),
+            insar_scatterer_count=(
+                int(r["scatterer_count"]) if r["scatterer_count"] is not None else None
+            ),
+            velocita_verticale_mmy=_float(r["velocita_verticale_mmy"]),
+            velocita_est_mmy=_float(r["velocita_est_mmy"]),
+        )
+        out.append((sf, float(r["lon"]), float(r["lat"])))
+    return out

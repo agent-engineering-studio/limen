@@ -1,4 +1,5 @@
-"""Lo step ``StaticFactors`` porta InSAR e suscettibilità nel bundle (#568).
+"""Lo step ``StaticFactors`` porta InSAR e suscettibilità nel bundle (#568),
+e ``limen backtest`` legge le celle dallo stesso caricamento.
 
 Lo sfidante frane imparava le ``insar.*`` dai valori di
 ``cell_insar_features`` e al servizio le riceveva a zero, perché il bundle non
@@ -13,8 +14,10 @@ from datetime import UTC, datetime
 import pytest
 
 from limen.agents.executors.static_factors import StaticFactorsExecutor
+from limen.cli import backtest
 from limen.core.models.context import MonitoringContext
 from limen.data.db import acquire
+from limen.data.repos.cell_static_factors_repo import fattori_aoi
 
 pytestmark = pytest.mark.integration
 
@@ -39,7 +42,8 @@ async def test_il_bundle_porta_insar_e_suscettibilita(reset_db: None, pg_pool: o
                 i * 0.01,
             )
             await conn.execute(
-                "INSERT INTO cell_static_factors (cell_id, slope_deg) VALUES ($1, 20.0)",
+                "INSERT INTO cell_static_factors (cell_id, slope_deg, flood_hazard_norm)"
+                " VALUES ($1, 20.0, 0.75)",
                 f"{AOI}|0|{i}",
             )
         await conn.execute(
@@ -72,3 +76,13 @@ async def test_il_bundle_porta_insar_e_suscettibilita(reset_db: None, pg_pool: o
     senza = out.static_by_cell[f"{AOI}|0|1"]
     assert senza.insar_velocity_mmy is None
     assert senza.insar_scatterer_count is None
+
+    # Il backtest frane misura la V1 di produzione: S con la suscettibilità
+    # ISPRA e H con la classe idraulica, che prima non caricava.
+    assert vars(backtest)["fattori_aoi"] is fattori_aoi
+    celle = {sf.cell_id: (sf, lon, lat) for sf, lon, lat in await fattori_aoi(AOI)}
+    sf, lon, lat = celle[f"{AOI}|0|0"]
+    assert sf.susc_ispra == pytest.approx(0.55)
+    assert sf.flood_hazard_norm == pytest.approx(0.75)
+    assert lon == pytest.approx(15.005)
+    assert lat == pytest.approx(40.005)
