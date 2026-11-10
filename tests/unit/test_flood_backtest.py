@@ -547,9 +547,11 @@ def test_write_report_carries_the_numbers_and_the_gate(tmp_path, monkeypatch) ->
         provenance=provenance,
         activations=[activation],
         thresholds=_thresholds(),
+        nodi_con_portata=(98, 135),
     )
 
     text = path.read_text(encoding="utf-8")
+    assert "Ramo fluviale: portata GloFAS su **98 nodi su 135**." in text
     assert path.name == "backtest_flood_it-test_2024-09-01_2024-09-30.md"
     assert "`EMSR800`" in text and "3.4" in text
     assert "75%" in text and "3.00x" in text
