@@ -226,6 +226,7 @@ async def cell_breakdown(
                 anni=piena.anni,
                 picco_m3s=piena.picco_m3s,
                 soglie_m3s=piena.soglie_m3s,
+                giorno_picco=piena.giorno,
                 lettura=lettura_piena(piena),
             )
             if piena is not None

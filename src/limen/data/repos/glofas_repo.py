@@ -174,19 +174,29 @@ async def ultima_corsa() -> date | None:
 _CORSE_TENUTE_GIORNI = 7
 
 
-async def salva_previsione(corsa: date, picchi: dict[Nodo, float], *, fonte: str) -> int:
-    """Scrive i picchi di una corsa. Rilanciabile."""
+async def salva_previsione(
+    corsa: date,
+    picchi: dict[Nodo, float],
+    *,
+    fonte: str,
+    giorni: dict[Nodo, date | None] | None = None,
+) -> int:
+    """Scrive i picchi di una corsa, con il giorno di ciascuno se noto. Rilanciabile."""
     if not picchi:
         return 0
     async with acquire() as conn, conn.transaction():
         await conn.executemany(
             """
-            INSERT INTO glofas_previsione (node_lon, node_lat, corsa, picco, fonte)
-            VALUES (round($1::numeric, 4), round($2::numeric, 4), $3, $4, $5)
+            INSERT INTO glofas_previsione (node_lon, node_lat, corsa, picco, fonte, giorno_picco)
+            VALUES (round($1::numeric, 4), round($2::numeric, 4), $3, $4, $5, $6)
             ON CONFLICT (node_lon, node_lat, corsa)
-            DO UPDATE SET picco = EXCLUDED.picco, fonte = EXCLUDED.fonte, scaricato = now()
+            DO UPDATE SET picco = EXCLUDED.picco, fonte = EXCLUDED.fonte,
+                          giorno_picco = EXCLUDED.giorno_picco, scaricato = now()
             """,
-            [(lon, lat, corsa, picco, fonte) for (lon, lat), picco in picchi.items()],
+            [
+                (lon, lat, corsa, picco, fonte, (giorni or {}).get((lon, lat)))
+                for (lon, lat), picco in picchi.items()
+            ],
         )
         await conn.execute(
             "DELETE FROM glofas_previsione WHERE corsa < $1",
@@ -316,7 +326,7 @@ async def piena_della_cella(cell_id: str, rapporto: object) -> Piena | None:
     if letto is None:
         return None
     q90, soglie = letto
-    return piena(float(rapporto), q90, soglie)
+    return piena(float(rapporto), q90, soglie, await ultimo_picco(nodo))
 
 
 async def nodi_con_soglie() -> set[Nodo]:
@@ -324,3 +334,20 @@ async def nodi_con_soglie() -> set[Nodo]:
     async with acquire() as conn:
         rows = await conn.fetch("SELECT node_lon, node_lat FROM glofas_soglie")
     return {(float(r["node_lon"]), float(r["node_lat"])) for r in rows}
+
+
+async def ultimo_picco(nodo: Nodo) -> tuple[float, date | None] | None:
+    """Picco e giorno del picco del nodo nella corsa più recente salvata."""
+    async with acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT picco, giorno_picco FROM glofas_previsione
+            WHERE node_lon = round($1::numeric, 4) AND node_lat = round($2::numeric, 4)
+            ORDER BY corsa DESC LIMIT 1
+            """,
+            nodo[0],
+            nodo[1],
+        )
+    if row is None:
+        return None
+    return float(row["picco"]), row["giorno_picco"]

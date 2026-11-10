@@ -69,7 +69,8 @@ async def aggiorna(settings: Settings, *, oggi: date | None = None) -> dict[str,
                 )
                 continue
             picchi = await asyncio.to_thread(ewds_glofas.picchi_per_nodo, path, nodi)
-            salvati = await glofas_repo.salva_previsione(corsa, picchi, fonte=FONTE)
+            giorni = await asyncio.to_thread(ewds_glofas.giorni_dei_picchi, path, nodi, corsa)
+            salvati = await glofas_repo.salva_previsione(corsa, picchi, fonte=FONTE, giorni=giorni)
             log.info(
                 "ewds.glofas.previsione.salvata",
                 corsa=corsa.isoformat(),

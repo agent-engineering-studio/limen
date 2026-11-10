@@ -312,10 +312,20 @@ async def test_la_piena_prevista_in_periodi_di_ritorno(client: httpx.AsyncClient
             "INSERT INTO glofas_soglie (node_lon, node_lat, rl2, rl5, rl20, fonte)"
             " VALUES (16.8, 41.1, 150, 300, 600, 'test')"
         )
+        await conn.execute(
+            "INSERT INTO glofas_previsione (node_lon, node_lat, corsa, picco, fonte, giorno_picco)"
+            " VALUES (16.8, 41.1, '2026-11-10', 350.0, 'test', '2026-11-14')"
+            " ON CONFLICT (node_lon, node_lat, corsa) DO UPDATE"
+            " SET picco = 350.0, giorno_picco = '2026-11-14'"
+        )
     piena = (await client.get(url)).json()["piena"]
     assert piena["anni"] == 5
+    assert piena["giorno_picco"] == "2026-11-14"
     assert piena["picco_m3s"] == pytest.approx(350.0)
-    assert piena["lettura"] == "Portata prevista sopra la piena da 5 anni (soglie GloFAS)."
+    assert piena["lettura"] == (
+        "Portata prevista sopra la piena da 5 anni, picco previsto il 14/11 "
+        "(soglie GloFAS, corsa di controllo)."
+    )
     # La frana non ha l'etichetta.
     frana = await client.get(f"/api/cell/{quoted}/breakdown")
     assert frana.json()["piena"] is None

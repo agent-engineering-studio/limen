@@ -46,7 +46,11 @@ async def test_un_riferimento_salvato_si_rilegge(pg_pool: object) -> None:
 async def test_la_previsione_salvata_si_rilegge_dall_ultima_corsa(pg_pool: object) -> None:
     await _pulisci()
     await glofas_repo.salva_previsione(date(2026, 10, 10), {_NODI[0]: 3.0}, fonte="t")
-    await glofas_repo.salva_previsione(date(2026, 10, 11), {_NODI[0]: 7.5}, fonte="t")
+    await glofas_repo.salva_previsione(
+        date(2026, 10, 11), {_NODI[0]: 7.5}, fonte="t", giorni={_NODI[0]: date(2026, 10, 14)}
+    )
+    assert await glofas_repo.ultimo_picco(_NODI[0]) == (7.5, date(2026, 10, 14))
+    assert await glofas_repo.ultimo_picco(_NODI[1]) is None
 
     assert await glofas_repo.ultima_corsa() == date(2026, 10, 11)
     assert await glofas_repo.picchi(_NODI, dal=date(2026, 10, 9)) == {_NODI[0]: 7.5}

@@ -97,6 +97,8 @@ class PienaOut(BaseModel):
     anni: int | None
     picco_m3s: float
     soglie_m3s: dict[int, float]
+    #: Il giorno del picco previsto (corsa GloFAS di controllo); None se ignoto.
+    giorno_picco: date | None = None
     lettura: str
 
 

@@ -13,6 +13,12 @@ Puro: q90 e soglie arrivano da ``glofas_repo``.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
+
+#: Quanto il picco salvato della corsa può scostarsi da quello ricavato dal
+#: punteggio perché il giorno valga per lui: oltre, il punteggio viene da
+#: un'altra corsa o da Open-Meteo, e il giorno sarebbe di un'altra previsione.
+TOLLERANZA_PICCO = 0.01
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,10 +28,15 @@ class Piena:
     anni: int | None
     picco_m3s: float
     soglie_m3s: dict[int, float]
+    #: Il giorno del picco nella corsa GloFAS, se è la stessa del punteggio.
+    giorno: date | None = None
 
 
 def piena(
-    rapporto: float | None, q90: float | None, soglie: dict[int, float | None]
+    rapporto: float | None,
+    q90: float | None,
+    soglie: dict[int, float | None],
+    previsto: tuple[float, date | None] | None = None,
 ) -> Piena | None:
     """L'etichetta, o ``None`` se manca un pezzo: senza q90 o senza la soglia
     da 2 anni non si può dire, e «non lo so» non è «sotto la piena»."""
@@ -36,14 +47,26 @@ def piena(
         return None
     picco = rapporto * q90
     superati = [anni for anni, s in note.items() if picco >= s]
-    return Piena(anni=max(superati) if superati else None, picco_m3s=picco, soglie_m3s=note)
+    giorno = None
+    if previsto is not None and previsto[1] is not None:
+        salvato = previsto[0]
+        if abs(salvato - picco) <= TOLLERANZA_PICCO * max(salvato, picco, 1.0):
+            giorno = previsto[1]
+    return Piena(
+        anni=max(superati) if superati else None,
+        picco_m3s=picco,
+        soglie_m3s=note,
+        giorno=giorno,
+    )
 
 
 def lettura(p: Piena) -> str:
     """In italiano, per il riquadro della cella e per un agente via MCP."""
+    quando = f", picco previsto il {p.giorno:%d/%m}" if p.giorno is not None else ""
+    fonte = "soglie GloFAS, corsa di controllo" if p.giorno is not None else "soglie GloFAS"
     if p.anni is None:
-        return "Portata prevista sotto la piena da 2 anni (soglie GloFAS)."
-    return f"Portata prevista sopra la piena da {p.anni} anni (soglie GloFAS)."
+        return f"Portata prevista sotto la piena da 2 anni{quando} ({fonte})."
+    return f"Portata prevista sopra la piena da {p.anni} anni{quando} ({fonte})."
 
 
-__all__ = ["Piena", "lettura", "piena"]
+__all__ = ["TOLLERANZA_PICCO", "Piena", "lettura", "piena"]

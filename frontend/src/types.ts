@@ -252,6 +252,8 @@ export interface Piena {
   anni: number | null;
   picco_m3s: number;
   soglie_m3s: Record<string, number>;
+  /** Giorno del picco previsto (ISO), dalla corsa GloFAS di controllo. */
+  giorno_picco?: string | null;
   lettura: string;
 }
 

@@ -34,8 +34,11 @@ def repo(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     async def nodi_con_fiume(**_kw: Any) -> list[tuple[float, float]]:
         return _NODI
 
-    async def salva_previsione(corsa: date, picchi: dict[Any, float], *, fonte: str) -> int:
+    async def salva_previsione(
+        corsa: date, picchi: dict[Any, float], *, fonte: str, giorni: Any = None
+    ) -> int:
         stato["salvate"].append((corsa, picchi, fonte))
+        stato["giorni"] = giorni
         return len(picchi)
 
     from limen.data.repos import glofas_repo
@@ -45,6 +48,9 @@ def repo(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     monkeypatch.setattr(glofas_repo, "salva_previsione", salva_previsione)
     monkeypatch.setattr(ewds_glofas, "nuovo_client", lambda _u, _k: object())
     monkeypatch.setattr(ewds_glofas, "picchi_per_nodo", lambda _p, nodi: dict.fromkeys(nodi, 5.0))
+    monkeypatch.setattr(
+        ewds_glofas, "giorni_dei_picchi", lambda _p, nodi, corsa: dict.fromkeys(nodi, corsa)
+    )
     return stato
 
 
