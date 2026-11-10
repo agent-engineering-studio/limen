@@ -76,7 +76,7 @@ gap si chiude dentro Limen.
 | 5 | Il ramo dei fiumi non si misura nei backtest quando finisce la quota del servizio delle portate. | in parte: portate salvate su disco per nodo e dichiarate in testa al report; manca il report ER/Lombardia con entrambi i rami | [#478](https://github.com/agent-engineering-studio/limen/issues/478) |
 | 5 | I report delle prove non sono nel repository. | in parte: provenienza in ogni report, `limen archivia-report` → `docs/misure`; mancano i report di riferimento | [#481](https://github.com/agent-engineering-studio/limen/issues/481) |
 | 5 | ~~Le misure veloci sui dati nuovi non sono riproducibili.~~ In parte chiuso: `limen misura` (AUC stratificata e osservate/attese, sola lettura); manca il punteggio del motore offline. | — | [#480](https://github.com/agent-engineering-studio/limen/issues/480) |
-| 5 | L'incendio è misurato su poche regioni e solo d'estate. | — | [#479](https://github.com/agent-engineering-studio/limen/issues/479) |
+| 5 | L'incendio è misurato su poche regioni e solo d'estate. | in parte: FAR per giornata-cella e riepilogo nazionale; manca la prova su venti regioni e tutto l'anno | [#479](https://github.com/agent-engineering-studio/limen/issues/479) |
 
 ## Capitolo 6. [Machine learning e AI](06-ml-e-ai.md)
 

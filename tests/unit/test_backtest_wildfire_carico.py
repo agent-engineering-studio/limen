@@ -160,3 +160,58 @@ def test_il_giorno_peggiore() -> None:
     assert carico.giorno_picco is not None
     assert carico.picco > carico.quota
     assert 0 < carico.picco <= 1
+
+
+def test_far_per_giornata_cella_contro_il_conto_a_mano() -> None:
+    """#479: un'allerta è vera se la sua cella brucia entro 72 h, sennò è falsa."""
+    t = _soglie()
+    engine = WildfireScoringEngine(t)
+    bruciate = {"conifere-ripide": INIZIO + timedelta(days=4), "citta": INIZIO + timedelta(days=1)}
+    accese = vere = 0
+    for cella in CELLE:
+        catena = CATENE[0] if cella.lon < 16.5 else CATENE[1]
+        for giorno, stato in catena.items():
+            livello = engine.score(
+                CellFeatureBundle(
+                    aoi_id="x",
+                    cell_id=cella.cell_id,
+                    static=cella.static,
+                    dynamic=DynamicInputs(
+                        valuation_time=datetime.combine(giorno, time(12), UTC),
+                        fire_weather=stato,
+                    ),
+                )
+            ).level
+            if list(RiskLevel).index(livello) < list(RiskLevel).index(RiskLevel.Moderate):
+                continue
+            accese += 1
+            fuoco = bruciate.get(cella.cell_id)
+            vere += fuoco is not None and giorno <= fuoco <= giorno + timedelta(days=3)
+    assert 0 < vere < accese
+    carico = carico_celle(
+        CELLE,
+        nodes=NODI,
+        chains=CATENE,
+        start=INIZIO,
+        end=INIZIO + timedelta(days=5),
+        thresholds=t,
+        alert_level=RiskLevel.Moderate,
+        bruciate=bruciate,
+    )
+    assert carico.giornate_allerta == accese
+    assert carico.giornate_false == accese - vere
+    assert carico.far == pytest.approx((accese - vere) / accese)
+
+
+def test_senza_date_degli_incendi_il_far_non_c_e() -> None:
+    carico = carico_celle(
+        CELLE,
+        nodes=NODI,
+        chains=CATENE,
+        start=INIZIO,
+        end=INIZIO + timedelta(days=5),
+        thresholds=_soglie(),
+        alert_level=RiskLevel.Moderate,
+    )
+    assert carico.far is None
+    assert carico.giornate_false == 0
