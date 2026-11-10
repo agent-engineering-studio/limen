@@ -783,7 +783,7 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
         <p className="verdict verdict-neutral" role="status">
           {t.spiegaNonMisurato}
         </p>
-        <DatiDiBase dati={data.dati_di_base} />
+        <DatiDiBase dati={data.dati_di_base} completezza={data.completezza} />
         <ContributoEsperto key={`${data.cell_id}|${rowHazard}`} cellId={data.cell_id} hazard={rowHazard} />
       </aside>
     );
@@ -862,7 +862,7 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
           <small className="fonte-meteo">{meteoEcmwf(undefined, lingua)}</small>
         </p>
       ) : null}
-      <DatiDiBase dati={data.dati_di_base} />
+      <DatiDiBase dati={data.dati_di_base} completezza={data.completezza} />
       <ComeNasce cellId={data.cell_id} hazard={rowHazard} />
       <ContributoEsperto key={`${data.cell_id}|${rowHazard}`} cellId={data.cell_id} hazard={rowHazard} />
 

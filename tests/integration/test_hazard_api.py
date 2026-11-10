@@ -233,6 +233,12 @@ async def test_the_breakdown_carries_the_base_data_with_its_source(
     assert dati["vicinanza"]["stato"] == "non_caricato"
     assert dati["vicinanza"]["valore"] is None
     assert "dtm" not in dati
+    # #484: fuori dalle aree idrauliche è un ingrediente noto; manca solo il
+    # non caricato, e la vicinanza è tra i mancanti.
+    c = res.json()["completezza"]
+    assert "idraulica" not in c["dati_mancanti"]
+    assert "vicinanza" in c["dati_mancanti"]
+    assert c["presenti"] + len(c["dati_mancanti"]) + len(c["segnali_mancanti"]) == c["totali"]
 
 
 async def test_alerts_of_a_hazard_without_a_yaml_degrade_instead_of_failing(

@@ -3,11 +3,14 @@
 // In italiano il testo è quello del backend, lo stesso che legge un agente via
 // MCP: un solo posto lo scrive. In inglese si ricompone qui dal valore grezzo,
 // perché il catalogo dei dati è scritto in italiano.
+//
+// In testa, a parole, su quanti ingredienti poggia il punteggio (#484): testo
+// e non colore, perché la rampa a cinque classi resta quella del pericolo.
 
 import type { JSX } from "react";
 
 import { testi, useLingua } from "../lib/i18n";
-import type { DatoDiBase } from "../types";
+import type { Completezza, DatoDiBase } from "../types";
 
 const T = testi(
   { titolo: "Dati di base", licenza: "licenza" },
@@ -24,7 +27,24 @@ const NOMI_EN: Record<string, string> = {
   wui: "wildland-urban interface",
   strade: "roads",
   litologia: "lithology",
+  quota_sul_fondo: "height above the valley floor",
+  vicinanza: "nearby settlements and infrastructure",
 };
+
+const SEGNALI_EN: Record<string, string> = {
+  fwi: "FWI chain (weather of the last days)",
+  pioggia: "forecast and observed rain",
+  portata: "river discharge (GloFAS)",
+};
+
+function completezzaEn(c: Completezza): string {
+  const nomi = [
+    ...c.dati_mancanti.map((id) => NOMI_EN[id] ?? id),
+    ...c.segnali_mancanti.map((id) => SEGNALI_EN[id] ?? id),
+  ];
+  const base = `${c.presenti} of ${c.totali} inputs`;
+  return nomi.length ? `${base}; missing: ${nomi.join(", ")}` : `${base}, all present`;
+}
 
 const CLASSI_EN: Record<string, string> = {
   P4: "very high",
@@ -74,13 +94,24 @@ function letturaEn(d: DatoDiBase): string {
   }
 }
 
-export default function DatiDiBase({ dati }: { readonly dati?: readonly DatoDiBase[] }): JSX.Element | null {
+export default function DatiDiBase({
+  dati,
+  completezza,
+}: {
+  readonly dati?: readonly DatoDiBase[];
+  readonly completezza?: Completezza | null;
+}): JSX.Element | null {
   const { lingua } = useLingua();
   const t = T[lingua];
   if (!dati || dati.length === 0) return null;
   return (
     <div className="dati-di-base">
       <span className="eyebrow">{t.titolo}</span>
+      {completezza ? (
+        <p className={`db-completezza${completezza.presenti < completezza.totali ? " is-vuoto" : ""}`}>
+          {lingua === "en" ? completezzaEn(completezza) : completezza.lettura}
+        </p>
+      ) : null}
       <ul>
         {dati.map((d) => {
           const nome = lingua === "en" ? (NOMI_EN[d.id] ?? d.nome) : d.nome;

@@ -125,6 +125,52 @@ def _leggi(colonna: str, valore: float | str, classe: str | None) -> str:
     return _numero(valore, 2) if isinstance(valore, float) else str(valore)
 
 
+#: I segnali del giorno, per id di :meth:`HazardBreakdown.segnali`.
+NOMI_SEGNALI = {
+    "fwi": "catena FWI (meteo degli ultimi giorni)",
+    "pioggia": "pioggia prevista e osservata",
+    "portata": "portata del fiume (GloFAS)",
+}
+
+
+class Completezza(BaseModel):
+    """Su quanti ingredienti poggia il punteggio della cella (#484).
+
+    Un dato caricato di cui la cella è fuori (fuori dalle aree PAI) è un
+    ingrediente noto, non mancante: dice qualcosa. Manca solo ciò che non è
+    caricato nella regione e il segnale del giorno che non è arrivato. Un
+    conteggio con i nomi, non una media pesata: i pesi degli YAML mescolano
+    scale diverse, e «mancano pendenza e litologia» si legge da solo.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    presenti: int
+    totali: int
+    #: Gli id dei dati di base non caricati (`config/dati.yaml`).
+    dati_mancanti: list[str]
+    #: Gli id dei segnali del giorno non arrivati (:data:`NOMI_SEGNALI`).
+    segnali_mancanti: list[str]
+    lettura: str
+
+
+def completezza(dati: list[DatoDiBase], segnali: Mapping[str, bool]) -> Completezza:
+    dati_mancanti = [d for d in dati if d.stato is StatoDato.NON_CARICATO]
+    segnali_mancanti = [s for s, arrivato in segnali.items() if not arrivato]
+    totali = len(dati) + len(segnali)
+    presenti = totali - len(dati_mancanti) - len(segnali_mancanti)
+    nomi = [d.nome for d in dati_mancanti] + [NOMI_SEGNALI.get(s, s) for s in segnali_mancanti]
+    lettura = f"{presenti} ingredienti su {totali}"
+    lettura += f"; mancano: {', '.join(nomi)}" if nomi else ", tutti presenti"
+    return Completezza(
+        presenti=presenti,
+        totali=totali,
+        dati_mancanti=[d.id for d in dati_mancanti],
+        segnali_mancanti=segnali_mancanti,
+        lettura=lettura,
+    )
+
+
 def dati_di_base(
     catalogo: CatalogoDati,
     pericolo: HazardType,
@@ -180,4 +226,4 @@ def _dato(
     )
 
 
-__all__ = ["DatoDiBase", "StatoDato", "dati_di_base"]
+__all__ = ["NOMI_SEGNALI", "Completezza", "DatoDiBase", "StatoDato", "completezza", "dati_di_base"]

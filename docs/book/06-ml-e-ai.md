@@ -762,9 +762,14 @@ Che cosa manca, in breve. Il dettaglio tecnico sta nella issue indicata.
   è valida, il tetto e lo sforzo sono corretti, e la pagina Diagnostica
   mostra la quota di testi di riserva: se arriva al 100 % per un giorno,
   Limen lo registra come degrado. ([#488](https://github.com/agent-engineering-studio/limen/issues/488))
-- **Il numero non dice quanto è sicuro.** Una cella con tutti i dati e una
-  con metà dei dati mancanti si presentano allo stesso modo; l'addestramento
-  calcola già una forbice di incertezza, ma non arriva sulla mappa.
+- **Il numero non dice quanto è sicuro** *(chiuso a metà)*. Il riquadro
+  della cella ora dice a parole su quanti ingredienti poggia il punteggio:
+  «7 ingredienti su 9; mancano: pendenza (DTM), portata del fiume». Un dato
+  caricato di cui la cella è fuori (fuori dalle aree PAI) conta come noto;
+  mancano solo i dati non caricati nella regione e i segnali del giorno non
+  arrivati (la catena FWI, la pioggia, la portata). Il punteggio non cambia,
+  e la tinta resta quella della classe. Resta fuori la forbice di
+  incertezza che l'addestramento calcola: arriverà con lo sfidante in ombra.
   ([#484](https://github.com/agent-engineering-studio/limen/issues/484))
 
 ## Per approfondire

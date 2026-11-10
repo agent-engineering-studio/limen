@@ -3740,6 +3740,9 @@ html[lang="en"] .app-nav a {
   font-size: 10px;
   margin: 0 0 4px;
 }
+.dati-di-base .db-completezza {
+  margin: 0 0 6px;
+}
 .dati-di-base ul {
   margin: 0;
   padding: 0;
