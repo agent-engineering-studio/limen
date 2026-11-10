@@ -171,6 +171,8 @@ class FloodBacktestMetrics:
     #: ha verificato stanno in ``unobserved_predicted``, mai fra i falsi.
     #: L'area del pixel è 0: si contano celle, non km².
     celle: Scores = _NESSUNA_CELLA
+    #: Giornate-cella sopra il livello fermate dal cancello sotto «Alto».
+    gated: int = 0
 
 
 def _unmeasurable(aoi_id: str, mode: Mode, *, days: int) -> FloodBacktestMetrics:
@@ -696,6 +698,8 @@ class _Tally:
     #: sposterebbe di un punto.
     pluvial_driven: int = 0
     fluvial_driven: int = 0
+    #: Giornate-cella sopra il livello ma fermate dal cancello sotto «Alto».
+    gated: int = 0
 
     @classmethod
     def empty(cls) -> _Tally:
@@ -711,6 +715,7 @@ class _Tally:
         self.measurable = self.measurable or other.measurable
         self.pluvial_driven += other.pluvial_driven
         self.fluvial_driven += other.fluvial_driven
+        self.gated += other.gated
 
 
 def _replay(
@@ -784,6 +789,15 @@ def _replay(
             )
             scored = engine.score(bundle)
             if not _at_least(scored.level, alert_level):
+                continue
+            # Il cancello degli avvisi sotto «Alto» (#477), come in
+            # `alert_dispatch`: senza, la replica a «Moderato» contava avvisi
+            # che la produzione non spedisce.
+            if (
+                not _at_least(scored.level, RiskLevel.High)
+                and scored.breakdown.predisposition() < thresholds.alerts.min_predisposition
+            ):
+                tally.gated += 1
                 continue
             tally.alert_days.setdefault(static.cell_id, []).append(day)
             if scored.breakdown.pluvial >= scored.breakdown.fluvial:
@@ -901,6 +915,7 @@ def _metrics(
         measurable=tally.measurable,
         window_start=window_start,
         celle=celle,
+        gated=tally.gated,
     )
 
 
@@ -949,6 +964,10 @@ def _write_report(
         f"{thresholds.pluvial.window_hours} h)",
         "",
         ramo_fluviale(*nodi_con_portata),
+        "",
+        f"Cancello sotto «Alto»: suscettibilità ≥ "
+        f"{thresholds.alerts.min_predisposition:.2f} (`alerts.min_predisposition`), "
+        "come negli avvisi spediti.",
         "",
         "## Truth set",
         "",
@@ -1110,7 +1129,8 @@ def _write_report(
                 f"{run.cells_scored} celle valutate su {run.days} giorni, "
                 f"{run.hits} hit / {run.misses} mancati; "
                 f"{run.alert_episodes} avvisi distinti "
-                f"({run.pluvial_driven} da pioggia, {run.fluvial_driven} da portata), "
+                f"({run.pluvial_driven} da pioggia, {run.fluvial_driven} da portata; "
+                f"{run.gated} giornate-cella fermate dal cancello), "
                 f"{run.true_days + run.false_days} giorni-cella verificabili "
                 f"su {run.true_days + run.false_days + run.unverifiable_days}."
             )
@@ -1325,6 +1345,7 @@ async def run() -> int:
                         unverifiable_days=metrics.unverifiable_days,
                         pluvial_driven=metrics.pluvial_driven,
                         fluvial_driven=metrics.fluvial_driven,
+                        gated=metrics.gated,
                         mean_lead_hours=round(metrics.mean_lead_hours, 1),
                         report=str(report),
                     )
