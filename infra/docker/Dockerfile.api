@@ -96,6 +96,11 @@ COPY --from=builder /app/pyproject.toml /app/pyproject.toml
 # sequenza dei dati statici resta scritta in un posto solo.
 COPY scripts/load_static_data.sh /app/scripts/load_static_data.sh
 
+# Lo sha del commit, per la provenienza dei report di misura (#481). In fondo,
+# perché un ARG che cambia a ogni commit invalida i layer che lo seguono.
+ARG LIMEN_COMMIT=""
+ENV LIMEN_COMMIT=${LIMEN_COMMIT}
+
 USER limen
 
 EXPOSE 8080

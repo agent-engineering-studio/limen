@@ -58,6 +58,7 @@ from pathlib import Path
 import numpy as np
 from fwi_chain import FwiState, advance
 
+from limen.cli import provenienza
 from limen.cli.fwi_backfill import params_from
 from limen.config.settings import get_settings
 from limen.core.logging import get_logger
@@ -586,7 +587,7 @@ def write_report(
             "va eseguito l'ingest. Le metriche sotto sono vuote per "
             "costruzione, non zero.",
         )
-    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    provenienza.scrivi_report(out, "\n".join(lines))
     return out
 
 

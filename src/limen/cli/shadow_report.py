@@ -25,6 +25,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from limen.cli import provenienza
 from limen.core.logging import get_logger
 from limen.data.db import acquire, lifespan_pool
 from limen.data.migrate import run_migrations
@@ -124,7 +125,7 @@ def _write_report(
         "The drift monitor (PSI/KS on rain_72h_mm) is informative only.",
         "",
     ]
-    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    provenienza.scrivi_report(out, "\n".join(lines))
     return out
 
 

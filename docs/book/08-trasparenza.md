@@ -554,7 +554,10 @@ Che cosa manca, in breve. Il dettaglio tecnico sta nella issue indicata.
 - **Le misure non sono sempre archiviate con i loro ingredienti.** Molti
   risultati vivono nei commenti delle issue, senza la versione esatta dei
   dati e del meteo usati; il meteo «come fu previsto» dipende da un archivio
-  esterno. *Proposta di dati aperti:* depositare ogni rapporto di misura, con
+  esterno. Ora ogni rapporto dichiara in coda commit, versioni dei motori,
+  comando e impostazioni con cui è uscito, e quelli di riferimento si
+  archiviano in `docs/misure`; restano fuori le impronte dei dati statici e
+  del meteo. *Proposta di dati aperti:* depositare ogni rapporto di misura, con
   il proprio elenco di versioni, su **Zenodo**, l'archivio aperto del CERN
   che dà a ogni deposito un identificativo permanente (DOI), già usato dal
   catalogo delle frane e-ITALICA citato nel capitolo 2

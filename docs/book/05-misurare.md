@@ -124,7 +124,11 @@ racconta per esteso.
       carico per cella, discriminazione spaziale, giorno peggiore, preavviso.
       Il FAR non è misurato: il replay guarda solo le celle bruciate.
     - L'AUC «dentro nodo meteo × fascia di quota» delle misure offline (#295,
-      #419, #420) non è nel codice del repository: vedi i Gap.
+      #419, #420) è `limen misura`, in sola lettura.
+    - Ogni comando di misura chiude il report con la sezione «Provenienza»
+      (commit, `model_version` dei tre pericoli, comando, manopole d'ambiente)
+      e la ripete in un `.provenienza.json` accanto; `limen archivia-report`
+      copia report e provenienza in `docs/misure` e ne riscrive l'indice.
 
 ## Rigiocare il passato
 
@@ -458,7 +462,7 @@ aneddoto, non una statistica: il primo lavoro è allargare il registro.
 | **Pochi eventi verificati dalla cronaca** | Con otto eventi non si misura niente. | Raccolta regolare su tutte le regioni e i tre pericoli; segnalazioni di enti e cittadini. | #345 |
 | **Alluvione: troppi falsi allarmi** | 78 % in Emilia-Romagna contro un obiettivo del 30 %. | Un dato sull'incanalamento dell'acqua (capitolo 4). | ([#474](https://github.com/agent-engineering-studio/limen/issues/474)) |
 | **Il ramo dei fiumi non si misura nei backtest** | Quando la quota giornaliera del servizio delle portate finisce, la prova misura solo la pioggia, come l'8 novembre. | Salvare una volta le portate storiche delle finestre di prova e rileggerle da disco. | ([#478](https://github.com/agent-engineering-studio/limen/issues/478)) |
-| **I report delle prove non sono nel repository** | Chi arriva non trova i numeri citati nelle issue, e non può confrontare una nuova prova con la precedente. | Una cartella versionata con i report di riferimento, rigenerata a ogni promozione. | ([#481](https://github.com/agent-engineering-studio/limen/issues/481)) |
+| **I report delle prove non sono nel repository** | Chi arriva non trova i numeri citati nelle issue, e non può confrontare una nuova prova con la precedente. | Chiuso in parte: ogni report dichiara commit, versioni dei motori, comando e ambiente, e `limen archivia-report` lo porta in `docs/misure` con un indice; la PR che cambia una `model_version` lo chiede nel suo modello. Mancano i report di riferimento veri (incendio, alluvione, le dodici finestre della frana), da rifare con la provenienza. | ([#481](https://github.com/agent-engineering-studio/limen/issues/481)) |
 | ~~**Le misure veloci non sono riproducibili**~~ | Chiuso in parte: `limen misura` rifà in sola lettura AUC stratificata per nodo meteo e fascia di quota e osservate/attese, con stima e verifica in anni diversi, per ogni colonna numerica dei fattori per cella contro EFFIS o Copernicus EMS. | Manca il punteggio calcolato dal motore vero, che vuole il meteo di ogni giorno. | ([#480](https://github.com/agent-engineering-studio/limen/issues/480)) |
 | **L'incendio è misurato su poche regioni, solo d'estate** | Tre-quattro regioni del Sud, giugno-settembre; falsi allarmi non misurati; la quota dell'archivio meteo interrompe le prove. | Prova su tutte le venti regioni e tutto l'anno, con il meteo storico salvato una volta. | ([#479](https://github.com/agent-engineering-studio/limen/issues/479)) |
 
