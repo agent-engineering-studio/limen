@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import numpy as np
 import pytest
 from pydantic import SecretStr
 
@@ -64,6 +65,11 @@ class _Archivio:
 
     def __init__(self) -> None:
         self.richieste: list[httpx.Request] = []
+        self.csv = (
+            b"pid,easting,northing,height_ortho,mean_velocity,acceleration,seasonality,20200101\n"
+            b"a,4700050,1999950,10,1.0,0.5,3.0,0.0\n"
+            b"b,4700150,1999950,10,1.0,-0.2,1.5,0.0\n"
+        )
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.richieste.append(request)
@@ -91,7 +97,7 @@ class _Archivio:
             buffer = io.BytesIO()
             with zipfile.ZipFile(buffer, "w") as z:
                 z.writestr(f"{stem}.tiff", b"TIFF")
-                z.writestr(f"{stem}.csv", b"serie")
+                z.writestr(f"{stem}.csv", self.csv)
             return httpx.Response(200, content=buffer.getvalue())
         raise AssertionError(path)
 
@@ -225,3 +231,35 @@ async def test_il_download_passa_dal_retry_di_limen(
     assert tiff is not None and tiff.read_bytes() == b"TIFF"
     assert finto.scaricati() == 2
     assert not list(tmp_path.glob("*.part"))
+
+
+async def test_gli_attributi_vengono_dallo_stesso_zip(archivio: _Archivio, tmp_path: Path) -> None:
+    a = await clms.archivio(_impostazioni())
+    assert a is not None
+    # Una tile scaricata prima della #380: c'è il GeoTIFF, mancano gli attributi.
+    vecchia = await a.fetch_tile((47, 19), "U", "2020_2024", tmp_path)
+    assert vecchia is not None and not clms.attributi_di(vecchia).exists()
+    tiff = await a.fetch_tile((47, 19), "U", "2020_2024", tmp_path, attributi=True)
+    assert tiff == vecchia
+    with np.load(clms.attributi_di(tiff)) as attr:
+        assert attr["acceleration"].tolist() == [0.5, -0.2]
+        assert attr["seasonality"].tolist() == [3.0, 1.5]
+        assert attr["easting"].tolist() == [4700050, 4700150]
+    # Ora c'è tutto: nessun altro download.
+    assert await a.fetch_tile((47, 19), "U", "2020_2024", tmp_path, attributi=True) == tiff
+    assert archivio.scaricati() == 2
+    assert not list(tmp_path.glob("*.csv")) and not list(tmp_path.glob("*.part"))
+
+
+async def test_un_csv_senza_colonne_lascia_attributi_vuoti(
+    archivio: _Archivio, tmp_path: Path
+) -> None:
+    archivio.csv = b"pid,easting,northing,mean_velocity\na,1,2,3\n"
+    a = await clms.archivio(_impostazioni())
+    assert a is not None
+    tiff = await a.fetch_tile((47, 19), "U", "2020_2024", tmp_path, attributi=True)
+    assert tiff is not None
+    with np.load(clms.attributi_di(tiff)) as attr:
+        assert attr["acceleration"].size == 0
+    assert await a.fetch_tile((47, 19), "U", "2020_2024", tmp_path, attributi=True) == tiff
+    assert archivio.scaricati() == 1

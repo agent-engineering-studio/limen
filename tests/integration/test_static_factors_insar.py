@@ -48,8 +48,8 @@ async def test_il_bundle_porta_insar_e_suscettibilita(reset_db: None, pg_pool: o
             )
         await conn.execute(
             "INSERT INTO cell_insar_features (cell_id, insar_velocity_mmy, insar_accel_mmy2,"
-            " scatterer_count, velocita_verticale_mmy, velocita_est_mmy)"
-            " VALUES ($1, -4.5, -0.3, 12, -3.9, 1.2)",
+            " scatterer_count, velocita_verticale_mmy, velocita_est_mmy,"
+            " stagionalita_verticale_mm) VALUES ($1, -4.5, -0.3, 12, -3.9, 1.2, 2.5)",
             f"{AOI}|0|0",
         )
         await conn.execute(
@@ -71,6 +71,7 @@ async def test_il_bundle_porta_insar_e_suscettibilita(reset_db: None, pg_pool: o
     assert con.insar_scatterer_count == 12
     assert con.velocita_verticale_mmy == pytest.approx(-3.9)
     assert con.velocita_est_mmy == pytest.approx(1.2)
+    assert con.stagionalita_verticale_mm == pytest.approx(2.5)
     assert con.susc_ispra == pytest.approx(0.55)
     # Senza scatterer la cella resta ignota, non ferma.
     senza = out.static_by_cell[f"{AOI}|0|1"]
@@ -86,3 +87,39 @@ async def test_il_bundle_porta_insar_e_suscettibilita(reset_db: None, pg_pool: o
     assert sf.flood_hazard_norm == pytest.approx(0.75)
     assert lon == pytest.approx(15.005)
     assert lat == pytest.approx(40.005)
+
+
+async def test_accelerazione_e_stagionalita_si_scrivono_e_si_rileggono(
+    reset_db: None, pg_pool: object
+) -> None:
+    """Le due grandezze del CSV L3 (#380) fanno il giro del repository."""
+    from limen.data.repos.cell_insar_features_repo import (
+        CellInsarFeatures,
+        get_for_cell,
+        upsert_many,
+    )
+
+    async with acquire() as conn:
+        await conn.execute(
+            "INSERT INTO aoi (id, name, kind, geom) VALUES ($1, 'SF', 'region',"
+            " ST_Multi(ST_MakeEnvelope(15.0, 40.0, 15.1, 40.1, 4326)))",
+            AOI,
+        )
+        await conn.execute(
+            "INSERT INTO grid_cells (id, aoi_id, row_idx, col_idx, geom, area_km2)"
+            " VALUES ($1, $2, 0, 0, ST_MakeEnvelope(15.0, 40.0, 15.01, 40.01, 4326), 1.0)",
+            f"{AOI}|0|0",
+            AOI,
+        )
+    riga = CellInsarFeatures(
+        cell_id=f"{AOI}|0|0",
+        insar_velocity_mmy=4.0,
+        insar_accel_mmy2=0.8,
+        scatterer_count=90,
+        stagionalita_verticale_mm=3.5,
+    )
+    assert await upsert_many([riga]) == 1
+    letta = await get_for_cell(riga.cell_id)
+    assert letta is not None
+    assert letta.insar_accel_mmy2 == pytest.approx(0.8)
+    assert letta.stagionalita_verticale_mm == pytest.approx(3.5)

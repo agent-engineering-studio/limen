@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from egms_client import tiles_for_bounds
 
-from limen.integrations.egms.aggregate import Cella, Griglia, mosaico, per_cella
+from limen.integrations.egms.aggregate import Cella, Griglia, mosaico, per_cella, su_griglia
 
 
 def test_le_tile_sono_le_centinaia_di_km_dell_angolo() -> None:
@@ -135,3 +135,49 @@ def test_una_tile_in_un_altra_proiezione_alza(tmp_path: Path) -> None:
         dst.write(np.array([[1.0]], dtype="float32"), 1)
     with pytest.raises(ValueError, match="LAEA"):
         mosaico([path], minx=0.0, miny=0.0, maxx=100.0, maxy=100.0)
+
+
+def test_accelerazione_e_stagionalita_dal_csv_sulla_stessa_griglia(tmp_path: Path) -> None:
+    nan = float("nan")
+    # I centri dei pixel: (150, 250) è la riga 1, colonna 1 di una griglia con
+    # l'angolo in (0, 400); un punto fuori dalla griglia si ignora.
+    u = tmp_path / "u.attributi.npz"
+    e = tmp_path / "e.attributi.npz"
+    np.savez(
+        u,
+        easting=np.array([150.0, 250.0, 150.0, 9050.0]),
+        northing=np.array([250.0, 250.0, 150.0, 50.0]),
+        acceleration=np.array([3.0, 0.0, nan, 7.0]),
+        seasonality=np.array([2.0, 4.0, 6.0, 7.0]),
+    )
+    np.savez(
+        e,
+        easting=np.array([150.0, 250.0]),
+        northing=np.array([250.0, 250.0]),
+        acceleration=np.array([4.0, 1.0]),
+        seasonality=np.array([0.0, 0.0]),
+    )
+    angolo = {"forma": (4, 4), "left": 0.0, "top": 400.0}
+    acc_u = su_griglia([u], "acceleration", **angolo)
+    assert acc_u[1, 1] == 3.0 and acc_u[1, 2] == 0.0 and np.isnan(acc_u[2, 1])
+    uno = [[1.0] * 4 for _ in range(4)]
+    griglia = Griglia(
+        verticale=np.array(uno, dtype="float32"),
+        est=np.array(uno, dtype="float32"),
+        left=0.0,
+        top=400.0,
+        accelerazione_verticale=acc_u,
+        accelerazione_est=su_griglia([e], "acceleration", **angolo),
+        stagionalita_verticale=su_griglia([u], "seasonality", **angolo),
+    )
+    (r,) = per_cella([Cella("c", 100.0, 100.0, 300.0, 300.0)], griglia)
+    # moduli 5 e 1 (il terzo pixel non ha l'accelerazione est).
+    assert r.insar_accel_mmy2 == pytest.approx(np.percentile([5.0, 1.0], 90))
+    assert r.stagionalita_verticale_mm == pytest.approx(4.0)
+
+
+def test_senza_csv_accelerazione_e_stagionalita_restano_nulle() -> None:
+    v = [[1.0, 1.0], [1.0, 1.0]]
+    (r,) = per_cella([Cella("c", 0.0, 200.0, 200.0, 400.0)], _griglia(v, v))
+    assert r.scatterer_count == 4
+    assert r.insar_accel_mmy2 is None and r.stagionalita_verticale_mm is None

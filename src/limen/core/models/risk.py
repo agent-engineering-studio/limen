@@ -95,6 +95,7 @@ class StaticFactors(_Frozen):
     insar_scatterer_count: int | None = Field(default=None, ge=0)
     velocita_verticale_mmy: float | None = None
     velocita_est_mmy: float | None = None
+    stagionalita_verticale_mm: float | None = None
 
 
 class RainfallSample(_Frozen):

@@ -12,8 +12,11 @@ from __future__ import annotations
 
 import asyncio
 import time
+import zipfile
+from io import BytesIO
 from pathlib import Path
 
+import numpy as np
 from egms_client import (
     Component,
     EgmsError,
@@ -36,11 +39,37 @@ from egms_client import (
 from limen.config.settings import EgmsSettings
 from limen.core.logging import get_logger
 from limen.integrations._http import fetch_with_retry
+from limen.integrations.egms.aggregate import COLONNE_ATTRIBUTI, leggi_attributi
 
 log = get_logger(__name__)
 
 #: Il token dura un'ora: si rinnova prima, perché un sync d'Italia dura di più.
 _MARGINE_S = 300
+
+
+def attributi_di(tiff: Path) -> Path:
+    """Dove sta, accanto al GeoTIFF, ciò che serve del CSV della stessa tile."""
+    return tiff.with_name(f"{tiff.stem}.attributi.npz")
+
+
+def _salva_attributi(zip_: bytes, stem: str, path: Path) -> None:
+    """Accelerazione e stagionalità per pixel, dal CSV dello ZIP (#380).
+
+    ~170.000 righe per quattro colonne: qualche MB, contro i ~250 MB del CSV
+    con la serie storica, che non serve. Un CSV che manca o non ha le colonne
+    lascia un file vuoto, così il sync seguente non riscarica la tile per
+    niente: la cella avrà accelerazione e stagionalità NULL, non zero.
+    """
+    try:
+        with zipfile.ZipFile(BytesIO(zip_)) as z, z.open(f"{stem}.csv") as csv:
+            colonne = leggi_attributi(csv)
+    except (KeyError, ValueError) as exc:
+        log.warning("egms.attributi_assenti", tile=stem, error=str(exc))
+        colonne = {c: np.empty(0) for c in ("easting", "northing", *COLONNE_ATTRIBUTI)}
+    parziale = path.with_name(f"{path.name}.part")
+    with parziale.open("wb") as f:
+        np.savez(f, **colonne)
+    parziale.rename(path)
 
 
 def _sotto_release(nome: str) -> int:
@@ -90,17 +119,26 @@ class Archivio:
         return parse_search(resp.content)
 
     async def fetch_tile(
-        self, tile: Tile, componente: Component, release: str, cartella: Path
+        self,
+        tile: Tile,
+        componente: Component,
+        release: str,
+        cartella: Path,
+        *,
+        attributi: bool = False,
     ) -> Path | None:
         """Il GeoTIFF della velocità media in ``cartella``, scaricato se manca.
 
         ``None`` se la tile non esiste (mare). Tutti e due gli esiti restano
         in ``cartella`` (il GeoTIFF o un segnaposto ``…absent``, gli stessi
         nomi di ``egms-client``), quindi il secondo sync non chiede niente.
+        Con ``attributi`` salva anche :func:`attributi_di` dallo stesso ZIP;
+        una tile scaricata prima, che ha il GeoTIFF e non gli attributi, si
+        riscarica una volta.
         """
         prefisso = tile_prefix(tile, componente, release)
         in_cache = sorted(cartella.glob(f"{prefisso}*.tiff"), key=lambda p: _sotto_release(p.stem))
-        if in_cache:
+        if in_cache and (not attributi or attributi_di(in_cache[-1]).exists()):
             return in_cache[-1]
         segnaposto = cartella / f"{prefisso}absent"
         if segnaposto.exists():
@@ -122,11 +160,14 @@ class Archivio:
         if resp.status_code == 404:
             segnaposto.touch()
             return None
-        tiff = extract_tiff(check_download(resp.status_code, resp.content), trovata)
+        zip_ = check_download(resp.status_code, resp.content)
         path = cartella / f"{trovata.stem}.tiff"
-        parziale = path.with_name(f"{path.name}.part")
-        parziale.write_bytes(tiff)
-        parziale.rename(path)
+        if not path.exists():
+            parziale = path.with_name(f"{path.name}.part")
+            parziale.write_bytes(extract_tiff(zip_, trovata))
+            parziale.rename(path)
+        if attributi:
+            await asyncio.to_thread(_salva_attributi, zip_, trovata.stem, attributi_di(path))
         return path
 
 
@@ -172,4 +213,4 @@ def perche_no(s: EgmsSettings) -> str:
     return "né EGMS__SERVICE_KEY né EGMS__SERVICE_KEY_FILE"
 
 
-__all__ = ["Archivio", "archivio", "chiave", "leggi_chiave", "perche_no"]
+__all__ = ["Archivio", "archivio", "attributi_di", "chiave", "leggi_chiave", "perche_no"]
