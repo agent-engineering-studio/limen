@@ -7,7 +7,10 @@ dello sweep, e un 429 la sospende fino a mezzanotte: l'8 novembre 2026 il
 backtest della #420 è uscito con il ramo fluviale vuoto in tutte e tre le
 varianti, cioè una misura della sola pioggia.
 
-Qui ogni nodo ha un file JSON con l'arco che copre e la serie. Il passato non
+Qui ogni nodo ha un file JSON con l'arco che copre e la serie, in una
+cartella **per fonte** (``open-meteo`` o l'EWDS di Copernicus): sono la stessa
+grandezza da due prodotti, e un riferimento fluviale calcolato su una serie
+non si confronta con una portata dell'altra (#448). Il passato non
 cambia, quindi un nodo letto una volta non si richiede più; una prova
 interrotta riprende dai nodi che mancano. **Una risposta vuota non si scrive
 mai**: un degrado salvato terrebbe il nodo a secco per sempre.
@@ -22,9 +25,15 @@ from pathlib import Path
 
 from limen.config.percorsi import radice_dati
 
+#: Le fonti delle portate storiche: l'API pubblica di Open-Meteo, a quota, o
+#: l'EWDS di Copernicus (`cems-glofas-historical`), a coda e senza quota.
+FONTI = ("open-meteo", "ewds")
 
-def cartella() -> Path:
-    return radice_dati() / "archivio" / "glofas"
+
+def cartella(fonte: str = "open-meteo") -> Path:
+    if fonte not in FONTI:
+        raise ValueError(f"fonte delle portate: {fonte!r}, attese {FONTI}")
+    return radice_dati() / "archivio" / "glofas" / fonte
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,4 +84,4 @@ def scrivi(base: Path, nodo: tuple[float, float], serie: SerieNodo) -> bool:
     return True
 
 
-__all__ = ["SerieNodo", "cartella", "leggi", "scrivi"]
+__all__ = ["FONTI", "SerieNodo", "cartella", "leggi", "scrivi"]
