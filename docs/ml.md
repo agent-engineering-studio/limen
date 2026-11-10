@@ -198,10 +198,17 @@ its own `feature_names.json`): `seismic.pga_max_g` — the max PGA of the
 earthquakes that shook the cell in `SeismicCheck`'s window, up to the sample
 time only — and `static.imperviousness_norm`. Every schema name must be
 mapped by `ml_engine._bundle_to_feature_row`, or it is served as a silent
-zero; `tests/unit/test_feature_store_482.py` checks it. Known gap: the
-`insar.*` features are trained on `cell_insar_features` but served as 0,
-because the bundle carries no InSAR — the EGMS vertical/east components are
-not added until it does.
+zero; `tests/unit/test_feature_store_482.py` checks it, with no exceptions.
+Until #568's fix the `insar.*` features were trained on `cell_insar_features`
+and served as 0 (the bundle carried no InSAR), and `static.susc_ispra` the
+other way round (served from `susceptibility`, trained as None): the
+`StaticFactors` step now joins both tables, and the EGMS Ortho L3
+vertical/east components (`insar.velocita_verticale_mmy`,
+`insar.velocita_est_mmy`) are at the schema tail. A model trained before the
+fix learnt InSAR on real values and was served zeros: retrain before reading
+its shadow numbers. Known gap: `limen backtest` builds its own reduced
+`StaticFactors` (the V1 inputs only), so a challenger replayed there still
+sees zeros for TWI, curvature, InSAR and the rest.
 
 A threshold breach OR enough new IFFI events triggers
 `RetrainingTrigger(should_retrain=True, reason=...)`. The trigger

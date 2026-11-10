@@ -33,11 +33,6 @@ from limen.ml.monitoring.drift import make_report, peggiore
 
 T = datetime(2026, 10, 10, 12, tzinfo=UTC)
 
-#: Addestrate sui valori di `cell_insar_features` ma servite a zero: il bundle
-#: non porta InSAR. Difetto noto, tracciato nella raccolta #568; qui solo
-#: perché il test sotto non lo nasconda e non lo lasci crescere.
-_NON_SERVITE = {"insar.velocity_mmy", "insar.accel_mmy2", "insar.scatterer_count"}
-
 _PRIMA_DELLA_482 = (
     "static.susc_ispra",
     "static.iffi_density_500",
@@ -64,6 +59,8 @@ def test_lo_schema_frane_si_allunga_solo_in_coda() -> None:
     assert CANONICAL_FEATURES[len(_PRIMA_DELLA_482) :] == (
         "seismic.pga_max_g",
         "static.imperviousness_norm",
+        "insar.velocita_verticale_mmy",
+        "insar.velocita_est_mmy",
     )
 
 
@@ -78,6 +75,7 @@ def _bundle() -> CellFeatureBundle:
         cell_id="a|0|0",
         static=StaticFactors(
             cell_id="a|0|0",
+            susc_ispra=0.55,
             iffi_density_500=2.0,
             distance_to_iffi_m=300.0,
             slope_deg=21.0,
@@ -89,6 +87,11 @@ def _bundle() -> CellFeatureBundle:
             imperviousness_norm=0.3,
             quota_sul_fondo_m=12.0,
             elevation_m=140.0,
+            insar_velocity_mmy=-4.5,
+            insar_accel_mmy2=-0.3,
+            insar_scatterer_count=12,
+            velocita_verticale_mmy=-3.9,
+            velocita_est_mmy=1.2,
         ),
         dynamic=DynamicInputs(
             valuation_time=T,
@@ -114,18 +117,33 @@ def _bundle() -> CellFeatureBundle:
 
 @pytest.mark.parametrize("schema", [CANONICAL_FEATURES, FLOOD_FEATURES])
 def test_ogni_feature_dello_schema_e_servita(schema: tuple[str, ...]) -> None:
-    """Una feature che il servizio non conosce vale zero in silenzio: proprio
-    il difetto che la #482 doveva evitare di allargare."""
+    """Una feature che il servizio non conosce vale zero in silenzio: lo
+    sfidante frane l'ha fatto con InSAR, imparata sui valori veri e servita a
+    zero finché il bundle non la portava (#568). Nessuna eccezione."""
     nomi = list(schema)
     riga = dict(zip(nomi, _bundle_to_feature_row(_bundle(), names=nomi), strict=True))
     statiche = _bundle().static
+    insar = {
+        "velocity_mmy": statiche.insar_velocity_mmy,
+        "accel_mmy2": statiche.insar_accel_mmy2,
+        "scatterer_count": statiche.insar_scatterer_count,
+        "velocita_verticale_mmy": statiche.velocita_verticale_mmy,
+        "velocita_est_mmy": statiche.velocita_est_mmy,
+    }
     for nome in nomi:
         top, _, sub = nome.partition(".")
-        if nome in _NON_SERVITE or top == "rain" or sub == "susc_ispra":
+        if top == "rain":
             continue
+        atteso: Any
         if top == "static":
-            assert riga[nome] == pytest.approx(float(getattr(statiche, sub))), nome
-    assert riga.get("seismic.pga_max_g", 0.12) == pytest.approx(0.12)
+            atteso = getattr(statiche, sub)
+        elif top == "insar":
+            atteso = insar[sub]
+        else:
+            assert nome == "seismic.pga_max_g"
+            atteso = 0.12
+        assert atteso, nome
+        assert riga[nome] == pytest.approx(float(atteso)), nome
 
 
 def test_wildfire_invariato() -> None:
