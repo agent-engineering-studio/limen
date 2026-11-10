@@ -228,7 +228,7 @@ async def run_nightly_pipeline(deps: AppDependencies) -> dict[str, Any]:
     out["esposizione_ispra"] = await _step("esposizione_ispra", _esposizione_ispra)
     # Dopo gli altri passi, così vede i loro errori di stanotte; prima di
     # GloFAS, che dura ore e non deve ritardare il riepilogo (#421).
-    out["qualita_dati"] = await _step("qualita_dati", _qualita_dati)
+    out["qualita_dati"] = await _step("qualita_dati", lambda: _qualita_dati(deps))
     # Per ultimo: il tetto di GloFAS riparte a mezzanotte UTC, quindi alle due
     # è intero comunque, e il riempimento ora dura un paio d'ore (i lotti si
     # distanziano sotto il limite orario): davanti, terrebbe ferma la retention.
@@ -238,10 +238,10 @@ async def run_nightly_pipeline(deps: AppDependencies) -> dict[str, Any]:
     return out
 
 
-async def _qualita_dati() -> dict[str, Any]:
+async def _qualita_dati(deps: AppDependencies) -> dict[str, Any]:
     from limen.cli.qualita_dati import riepilogo
 
-    return await riepilogo()
+    return await riepilogo(client=deps.llm_factory.create("Briefing"))
 
 
 async def _drift(deps: AppDependencies) -> dict[str, Any]:

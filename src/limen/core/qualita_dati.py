@@ -4,8 +4,8 @@ Ogni notte il passo ``qualita_dati`` raccoglie tre fatti dal database —
 job falliti nelle ultime 24 ore, job in ritardo sulla loro cadenza, celle
 non misurate per pericolo — e qui diventano un testo. È **deterministico**:
 ogni cifra viene dai fatti, come nei riepiloghi regionali, e nessun modello
-la tocca. Un riepilogo scritto dall'AI potrà riformulare queste righe, non
-sostituirle.
+la tocca. Il paragrafo dell'AI (`agents/chat_agents/qualita_dati.py`)
+riformula queste righe sopra di loro, non al loro posto.
 
 La cadenza di un job non è scritta da nessuna parte: si ricava dalla sua
 storia. Un job è in ritardo quando dall'ultimo successo è passato più di
@@ -183,7 +183,10 @@ def righe(fatti: Fatti, settimana_prima: Mapping[str, object] | None) -> list[st
     return out
 
 
-def testo(fatti: Fatti, settimana_prima: Mapping[str, object] | None) -> str:
+def testo(
+    fatti: Fatti, settimana_prima: Mapping[str, object] | None, sintesi: str | None = None
+) -> str:
+    """Il report; ``sintesi`` è il paragrafo dell'AI, che va sopra le righe e non al loro posto."""
     problemi = righe(fatti, settimana_prima)
     testa = [f"# Qualità dei dati — {fatti.adesso:%Y-%m-%d %H:%M} UTC", ""]
     if not problemi:
@@ -194,6 +197,8 @@ def testo(fatti: Fatti, settimana_prima: Mapping[str, object] | None) -> str:
                 "nessun pericolo con metà delle celle non misurate.",
             ]
         )
+    if sintesi:
+        testa += [sintesi, "", "_Riformulato dall'AI dalle righe qui sotto, che fanno fede._", ""]
     return "\n".join([*testa, *(f"- {p}" for p in problemi)])
 
 
