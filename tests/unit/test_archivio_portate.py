@@ -111,3 +111,33 @@ def test_la_testa_del_report_dice_se_il_ramo_fluviale_e_misurato() -> None:
     assert backtest_flood.ramo_fluviale(98, 135) == (
         "Ramo fluviale: portata GloFAS su **98 nodi su 135**."
     )
+
+
+def test_una_cartella_per_fonte() -> None:
+    assert ap.cartella("open-meteo") != ap.cartella("ewds")
+    with pytest.raises(ValueError):
+        ap.cartella("altro")
+
+
+async def test_dall_ewds_non_si_tocca_open_meteo(
+    api: _Api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chieste: list[tuple[list[tuple[float, float]], date, date]] = []
+
+    async def ewds(
+        nodi: list[tuple[float, float]], *, start: date, end: date
+    ) -> list[dict[date, float]]:
+        chieste.append((list(nodi), start, end))
+        return [{start: 5.0, end: 6.0} for _ in nodi]
+
+    monkeypatch.setenv("LIMEN_BACKTEST_FLOOD_PORTATE", "ewds")
+    monkeypatch.setattr(backtest_flood, "_portate_ewds", ewds)
+    out = await backtest_flood._fetch_discharges(NODI, start=DAL, end=AL)
+    assert api.chiamate == []
+    assert chieste == [(NODI, DAL, AL)]
+    assert out[0] == {DAL: 5.0, AL: 6.0}
+    # Salvate sotto la fonte EWDS, non sotto Open-Meteo: la seconda volta dal disco.
+    assert ap.leggi(ap.cartella("ewds"), NODI[0]) is not None
+    assert ap.leggi(ap.cartella("open-meteo"), NODI[0]) is None
+    await backtest_flood._fetch_discharges(NODI, start=DAL, end=AL)
+    assert len(chieste) == 1

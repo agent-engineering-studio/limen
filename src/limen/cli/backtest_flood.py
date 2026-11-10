@@ -39,10 +39,17 @@ Env:
 * ``LIMEN_BACKTEST_FLOOD_NODE_DEG`` — passo del reticolo meteo (default 0.1°).
 * ``LIMEN_BACKTEST_FLOOD_SOGLIE`` — ``locali`` (default: quelle del nodo,
   se `flood.yaml` le chiede e il nodo ha una climatologia) | ``nazionali``.
+* ``LIMEN_BACKTEST_FLOOD_PORTATE`` — da dove vengono le portate storiche che
+  mancano su disco: ``open-meteo`` (default; l'API pubblica, la **stessa quota**
+  dello sweep e del riempimento notturno dei riferimenti) | ``ewds`` (l'EWDS di
+  Copernicus, una griglia sull'Italia al mese, nessuna quota Open-Meteo; serve
+  ``COPERNICUS__EWDS_KEY`` e il gruppo ``copernicus``; i mesi in
+  ``LIMEN_EWDS_DIR``, default ``$LIMEN_DATA_ROOT/archivio/ewds``).
 """
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -91,6 +98,7 @@ _LEVEL_ENV = "LIMEN_BACKTEST_FLOOD_LEVEL"
 _MODE_ENV = "LIMEN_BACKTEST_FLOOD_MODE"
 _NODE_ENV = "LIMEN_BACKTEST_FLOOD_NODE_DEG"
 _SOGLIE_ENV = "LIMEN_BACKTEST_FLOOD_SOGLIE"
+_PORTATE_ENV = "LIMEN_BACKTEST_FLOOD_PORTATE"
 
 #: Passo del reticolo meteo. 0.1° (~11 km) come il resto della pipeline flood.
 _DEFAULT_NODE_DEG = 0.1
@@ -456,7 +464,8 @@ async def _fetch_discharges(
     modo peggiore di sbagliare: il ramo fluviale risulterebbe spento e il
     report non lo saprebbe.
     """
-    base = archivio_portate.cartella()
+    fonte = os.getenv(_PORTATE_ENV, "open-meteo")
+    base = archivio_portate.cartella(fonte)
     out: dict[int, dict[date, float]] = {}
     mancanti: list[int] = []
     lo, hi = start, end
@@ -470,7 +479,14 @@ async def _fetch_discharges(
             lo, hi = min(lo, salvata.dal), max(hi, salvata.al)
 
     salvati = 0
-    if mancanti:
+    if mancanti and fonte == "ewds":
+        per_nodo = await _portate_ewds([nodes[i] for i in mancanti], start=lo, end=hi)
+        for k, index in enumerate(mancanti):
+            out[index] = per_nodo[k]
+            salvati += archivio_portate.scrivi(
+                base, nodes[index], archivio_portate.SerieNodo(dal=lo, al=hi, portate=per_nodo[k])
+            )
+    elif mancanti:
         from limen.integrations.openmeteo.flood import FLOOD_URL, OpenMeteoFloodClient
 
         flow = await OpenMeteoFloodClient().fetch_grid(
@@ -498,6 +514,7 @@ async def _fetch_discharges(
             )
     log.info(
         "backtest_flood.discharges",
+        fonte=fonte,
         nodes=len(nodes),
         start=str(start),
         end=str(end),
@@ -507,6 +524,32 @@ async def _fetch_discharges(
         with_series=sum(1 for v in out.values() if v),
     )
     return out
+
+
+async def _portate_ewds(
+    nodes: list[tuple[float, float]], *, start: date, end: date
+) -> list[dict[date, float]]:
+    """La portata giornaliera dei nodi dall'EWDS di Copernicus, un mese per file.
+
+    I mesi già scaricati in ``LIMEN_EWDS_DIR`` non si richiedono; la coda
+    dell'EWDS può tenere un mese in attesa per ore, quindi il download gira in
+    un thread. La cella è quella che Open-Meteo serve (`glofas-ewds`), così una
+    portata EWDS e una Open-Meteo dello stesso nodo sono lo stesso numero.
+    """
+    from glofas_ewds import discharge_by_day
+
+    from limen.config.percorsi import radice_dati
+    from limen.config.settings import get_settings
+    from limen.integrations.copernicus import ewds_glofas
+
+    cfg = get_settings().copernicus
+    if cfg.ewds_key is None or not cfg.attivo:
+        raise RuntimeError("portate dall'EWDS: manca COPERNICUS__EWDS_KEY")
+    cartella = Path(os.getenv("LIMEN_EWDS_DIR") or radice_dati() / "archivio" / "ewds")
+    client = ewds_glofas.nuovo_client(cfg.ewds_url, cfg.ewds_key.get_secret_value())
+    files = await asyncio.to_thread(ewds_glofas.scarica, cartella, start, end, client=client)
+    per_nodo = await asyncio.to_thread(discharge_by_day, files, nodes, start=start, end=end)
+    return [per_nodo.get(n, {}) for n in nodes]
 
 
 async def _fetch_node_series(
