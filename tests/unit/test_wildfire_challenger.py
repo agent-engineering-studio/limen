@@ -25,6 +25,7 @@ from limen.core.scoring.regional_thresholds import (
 from limen.data.repos.training_samples_repo import TrainingSample
 from limen.ml.dataset import (
     CANONICAL_FEATURES,
+    FLOOD_FEATURES,
     WILDFIRE_FEATURES,
     features_for,
     matrix_sha,
@@ -67,9 +68,9 @@ def _sample(*, label: int, fwi: float = 30.0, block: str = "b1") -> TrainingSamp
 def test_each_hazard_gets_its_own_ordered_schema() -> None:
     assert features_for(HazardType.WILDFIRE) == WILDFIRE_FEATURES
     assert features_for(HazardType.LANDSLIDE) == CANONICAL_FEATURES
-    # Un pericolo senza voce ricade su quello delle frane: è il comportamento
-    # di prima della #68 e non deve rompersi.
-    assert features_for(HazardType.FLOOD) == CANONICAL_FEATURES
+    # Dalla #482 anche l'alluvione ha il suo: prima ricadeva su quello delle
+    # frane e le sue feature idrauliche uscivano a zero.
+    assert features_for(HazardType.FLOOD) == FLOOD_FEATURES
 
 
 def test_the_two_schemas_share_only_what_means_the_same_thing() -> None:

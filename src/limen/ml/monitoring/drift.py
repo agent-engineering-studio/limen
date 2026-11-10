@@ -17,7 +17,7 @@ plain float — no model objects, no DB. Compose them in :mod:`trigger`.
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -162,10 +162,22 @@ def make_report(
     )
 
 
+def peggiore(reports: Mapping[str, DriftReport]) -> tuple[str, DriftReport]:
+    """La feature che deriva di più (#482): prima chi supera una soglia, poi la PSI più alta.
+
+    Il trigger guarda una feature sola, la peggiore: su diciassette colonne,
+    sommare gli allarmi farebbe ripartire l'addestramento per rumore.
+    """
+    if not reports:
+        raise ValueError("nessuna feature da confrontare")
+    return max(reports.items(), key=lambda kv: (kv[1].any_alert, kv[1].psi, kv[0]))
+
+
 __all__: list[Any] = [
     "DriftReport",
     "ks_distance",
     "make_report",
+    "peggiore",
     "population_stability_index",
     "prediction_drift",
 ]

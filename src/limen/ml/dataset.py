@@ -37,6 +37,12 @@ CANONICAL_FEATURES: tuple[str, ...] = (
     "rain.rain_72h_mm",
     "rain.rain_30d_mm",
     "rain.max_i_24h_mmh",
+    # #482, in coda: un modello già registrato legge il suo `feature_names.json`
+    # e non le vede. La PGA massima dei terremoti che hanno scosso la cella
+    # nella finestra del motore V1 (`seismic.giorni_da_leggere`), presa solo
+    # dagli eventi fino al campione; il suolo sigillato dalla tabella statica.
+    "seismic.pga_max_g",
+    "static.imperviousness_norm",
 )
 
 #: Feature dell'incendio (#68). **Lista separata, non in coda alla comune.**
@@ -66,11 +72,27 @@ WILDFIRE_FEATURES: tuple[str, ...] = (
     "rain.rain_30d_mm",
 )
 
+#: Feature dell'alluvione (#482): quelle di `_build_flood_features`, che prima
+#: finivano proiettate sullo schema delle frane e uscivano quasi tutte a zero.
+#: Solo colonne che anche il bundle del motore porta, perché al servizio lo
+#: sfidante legge il bundle: `distance_to_road_m` resta nel campione ma non
+#: nello schema, il bundle non la ha. La parte dinamica (pioggia, portata
+#: storiche) manca ancora, come la baseline.
+FLOOD_FEATURES: tuple[str, ...] = (
+    "static.flood_hazard_norm",
+    "static.imperviousness_norm",
+    "static.quota_sul_fondo_m",
+    "static.elevation_m",
+    "static.slope_deg",
+    "static.twi",
+)
+
 #: Quale schema per quale pericolo. Un pericolo senza voce usa quello delle
 #: frane, che è il comportamento di prima della #68.
 FEATURES_BY_HAZARD: dict[HazardType, tuple[str, ...]] = {
     HazardType.LANDSLIDE: CANONICAL_FEATURES,
     HazardType.WILDFIRE: WILDFIRE_FEATURES,
+    HazardType.FLOOD: FLOOD_FEATURES,
 }
 
 

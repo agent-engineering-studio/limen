@@ -42,6 +42,9 @@ class CellStaticFactors:
     # predittore e nessuno se ne accorgeva.
     imperviousness_norm: float | None = None
     distance_to_road_m: float | None = None
+    # #469, letta dal blocco `terrain` del motore alluvione: lo sfidante deve
+    # vederla anche lui (#482).
+    quota_sul_fondo_m: float | None = None
     # Interfaccia urbano-foresta (#62) e memoria del fuoco (#66): servono al
     # vettore di feature dell'incendio (#68). Con l'accesso diretto un campo
     # assente è un AttributeError immediato invece di un None silenzioso —
@@ -137,7 +140,7 @@ async def get_for_cell(cell_id: str) -> CellStaticFactors | None:
                    lithology, landuse_code, litho_weight,
                    dist_faults_m, distance_to_iffi_m, iffi_density_500,
                    pai_class_norm, flood_hazard_class, flood_hazard_norm,
-                   imperviousness_norm, distance_to_road_m,
+                   imperviousness_norm, distance_to_road_m, quota_sul_fondo_m,
                    wui_proximity_norm, fire_density, extras
             FROM cell_static_factors WHERE cell_id = $1
             """,
@@ -166,6 +169,7 @@ async def get_for_cell(cell_id: str) -> CellStaticFactors | None:
         flood_hazard_norm=row["flood_hazard_norm"],
         imperviousness_norm=row["imperviousness_norm"],
         distance_to_road_m=row["distance_to_road_m"],
+        quota_sul_fondo_m=row["quota_sul_fondo_m"],
         wui_proximity_norm=row["wui_proximity_norm"],
         fire_density=int(row["fire_density"] or 0),
         extras=extras or {},

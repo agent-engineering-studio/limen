@@ -1063,10 +1063,12 @@ class MonitoringSettings(BaseSettings):
     # APScheduler cadence — coarse, drift checks aren't a hot path.
     drift_check_hours: int = Field(default=24, ge=1)
     enable_drift_monitoring: bool = True
-    # Canonical feature whose distribution is compared training-vs-live.
-    # Must exist both in training_samples.features and in the shadow's
-    # persisted breakdown["features"] (same keys, same scales).
-    drift_feature: str = "rain.rain_72h_mm"
+    # Features whose distribution is compared training-vs-live (#482); each
+    # must exist both in training_samples.features and in the shadow's
+    # persisted breakdown["features"] (same keys, same scales). Empty = every
+    # feature of the vector the challenger persisted. The trigger reads the
+    # worst one (`drift.peggiore`).
+    drift_features: list[str] = Field(default_factory=list)
 
 
 class GeoServerSourceSettings(BaseSettings):

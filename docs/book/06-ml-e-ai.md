@@ -738,10 +738,15 @@ Che cosa manca, in breve. Il dettaglio tecnico sta nella issue indicata.
   il combustibile con le regole correnti della formula, che con la versione
   1.1.0 sono cambiate: va riaddestrato e rimisurato prima di ogni confronto.
   ([#485](https://github.com/agent-engineering-studio/limen/issues/485))
-- **Al quaderno mancano i dati più nuovi.** Il modello frane non vede i
-  terremoti recenti, la pioggia misurata dal radar, le due direzioni del
-  movimento del terreno che il satellite europeo ora fornisce, né il suolo
-  impermeabile; l'alluvione non ha ancora un suo sfidante. *Proposta di
+- **Al quaderno mancano i dati più nuovi** *(in parte chiuso)*. Il modello
+  frane ora vede i terremoti recenti (la scossa più forte che ha raggiunto
+  la cella, solo fino al giorno dell'esempio) e il suolo impermeabile;
+  l'alluvione ha un suo elenco di dati invece di quello delle frane; la
+  sorveglianza della deriva guarda tutti i dati del modello e non uno solo.
+  Restano fuori le due direzioni del movimento del terreno: il modello
+  impara già la velocità del suolo, ma quando calcola non la riceve, e
+  aggiungerne altre allargherebbe lo stesso buco. L'alluvione non ha ancora
+  un primo sfidante addestrato, né la pioggia e la portata storiche. *Proposta di
   dati aperti:* il servizio europeo di monitoraggio dei movimenti del
   terreno (EGMS, Copernicus), gratuito con licenza aperta, che Limen già
   scarica (<https://egms.land.copernicus.eu>). (issue: #380 per il movimento
