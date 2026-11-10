@@ -358,6 +358,13 @@ def _bundle_to_feature_row(bundle: CellFeatureBundle, *, names: list[str]) -> li
         "static.litho_weight": _clamp01(bundle.static.litho_weight),
         "static.twi": float(bundle.static.twi or 0.0),
         "static.curvature": float(bundle.static.curvature or 0.0),
+        # Dal bundle dalla correzione della #568: prima mancavano qui e lo
+        # sfidante le riceveva a zero dopo averle imparate sui valori veri.
+        "insar.velocity_mmy": float(bundle.static.insar_velocity_mmy or 0.0),
+        "insar.accel_mmy2": float(bundle.static.insar_accel_mmy2 or 0.0),
+        "insar.scatterer_count": float(bundle.static.insar_scatterer_count or 0),
+        "insar.velocita_verticale_mmy": float(bundle.static.velocita_verticale_mmy or 0.0),
+        "insar.velocita_est_mmy": float(bundle.static.velocita_est_mmy or 0.0),
         # Same antecedent-rain aggregates the model trained on (CERRA
         # replay). The monitoring window is 48 h, so rain_72h is a lower
         # bound; the 30-day total comes from the API_30 archive lookup.

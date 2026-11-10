@@ -420,7 +420,10 @@ async def _build_features(cell_id: str, valuation_time: datetime) -> dict[str, A
     insar = await cell_insar_features_repo.get_for_cell(cell_id)
     features: dict[str, Any] = {
         "static": {
-            "susc_ispra": _maybe_float(getattr(static, "susc_ispra", None)),
+            # Da `susceptibility`, come lo step `StaticFactors`: il dataclass
+            # della tabella statica non ha la colonna, e il vecchio `getattr`
+            # dava None a ogni campione mentre il servizio leggeva il valore.
+            "susc_ispra": await _suscettibilita(cell_id),
             "iffi_density_500": _maybe_float(getattr(static, "iffi_density_500", None)),
             "distance_to_iffi_m": _maybe_float(getattr(static, "distance_to_iffi_m", None)),
             "slope_deg": _maybe_float(getattr(static, "slope_deg", None)),
@@ -435,9 +438,17 @@ async def _build_features(cell_id: str, valuation_time: datetime) -> dict[str, A
             "velocity_mmy": insar.insar_velocity_mmy if insar is not None else None,
             "accel_mmy2": insar.insar_accel_mmy2 if insar is not None else None,
             "scatterer_count": insar.scatterer_count if insar is not None else 0,
+            "velocita_verticale_mmy": insar.velocita_verticale_mmy if insar is not None else None,
+            "velocita_est_mmy": insar.velocita_est_mmy if insar is not None else None,
         },
     }
     return features
+
+
+async def _suscettibilita(cell_id: str) -> float | None:
+    async with acquire() as conn:
+        value = await conn.fetchval("SELECT score FROM susceptibility WHERE cell_id = $1", cell_id)
+    return _maybe_float(value)
 
 
 def _maybe_float(value: Any) -> float | None:

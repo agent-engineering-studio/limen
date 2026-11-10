@@ -43,6 +43,10 @@ CANONICAL_FEATURES: tuple[str, ...] = (
     # dagli eventi fino al campione; il suolo sigillato dalla tabella statica.
     "seismic.pga_max_g",
     "static.imperviousness_norm",
+    # Le componenti EGMS Ortho L3 (migrazione 072), servite dal bundle come le
+    # altre `insar.*` dalla correzione della #568.
+    "insar.velocita_verticale_mmy",
+    "insar.velocita_est_mmy",
 )
 
 #: Feature dell'incendio (#68). **Lista separata, non in coda alla comune.**

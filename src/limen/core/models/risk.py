@@ -86,6 +86,15 @@ class StaticFactors(_Frozen):
     # cella (`limen clima-pioggia`): il metro dell'innesco `cumulata`. NULL =
     # nessun riferimento, e l'innesco resta su Caine.
     pioggia_riferimento_mm: float | None = Field(default=None, gt=0.0)
+    # Dal `cell_insar_features` (EGMS), non da `cell_static_factors`: il motore
+    # V1 non le legge, lo sfidante ML sì, e finché il bundle non le portava le
+    # imparava sui valori veri e le riceveva a zero (#568). NULL = nessuno
+    # scatterer nella cella, che lo sfidante legge come 0 come in addestramento.
+    insar_velocity_mmy: float | None = None
+    insar_accel_mmy2: float | None = None
+    insar_scatterer_count: int | None = Field(default=None, ge=0)
+    velocita_verticale_mmy: float | None = None
+    velocita_est_mmy: float | None = None
 
 
 class RainfallSample(_Frozen):

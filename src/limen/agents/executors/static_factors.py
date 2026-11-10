@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from limen.agents.workflow_runtime.executor import Executor, handler
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
@@ -22,12 +24,19 @@ SELECT c.cell_id,
        c.flood_hazard_norm,
        c.quota_sul_fondo_m,
        c.imperviousness_norm,
-       s.score AS susc_ispra
+       s.score AS susc_ispra,
+       i.insar_velocity_mmy, i.insar_accel_mmy2, i.scatterer_count,
+       i.velocita_verticale_mmy, i.velocita_est_mmy
 FROM cell_static_factors c
 JOIN grid_cells g ON g.id = c.cell_id
 LEFT JOIN susceptibility s ON s.cell_id = c.cell_id
+LEFT JOIN cell_insar_features i ON i.cell_id = c.cell_id
 WHERE g.aoi_id = $1
 """
+
+
+def _float(x: Any) -> float | None:
+    return None if x is None else float(x)
 
 
 class StaticFactorsExecutor(Executor):
@@ -79,6 +88,13 @@ class StaticFactorsExecutor(Executor):
                     if r["imperviousness_norm"] is not None
                     else None
                 ),
+                insar_velocity_mmy=_float(r["insar_velocity_mmy"]),
+                insar_accel_mmy2=_float(r["insar_accel_mmy2"]),
+                insar_scatterer_count=(
+                    int(r["scatterer_count"]) if r["scatterer_count"] is not None else None
+                ),
+                velocita_verticale_mmy=_float(r["velocita_verticale_mmy"]),
+                velocita_est_mmy=_float(r["velocita_est_mmy"]),
             )
 
         log.info(
