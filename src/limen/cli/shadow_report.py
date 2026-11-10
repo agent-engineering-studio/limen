@@ -54,6 +54,7 @@ def _write_report(
     truth_rows: list[dict[str, Any]],
     model_versions: list[str],
     confronto: ConfrontoEsiti | None = None,
+    forbice_q90: dict[str, float | None] | None = None,
 ) -> Path:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     out = REPORTS_DIR / f"shadow_report_{since.date()}.md"
@@ -65,6 +66,11 @@ def _write_report(
         f"Generated: {datetime.now(UTC).isoformat()}",
         f"AOI filter: `{aoi_filter or 'all'}` · challenger versions: "
         f"{', '.join(model_versions) or 'n/a'}",
+        *(
+            f"Forbice della versione {v}: ± {q:.3f} (intervallo conforme al 90 %)."
+            for v, q in (forbice_q90 or {}).items()
+            if q is not None
+        ),
         "",
         "## Divergence per AOI (divergence = ml_probability - champion_score)",
         "",
@@ -182,6 +188,7 @@ async def run() -> int:
         truth_rows=summary.truth_rows,
         model_versions=summary.model_versions,
         confronto=confronto,
+        forbice_q90=summary.forbice_q90,
     )
     log.info(
         "shadow_report.done",

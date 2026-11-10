@@ -81,13 +81,16 @@ WHERE rn <= 10
 ORDER BY aoi_id, rn
 """
 
+# La forbice dello sfidante (#484): la semiampiezza dell'intervallo conforme
+# al 90 % sta in ogni breakdown, ed è una per versione del modello.
 _VERSIONS_SQL = """
-SELECT DISTINCT model_version
+SELECT model_version, max((breakdown->>'conformal_q90')::float8) AS q90
 FROM model_runs
 WHERE role = 'challenger'
   AND hazard_type = $3
   AND computed_at >= $1
   AND ($2::text IS NULL OR aoi_id = $2)
+GROUP BY model_version
 ORDER BY model_version
 """
 
@@ -242,6 +245,9 @@ class ShadowSummary:
     truth_rows: list[dict[str, Any]]
     model_versions: list[str]
     total_pairs: int
+    #: versione → ± semiampiezza dell'intervallo conforme al 90 % (None: run
+    #: addestrato prima che il training salvasse ``conformal.json``).
+    forbice_q90: dict[str, float | None] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -399,4 +405,8 @@ async def collect_shadow_summary(
         truth_rows=truth_rows,
         model_versions=[str(v["model_version"]) for v in versions],
         total_pairs=sum(s.n for s in stats),
+        forbice_q90={
+            str(v["model_version"]): (float(v["q90"]) if v["q90"] is not None else None)
+            for v in versions
+        },
     )

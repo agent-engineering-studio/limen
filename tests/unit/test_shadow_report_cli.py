@@ -53,11 +53,14 @@ def test_report_with_stats_and_ground_truth(
             }
         ],
         model_versions=["3", "4"],
+        forbice_q90={"3": None, "4": 0.1234},
     )
     text = out.read_text(encoding="utf-8")
 
     assert out.name == "shadow_report_2026-07-06.md"
     assert "AOI filter: `it-basilicata` · challenger versions: 3, 4" in text
+    assert "Forbice della versione 4: ± 0.123 (intervallo conforme al 90 %)." in text
+    assert "Forbice della versione 3" not in text
     assert "### `it-basilicata` — 240 paired runs" in text
     assert "score correlation (Pearson): **n/a**" in text
     assert "class agreement: **87.5%**" in text
