@@ -12,6 +12,7 @@ const SUMMARY: ShadowSummaryResponse = {
   since: "2026-07-06T13:00:00+00:00",
   aoi_filter: null,
   model_versions: ["ml-v2"],
+  forbice_q90: { "ml-v2": 0.12, "ml-v1": null },
   total_pairs: 1000,
   regions: [
     { aoi_id: "it-puglia", aoi_name: "Puglia", n: 700, mean_abs_div: 0.4, p95_abs_div: 0.6, max_abs_div: 0.8, correlation: 0.3, class_agreement: 0.5 },
@@ -66,6 +67,9 @@ describe("ShadowDiagnosticsPage — live data (public)", () => {
     // human names, not raw it-* ids
     expect(screen.getByText("Basilicata")).toBeInTheDocument();
     expect(screen.queryByText("it-basilicata")).not.toBeInTheDocument();
+    // la forbice conforme (#484), solo per la versione che ce l'ha
+    expect(screen.getByText(/Forbice del modello IA ml-v2: ± 0,12/)).toBeInTheDocument();
+    expect(screen.queryByText(/ml-v1/)).not.toBeInTheDocument();
     // calibration section present, gated to insufficient-data state
     await waitFor(() =>
       expect(screen.getByText(/Dati insufficienti/)).toBeInTheDocument(),

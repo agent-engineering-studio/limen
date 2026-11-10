@@ -379,6 +379,8 @@ export interface ShadowSummaryResponse {
   since: string;
   aoi_filter: string | null;
   model_versions: string[];
+  /** versione → ± semiampiezza dell'intervallo conforme al 90 % (#484). */
+  forbice_q90?: Record<string, number | null>;
   total_pairs: number;
   regions: ShadowRegion[];
   truth_events: {

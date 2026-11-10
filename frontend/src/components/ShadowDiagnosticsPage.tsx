@@ -90,6 +90,8 @@ const T = testi(
     caricamentoCalibrazione: "Caricamento della calibrazione…",
     finestra: (dal: string, modelli: string) =>
       `Finestra dal ${dal} · confronto notturno · modello IA: ${modelli}.`,
+    forbice: (versione: string, q: string) =>
+      `Forbice del modello IA ${versione}: ± ${q} sulla probabilità. In nove casi su dieci, nei dati di calibrazione, il valore vero stava dentro questa distanza dalla stima.`,
     nd: "n/d",
     pagina: "Diagnostica ML (shadow)",
     learn:
@@ -194,6 +196,8 @@ const T = testi(
     caricamentoCalibrazione: "Loading calibration…",
     finestra: (dal: string, modelli: string) =>
       `Window from ${dal} · nightly comparison · AI model: ${modelli}.`,
+    forbice: (versione: string, q: string) =>
+      `AI model ${versione} uncertainty band: ± ${q} on the probability. In nine cases out of ten, on the calibration data, the true value was within this distance of the estimate.`,
     nd: "n/a",
     pagina: "ML diagnostics (shadow)",
     learn:
@@ -363,6 +367,13 @@ function LiveDiagnostics(): JSX.Element {
       <p className="exp-note">
         {t.finestra(data.since.slice(0, 10), data.model_versions.join(", ") || t.nd)}
       </p>
+      {Object.entries(data.forbice_q90 ?? {})
+        .filter((e): e is [string, number] => e[1] !== null)
+        .map(([versione, q]) => (
+          <p className="exp-note" key={versione}>
+            {t.forbice(versione, q.toLocaleString(loc, { maximumFractionDigits: 3 }))}
+          </p>
+        ))}
     </>
   );
 }

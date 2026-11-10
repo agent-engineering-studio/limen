@@ -86,10 +86,13 @@ async def insert_many(rows: Iterable[ModelRunRow]) -> int:
     async with acquire() as conn, conn.transaction():
         # ON COMMIT DROP: la temporanea vive quanto la transazione, quindi
         # due sweep concorrenti non se la contendono e non resta niente da
-        # ripulire se qualcosa esplode a metà.
+        # ripulire se qualcosa esplode a metà. Solo le colonne della COPY:
+        # `LIKE model_runs` portava anche `id` NOT NULL senza l'identità
+        # (INCLUDING DEFAULTS non la copia), e ogni scrittura dell'ombra
+        # falliva su un id nullo — ingoiata, come vuole l'ombra (#484).
         await conn.execute(
-            "CREATE TEMP TABLE _model_runs_staging "
-            "(LIKE model_runs INCLUDING DEFAULTS) ON COMMIT DROP"
+            "CREATE TEMP TABLE _model_runs_staging ON COMMIT DROP AS "
+            f"SELECT {', '.join(_STAGING_COLUMNS)} FROM model_runs WITH NO DATA"
         )
         await conn.copy_records_to_table(
             "_model_runs_staging", records=records, columns=list(_STAGING_COLUMNS)

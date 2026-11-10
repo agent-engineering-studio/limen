@@ -356,6 +356,7 @@ async def shadow_summary(
         "since": summary.since.isoformat(),
         "aoi_filter": summary.aoi_filter,
         "model_versions": summary.model_versions,
+        "forbice_q90": summary.forbice_q90,
         "total_pairs": summary.total_pairs,
         "regions": [
             {
