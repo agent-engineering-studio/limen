@@ -206,9 +206,13 @@ other way round (served from `susceptibility`, trained as None): the
 vertical/east components (`insar.velocita_verticale_mmy`,
 `insar.velocita_est_mmy`) are at the schema tail. A model trained before the
 fix learnt InSAR on real values and was served zeros: retrain before reading
-its shadow numbers. Known gap: `limen backtest` builds its own reduced
-`StaticFactors` (the V1 inputs only), so a challenger replayed there still
-sees zeros for TWI, curvature, InSAR and the rest.
+its shadow numbers. `limen backtest` loads its cells through the same
+`cell_static_factors_repo.fattori_aoi` as the `StaticFactors` step: before,
+it built a reduced `StaticFactors` of its own, so a challenger replayed there
+(the promotion gate) saw zeros for TWI, curvature, InSAR and the rest — and
+the **V1** replayed there had no ISPRA susceptibility in S and H = 0, i.e. it
+was not the V1 in production. Landslide backtest numbers measured before this
+change (#243 and earlier) carry that difference.
 
 A threshold breach OR enough new IFFI events triggers
 `RetrainingTrigger(should_retrain=True, reason=...)`. The trigger
