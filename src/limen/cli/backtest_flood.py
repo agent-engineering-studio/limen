@@ -74,6 +74,7 @@ from limen.data.repos import flood_events_repo, pioggia_climatologia_repo
 from limen.data.repos.flood_events_repo import ActivationSummary
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.copernicus_ems.client import catalogue_provenance
+from limen.integrations.openmeteo import archivio_portate
 from limen.integrations.openmeteo.flood import MIN_REFERENCE_DAYS, percentile_of
 
 log = get_logger(__name__)
@@ -436,65 +437,73 @@ def _node_reference(daily: dict[date, float], *, percentile: float, min_days: in
 #: che non vale. Misurato: 4 richieste su 8 respinte.
 _SERIES_CACHE: dict[tuple[tuple[tuple[float, float], ...], date, date], list[_NodeSeries]] = {}
 
-#: Le portate, scaricate una volta per **tutte** le finestre. Sono l'oggetto
-#: piu' costoso del backtest — due anni di storia per nodo, perche' il
-#: riferimento fluviale e' un percentile pluriennale (#108) — e non dipendono
-#: dalla finestra: e' la finestra che ritaglia una serie gia' letta. Chiedere
-#: un intervallo diverso per ogni finestra faceva 429 e spegneva il ramo
-#: fluviale proprio dove andava misurato.
-#: chiave: i nodi. Valore: l'arco coperto e le serie lette.
-_DISCHARGE_CACHE: dict[
-    tuple[tuple[float, float], ...], tuple[date, date, dict[int, dict[date, float]]]
-] = {}
+#: Le portate si leggono una volta per **tutte** le finestre, e restano su
+#: disco (#478): sono l'oggetto piu' costoso del backtest — due anni di storia
+#: per nodo, perche' il riferimento fluviale e' un percentile pluriennale
+#: (#108) — non dipendono dalla finestra, e vengono dall'API pubblica, che con
+#: un 429 spegneva il ramo fluviale proprio dove andava misurato.
 
 
 async def _fetch_discharges(
     nodes: list[tuple[float, float]], *, start: date, end: date
 ) -> dict[int, dict[date, float]]:
-    """Portata giornaliera per nodo su tutto l'arco richiesto, una volta sola.
+    """Portata giornaliera per nodo su tutto l'arco richiesto.
 
-    La cache ricorda **quale** arco copre, e allarga se qualcuno chiede giorni
-    che non ha: riusare una serie piu' corta di quella richiesta darebbe
-    finestre senza portata senza dirlo, che e' il modo peggiore di sbagliare —
-    il ramo fluviale risulterebbe spento e il report non lo saprebbe.
+    Dal disco (`integrations/openmeteo/archivio_portate.py`) per i nodi che
+    coprono l'arco; gli altri si chiedono **insieme** all'API, sull'arco
+    allargato a quello che avevano, e si salvano. Riusare una serie piu' corta
+    di quella richiesta darebbe finestre senza portata senza dirlo, che e' il
+    modo peggiore di sbagliare: il ramo fluviale risulterebbe spento e il
+    report non lo saprebbe.
     """
-    chiave = tuple(nodes)
-    coperto = _DISCHARGE_CACHE.get(chiave)
-    if coperto is not None:
-        lo, hi, dati = coperto
-        if lo <= start and hi >= end:
-            return dati
-        start, end = min(lo, start), max(hi, end)
-
-    from limen.integrations.openmeteo.flood import FLOOD_URL, OpenMeteoFloodClient
-
-    flow = await OpenMeteoFloodClient().fetch_grid(
-        FLOOD_URL,
-        nodes,
-        {
-            "daily": "river_discharge",
-            "start_date": start.isoformat(),
-            "end_date": end.isoformat(),
-            "timezone": "UTC",
-        },
-        "backtest_flood.discharge",
-    )
+    base = archivio_portate.cartella()
     out: dict[int, dict[date, float]] = {}
-    for index in range(len(nodes)):
-        river = (flow[index] if index < len(flow) else {}).get("daily") or {}
-        serie: dict[date, float] = {}
-        for stamp, value in zip(
-            river.get("time") or [], river.get("river_discharge") or [], strict=False
-        ):
-            if value is not None:
-                serie[date.fromisoformat(str(stamp))] = float(value)
-        out[index] = serie
-    _DISCHARGE_CACHE[chiave] = (start, end, out)
+    mancanti: list[int] = []
+    lo, hi = start, end
+    for index, nodo in enumerate(nodes):
+        salvata = archivio_portate.leggi(base, nodo)
+        if salvata is not None and salvata.copre(start, end):
+            out[index] = salvata.portate
+            continue
+        mancanti.append(index)
+        if salvata is not None:
+            lo, hi = min(lo, salvata.dal), max(hi, salvata.al)
+
+    salvati = 0
+    if mancanti:
+        from limen.integrations.openmeteo.flood import FLOOD_URL, OpenMeteoFloodClient
+
+        flow = await OpenMeteoFloodClient().fetch_grid(
+            FLOOD_URL,
+            [nodes[i] for i in mancanti],
+            {
+                "daily": "river_discharge",
+                "start_date": lo.isoformat(),
+                "end_date": hi.isoformat(),
+                "timezone": "UTC",
+            },
+            "backtest_flood.discharge",
+        )
+        for k, index in enumerate(mancanti):
+            river = (flow[k] if k < len(flow) else {}).get("daily") or {}
+            serie: dict[date, float] = {}
+            for stamp, value in zip(
+                river.get("time") or [], river.get("river_discharge") or [], strict=False
+            ):
+                if value is not None:
+                    serie[date.fromisoformat(str(stamp))] = float(value)
+            out[index] = serie
+            salvati += archivio_portate.scrivi(
+                base, nodes[index], archivio_portate.SerieNodo(dal=lo, al=hi, portate=serie)
+            )
     log.info(
         "backtest_flood.discharges",
         nodes=len(nodes),
         start=str(start),
         end=str(end),
+        dal_disco=len(nodes) - len(mancanti),
+        richiesti=len(mancanti),
+        salvati=salvati,
         with_series=sum(1 for v in out.values() if v),
     )
     return out
@@ -862,6 +871,17 @@ def _ratio_cell(value: float, *, percent: bool = True) -> str:
     return f"{value:.0%}" if percent else f"{value:.2f}"
 
 
+def ramo_fluviale(con_portata: int, nodi: int) -> str:
+    """La riga di testa del report sul ramo fluviale (#478)."""
+    if con_portata == 0:
+        return (
+            f"> **Ramo fluviale non misurato**: nessuno dei {nodi} nodi ha una portata "
+            "GloFAS. È un confronto del **solo ramo pluviale**; rilanciare quando la "
+            "quota di Open-Meteo lo permette (le portate lette restano su disco)."
+        )
+    return f"Ramo fluviale: portata GloFAS su **{con_portata} nodi su {nodi}**."
+
+
 def _write_report(
     *,
     aoi_id: str,
@@ -871,6 +891,7 @@ def _write_report(
     provenance: dict[str, str],
     activations: Sequence[ActivationSummary],
     thresholds: FloodThresholds,
+    nodi_con_portata: tuple[int, int],
 ) -> Path:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     out = REPORTS_DIR / f"backtest_flood_{aoi_id}_{start.date()}_{end.date()}.md"
@@ -883,6 +904,8 @@ def _write_report(
         f"Soglie: `{thresholds.model_version}` "
         f"({thresholds.pluvial.threshold_mm:.0f}-{thresholds.pluvial.saturation_mm:.0f} mm/"
         f"{thresholds.pluvial.window_hours} h)",
+        "",
+        ramo_fluviale(*nodi_con_portata),
         "",
         "## Truth set",
         "",
@@ -1144,12 +1167,17 @@ async def run() -> int:
                 # Le portate si leggono qui, una volta, sull'arco di **tutte**
                 # le finestre: un intervallo diverso per finestra e' un'altra
                 # richiesta da due anni per 135 nodi, e Open-Meteo la respinge.
-                await _fetch_discharges(
+                portate = await _fetch_discharges(
                     nodes,
                     start=span_start.date()
                     - timedelta(days=thresholds.fluvial.reference_window_days),
                     end=span_end.date() + timedelta(days=3),
                 )
+                con_portata = sum(1 for serie in portate.values() if serie)
+                if not con_portata:
+                    # Come per la pioggia (#184): non un silenzio. Il report
+                    # lo dice in testa, e chi legge sa che misura la sola pioggia.
+                    log.error("backtest.discharge.empty", aoi_id=aoi_id, nodes=len(nodes))
                 log.info(
                     "backtest_flood.aoi.loaded",
                     aoi_id=aoi_id,
@@ -1238,6 +1266,7 @@ async def run() -> int:
                     provenance=catalogue_provenance(),
                     activations=activations,
                     thresholds=thresholds,
+                    nodi_con_portata=(con_portata, len(nodes)),
                 )
                 for metrics in runs:
                     log.info(
