@@ -223,6 +223,8 @@ uv run limen dem-tiles [--aoi it-puglia]   # relief tiles (terrain-RGB PMTiles) 
 uv run limen registra-verifica F # fact-check event → verifiche_eventi (+ landslide_events if a landslide)
 uv run limen verifiche-report   # verified events vs forecasts per hazard, with the base rate
 uv run limen raccolta-eventi    # news → Claude extractor → two outlets → verifiche_eventi (#347; daily job too)
+uv run limen misura --pericolo wildfire --feature slope_deg --stima 2021-2023 --verifica 2024-2026
+                                # read-only stratified AUC + observed/expected of a per-cell feature (#480)
 uv run limen importa-eventi F --ente N --licenza L  # an authority's dated events (CSV/GeoJSON) → verifiche_eventi (#509)
 uv run limen anticipo 077014 wildfire 2026-10-10T15:00+02:00   # how early Limen saw an event (JSON)
 

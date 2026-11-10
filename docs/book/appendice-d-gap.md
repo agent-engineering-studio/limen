@@ -75,7 +75,7 @@ gap si chiude dentro Limen.
 | 5 | Alluvione: troppi falsi allarmi (78 % in Emilia-Romagna, obiettivo 30 %). | vedi capitolo 4 | [#474](https://github.com/agent-engineering-studio/limen/issues/474) |
 | 5 | Il ramo dei fiumi non si misura nei backtest quando finisce la quota del servizio delle portate. | — | [#478](https://github.com/agent-engineering-studio/limen/issues/478) |
 | 5 | I report delle prove non sono nel repository. | — | [#481](https://github.com/agent-engineering-studio/limen/issues/481) |
-| 5 | Le misure veloci sui dati nuovi non sono riproducibili. | — | [#480](https://github.com/agent-engineering-studio/limen/issues/480) |
+| 5 | ~~Le misure veloci sui dati nuovi non sono riproducibili.~~ In parte chiuso: `limen misura` (AUC stratificata e osservate/attese, sola lettura); manca il punteggio del motore offline. | — | [#480](https://github.com/agent-engineering-studio/limen/issues/480) |
 | 5 | L'incendio è misurato su poche regioni e solo d'estate. | — | [#479](https://github.com/agent-engineering-studio/limen/issues/479) |
 
 ## Capitolo 6. [Machine learning e AI](06-ml-e-ai.md)

@@ -77,7 +77,9 @@ HAZARD_NEEDS: dict[str, tuple[str, ...]] = {
     nome: tuple(v.misura.colonna for v in _CATALOGO.essenziali(h) if v.misura.colonna)
     for h, nome in _NOMI_PERICOLO.items()
 }
-_PERIMETRI = _CATALOGO.voce("perimetri_effis")
+#: Le voci contate per righe di una tabella e non per cella: i perimetri
+#: EFFIS, lo storico FIRMS (#472).
+_TABELLE = tuple(v for v in _CATALOGO.voci if v.misura.tabella is not None)
 _CONTATE_SUI_VERI = frozenset(v.id for v in _CATALOGO.voci if v.misura.conta == "veri")
 
 
@@ -98,9 +100,6 @@ async def run() -> int:
     voce_di = {v.misura.colonna: v.id for v in _CATALOGO.voci if v.misura.colonna}
     counts = {layer.column: copertura.totali[voce_di[layer.column]] for layer in LAYERS}
     senza = regioni_senza(_CATALOGO, copertura.per_regione)
-    # I perimetri di area bruciata non stanno in cell_static_factors: sono
-    # il truth set del backtest incendio, e la loro assenza si nota solo lì.
-    perimeters = copertura.totali[_PERIMETRI.id]
 
     print(f"\nCopertura dei fattori statici — {total:,} celle in {aois} AOI\n".replace(",", "."))
     print(f"  {'layer':34s} {'celle':>10s}  {'':20s}  gate")
@@ -119,7 +118,11 @@ async def run() -> int:
             else (f"{'calcolato' if n else 'non calcolato':20s}")
         )
         print(f"  {layer.label:34s} {n:>10,}  {barra}  {gate}".replace(",", "."))
-    print(f"\n  {_PERIMETRI.nome:34s} {perimeters:>10,}".replace(",", "."))
+    # Non stanno in cell_static_factors (verità del backtest, storia degli
+    # incendi): la loro assenza si nota solo qui.
+    print()
+    for v in _TABELLE:
+        print(f"  {v.nome:34s} {copertura.totali[v.id]:>10,}".replace(",", "."))
     # Le tile del rilievo non sono un fattore per cella: servono alla vista
     # «Rilievo» della mappa, e mancano senza che lo score se ne accorga.
     rilievo = sorted(p.name for p in cartella_tile().glob("rilievo-*.pmtiles"))

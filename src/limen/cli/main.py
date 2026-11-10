@@ -16,6 +16,7 @@ Usage:
     limen importa-eventi     Gli eventi datati di un ente (CSV o GeoJSON) nel registro (#509).
     limen anticipo           Quanto prima Limen ha visto un evento, in JSON.
     limen sensore            Registro dei sensori dei cittadini: approva, revoca (#253).
+    limen misura             AUC e osservate/attese di una feature per cella (#480).
     limen dati               Download dei dati statici, eseguiti dal worker: stato | scarica (#402).
     limen backup             Backup dello stato fuori dal server; `elenco` li elenca (#304).
     limen restore            Ripristina un backup (`--conferma`: sovrascrive il database).
@@ -96,6 +97,8 @@ from limen.cli.llm_check import run as _run_llm_check
 from limen.cli.llm_spesa import run as _run_llm_spesa
 from limen.cli.mcp_serve import run as _run_mcp_serve
 from limen.cli.migrate import run as _run_migrate
+from limen.cli.misura import build_subparser as _build_misura_subparser
+from limen.cli.misura import run as _run_misura
 from limen.cli.monitor_once import run as _run_monitor_once
 from limen.cli.partitions import run as _run_partitions
 from limen.cli.raccolta_eventi import run as _run_raccolta_eventi
@@ -440,6 +443,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="push the local corpus (papers + PAI + ISPRA + briefings) to the KG sidecar",
     )
     _build_sensore_subparser(sub)
+    _build_misura_subparser(sub)
     _build_dati_subparser(sub)
     _build_backup_subparser(sub)
     _build_static_snapshot_subparser(sub)
@@ -535,6 +539,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "dati":
         try:
             return asyncio.run(_run_dati(args))
+        except KeyboardInterrupt:  # pragma: no cover
+            return 130
+    if args.command == "misura":
+        try:
+            return asyncio.run(_run_misura(args))
         except KeyboardInterrupt:  # pragma: no cover
             return 130
     if args.command == "sensore":
