@@ -70,6 +70,10 @@ Admin tools (MCP_ADMIN_TOKEN, fail-closed):
 * forecast_history(admin_token, aoi_ids?, hazard?) → persist the per-cell
   forecast trend (+24/48/72h) used by the sidebar / report charts.
 
+Events (experimental, MCP__EVENTI=true; poll only): events/list and
+events/poll serve limen.alert.dispatched, limen.risk.class_changed and
+limen.source.unmeasured, each a Limen estimate and never an official warning.
+
 Scores come from the deterministic/ML engine and are never altered here:
 these tools read and trigger, they do not decide.
 """
@@ -178,6 +182,13 @@ def _build_server() -> Any:
             log.warning("limen.mcp.forecast_history_denied", reason=str(exc))
             return {"error": str(exc)}
 
+    from limen.config.settings import get_settings
+
+    if get_settings().mcp.eventi:
+        from limen.mcp.eventi import EventiLimen
+
+        mcp.add_extension(EventiLimen())
+        log.info("limen.mcp.eventi", identificatore=EventiLimen.identifier)
     return mcp
 
 
