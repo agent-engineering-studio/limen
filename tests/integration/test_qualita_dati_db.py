@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from limen.agents.llm_factory.stub import StubChatClient
 from limen.cli.qualita_dati import riepilogo
 from limen.data.db import acquire
 from limen.data.repos import qualita_dati_repo
@@ -62,9 +63,12 @@ async def test_fatti_e_report(
     prima = await qualita_dati_repo.settimana_prima(ORA)
     assert prima == {"non_misurate": {"flood": 0.01}}
 
-    metriche = await riepilogo(ORA)
+    paragrafo = "Il job limen-test-orario è fermo da 5 h: è il guasto da guardare per primo."
+    metriche = await riepilogo(ORA, StubChatClient(canned_responses=[paragrafo]))
     assert metriche["in_ritardo"] == ["limen-test-orario"]
     assert metriche["problemi"] == 2
+    assert metriche["ai"] is True
     testo = (tmp_path / f"qualita_dati_{ORA:%Y-%m-%d}.md").read_text(encoding="utf-8")
     assert "**limen-test-orario** è fermo" in testo
+    assert testo.index(paragrafo) < testo.index("**limen-test-orario** è fermo")
     assert "segreta" not in testo

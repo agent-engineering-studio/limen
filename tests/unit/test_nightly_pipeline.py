@@ -88,7 +88,7 @@ def stubbed(monkeypatch: pytest.MonkeyPatch) -> None:
     async def esposizione() -> dict[str, object]:
         return {"esito": "invariata", "comuni": 0}
 
-    async def qualita() -> dict[str, object]:
+    async def qualita(_deps: object) -> dict[str, object]:
         return {"problemi": 0}
 
     async def backup(_deps: object) -> dict[str, object]:

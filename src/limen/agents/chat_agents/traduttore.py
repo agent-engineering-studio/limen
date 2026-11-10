@@ -108,6 +108,16 @@ def numeri_coincidono(italiano: str, inglese: str) -> bool:
     return True
 
 
+def numeri_dentro(testo: str, fonte: str) -> bool:
+    """Ogni numero di ``testo`` è uno di ``fonte``: se ne possono omettere, non aggiungere.
+
+    Per i testi che riassumono invece di tradurre (il riepilogo sulla qualità
+    dei dati, #421): tacere una cifra è lecito, cambiarla o inventarla no.
+    """
+    valori = [letture(m.group(0)) for m in _NUMERO.finditer(fonte)]
+    return all(any(letture(m.group(0)) & v for v in valori) for m in _NUMERO.finditer(testo))
+
+
 class TraduttoreRacconti:
     """Traduce in inglese una spiegazione e le anomalie della sua analisi."""
 
@@ -145,4 +155,4 @@ class TraduttoreRacconti:
         return tradotta
 
 
-__all__ = ["TraduttoreRacconti", "Traduzione", "numeri", "numeri_coincidono"]
+__all__ = ["TraduttoreRacconti", "Traduzione", "numeri", "numeri_coincidono", "numeri_dentro"]
