@@ -84,11 +84,11 @@ voci:
     misura: {colonna: slope_deg}
     variabile: LIMEN_DEM_RASTER
     procura_con: make static-data
-    fonte: IRPI-CNR — HR-DTM Italia 5 m, versione 1.2 (Panza et al., Zenodo)
-    url: https://zenodo.org/records/18921767
+    fonte: IRPI-CNR — HR-DTM Italia 5 m, versione 1.3 (Panza et al., Zenodo)
+    url: https://zenodo.org/records/24009736
     licenza: CC-BY 4.0
-    attribuzione: Panza et al., CNR-IRPI, HR-DTM of Italy 5 m v1.2, doi:10.5281/zenodo.18921767
-    peso_gb: 22.1
+    attribuzione: Panza et al., CNR-IRPI, HR-DTM of Italy 5 m v1.3, doi:10.5281/zenodo.24009736
+    peso_gb: 34.3
 
   - id: quota_sul_fondo
     nome: quota sul fondo valle

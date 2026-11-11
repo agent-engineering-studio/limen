@@ -361,10 +361,10 @@ export const FONTI: readonly Fonte[] = [
     ),
     licenza: "CC BY 4.0",
     attribuzione: t(
-      "Panza et al., CNR-IRPI, HR-DTM of Italy 5 m v1.2, doi:10.5281/zenodo.18921767",
-      "Panza et al., CNR-IRPI, HR-DTM of Italy 5 m v1.2, doi:10.5281/zenodo.18921767",
+      "Panza et al., CNR-IRPI, HR-DTM of Italy 5 m v1.3, doi:10.5281/zenodo.24009736",
+      "Panza et al., CNR-IRPI, HR-DTM of Italy 5 m v1.3, doi:10.5281/zenodo.24009736",
     ),
-    url: "https://zenodo.org/records/18921767",
+    url: "https://zenodo.org/records/24009736",
     facoltativa: true,
   },
   {

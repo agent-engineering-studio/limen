@@ -58,14 +58,22 @@ class _Fonti:
             return httpx.Response(200, content=_zip_istat())
         if "sinanet" in request.url.host:
             return httpx.Response(200, content=request.url.path.rsplit(".", 1)[1].encode())
-        if request.url.host == "zenodo.org" and request.url.path.endswith("/18921767"):
+        if request.url.host == "zenodo.org" and request.url.path.endswith("/24009736"):
+            base = "https://zenodo.org/api/records/24009736/files"
+            # La maschera delle fonti viene prima del raster, come nel record vero.
+            maschera = {
+                "key": "HRDTM5m_Mask_20mres.gpkg",
+                "size": 3,
+                "checksum": "md5:0",
+                "links": {"self": f"{base}/HRDTM5m_Mask_20mres.gpkg/content"},
+            }
             file = {
-                "key": "HRDTM5m",
+                "key": "HRDM5m_20261030_cog.tif",
                 "size": len(self.dtm),
                 "checksum": f"md5:{self.md5}",
-                "links": {"self": "https://zenodo.org/api/records/18921767/files/HRDTM5m/content"},
+                "links": {"self": f"{base}/HRDM5m_20261030_cog.tif/content"},
             }
-            return httpx.Response(200, json={"files": [file]})
+            return httpx.Response(200, json={"files": [maschera, file]})
         if request.url.host == "zenodo.org":
             inizio = 0
             if "range" in request.headers:
@@ -108,7 +116,7 @@ async def test_tutto_al_primo_giro_niente_al_secondo(
     assert falliti == {}
     # Il raster CORINE c'era già: non si rifà.
     assert scaricati == ["confini ISTAT", "CORINE 2018", "DTM 5 m", "geolitologia"]
-    assert (tmp_path / "dtm" / "HRDTM5m.tif").read_bytes() == _DTM
+    assert (tmp_path / "dtm" / "HRDTM5m_v1.3.tif").read_bytes() == _DTM
 
     # ISTAT: una cartella sola, non Limiti01012023_g/Limiti01012023_g.
     com = tmp_path / "Limiti01012023_g" / "Com01012023_g" / "Com01012023_g_WGS84.shp"
@@ -180,7 +188,7 @@ async def test_il_dtm_riprende_da_dove_si_era_fermato(
     monkeypatch.delenv("LIMEN_DEM_RASTER", raising=False)
     finte.taglia_dopo = 3000  # la connessione cade a 3000 byte
     assert await dati_base.dtm(tmp_path)
-    assert (tmp_path / "dtm" / "HRDTM5m.tif").read_bytes() == _DTM
+    assert (tmp_path / "dtm" / "HRDTM5m_v1.3.tif").read_bytes() == _DTM
     scaricati = [r for r in finte.richieste if r.url.path.endswith("/content")]
     assert [r.headers.get("range") for r in scaricati] == [None, "bytes=3000-"]
 
@@ -215,7 +223,7 @@ async def test_senza_spazio_il_dtm_non_parte(
     monkeypatch.setattr(dati_base, "_DTM_MARGINE_BYTE", 10**18)
     with pytest.raises(RuntimeError, match="servono"):
         await dati_base.dtm(tmp_path)
-    assert [r.url.path for r in finte.richieste] == ["/api/records/18921767"]
+    assert [r.url.path for r in finte.richieste] == ["/api/records/24009736"]
 
 
 async def test_il_raster_corine_dallo_shapefile(tmp_path: Path) -> None:
@@ -277,7 +285,7 @@ def test_gli_appoggi_di_un_giro_interrotto_si_tolgono(tmp_path: Path) -> None:
         (tmp_path / nome).mkdir()
         (tmp_path / nome / "x.shp").write_bytes(b"")
     (tmp_path / "dtm").mkdir()
-    (tmp_path / "dtm" / "HRDTM5m.tif.part").write_bytes(b"ripresa")
+    (tmp_path / "dtm" / "HRDTM5m_v1.3.tif.part").write_bytes(b"ripresa")
     (tmp_path / "clc2018_it").mkdir()
     assert sorted(dati_base.pulisci_appoggi(tmp_path)) == [
         "Limiti01012023_g.zip.d",
@@ -285,4 +293,4 @@ def test_gli_appoggi_di_un_giro_interrotto_si_tolgono(tmp_path: Path) -> None:
         "clc2018_it.part",
     ]
     assert sorted(p.name for p in tmp_path.iterdir()) == ["clc2018_it", "dtm"]
-    assert (tmp_path / "dtm" / "HRDTM5m.tif.part").exists()
+    assert (tmp_path / "dtm" / "HRDTM5m_v1.3.tif.part").exists()

@@ -391,7 +391,7 @@ score.
 | [**DPC radar platform**](https://radar.protezionecivile.it) | national SRI (1 km, 5 min) and «Merging» radar + rain-gauge accumulations | nowcast trigger; rain already fallen for floods | CC-BY-SA 4.0 | no |
 | [**Copernicus EMS — GloFAS**](https://ewds.climate.copernicus.eu) | river discharge forecast per node; each node's ordinary high flow from the multi-year history | flood (fluvial branch) | CEMS-Floods licence, attribution required | free EWDS key (or via Open-Meteo) |
 | [**ISPRA IdroGEO**](https://idrogeo.isprambiente.it) | IFFI landslide inventory (721,365 landslides), PAI landslide and hydraulic hazard mosaics | landslide terrain; flood susceptibility | CC BY-SA 4.0 (IFFI: one licence per region, all 21 checked) | no |
-| [**HR-DTM 5 m v1.2**](https://zenodo.org/records/18921767) (CNR-IRPI, Panza et al.; default) or **TINITALY 10 m** (INGV) | elevation → slope, aspect, curvature | landslide, wildfire | CC BY 4.0 | no |
+| [**HR-DTM 5 m v1.3**](https://zenodo.org/records/24009736) (CNR-IRPI, Panza et al.; default) or **TINITALY 10 m** (INGV) | elevation → slope, aspect, curvature | landslide, wildfire | CC BY 4.0 | no |
 | [**CORINE Land Cover 2018**](https://groupware.sinanet.isprambiente.it) (SINAnet/ISPRA) | land cover → fuel type | wildfire | Copernicus open access (EU Reg. 1159/2013) | no |
 | [**Geolithological Map of Italy 1:500k**](https://gn.mase.gov.it) (MASE, Geoportale Nazionale) | rock and soil type | landslide | CC BY 4.0 | no |
 | [**Copernicus Land — imperviousness**](https://land.copernicus.eu) | sealed soil (%) | flood (urban runoff) | Copernicus Land open licence | no |
@@ -1122,9 +1122,9 @@ anything derived from them:
   (Reg. EU 2021/696): cite «Generated using European Union's Copernicus Land
   Monitoring Service information» and state the modifications.
   <https://egms.land.copernicus.eu>
-* **HR-DTM of Italy 5 m v1.2** (CNR-IRPI) — CC BY 4.0: «Panza et al., CNR-IRPI,
-  HR-DTM of Italy 5 m v1.2, doi:10.5281/zenodo.18921767», plus the
-  modifications. <https://zenodo.org/records/18921767>
+* **HR-DTM of Italy 5 m v1.3** (CNR-IRPI) — CC BY 4.0: «Panza et al., CNR-IRPI,
+  HR-DTM of Italy 5 m v1.3, doi:10.5281/zenodo.24009736», plus the
+  modifications. <https://zenodo.org/records/24009736>
 * **INGV** (FDSN events, ShakeMap; TINITALY if used instead of the HR-DTM) —
   CC BY 4.0. <https://terremoti.ingv.it>
 * **EFFIS** (burnt-area perimeters, FWI) — CC BY 4.0: «© European Union,

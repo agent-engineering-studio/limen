@@ -228,7 +228,7 @@ def procuratori() -> dict[str, Procuratore]:
         "idraulica": Procuratore(
             _idrogeo(_mosaico("idraulica")), gs(f"{MOSAICS['idraulica']}.zip*")
         ),
-        "dtm": Procuratore(_dtm, gs("dtm/HRDTM5m.tif*")),
+        "dtm": Procuratore(_dtm, gs("dtm/HRDTM5m_v1.3.tif*")),
         "corine": Procuratore(_corine, gs("clc2018_it", "clc2018_it.part")),
         "litologia": Procuratore(_litologia, gs("carta_geolitologica*")),
         "comuni": Procuratore(_confini_comuni, gs("Limiti01012023_g*")),
