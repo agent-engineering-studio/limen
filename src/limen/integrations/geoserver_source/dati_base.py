@@ -83,12 +83,13 @@ _CAMPI_GML = ("lowerCorner", "upperCorner")
 
 
 #: HR-DTM 5 m di IRPI-CNR (Panza et al.), CC BY 4.0: il record Zenodo della
-#: versione 1.2, fissato perché un DTM nuovo cambia la pendenza per cella e va
-#: scelto, non preso da sé. Lo stesso grid del file in produzione (EPSG:6875,
-#: 5 m, 195520 x 257218).
-DTM_RECORD = "https://zenodo.org/api/records/18921767"
+#: versione 1.3, fissato perché un DTM nuovo cambia la pendenza per cella e va
+#: scelto, non preso da sé (#468: 0,4 % delle celle oltre 2° dalla 1.2, quasi
+#: tutte artefatti corretti). Il nome locale porta la versione: un file nuovo
+#: si scarica accanto al vecchio, e il bootstrap lo vede come sorgente nuova.
+DTM_RECORD = "https://zenodo.org/api/records/24009736"
 DTM_CARTELLA = "dtm"
-DTM_FILE = "HRDTM5m.tif"
+DTM_FILE = "HRDTM5m_v1.3.tif"
 #: Spazio libero da lasciare oltre al file, per non riempire il disco.
 _DTM_MARGINE_BYTE = 5 * 10**9
 _BLOCCO = 1 << 20
@@ -223,10 +224,10 @@ async def geolitologia(dove: Path) -> bool:
 
 
 async def dtm(dove: Path) -> bool:
-    """Il DTM a 5 m in ``dove/dtm/HRDTM5m.tif``; ``True`` se scaricato ora.
+    """Il DTM a 5 m in ``dove/dtm/HRDTM5m_v1.3.tif``; ``True`` se scaricato ora.
 
     Niente da fare se ``LIMEN_DEM_RASTER`` punta già a un file che esiste (il
-    server di oggi usa una copia rielaborata dello stesso DTM). Sono 22 GB:
+    server di oggi usa una copia rielaborata dello stesso DTM). Sono 34 GB:
     un errore di rete riprende dal ``.part`` invece che da zero, e il file si
     rinomina solo dopo aver controllato dimensione e md5 dichiarati da Zenodo.
     """
@@ -238,7 +239,8 @@ async def dtm(dove: Path) -> bool:
         return False
     resp = await fetch_with_retry("GET", DTM_RECORD)
     resp.raise_for_status()
-    (voce,) = resp.json()["files"]
+    # Il record ha anche la maschera delle fonti (.gpkg): serve il raster.
+    (voce,) = [f for f in resp.json()["files"] if str(f["key"]).endswith(".tif")]
     url = str(voce["links"]["self"])
     dimensione = int(voce["size"])
     md5 = str(voce["checksum"]).removeprefix("md5:")
@@ -334,7 +336,7 @@ def pulisci_appoggi(dove: Path) -> list[str]:
     geoserver-init carica ogni ``*.shp`` sotto la cartella e chiama il layer
     come la cartella che lo contiene: un ``clc2018_it.part`` dimenticato
     diventerebbe una tabella in PostGIS. Solo cartelle in cima: il
-    ``HRDTM5m.tif.part`` del DTM è un file in ``dtm/`` e serve alla ripresa.
+    ``HRDTM5m_v1.3.tif.part`` del DTM è un file in ``dtm/`` e serve alla ripresa.
     """
     tolte = []
     for voce in dove.iterdir() if dove.is_dir() else ():

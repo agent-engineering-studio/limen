@@ -53,7 +53,7 @@ predefinito() {  # predefinito VARIABILE percorso
   fi
 }
 predefinito LIMEN_DEM_RASTER "$GEOSERVER_DATI/dtm/dtm5m.vrt"
-predefinito LIMEN_DEM_RASTER "$GEOSERVER_DATI/dtm/HRDTM5m.tif"
+predefinito LIMEN_DEM_RASTER "$GEOSERVER_DATI/dtm/HRDTM5m_v1.3.tif"
 predefinito LIMEN_CORINE_RASTER "$GEOSERVER_DATI/clc2018_it/clc2018_it_100m.tif"
 predefinito LIMEN_GEOLOGICAL_SHAPEFILE "$GEOSERVER_DATI/carta_geolitologica/carta_geolitologica.shp"
 predefinito LIMEN_OSM_ROADS "$RADICE/osm/osm_roads.gpkg"
@@ -243,7 +243,7 @@ say "3/7  Dati geografici di base (IdroGEO, ISTAT, CORINE, geolitologia, DTM)"
 # In GEOSERVER_SHAPEFILE_DIR: l'inventario frane IFFI di tutte le regioni e i
 # mosaici PAI e idraulico (IdroGEO), i confini ISTAT, CORINE 2018 con il suo
 # raster per cella, la carta geolitologica e, se LIMEN_DEM_RASTER non punta
-# già a un file, il DTM a 5 m (22 GB, Zenodo). La prima volta ~25 GB; poi un
+# già a un file, il DTM a 5 m (34 GB, Zenodo). La prima volta ~37 GB; poi un
 # file IdroGEO si richiede solo dopo GEODATI__RIVALIDA_DOPO_GIORNI (30), e gli
 # altri, che non cambiano, mai più. Prima erano shapefile copiati a
 # mano: un server nuovo non sapeva ricostruirli. Solo con GeoServer
@@ -259,7 +259,7 @@ if [ "$have_geodati" -eq 1 ]; then
   # fattori per cella (7/7) devono vederli già a questo giro. La cartella è
   # già montata nel container, basta la variabile.
   for coppia in \
-    "LIMEN_DEM_RASTER:$GEOSERVER_DATI/dtm/HRDTM5m.tif" \
+    "LIMEN_DEM_RASTER:$GEOSERVER_DATI/dtm/HRDTM5m_v1.3.tif" \
     "LIMEN_CORINE_RASTER:$GEOSERVER_DATI/clc2018_it/clc2018_it_100m.tif" \
     "LIMEN_GEOLOGICAL_SHAPEFILE:$GEOSERVER_DATI/carta_geolitologica/carta_geolitologica.shp"; do
     v="${coppia%%:*}"; percorso="${coppia#*:}"
