@@ -574,6 +574,30 @@ export const FONTI: readonly Fonte[] = [
     copernicus: "EFFIS",
   },
   {
+    id: "arpae-idrometri",
+    ente: "Arpae Emilia-Romagna",
+    dataset: t(
+      "Idrometri della rete idro-meteorologica regionale, ogni 15 minuti",
+      "River gauges of the regional hydro-meteorological network, every 15 minutes",
+    ),
+    ruolo: "verifica",
+    pericoli: ["flood"],
+    cosa: t(
+      "Il livello dei fiumi in circa 270 stazioni, dal 2006.",
+      "River level at about 270 stations, since 2006.",
+    ),
+    accesso: t(
+      "Archivio mensile aperto di Arpae SIMC, senza credenziali; comando limen idrometri-misura.",
+      "Arpae SIMC open monthly archive, no credentials; command limen idrometri-misura.",
+    ),
+    interpretazione: t(
+      "Per ora solo una misura: se il livello di ogni stazione, letto rispetto alla sua stessa storia, distingue i giorni in cui il satellite ha visto l'acqua uscire. Non entra nel punteggio prima di un backtest.",
+      "For now only a measurement: whether each station's level, read against its own history, tells apart the days when the satellite saw water spill out. It does not enter the score before a backtest.",
+    ),
+    licenza: "CC BY 4.0",
+    url: "https://dati.arpae.it/dataset/dati-dalle-stazioni-meteo-locali-della-rete-idrometeorologica-regionale",
+  },
+  {
     id: "arpa-lombardia-pluviometri",
     ente: "ARPA Lombardia",
     dataset: t(
