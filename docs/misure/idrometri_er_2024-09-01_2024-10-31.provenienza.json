@@ -1,0 +1,18 @@
+{
+  "report": "idrometri_er_2024-09-01_2024-10-31.md",
+  "generato": "2026-11-12T11:55:21+00:00",
+  "limen": "0.1.0",
+  "commit": "9726bbec66fd6ab6545cad33a3756e1a4120d355",
+  "versioni": {
+    "landslide": "limen-deterministic-v1",
+    "flood": "flood-v1.3.0",
+    "wildfire": "wildfire-v1.1.0"
+  },
+  "comando": "limen idrometri-misura",
+  "ambiente": {
+    "LIMEN_DATA_ROOT": "<percorso locale>",
+    "LIMEN_IDROMETRI_FINE": "2024-10-31",
+    "LIMEN_IDROMETRI_INIZIO": "2024-09-01",
+    "LIMEN_REPORTS_DIR": "<percorso locale>"
+  }
+}
