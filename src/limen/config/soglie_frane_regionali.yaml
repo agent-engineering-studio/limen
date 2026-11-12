@@ -1,0 +1,125 @@
+# Soglie di pioggia regionali per l'innesco di frane (#506).
+#
+# Dati, non configurazione del motore: la produzione usa le curve per
+# macroregione di `hazards/landslide.yaml` (e-ITALICA T5). Questo file le
+# affianca a quelle pubblicate per regione o zona di allerta, perché il
+# backtest le possa confrontare (`LIMEN_BACKTEST_SOGLIE_REGIONALI=1`).
+# Ricognizione del 2026-11-12, commento su #506.
+#
+# Una voce entra solo con parametri numerici pubblicati e una licenza che ne
+# consente la trascrizione. Le soglie di Emilia-Romagna (SIGMA), Piemonte
+# (SLOPS/DEFENSE), Sardegna, Veneto, Puglia, Lazio e delle altre regioni non
+# sono qui: o non sono pubblicate in numeri, o la licenza non è dichiarata.
+#
+# `forma`:
+#   E-D  — E = alpha · D^gamma, pioggia cumulata dell'evento E in mm, durata D
+#          in ore (lavori CNR-IRPI). In intensità I = alpha · D^(gamma - 1).
+#   I-D  — I = alpha · D^(-beta), intensità I in mm/h.
+# `aoi`: le AOI di Limen su cui la soglia vale per intero. Una soglia per zona
+# di allerta ha `zona` e nessuna `aoi`: senza le geometrie delle zone il
+# backtest non la può ancora applicare, e resta qui come dato.
+
+fonti:
+  vennari2014:
+    citazione: >-
+      Vennari C. et al. (2014), Rainfall thresholds for shallow landslide
+      occurrence in Calabria, southern Italy, NHESS 14, 317-330
+    url: https://nhess.copernicus.org/articles/14/317/2014/nhess-14-317-2014.pdf
+    licenza: CC BY 3.0
+  peruccacci2017:
+    citazione: >-
+      Peruccacci S. et al. (2017), Rainfall thresholds for possible landslide
+      occurrence in Italy, Geomorphology 290, 39-57
+    url: https://geomorphology.irpi.cnr.it/publications/repository/public/journals/2017/peruccacci-et-al-2017.pdf
+    licenza: CC BY 4.0
+  segoni2015:
+    citazione: >-
+      Segoni S. et al. (2015), NHESS 15, 853-861, Tab. 1 (soglie per le zone
+      di allerta della Toscana)
+    url: https://nhess.copernicus.org/articles/15/853/2015/nhess-15-853-2015.pdf
+    licenza: CC BY 3.0
+  nocentini2024:
+    citazione: >-
+      Nocentini N. et al. (2024), Landslides, Tab. 1-2 (soglie per le zone di
+      allerta della Liguria)
+    url: https://flore.unifi.it/retrieve/b8259e7f-849b-4f9a-9b15-8b4cbc56e38f/Nocentini%20et%20al%20LANDSLIDES%202024%20%282%29.pdf
+    licenza: CC BY 4.0
+
+soglie:
+  # --- Soglie per regione: le usa la variante del backtest -------------------
+  - id: calabria-t5
+    aoi: [it-calabria]
+    forma: E-D
+    alpha: 8.6
+    gamma: 0.41
+    durata_h: [1, 451]
+    livello: T5
+    fonte: vennari2014
+    nota: Tab. 2, T5,C; incertezze Δα 1,1, Δγ 0,03
+  - id: abruzzo-marche-umbria-t5
+    aoi: [it-abruzzo, it-marche, it-umbria]
+    forma: E-D
+    alpha: 7.4
+    gamma: 0.38
+    durata_h: [1, 1212]
+    livello: T5
+    fonte: vennari2014
+    nota: T5,AMU di Peruccacci et al. 2012, riportata in Vennari 2014 Tab. 2
+  - id: sicilia-t5
+    aoi: [it-sicilia]
+    forma: E-D
+    alpha: 9.9
+    gamma: 0.30
+    durata_h: [1, 252]
+    livello: T5
+    fonte: peruccacci2017
+    nota: Tab. 1, area fisica P7 (Sicilia)
+
+  # --- Soglie per versante o area fisica: dato, non applicate ----------------
+  - {id: calabria-tirreno-t5, zona: Calabria versante tirrenico, forma: E-D, alpha: 9.7, gamma: 0.36, livello: T5, fonte: vennari2014}
+  - {id: calabria-ionio-t5, zona: Calabria versante ionico, forma: E-D, alpha: 9.0, gamma: 0.50, durata_h: [1, 357], livello: T5, fonte: vennari2014}
+  - {id: calabria-t1, zona: Calabria, forma: E-D, alpha: 5.8, gamma: 0.41, livello: T1, fonte: vennari2014}
+  - {id: italia-t5, zona: Italia, forma: E-D, alpha: 7.7, gamma: 0.39, durata_h: [1, 1212], livello: T5, fonte: peruccacci2017}
+  - {id: alpi-p1-t5, zona: P1 Alpi, forma: E-D, alpha: 6.3, gamma: 0.47, livello: T5, fonte: peruccacci2017}
+  - {id: appennino-p4-t5, zona: P4 Appennino, forma: E-D, alpha: 8.6, gamma: 0.36, livello: T5, fonte: peruccacci2017}
+  - {id: tirreno-p5-t5, zona: P5 bordo tirrenico, forma: E-D, alpha: 9.3, gamma: 0.34, livello: T5, fonte: peruccacci2017}
+  - {id: adriatico-p6-t5, zona: P6 bordo adriatico, forma: E-D, alpha: 7.6, gamma: 0.38, livello: T5, fonte: peruccacci2017}
+
+  # --- Toscana, zone di allerta (Segoni 2015, Tab. 1) ------------------------
+  # `nrg_h`: ore senza pioggia che chiudono un evento («no rain gap»).
+  - {id: toscana-a1, zona: A1, forma: I-D, alpha: 61.4, beta: 0.78, nrg_h: 18, fonte: segoni2015}
+  - {id: toscana-a2, zona: A2, forma: I-D, alpha: 34.0, beta: 0.86, nrg_h: 18, fonte: segoni2015}
+  - {id: toscana-a3, zona: A3, forma: I-D, alpha: 52.4, beta: 0.73, nrg_h: 24, fonte: segoni2015}
+  - {id: toscana-a4, zona: A4, forma: I-D, alpha: 101.5, beta: 0.99, nrg_h: 18, fonte: segoni2015}
+  - {id: toscana-b1, zona: B1, forma: I-D, alpha: 33.8, beta: 0.81, nrg_h: 20, fonte: segoni2015}
+  - {id: toscana-b2-b3, zona: B2 B3, forma: I-D, alpha: 22.5, beta: 0.65, nrg_h: 24, fonte: segoni2015}
+  - {id: toscana-b4, zona: B4, forma: I-D, alpha: 49.9, beta: 0.73, nrg_h: 24, fonte: segoni2015}
+  - {id: toscana-b5, zona: B5, forma: I-D, alpha: 405.9, beta: 1.29, nrg_h: 24, fonte: segoni2015}
+  - {id: toscana-c1-c4, zona: C1 C2 C3 C4, forma: I-D, alpha: 49.2, beta: 0.77, nrg_h: 24, fonte: segoni2015}
+  - {id: toscana-d1-d3, zona: D1 D3, forma: I-D, alpha: 40.5, beta: 0.90, nrg_h: 24, fonte: segoni2015}
+  - {id: toscana-d2, zona: D2, forma: I-D, alpha: 31.6, beta: 0.76, nrg_h: 12, fonte: segoni2015}
+  - {id: toscana-d4, zona: D4, forma: I-D, alpha: 33.5, beta: 0.74, nrg_h: 15, fonte: segoni2015}
+  - {id: toscana-e1, zona: E1, forma: I-D, alpha: 20.0, beta: 0.66, nrg_h: 12, fonte: segoni2015}
+  - {id: toscana-e2, zona: E2, forma: I-D, alpha: 29.6, beta: 0.75, nrg_h: 12, fonte: segoni2015}
+  - {id: toscana-e3, zona: E3, forma: I-D, alpha: 20.9, beta: 0.78, nrg_h: 10, fonte: segoni2015}
+  - {id: toscana-e4, zona: E4, forma: I-D, alpha: 15.0, beta: 0.69, nrg_h: 32, fonte: segoni2015}
+  - {id: toscana-f1-f4, zona: F1 F4, forma: I-D, alpha: 37.2, beta: 0.88, nrg_h: 24, fonte: segoni2015}
+  - {id: toscana-f2-f3, zona: F2 F3, forma: I-D, alpha: 50.7, beta: 0.78, nrg_h: 36, fonte: segoni2015}
+
+  # --- Liguria, zone di allerta (Nocentini 2024, Tab. 1-2) -------------------
+  # Tre livelli per zona con β comune; più la pioggia antecedente di zona.
+  - {id: liguria-a-basso, zona: Ligu-A, forma: I-D, alpha: 9.05, beta: 0.58, livello: basso, fonte: nocentini2024}
+  - {id: liguria-a-moderato, zona: Ligu-A, forma: I-D, alpha: 21.0, beta: 0.58, livello: moderato, fonte: nocentini2024}
+  - {id: liguria-a-alto, zona: Ligu-A, forma: I-D, alpha: 34.0, beta: 0.58, livello: alto, fonte: nocentini2024}
+  - {id: liguria-b-basso, zona: Ligu-B, forma: I-D, alpha: 21.78, beta: 0.67, livello: basso, fonte: nocentini2024}
+  - {id: liguria-b-moderato, zona: Ligu-B, forma: I-D, alpha: 36.0, beta: 0.67, livello: moderato, fonte: nocentini2024}
+  - {id: liguria-b-alto, zona: Ligu-B, forma: I-D, alpha: 56.0, beta: 0.67, livello: alto, fonte: nocentini2024}
+  - {id: liguria-c-basso, zona: Ligu-C, forma: I-D, alpha: 10.80, beta: 0.45, livello: basso, fonte: nocentini2024}
+  - {id: liguria-c-moderato, zona: Ligu-C, forma: I-D, alpha: 22.0, beta: 0.45, livello: moderato, fonte: nocentini2024}
+  - {id: liguria-c-alto, zona: Ligu-C, forma: I-D, alpha: 45.0, beta: 0.45, livello: alto, fonte: nocentini2024}
+  - {id: liguria-d-basso, zona: Ligu-D, forma: I-D, alpha: 16.70, beta: 0.57, livello: basso, fonte: nocentini2024}
+  - {id: liguria-d-moderato, zona: Ligu-D, forma: I-D, alpha: 31.0, beta: 0.57, livello: moderato, fonte: nocentini2024}
+  - {id: liguria-d-alto, zona: Ligu-D, forma: I-D, alpha: 78.0, beta: 0.57, livello: alto, fonte: nocentini2024}
+  - {id: liguria-e-basso, zona: Ligu-E, forma: I-D, alpha: 22.36, beta: 0.67, livello: basso, fonte: nocentini2024}
+  - {id: liguria-e-moderato, zona: Ligu-E, forma: I-D, alpha: 43.0, beta: 0.67, livello: moderato, fonte: nocentini2024}
+  - {id: liguria-e-alto, zona: Ligu-E, forma: I-D, alpha: 73.0, beta: 0.67, livello: alto, fonte: nocentini2024}
