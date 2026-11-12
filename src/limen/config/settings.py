@@ -874,6 +874,11 @@ class CopernicusSettings(BaseSettings):
     #: il resto resta a chi usa lo stesso account per altro. Le credenziali le
     #: legge la libreria (CDSE_CREDENTIALS_FILE, o CDSE_CLIENT_ID/_SECRET).
     cdse_pu_mensili: float = Field(default=1000.0, ge=0)
+    #: Chiavi S3 dell'archivio `eodata` del CDSE (#507): leggono i prodotti
+    #: Copernicus Land (SWI 1 km) a pixel dai COG, senza processing unit. Non
+    #: sono l'OAuth client qui sopra. Assenti ⇒ la misura della #507 non parte.
+    cdse_s3_access_key: SecretStr | None = None
+    cdse_s3_secret_key: SecretStr | None = None
     #: 40 m e non i 20 di default della libreria: è la risoluzione delle coppie
     #: già pagate (artifact ems-data), che si riusano a 0 PU solo così, e costa
     #: un quarto.
