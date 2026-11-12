@@ -26,6 +26,7 @@ riscrive niente (impronta in ``dataset_versions``).
 from __future__ import annotations
 
 import os
+import re
 import zipfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -52,6 +53,9 @@ DATASET = "catasti_incendi"
 _CAMPI_DATA = ("data_inc", "data_incendio", "data_ince", "dt_ince", "data")
 _CAMPI_CHIAVE = ("inc_id", "id_ince", "cod_incend", "incendio_id")
 _FORMATI_DATA = ("%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d")
+#: Il GeoServer della Basilicata scrive l'ora della risposta nel GeoJSON: senza
+#: toglierla ogni giro avrebbe un'impronta nuova e riscriverebbe tutto.
+_ORA_RISPOSTA = re.compile(rb'"timeStamp":"[^"]*"')
 
 _WFS_BASILICATA = (
     "https://rsdi.regione.basilicata.it/rbgeoserver2016/aree_percorse_dal_fuoco/ows"
@@ -192,6 +196,11 @@ def leggi(path: Path) -> tuple[list[Poligono], int]:
     return poligoni, senza_data
 
 
+def impronta(contenuto: bytes) -> bytes:
+    """Il contenuto senza l'ora della risposta che il WFS ci scrive dentro."""
+    return _ORA_RISPOSTA.sub(b"", contenuto)
+
+
 async def scarica(ente: Ente, oggi: date) -> list[Path]:
     """I file dell'ente in cache; quelli di anni chiusi non si riscaricano."""
     dest = cartella()
@@ -210,43 +219,62 @@ async def scarica(ente: Ente, oggi: date) -> list[Path]:
                 log.info("catasti_incendi.assente", fonte=ente.fonte, url=f.url)
                 continue
             raise
+        if f.nome.endswith(".zip") and not resp.content.startswith(b"PK"):
+            # Il webgis sardo risponde 200 con una pagina HTML per un anno non
+            # ancora pubblicato, invece di un 404.
+            if ente.tollera_assenti:
+                log.info("catasti_incendi.assente", fonte=ente.fonte, url=f.url)
+                continue
+            raise RuntimeError(f"{ente.fonte}: {f.url} non è uno zip")
         path.write_bytes(resp.content)
         percorsi.append(path)
     return percorsi
 
 
-async def _scrivi(ente: Ente, poligoni: list[Poligono], versione_id: int) -> int:
+#: Incendi per istruzione: unire in una volta i 27.000 poligoni sardi supera
+#: il timeout della connessione.
+_LOTTO = 1000
+
+
+async def _scrivi(ente: Ente, poligoni: list[Poligono]) -> int:
     """Una riga per incendio, i poligoni uniti e riportati in EPSG:4326."""
+    per_chiave: dict[str, list[Poligono]] = {}
+    for p in poligoni:
+        per_chiave.setdefault(p.chiave, []).append(p)
+    chiavi = list(per_chiave)
+    scritte = 0
     async with acquire() as conn, conn.transaction():
         await conn.execute("DELETE FROM catasti_incendi WHERE fonte = $1", ente.fonte)
-        stato = await conn.execute(
-            """
-            WITH p AS (
-                SELECT k, d,
-                       ST_MakeValid(ST_Transform(ST_SetSRID(ST_GeomFromWKB(w), s), 4326)) AS g
-                FROM unnest($2::text[], $3::date[], $4::bytea[], $5::int[]) AS t(k, d, w, s)
-            ),
-            u AS (
-                SELECT k, min(d) AS d,
-                       ST_Multi(ST_CollectionExtract(ST_Union(g), 3)) AS g
-                FROM p GROUP BY k
+        for i in range(0, len(chiavi), _LOTTO):
+            lotto = [p for k in chiavi[i : i + _LOTTO] for p in per_chiave[k]]
+            stato = await conn.execute(
+                """
+                WITH p AS (
+                    SELECT k, d,
+                           ST_MakeValid(ST_Transform(ST_SetSRID(ST_GeomFromWKB(w), s), 4326))
+                               AS g
+                    FROM unnest($2::text[], $3::date[], $4::bytea[], $5::int[]) AS t(k, d, w, s)
+                ),
+                u AS (
+                    SELECT k, min(d) AS d,
+                           ST_Multi(ST_CollectionExtract(ST_Union(g), 3)) AS g
+                    FROM p GROUP BY k
+                )
+                INSERT INTO catasti_incendi (id, fonte, fire_date, area_ha, geom, attributes)
+                SELECT $1 || ':' || k, $1, d,
+                       ST_Area(ST_Transform(g, 3035)) / 10000.0, g,
+                       jsonb_build_object('chiave', k, 'licenza', $6::text)
+                FROM u WHERE NOT ST_IsEmpty(g)
+                """,
+                ente.fonte,
+                [p.chiave for p in lotto],
+                [p.giorno for p in lotto],
+                [p.wkb for p in lotto],
+                [p.srid for p in lotto],
+                ente.licenza,
             )
-            INSERT INTO catasti_incendi
-                (id, fonte, fire_date, area_ha, geom, dataset_version_id, attributes)
-            SELECT $1 || ':' || k, $1, d,
-                   ST_Area(ST_Transform(g, 3035)) / 10000.0, g, $6,
-                   jsonb_build_object('chiave', k, 'licenza', $7::text)
-            FROM u WHERE NOT ST_IsEmpty(g)
-            """,
-            ente.fonte,
-            [p.chiave for p in poligoni],
-            [p.giorno for p in poligoni],
-            [p.wkb for p in poligoni],
-            [p.srid for p in poligoni],
-            versione_id,
-            ente.licenza,
-        )
-    return int(stato.split()[-1])
+            scritte += int(stato.split()[-1])
+    return scritte
 
 
 async def carica(ente: Ente, *, forzato: bool, oggi: date) -> dict[str, int] | None:
@@ -255,7 +283,7 @@ async def carica(ente: Ente, *, forzato: bool, oggi: date) -> dict[str, int] | N
     if not percorsi:
         raise RuntimeError(f"{ente.fonte}: nessun file scaricato")
     versione = dataset_versions_repo.content_hash(
-        [f"v{VERSIONE_CALCOLO}".encode(), *(p.read_bytes() for p in percorsi)]
+        [f"v{VERSIONE_CALCOLO}".encode(), *(impronta(p.read_bytes()) for p in percorsi)]
     )
     if not forzato and await dataset_versions_repo.find(ente.fonte, DATASET, versione):
         log.info("catasti_incendi.invariato", fonte=ente.fonte, version=versione[:12])
@@ -266,6 +294,9 @@ async def carica(ente: Ente, *, forzato: bool, oggi: date) -> dict[str, int] | N
         letti, scartati = leggi(path)
         poligoni += letti
         senza_data += scartati
+    # Prima le righe, poi l'impronta: un'impronta registrata su una scrittura
+    # fallita farebbe dire «invariato» al giro dopo.
+    incendi = await _scrivi(ente, poligoni)
     versione_id = await dataset_versions_repo.record(
         source=ente.fonte,
         dataset=DATASET,
@@ -276,7 +307,12 @@ async def carica(ente: Ente, *, forzato: bool, oggi: date) -> dict[str, int] | N
             "files": [p.name for p in percorsi],
         },
     )
-    incendi = await _scrivi(ente, poligoni, versione_id)
+    async with acquire() as conn:
+        await conn.execute(
+            "UPDATE catasti_incendi SET dataset_version_id = $2 WHERE fonte = $1",
+            ente.fonte,
+            versione_id,
+        )
     conti = {"poligoni": len(poligoni), "senza_data": senza_data, "incendi": incendi}
     log.info("catasti_incendi.caricato", fonte=ente.fonte, **conti)
     return conti
