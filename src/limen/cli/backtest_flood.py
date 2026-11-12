@@ -45,6 +45,14 @@ Env:
   Copernicus, una griglia sull'Italia al mese, nessuna quota Open-Meteo; serve
   ``COPERNICUS__EWDS_KEY`` e il gruppo ``copernicus``; i mesi in
   ``LIMEN_EWDS_DIR``, default ``$LIMEN_DATA_ROOT/archivio/ewds``).
+* ``LIMEN_BACKTEST_FLOOD_IDROMETRI`` — ``arpae`` aggiunge al ramo fluviale gli
+  idrometri dell'Emilia-Romagna (#501): su ogni nodo con una stazione il
+  rapporto di portata diventa ``max(GloFAS, idrometro)``, con il livello del
+  **giorno prima** (quello che a mezzanotte c'è). Misura, non esercizio: nel
+  motore entra solo se il confronto con la replica senza idrometri lo regge.
+* ``LIMEN_BACKTEST_FLOOD_IDROMETRI_SOGLIE`` — ``piede,saturazione`` della rampa
+  sul rapporto dell'idrometro (default ``2,5``), riportate sulla scala GloFAS
+  di `flood.yaml`.
 """
 
 from __future__ import annotations
@@ -52,7 +60,7 @@ from __future__ import annotations
 import asyncio
 import os
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Literal
@@ -60,6 +68,7 @@ from typing import Literal
 from copernicus_ems.ml import Scores
 
 from limen.cli import provenienza
+from limen.config.percorsi import radice_dati
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
 from limen.core.models.risk import (
@@ -80,6 +89,7 @@ from limen.data.migrate import run_migrations
 from limen.data.repos import flood_events_repo, pioggia_climatologia_repo
 from limen.data.repos.flood_events_repo import ActivationSummary
 from limen.integrations._http import SharedHttpClient
+from limen.integrations.arpae import idrometri
 from limen.integrations.copernicus_ems.client import catalogue_provenance
 from limen.integrations.openmeteo import archivio_portate
 from limen.integrations.openmeteo.flood import MIN_REFERENCE_DAYS, percentile_of
@@ -99,6 +109,14 @@ _MODE_ENV = "LIMEN_BACKTEST_FLOOD_MODE"
 _NODE_ENV = "LIMEN_BACKTEST_FLOOD_NODE_DEG"
 _SOGLIE_ENV = "LIMEN_BACKTEST_FLOOD_SOGLIE"
 _PORTATE_ENV = "LIMEN_BACKTEST_FLOOD_PORTATE"
+_IDROMETRI_ENV = "LIMEN_BACKTEST_FLOOD_IDROMETRI"
+_IDROMETRI_SOGLIE_ENV = "LIMEN_BACKTEST_FLOOD_IDROMETRI_SOGLIE"
+#: Piede e saturazione sul rapporto dell'idrometro, (h - p05) / (p90 - p05).
+#: Il piede a 2 è dove la misura del 12/11/2026 separava già (il giorno prima,
+#: 53% dei giorni di piena contro 7,4% dei qualunque, Emilia-Romagna 2024).
+_IDROMETRI_SOGLIE = (2.0, 5.0)
+#: Un anno di livelli prima della finestra, come per `limen idrometri-misura`.
+_IDROMETRI_MINIMO_GIORNI = 365
 
 #: Passo del reticolo meteo. 0.1° (~11 km) come il resto della pipeline flood.
 _DEFAULT_NODE_DEG = 0.1
@@ -634,6 +652,105 @@ async def _fetch_node_series(
     return out
 
 
+def idrometro_come_portata(
+    rapporto: float, *, piede: float, saturazione: float, fluvial: FluvialBlock
+) -> float:
+    """Il rapporto di un idrometro riportato sulla scala del rapporto GloFAS.
+
+    Le due scale non sono la stessa: GloFAS è il picco dei 7 giorni seguenti
+    sulla piena ordinaria, l'idrometro il livello sopra il fondo sulla piena
+    ordinaria sopra il fondo. Il piede dell'idrometro cade su `normal_ratio`
+    e la sua saturazione su `saturation_ratio`, linearmente: `fluvial_trigger`
+    dà così sull'idrometro la rampa delle sue soglie, e il massimo con GloFAS
+    confronta due grandezze sulla stessa rampa.
+    """
+    passo = (rapporto - piede) / (saturazione - piede)
+    return max(
+        0.0, fluvial.normal_ratio + passo * (fluvial.saturation_ratio - fluvial.normal_ratio)
+    )
+
+
+def con_idrometri(
+    series: Sequence[_NodeSeries], per_nodo: dict[int, dict[date, float]]
+) -> list[_NodeSeries]:
+    """Le serie con ``max(GloFAS, idrometro del giorno prima)`` come rapporto di portata."""
+    out: list[_NodeSeries] = []
+    for index, node in enumerate(series):
+        livelli = per_nodo.get(index)
+        if not livelli:
+            out.append(node)
+            continue
+        ratio = dict(node.discharge_ratio)
+        for giorno, valore in livelli.items():
+            dopo = giorno + timedelta(days=1)
+            ratio[dopo] = max(valore, ratio.get(dopo, valore))
+        out.append(replace(node, discharge_ratio=ratio))
+    return out
+
+
+def _soglie_idrometri() -> tuple[float, float]:
+    raw = os.getenv(_IDROMETRI_SOGLIE_ENV)
+    if not raw:
+        return _IDROMETRI_SOGLIE
+    piede, saturazione = (float(x) for x in raw.split(","))
+    if saturazione <= piede:
+        raise ValueError(f"{_IDROMETRI_SOGLIE_ENV}: la saturazione va sopra il piede")
+    return piede, saturazione
+
+
+async def _idrometri_per_nodo(
+    nodes: Sequence[tuple[float, float]],
+    *,
+    inizio: date,
+    fine: date,
+    spacing: float,
+    fluvial: FluvialBlock,
+    soglie: tuple[float, float],
+) -> dict[int, dict[date, float]]:
+    """Il rapporto degli idrometri Arpae per nodo, già sulla scala GloFAS.
+
+    Una stazione va al nodo del reticolo su cui cade, come una cella; più
+    stazioni sullo stesso nodo danno il massimo. Il riferimento è la storia
+    della stazione **prima** di ``inizio``.
+    """
+    livelli, mancati = await idrometri.livelli(
+        inizio - timedelta(days=fluvial.reference_window_days),
+        fine,
+        cartella=radice_dati() / "archivio" / "arpae",
+    )
+    indice = {_node_key(lon, lat, spacing=spacing): i for i, (lon, lat) in enumerate(nodes)}
+    piede, saturazione = soglie
+    out: dict[int, dict[date, float]] = {}
+    stazioni = 0
+    for chiave, giorni in livelli.massimi.items():
+        stazione = livelli.stazioni[chiave]
+        nodo = indice.get(_node_key(stazione.lon, stazione.lat, spacing=spacing))
+        if nodo is None:
+            continue
+        rapporti = idrometri.rapporti(
+            giorni,
+            prima_di=inizio,
+            percentile=fluvial.reference_percentile,
+            minimo_giorni=_IDROMETRI_MINIMO_GIORNI,
+        )
+        if not rapporti:
+            continue
+        stazioni += 1
+        mio = out.setdefault(nodo, {})
+        for giorno, rapporto in rapporti.items():
+            valore = idrometro_come_portata(
+                rapporto, piede=piede, saturazione=saturazione, fluvial=fluvial
+            )
+            mio[giorno] = max(valore, mio.get(giorno, valore))
+    log.info(
+        "backtest_flood.idrometri",
+        stazioni=stazioni,
+        nodi=len(out),
+        mesi_mancati=len(mancati),
+    )
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Replay
 # ---------------------------------------------------------------------------
@@ -940,6 +1057,16 @@ def ramo_fluviale(con_portata: int, nodi: int) -> str:
     return f"Ramo fluviale: portata GloFAS su **{con_portata} nodi su {nodi}**."
 
 
+def riga_idrometri(nodi: int, soglie: tuple[float, float]) -> str:
+    """La riga di testa del report quando il ramo fluviale usa anche gli idrometri."""
+    return (
+        f"Idrometri Arpae ({idrometri.LICENZA}) su **{nodi} nodi**: il rapporto di "
+        "portata è `max(GloFAS, idrometro del giorno prima)`, con la rampa "
+        f"dell'idrometro da {soglie[0]:g} a {soglie[1]:g} volte la piena ordinaria "
+        "sopra il fondo (#501)."
+    )
+
+
 def _write_report(
     *,
     aoi_id: str,
@@ -950,9 +1077,11 @@ def _write_report(
     activations: Sequence[ActivationSummary],
     thresholds: FloodThresholds,
     nodi_con_portata: tuple[int, int],
+    idrometri_nodi: tuple[int, tuple[float, float]] | None = None,
 ) -> Path:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    out = REPORTS_DIR / f"backtest_flood_{aoi_id}_{start.date()}_{end.date()}.md"
+    variante = "_idrometri" if idrometri_nodi is not None else ""
+    out = REPORTS_DIR / f"backtest_flood_{aoi_id}_{start.date()}_{end.date()}{variante}.md"
 
     lines = [
         f"# Backtest alluvione — AOI `{aoi_id}`",
@@ -965,6 +1094,7 @@ def _write_report(
         "",
         ramo_fluviale(*nodi_con_portata),
         "",
+        *([riga_idrometri(*idrometri_nodi), ""] if idrometri_nodi is not None else []),
         f"Cancello sotto «Alto»: suscettibilità ≥ "
         f"{thresholds.alerts.min_predisposition:.2f} (`alerts.min_predisposition`), "
         "come negli avvisi spediti.",
@@ -1175,6 +1305,8 @@ async def run() -> int:
     alert_level = _parse_level()
     node_deg = float(os.getenv(_NODE_ENV, str(_DEFAULT_NODE_DEG)))
     modes = _modes()
+    con_arpae = os.getenv(_IDROMETRI_ENV, "").strip().lower() == "arpae"
+    soglie_idrometri = _soglie_idrometri()
 
     try:
         async with lifespan_pool():
@@ -1237,6 +1369,16 @@ async def run() -> int:
                     end=span_end.date() + timedelta(days=3),
                 )
                 con_portata = sum(1 for serie in portate.values() if serie)
+                idro: dict[int, dict[date, float]] = {}
+                if con_arpae:
+                    idro = await _idrometri_per_nodo(
+                        nodes,
+                        inizio=span_start.date(),
+                        fine=span_end.date(),
+                        spacing=node_deg,
+                        fluvial=thresholds.fluvial,
+                        soglie=soglie_idrometri,
+                    )
                 if not con_portata:
                     # Come per la pioggia (#184): non un silenzio. Il report
                     # lo dice in testa, e chi legge sa che misura la sola pioggia.
@@ -1291,6 +1433,8 @@ async def run() -> int:
                         series = await _fetch_node_series(
                             nodes, start=window_lo.date(), end=hi.date()
                         )
+                        if idro:
+                            series = con_idrometri(series, idro)
                         tally.merge(
                             _replay(
                                 aoi_id=aoi_id,
@@ -1330,6 +1474,7 @@ async def run() -> int:
                     activations=activations,
                     thresholds=thresholds,
                     nodi_con_portata=(con_portata, len(nodes)),
+                    idrometri_nodi=(len(idro), soglie_idrometri) if con_arpae else None,
                 )
                 for metrics in runs:
                     log.info(

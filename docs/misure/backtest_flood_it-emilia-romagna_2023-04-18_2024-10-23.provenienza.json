@@ -1,0 +1,16 @@
+{
+  "report": "backtest_flood_it-emilia-romagna_2023-04-18_2024-10-23.md",
+  "generato": "2026-11-12T13:30:48+00:00",
+  "limen": "0.1.0",
+  "commit": "834799ea674fea1e88bcec9a5efe02392e5dbb89",
+  "versioni": {
+    "landslide": "limen-deterministic-v1",
+    "flood": "flood-v1.3.0",
+    "wildfire": "wildfire-v1.1.0"
+  },
+  "comando": "-c",
+  "ambiente": {
+    "LIMEN_BACKTEST_FLOOD_AOI": "it-emilia-romagna",
+    "LIMEN_REPORTS_DIR": "<percorso locale>"
+  }
+}

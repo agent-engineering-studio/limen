@@ -38,6 +38,8 @@ from limen.cli.backtest_flood import (
     _Tally,
     _unmeasurable,
     _write_report,
+    con_idrometri,
+    idrometro_come_portata,
 )
 from limen.core.models.hazard import HazardType
 from limen.core.models.risk import RiskLevel, StaticFactors
@@ -589,3 +591,29 @@ def test_write_report_carries_the_numbers_and_the_gate(tmp_path, monkeypatch) ->
     if _thresholds().calibration is not None:
         assert "### Gate §2.5" in text
         assert "non valutabile" in text
+
+
+def test_idrometro_sulla_scala_glofas() -> None:
+    fluviale = _thresholds().fluvial
+    piede = idrometro_come_portata(2.0, piede=2.0, saturazione=5.0, fluvial=fluviale)
+    pieno = idrometro_come_portata(5.0, piede=2.0, saturazione=5.0, fluvial=fluviale)
+    assert piede == pytest.approx(fluviale.normal_ratio)
+    assert pieno == pytest.approx(fluviale.saturation_ratio)
+    assert idrometro_come_portata(-9.0, piede=2.0, saturazione=5.0, fluvial=fluviale) == 0.0
+
+
+def test_con_idrometri_massimo_col_giorno_prima() -> None:
+    giorno = date(2024, 9, 18)
+    glofas = _NodeSeries(
+        rain_issued={},
+        rain_observed={},
+        soil={},
+        discharge_ratio={giorno: 3.0, giorno + timedelta(days=1): 8.0},
+    )
+    senza = _NodeSeries(rain_issued={}, rain_observed={}, soil={}, discharge_ratio={})
+    fuso = con_idrometri([glofas, senza], {0: {giorno: 6.0, giorno - timedelta(days=1): 1.0}})
+    assert fuso[0].discharge_ratio == {giorno: 3.0, giorno + timedelta(days=1): 8.0}
+    fuso = con_idrometri([glofas, senza], {0: {giorno - timedelta(days=1): 6.0}, 1: {giorno: 4.0}})
+    assert fuso[0].discharge_ratio[giorno] == 6.0
+    assert fuso[1].discharge_ratio == {giorno + timedelta(days=1): 4.0}
+    assert glofas.discharge_ratio[giorno] == 3.0
