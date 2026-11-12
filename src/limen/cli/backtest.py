@@ -52,6 +52,9 @@ Configuration knobs (env vars, kept off the dispatcher for parity with
   scrivere. Serve a misurare un cambio della litologia prima di metterlo in
   produzione; una cella che la carta non copre tiene il valore del database,
   come farebbe il bootstrap.
+* ``LIMEN_BACKTEST_SOGLIE_REGIONALI`` — ``1``: la curva di Caine regionale
+  di ``config/soglie_frane_regionali.yaml`` al posto di quella della
+  macroregione, nelle AOI che ne hanno una (#506). Default: le macroregioni.
 * ``LIMEN_BACKTEST_SISMICA``     — ``no`` (default) o ``shakemap``: la componente
   E dalle ShakeMap storiche INGV (#287). Per ogni terremoto della finestra,
   più ``seismic.lookback_days`` prima, con ``M ≥ seismic.min_magnitude``, la
@@ -1107,6 +1110,14 @@ async def run() -> int:
         log.error("backtest.bad_soglia_sismica", error=str(exc))
         return 1
     soglie = soglie_backtest(pga_min_g, soglia_pioggia)
+    regionali = os.getenv("LIMEN_BACKTEST_SOGLIE_REGIONALI", "").strip()
+    if regionali not in ("", "0", "1"):
+        log.error("backtest.bad_soglie_regionali", value=regionali)
+        return 1
+    if regionali == "1":
+        from limen.core.scoring.soglie_regionali import con_soglie_regionali
+
+        soglie = con_soglie_regionali(soglie)
     cache_env = os.getenv("LIMEN_BACKTEST_SHAKEMAP_CACHE", "").strip()
     cache_shakemap = Path(cache_env) if cache_env else None
     pioggia = os.getenv("LIMEN_BACKTEST_PIOGGIA", "modello").strip() or "modello"
