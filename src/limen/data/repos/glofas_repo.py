@@ -10,6 +10,12 @@ from limen.data.db import acquire
 
 Nodo = tuple[float, float]
 
+#: La sola fonte dei riferimenti (#448): l'archivio di Open-Meteo, che dal 2024
+#: è la catena di `forecast_v4`, la stessa della previsione al numeratore. La
+#: rianalisi EWDS ha la mediana uguale (0,98) ma è più bassa in un nodo su
+#: dieci, fino a un terzo in Calabria ionica, e lì alzerebbe il rapporto.
+FONTE_RIFERIMENTO = "open-meteo"
+
 
 async def riferimenti(
     nodes: list[Nodo], *, percentile: float, window_days: int
@@ -50,7 +56,7 @@ async def salva(
     *,
     percentile: float,
     window_days: int,
-    fonte: str = "open-meteo",
+    fonte: str = FONTE_RIFERIMENTO,
 ) -> int:
     """Scrive o aggiorna i riferimenti calcolati. Rilanciabile."""
     if not righe:
@@ -73,6 +79,10 @@ async def da_calcolare(
     *, spacing: float, percentile: float, window_days: int, limite: int, soglia_pioggia_mm: float
 ) -> list[Nodo]:
     """I nodi che servono e non hanno ancora un riferimento, i più urgenti prima.
+
+    Un riferimento di un'altra fonte (le righe ``ewds:`` scritte da
+    ``limen glofas-ewds`` prima della #448) conta come da rifare, ma dopo quelli
+    che mancano: intanto resta, meglio di nessuno.
 
     Solo i nodi più vicini a celle mappate nella Mosaicatura ISPRA: fuori mappa
     la suscettibilità è il valore di ripiego, e ripiego per fluviale non arriva
@@ -120,8 +130,9 @@ async def da_calcolare(
             LEFT JOIN glofas_riferimento r
               ON r.node_lon = n.lon AND r.node_lat = n.lat
              AND r.percentile = $2::numeric(4,3) AND r.window_days = $3
-            WHERE r.node_lon IS NULL
-            ORDER BY n.piove DESC, n.esposto DESC, n.peso DESC, n.lon, n.lat
+            WHERE r.node_lon IS NULL OR r.fonte <> $6
+            ORDER BY r.node_lon IS NULL DESC, n.piove DESC, n.esposto DESC, n.peso DESC,
+                     n.lon, n.lat
             LIMIT $4
             """,
             spacing,
@@ -129,8 +140,26 @@ async def da_calcolare(
             window_days,
             limite,
             soglia_pioggia_mm,
+            FONTE_RIFERIMENTO,
         )
     return [(float(r["lon"]), float(r["lat"])) for r in rows]
+
+
+async def salvati(*, percentile: float, window_days: int, fonte: str) -> dict[Nodo, float]:
+    """I riferimenti di ``fonte`` con un fiume (portata positiva), per nodo."""
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT node_lon, node_lat, portata FROM glofas_riferimento
+            WHERE percentile = $1::numeric(4,3) AND window_days = $2 AND fonte = $3
+              AND portata > 0
+            ORDER BY node_lon, node_lat
+            """,
+            percentile,
+            window_days,
+            fonte,
+        )
+    return {(float(r["node_lon"]), float(r["node_lat"])): float(r["portata"]) for r in rows}
 
 
 async def con_fiume(*, percentile: float, window_days: int) -> int:

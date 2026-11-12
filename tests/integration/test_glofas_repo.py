@@ -43,6 +43,22 @@ async def test_un_riferimento_salvato_si_rilegge(pg_pool: object) -> None:
     await _pulisci()
 
 
+async def test_un_riferimento_ewds_resta_letto_ma_non_conta_come_open_meteo(
+    pg_pool: object,
+) -> None:
+    """#448: una riga ``ewds:`` resta letta finché il notturno non la rifà."""
+    await _pulisci()
+    await glofas_repo.salva([(_NODI[0], 12.5)], percentile=0.9, window_days=730, fonte="ewds:v")
+    await glofas_repo.salva([(_NODI[1], 3.0)], percentile=0.9, window_days=730)
+
+    assert await glofas_repo.salvati(percentile=0.9, window_days=730, fonte="open-meteo") == {
+        _NODI[1]: pytest.approx(3.0)
+    }
+    letti = await glofas_repo.riferimenti([_NODI[0]], percentile=0.9, window_days=730)
+    assert letti == {_NODI[0]: pytest.approx(12.5)}
+    await _pulisci()
+
+
 async def test_la_previsione_salvata_si_rilegge_dall_ultima_corsa(pg_pool: object) -> None:
     await _pulisci()
     await glofas_repo.salva_previsione(date(2026, 10, 10), {_NODI[0]: 3.0}, fonte="t")

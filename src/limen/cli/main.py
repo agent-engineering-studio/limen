@@ -171,7 +171,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     sub.add_parser(
         "glofas-ewds",
-        help="la stessa portata ordinaria, da un download dello storico GloFAS su Copernicus EWDS",
+        help="misura: la portata ordinaria di Open-Meteo contro lo storico GloFAS EWDS (#448)",
     )
     sub.add_parser(
         "partitions",
