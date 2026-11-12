@@ -6,7 +6,9 @@ sorgente, perché le due sorgenti non si somigliano affatto:
 * ``--hazard landslide`` (default) — ITALICA / e-ITALICA: un CSV di **punti**
   datati, scaricabile da un DOI Zenodo fissato. IFFI da solo è un inventario
   senza date. Dopo ITALICA, FraneItalia (:mod:`limen.cli.ingest_franeitalia`):
-  e-ITALICA si ferma al 2021, FraneItalia arriva al 2024.
+  e-ITALICA si ferma al 2021, FraneItalia arriva al 2024. Poi l'inventario
+  Marche-Umbria del 15/09/2022 (:mod:`limen.cli.ingest_marche_umbria`), una
+  riga per cella: va dopo il seme, perché si aggancia alle celle.
 * ``--hazard flood`` — Copernicus EMS Rapid Mapping: i **poligoni** di
   estensione allagata osservata delle attivazioni italiane. Un allagamento ha
   un'estensione, e su celle da 1 km² il perimetro è ciò che rende il backtest
@@ -35,7 +37,7 @@ from typing import Any
 
 from shapely.geometry import Point
 
-from limen.cli import ingest_franeitalia
+from limen.cli import ingest_franeitalia, ingest_marche_umbria
 from limen.cli.bootstrap_static import FORCE_ENV
 from limen.config.percorsi import radice_dati
 from limen.core.logging import get_logger
@@ -153,6 +155,7 @@ async def _run_landslide() -> int:
     try:
         path = await _resolve_csv()
         franeitalia = await ingest_franeitalia.risolvi_file()
+        marche_umbria = await ingest_marche_umbria.risolvi_file()
     finally:
         await SharedHttpClient.aclose()
     if path is None:
@@ -167,9 +170,11 @@ async def _run_landslide() -> int:
         n = await events_upsert(events)
         if franeitalia is not None:
             await ingest_franeitalia.carica(franeitalia, forzato=forzato)
+        if marche_umbria is not None:
+            await ingest_marche_umbria.carica(marche_umbria, forzato=forzato)
         total = await count_events()
     log.info("ingest_events.done", hazard="landslide", upserted=n, total_in_db=total)
-    return 0 if franeitalia is not None else 1
+    return 0 if franeitalia is not None and marche_umbria is not None else 1
 
 
 def _flood_categories() -> tuple[str, ...]:
