@@ -1,0 +1,16 @@
+{
+  "report": "idrometri_er_2023-05-01_2023-05-31.md",
+  "generato": "2026-11-12T11:39:05+00:00",
+  "limen": "0.1.0",
+  "commit": "75ddfd979c847617b464c4db046793f89ad5b7c1+modifiche",
+  "versioni": {
+    "landslide": "limen-deterministic-v1",
+    "flood": "flood-v1.3.0",
+    "wildfire": "wildfire-v1.1.0"
+  },
+  "comando": "limen idrometri-misura",
+  "ambiente": {
+    "LIMEN_DATA_ROOT": "<percorso locale>",
+    "LIMEN_REPORTS_DIR": "<percorso locale>"
+  }
+}

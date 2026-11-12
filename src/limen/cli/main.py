@@ -106,6 +106,7 @@ from limen.cli.mcp_serve import run as _run_mcp_serve
 from limen.cli.migrate import run as _run_migrate
 from limen.cli.misura import build_subparser as _build_misura_subparser
 from limen.cli.misura import run as _run_misura
+from limen.cli.misura_swi import run as _run_misura_swi
 from limen.cli.monitor_once import run as _run_monitor_once
 from limen.cli.partitions import run as _run_partitions
 from limen.cli.qualita_dati import run as _run_qualita_dati
@@ -177,6 +178,10 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "idrometri-misura",
         help="misura: gli idrometri Arpae separano i giorni di piena EMS? (#501)",
+    )
+    sub.add_parser(
+        "misura-swi",
+        help="misura: l'SWI 1 km Copernicus separa i giorni di frana? (#507, protocollo #282)",
     )
     sub.add_parser(
         "partitions",
@@ -509,6 +514,7 @@ def main(argv: list[str] | None = None) -> int:
         "idrometri-misura": _run_idrometri_misura,
         "fedelta-racconti": _run_fedelta_racconti,
         "raccolta-eventi": _run_raccolta_eventi,
+        "misura-swi": _run_misura_swi,
         "partitions": _run_partitions,
         "seed": _run_seed,
         "seed-comuni": _run_seed_comuni,

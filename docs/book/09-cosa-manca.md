@@ -410,9 +410,14 @@ perché conta e, dove c'è, il dato aperto che lo colmerebbe.
 - **Il movimento del suolo è usato solo in parte.** Accelerazione e
   stagionalità del terreno sono già nei dati europei e non ancora misurate.
   *(issue: #380)*
-- **L'umidità del suolo a 1 km non è mai stata provata.** *Proposta di open
-  data:* l'umidità superficiale del suolo da radar Sentinel-1 di Copernicus
-  Land (licenza da verificare). *([#507](https://github.com/agent-engineering-studio/limen/issues/507))*
+- ~~**L'umidità del suolo a 1 km non è mai stata provata.**~~ Provata e
+  scartata (12 novembre 2026): l'indice d'acqua nel suolo a 1 km di Copernicus
+  Land, letto con il ritardo con cui arriva davvero, separa 1.500 frane dai
+  giorni tranquilli dello stesso punto quanto il caso (0,506), e accanto a
+  pioggia e umidità che Limen usa già non aggiunge nulla (−0,001). In più
+  manca su molti versanti: c'è al punto di una frana in un caso su tre. Come
+  l'umidità europea qui sopra. *([#507](https://github.com/agent-engineering-studio/limen/issues/507),
+  report in `docs/misure`)*
 - **Le reti di pluviometri dei cittadini non sono acquisibili.** L'unica rete
   italiana con pluviometri e licenza aperta non ha concesso l'accesso per
   regione. *(issue: #249, #250)*
