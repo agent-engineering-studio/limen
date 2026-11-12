@@ -574,6 +574,30 @@ export const FONTI: readonly Fonte[] = [
     copernicus: "EFFIS",
   },
   {
+    id: "arpa-lombardia-pluviometri",
+    ente: "ARPA Lombardia",
+    dataset: t(
+      "Pluviometri della rete idro-nivo-meteorologica, a 10 minuti",
+      "Rain gauges of the hydro-snow-weather network, every 10 minutes",
+    ),
+    ruolo: "verifica",
+    pericoli: ["landslide"],
+    cosa: t(
+      "La pioggia caduta in circa 250 pluviometri attivi, dal 1987.",
+      "The rain that fell in about 250 active gauges, since 1987.",
+    ),
+    accesso: t(
+      "Open data di Regione Lombardia (dati.lombardia.it), senza credenziali; solo nel backtest frane, con LIMEN_BACKTEST_PIOGGIA=pluviometri.",
+      "Lombardy Region open data (dati.lombardia.it), no credentials; only in the landslide backtest, with LIMEN_BACKTEST_PIOGGIA=pluviometri.",
+    ),
+    interpretazione: t(
+      "Al posto della pioggia del modello, ogni nodo prende il pluviometro più vicino entro 5 km: dice quanto di una frana mancata è colpa della pioggia stimata e quanto del motore. Un giorno in cui il pluviometro non ha misurato resta sul modello, non diventa asciutto.",
+      "Instead of the model's rain, each node takes the nearest gauge within 5 km: it tells how much of a missed landslide is down to the estimated rain and how much to the engine. A day when the gauge did not measure stays on the model; it does not become dry.",
+    ),
+    licenza: "CC0 1.0",
+    url: "https://www.dati.lombardia.it/Ambiente/Stazioni-Idro-Nivo-Meteorologiche/nf78-nj6b",
+  },
+  {
     id: "italica",
     ente: "CNR-IRPI",
     dataset: t(

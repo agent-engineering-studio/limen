@@ -45,6 +45,11 @@ Configuration knobs (env vars, kept off the dispatcher for parity with
   stesso con l'archivio locale del «Merging» DPC (radar più pluviometri,
   ``limen radar-archivio``, cartella ``RADAR_ARCHIVE__CARTELLA``): esiste solo
   da quando lo si archivia, ma è la pioggia che la produzione usa davvero.
+  ``pluviometri`` usa i pluviometri ARPA Lombardia (open data CC0, a 10
+  minuti dal 1987, #505): ogni nodo prende il pluviometro più vicino entro
+  ``LIMEN_BACKTEST_PLUVIOMETRI_KM`` (5); i nodi senza, e i giorni in cui il
+  pluviometro non ha misurato, restano sul modello. Ha senso solo su
+  ``it-lombardia``.
 * ``LIMEN_BACKTEST_LITOLOGIA``   — ``db`` (default, il ``litho_weight`` scritto
   in ``cell_static_factors``) o ``carta``: lo ricalcola in memoria dalla carta
   geolitologica (``LIMEN_GEOLOGICAL_SHAPEFILE``, colonna
@@ -1121,7 +1126,7 @@ async def run() -> int:
     cache_env = os.getenv("LIMEN_BACKTEST_SHAKEMAP_CACHE", "").strip()
     cache_shakemap = Path(cache_env) if cache_env else None
     pioggia = os.getenv("LIMEN_BACKTEST_PIOGGIA", "modello").strip() or "modello"
-    if pioggia not in ("modello", "radar", "merging") or (
+    if pioggia not in ("modello", "radar", "merging", "pluviometri") or (
         pioggia != "modello" and modo == "neutro"
     ):
         log.error("backtest.bad_pioggia", value=pioggia, antecedent=modo)
@@ -1266,6 +1271,23 @@ async def run() -> int:
                             grezzo,
                             archivio.oraria(nodes, start - timedelta(days=31), end),
                         )
+                    elif pioggia == "pluviometri":
+                        from limen.integrations.arpa_lombardia import pluviometri
+                        from limen.integrations.dpc.merging_archive import pioggia_dal_radar
+
+                        misurata = await pluviometri.oraria(
+                            nodes,
+                            start - timedelta(days=31),
+                            end,
+                            raggio_km=float(os.getenv("LIMEN_BACKTEST_PLUVIOMETRI_KM", "5")),
+                            bbox=(bbox[0], bbox[1], bbox[2], bbox[3]),
+                        )
+                        if not misurata:
+                            # Nessun pluviometro letto: il report direbbe
+                            # «pluviometri» su una pioggia tutta del modello.
+                            log.error("backtest.pluviometri_assenti", aoi_id=aoi_id)
+                            return 1
+                        grezzo = pioggia_dal_radar(grezzo, misurata)
                     node_rainfall = [
                         [
                             RainfallSample(
