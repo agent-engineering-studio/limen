@@ -13,8 +13,9 @@ Il portale non aggrega per ora (``date_trunc_ymdh`` non esiste in questa SoQL)
 e un mese di dieci minuti su 250 sensori sono un milione di righe. Si chiedono
 quindi due cose: le sole righe con pioggia, e il numero di righe valide per
 sensore e giorno. Un giorno con almeno ``_COPERTURA_MINIMA`` delle sue misure
-(144, meno ai capi della finestra) è misurato, e le sue ore senza righe di pioggia valgono zero; un giorno con
-meno è ``None`` — un pluviometro fermo non è un'ora asciutta.
+(144, meno ai capi della finestra) è misurato, e le sue ore senza righe di
+pioggia valgono zero; un giorno con meno è ``None`` — un pluviometro fermo
+non è un'ora asciutta.
 
 Sola lettura: una sorgente che non risponde restituisce ``{}`` e logga
 ``integration.degraded``.
