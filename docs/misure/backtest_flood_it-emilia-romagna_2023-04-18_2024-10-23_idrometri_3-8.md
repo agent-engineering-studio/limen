@@ -1,7 +1,7 @@
 # Backtest alluvione — AOI `it-emilia-romagna`
 
-Finestra: **2023-04-18 → 2024-10-23**  
-Generato: 2026-11-12T14:42:03+00:00  
+Finestra: **2023-04-18 → 2024-10-23**
+Generato: 2026-11-12T14:42:03+00:00
 Soglie: `flood-v1.3.0` (40-120 mm/72 h)
 
 Ramo fluviale: portata GloFAS su **95 nodi su 123**.
