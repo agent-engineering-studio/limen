@@ -664,6 +664,30 @@ export const FONTI: readonly Fonte[] = [
     url: "https://zenodo.org/records/15144334",
   },
   {
+    id: "marche-umbria-2022",
+    ente: "CNR-IRPI",
+    dataset: t(
+      "Inventario delle frane del nubifragio Marche-Umbria del 15 settembre 2022",
+      "Inventory of the landslides of the Marche-Umbria storm of 15 September 2022",
+    ),
+    ruolo: "verifica",
+    pericoli: ["landslide"],
+    cosa: t(
+      "1.687 frane mappate sul terreno e da foto aeree a 1:15.000.",
+      "1,687 landslides mapped in the field and from aerial photos at 1:15,000.",
+    ),
+    accesso: t(
+      "figshare, con limen ingest-events dopo FraneItalia (anche in make init).",
+      "figshare, with limen ingest-events after FraneItalia (also in make init).",
+    ),
+    interpretazione: t(
+      "Entra una riga per cella da 1 km², con quante frane ci sono cadute: un solo pomeriggio non deve pesare più di un anno di catalogo. La data del file è quella del rilievo, quindi il giorno è quello del nubifragio, alle 20. Nel backtest è la sorgente marche_umbria_2022.",
+      "One row per 1 km² cell goes in, with how many landslides fell in it: a single afternoon must not weigh more than a year of catalogue. The date in the file is the survey's, so the day is the storm's, at 8 pm. In the backtest it is the marche_umbria_2022 source.",
+    ),
+    licenza: "CC BY 4.0",
+    url: "https://doi.org/10.6084/m9.figshare.21981842",
+  },
+  {
     id: "cems-rapid-mapping",
     ente: "Copernicus Emergency Management Service",
     dataset: t("Rapid Mapping: le aree allagate osservate", "Rapid Mapping: observed flooded areas"),
