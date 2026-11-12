@@ -109,3 +109,41 @@ def test_verita_con_un_estremo_solo() -> None:
 def test_verita_illeggibile_e_un_errore(fonte: str, ettari: str) -> None:
     with pytest.raises(ValueError):
         leggi_verita(fonte, ettari)
+
+
+async def test_una_pagina_html_al_posto_dello_zip_e_un_anno_assente(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import httpx
+
+    from limen.cli import catasti_incendi
+
+    risposte = {"a.zip": b"PK\x03\x04resto", "b.zip": b"<html>non trovato</html>"}
+
+    async def finto(_metodo: str, url: str, **_kw: object) -> httpx.Response:
+        return httpx.Response(200, content=risposte[url])
+
+    monkeypatch.setattr(catasti_incendi, "fetch_with_retry", finto)
+    monkeypatch.setattr(catasti_incendi, "cartella", lambda: tmp_path)
+    ente = catasti_incendi.Ente(
+        fonte="prova",
+        licenza="CC BY 4.0",
+        attribuzione="prova",
+        file=lambda _a: [catasti_incendi.File(n, n, definitivo=False) for n in ("a.zip", "b.zip")],
+        tollera_assenti=True,
+    )
+
+    percorsi = await catasti_incendi.scarica(ente, date(2026, 11, 12))
+
+    assert [p.name for p in percorsi] == ["a.zip"]
+    assert not (tmp_path / "b.zip").exists()
+
+
+def test_l_impronta_ignora_l_ora_della_risposta_wfs() -> None:
+    from limen.cli.catasti_incendi import impronta
+
+    a = b'{"features":[],"timeStamp":"2026-11-12T15:13:42.182Z","crs":{}}'
+    b = b'{"features":[],"timeStamp":"2026-11-13T09:00:00.000Z","crs":{}}'
+
+    assert impronta(a) == impronta(b)
+    assert impronta(a) != impronta(a.replace(b"[]", b"[1]"))
