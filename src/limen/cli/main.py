@@ -93,6 +93,7 @@ from limen.cli.geoserver_sync import run as _run_geoserver_sync
 from limen.cli.glofas_ewds import run as _run_glofas_ewds
 from limen.cli.glofas_riferimenti import run as _run_glofas_riferimenti
 from limen.cli.glofas_soglie import run as _run_glofas_soglie
+from limen.cli.idrometri_misura import run as _run_idrometri_misura
 from limen.cli.imperviousness_fetch import run as _run_imperviousness_fetch
 from limen.cli.ingest_events import run as _run_ingest_events
 from limen.cli.ingest_fire_history import run as _run_ingest_fire_history
@@ -172,6 +173,10 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "glofas-ewds",
         help="misura: la portata ordinaria di Open-Meteo contro lo storico GloFAS EWDS (#448)",
+    )
+    sub.add_parser(
+        "idrometri-misura",
+        help="misura: gli idrometri Arpae separano i giorni di piena EMS? (#501)",
     )
     sub.add_parser(
         "partitions",
@@ -501,6 +506,7 @@ def main(argv: list[str] | None = None) -> int:
         "review-alerts": _run_review_alerts,
         "glofas-riferimenti": _run_glofas_riferimenti,
         "glofas-ewds": _run_glofas_ewds,
+        "idrometri-misura": _run_idrometri_misura,
         "fedelta-racconti": _run_fedelta_racconti,
         "raccolta-eventi": _run_raccolta_eventi,
         "partitions": _run_partitions,
