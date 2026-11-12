@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from collections.abc import Mapping, Sequence
@@ -32,6 +33,9 @@ COMMIT_ENV = "LIMEN_COMMIT"
 _PREFISSI = ("LIMEN_", "SCORING__", "FORECAST__", "BACKTEST__")
 _SEGRETI = ("TOKEN", "KEY", "SECRET", "PASSWORD", "CONNECTION", "CREDENZIAL")
 _PERCORSO = "<percorso locale>"
+#: Utente e password dentro un URL: `SCORING__MLFLOW_TRACKING_URI` li porta
+#: senza che il nome della variabile lo dica.
+_CREDENZIALI_URL = re.compile(r"://[^/@\s]+@")
 
 
 def commit() -> str | None:
@@ -66,7 +70,7 @@ def ambiente(env: Mapping[str, str]) -> dict[str, str]:
             continue
         if any(s in nome.upper() for s in _SEGRETI):
             continue
-        valore = env[nome]
+        valore = _CREDENZIALI_URL.sub("://<credenziali>@", env[nome])
         out[nome] = _PERCORSO if valore.startswith(("/", "~", "./")) else valore
     return out
 

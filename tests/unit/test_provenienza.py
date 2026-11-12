@@ -34,6 +34,17 @@ def test_ambiente_tiene_le_manopole_senza_segreti_ne_percorsi() -> None:
     }
 
 
+def test_ambiente_toglie_utente_e_password_dagli_url() -> None:
+    env = {
+        "SCORING__MLFLOW_TRACKING_URI": "postgresql://limen:segreta@postgres:5432/mlflow",
+        "SCORING__MLFLOW_ARTIFACT_ROOT": "file:///var/lib/limen/mlruns",
+    }
+    assert ambiente(env) == {
+        "SCORING__MLFLOW_ARTIFACT_ROOT": "file:///var/lib/limen/mlruns",
+        "SCORING__MLFLOW_TRACKING_URI": "postgresql://<credenziali>@postgres:5432/mlflow",
+    }
+
+
 def test_provenienza_dichiara_commit_versioni_e_comando(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LIMEN_COMMIT", "0ec0570")
     p = provenienza(ora=ORA, argv=["/app/.venv/bin/limen", "backtest-wildfire"], env={})
