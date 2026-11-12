@@ -28,6 +28,12 @@ Env knobs:
 * ``LIMEN_BACKTEST_WILDFIRE_START`` / ``_END`` — ISO dates bounding the replay.
 * ``LIMEN_BACKTEST_WILDFIRE_LEVEL`` — alert level counted as a warning
   (default ``High``, the EFFIS "high danger" band).
+* ``LIMEN_BACKTEST_WILDFIRE_VERITA`` — ``effis`` (default), ``catasti`` o
+  ``tutte``: i perimetri EFFIS, i catasti regionali degli incendi (#498: gli
+  incendi piccoli, Basilicata, Sardegna, Emilia-Romagna) o entrambi.
+* ``LIMEN_BACKTEST_WILDFIRE_ETTARI`` — ``min-max`` in ettari (un estremo può
+  mancare: ``-10``, ``100-``): solo gli incendi di quella superficie, per
+  leggere il backtest per classe di grandezza.
 * ``LIMEN_BACKTEST_WILDFIRE_PIOGGIA`` — ``modello`` (default) o ``osservata``:
   la pioggia delle 24 ore fino a mezzogiorno dal «Merging» DPC archiviato
   (``RADAR_ARCHIVE__CARTELLA``) al posto di quella del modello, dove il radar
@@ -102,6 +108,63 @@ _START_ENV = "LIMEN_BACKTEST_WILDFIRE_START"
 _END_ENV = "LIMEN_BACKTEST_WILDFIRE_END"
 _LEVEL_ENV = "LIMEN_BACKTEST_WILDFIRE_LEVEL"
 _PIOGGIA_ENV = "LIMEN_BACKTEST_WILDFIRE_PIOGGIA"
+_VERITA_ENV = "LIMEN_BACKTEST_WILDFIRE_VERITA"
+_ETTARI_ENV = "LIMEN_BACKTEST_WILDFIRE_ETTARI"
+
+_TABELLE_VERITA = {
+    "effis": ("fire_perimeters",),
+    "catasti": ("catasti_incendi",),
+    "tutte": ("fire_perimeters", "catasti_incendi"),
+}
+_NOMI_VERITA = {
+    "effis": "perimetri EFFIS",
+    "catasti": "catasti regionali degli incendi",
+    "tutte": "perimetri EFFIS e catasti regionali",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class Verita:
+    """Quali incendi fanno da verità, e di che grandezza."""
+
+    fonte: str = "effis"
+    ettari_min: float | None = None
+    ettari_max: float | None = None
+
+    @property
+    def descrizione(self) -> str:
+        testo = _NOMI_VERITA[self.fonte]
+        if self.ettari_min is None and self.ettari_max is None:
+            return testo
+        lo = f"{self.ettari_min:g}" if self.ettari_min is not None else "0"
+        hi = f"{self.ettari_max:g} ha" if self.ettari_max is not None else "ha e oltre"
+        return f"{testo}, incendi da {lo} a {hi}"
+
+    @property
+    def suffisso(self) -> str:
+        parti = [] if self.fonte == "effis" else [self.fonte]
+        if self.ettari_min is not None or self.ettari_max is not None:
+            lo = f"{self.ettari_min:g}" if self.ettari_min is not None else ""
+            hi = f"{self.ettari_max:g}" if self.ettari_max is not None else ""
+            parti.append(f"{lo}-{hi}ha")
+        return "".join(f"_{p}" for p in parti)
+
+
+def leggi_verita(fonte: str, ettari: str) -> Verita:
+    """La verità dalle due variabili; ``ValueError`` se non si leggono."""
+    if fonte not in _TABELLE_VERITA:
+        raise ValueError(f"{_VERITA_ENV}={fonte!r}: atteso effis, catasti o tutte")
+    if not ettari.strip():
+        return Verita(fonte=fonte)
+    lo, sep, hi = ettari.partition("-")
+    if not sep:
+        raise ValueError(f"{_ETTARI_ENV}={ettari!r}: atteso min-max")
+    return Verita(
+        fonte=fonte,
+        ettari_min=float(lo) if lo.strip() else None,
+        ettari_max=float(hi) if hi.strip() else None,
+    )
+
 
 #: The issue's question is about the three days before ignition. Fire danger
 #: is a daily index, so a warning further back than this is not early warning
@@ -154,7 +217,7 @@ def _at_least(level: RiskLevel, threshold: RiskLevel) -> bool:
 
 
 async def fetch_burnt_cells(
-    aoi_id: str, *, start: date, end: date
+    aoi_id: str, *, start: date, end: date, verita: Verita | None = None
 ) -> dict[str, tuple[date, float, float]]:
     """``{cell_id: (fire_date, lon, lat)}`` for cells inside a burnt perimeter.
 
@@ -162,24 +225,33 @@ async def fetch_burnt_cells(
     window is one truth event, not two, or a single well-warned area would
     inflate the hit rate by however often it caught fire.
     """
+    verita = verita or Verita()
+    # Nomi di tabella da un dizionario chiuso, mai dall'ambiente.
+    incendi = " UNION ALL ".join(
+        f"SELECT fire_date, area_ha, geom FROM {t}" for t in _TABELLE_VERITA[verita.fonte]
+    )
     async with acquire() as conn:
         rows = await conn.fetch(
-            """
+            f"""
             SELECT g.id AS cell_id,
                    MIN(p.fire_date) AS first_fire,
                    ST_X(ST_Centroid(g.geom)) AS lon,
                    ST_Y(ST_Centroid(g.geom)) AS lat
-            FROM fire_perimeters p
+            FROM ({incendi}) p
             JOIN grid_cells g ON ST_Intersects(g.geom, p.geom)
             WHERE g.aoi_id = $1
               AND p.fire_date IS NOT NULL
               AND p.fire_date >= $2
               AND p.fire_date <= $3
+              AND ($4::float8 IS NULL OR p.area_ha >= $4)
+              AND ($5::float8 IS NULL OR p.area_ha < $5)
             GROUP BY g.id, g.geom
             """,
             aoi_id,
             start,
             end,
+            verita.ettari_min,
+            verita.ettari_max,
         )
     return {str(r["cell_id"]): (r["first_fire"], float(r["lon"]), float(r["lat"])) for r in rows}
 
@@ -574,10 +646,16 @@ def _lift_spaziale(metrics: WildfireBacktestMetrics) -> float:
 
 
 def write_report(
-    metrics: WildfireBacktestMetrics, *, start: date, end: date, alert_level: RiskLevel
+    metrics: WildfireBacktestMetrics,
+    *,
+    start: date,
+    end: date,
+    alert_level: RiskLevel,
+    verita: Verita | None = None,
 ) -> Path:
+    verita = verita or Verita()
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    out = REPORTS_DIR / f"backtest_wildfire_{metrics.aoi_id}_{start}_{end}.md"
+    out = REPORTS_DIR / f"backtest_wildfire_{metrics.aoi_id}_{start}_{end}{verita.suffisso}.md"
     lines = [
         f"# Limen backtest incendio — AOI `{metrics.aoi_id}`",
         "",
@@ -587,7 +665,7 @@ def write_report(
         f"Soglia di allerta: **{alert_level.value}**, "
         f"orizzonte di preavviso **{_LEAD_MAX_HOURS:.0f} h**",
         "",
-        f"- Celle bruciate (perimetri EFFIS nella finestra): **{metrics.truth_fires}**",
+        f"- Celle bruciate ({verita.descrizione} nella finestra): **{metrics.truth_fires}**",
         f"- Celle con almeno un'allerta: **{metrics.cells_warned}**",
         f"- Hit: **{metrics.hits}**, mancati: **{metrics.misses}** (celle bruciate); "
         f"falsi allarmi: **{metrics.false_alarms}** giornate-cella",
@@ -629,10 +707,11 @@ def write_report(
     if metrics.truth_fires == 0:
         lines.insert(
             5,
-            "> **Nessun perimetro EFFIS nella finestra.** Il servizio è "
-            "pubblico e non richiede credenziali: se `fire_perimeters` è vuota "
-            "va eseguito l'ingest. Le metriche sotto sono vuote per "
-            "costruzione, non zero.",
+            f"> **Nessun incendio ({verita.descrizione}) nella finestra.** Le "
+            "sorgenti sono pubbliche e non richiedono credenziali: se la tabella "
+            "è vuota va eseguito l'ingest (`limen effis-sync`, `limen "
+            "catasti-incendi`). Le metriche sotto sono vuote per costruzione, "
+            "non zero.",
         )
     provenienza.scrivi_report(out, "\n".join(lines))
     return out
@@ -644,6 +723,7 @@ def write_national_report(
     start: date,
     end: date,
     alert_level: RiskLevel,
+    verita: Verita | None = None,
 ) -> Path:
     """Una riga per regione, sulla stessa finestra e la stessa soglia (#479).
 
@@ -651,14 +731,15 @@ def write_national_report(
     di base, non una media delle righe: una regione con tre incendi non pesa
     quanto una con trecento.
     """
+    verita = verita or Verita()
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    out = REPORTS_DIR / f"backtest_wildfire_italia_{start}_{end}.md"
+    out = REPORTS_DIR / f"backtest_wildfire_italia_{start}_{end}{verita.suffisso}.md"
     righe = [
         "# Limen backtest incendio — Italia",
         "",
         f"Finestra: **{start} → {end}**; soglia di allerta **{alert_level.value}**, "
-        f"orizzonte di preavviso **{_LEAD_MAX_HOURS:.0f} h**. Il dettaglio di ogni "
-        "regione è nel suo report.",
+        f"orizzonte di preavviso **{_LEAD_MAX_HOURS:.0f} h**; verità: "
+        f"{verita.descrizione}. Il dettaglio di ogni regione è nel suo report.",
         "",
         "| AOI | celle bruciate | hit rate | tasso di base | discriminazione "
         "| carico per cella | FAR (giornate-cella) | preavviso |",
@@ -684,7 +765,7 @@ def write_national_report(
     righe += [
         "",
         "Una regione senza celle bruciate non ha hit rate né FAR: non è «zero»,",
-        "è nessun incendio grande censito da EFFIS nella finestra.",
+        f"è nessun incendio censito ({verita.descrizione}) nella finestra.",
     ]
     provenienza.scrivi_report(out, "\n".join(righe))
     return out
@@ -699,8 +780,9 @@ async def backtest_aoi(
     thresholds: WildfireThresholds,
     client: OpenMeteoHttpClient,
     fonte: Fonte | None = None,
+    verita: Verita | None = None,
 ) -> WildfireBacktestMetrics:
-    truth = await fetch_burnt_cells(aoi_id, start=start, end=end)
+    truth = await fetch_burnt_cells(aoi_id, start=start, end=end, verita=verita)
     if not truth:
         log.warning("backtest_wildfire.no_truth", aoi_id=aoi_id, start=str(start), end=str(end))
         metrics = WildfireBacktestMetrics(
@@ -716,7 +798,7 @@ async def backtest_aoi(
             base_rate=0.0,
             report_path=None,
         )
-        path = write_report(metrics, start=start, end=end, alert_level=alert_level)
+        path = write_report(metrics, start=start, end=end, alert_level=alert_level, verita=verita)
         return replace(metrics, report_path=path)
 
     bbox = await _aoi_bbox(aoi_id)
@@ -788,7 +870,7 @@ async def backtest_aoi(
         giorno_picco=carico.giorno_picco,
         pioggia="osservata" if fonte is not None else "modello",
     )
-    path = write_report(metrics, start=start, end=end, alert_level=alert_level)
+    path = write_report(metrics, start=start, end=end, alert_level=alert_level, verita=verita)
     log.info(
         "backtest_wildfire.aoi.done",
         aoi_id=aoi_id,
@@ -835,6 +917,12 @@ async def run() -> int:
         log.warning("backtest_wildfire.bad_env", var=_LEVEL_ENV, value=level_raw, using="High")
         alert_level = RiskLevel.High
 
+    try:
+        verita = leggi_verita(os.getenv(_VERITA_ENV, "effis"), os.getenv(_ETTARI_ENV, ""))
+    except ValueError as exc:
+        log.error("backtest_wildfire.bad_env", error=str(exc))
+        return 1
+
     fonte: Fonte | None = None
     pioggia = os.getenv(_PIOGGIA_ENV, "modello")
     if pioggia == "osservata":
@@ -863,11 +951,14 @@ async def run() -> int:
                 thresholds=loaded,
                 client=client,
                 fonte=fonte,
+                verita=verita,
             )
             for aoi_id in aoi_ids
         ]
     if len(risultati) > 1:
-        nazionale = write_national_report(risultati, start=start, end=end, alert_level=alert_level)
+        nazionale = write_national_report(
+            risultati, start=start, end=end, alert_level=alert_level, verita=verita
+        )
         log.info("backtest_wildfire.italia.done", aoi=len(risultati), report=str(nazionale))
     await SharedHttpClient.aclose()
     return 0
@@ -876,12 +967,14 @@ async def run() -> int:
 __all__ = [
     "CaricoCelle",
     "CellaAoi",
+    "Verita",
     "WildfireBacktestMetrics",
     "backtest_aoi",
     "carico_celle",
     "celle_aoi",
     "evaluate",
     "fetch_burnt_cells",
+    "leggi_verita",
     "replay_chain",
     "run",
     "write_national_report",

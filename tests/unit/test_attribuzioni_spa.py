@@ -38,6 +38,7 @@ _CORRISPONDENZE: dict[str, tuple[str, str]] = {
     "litologia": ("mase-geologia", "Ministero dell'Ambiente e della Sicurezza Energetica"),
     "perimetri_effis": ("effis", "EFFIS"),
     "firms_storico": ("firms", "NASA"),
+    "catasti_incendi": ("catasti-incendi", "Regione"),
 }
 
 _FRASE_ECMWF = (

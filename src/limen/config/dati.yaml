@@ -230,6 +230,28 @@ voci:
     attribuzione: © European Union, European Forest Fire Information System (EFFIS), Copernicus EMS
     peso_gb: 0.01
 
+  - id: catasti_incendi
+    nome: catasti regionali degli incendi (truth set incendio, incendi piccoli)
+    a_cosa_serve: >-
+      Le aree percorse dal fuoco che le Regioni censiscono per legge, anche
+      quelle da un ettaro che EFFIS non vede: Basilicata, Sardegna ed
+      Emilia-Romagna. Servono a misurare il backtest sugli incendi piccoli;
+      non entrano nel punteggio.
+    pericoli: [wildfire]
+    livello: avanzato
+    misura: {tabella: catasti_incendi}
+    procura_con: make static-data
+    fonte: >-
+      Catasti delle aree percorse dal fuoco (L. 353/2000) — Regione Basilicata
+      (RSDI), Regione Sardegna (CFVA), Regione Emilia-Romagna
+    url: https://webgis.regione.sardegna.it/scaricocartografiaETL/cfva/
+    licenza: IODL 2.0 (Basilicata), CC BY 4.0 (Sardegna, Emilia-Romagna)
+    attribuzione: >-
+      Regione Basilicata — RSDI; Regione Autonoma della Sardegna — Corpo
+      Forestale e di Vigilanza Ambientale; Regione Emilia-Romagna — Catasto
+      regionale delle aree percorse dal fuoco
+    peso_gb: 0.09
+
   - id: firms_storico
     nome: storico degli incendi FIRMS (2000 a oggi)
     a_cosa_serve: >-

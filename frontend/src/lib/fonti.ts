@@ -688,6 +688,30 @@ export const FONTI: readonly Fonte[] = [
     url: "https://doi.org/10.6084/m9.figshare.21981842",
   },
   {
+    id: "catasti-incendi",
+    ente: "Regione Basilicata, Regione Sardegna (CFVA), Regione Emilia-Romagna",
+    dataset: t(
+      "Catasti regionali delle aree percorse dal fuoco (L. 353/2000)",
+      "Regional registers of burnt areas (Law 353/2000)",
+    ),
+    ruolo: "verifica",
+    pericoli: ["wildfire"],
+    cosa: t(
+      "Le aree bruciate censite dalle Regioni, giorno per giorno, anche da un ettaro: Basilicata dal 2004, Sardegna dal 2005, Emilia-Romagna dal 2003.",
+      "The burnt areas the Regions record, day by day, down to one hectare: Basilicata from 2004, Sardinia from 2005, Emilia-Romagna from 2003.",
+    ),
+    accesso: t(
+      "WFS della Basilicata e file scaricabili di Sardegna ed Emilia-Romagna, con limen catasti-incendi (anche in make static-data).",
+      "The Basilicata WFS and the downloadable files of Sardinia and Emilia-Romagna, with limen catasti-incendi (also in make static-data).",
+    ),
+    interpretazione: t(
+      "EFFIS mappa gli incendi grandi; i catasti hanno anche quelli piccoli, in interfaccia urbano-bosco. Servono solo al backtest incendio, con la sorgente catasti: il punteggio legge solo EFFIS.",
+      "EFFIS maps the large fires; the registers also hold the small ones, at the wildland-urban interface. They serve only the wildfire backtest, as the catasti source: the score reads only EFFIS.",
+    ),
+    licenza: "IODL 2.0 (Basilicata), CC BY 4.0 (Sardegna, Emilia-Romagna)",
+    url: "https://webgis.regione.sardegna.it/scaricocartografiaETL/cfva/",
+  },
+  {
     id: "cems-rapid-mapping",
     ente: "Copernicus Emergency Management Service",
     dataset: t("Rapid Mapping: le aree allagate osservate", "Rapid Mapping: observed flooded areas"),

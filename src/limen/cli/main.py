@@ -28,6 +28,7 @@ Usage:
     limen fwi-pioggia        Rifà la catena FWI con la pioggia misurata dal DPC.
     limen ingest-fire-history  FIRMS country archive (2000+), fire_density + truth set.
     limen effis-sync         Perimetri di area bruciata EFFIS: truth set del backtest incendio.
+    limen catasti-incendi    Catasti regionali degli incendi: verità degli incendi piccoli (#498).
     limen monitor-once       Run the MAF landslide workflow once for an AOI.
     limen forecast           Predictive run at now+H hours (forecast rain, no persistence).
     limen firms-sync         Ingest NASA FIRMS active-fire hotspots (FIRMS__MAP_KEY).
@@ -72,6 +73,7 @@ from limen.cli.bootstrap_static import run as _run_bootstrap_static
 from limen.cli.calibrate import run as _run_calibrate
 from limen.cli.carica_vettori import FORZA_ENV as VETTORI_FORZA_ENV
 from limen.cli.carica_vettori import run as _run_carica_vettori
+from limen.cli.catasti_incendi import run as _run_catasti_incendi
 from limen.cli.clima_pioggia import run as _run_clima_pioggia
 from limen.cli.data_status import run as _run_data_status
 from limen.cli.dati import build_subparser as _build_dati_subparser
@@ -207,6 +209,10 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "effis-sync",
         help="scarica i perimetri di area bruciata EFFIS per ogni AOI (truth set incendio)",
+    )
+    sub.add_parser(
+        "catasti-incendi",
+        help="catasti regionali degli incendi (Basilicata, Sardegna, E-R): verità del backtest",
     )
     sub.add_parser(
         "calibrate",
@@ -521,6 +527,7 @@ def main(argv: list[str] | None = None) -> int:
         "seed-comuni": _run_seed_comuni,
         "bootstrap-static": _run_bootstrap_static,
         "effis-sync": _run_effis_sync,
+        "catasti-incendi": _run_catasti_incendi,
         "calibrate": _run_calibrate,
         "backtest": _run_backtest,
         "backtest-flood": _run_backtest_flood,

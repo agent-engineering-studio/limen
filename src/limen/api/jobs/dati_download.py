@@ -196,6 +196,16 @@ async def _perimetri_effis() -> None:
         )
 
 
+async def _catasti_incendi() -> None:
+    from limen.cli.catasti_incendi import sincronizza
+
+    conti = await sincronizza(forzato=False)
+    if conti["falliti"]:
+        raise DownloadFallitoError(
+            f"{conti['falliti']} catasti regionali su {conti['enti']} non hanno risposto: riprova."
+        )
+
+
 async def _storico_firms() -> None:
     from limen.cli.ingest_fire_history import scarica_e_ingerisci
 
@@ -207,6 +217,12 @@ def _cartella_firms() -> list[Path]:
     from limen.integrations.firms.archive import cartella_cache
 
     return [cartella_cache()]
+
+
+def _cartella_catasti() -> list[Path]:
+    from limen.cli.catasti_incendi import cartella
+
+    return [cartella()]
 
 
 def procuratori() -> dict[str, Procuratore]:
@@ -235,6 +251,7 @@ def procuratori() -> dict[str, Procuratore]:
         "impermeabilizzazione": Procuratore(_impermeabilizzazione, _cartella_impermeabilizzazione),
         "strade": Procuratore(_strade, lambda: [radice_dati() / "osm"]),
         "perimetri_effis": Procuratore(_perimetri_effis, list),
+        "catasti_incendi": Procuratore(_catasti_incendi, _cartella_catasti),
         "firms_storico": Procuratore(_storico_firms, _cartella_firms),
     }
 
