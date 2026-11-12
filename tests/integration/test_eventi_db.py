@@ -116,3 +116,44 @@ async def test_le_allerte_spedite(reset_db: None, pg_pool: object) -> None:
     )
     assert [e["data"]["level"] for e in alte["events"]] == ["High"]
     assert alte["events"][0]["data"]["attribuzione"] is None
+
+
+async def _prevista(ore_fa: float, classe: str, cella: str = "c-ev") -> None:
+    async with acquire() as conn:
+        await conn.execute(
+            "INSERT INTO risk_assessments (cell_id, computed_at, hazard_type, horizon, score,"
+            " class, pipeline_version) VALUES ($1, $2, 'landslide', '+24h', 0.7, $3, 'test')",
+            cella,
+            ADESSO - timedelta(hours=ore_fa),
+            classe,
+        )
+
+
+async def test_una_previsione_che_sale_solo_se_la_corsa_prima_c_e(
+    reset_db: None, pg_pool: object
+) -> None:
+    await _prepara()
+    async with acquire() as conn:
+        await conn.execute(
+            "INSERT INTO grid_cells (id, aoi_id, row_idx, col_idx, geom, area_km2) VALUES"
+            " ('c-ev2', 'it-ev', 0, 1, ST_MakeEnvelope(15.01, 41, 15.02, 41.01, 4326), 1)"
+        )
+    inizio = eventi.codifica(eventi.Posizione(t=ADESSO - timedelta(hours=30), id=0))
+    # Corsa di 24 ore fa senza una corsa sei ore prima: non si sa da dove sale.
+    await _prevista(24, "High")
+    # Corsa di 12 ore fa: c-ev a Moderato, c-ev2 non c'è (sotto Moderato).
+    await _prevista(12, "Moderate")
+    # Corsa di 6 ore fa: c-ev sale ad Alto, c-ev2 compare ad Alto.
+    await _prevista(6, "High")
+    await _prevista(6, "VeryHigh", cella="c-ev2")
+    # Corsa di adesso-0,1 h: dentro il margine, non ancora.
+    await _prevista(0.1, "High", cella="c-ev2")
+
+    salite = await eventi_repo.poll(
+        eventi.PREVISIONE, {"hazard": "landslide"}, inizio, adesso=ADESSO
+    )
+    assert sorted((e["data"]["cell_id"], e["data"]["from"]) for e in salite["events"]) == [
+        ("c-ev", "Moderate"),
+        ("c-ev2", None),
+    ]
+    assert all(e["data"]["horizon_hours"] == 24 for e in salite["events"])

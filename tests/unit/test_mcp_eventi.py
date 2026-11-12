@@ -74,6 +74,7 @@ async def test_lista_e_poll_attraverso_il_protocollo(
             eventi.ALLERTA,
             eventi.CAMBIO_CLASSE,
             eventi.NON_MISURATO,
+            eventi.PREVISIONE,
         ]
         poll = await client.session.send_request(
             _Poll(params=_ParametriPoll(name=eventi.ALLERTA)), _DIZ
