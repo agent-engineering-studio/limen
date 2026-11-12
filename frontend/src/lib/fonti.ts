@@ -592,6 +592,30 @@ export const FONTI: readonly Fonte[] = [
     url: "https://zenodo.org/records/14204473",
   },
   {
+    id: "franeitalia",
+    ente: "Università di Salerno",
+    dataset: t(
+      "FraneItalia, catalogo delle frane recenti dalla stampa online (2010-2024)",
+      "FraneItalia, catalogue of recent landslides from online news (2010-2024)",
+    ),
+    ruolo: "verifica",
+    pericoli: ["landslide"],
+    cosa: t(
+      "Quasi diecimila frane con giorno, luogo e accuratezza dichiarata.",
+      "Almost ten thousand landslides with day, place and declared accuracy.",
+    ),
+    accesso: t(
+      "Zenodo, con limen ingest-events dopo ITALICA (anche in make init).",
+      "Zenodo, with limen ingest-events after ITALICA (also in make init).",
+    ),
+    interpretazione: t(
+      "Porta il backtest frane oltre il 2021, dove ITALICA si ferma. Entrano le frane da pioggia o di causa non detta; fino al 2021 una frana già in ITALICA a meno di 5 km e un giorno non entra due volte. Nel backtest è la sorgente franeitalia.",
+      "It takes the landslide backtest past 2021, where ITALICA stops. Rain-triggered landslides and those with no stated cause go in; up to 2021 a landslide already in ITALICA within 5 km and one day is not counted twice. In the backtest it is the franeitalia source.",
+    ),
+    licenza: "CC BY 4.0",
+    url: "https://zenodo.org/records/15144334",
+  },
+  {
     id: "cems-rapid-mapping",
     ente: "Copernicus Emergency Management Service",
     dataset: t("Rapid Mapping: le aree allagate osservate", "Rapid Mapping: observed flooded areas"),

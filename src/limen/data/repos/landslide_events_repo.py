@@ -100,3 +100,20 @@ async def count_events() -> int:
     async with acquire() as conn:
         row = await conn.fetchrow("SELECT COUNT(*)::bigint AS n FROM landslide_events")
     return int(row["n"]) if row else 0
+
+
+async def eventi_del_catalogo(
+    catalogo: str, *, fino_a: datetime
+) -> list[tuple[datetime, float, float]]:
+    """``(event_time, lon, lat)`` delle righe di un catalogo, per togliere i doppioni."""
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT event_time, ST_X(geom) AS lon, ST_Y(geom) AS lat
+            FROM landslide_events
+            WHERE attributes->>'catalogue' = $1 AND event_time <= $2
+            """,
+            catalogo,
+            fino_a,
+        )
+    return [(r["event_time"], float(r["lon"]), float(r["lat"])) for r in rows]
