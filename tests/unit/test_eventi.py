@@ -11,9 +11,9 @@ from limen.core import eventi
 from limen.core.eventi import ArgomentiNonValidiError, Posizione
 
 
-def test_il_catalogo_offre_solo_il_poll_e_tre_eventi() -> None:
+def test_il_catalogo_offre_solo_il_poll_e_quattro_eventi() -> None:
     nomi = [e["name"] for e in eventi.catalogo()]
-    assert nomi == [eventi.ALLERTA, eventi.CAMBIO_CLASSE, eventi.NON_MISURATO]
+    assert nomi == [eventi.ALLERTA, eventi.CAMBIO_CLASSE, eventi.NON_MISURATO, eventi.PREVISIONE]
     assert all(e["delivery"] == ["poll"] for e in eventi.catalogo())
 
 
@@ -66,3 +66,24 @@ def test_l_alluvione_porta_l_attribuzione_e_tutti_l_avvertenza() -> None:
     frana = eventi.payload({**riga, "hazard": "landslide"}, eventi.NON_MISURATO, 2026)
     assert frana["attribuzione"] is None
     assert eventi.id_evento(eventi.CAMBIO_CLASSE, riga) == "class:7"
+
+
+def test_una_previsione_che_sale_dice_orizzonte_e_ora_bersaglio() -> None:
+    corsa = datetime(2026, 11, 12, 8, 20, tzinfo=UTC)
+    riga = {
+        "id": 9,
+        "t": corsa,
+        "cell_id": "c",
+        "aoi_id": "it-x",
+        "hazard": "landslide",
+        "classe": "High",
+        "prima": None,
+        "score": 0.71,
+        "horizon": "+48h",
+    }
+    dati = eventi.payload(riga, eventi.PREVISIONE, 2026)
+    assert dati["from"] is None and dati["to"] == "High"
+    assert dati["horizon_hours"] == 48
+    assert dati["target_at"] == "2026-11-14T08:20:00+00:00"
+    assert eventi.id_evento(eventi.PREVISIONE, riga) == "forecast:9"
+    assert eventi.filtro(eventi.PREVISIONE, None).livello_minimo == "High"

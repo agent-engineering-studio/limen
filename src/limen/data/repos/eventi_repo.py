@@ -20,6 +20,7 @@ from typing import Any
 from limen.core.eventi import (
     ALLERTA,
     CAMBIO_CLASSE,
+    PREVISIONE,
     Filtro,
     Posizione,
     codifica,
@@ -79,6 +80,50 @@ ORDER BY r.computed_at, r.id
 LIMIT $6
 """
 
+# Le corse previsionali girano ogni sei ore (02/08/14/20:20 UTC). La corsa
+# precedente di una riga è quella da un'ora a nove ore prima: esclude la corsa
+# stessa (che scrive in pochi minuti) e non salta a due corse fa. Se in quella
+# finestra non c'è nessuna riga dello stesso pericolo e orizzonte, la corsa
+# precedente non è girata e una cella senza riga non vuol dire «sotto
+# Moderato»: niente evento.
+_SALITE_SQL = """
+WITH candidate AS MATERIALIZED (
+    SELECT r.id, r.computed_at, r.cell_id, r.hazard_type, r.horizon, r.class, r.score
+    FROM risk_assessments r
+    WHERE r.horizon IN ('+24h', '+48h', '+72h')
+      AND (r.computed_at, r.id) > ($1::timestamptz, $2::bigint)
+      AND r.computed_at <= $3::timestamptz
+      AND ($4::text IS NULL OR r.hazard_type::text = $4)
+      AND r.class = ANY($7::text[])
+)
+SELECT c.id, c.computed_at AS t, c.cell_id, g.aoi_id, c.hazard_type::text AS hazard,
+       c.class AS classe, c.score, c.horizon, p.class AS prima
+FROM candidate c
+JOIN grid_cells g ON g.id = c.cell_id
+-- Una LATERAL con LIMIT e non un EXISTS: Postgres trasformava l'EXISTS in
+-- un hash semi join su tutta la tabella (13 milioni di righe, oltre due minuti).
+JOIN LATERAL (
+    SELECT 1 FROM risk_assessments x
+    WHERE x.hazard_type = c.hazard_type AND x.horizon = c.horizon
+      AND x.computed_at BETWEEN c.computed_at - interval '9 hours'
+                            AND c.computed_at - interval '1 hour'
+    LIMIT 1
+) corsa_prima ON true
+LEFT JOIN LATERAL (
+    SELECT q.class
+    FROM risk_assessments q
+    WHERE q.cell_id = c.cell_id AND q.hazard_type = c.hazard_type AND q.horizon = c.horizon
+      AND q.computed_at BETWEEN c.computed_at - interval '9 hours'
+                            AND c.computed_at - interval '1 hour'
+    ORDER BY q.computed_at DESC
+    LIMIT 1
+) p ON true
+WHERE ($5::text IS NULL OR g.aoi_id = $5)
+  AND (p.class IS NULL OR NOT p.class = ANY($7::text[]))
+ORDER BY c.computed_at, c.id
+LIMIT $6
+"""
+
 _CAMBIO = (
     "p.class IS DISTINCT FROM r.class AND p.class IS NOT NULL"
     " AND (r.class = ANY($7::text[]) OR p.class = ANY($7::text[]))"
@@ -102,6 +147,10 @@ async def _righe(nome: str, f: Filtro, dopo: Posizione, fino: datetime, limite: 
                 )
             )
         argomenti: list[Any] = [dopo.t, dopo.id, fino, f.hazard, f.aoi_id, limite]
+        if nome == PREVISIONE:
+            assert f.livello_minimo is not None
+            argomenti.append(livelli_da(f.livello_minimo))
+            return list(await conn.fetch(_SALITE_SQL, *argomenti))
         if nome == CAMBIO_CLASSE:
             assert f.livello_minimo is not None
             sql = _TRANSIZIONI_SQL.format(predicato=_CAMBIO)

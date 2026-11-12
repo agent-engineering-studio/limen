@@ -6,15 +6,20 @@ per client, nessun webhook, niente da ricordare fra una richiesta e l'altra.
 Un agente esterno chiede «che cosa è successo dopo il mio cursore» e combina
 la risposta con fonti che Limen non ha.
 
-Tre eventi, tutti letti da tabelle che già esistono e scritte dal percorso
-orario, che qui non si tocca:
+Quattro eventi, tutti letti da tabelle che già esistono e scritte dai
+percorsi orario e previsionale, che qui non si toccano:
 
 * ``limen.alert.dispatched`` — un'allerta di Limen davvero spedita
   (``alert_dispatches``, già deduplicata);
 * ``limen.risk.class_changed`` — una cella cambia classe nello sweep orario;
 * ``limen.source.unmeasured`` — una cella passa a «non misurato»: mancava il
   dato, non è quiete. È l'invariante di Limen portato fuori: un agente deve
-  poter distinguere «calmo» da «non lo so».
+  poter distinguere «calmo» da «non lo so»;
+* ``limen.forecast.escalated`` — una corsa previsionale (+24/+48/+72 h) porta
+  una cella ad almeno ``min_level`` dove la corsa precedente la teneva sotto.
+  Lo storico previsionale tiene solo le celle da Moderato in su, quindi
+  «nessuna riga» nella corsa precedente vuol dire «sotto Moderato» — ma solo
+  se quella corsa c'è stata: senza, non si scrive niente.
 
 Ogni payload dice che è una stima di Limen e non un'allerta ufficiale, e quelli
 dell'alluvione portano l'attribuzione Copernicus richiesta dalla licenza CEMS.
@@ -29,7 +34,7 @@ import base64
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from limen.core.models.hazard import HazardType
@@ -40,6 +45,7 @@ IDENTIFICATORE = "io.modelcontextprotocol/events"
 ALLERTA = "limen.alert.dispatched"
 CAMBIO_CLASSE = "limen.risk.class_changed"
 NON_MISURATO = "limen.source.unmeasured"
+PREVISIONE = "limen.forecast.escalated"
 
 #: Errori della bozza (SEP-3415, provvisori finché non è accettata).
 NON_TROVATO = -32023
@@ -141,6 +147,30 @@ def catalogo() -> list[dict[str, Any]]:
             "inputSchema": {"type": "object", "properties": dict(_COMUNI)},
             "payloadSchema": {"type": "object", "properties": dict(_COMUNE_PAYLOAD)},
         },
+        {
+            "name": PREVISIONE,
+            "description": (
+                "Una corsa previsionale porta una cella da 1 km ad almeno min_level fra "
+                "24, 48 o 72 ore, dove la corsa precedente la teneva sotto. from null vuol "
+                "dire sotto Moderato. Non è un'allerta: è una previsione che sale."
+            ),
+            "delivery": ["poll"],
+            "inputSchema": {
+                "type": "object",
+                "properties": {**_COMUNI, "min_level": {**_LIVELLO, "default": "High"}},
+            },
+            "payloadSchema": {
+                "type": "object",
+                "properties": {
+                    **_COMUNE_PAYLOAD,
+                    "from": {"type": ["string", "null"]},
+                    "to": {"type": "string"},
+                    "score": {"type": "number"},
+                    "horizon_hours": {"type": "integer"},
+                    "target_at": {"type": "string", "format": "date-time"},
+                },
+            },
+        },
     ]
 
 
@@ -222,12 +252,27 @@ def payload(riga: Mapping[str, Any], nome: str, anno: int) -> dict[str, Any]:
             "score": float(riga["score"]),
             "measured": riga["measured"],
         }
+    if nome == PREVISIONE:
+        ore = int(str(riga["horizon"]).strip("+h"))
+        return {
+            **base,
+            "from": riga["prima"],
+            "to": riga["classe"],
+            "score": float(riga["score"]),
+            "horizon_hours": ore,
+            "target_at": (riga["t"] + timedelta(hours=ore)).astimezone(UTC).isoformat(),
+        }
     return base
 
 
 def id_evento(nome: str, riga: Mapping[str, Any]) -> str:
     """Stabile: la stessa riga dà sempre lo stesso id, per la deduplica del client."""
-    prefisso = {ALLERTA: "alert", CAMBIO_CLASSE: "class", NON_MISURATO: "unmeasured"}[nome]
+    prefisso = {
+        ALLERTA: "alert",
+        CAMBIO_CLASSE: "class",
+        NON_MISURATO: "unmeasured",
+        PREVISIONE: "forecast",
+    }[nome]
     return f"{prefisso}:{riga['id']}"
 
 
@@ -240,6 +285,7 @@ __all__ = [
     "NON_MISURATO",
     "NON_TROVATO",
     "PARAMETRI_NON_VALIDI",
+    "PREVISIONE",
     "ArgomentiNonValidiError",
     "Filtro",
     "Posizione",
