@@ -35,7 +35,8 @@ Configuration knobs (env vars, kept off the dispatcher for parity with
   centroide, che non è quella franata. Vuota = tutti, anche quelli senza
   precisione dichiarata.
 * ``LIMEN_BACKTEST_SORGENTI``    — sorgenti ammesse, separate da virgola
-  (``IR,NR`` per ITALICA, ``stampa`` per il fact check). Vuota = tutte.
+  (``IR,NR`` per ITALICA, ``franeitalia`` per FraneItalia 2010-2024,
+  ``stampa`` per il fact check). Vuota = tutte.
 * ``LIMEN_BACKTEST_PIOGGIA``     — ``modello`` (default, la rianalisi
   Open-Meteo) o ``radar``: la pioggia oraria del radar DPC storico
   (IT-DPC-SRI, ``LIMEN_BACKTEST_RADAR_ZARR``) al posto di quella del modello,

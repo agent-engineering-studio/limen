@@ -372,13 +372,16 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     ingest_events = sub.add_parser(
         "ingest-events",
-        help="load a dated event catalogue: ITALICA (landslide) or Copernicus EMS (flood)",
+        help="dated event catalogue: ITALICA + FraneItalia (landslide), Copernicus EMS (flood)",
     )
     ingest_events.add_argument(
         "--hazard",
         choices=["landslide", "flood"],
         default="landslide",
-        help="landslide: ITALICA CSV (LIMEN_ITALICA_CSV); flood: Copernicus EMS perimeters",
+        help=(
+            "landslide: ITALICA CSV (LIMEN_ITALICA_CSV) + FraneItalia GeoPackage "
+            "(LIMEN_FRANEITALIA_GPKG); flood: Copernicus EMS perimeters"
+        ),
     )
     ems_s1 = sub.add_parser(
         "ems-sentinel1",
