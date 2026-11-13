@@ -257,7 +257,7 @@ def _patch_lifecycle(monkeypatch: pytest.MonkeyPatch, *, schema_ok: bool) -> dic
         events["registered"] = True
         return ["limen-hourly-monitoring"]
 
-    async def _beat(stop: asyncio.Event, scheduler: object = None) -> None:
+    async def _beat(stop: asyncio.Event, scheduler: object = None, _s: object = None) -> None:
         # Il battito finto ferma subito il worker: e' l'equivalente di un
         # SIGTERM arrivato appena partito.
         stop.set()
@@ -309,3 +309,51 @@ async def test_run_registers_jobs_and_shuts_down_cleanly(monkeypatch: pytest.Mon
     assert events["scheduler_stopped"] is True
     assert events["http_closed"] is True
     assert events["closed"] == 1
+
+
+@pytest.mark.asyncio
+async def test_un_timeout_del_database_non_uccide_il_battito(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Il primo battito va in timeout, il secondo riesce: il task resta vivo e
+    # solo il battito riuscito rinfresca la sentinella.
+    tentativi: list[str] = []
+    sentinella = worker_mod.Sentinella(60.0, uscita=lambda _c: None)
+    sentinella._ultimo -= 30
+
+    class _BeatRepo:
+        async def start(self, job_id: str, *, scope: str | None = None) -> int:
+            tentativi.append("start")
+            if len(tentativi) == 1:
+                raise TimeoutError
+            stop.set()
+            return 7
+
+        async def finish(self, run_id: int | None, *, status: str, **_: object) -> None:
+            tentativi.append("finish")
+
+    monkeypatch.setattr(worker_mod, "job_runs_repo", _BeatRepo())
+    monkeypatch.setenv("LIMEN_WORKER_HEARTBEAT_SECONDS", "0.01")
+    stop = asyncio.Event()
+    await asyncio.wait_for(worker_mod._heartbeat_loop(stop, None, sentinella), timeout=5)
+    assert tentativi == ["start", "start", "finish"]
+    assert sentinella.eta() < 5
+
+
+def test_la_sentinella_esce_senza_battito() -> None:
+    uscite: list[int] = []
+    sentinella = worker_mod.Sentinella(0.05, uscita=uscite.append)
+    sentinella.sorveglia(passo=0.01)
+    assert uscite == [1]
+
+
+def test_la_sentinella_tace_finche_il_battito_arriva() -> None:
+    uscite: list[int] = []
+    sentinella = worker_mod.Sentinella(0.2, uscita=uscite.append)
+    filo = sentinella.avvia()
+    for _ in range(10):
+        sentinella.battito()
+        filo.join(timeout=0.03)
+    sentinella.ferma()
+    filo.join(timeout=1)
+    assert uscite == [] and not filo.is_alive()
