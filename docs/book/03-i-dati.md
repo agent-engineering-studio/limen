@@ -314,7 +314,7 @@ abita, ma tutti sanno in che comune.
     - Le integrazioni: `src/limen/integrations/idrogeo/` (IFFI, PAI, mosaico
       idraulico; i vettori ISPRA si caricano nello schema `sorgenti` con
       `limen carica-vettori`, #426), `dem/` (pendenza, esposizione,
-      curvatura; tile del rilievo con `limen dem-tiles`), `corine/`,
+      curvatura; tile del rilievo con `limen dem-tiles`, lanciato dall'init e servito su `/rilievo/`, #615), `corine/`,
       `imperviousness/`, `geological/` (pesi in `landslide.yaml`, `static.lithology`),
       `osm/`.
     - Colonne: `iffi_density_500`, `distance_to_iffi_m`, `pai_class_norm`,

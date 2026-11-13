@@ -312,8 +312,10 @@ qui sotto.*
 Le due tabelle che crescono più in fretta, lo storico dei punteggi e i
 risultati del modello in ombra, sono divise **per giorno**, come un
 quaderno con una pagina per data. Quando una pagina è troppo vecchia (dopo
-14 giorni per lo storico), la si strappa tutta intera invece di cancellare
-le righe una a una: è molto più veloce e non lascia buchi. Ogni notte si
+30 giorni per lo storico), la si strappa tutta intera invece di cancellare
+le righe una a una: è molto più veloce e non lascia buchi. I giorni sono 30
+e non 14 perché una verifica guarda i dieci giorni prima di un evento: con
+14, un evento si poteva verificare solo nei quattro giorni successivi. Ogni notte si
 preparano le pagine dei giorni successivi, così il calcolo dell'ora trova
 sempre una pagina pronta su cui scrivere.
 
@@ -337,7 +339,9 @@ testi, il registro degli avvisi, i sensori.
       `risk_assessments` e `model_runs`; `ensure_partitions()` prima di ogni
       sweep (job `limen-partitions`, registrato sempre), retention con
       `drop_expired_partitions()`, mai `DELETE`
-      (`SCORING__ASSESSMENTS_RETENTION_DAYS`=14,
+      (`SCORING__ASSESSMENTS_RETENTION_DAYS`=30, ~1,7 GB al giorno dal
+      #135; erano 14 fino al 13/11/2026, quando le verifiche del fact check
+      hanno chiesto il fondo di 10 giorni di `anticipo.sql`;
       `SCORING__MODEL_RUNS_RETENTION_DAYS`=30). Righe nella partizione
       `*_default` sono un bug.
     - Misura dell'8/11/2026: `risk_assessments` 3,85 GB in 13 partizioni,
