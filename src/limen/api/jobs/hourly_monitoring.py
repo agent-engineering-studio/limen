@@ -32,12 +32,24 @@ _GIORNI_MERGING_ORARIO = 3
 _ATTESA_MERGING_ORARIO_S = 180.0
 
 
+#: Quanto indietro si guarda in `job_runs` per ordinare lo sweep. Una regione
+#: o un pericolo che non ha una corsa riuscita da più di così va in testa,
+#: come uno mai valutato.
+_ORDINE_FINESTRA = timedelta(days=7)
+
+
 async def _aois_stale_first(hazard: HazardType = DEFAULT_HAZARD) -> list[str]:
     """AOIs ordered by oldest assessment first (never-assessed in testa).
 
     Lo sweep nazionale dura più del tick orario: con l'ordine alfabetico
     fisso le regioni in coda (Toscana, Veneto, …) non venivano MAI
     valutate — ogni tick ripartiva dalla testa.
+
+    L'ultima valutazione si legge dalle corse riuscite in `job_runs` (una riga
+    per regione e pericolo, con `metrics.hazard`), non da `latest_risk`: sono
+    1,3 GB quasi tutti JSON, e a cache fredda il loro MAX ci metteva 31 s,
+    oltre i 30 del pool — lo sweep intero falliva prima di cominciare
+    (13/11/2026). Su `job_runs` sono ~40 ms.
     """
     async with acquire() as conn:
         rows = await conn.fetch(
@@ -45,15 +57,19 @@ async def _aois_stale_first(hazard: HazardType = DEFAULT_HAZARD) -> list[str]:
             SELECT a.id
             FROM aoi a
             LEFT JOIN (
-                SELECT g.aoi_id, MAX(lr.computed_at) AS ts
-                FROM latest_risk lr
-                JOIN grid_cells g ON g.id = lr.cell_id
-                WHERE lr.hazard_type = $1
-                GROUP BY g.aoi_id
+                SELECT scope AS aoi_id, MAX(finished_at) AS ts
+                FROM job_runs
+                WHERE job_id = $2
+                  AND status = 'ok'
+                  AND started_at > now() - $3::interval
+                  AND metrics->>'hazard' = $1
+                GROUP BY scope
             ) m ON m.aoi_id = a.id
             ORDER BY m.ts ASC NULLS FIRST, a.id
             """,
             hazard.value,
+            JOB_HOURLY_MONITORING,
+            _ORDINE_FINESTRA,
         )
     return [str(r["id"]) for r in rows]
 
@@ -69,19 +85,21 @@ async def _hazards_stale_first(enabled: Sequence[HazardType]) -> list[HazardType
     """
     if len(enabled) < 2:
         return list(enabled)
-    # `latest_risk` e non la vista `mv_latest_risk`: la vista incrocia ogni
-    # cella con ogni pericolo, e sotto carico questa query ci metteva 24 s
-    # contro 0,3 (13/11/2026) — oltre i 30 s del pool fermava lo sweep intero.
-    # Il MAX ignora le celle mai valutate, come il LEFT JOIN della vista.
+    # Da `job_runs`, come `_aois_stale_first` e per la stessa ragione.
     async with acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT hazard_type, MAX(computed_at) AS ts
-            FROM latest_risk
-            WHERE hazard_type = ANY($1::hazard_type[])
-            GROUP BY hazard_type
+            SELECT metrics->>'hazard' AS hazard_type, MAX(finished_at) AS ts
+            FROM job_runs
+            WHERE job_id = $2
+              AND status = 'ok'
+              AND started_at > now() - $3::interval
+              AND metrics->>'hazard' = ANY($1::text[])
+            GROUP BY 1
             """,
             [h.value for h in enabled],
+            JOB_HOURLY_MONITORING,
+            _ORDINE_FINESTRA,
         )
     seen = {HazardType(r["hazard_type"]): r["ts"] for r in rows}
     # Never assessed sorts first; ties keep the configured order.
