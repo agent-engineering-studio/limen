@@ -83,7 +83,7 @@ describe("SelettoreVista", () => {
     await caricato();
     const rilievo = screen.getByRole("radio", { name: /Rilievo/ });
     expect(rilievo).toBeDisabled();
-    expect(rilievo).toHaveAccessibleName(expect.stringContaining("VITE_DEM_PMTILES_URL"));
+    expect(rilievo).toHaveAccessibleName(expect.stringContaining("limen dem-tiles"));
     expect(screen.getByRole("radio", { name: /3D/ })).toBeDisabled();
     expect(screen.getByRole("radio", { name: /3D/ })).toHaveAccessibleName(
       expect.stringContaining("#321"),

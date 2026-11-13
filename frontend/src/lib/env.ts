@@ -58,6 +58,20 @@ export const sullOrigine = (raw: string, origine?: string): string => {
   return `${base}${raw}`.replace(/\/+$/, "");
 };
 
+// `||`: vuota da Docker vuol dire non impostata, come per i glifi sotto;
+// "off" spegne anche la ricerca al percorso predefinito.
+const rilievo: { url: string | undefined } = {
+  url:
+    env.VITE_DEM_PMTILES_URL && env.VITE_DEM_PMTILES_URL !== "off"
+      ? env.VITE_DEM_PMTILES_URL
+      : undefined,
+};
+
+/** L'URL delle tile del rilievo trovato a runtime (#318). */
+export function impostaRilievo(url: string | undefined): void {
+  rilievo.url = url;
+}
+
 export const config = {
   apiUrl: sullOrigine(env.VITE_API_URL ?? "http://localhost:8080"),
   tileservUrl: sullOrigine(env.VITE_TILESERV_URL ?? "http://localhost:7800"),
@@ -69,8 +83,11 @@ export const config = {
   // tippecanoe from the ISPRA mosaic). When unset the layers are not added.
   paiPmtilesUrl: env.VITE_PAI_PMTILES_URL,
   iffiPmtilesUrl: env.VITE_IFFI_PMTILES_URL,
-  // `||`: vuota da Docker vuol dire non impostata, come per i glifi sotto.
-  demPmtilesUrl: env.VITE_DEM_PMTILES_URL || undefined,
+  // Un getter: non impostata alla build, la cerca `trovaRilievo`
+  // (lib/rilievo.ts) prima del primo disegno e la scrive con `impostaRilievo`.
+  get demPmtilesUrl(): string | undefined {
+    return rilievo.url;
+  },
   // `||` e non `??`: passata da Docker una variabile non impostata arriva
   // come stringa **vuota**, e `??` la considererebbe un valore valido. Con i
   // glifi il risultato e' uno stile senza caratteri, cioe' di nuovo la mappa

@@ -7,7 +7,7 @@
 
 import { useMemo } from "react";
 
-import { config } from "./env";
+import { config, impostaRilievo, sullOrigine } from "./env";
 import { testi, useLingua, type Lingua } from "./i18n";
 
 export const DEM_SOURCE_ID = "limen-dem";
@@ -39,12 +39,12 @@ export const OMBREGGIATURA = {
 
 const T = testi(
   {
-    senzaDem: "Rilievo non disponibile: questo sito non ha le tile del terreno (VITE_DEM_PMTILES_URL).",
+    senzaDem: "Rilievo non disponibile: questo sito non ha le tile del terreno (limen dem-tiles).",
     senzaWebgl2: "Rilievo non disponibile: il browser non supporta WebGL2.",
     senza3d: "La vista 3D arriva con #321.",
   },
   {
-    senzaDem: "Relief unavailable: this site has no terrain tiles (VITE_DEM_PMTILES_URL).",
+    senzaDem: "Relief unavailable: this site has no terrain tiles (limen dem-tiles).",
     senzaWebgl2: "Relief unavailable: the browser does not support WebGL2.",
     senza3d: "The 3D view comes with #321.",
   },
@@ -67,6 +67,34 @@ export function motivoSenzaRilievo(
   if (!demUrl) return T[lingua].senzaDem;
   if (!webgl2()) return T[lingua].senzaWebgl2;
   return null;
+}
+
+/** Dove `make init` e il compose mettono le tile del rilievo (#318): la
+ *  cartella `LIMEN_DEM_TILES_DIR`, servita su `/rilievo/`. */
+export const RILIEVO_PREDEFINITO = "rilievo/rilievo-italia.pmtiles";
+
+/** Senza un URL di build, cerca le tile al percorso predefinito prima del
+ *  primo disegno, e se ci sono le usa: così la stessa immagine pubblicata va
+ *  su ogni server, con o senza DTM, senza ricostruire la SPA. Una risposta
+ *  HTML è il ripiego della SPA (il dev server di Vite risponde così a ogni
+ *  percorso), non un PMTiles. `VITE_DEM_PMTILES_URL=off` spegne la ricerca. */
+export async function trovaRilievo(
+  url: string = sullOrigine(`${import.meta.env.BASE_URL ?? "/"}${RILIEVO_PREDEFINITO}`),
+  attesaMs = 2000,
+  daBuild: string | undefined = import.meta.env.VITE_DEM_PMTILES_URL as string | undefined,
+): Promise<void> {
+  if (config.demPmtilesUrl || daBuild === "off") return;
+  const fermo = new AbortController();
+  const timer = setTimeout(() => fermo.abort(), attesaMs);
+  try {
+    const r = await fetch(url, { method: "HEAD", signal: fermo.signal });
+    const tipo = r.headers.get("content-type") ?? "";
+    if (r.ok && !tipo.includes("text/html")) impostaRilievo(url);
+  } catch {
+    // Rete o tempo scaduto: il rilievo resta spento e lo dice.
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function useMotivoSenzaRilievo(): string | null {

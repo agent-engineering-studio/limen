@@ -653,6 +653,10 @@ services:
     image: ${LIMEN_IMAGE_PREFIX:-limen/}web:${LIMEN_IMAGE_TAG:-0.1}
     container_name: limen-frontend-static
     restart: unless-stopped
+    volumes:
+      # Le tile del rilievo (#318) che `make init` scrive con `limen dem-tiles`:
+      # la SPA le cerca su /rilievo/ e accende la vista «Rilievo» se ci sono.
+      - ${LIMEN_DEM_TILES_DIR:-${LIMEN_DATA_ROOT:-../../data}/tiles}:/usr/share/nginx/html/rilievo:ro
     depends_on:
       api:
         condition: service_healthy
