@@ -98,10 +98,22 @@ SELECT json_build_object(
     -- rimasta dice da quando c'è ancora tutto, righe del fondo comprese. Le
     -- righe `+24h` no: si scrivono solo da Moderato in su, e la loro assenza
     -- è un fondo basso, non uno storico cancellato.
-    'partizioni_dal', (SELECT min(to_date(right(c.relname, 8), 'YYYYMMDD'))
-                       FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid
-                       WHERE i.inhparent = 'public.risk_assessments'::regclass
-                         AND c.relname ~ '^risk_assessments_[0-9]{8}$'),
+    -- Solo le partizioni con righe (`reltuples > 0`, le statistiche): quelle
+    -- vuote le crea in anticipo `ensure_partitions`, e su questo server lo
+    -- storico comincia il 6/11/2026 con le partizioni dal 4/11 — contarle
+    -- faceva passare per completo un fondo di due giorni più corto. Una
+    -- partizione mai analizzata (-1) non conta: l'errore è verso il «non
+    -- verificabile», mai verso un fondo inventato. Nessuna partizione con
+    -- statistiche (un'installazione nuova prima del primo ANALYZE) vale
+    -- «da oggi»: NULL l'esito lo leggerebbe come una misura vecchia, senza
+    -- il controllo.
+    'partizioni_dal', coalesce(
+                        (SELECT min(to_date(right(c.relname, 8), 'YYYYMMDD'))
+                         FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid
+                         WHERE i.inhparent = 'public.risk_assessments'::regclass
+                           AND c.relname ~ '^risk_assessments_[0-9]{8}$'
+                           AND c.reltuples > 0),
+                        (now() AT TIME ZONE 'UTC')::date),
     'anticipo_ore_moderato', (
         SELECT round(extract(epoch FROM (SELECT t FROM ev) - min(run_at)) / 3600)
         FROM corse),
