@@ -1162,6 +1162,8 @@ when an open map of the danger is most useful.
   <a href="https://www.buymeacoffee.com/f9t3zol"><img src="https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=&slug=f9t3zol&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" alt="Buy me a coffee" height="40"></a>
 * 🏛️ **Public bodies, municipalities, universities**: for trials on your
   territory, write to us from [agentengineering.it](https://www.agentengineering.it).
+* 💶 **Funders**: [*Funding Limen*](./docs/finanziare-limen.en.md) says in
+  two pages what a grant buys, how much it costs and how the result is measured.
 
 ### Contact
 
