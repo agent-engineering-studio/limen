@@ -68,6 +68,8 @@ ENV PYTHONUNBUFFERED=1 \
 # Minimal system libs for the geospatial stack at runtime, plus the
 # PostgreSQL 16 client for the nightly backup (#304): pg_dump must match the
 # server's major version, and bookworm ships 15, so it comes from PGDG.
+# `libarchive-tools` is bsdtar: the RER2023 landslide inventory (#500) is
+# published only as a RAR, and the init loads it inside this image.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
     && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
@@ -80,6 +82,7 @@ RUN apt-get update \
         libgeos-c1v5 \
         libproj25 \
         libgomp1 \
+        libarchive-tools \
         postgresql-client-16 \
     && apt-get purge -y --auto-remove curl gnupg \
     && rm -rf /var/lib/apt/lists/* \
