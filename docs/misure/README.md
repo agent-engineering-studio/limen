@@ -6,6 +6,7 @@ riscrive questo indice: non modificarlo a mano.
 
 | generato | report | versioni | commit | comando |
 |---|---|---|---|---|
+| 2026-11-13 | [backtest_flood_it-lombardia_2024-04-30_2025-09-25.md](backtest_flood_it-lombardia_2024-04-30_2025-09-25.md) | `limen-deterministic-v1`, `flood-v1.3.0`, `wildfire-v1.1.0` | `f6bec8725848` | `main.py backtest-flood` |
 | 2026-11-12 | [backtest_wildfire_it-toscana_2026-01-01_2026-11-10.md](backtest_wildfire_it-toscana_2026-01-01_2026-11-10.md) | `limen-deterministic-v1`, `flood-v1.3.0`, `wildfire-v1.1.0` | `42d772137fbc` | `limen backtest-wildfire` |
 | 2026-11-12 | [backtest_wildfire_it-toscana_2025-01-01_2025-12-31.md](backtest_wildfire_it-toscana_2025-01-01_2025-12-31.md) | `limen-deterministic-v1`, `flood-v1.3.0`, `wildfire-v1.1.0` | `42d772137fbc` | `limen backtest-wildfire` |
 | 2026-11-12 | [backtest_wildfire_it-toscana_2024-01-01_2024-12-31.md](backtest_wildfire_it-toscana_2024-01-01_2024-12-31.md) | `limen-deterministic-v1`, `flood-v1.3.0`, `wildfire-v1.1.0` | `42d772137fbc` | `limen backtest-wildfire` |

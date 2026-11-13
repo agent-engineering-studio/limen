@@ -24,6 +24,7 @@ def test_ambiente_tiene_le_manopole_senza_segreti_ne_percorsi() -> None:
         "SCORING__ENGINE": "deterministic",
         "INSTALLAZIONE__TOKEN": "x",
         "LIMEN_API_KEY": "x",
+        "LIMEN_MINIO_ROOT_USER": "x",
         "LIMEN_COMMIT": "abc",
         "HOME": "/Users/qualcuno",
     }
