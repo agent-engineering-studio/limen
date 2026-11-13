@@ -90,7 +90,7 @@ ordine(class, rango) AS (
 SELECT json_build_object(
     'evento', (SELECT t FROM ev),
     'celle', (SELECT count(*) FROM celle),
-    -- Oltre la retention (ASSESSMENTS_RETENTION_DAYS, 14 giorni) lo storico
+    -- Oltre la retention (ASSESSMENTS_RETENTION_DAYS, 30 giorni) lo storico
     -- non c'è più: «nessuna riga» lì vuol dire «non verificabile».
     'storico_dal', (SELECT min(computed_at) FROM risk_assessments
                     WHERE hazard_type = $2::hazard_type AND horizon = '+24h'),
