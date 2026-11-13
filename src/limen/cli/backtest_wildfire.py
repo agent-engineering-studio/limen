@@ -381,7 +381,15 @@ def evaluate(
                 ),
             )
         )
-        return _at_least(scored.level, alert_level)
+        if not _at_least(scored.level, alert_level):
+            return False
+        # Il cancello degli avvisi sotto «Alto» (#477), come in
+        # `alert_dispatch` e in `backtest-flood`: senza, la replica a
+        # «Moderato» contava avvisi che la produzione non spedisce (#476).
+        return (
+            _at_least(scored.level, RiskLevel.High)
+            or scored.breakdown.predisposition() >= thresholds.alerts.min_predisposition
+        )
 
     # Il tasso di base si misura sulla **stagione degli incendi**, non sui
     # giorni di spin-up che la precedono: quelli sono primavera, il pericolo è
@@ -574,11 +582,14 @@ def carico_celle(
     rosso = thresholds.classes.very_high.lo
     pieno = thresholds.fwi.normalisation_max
     soglia = _soglia(alert_level, thresholds)
+    alto = thresholds.classes.high.lo
+    cancello = thresholds.alerts.min_predisposition
     per_nodo: dict[int, list[float]] = defaultdict(list)
+    predisposti_per_nodo: dict[int, list[bool]] = defaultdict(list)
     fuoco_per_nodo: dict[int, list[date | None]] = defaultdict(list)
     orizzonte = timedelta(days=int(_LEAD_MAX_HOURS // 24))
     for cella in celle:
-        terreno = engine.score(
+        valutata = engine.score(
             CellFeatureBundle(
                 aoi_id="carico",
                 cell_id=cella.cell_id,
@@ -590,9 +601,10 @@ def carico_celle(
                     ),
                 ),
             )
-        ).score
+        )
         k = nearest_node(cella.lon, cella.lat, nodes)
-        per_nodo[k].append(terreno)
+        per_nodo[k].append(valutata.score)
+        predisposti_per_nodo[k].append(valutata.breakdown.predisposition() >= cancello)
         fuoco_per_nodo[k].append((bruciate or {}).get(cella.cell_id))
     giornate = 0
     in_allerta = 0
@@ -608,7 +620,9 @@ def carico_celle(
         if gate is not None:
             accesa = np.outer(t >= gate.terrain_min, fwi >= gate.fwi_min)
             punteggi = np.where(accesa, np.maximum(punteggi, rosso), punteggi)
-        accese = punteggi >= soglia
+        # Sotto «Alto» accende solo una cella predisposta, come gli avvisi.
+        predisposte = np.array(predisposti_per_nodo[k])[:, None]
+        accese = (punteggi >= soglia) & ((punteggi >= alto) | predisposte)
         allerte = np.count_nonzero(accese, axis=0)
         for riga, fuoco in enumerate(fuoco_per_nodo[k]):
             if fuoco is None:
