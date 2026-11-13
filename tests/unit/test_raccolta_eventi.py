@@ -647,3 +647,65 @@ async def test_due_raccolte_insieme_la_seconda_non_parte(monkeypatch: pytest.Mon
     monkeypatch.setattr(job, "connessione_dedicata", _lock(False))
     out = await raccogli(impostazioni)
     assert out == {"status": "skipped", "reason": "un'altra raccolta è in corso"}
+
+
+async def test_un_evento_che_va_in_timeout_non_ferma_gli_altri(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Il 13/11/2026 la misura dell'ottavo evento è andata in timeout e la
+    # raccolta si è fermata lì: gli eventi dopo non sono stati verificati.
+    from decimal import Decimal
+
+    from limen.api.jobs import raccolta_eventi as job
+
+    titolo = Titolo(
+        "Frana a Lacedonia", "Ottopagine", "https://x/1", datetime(2026, 10, 28, tzinfo=UTC)
+    )
+
+    async def zero() -> Decimal:
+        return Decimal("0")
+
+    async def registra(**kw: Any) -> Decimal:
+        return Decimal("0")
+
+    async def titoli_per_pericolo(**kw: object) -> dict[HazardType, list[Titolo]]:
+        return {HazardType.LANDSLIDE: [titolo]}
+
+    async def estrai(self: Any, titoli: object) -> dict[HazardType, list[EventoEstratto]]:
+        return {HazardType.LANDSLIDE: [_evento(luogo="primo"), _evento(luogo="secondo")]}
+
+    async def conferma(self: Any, casi: list[object]) -> list[list[int]]:
+        return [[] for _ in casi]
+
+    async def cerca_conferme(*a: object) -> list[Titolo]:
+        return []
+
+    registrati: list[str] = []
+
+    async def registra_evento(h: object, e: EventoEstratto, *a: object) -> None:
+        if e.luogo == "primo":
+            raise TimeoutError
+        registrati.append(e.luogo)
+
+    async def in_sospeso() -> list[tuple[HazardType, Any]]:
+        return []
+
+    impostazioni = cast(Any, Settings)(
+        _env_file=None,
+        llm=LLMSettings(models={"eventi": "claude-sonnet-5-5"}, anthropic_budget_mensile_usd=10),
+        anthropic_api_key="sk-prova",
+    )
+    monkeypatch.setattr(job.budget, "get_settings", lambda: impostazioni)
+    monkeypatch.setattr(job.budget, "spesa_del_mese", zero)
+    monkeypatch.setattr(job.budget, "registra", registra)
+    monkeypatch.setattr(job, "titoli_per_pericolo", titoli_per_pericolo)
+    monkeypatch.setattr(job, "cerca_conferme", cerca_conferme)
+    monkeypatch.setattr(job, "_registra", registra_evento)
+    monkeypatch.setattr(EstrattoreEventi, "estrai", estrai)
+    monkeypatch.setattr(EstrattoreEventi, "conferma", conferma)
+    monkeypatch.setattr(job, "connessione_dedicata", _lock(True))
+    monkeypatch.setattr(job.candidati_eventi_repo, "in_sospeso", in_sospeso)
+
+    esito_raccolta = await raccogli(impostazioni)
+    assert registrati == ["secondo"]
+    assert esito_raccolta["rinviati"] == 1
