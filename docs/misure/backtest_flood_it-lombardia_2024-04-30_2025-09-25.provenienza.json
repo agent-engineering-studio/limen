@@ -1,0 +1,18 @@
+{
+  "report": "backtest_flood_it-lombardia_2024-04-30_2025-09-25.md",
+  "generato": "2026-11-13T13:50:09+00:00",
+  "limen": "0.1.0",
+  "commit": "f6bec872584885bdda18821ed716de8c67833820",
+  "versioni": {
+    "landslide": "limen-deterministic-v1",
+    "flood": "flood-v1.3.0",
+    "wildfire": "wildfire-v1.1.0"
+  },
+  "comando": "main.py backtest-flood",
+  "ambiente": {
+    "LIMEN_BACKTEST_FLOOD_AOI": "it-lombardia",
+    "LIMEN_BACKTEST_FLOOD_PORTATE": "ewds",
+    "LIMEN_DATA_ROOT": "<percorso locale>",
+    "LIMEN_REPORTS_DIR": "<percorso locale>"
+  }
+}
