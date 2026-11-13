@@ -383,6 +383,12 @@ services:
       # Il worker ignora il flag — è la sua ragione di esistere — ma tenerlo
       # esplicito evita che qualcuno legga l'ancora e pensi il contrario.
       SCHEDULER__ENABLED: "true"
+      # Il tetto di una query del worker, sopra i 30 s dell'API: l'API serve la
+      # mappa e deve fallire presto, il worker scrive regioni intere. Il 13/11/2026,
+      # dopo un riavvio a cache fredda, quattro regioni da ~24.000 celle hanno
+      # perso l'ora dell'incendio su un timeout di PersistResult (sul 10/11 erano
+      # 601 corse fallite così).
+      DB__COMMAND_TIMEOUT_SECONDS: ${LIMEN_WORKER_DB_TIMEOUT_SECONDS:-120}
       # Il backup notturno dello stato, fuori dal server (#304). Vuoto
       # BACKUP__BUCKET, il passo si salta. La passphrase della CA dei sensori
       # non è qui: la CA sta sull'host, e lì si salva.
