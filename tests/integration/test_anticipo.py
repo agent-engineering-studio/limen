@@ -16,17 +16,42 @@ pytestmark = pytest.mark.integration
 async def test_la_misura_dice_da_quando_ci_sono_le_partizioni(
     reset_db: None, pg_pool: object
 ) -> None:
+    async def partizioni_dal() -> date:
+        misura = await anticipo_repo.misura(
+            comuni=["000000"],
+            hazard=HazardType.LANDSLIDE,
+            evento_at=datetime.now(UTC) - timedelta(hours=1),
+            tolleranza_ore=12,
+        )
+        assert misura["celle"] == 0
+        return date.fromisoformat(misura["partizioni_dal"])
+
     async with acquire() as conn:
         await conn.execute("SELECT ensure_partitions('risk_assessments', 3)")
         oggi = await conn.fetchval("SELECT (now() AT TIME ZONE 'UTC')::date")
-    misura = await anticipo_repo.misura(
-        comuni=["000000"],
-        hazard=HazardType.LANDSLIDE,
-        evento_at=datetime.now(UTC) - timedelta(hours=1),
-        tolleranza_ore=12,
-    )
-    assert misura["celle"] == 0
-    assert date.fromisoformat(misura["partizioni_dal"]) <= oggi
+    # Partizioni create in anticipo e vuote non sono storico (13/11/2026: dal
+    # 4/11 contro righe dal 6/11): senza righe vale «da oggi».
+    assert await partizioni_dal() == oggi
+
+    ieri = oggi - timedelta(days=1)
+    async with acquire() as conn:
+        await conn.execute("SELECT ensure_partitions('risk_assessments', $1, $2)", ieri, oggi)
+        await conn.execute(
+            "INSERT INTO aoi (id, name, kind, geom) VALUES ('it-p', 'p', 'region',"
+            " ST_Multi(ST_MakeEnvelope(15, 41, 15.1, 41.1, 4326)))"
+        )
+        await conn.execute(
+            "INSERT INTO grid_cells (id, aoi_id, row_idx, col_idx, geom, area_km2) VALUES"
+            " ('c-p', 'it-p', 0, 0, ST_MakeEnvelope(15, 41, 15.01, 41.01, 4326), 1)"
+        )
+        await conn.execute(
+            "INSERT INTO risk_assessments (cell_id, hazard_type, score, class, factors,"
+            " computed_at, horizon, pipeline_version) VALUES ('c-p', 'landslide', 0.1,"
+            " 'Low', '{}'::jsonb, $1, '24h', 'v1')",
+            datetime.combine(ieri, datetime.min.time(), UTC) + timedelta(hours=12),
+        )
+        await conn.execute("ANALYZE risk_assessments")
+    assert await partizioni_dal() == ieri
 
 
 async def test_il_pericolo_e_valutato_se_ha_girato_la_regione_dell_evento(
