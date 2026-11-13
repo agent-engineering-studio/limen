@@ -14,8 +14,10 @@ import pytest
 from pydantic import SecretStr
 
 from limen.config.settings import EgmsSettings, Settings
+from limen.data.repos import dataset_versions_repo
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.egms import clms, sync_job
+from limen.integrations.egms.aggregate import Cella
 
 
 def _chiave() -> dict[str, Any]:
@@ -81,13 +83,15 @@ class _Archivio:
             return httpx.Response(200, json=["2019-2023", "2020-2024", "2020-2025"])
         if path.endswith("/search"):
             assert request.headers["Authorization"] == "Bearer a"
-            tile = json.loads(request.content)["tileId"]
+            corpo = json.loads(request.content)
+            tile = corpo["tileId"]
+            componente = "E" if corpo["productType"] == "ORTHO-EAST" else "U"
             if tile != "E47N19":
                 return httpx.Response(
                     200, json={"status": False, "message": f"Invalid tile ID: '{tile}'"}
                 )
             trovata = {
-                "filename": "EGMS_L3_E47N19_100km_U_2020_2024_1.zip",
+                "filename": f"EGMS_L3_E47N19_100km_{componente}_2020_2024_1.zip",
                 "version": "2020_2024_1",
             }
             return httpx.Response(200, json={"status": True, "id": "q", "hits": [trovata]})
@@ -263,3 +267,63 @@ async def test_un_csv_senza_colonne_lascia_attributi_vuoti(
         assert attr["acceleration"].size == 0
     assert await a.fetch_tile((47, 19), "U", "2020_2024", tmp_path, attributi=True) == tiff
     assert archivio.scaricati() == 1
+
+
+def _archivio_con_401(monkeypatch: pytest.MonkeyPatch, rifiuti: int) -> _Archivio:
+    """L'archivio finto che rifiuta con 401 i primi ``rifiuti`` download."""
+    finto = _Archivio()
+    restano = [rifiuti]
+
+    def _rifiuta(request: httpx.Request) -> httpx.Response:
+        if "/download/" in request.url.path and restano[0] > 0:
+            restano[0] -= 1
+            finto.richieste.append(request)
+            return httpx.Response(401, text="You need a valid download token to download data.")
+        return finto(request)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(_rifiuta))
+
+    async def _get(_cls: type[SharedHttpClient]) -> httpx.AsyncClient:
+        return client
+
+    monkeypatch.setattr(SharedHttpClient, "get", classmethod(_get))
+    return finto
+
+
+def _ricerche(archivio: _Archivio) -> int:
+    return sum(r.url.path.endswith("/search") for r in archivio.richieste)
+
+
+async def test_un_401_rifa_la_ricerca_e_scarica(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Il 13/11/2026 un 401 isolato («Rerun your search») ha fermato il sync.
+    finto = _archivio_con_401(monkeypatch, rifiuti=1)
+    a = await clms.archivio(_impostazioni())
+    assert a is not None
+    tiff = await a.fetch_tile((47, 19), "U", "2020_2024", tmp_path)
+    assert tiff is not None and tiff.read_bytes() == b"TIFF"
+    assert _ricerche(finto) == 2
+    assert finto.scaricati() == 2
+
+
+async def test_un_401_che_resta_non_tocca_l_aoi(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    finto = _archivio_con_401(monkeypatch, rifiuti=99)
+    cella = Cella(cell_id="c1", minx=4_700_000, miny=1_998_000, maxx=4_701_000, maxy=1_999_000)
+
+    async def _celle(_aoi: str) -> list[Cella]:
+        return [cella]
+
+    async def _mai(*_a: object, **_k: object) -> None:
+        raise AssertionError("un'AOI con tile rifiutate non deve arrivare al registro")
+
+    monkeypatch.setattr(sync_job, "_celle", _celle)
+    monkeypatch.setattr(dataset_versions_repo, "find", _mai)
+    s = Settings(egms=_impostazioni(cartella=str(tmp_path), release="2020_2024"))
+    assert await sync_job.sync_egms(aoi_id="it-prova", settings=s) == 0
+    # Un tentativo e una ricerca nuova per componente; nessun segnaposto del
+    # mare, così il prossimo sync la riprova.
+    assert finto.scaricati() == 4
+    assert not list(tmp_path.glob("*absent"))
