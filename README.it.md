@@ -1100,6 +1100,9 @@ in cui una mappa aperta del pericolo serve di più.
   <a href="https://www.buymeacoffee.com/f9t3zol"><img src="https://img.buymeacoffee.com/button-api/?text=Offrimi%20un%20caff%C3%A8&emoji=&slug=f9t3zol&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" alt="Offrimi un caffè" height="40"></a>
 * 🏛️ **Enti pubblici, comuni, università**: per sperimentazioni sul vostro
   territorio, scriveteci da [agentengineering.it](https://www.agentengineering.it).
+* 💶 **Finanziatori**: [*Finanziare Limen*](./docs/finanziare-limen.md) dice in
+  due pagine che cosa si compra con un finanziamento, quanto costa e come si
+  misura il risultato.
 
 ## Come è stato costruito
 
