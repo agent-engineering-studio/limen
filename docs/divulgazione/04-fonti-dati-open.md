@@ -1,3 +1,5 @@
+*[English version](04-fonti-dati-open.en.md)*
+
 # Le fonti dati: tutte aperte, tutte a costo zero
 
 **Ogni numero che Limen usa viene da un dato pubblico che tu hai già pagato

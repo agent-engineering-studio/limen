@@ -1,3 +1,5 @@
+*[English version](glossario.en.md)*
+
 # Glossario
 
 Le parole che in queste pagine compaiono senza essere ovvie, in ordine

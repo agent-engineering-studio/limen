@@ -92,9 +92,11 @@ Three things make Limen different:
 > official bulletin: the bulletin says *which zone*; Limen tries to say
 > *where inside it, why, and what comes next*.
 
-**Not a developer?** The plain-language pages in
+**Not a developer?** Start with
+[Limen in one page](./docs/divulgazione/01-limen-in-una-pagina.en.md) and the
+[glossary](./docs/divulgazione/glossario.en.md). The other plain-language pages in
 [`docs/divulgazione/`](./docs/divulgazione/README.md) and the
-[Limen book](https://limen-docs.agentengineering.it/) (both in Italian) explain
+[Limen book](https://limen-docs.agentengineering.it/) are in Italian and explain
 everything without jargon; once installed, so does the **How it works** page
 (`#/come-funziona`) of your own installation.
 
@@ -405,8 +407,8 @@ score.
 | **ISTAT** | municipal, provincial, regional borders (2023) | grid, rankings per comune | CC BY 4.0 | no |
 
 Where each source is configured, refreshed and stored on disk is in
-[`data/README.md`](./data/README.md); the Italian guide
-[`docs/divulgazione/04-fonti-dati-open.md`](./docs/divulgazione/04-fonti-dati-open.md)
+[`data/README.md`](./data/README.md); the guide
+[*The data sources: all open*](./docs/divulgazione/04-fonti-dati-open.en.md)
 tells the same story for a general audience.
 
 ---
