@@ -18,6 +18,8 @@ Env:
 * ``LIMEN_WORKER_HEARTBEAT_SECONDS`` — cadenza del battito (default 60).
 * ``LIMEN_WORKER_HEALTH_MAX_AGE_SECONDS`` — quanto può essere vecchio il
   battito perché ``--health`` dica ancora "vivo" (default 180).
+* ``LIMEN_WORKER_WATCHDOG_SECONDS`` — dopo quanto senza un battito riuscito il
+  worker esce da sé, perché Docker lo riavvii (default 900).
 """
 
 from __future__ import annotations
@@ -27,6 +29,9 @@ import contextlib
 import os
 import shutil
 import signal
+import threading
+import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -56,6 +61,51 @@ def _heartbeat_seconds() -> float:
 
 def _health_max_age_seconds() -> float:
     return float(os.getenv("LIMEN_WORKER_HEALTH_MAX_AGE_SECONDS", "180"))
+
+
+def _watchdog_seconds() -> float:
+    return float(os.getenv("LIMEN_WORKER_WATCHDOG_SECONDS", "900"))
+
+
+class Sentinella:
+    """Esce dal processo se il battito non riesce per ``limite`` secondi.
+
+    L'healthcheck vede un worker fermo, ma Docker fuori da Swarm non riavvia
+    un container *unhealthy*: `restart: unless-stopped` scatta solo se il
+    processo esce. Il 13/11/2026 il worker è rimasto fermo dalle 03:46 alle
+    10:06 UTC — niente sweep, previsione delle 08:20 e raccolta eventi perse —
+    finché non è stato ricreato a mano. È un thread e non un task: un event
+    loop bloccato non eseguirebbe un task che lo sorveglia.
+    """
+
+    def __init__(self, limite: float, uscita: Callable[[int], object] = os._exit) -> None:
+        self.limite = limite
+        self._uscita = uscita
+        self._ultimo = time.monotonic()
+        self._fermo = threading.Event()
+
+    def battito(self) -> None:
+        self._ultimo = time.monotonic()
+
+    def eta(self) -> float:
+        return time.monotonic() - self._ultimo
+
+    def ferma(self) -> None:
+        self._fermo.set()
+
+    def sorveglia(self, passo: float = 60.0) -> None:
+        while not self._fermo.wait(min(passo, self.limite / 4)):
+            if self.eta() > self.limite:
+                log.error(
+                    "worker.sentinella.scaduta", eta_s=round(self.eta()), limite_s=self.limite
+                )
+                self._uscita(1)
+                return
+
+    def avvia(self) -> threading.Thread:
+        filo = threading.Thread(target=self.sorveglia, name="sentinella", daemon=True)
+        filo.start()
+        return filo
 
 
 async def _wait_for_schema(*, timeout_s: float = _MIGRATION_WAIT_MAX_S) -> bool:
@@ -129,12 +179,23 @@ async def _riversa_salute() -> None:
         log.warning("worker.salute.failed", error=str(exc), error_type=type(exc).__name__)
 
 
-async def _heartbeat_loop(stop: asyncio.Event, scheduler: Any = None) -> None:
+async def _heartbeat_loop(
+    stop: asyncio.Event, scheduler: Any = None, sentinella: Sentinella | None = None
+) -> None:
     """Una riga in `job_runs` a intervalli, finché non arriva lo stop."""
     period = _heartbeat_seconds()
     while not stop.is_set():
-        run_id = await job_runs_repo.start(HEARTBEAT_JOB)
-        await job_runs_repo.finish(run_id, status="ok", metrics={"period_s": period, **_disco()})
+        # Un timeout del database non deve uccidere il battito: il task
+        # morirebbe in silenzio e il worker, vivo, risulterebbe fermo.
+        try:
+            run_id = await job_runs_repo.start(HEARTBEAT_JOB)
+            await job_runs_repo.finish(
+                run_id, status="ok", metrics={"period_s": period, **_disco()}
+            )
+            if sentinella is not None:
+                sentinella.battito()
+        except Exception as exc:
+            log.warning("worker.heartbeat.failed", error=str(exc), error_type=type(exc).__name__)
         await _riversa_salute()
         if scheduler is not None:
             await _publish_next_fire(scheduler, period)
@@ -239,9 +300,12 @@ async def run(*, check_health: bool = False) -> int:
                 "dati_download.non_avviato", error=str(exc)[:300], error_type=type(exc).__name__
             )
 
-        heartbeat = asyncio.create_task(_heartbeat_loop(stop, scheduler))
+        sentinella = Sentinella(_watchdog_seconds())
+        sentinella.avvia()
+        heartbeat = asyncio.create_task(_heartbeat_loop(stop, scheduler, sentinella))
         await stop.wait()
         log.info("worker.stopping")
+        sentinella.ferma()
 
         if heartbeat is not None:
             heartbeat.cancel()

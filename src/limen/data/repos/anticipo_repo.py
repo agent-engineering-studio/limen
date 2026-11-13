@@ -17,6 +17,11 @@ from limen.api.jobs.ids import JOB_HOURLY_MONITORING
 from limen.core.models.hazard import HazardType
 from limen.data.db import acquire
 
+#: Il tetto della misura, sopra i 30 s del pool: è un job serale e non la
+#: mappa, e a cache fredda, con gli sweep che scrivono, la query li superava
+#: (13/11/2026, raccolta fermata all'ottavo evento).
+ATTESA_S = 180.0
+
 
 @cache
 def _sql() -> str:
@@ -28,7 +33,13 @@ async def misura(
 ) -> dict[str, Any]:
     async with acquire() as conn:
         grezzo = await conn.fetchval(
-            _sql(), comuni, hazard.value, evento_at, tolleranza_ore, JOB_HOURLY_MONITORING
+            _sql(),
+            comuni,
+            hazard.value,
+            evento_at,
+            tolleranza_ore,
+            JOB_HOURLY_MONITORING,
+            timeout=ATTESA_S,
         )
     risultato: dict[str, Any] = json.loads(grezzo)
     return risultato

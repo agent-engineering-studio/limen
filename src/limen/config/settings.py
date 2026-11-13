@@ -705,9 +705,12 @@ class ScoringSettings(BaseSettings):
     # sulle magnitudini, che è il percorso già previsto quando l'explainer
     # manca. 0 disattiva lo SHAP del tutto.
     shadow_shap_top_k: int = Field(default=50, ge=0)
-    # Hot-table retention for per-cell assessments (~15 GB/day nationally).
-    # mv_latest_risk + alert ledgers keep the operational state. 0 = keep all.
-    assessments_retention_days: int = Field(default=14, ge=0)
+    # Hot-table retention for per-cell assessments. Con la scrittura selettiva
+    # (#135) sono ~1,7 GB al giorno sull'Italia (misurati a novembre 2026).
+    # 30 e non 14: una verifica legge i 10 giorni prima dell'evento
+    # (`anticipo.sql`), e con 14 un evento si verificava solo entro 4 giorni,
+    # mentre il fact check guarda fino a 13 giorni indietro. 0 = keep all.
+    assessments_retention_days: int = Field(default=30, ge=0)
     # Quando una cella merita una riga di storico (#135). Lo sweep orario
     # scriveva ogni cella a ogni giro — ~19 milioni di righe al giorno — e la
     # maggioranza diceva la stessa cosa dell'ora prima: con il 70% delle

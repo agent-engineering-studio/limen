@@ -45,10 +45,11 @@ async def _aois_stale_first(hazard: HazardType = DEFAULT_HAZARD) -> list[str]:
             SELECT a.id
             FROM aoi a
             LEFT JOIN (
-                SELECT aoi_id, MAX(computed_at) AS ts
-                FROM mv_latest_risk
-                WHERE hazard_type = $1
-                GROUP BY aoi_id
+                SELECT g.aoi_id, MAX(lr.computed_at) AS ts
+                FROM latest_risk lr
+                JOIN grid_cells g ON g.id = lr.cell_id
+                WHERE lr.hazard_type = $1
+                GROUP BY g.aoi_id
             ) m ON m.aoi_id = a.id
             ORDER BY m.ts ASC NULLS FIRST, a.id
             """,
@@ -68,11 +69,15 @@ async def _hazards_stale_first(enabled: Sequence[HazardType]) -> list[HazardType
     """
     if len(enabled) < 2:
         return list(enabled)
+    # `latest_risk` e non la vista `mv_latest_risk`: la vista incrocia ogni
+    # cella con ogni pericolo, e sotto carico questa query ci metteva 24 s
+    # contro 0,3 (13/11/2026) — oltre i 30 s del pool fermava lo sweep intero.
+    # Il MAX ignora le celle mai valutate, come il LEFT JOIN della vista.
     async with acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT hazard_type, MAX(computed_at) AS ts
-            FROM mv_latest_risk
+            FROM latest_risk
             WHERE hazard_type = ANY($1::hazard_type[])
             GROUP BY hazard_type
             """,

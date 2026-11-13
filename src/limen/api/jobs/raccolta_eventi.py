@@ -33,6 +33,8 @@ from datetime import date, datetime, time
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import asyncpg
+
 from limen.agents.chat_agents.estrattore_eventi import (
     NOME_PERICOLO,
     EstrattoreEventi,
@@ -357,7 +359,19 @@ async def _raccolta(settings: Settings, modello: str) -> dict[str, Any]:
         casi[k][2].extend(trovati[j] for j in scelti)
 
     for h, e, propri in casi:
-        await _registra(h, e, propri, esiti)
+        # Un evento che non si riesce a misurare non ferma gli altri: resta
+        # prenotato col suo slug, e il prossimo giro che lo ritrova lo riprende.
+        try:
+            await _registra(h, e, propri, esiti)
+        except (TimeoutError, OSError, asyncpg.PostgresError) as exc:
+            esiti["rinviati"] += 1
+            log.warning(
+                "raccolta_eventi.rinviato",
+                luogo=e.luogo,
+                hazard=h.value,
+                error=str(exc)[:200],
+                error_type=type(exc).__name__,
+            )
     out: dict[str, Any] = {
         "titoli": {h.value: len(t) for h, t in titoli.items()},
         "estratti": {h.value: len(e) for h, e in estratti.items()},
