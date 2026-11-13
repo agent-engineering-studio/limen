@@ -688,6 +688,30 @@ export const FONTI: readonly Fonte[] = [
     url: "https://doi.org/10.6084/m9.figshare.21981842",
   },
   {
+    id: "rer2023",
+    ente: "Regione Emilia-Romagna, Università di Bologna",
+    dataset: t(
+      "RER2023: inventario delle frane dell'evento di maggio 2023 in Emilia-Romagna",
+      "RER2023: inventory of the landslides of the May 2023 event in Emilia-Romagna",
+    ),
+    ruolo: "verifica",
+    pericoli: ["landslide"],
+    cosa: t(
+      "80.997 frane mappate dopo le alluvioni di maggio 2023 (Berti et al., ESSD 2025).",
+      "80,997 landslides mapped after the May 2023 floods (Berti et al., ESSD 2025).",
+    ),
+    accesso: t(
+      "Zenodo, con limen ingest-events dopo Marche-Umbria (anche in make init).",
+      "Zenodo, with limen ingest-events after Marche-Umbria (also in make init).",
+    ),
+    interpretazione: t(
+      "L'inventario non data le singole frane: entrano tutte la sera del 16 maggio 2023, il picco della seconda ondata, dichiarate con la precisione temporale più bassa (T3), perché una parte è dei primi di maggio. Una riga per cella da 1 km², con quante frane ci sono cadute. Nel backtest è la sorgente rer2023.",
+      "The inventory does not date individual landslides: they all go in on the evening of 16 May 2023, the peak of the second wave, declared with the lowest time precision (T3), because some are from early May. One row per 1 km² cell, with how many landslides fell in it. In the backtest it is the rer2023 source.",
+    ),
+    licenza: "CC BY 4.0",
+    url: "https://doi.org/10.5281/zenodo.13742643",
+  },
+  {
     id: "catasti-incendi",
     ente: "Regione Basilicata, Regione Sardegna (CFVA), Regione Emilia-Romagna",
     dataset: t(

@@ -37,6 +37,7 @@ Configuration knobs (env vars, kept off the dispatcher for parity with
 * ``LIMEN_BACKTEST_SORGENTI``    — sorgenti ammesse, separate da virgola
   (``IR,NR`` per ITALICA, ``franeitalia`` per FraneItalia 2010-2024,
   ``marche_umbria_2022`` per l'inventario del 15/09/2022,
+  ``rer2023`` per l'Emilia-Romagna di maggio 2023 (data convenzionale, T3),
   ``stampa`` per il fact check). Vuota = tutte.
 * ``LIMEN_BACKTEST_PIOGGIA``     — ``modello`` (default, la rianalisi
   Open-Meteo) o ``radar``: la pioggia oraria del radar DPC storico

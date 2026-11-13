@@ -396,7 +396,8 @@ def _build_parser() -> argparse.ArgumentParser:
         default="landslide",
         help=(
             "landslide: ITALICA CSV (LIMEN_ITALICA_CSV) + FraneItalia GeoPackage "
-            "(LIMEN_FRANEITALIA_GPKG) + Marche-Umbria 2022 (LIMEN_MARCHE_UMBRIA_ZIP); "
+            "(LIMEN_FRANEITALIA_GPKG) + Marche-Umbria 2022 (LIMEN_MARCHE_UMBRIA_ZIP) "
+            "+ RER2023 (LIMEN_RER2023_RAR); "
             "flood: Copernicus EMS perimeters"
         ),
     )
