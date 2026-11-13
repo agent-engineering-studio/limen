@@ -8,6 +8,7 @@ che darebbe il motore valutando ogni cella in ogni giorno.
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, time, timedelta
+from typing import Any
 
 import pytest
 
@@ -74,6 +75,15 @@ CELLE = [
 CATENE = [_catena([5, 20, 30, 45, 60, 25]), _catena([70, 80, 10, 50, 40, 22])]
 
 
+def _avvisa(valutata: Any, t: WildfireThresholds) -> bool:
+    """Il cancello degli avvisi sotto «Alto», come in `alert_dispatch` (#477)."""
+    ordine = list(RiskLevel)
+    return bool(
+        ordine.index(valutata.level) >= ordine.index(RiskLevel.High)
+        or valutata.breakdown.predisposition() >= t.alerts.min_predisposition
+    )
+
+
 @pytest.mark.parametrize("rosso", [False, True])
 @pytest.mark.parametrize("livello", [RiskLevel.Moderate, RiskLevel.High, RiskLevel.VeryHigh])
 def test_uguale_al_motore_cella_per_cella(livello: RiskLevel, rosso: bool) -> None:
@@ -84,7 +94,7 @@ def test_uguale_al_motore_cella_per_cella(livello: RiskLevel, rosso: bool) -> No
     for cella in CELLE:
         catena = CATENE[0] if cella.lon < 16.5 else CATENE[1]
         for giorno, stato in catena.items():
-            livello_giorno = engine.score(
+            valutata = engine.score(
                 CellFeatureBundle(
                     aoi_id="x",
                     cell_id=cella.cell_id,
@@ -94,9 +104,11 @@ def test_uguale_al_motore_cella_per_cella(livello: RiskLevel, rosso: bool) -> No
                         fire_weather=stato,
                     ),
                 )
-            ).level
+            )
             giornate += 1
-            in_allerta += ordine.index(livello_giorno) >= ordine.index(livello)
+            in_allerta += ordine.index(valutata.level) >= ordine.index(livello) and _avvisa(
+                valutata, t
+            )
     atteso = in_allerta / giornate
     assert 0 < atteso < 1  # il caso deve distinguere qualcosa
     assert carico_celle(
@@ -171,7 +183,7 @@ def test_far_per_giornata_cella_contro_il_conto_a_mano() -> None:
     for cella in CELLE:
         catena = CATENE[0] if cella.lon < 16.5 else CATENE[1]
         for giorno, stato in catena.items():
-            livello = engine.score(
+            valutata = engine.score(
                 CellFeatureBundle(
                     aoi_id="x",
                     cell_id=cella.cell_id,
@@ -181,8 +193,11 @@ def test_far_per_giornata_cella_contro_il_conto_a_mano() -> None:
                         fire_weather=stato,
                     ),
                 )
-            ).level
-            if list(RiskLevel).index(livello) < list(RiskLevel).index(RiskLevel.Moderate):
+            )
+            ordine = list(RiskLevel)
+            if ordine.index(valutata.level) < ordine.index(RiskLevel.Moderate) or not _avvisa(
+                valutata, t
+            ):
                 continue
             accese += 1
             fuoco = bruciate.get(cella.cell_id)
