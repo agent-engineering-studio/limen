@@ -16,10 +16,12 @@ import zipfile
 from io import BytesIO
 from pathlib import Path
 
+import httpx
 import numpy as np
 from egms_client import (
     Component,
     EgmsError,
+    Hit,
     Search,
     ServiceKey,
     Tile,
@@ -118,6 +120,24 @@ class Archivio:
         resp.raise_for_status()
         return parse_search(resp.content)
 
+    async def _cerca_e_scarica(
+        self, tile: Tile, componente: Component, release: str, prefisso: str
+    ) -> tuple[Hit, httpx.Response] | None:
+        """La tile trovata e la risposta del suo download; ``None`` se non esiste."""
+        ricerca = await self._cerca(tile, componente, release)
+        trovata = latest_hit(ricerca) if ricerca is not None else None
+        if ricerca is None or trovata is None:
+            return None
+        # Il nome diventa un path: uno che la glob di `fetch_tile` non ritrova
+        # vorrebbe dire ~60 MB scaricati a ogni sync, uno con un separatore
+        # scriverebbe altrove.
+        if not trovata.stem.startswith(prefisso) or "/" in trovata.filename:
+            raise EgmsError(f"nome inatteso per {prefisso}: {trovata.filename!r}")
+        resp = await fetch_with_retry(
+            "GET", download_url(self._archivio, trovata), params={"id": ricerca.id}
+        )
+        return trovata, resp
+
     async def fetch_tile(
         self,
         tile: Tile,
@@ -144,19 +164,17 @@ class Archivio:
         if segnaposto.exists():
             return None
         cartella.mkdir(parents=True, exist_ok=True)
-        ricerca = await self._cerca(tile, componente, release)
-        trovata = latest_hit(ricerca) if ricerca is not None else None
-        if ricerca is None or trovata is None:
+        scaricata = await self._cerca_e_scarica(tile, componente, release, prefisso)
+        if scaricata is not None and scaricata[1].status_code == 401:
+            # L'id della ricerca è scaduto (lo dice egms-client): una ricerca
+            # nuova dà link nuovi. Il 13/11/2026 un 401 isolato ha fermato
+            # `limen sync-egms` a 14 regioni su 20.
+            log.info("egms.ricerca_scaduta", tile=prefisso)
+            scaricata = await self._cerca_e_scarica(tile, componente, release, prefisso)
+        if scaricata is None:
             segnaposto.touch()
             return None
-        # Il nome diventa un path: uno che la glob qui sopra non ritrova
-        # vorrebbe dire ~60 MB scaricati a ogni sync, uno con un separatore
-        # scriverebbe altrove.
-        if not trovata.stem.startswith(prefisso) or "/" in trovata.filename:
-            raise EgmsError(f"nome inatteso per {prefisso}: {trovata.filename!r}")
-        resp = await fetch_with_retry(
-            "GET", download_url(self._archivio, trovata), params={"id": ricerca.id}
-        )
+        trovata, resp = scaricata
         if resp.status_code == 404:
             segnaposto.touch()
             return None

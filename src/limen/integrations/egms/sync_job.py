@@ -14,7 +14,15 @@ from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
-from egms_client import COMPONENTS, Component, Tile, api_release, tiles_for_bounds
+from egms_client import (
+    COMPONENTS,
+    Component,
+    EgmsError,
+    Tile,
+    api_release,
+    tile_prefix,
+    tiles_for_bounds,
+)
 
 from limen.config.settings import Settings, get_settings
 from limen.core.logging import get_logger
@@ -115,14 +123,31 @@ async def sync_egms(*, aoi_id: str, settings: Settings | None = None) -> int:
     migra_segnaposto(cartella)
     richieste = [(c, t) for c in COMPONENTS for t in tiles_for_bounds(minx, miny, maxx, maxy)]
     cancello = asyncio.Semaphore(s.concorrenza)
+    fallite: list[str] = []
 
     async def _una(componente: Component, tile: Tile) -> Path | None:
         # Una tile già sul disco (o già nota come mare) non chiede niente
         # all'archivio: il secondo sync scarica zero byte.
         async with cancello:
-            return await archivio.fetch_tile(tile, componente, s.release, cartella, attributi=True)
+            try:
+                return await archivio.fetch_tile(
+                    tile, componente, s.release, cartella, attributi=True
+                )
+            except EgmsError as exc:
+                fallite.append(tile_prefix(tile, componente, s.release))
+                log.warning("egms.tile_rifiutata", aoi_id=aoi_id, error=str(exc)[:200])
+                return None
 
     trovate = await asyncio.gather(*(_una(c, t) for c, t in richieste))
+    if fallite:
+        # Scrivere senza quelle tile metterebbe `scatterer_count = 0` («il
+        # satellite qui non vede») sulle celle che coprono, sopra le misure
+        # del sync precedente: l'AOI resta com'era e il prossimo sync la
+        # riprova (le altre tile sono già sul disco). Le altre AOI vanno avanti.
+        log.warning(
+            "integration.degraded", source=SOURCE, aoi_id=aoi_id, tile_rifiutate=sorted(fallite)
+        )
+        return 0
     tiff: dict[str, list[Path]] = {c: [] for c in COMPONENTS}
     for (componente, _), path in zip(richieste, trovate, strict=True):
         if path is not None:
