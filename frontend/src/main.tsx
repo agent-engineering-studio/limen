@@ -7,6 +7,7 @@ import App from "./App";
 import { HazardProvider } from "./lib/hazard";
 import { LinguaProvider } from "./lib/i18n";
 import { MapStateProvider, pericoloDaHash } from "./lib/map-state";
+import { trovaRilievo } from "./lib/rilievo";
 import { theme } from "./lib/theme";
 // L'ordine conta: gli stili di Mantine per primi, i nostri dopo, così una
 // regola del progetto vince su quella del componente e non viceversa.
@@ -18,7 +19,8 @@ if (!root) {
     throw new Error("root element not found");
 }
 
-ReactDOM.createRoot(root).render(
+// Prima del primo disegno: la mappa legge l'URL del rilievo una volta sola.
+void trovaRilievo().finally(() => ReactDOM.createRoot(root).render(
     <React.StrictMode>
         <LinguaProvider>
             <MantineProvider theme={theme} forceColorScheme="dark">
@@ -30,4 +32,4 @@ ReactDOM.createRoot(root).render(
             </MantineProvider>
         </LinguaProvider>
     </React.StrictMode>,
-);
+));

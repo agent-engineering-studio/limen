@@ -64,6 +64,17 @@ predefinito LIMEN_IMPERVIOUSNESS_RASTER "$RADICE/sealing/clms_imd_2018/imd_2018_
 # riscaricherebbe ~7 GB. Con le tile già lì, un sync ripetuto non va in rete
 # e non scrive niente (dataset_versions).
 export EGMS__CARTELLA="${EGMS__CARTELLA:-$RADICE/egms}"
+# Le tile del rilievo (#318) stanno sotto la radice: il compose le monta nel
+# frontend su /rilievo/, nginx le serve da lì sul server (attiva-limen.sh).
+export LIMEN_DEM_TILES_DIR="${LIMEN_DEM_TILES_DIR:-$RADICE/tiles}"
+# L'attribuzione è obbligatoria (senza, `limen dem-tiles` non scrive): quella
+# che chiede la CC BY 4.0 dell'HR-DTM, se il DTM è quello che scarica il
+# passo 3/7. Un altro DTM vuole la sua, nel .env.
+case "${LIMEN_DEM_RASTER:-}" in
+  */HRDTM5m_v1.3.tif)
+    export LIMEN_DEM_ATTRIBUZIONE="${LIMEN_DEM_ATTRIBUZIONE:-<a href=\"https://doi.org/10.5281/zenodo.24009736\">HR-DTM 5 m</a> © Panza et al., IRPI-CNR — <a href=\"https://creativecommons.org/licenses/by/4.0/\">CC BY 4.0</a>, modificato}"
+    ;;
+esac
 # I dati di base ISPRA (IFFI, mosaici PAI e idraulico) li scarica
 # `limen geodati-sync` proprio dove `geoserver-init` li carica: la stessa
 # GEOSERVER_SHAPEFILE_DIR, assoluta perché diventa anche un mount di Docker.
@@ -126,6 +137,12 @@ if [ "$MODO" = docker ]; then
       CONTAINER+=(-v "$EGMS__SERVICE_KEY_FILE:$EGMS__SERVICE_KEY_FILE:ro" -e "EGMS__SERVICE_KEY_FILE=$EGMS__SERVICE_KEY_FILE")
     fi
     [ -n "$egms_chiave_shell" ] && CONTAINER+=(-e "EGMS__SERVICE_KEY=$egms_chiave_shell")
+  fi
+  # Le tile del rilievo in scrittura, con la loro attribuzione.
+  if [ -n "${LIMEN_DEM_RASTER:-}" ] && [ -e "${LIMEN_DEM_RASTER}" ]; then
+    mkdir -p "$LIMEN_DEM_TILES_DIR"
+    CONTAINER+=(-v "$LIMEN_DEM_TILES_DIR:$LIMEN_DEM_TILES_DIR" -e "LIMEN_DEM_TILES_DIR=$LIMEN_DEM_TILES_DIR")
+    [ -n "${LIMEN_DEM_ATTRIBUZIONE:-}" ] && CONTAINER+=(-e "LIMEN_DEM_ATTRIBUZIONE=$LIMEN_DEM_ATTRIBUZIONE")
   fi
   # La cartella di GeoServer va in scrittura: ci scrive geodati-sync.
   if [ "$have_geodati" -eq 1 ]; then
@@ -336,6 +353,13 @@ say "7/7  Fattori per cella"
 # registra `static_bootstrap.skip` per gli altri: una sola chiamata copre
 # DTM, CORINE, imperviousness, WUI, distanze OSM e litologia.
 limen bootstrap-static || exit 1
+# Dallo stesso DTM, le tile del rilievo per la vista «Rilievo» (#318). Con il
+# DTM invariato il comando non rifà niente; la prima volta sull'Italia sono
+# ore, e un errore non ferma il resto: il prossimo giro le riprende.
+if [ "$have_dem" -eq 1 ]; then
+  mkdir -p "$LIMEN_DEM_TILES_DIR"
+  limen dem-tiles || echo "  (tile del rilievo non completate: il prossimo giro le riprende)"
+fi
 
 say "Risultato"
 limen data-status
