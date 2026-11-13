@@ -53,7 +53,13 @@ sotto pg_cron la fa il database), `storage` (peso del database), `backup`,
 GloFAS, entro `SCHEDULER__GLOFAS_CHIAMATE_PER_NOTTE`).
 
 Fuori dallo scheduler il worker scrive ogni tanto `limen-worker-heartbeat`
-in `job_runs` (lo legge `limen worker --health`). Non esistono più il sync
+in `job_runs` (lo legge `limen worker --health`). Docker fuori da Swarm non
+riavvia un container solo *unhealthy*, quindi il worker si sorveglia da sé:
+un thread fuori dall'event loop lo fa uscire se il battito non riesce per
+`LIMEN_WORKER_WATCHDOG_SECONDS` (900), e `restart: unless-stopped` lo
+riavvia (#611; il 13/11/2026 era rimasto fermo sei ore). Nei log l'uscita è
+`worker.sentinella.scaduta`. Le query del worker hanno 120 s di tetto
+(`LIMEN_WORKER_DB_TIMEOUT_SECONDS`), quelle dell'API 30. Non esistono più il sync
 settimanale ISPRA IdroGEO (il WFS risponde 401 agli anonimi, vedi «Mancano
 dati ISPRA»), né schedule autonomi per pulizia cache, drift o previsione:
 reintrodurne uno lo fa girare due volte. Cosa ha girato e quanto è durato:
