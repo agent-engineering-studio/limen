@@ -31,7 +31,7 @@ from limen.core.scoring.regional_thresholds import load_hazard_thresholds
 #: Lo sha del commit, scritto nell'immagine dalla CI (``--build-arg``).
 COMMIT_ENV = "LIMEN_COMMIT"
 _PREFISSI = ("LIMEN_", "SCORING__", "FORECAST__", "BACKTEST__")
-_SEGRETI = ("TOKEN", "KEY", "SECRET", "PASSWORD", "CONNECTION", "CREDENZIAL")
+_SEGRETI = ("TOKEN", "KEY", "SECRET", "PASSWORD", "CONNECTION", "CREDENZIAL", "USER")
 _PERCORSO = "<percorso locale>"
 #: Utente e password dentro un URL: `SCORING__MLFLOW_TRACKING_URI` li porta
 #: senza che il nome della variabile lo dica.
