@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
@@ -10,6 +10,7 @@ import pytest
 from limen.cli import verifiche_report
 from limen.cli.verifiche_report import riepiloga, scrivi_report
 from limen.core.models.hazard import HazardType
+from limen.data.repos.carico_repo import Carico
 from limen.data.repos.verifiche_eventi_repo import RigaVerifica
 
 _T = datetime(2026, 10, 10, 10, tzinfo=UTC)
@@ -87,3 +88,35 @@ def test_l_anticipo_mediano_si_conta_sopra_il_fondo() -> None:
     riga = _riga("a", esito="anticipata", moderato=72, alto=72, fondo="High", sopra=20)
     (s,) = riepiloga([riga])
     assert s.anticipo_mediano_ore == 20
+
+
+def _carico(sopra: int, *, comuni: int = 100, giorni: int = 10) -> Carico:
+    return Carico(
+        hazard=HazardType.LANDSLIDE,
+        comuni_giorno_sopra=sopra,
+        comuni=comuni,
+        giorni=giorni,
+        dal_giorno=date(2026, 10, 1),
+        al_giorno=date(2026, 10, 10),
+    )
+
+
+def test_il_carico_sta_accanto_agli_eventi_colti(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Il metro della #345: colti e carico nella stessa sezione, per pericolo."""
+    monkeypatch.setattr(verifiche_report, "REPORTS_DIR", tmp_path)
+    righe = [_riga("a", esito="anticipata", moderato=40), _riga("b", hazard=HazardType.FLOOD)]
+    frana, alluvione = riepiloga(righe, {HazardType.LANDSLIDE: _carico(125)})
+    assert frana.carico is not None
+    assert frana.carico.quota == pytest.approx(0.125)
+    assert alluvione.carico is None
+    testo = scrivi_report([frana, alluvione], righe, dal=None, al=None).read_text(encoding="utf-8")
+    assert "- Carico: **12.5%** dei comuni-giorno" in testo
+    assert "(125 su 1000: 100 comuni per 10 giorni, 2026-10-01 → 2026-10-10)" in testo
+    assert "- Carico: — (nessun giorno di previsioni valutato nella finestra)" in testo
+
+
+def test_un_carico_senza_giorni_valutati_non_e_zero() -> None:
+    assert _carico(0, giorni=0).quota is None
+    assert _carico(0).quota == 0.0

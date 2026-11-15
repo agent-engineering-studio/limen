@@ -14,6 +14,11 @@ l'anno farebbe sembrare previsto ogni evento: a Melito, San Lorenzo e
 Roccaforte del Greco, il 10 ottobre 2026, 74-80 ore di «anticipo» erano lo
 sfondo. Solo l'esito ``anticipata`` è una previsione sopra lo sfondo.
 
+E accanto a tutte e due c'è il **carico** (#345): la quota di comuni-giorno
+con una previsione ≥ Moderato nella stessa finestra, finché lo storico la
+tiene. Prevedere Moderato ovunque coglie ogni evento; il carico è quello che
+costa.
+
 Env knobs: ``LIMEN_VERIFICHE_DAL`` / ``LIMEN_VERIFICHE_AL`` (ISO; default
 tutto il registro).
 """
@@ -31,6 +36,8 @@ from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
 from limen.data.db import lifespan_pool
 from limen.data.migrate import run_migrations
+from limen.data.repos import carico_repo
+from limen.data.repos.carico_repo import Carico
 from limen.data.repos.verifiche_eventi_repo import RigaVerifica, elenca
 
 log = get_logger(__name__)
@@ -53,6 +60,8 @@ class Riepilogo:
     fondo_moderato: int
     con_alto: int
     anticipo_mediano_ore: float | None
+    #: ``None`` se nella finestra non c'è un giorno di previsioni valutato.
+    carico: Carico | None = None
 
     @property
     def quota_anticipate(self) -> float | None:
@@ -67,7 +76,9 @@ class Riepilogo:
         return self.fondo_moderato / self.verificati if self.verificati else None
 
 
-def riepiloga(righe: list[RigaVerifica]) -> list[Riepilogo]:
+def riepiloga(
+    righe: list[RigaVerifica], carichi: dict[HazardType, Carico] | None = None
+) -> list[Riepilogo]:
     """Un riepilogo per pericolo presente, nell'ordine dell'enum.
 
     ``non_verificabile`` resta fuori dal denominatore: è un evento in cui
@@ -97,6 +108,7 @@ def riepiloga(righe: list[RigaVerifica]) -> list[Riepilogo]:
                 fondo_moderato=sum(r.fondo_classe_max in _ALMENO_MODERATO for r in valide),
                 con_alto=sum(r.anticipo_ore_alto is not None for r in valide),
                 anticipo_mediano_ore=statistics.median(anticipi) if anticipi else None,
+                carico=(carichi or {}).get(hazard),
             )
         )
     return out
@@ -108,6 +120,16 @@ def _quota(x: float | None) -> str:
 
 def _ore(x: int | float | None) -> str:
     return "—" if x is None else f"{x:.0f} h"
+
+
+def _carico(c: Carico | None) -> str:
+    if c is None or c.quota is None:
+        return "- Carico: — (nessun giorno di previsioni valutato nella finestra)"
+    return (
+        f"- Carico: **{c.quota:.1%}** dei comuni-giorno con una previsione ≥ Moderato "
+        f"({c.comuni_giorno_sopra} su {c.comuni * c.giorni}: {c.comuni} comuni per "
+        f"{c.giorni} giorni, {c.dal_giorno} → {c.al_giorno}), sfondo compreso"
+    )
 
 
 def scrivi_report(
@@ -142,6 +164,7 @@ def scrivi_report(
             f"contro un tasso di base di {_quota(s.tasso_di_base)} "
             f"(comune già ≥ Moderato da 10 a 4 giorni prima)",
             f"- Con una previsione ≥ Alto: {s.con_alto}",
+            _carico(s.carico),
             f"- Anticipo mediano delle anticipate: {_ore(s.anticipo_mediano_ore)}",
             "",
             "| Evento | Esito | ≥ Moderato | ≥ Alto | Prevista max | Fondo max |",
@@ -173,7 +196,8 @@ async def run() -> int:
     async with lifespan_pool():
         await run_migrations()
         righe = await elenca(dal=dal, al=al)
-    riepiloghi = riepiloga(righe)
+        carichi = await carico_repo.misura(dal=dal, al=al) if righe else {}
+    riepiloghi = riepiloga(righe, carichi)
     if not riepiloghi:
         log.warning("verifiche_report.vuoto", dal=dal, al=al)
         return 0
@@ -186,6 +210,7 @@ async def run() -> int:
             anticipate=s.anticipate,
             quota_apparenti=s.quota_apparenti,
             tasso_di_base=s.tasso_di_base,
+            carico=s.carico.quota if s.carico else None,
         )
     log.info("verifiche_report.done", report=str(path), eventi=len(righe))
     return 0
