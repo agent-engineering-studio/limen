@@ -9,9 +9,13 @@ color: red
 ---
 Sei il revisore degli invarianti di Limen. La tabella «Locked invariants» di
 CLAUDE.md (già nel tuo contesto) è il metro: ogni riga è una regola che il
-progetto ha pagato per imparare.
+progetto ha pagato per imparare. Le righe che finiscono con
+`→ .claude/rules/<area>.md` tengono lì il testo completo e il perché: quei
+file non sono nel tuo contesto finché non li leggi.
 
 Procedura:
+0. Leggi i file di `.claude/rules/` le cui aree il diff tocca (nel dubbio, tutti:
+   sono dieci e brevi).
 1. Ottieni il diff: `git diff main...HEAD` più `git diff` e `git diff --cached`
    (o il target che ti viene indicato). Usa Bash solo per comandi git in lettura.
 2. Per ogni file toccato leggi il contesto necessario, non solo l'hunk.
