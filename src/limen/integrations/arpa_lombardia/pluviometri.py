@@ -3,7 +3,10 @@
 Il backtest frane gira sulla pioggia di un modello a ~9 km; questa è la
 pioggia caduta nel pluviometro, per chiedersi quanto del mancato è del modello
 e quanto del motore. Open data di Regione Lombardia (Socrata, CC0): anagrafica
-``nf78-nj6b``, misure a 10 minuti in tre dataset per periodo.
+``nf78-nj6b``, misure a 10 minuti in tre dataset per periodo. L'ultimo dei tre
+si ferma a quando Regione lo ha aggiornato (a novembre 2026: il 1° marzo
+2026); da lì in poi le misure stanno nel dataset dei sensori in tempo reale,
+``647i-nhxk``, con le stesse colonne.
 
 Le misure sono in **ora solare** (CET, UTC+1 tutto l'anno) e ogni valore è la
 pioggia dei dieci minuti che finiscono all'ora indicata: un'ora ``(h-1, h]``
@@ -40,6 +43,8 @@ BASE = "https://www.dati.lombardia.it/resource"
 ANAGRAFICA = "nf78-nj6b"
 #: Le misure a 10 minuti: dataset e primo anno che copre.
 DATASET = (("e7r2-7m84", 1900), ("2kar-pnuk", 2011), ("pstb-pga6", 2021))
+#: Le misure più recenti di tutti i sensori meteo, non ancora passate nello storico.
+CORRENTE = "647i-nhxk"
 _CET = timezone(timedelta(hours=1))
 _PAGINA = 50_000
 _STATI_VALIDI = "('VA','VV')"
@@ -82,6 +87,19 @@ def dataset_per(start: datetime, end: datetime) -> list[str]:
         for (ds, primo), oltre in zip(DATASET, fuori, strict=True)
         if any(primo <= a < oltre for a in anni)
     ]
+
+
+async def _fonti(start: datetime, end: datetime) -> list[tuple[str, str]]:
+    """``(dataset, filtro in più)``: lo storico e, oltre la sua fine, il corrente."""
+    storici = dataset_per(start, end)
+    fonti = [(ds, "") for ds in storici]
+    if DATASET[-1][0] in storici:
+        ultimo = str(
+            (await _pagine(DATASET[-1][0], {"$select": "max(data) as ultimo"}))[0]["ultimo"]
+        )
+        if _cet(ultimo) < end:
+            fonti.append((CORRENTE, f" AND data > '{ultimo}'"))
+    return fonti
 
 
 def associa(
@@ -210,21 +228,23 @@ async def oraria(
     pioggia: list[tuple[str, str, float]] = []
     conteggi: list[tuple[str, date, int]] = []
     try:
-        for ds in dataset_per(start, end):
-            for r in await _pagine(ds, {"$where": f"{filtro} AND valore > 0", "$order": "data"}):
+        for ds, oltre in await _fonti(start, end):
+            for r in await _pagine(
+                ds, {"$where": f"{filtro}{oltre} AND valore > 0", "$order": "data"}
+            ):
                 pioggia.append((str(r["idsensore"]), str(r["data"]), float(r["valore"])))
             for r in await _pagine(
                 ds,
                 {
                     "$select": "idsensore, date_trunc_ymd(data) as giorno, count(*) as n",
-                    "$where": f"{filtro} AND valore >= 0",
+                    "$where": f"{filtro}{oltre} AND valore >= 0",
                     "$group": "idsensore, giorno",
                 },
             ):
                 giorno = _giorno(r["giorno"])
                 if giorno is not None:
                     conteggi.append((str(r["idsensore"]), giorno, int(r["n"])))
-    except (httpx.HTTPError, ValueError, KeyError) as exc:
+    except (httpx.HTTPError, ValueError, KeyError, IndexError) as exc:
         log.warning("integration.degraded", source="arpa_lombardia", error=str(exc))
         return {}
     per_sensore = ore_dai_dieci_minuti(pioggia, conteggi, sensori=sensori, start=start, end=end)

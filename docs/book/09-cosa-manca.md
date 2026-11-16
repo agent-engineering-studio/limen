@@ -129,9 +129,11 @@ casella vuota a una disponibilità inventata.
   punteggi. Per un giorno il confronto è fatto: il 10 ottobre 2026 nelle zone
   in arancione sono caduti 28 mm in media sulla zona, in quelle gialle 11,
   in quelle senza allerta zero ([appendice E](appendice-e-radar.md)).
-  Per farlo in modo sistematico, giorno per giorno, lo strumento ora c'è
-  (`limen misura-radar`); mancano i numeri sull'archivio completo e il
-  confronto con la classe data da Limen nella stessa zona
+  Il confronto sistematico ora c'è, su 155 giorni e quasi 29.000 coppie
+  zona-giorno: la pioggia media di mezzo è 0 mm senza allerta, 4,5 in
+  giallo, 22 in arancione, 63 in rosso; ma una zona arancione o rossa su
+  quattro ha avuto meno di 10 mm. Manca il confronto con la classe data da
+  Limen nella stessa zona
   ([#629](https://github.com/agent-engineering-studio/limen/issues/629)).
 
 ??? note "Per chi sviluppa"

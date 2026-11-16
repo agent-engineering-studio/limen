@@ -164,8 +164,9 @@ issue servono a scrivere la richiesta alla Protezione civile e a misurare,
 nel frattempo, quello che si può con i dati che ci sono. La richiesta è
 scritta
 ([lettera](https://github.com/agent-engineering-studio/limen/blob/main/docs/lettere/2026-11-richiesta-radar-dpc.md))
-e le misure si fanno con un solo comando, `limen misura-radar`; i numeri
-arriveranno quando il comando avrà letto l'archivio completo.
+e le misure si fanno con un solo comando, `limen misura-radar`: i numeri su
+155 giorni, dal 10 giugno al 15 novembre 2026, sono nell'appendice E e nel
+[rapporto](https://github.com/agent-engineering-studio/limen/blob/main/docs/misure/misura_radar_2026-06-10_2026-11-15.md).
 
 | Capitolo | Gap | Proposta di open data | Issue |
 |---|---|---|---|

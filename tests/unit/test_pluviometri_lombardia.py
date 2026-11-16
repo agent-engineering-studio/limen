@@ -73,6 +73,8 @@ async def test_oraria_per_nodo_e_degrado(monkeypatch: pytest.MonkeyPatch) -> Non
     async def pagine(dataset: str, params: dict[str, str]) -> list[dict[str, Any]]:
         if dataset == pl.ANAGRAFICA:
             return anagrafica
+        if params.get("$select", "").startswith("max("):
+            return [{"ultimo": "2026-03-01T00:00:00.000"}]
         if "$group" in params:
             assert "idsensore in ('A')" in params["$where"]
             return [{"idsensore": "A", "giorno": "2023-05-15T00:00:00.000", "n": "18"}]
@@ -91,3 +93,31 @@ async def test_oraria_per_nodo_e_degrado(monkeypatch: pytest.MonkeyPatch) -> Non
 
     monkeypatch.setattr(pl, "_pagine", giu)
     assert await pl.oraria(nodi, start, end, raggio_km=5.0, bbox=(8.0, 44.0, 11.0, 47.0)) == {}
+
+
+async def test_oltre_la_fine_dello_storico_si_legge_il_corrente(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chiesti: list[tuple[str, str]] = []
+
+    async def pagine(dataset: str, params: dict[str, str]) -> list[dict[str, Any]]:
+        if dataset == pl.ANAGRAFICA:
+            return [{"idsensore": "A", "nomestazione": "a", "lng": "9.0", "lat": "45.0"}]
+        if params.get("$select", "").startswith("max("):
+            return [{"ultimo": "2026-03-01T00:00:00.000"}]
+        chiesti.append((dataset, params["$where"]))
+        if "$group" in params:
+            return [{"idsensore": "A", "giorno": "2026-07-15T00:00:00.000", "n": "18"}]
+        if dataset == pl.CORRENTE:
+            return [{"idsensore": "A", "data": "2026-07-15T02:10:00.000", "valore": "4.2"}]
+        return []
+
+    monkeypatch.setattr(pl, "_pagine", pagine)
+    start = datetime(2026, 7, 15, 0, tzinfo=UTC)
+    end = datetime(2026, 7, 15, 3, tzinfo=UTC)
+    ore = await pl.oraria([(9.0, 45.0)], start, end, raggio_km=5.0, bbox=(8.0, 44.0, 11.0, 47.0))
+    assert ore[datetime(2026, 7, 15, 2, tzinfo=UTC)] == [4.2]
+    del_corrente = [dove for ds, dove in chiesti if ds == pl.CORRENTE]
+    assert len(del_corrente) == 2
+    assert all("data > '2026-03-01T00:00:00.000'" in dove for dove in del_corrente)
+    assert all("data > " not in dove for ds, dove in chiesti if ds != pl.CORRENTE)
