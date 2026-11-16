@@ -3,9 +3,9 @@
 Testo pronto da inviare al Dipartimento della Protezione Civile (#625, #626,
 #627, #628). Il destinatario va preso dai contatti sul sito del Dipartimento
 (<https://www.protezionecivile.gov.it>; la PEC, se si vuole una risposta
-protocollata). Le parti fra parentesi quadre le completa chi invia. Prima di
-inviare, eseguire `limen misura-radar` sul server e copiare dal report i due
-numeri che la lettera lascia fra parentesi quadre.
+protocollata). Le parti fra parentesi quadre le completa chi invia. I numeri
+vengono dal [report](../misure/misura_radar_2026-06-10_2026-11-15.md) del
+16 novembre 2026.
 
 Quando arriva la risposta: archiviarla (PDF o link) nelle issue #625-#628,
 aggiornare la tabella «Gap e come chiuderli» dell'[appendice E](../book/appendice-e-radar.md)
@@ -37,10 +37,10 @@ quattro limiti che solo voi potete togliere.
 
 1. **Un archivio permanente del «Merging».** Il servizio conserva circa
    cinque mesi di immagini; quelle più vecchie non si possono più scaricare.
-   Dal [data di inizio dell'archivio] Limen salva ogni notte le CUM3 e le
-   SRT1, e a oggi ne ha [numero di fotogrammi]: ma quello che è stato
-   pubblicato prima è perso, e ogni gruppo di ricerca si trova nella stessa
-   condizione. Per il solo radar esiste l'archivio IT-DPC-SRI, pubblicato su
+   Il 16 novembre 2026 il servizio dava ancora le immagini dal 9 giugno:
+   ne abbiamo salvate 5.109 fra CUM3 e SRT1, e da ora le salviamo ogni
+   notte. Ma quello che è stato pubblicato prima è perso, e ogni gruppo di
+   ricerca si trova nella stessa condizione. Per il solo radar esiste l'archivio IT-DPC-SRI, pubblicato su
    Zenodo con un DOI (https://doi.org/10.5281/zenodo.18637608). È possibile
    pubblicare allo stesso modo l'archivio storico delle cumulate «Merging»?
 2. **Un «Merging» di un'ora.** Le piene improvvise si decidono in un'ora, ma
@@ -60,7 +60,12 @@ quattro limiti che solo voi potete togliere.
    lontano dagli impianti e dietro i rilievi vede meno. Oggi una pioggia
    vista male arriva uguale a una vista bene. È possibile pubblicare la mappa
    della copertura e della qualità del mosaico, e l'elenco (o la posizione)
-   dei pluviometri che entrano nel «Merging»?
+   dei pluviometri che entrano nel «Merging»? Una stima nostra, fatta
+   confrontando SRT1 e CUM3 su 155 giorni, indica i riquadri a ovest della
+   Sicilia come quelli dove il solo radar vede meno. La stessa stima mostra,
+   in due riquadri vicino a Foggia (circa 15,4°E 41,25°N), pioggia nel
+   «Merging» in giorni in cui il radar e i riquadri vicini non ne vedono:
+   ve lo segnaliamo nel caso sia un pluviometro da controllare.
 
 Se una di queste cose esiste già e non l'abbiamo trovata, ci basta
 l'indicazione di dove cercarla. Tutto quello che misuriamo su questi dati è

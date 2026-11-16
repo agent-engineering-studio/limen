@@ -359,9 +359,55 @@ richieste al giorno al servizio, una ogni due minuti, e scarica circa 180
 immagini. Il servizio non dichiara un limite; Limen se ne dà uno da solo:
 meno di mille richieste al giorno.
 
-I numeri delle altre quattro parti non sono ancora in questa pagina: il
-comando deve girare sull'archivio completo, e i rapporti saranno pubblicati
-fra le [misure](https://github.com/agent-engineering-studio/limen/tree/main/docs/misure).
+Il 16 novembre 2026 il comando ha letto tutto quello che il servizio teneva
+ancora: 155 giorni interi, dal 10 giugno al 15 novembre 2026. Il
+[rapporto](https://github.com/agent-engineering-studio/limen/blob/main/docs/misure/misura_radar_2026-06-10_2026-11-15.md) è pubblico e chiunque può rifarlo. Ecco che cosa dice.
+
+**L'archivio.** Il servizio dava ancora le immagini dal 9 giugno: 1.271
+«Merging» di tre ore e 3.838 immagini orarie del solo radar. Otto «Merging»
+non c'erano più, sei del 25 e 26 giugno e due del 7 novembre. Tutto quello
+che è stato pubblicato prima del 9 giugno non si può più avere.
+
+**L'allerta e la pioggia.** Su 155 giorni e 187 zone, quasi 29.000 coppie
+zona-giorno:
+
+| Colore annunciato | Zone-giorno | Pioggia media sulla zona (mediana) | Punto più piovoso (mediana) |
+|---|---|---|---|
+| nessuna allerta | 25.238 | 0 mm | 0,4 mm |
+| gialla | 3.386 | 4,5 mm | 23 mm |
+| arancione | 355 | 22 mm | 48 mm |
+| rossa | 6 | 63 mm | 161 mm |
+
+La scala tiene: più alto il colore, più pioggia è caduta. Ma non è una
+regola. In 604 zone-giorno senza allerta, il 2,4 %, un punto ha avuto più
+di 50 mm. E una zona arancione o rossa su quattro ha avuto meno di 10 mm in
+media. Non è un voto al bollettino: l'allerta parla di frane, piene e
+temporali, non di millimetri, e le rosse sono solo sei.
+
+**Dove il radar vede bene.** Su 8.577 riquadri di dieci chilometri con
+almeno cinque giorni di pioggia, il solo radar e il «Merging» vanno
+d'accordo: il rapporto di mezzo è 1,01. In un riquadro su cento il radar
+vede meno della metà della pioggia; in sei su cento ne vede una volta e
+mezza di più. I riquadri peggiori sono a ovest della Sicilia, intorno a
+Trapani. Due riquadri vicino a Foggia mostrano un'altra cosa: lì il
+«Merging» segna pioggia in giorni in cui il radar e i riquadri accanto non
+ne vedono. Può essere un pluviometro guasto: è un'ipotesi, e l'abbiamo
+scritta nella lettera al Dipartimento.
+
+**L'ora ricostruita.** Messa accanto a 262 pluviometri lombardi, su quasi
+47.000 ore di pioggia:
+
+| Lettura | Errore medio | Errore tipico | Ore oltre 30 mm colte | Ore oltre 30 mm che il pluviometro non ha |
+|---|---|---|---|---|
+| solo radar | +1,1 mm | 2,3 mm | 31 su 132 | 155 |
+| ora ricostruita | 0,0 mm | 1,0 mm | 44 su 132 | 14 |
+
+L'ora ricostruita sbaglia meno della metà del solo radar e quasi non grida
+al lupo. Ma delle ore più violente ne coglie una su tre: il «Merging» di
+tre ore spalma il nubifragio. Due avvertenze: una parte di questi
+pluviometri è già dentro il «Merging», quindi il confronto non è
+indipendente; e un pluviometro misura un secchio, il radar un chilometro
+quadrato.
 
 ## Per approfondire
 
