@@ -161,7 +161,11 @@ gap si chiude dentro Limen.
 
 I primi quattro riguardano dati che solo chi li produce può pubblicare: le
 issue servono a scrivere la richiesta alla Protezione civile e a misurare,
-nel frattempo, quello che si può con i dati che ci sono.
+nel frattempo, quello che si può con i dati che ci sono. La richiesta è
+scritta
+([lettera](https://github.com/agent-engineering-studio/limen/blob/main/docs/lettere/2026-11-richiesta-radar-dpc.md))
+e le misure si fanno con un solo comando, `limen misura-radar`; i numeri
+arriveranno quando il comando avrà letto l'archivio completo.
 
 | Capitolo | Gap | Proposta di open data | Issue |
 |---|---|---|---|

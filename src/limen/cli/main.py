@@ -25,6 +25,7 @@ Usage:
     limen restore            Ripristina un backup (`--conferma`: sovrascrive il database).
     limen static-snapshot    Fattori per cella senza raster: export|import|elenco|pacchetto (#406).
     limen radar-archivio     Salva il radar DPC «Merging» prima che il DPC lo perda.
+    limen misura-radar       Copertura, bollettini, qualità e ore dell'archivio «Merging».
     limen fwi-pioggia        Rifà la catena FWI con la pioggia misurata dal DPC.
     limen ingest-fire-history  FIRMS country archive (2000+), fire_density + truth set.
     limen effis-sync         Perimetri di area bruciata EFFIS: truth set del backtest incendio.
@@ -108,6 +109,7 @@ from limen.cli.mcp_serve import run as _run_mcp_serve
 from limen.cli.migrate import run as _run_migrate
 from limen.cli.misura import build_subparser as _build_misura_subparser
 from limen.cli.misura import run as _run_misura
+from limen.cli.misura_radar import run as _run_misura_radar
 from limen.cli.misura_swi import run as _run_misura_swi
 from limen.cli.monitor_once import run as _run_monitor_once
 from limen.cli.partitions import run as _run_partitions
@@ -180,6 +182,11 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "idrometri-misura",
         help="misura: gli idrometri Arpae separano i giorni di piena EMS? (#501)",
+    )
+    sub.add_parser(
+        "misura-radar",
+        help="misura: copertura, bollettini, qualità e ore dell'archivio «Merging» (#625-#629; "
+        "RADAR_ARCHIVE__CARTELLA, LIMEN_RADAR_DAL / _AL / _MISURE)",
     )
     sub.add_parser(
         "misura-swi",
@@ -522,6 +529,7 @@ def main(argv: list[str] | None = None) -> int:
         "idrometri-misura": _run_idrometri_misura,
         "fedelta-racconti": _run_fedelta_racconti,
         "raccolta-eventi": _run_raccolta_eventi,
+        "misura-radar": _run_misura_radar,
         "misura-swi": _run_misura_swi,
         "partitions": _run_partitions,
         "seed": _run_seed,

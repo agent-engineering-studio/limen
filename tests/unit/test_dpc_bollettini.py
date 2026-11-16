@@ -129,3 +129,26 @@ async def test_scarica_legge_oggi_e_domani(monkeypatch: pytest.MonkeyPatch) -> N
     assert b is not None
     assert b.name == "20261005_1417"
     assert [z.valid for z in b.zones] == [date(2026, 10, 5), date(2026, 10, 6)]
+
+
+async def test_i_nomi_sono_tutto_l_archivio_in_ordine(monkeypatch: pytest.MonkeyPatch) -> None:
+    _rete(
+        monkeypatch,
+        {
+            f"{_API}/git/trees/master": _albero({"path": "files", "sha": "f"}),
+            f"{_API}/git/trees/f": _albero({"path": "geojson", "sha": "g"}),
+            f"{_API}/git/trees/g": _albero(
+                {"path": "20261005_1417_today.json"},
+                {"path": "20261005_1417_tomorrow.json"},
+                {"path": "20261004_1400_today.json"},
+            ),
+        },
+    )
+    assert await bollettini.nomi() == ["20261004_1400_today.json", "20261005_1417_today.json"]
+
+
+async def test_senza_la_cartella_dei_bollettini_i_nomi_sono_vuoti(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _rete(monkeypatch, {f"{_API}/git/trees/master": _albero({"path": "altro", "sha": "x"})})
+    assert await bollettini.nomi() == []

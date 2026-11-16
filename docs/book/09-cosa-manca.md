@@ -129,7 +129,9 @@ casella vuota a una disponibilità inventata.
   punteggi. Per un giorno il confronto è fatto: il 10 ottobre 2026 nelle zone
   in arancione sono caduti 28 mm in media sulla zona, in quelle gialle 11,
   in quelle senza allerta zero ([appendice E](appendice-e-radar.md)).
-  Farlo in modo sistematico, giorno per giorno, è un lavoro da fare
+  Per farlo in modo sistematico, giorno per giorno, lo strumento ora c'è
+  (`limen misura-radar`); mancano i numeri sull'archivio completo e il
+  confronto con la classe data da Limen nella stessa zona
   ([#629](https://github.com/agent-engineering-studio/limen/issues/629)).
 
 ??? note "Per chi sviluppa"
