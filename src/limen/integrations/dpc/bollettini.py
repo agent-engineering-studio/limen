@@ -19,7 +19,7 @@ from typing import Any
 
 import httpx
 from dpc_radar import DpcRadarError
-from dpc_radar.bulletins import Bulletin, fetch, latest_name
+from dpc_radar.bulletins import API, Bulletin, fetch, issued, latest_name
 from tenacity import RetryError
 
 from limen.core.logging import get_logger
@@ -35,6 +35,7 @@ _DEGRADO: tuple[type[Exception], ...] = (
     ValueError,
     DpcRadarError,
 )
+_SENZA_ELENCO: tuple[type[Exception], ...] = (*_DEGRADO, StopIteration)
 
 
 async def _send(method: str, url: str, **kwargs: Any) -> httpx.Response:
@@ -48,6 +49,24 @@ async def ultimo_nome() -> str | None:
     except _DEGRADO as exc:
         log.warning("integration.degraded", source="dpc_bollettini", error=str(exc))
         return None
+
+
+async def nomi() -> list[str]:
+    """Tutti i bollettini dell'archivio (``…_today.json``), dal più vecchio; ``[]`` se non si legge.
+
+    Tre chiamate all'albero del repository, come :func:`ultimo_nome`: serve al
+    confronto con la pioggia caduta (#629), che vuole il bollettino di ogni giorno.
+    """
+    try:
+        cartella = f"{API}/git/trees/master"
+        for ramo in ("files", "geojson"):
+            albero = (await _send("GET", cartella)).json()["tree"]
+            cartella = f"{API}/git/trees/" + next(t["sha"] for t in albero if t["path"] == ramo)
+        elenco = (await _send("GET", cartella)).json()["tree"]
+    except _SENZA_ELENCO as exc:
+        log.warning("integration.degraded", source="dpc_bollettini", error=str(exc))
+        return []
+    return sorted(t["path"] for t in elenco if issued(t["path"]) is not None)
 
 
 async def scarica(nome: str) -> Bulletin | None:

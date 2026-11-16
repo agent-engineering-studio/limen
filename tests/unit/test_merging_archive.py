@@ -192,3 +192,15 @@ async def test_un_fotogramma_fallito_e_un_degrado(
     assert [e["source"] for e in logs if e["event"] == "integration.degraded"] == [
         "dpc_merging_archive"
     ]
+
+
+def test_leggi_da_il_fotogramma_o_niente(tmp_path: Path) -> None:
+    fine = _T + timedelta(hours=3)
+    _tif(percorso(tmp_path, "CUM3", fine), 12.0)
+    archivio = MergingArchive(tmp_path)
+    letto = archivio.leggi("CUM3", fine)
+    assert letto is not None
+    assert letto.data.shape == (5, 5)
+    assert float(letto.data[0, 0]) == 12.0
+    assert archivio.leggi("CUM3", fine + timedelta(hours=3)) is None
+    assert merging_archive.PASSI == {"CUM3": 3, "SRT1": 1}

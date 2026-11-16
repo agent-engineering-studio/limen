@@ -21,6 +21,7 @@ from datetime import UTC, datetime, timedelta
 from functools import cache
 from pathlib import Path
 
+from dpc_radar import RainGrid
 from dpc_radar import archive as dpc_archive
 
 from limen.core.logging import get_logger
@@ -31,6 +32,8 @@ log = get_logger(__name__)
 
 percorso = dpc_archive.path
 istanti = dpc_archive.times
+#: Prodotto archiviato → ore fra due fotogrammi.
+PASSI = dpc_archive.STEPS
 
 #: Le 48 ore dello sweep toccano fino a 51 SRT1 e 17 CUM3, ~6,5 MB l'uno.
 #: Con margine: a cache piena giusta, un fotogramma in più fa girare l'LRU
@@ -107,6 +110,10 @@ class MergingArchive:
     ) -> dict[datetime, list[float | None]]:
         """Pioggia di ogni ora ``(h-1, h]`` in ``(start, end]``, per punto (mm)."""
         return self._archivio.hourly(points, start, end)
+
+    def leggi(self, prodotto: str, istante: datetime) -> RainGrid | None:
+        """Un fotogramma dell'archivio, o ``None`` se manca o non si legge."""
+        return self._archivio.read(prodotto, istante)
 
 
 def pioggia_dal_radar(

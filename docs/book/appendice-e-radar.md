@@ -342,6 +342,27 @@ Ci sono anche quattro piccoli programmi, ciascuno in un solo file:
 
 Le righe sono riportate nel [registro dei gap](appendice-d-gap.md).
 
+I primi quattro gap li può chiudere solo la Protezione civile: la richiesta
+è scritta, pronta da inviare, in una
+[lettera](https://github.com/agent-engineering-studio/limen/blob/main/docs/lettere/2026-11-richiesta-radar-dpc.md)
+pubblica. Nel frattempo Limen misura quello che può. Un solo comando,
+`limen misura-radar`, legge l'archivio e scrive un rapporto con cinque
+parti: quante immagini ci sono mese per mese e quante erano già perse;
+quante richieste Limen fa al servizio; la pioggia caduta in ogni zona di
+allerta accanto al colore annunciato, per tutti i giorni dell'archivio;
+quanto vede il solo radar rispetto al «Merging», riquadro per riquadro di
+dieci chilometri; e l'ora ricostruita messa a confronto con i pluviometri
+della Lombardia.
+
+Una cosa si può già dire. Per venti aree sorvegliate Limen fa circa 750
+richieste al giorno al servizio, una ogni due minuti, e scarica circa 180
+immagini. Il servizio non dichiara un limite; Limen se ne dà uno da solo:
+meno di mille richieste al giorno.
+
+I numeri delle altre quattro parti non sono ancora in questa pagina: il
+comando deve girare sull'archivio completo, e i rapporti saranno pubblicati
+fra le [misure](https://github.com/agent-engineering-studio/limen/tree/main/docs/misure).
+
 ## Per approfondire
 
 - La documentazione di dpc-radar, con la teoria, gli esempi e il banco di

@@ -311,6 +311,35 @@ Il lifespan va in crash su:
   prod si usa un host Ollama con modello qwen; il resolver ricade su
   Ollama se manca l'SDK del provider cloud.
 
+## Richieste al servizio radar del DPC
+
+Il servizio `radar-api.protezionecivile.it` non ha condizioni d'uso scritte né
+un limite di richieste dichiarato (#627). Finché il Dipartimento non ne indica
+uno, Limen si dà questo tetto: **meno di 1.000 richieste al giorno** a regime
+per un'installazione con 20 aree monitorate, più il primo recupero
+dell'archivio, di notte, entro `RADAR_ARCHIVE__FILE_PER_NOTTE` (1.500).
+
+Il conto, dalla configurazione predefinita:
+
+| per che cosa | ogni quanto | richieste al servizio | file |
+|---|---|---|---|
+| sveglia (SRI) | 15 minuti (`NOWCAST__INTERVAL_MINUTES`) | 192 | 96 |
+| pioggia caduta (CUM) | giro orario, per ogni area | 528 | 48 |
+| catena degli incendi (CUM24) | una volta a notte | 2 | 2 |
+| archivio (CUM3 e SRT1) | una volta a notte | 32 | 32 |
+| **totale** | | **754** | **178** |
+
+Un fotogramma costa due richieste al servizio (qual è l'ultimo, e il link) e
+un file scaricato dal link; la pioggia caduta chiede qual è l'ultimo per ogni
+area e scarica solo i fotogrammi nuovi. I bollettini non passano da questo
+servizio: si leggono da GitHub.
+
+`limen misura-radar` rifà il conto con la configurazione in uso
+(`LIMEN_RADAR_AREE` per il numero di aree) e lo scrive nel report. Prima di
+abbassare l'intervallo della sveglia o del giro orario, o di aggiungere aree
+oltre le 20, rifare il conto: se supera il tetto, la scelta va scritta qui.
+I file scaricati si contano nei log (`dpc.radar.fetched`, `dpc.archivio.done`).
+
 ## Osservabilità
 
 Avviare lo stack Grafana LGTM accanto alla demo:
