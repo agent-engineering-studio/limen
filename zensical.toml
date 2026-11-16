@@ -35,6 +35,7 @@ nav = [
     { "B. Bibliografia" = "appendice-b-bibliografia.md" },
     { "C. Indice delle librerie" = "appendice-c-librerie.md" },
     { "D. Registro dei gap" = "appendice-d-gap.md" },
+    { "E. Il radar, da vicino" = "appendice-e-radar.md" },
   ] },
 ]
 

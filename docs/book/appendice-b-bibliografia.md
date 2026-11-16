@@ -40,6 +40,11 @@ nei capitoli, accanto al punto in cui servono.
   occurrence in Italy. *Geomorphology* 290, 39-57.
   <https://doi.org/10.1016/j.geomorph.2017.03.031>
 
+## Radar e pioggia
+
+- Marshall, J. S., Palmer, W. McK. (1948). The distribution of raindrops
+  with size. *Journal of Meteorology* 5, 165-166.
+
 ## Incendi
 
 - Copernicus Emergency Management Service. *EFFIS, European Forest Fire
@@ -88,11 +93,17 @@ nei capitoli, accanto al punto in cui servono.
   <https://land.copernicus.eu/en/products/soil-moisture>
 - Copernicus Land Monitoring Service. *EGMS, European Ground Motion
   Service*. <https://egms.land.copernicus.eu>
+- Dipartimento della Protezione Civile. *Bollettini di criticità
+  idrogeologica e idraulica*, in formato aperto dal 2020, CC BY 4.0.
+  <https://github.com/pcm-dpc/DPC-Bollettini-Criticita-Idrogeologica-Idraulica>
 - Dipartimento della Protezione Civile. *Radar meteo nazionale*.
   <https://radar.protezionecivile.it>
 - ECMWF. *Open data*. <https://www.ecmwf.int/en/forecasts/datasets/open-data>
 - Eurostat GISCO. *GEOSTAT, griglia europea della popolazione*.
   <https://ec.europa.eu/eurostat/web/gisco/geodata/population-distribution/geostat>
+- Fondazione Bruno Kessler. *IT-DPC-SRI*, il mosaico radar della Protezione
+  civile dal 2010 al 2025. Zenodo, CC BY-SA 4.0.
+  <https://doi.org/10.5281/zenodo.18637608>
 - INGV. *Terremoti* e *ShakeMap*. <https://terremoti.ingv.it>;
   <https://shakemap.ingv.it>
 - JRC, Copernicus. *Global Human Settlement Layer*.

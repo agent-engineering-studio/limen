@@ -77,6 +77,7 @@ formule): chi non scrive programmi può ignorarli senza perdere il filo.
 | B | [Bibliografia](appendice-b-bibliografia.md) | articoli, rapporti, dati |
 | C | [Indice delle librerie](appendice-c-librerie.md) | una riga per ogni libreria, con licenza e link |
 | D | [Registro dei gap](appendice-d-gap.md) | tutti i gap del libro, con la proposta di open data e la issue |
+| E | [Il radar, da vicino](appendice-e-radar.md) | come un radar misura la pioggia, perché sbaglia, i dati aperti della Protezione civile e come leggerli |
 
 ## Una promessa sui numeri
 

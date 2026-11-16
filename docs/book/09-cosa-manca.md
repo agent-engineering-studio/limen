@@ -126,8 +126,11 @@ casella vuota a una disponibilità inventata.
   fresca che esista, ma vanno controllate una per una.
 - **Bollettini ufficiali di allerta.** La Protezione civile pubblica i
   bollettini di criticità in formato aperto; Limen li mostra accanto ai suoi
-  punteggi. Confrontarli in modo sistematico, giorno per giorno, è un lavoro
-  da fare.
+  punteggi. Per un giorno il confronto è fatto: il 10 ottobre 2026 nelle zone
+  in arancione sono caduti 28 mm in media sulla zona, in quelle gialle 11,
+  in quelle senza allerta zero ([appendice E](appendice-e-radar.md)).
+  Farlo in modo sistematico, giorno per giorno, è un lavoro da fare
+  ([#629](https://github.com/agent-engineering-studio/limen/issues/629)).
 
 ??? note "Per chi sviluppa"
     - Le prove citate: #282 (EDO, `scoring-analyst`, 1.117 frane contro 5.171
