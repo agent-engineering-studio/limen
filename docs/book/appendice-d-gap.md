@@ -156,3 +156,17 @@ gap si chiude dentro Limen.
       il numero va qui e nel capitolo.
     - Quando un gap si chiude: la riga resta, con il numero della PR e la
       misura che l'ha chiuso, finché il capitolo non viene riscritto.
+
+## Appendice E. [Il radar, da vicino](appendice-e-radar.md)
+
+I primi quattro riguardano dati che solo chi li produce può pubblicare: le
+issue servono a scrivere la richiesta alla Protezione civile e a misurare,
+nel frattempo, quello che si può con i dati che ci sono.
+
+| Capitolo | Gap | Proposta di open data | Issue |
+|---|---|---|---|
+| E | Il «Merging» (radar corretto con i pluviometri) non ha un archivio pubblico: dopo circa cinque mesi sparisce. | un archivio permanente del «Merging» con un DOI, come [IT-DPC-SRI](https://doi.org/10.5281/zenodo.18637608) per il solo radar | [#625](https://github.com/agent-engineering-studio/limen/issues/625) |
+| E | Non esiste un «Merging» di un'ora: Limen lo ricostruisce da quello di tre ore. | la cumulata oraria corretta con i pluviometri, pubblicata accanto a quelle di 3-24 ore | [#626](https://github.com/agent-engineering-studio/limen/issues/626) |
+| E | Il servizio del radar non ha un manuale pubblico né condizioni d'uso scritte. | la documentazione del servizio e una pagina di condizioni d'uso | [#627](https://github.com/agent-engineering-studio/limen/issues/627) |
+| E | Non è pubblicata una mappa di qualità del radar: dove vede bene e dove no. | la mappa della copertura e della qualità del mosaico, e la posizione dei pluviometri usati | [#628](https://github.com/agent-engineering-studio/limen/issues/628) |
+| E | Il confronto fra allerta ufficiale e pioggia caduta è fatto su singoli giorni. | c'è già: i [bollettini dal 2020](https://github.com/pcm-dpc/DPC-Bollettini-Criticita-Idrogeologica-Idraulica) (CC BY 4.0) e l'archivio del «Merging» | [#629](https://github.com/agent-engineering-studio/limen/issues/629) |

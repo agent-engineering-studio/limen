@@ -67,6 +67,11 @@ periodo già avvenuto, come se non si sapesse come è andata, e contare quanti
 eventi veri aveva visto prima. È il modo onesto di dire se un sistema
 funziona. *Cap. [1](01-il-problema.md), [5](05-misurare.md), [8](08-trasparenza.md).*
 
+**Bollettino di criticità** — Il documento con cui la Protezione civile
+pubblica ogni pomeriggio il colore dell'allerta di oggi e di domani, zona per
+zona. Dal 2020 esiste anche come dato aperto. Vedi *allertamento ufficiale*.
+*Cap. [9](09-cosa-manca.md). *App. [E](appendice-e-radar.md).**
+
 **Briefing** — Il breve testo in italiano che accompagna la situazione di una
 regione, scritto da un modello linguistico *dopo* che i numeri sono stati
 calcolati. Non può cambiarli. *Cap. [1](01-il-problema.md), [6](06-ml-e-ai.md).*
@@ -176,6 +181,10 @@ con una licenza che lo permette. Limen usa solo dati aperti. *Cap. [1](01-il-pro
 **Dati di base** — La sezione della scheda di una cella che mostra, per ogni
 ingrediente del calcolo, il valore, la fonte e la licenza. *Esempio:* «suolo
 impermeabilizzato 42 %», con accanto la frase di Copernicus. *Cap. [8](08-trasparenza.md).*
+
+**dBZ** — L'unità in cui si misura la forza dell'eco del radar (la
+*riflettività*). Ogni 10 dBZ in più l'eco è dieci volte più forte.
+*Esempio:* 20 dBZ è pioviggine, 50 dBZ un nubifragio. *App. [E](appendice-e-radar.md).*
 
 **DCAT-AP_IT** — Il modo comune, italiano ed europeo, di descrivere un
 insieme di dati (chi lo pubblica, che cosa contiene, con quale licenza)
@@ -333,6 +342,11 @@ risultati in italiano; può girare in casa o in cloud (per esempio Claude).
 AI chiedono dati a un programma. Limen lo usa per rispondere, per esempio,
 «qual è il rischio in questo Comune?». *Cap. [2](02-le-librerie.md), [10](10-partecipare.md).*
 
+**Merging** — Il prodotto della Protezione civile che unisce radar e
+pluviometri: il radar dà la forma della pioggia, i pluviometri correggono la
+quantità. È la pioggia misurata più affidabile che esista in Italia.
+*Cap. [3](03-i-dati.md), [4](04-i-motori.md). *App. [E](appendice-e-radar.md).**
+
 **Migrazione** — Un file numerato che descrive un cambiamento nella
 struttura del database. Una volta applicato non si tocca più: per correggere
 se ne aggiunge un altro. *Cap. [8](08-trasparenza.md).*
@@ -346,6 +360,9 @@ Un dato mancante non deve mai sembrare una giornata tranquilla. *Cap. [1](01-il-
 **Modello in ombra** — Vedi *campione e sfidante*: un modello che gira sugli
 stessi dati, scrive i suoi risultati a parte e non tocca mappa né avvisi.
 *Cap. [1](01-il-problema.md), [6](06-ml-e-ai.md).*
+
+**Mosaico radar** — L'immagine unica dell'Italia ottenuta cucendo insieme
+le immagini di tutti i radar della rete nazionale. *App. [E](appendice-e-radar.md).*
 
 **Motore** — La parte di Limen che trasforma i dati in un punteggio. Ce n'è
 uno per pericolo: frana, alluvione, incendio. *Cap. [1](01-il-problema.md), [4](04-i-motori.md).*
@@ -443,11 +460,17 @@ un pericolo in un dato momento. Diventa una delle cinque *classi*. *Cap. [1](01-
 **PyPI** — L'archivio pubblico dei pacchetti per il linguaggio Python, da cui
 chiunque può scaricare le librerie di Limen. *Cap. [2](02-le-librerie.md).*
 
+## Q
+
+**Quaderno** (in inglese *notebook*) — Una pagina che mescola testo,
+programma e risultati: si legge come un articolo e si può rieseguire. *App. [E](appendice-e-radar.md).*
+
 ## R
 
 **Radar meteo** — Lo strumento che vede la pioggia mentre cade, su tutta
-Italia. Quello della Protezione civile è uno degli ingredienti di Limen.
-*Cap. [1](01-il-problema.md), [3](03-i-dati.md).*
+Italia, ascoltando l'eco che le gocce rimandano. Quello della Protezione
+civile è uno degli ingredienti di Limen.
+*Cap. [1](01-il-problema.md), [3](03-i-dati.md). App. [E](appendice-e-radar.md).*
 
 **README** — Il file di presentazione di un progetto, il primo che si legge
 quando lo si apre sulla piattaforma GitHub. *Cap. [1](01-il-problema.md), [2](02-le-librerie.md), [6](06-ml-e-ai.md), [10](10-partecipare.md).*
@@ -455,6 +478,10 @@ quando lo si apre sulla piattaforma GitHub. *Cap. [1](01-il-problema.md), [2](02
 **Rianalisi** — Una ricostruzione del meteo passato, fatta con modelli e
 osservazioni. È precisa a grandi linee, ma può perdere un temporale
 localizzato. *Cap. [1](01-il-problema.md), [5](05-misurare.md).*
+
+**Riflettività** — Quanto è forte l'eco che le gocce rimandano al radar. Da
+qui il radar stima la pioggia; dipende molto dalla grandezza delle gocce, ed
+è per questo che la stima può sbagliare. Si misura in *dBZ*. *App. [E](appendice-e-radar.md).*
 
 **Riproducibilità** — La possibilità, per chiunque, di rifare un calcolo con
 gli stessi ingredienti e ottenere lo stesso risultato. *Cap. [8](08-trasparenza.md).*
@@ -493,6 +520,11 @@ del totale. *Esempio:* il punteggio della frana somma il posto, la pioggia, i
 terremoti, gli incendi passati e i fiumi, ognuno con il suo peso. *Cap. [4](04-i-motori.md).*
 
 **Spin-up** — Vedi *rodaggio*. *Cap. [3](03-i-dati.md), [5](05-misurare.md).*
+
+**SRI, SRT1, CUM** — I nomi dei prodotti del radar della Protezione civile.
+SRI è quanto forte piove adesso; SRT1 la pioggia dell'ultima ora, dal solo
+radar; CUM3, CUM6, CUM12 e CUM24 la pioggia delle ultime 3-24 ore, corretta
+con i pluviometri (vedi *Merging*). *App. [E](appendice-e-radar.md).*
 
 **STAC** — Un catalogo standard delle immagini da satellite: che cosa c'è,
 dove, quando. Limen lo usa per cercare le immagini radar delle alluvioni.

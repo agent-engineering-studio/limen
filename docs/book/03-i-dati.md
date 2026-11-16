@@ -390,14 +390,32 @@ temporale localizzato le due possono differire molto.
 
 **Cosa misura.** La rete radar nazionale della Protezione civile misura la
 pioggia che sta cadendo, su tutta Italia, a un chilometro e ogni cinque
-minuti. Il prodotto «Merging» la corregge con i pluviometri a terra.
+minuti. Ne escono due famiglie di dati. Il **radar da solo** dice quanto
+forte piove adesso e quanta pioggia è caduta nell'ultima ora. Il
+**«Merging»** corregge il radar con i pluviometri a terra e dà la pioggia
+delle ultime 3, 6, 12 e 24 ore, aggiornata ogni mezz'ora.
 
 **A cosa serve.** È la **pioggia già caduta**, che le previsioni non vedono.
-A Melito di Porto Salvo, il 10 ottobre 2026, la previsione dava 20 mm e il
-radar ne aveva già misurati 152[^199]. Da allora l'alluvione usa il maggiore
-fra la pioggia prevista e quella già caduta più quella prevista per le ore
-che restano. Il radar fa anche da **sveglia**: oltre 30 mm all'ora su un
-pezzo di regione, quella regione si ricalcola subito senza aspettare l'ora.
+A Melito di Porto Salvo, la mattina del 10 ottobre 2026, la previsione dava
+20 mm e il radar ne aveva già misurati 152[^199]; a fine giornata erano
+192. Limen lo usa in quattro modi.
+
+- **Nell'alluvione**: vale il maggiore fra la pioggia prevista e quella già
+  caduta più quella prevista per le ore che restano.
+- **Come sveglia**: ogni quarto d'ora Limen guarda l'ultima immagine; oltre
+  30 mm all'ora su un pezzo di regione, quella regione si ricalcola subito
+  senza aspettare l'ora.
+- **Per l'indice degli incendi**: per i giorni già passati la pioggia viene
+  dal «Merging» e non dal modello meteo, che non vede i temporali.
+- **Per rigiocare il passato**: ogni notte Limen salva il «Merging» nel
+  proprio archivio ([capitolo 5](05-misurare.md)).
+
+**Quanto fidarsi.** Il radar non misura la pioggia: la stima dall'eco delle
+gocce, e guarda a chilometri di quota. Da solo sbaglia nei due sensi. A
+Melito, quel giorno, ha visto 115 mm su 192, sei decimi; sull'insieme dell'area colpita ne
+ha visti invece circa il 12 % in più dei pluviometri. Per i millimetri vale il «Merging»; il radar da
+solo serve a sapere *quando* e *dove*. L'[appendice E](appendice-e-radar.md)
+spiega il perché, con le figure.
 
 **La lezione del dato impossibile.** Dall'11 ottobre al 3 novembre 2026 una
 delle serie del radar è arrivata a tratti corrotta: l'11 ottobre una cella
@@ -407,6 +425,18 @@ che un filtro semplice lasciava passare ai bordi. Limen ora confronta ogni
 mappa con quella di mezz'ora prima e, se il salto è implausibile, la scarta e
 usa la precedente[^429]. Un dato pubblico va sempre controllato, anche quando
 viene dalla fonte più autorevole.
+
+**Che cosa manca.** Quattro cose, tutte nelle mani di chi produce il dato.
+Il servizio tiene circa cinque mesi di immagini e il «Merging» non ha un
+archivio pubblico
+([#625](https://github.com/agent-engineering-studio/limen/issues/625)). Non
+esiste un «Merging» di un'ora, che è il tempo delle piene improvvise: Limen
+lo ricostruisce
+([#626](https://github.com/agent-engineering-studio/limen/issues/626)). Il
+servizio non ha un manuale né condizioni d'uso scritte
+([#627](https://github.com/agent-engineering-studio/limen/issues/627)). E
+non è pubblicata una mappa di dove il radar vede bene e dove no
+([#628](https://github.com/agent-engineering-studio/limen/issues/628)).
 
 **Licenza.** CC BY-SA 4.0.
 
@@ -709,6 +739,13 @@ corrispondente.
 - **Nuova versione del modello del terreno.** La 1.3 del CNR-IRPI è uscita il 6
   novembre 2026; Limen usa la 1.2. Prima di cambiare, va misurato quanto
   cambiano le pendenze. *([#468](https://github.com/agent-engineering-studio/limen/issues/468))*
+- **Il radar: archivio, ora singola, manuale, qualità.** Il «Merging» sparisce
+  dopo cinque mesi e nessuno lo archivia in pubblico; non esiste di un'ora;
+  il servizio non ha un manuale né condizioni d'uso; non c'è una mappa di
+  dove il radar vede bene. Sono richieste da fare alla Protezione civile, con
+  una misura da fare intanto con i dati che ci sono. Il dettaglio è
+  nell'[appendice E](appendice-e-radar.md).
+  *([#625](https://github.com/agent-engineering-studio/limen/issues/625), [#626](https://github.com/agent-engineering-studio/limen/issues/626), [#627](https://github.com/agent-engineering-studio/limen/issues/627), [#628](https://github.com/agent-engineering-studio/limen/issues/628))*
 
 ## Per approfondire
 

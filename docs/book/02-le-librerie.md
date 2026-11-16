@@ -231,20 +231,42 @@ e per studiare i mesi dopo il terremoto del Centro Italia del 2016.
 
 *Documentazione: [agentengineering.it/dpc-radar](https://agentengineering.it/dpc-radar/) · codice su [GitHub](https://github.com/agent-engineering-studio/dpc-radar).*
 
-**Il problema.** Il radar meteo nazionale della Protezione civile vede la
-pioggia ogni pochi minuti, con un dettaglio di un chilometro. È il dato che
-dice cosa sta cadendo *adesso*, mentre le previsioni dicono cosa cadrà.
+**Il problema.** Una previsione dice che cosa probabilmente cadrà su un'area
+larga. Il radar dice che cosa sta cadendo, qui e adesso: la rete nazionale
+della Protezione civile vede la pioggia su tutta Italia, con un dettaglio di
+un chilometro, ogni cinque minuti. I dati sono aperti, ma usarli bene non è
+immediato: il servizio non ha un manuale, tiene solo cinque mesi di immagini
+e ogni tanto ne pubblica una rovinata.
 
-**Cosa fa.** Legge i prodotti aperti del radar: la pioggia di questo momento,
-quella accumulata nelle ultime ore (il radar corretto con i pluviometri a
-terra), l'archivio e i bollettini di allerta.
+**Cosa fa.** Quattro cose.
 
-**Come la usa Limen.** Per la pioggia già caduta nel punteggio
-dell'alluvione (il caso di Melito, capitolo 1), per ricalcolare subito una
-regione sotto un temporale e per confrontare Limen con i bollettini
-ufficiali. Sa anche riconoscere un'immagine radar rovinata: l'11 ottobre 2026
-un errore del prodotto mostrava 7.348 millimetri di pioggia in un giorno, più
-di quanto cade in cinque anni in molte città italiane.
+- **Legge la pioggia**: quanto forte piove adesso, e quanta ne è caduta
+  nelle ultime 3, 6, 12 e 24 ore. Queste cumulate sono il «Merging»: il
+  radar corretto con i pluviometri a terra.
+- **Controlla le immagini.** L'11 ottobre 2026 un errore del prodotto
+  mostrava 7.348 millimetri di pioggia in un giorno, più di quanto cade in
+  cinque anni in molte città italiane. La libreria confronta ogni immagine
+  con la precedente e scarta quelle impossibili.
+- **Tiene un archivio**, perché quello che non si salva in tempo è perso, e
+  ne ricava la pioggia **ora per ora**, che la Protezione civile non
+  pubblica in forma corretta.
+- **Legge i bollettini ufficiali di allerta** e dice quale colore vale in
+  un punto, per oggi e per domani.
+
+**Come la usa Limen.** In cinque punti: la pioggia già caduta nel punteggio
+dell'alluvione (il caso di Melito, capitolo 1); la «sveglia» che fa
+ricalcolare subito una regione sotto un temporale; il controllo delle
+immagini guaste; la pioggia dei giorni passati per l'indice degli incendi;
+i bollettini ufficiali mostrati accanto ai punteggi. Il [capitolo 3](03-i-dati.md)
+racconta il dato, l'[appendice E](appendice-e-radar.md) racconta il radar:
+come misura, perché sbaglia e quanto fidarsi.
+
+**Per provarla.** La libreria ha cinque quaderni che si aprono nel browser,
+senza installare niente, e quattro piccoli programmi d'esempio, fra cui un
+cruscotto della pioggia per qualunque Comune. Chi fa una mappa del temporale
+sul proprio paese può raccontarla nelle
+[discussioni](https://github.com/orgs/agent-engineering-studio/discussions)
+dell'organizzazione.
 
 ### glofas-ewds: la portata dei fiumi
 
