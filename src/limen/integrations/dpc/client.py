@@ -26,7 +26,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import httpx
-from dpc_radar import Absent, DpcRadarError, RadarClient, RainGrid
+from dpc_radar import Absent, DpcRadarError, NetworkStatus, RadarClient, RainGrid
 from tenacity import RetryError
 
 from limen.core.logging import get_logger
@@ -154,11 +154,34 @@ async def get_cum_at(hours: int, observed_at: datetime) -> RainGrid | None:
     return grid
 
 
+async def get_radar_status(at: datetime | None = None) -> NetworkStatus | None:
+    """Quali radar il visualizzatore del DPC dà per accesi, ora o ad ``at``.
+
+    ``None`` se non si sa: il file non c'è (il DPC ne tiene circa due
+    settimane) o non si legge. È un indizio, non una prova: il file non è
+    documentato né ha una licenza, e non sempre concorda con il mosaico (il 17
+    novembre 2026 dava Linate spento con dati tutto intorno, e Catania acceso
+    senza dati). Serve a spiegare un buco nei dati, mai a dire che sono buoni.
+    """
+    label = "dpc.radar_status"
+    try:
+        status = await RadarClient(send=_send).radar_status(at)
+    except _DEGRADATION_EXC as exc:
+        _degraded(label, exc)
+        return None
+    if isinstance(status, Absent):
+        _degraded(label, "no status file for that time")
+        return None
+    return status
+
+
 __all__ = [
     "CUM_PERIOD",
+    "NetworkStatus",
     "RainGrid",
     "get_cum_at",
     "get_latest_cum",
     "get_latest_sri",
+    "get_radar_status",
     "radar_archivio",
 ]

@@ -8,6 +8,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+* **`dpc-radar` 0.3.0, e lo stato dei radar.** `integrations.dpc.client.get_radar_status(at=None)`
+  dice quali radar il visualizzatore del DPC dà per accesi, ora o a un'ora
+  delle ultime due settimane; `None` se non si sa. Passa dal client condiviso
+  come il resto. È un indizio: il file non è documentato né ha una licenza, e
+  non sempre concorda con il mosaico (limen#643). Nessun motore lo usa ancora:
+  punteggi e allerte non cambiano.
 * **Dopo un terremoto forte, nella cella la soglia di pioggia scende, e risale
   piano (#441).** Un nuovo blocco opzionale in `landslide.yaml`,
   `seismic.soglia_pioggia` (`riduzione_max`, `memoria_giorni`,

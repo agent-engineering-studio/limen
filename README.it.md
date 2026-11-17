@@ -463,7 +463,7 @@ una libreria.
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) · [documentazione](https://agentengineering.it/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |
 | [`imageserver-export`](https://pypi.org/project/imageserver-export/) · [documentazione](https://agentengineering.it/imageserver-export/) | `~=0.2.0` | Apache-2.0 |
 | [`ingv-shakemap`](https://pypi.org/project/ingv-shakemap/) · [documentazione](https://agentengineering.it/ingv-shakemap/) | `~=0.2.0` | Apache-2.0 |
-| [`dpc-radar`](https://pypi.org/project/dpc-radar/) · [documentazione](https://agentengineering.it/dpc-radar/) | `~=0.2.1` | Apache-2.0 |
+| [`dpc-radar`](https://pypi.org/project/dpc-radar/) · [documentazione](https://agentengineering.it/dpc-radar/) | `~=0.3.0` | Apache-2.0 |
 | [`glofas-ewds`](https://pypi.org/project/glofas-ewds/) · [documentazione](https://agentengineering.it/glofas-ewds/) | `~=0.2.0` | Apache-2.0 |
 | [`mcp-geo-server`](https://github.com/agent-engineering-studio/mcp-geo-server) · [documentazione](https://agentengineering.it/mcp-geo-server/) | immagine Docker, commit fissato | MIT |
 
