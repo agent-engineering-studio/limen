@@ -466,7 +466,7 @@ rule stays in Limen. The numbers that tune a hazard stay in
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) · [docs](https://agentengineering.it/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |
 | [`imageserver-export`](https://pypi.org/project/imageserver-export/) · [docs](https://agentengineering.it/imageserver-export/) | `~=0.2.0` | Apache-2.0 |
 | [`ingv-shakemap`](https://pypi.org/project/ingv-shakemap/) · [docs](https://agentengineering.it/ingv-shakemap/) | `~=0.2.0` | Apache-2.0 |
-| [`dpc-radar`](https://pypi.org/project/dpc-radar/) · [docs](https://agentengineering.it/dpc-radar/) | `~=0.2.1` | Apache-2.0 |
+| [`dpc-radar`](https://pypi.org/project/dpc-radar/) · [docs](https://agentengineering.it/dpc-radar/) | `~=0.3.0` | Apache-2.0 |
 | [`glofas-ewds`](https://pypi.org/project/glofas-ewds/) · [docs](https://agentengineering.it/glofas-ewds/) | `~=0.2.0` | Apache-2.0 |
 | [`mcp-geo-server`](https://github.com/agent-engineering-studio/mcp-geo-server) · [docs](https://agentengineering.it/mcp-geo-server/) | Docker image, pinned commit | MIT |
 

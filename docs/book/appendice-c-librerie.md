@@ -34,7 +34,7 @@ solo per scelta.
 | firms-client | ~= 0.5.0 | scarica i fuochi visti dal satellite e separa gli incendi dalle fonti di calore fisse | [documentazione](https://agentengineering.it/firms-client/) · [GitHub](https://github.com/agent-engineering-studio/firms-client) |
 | imageserver-export | ~= 0.2.0 | ricompone le mappe europee del suolo (cemento, alberi, acqua) | [documentazione](https://agentengineering.it/imageserver-export/) · [GitHub](https://github.com/agent-engineering-studio/imageserver-export) |
 | ingv-shakemap | ~= 0.2.0 | legge quanto ha tremato il suolo dopo un terremoto | [documentazione](https://agentengineering.it/ingv-shakemap/) · [GitHub](https://github.com/agent-engineering-studio/ingv-shakemap) |
-| dpc-radar | ~= 0.2.1 | legge la pioggia del radar della Protezione civile e i bollettini (vedi l'[appendice E](appendice-e-radar.md)) | [documentazione](https://agentengineering.it/dpc-radar/) · [GitHub](https://github.com/agent-engineering-studio/dpc-radar) |
+| dpc-radar | ~= 0.3.0 | legge la pioggia del radar della Protezione civile e i bollettini (vedi l'[appendice E](appendice-e-radar.md)) | [documentazione](https://agentengineering.it/dpc-radar/) · [GitHub](https://github.com/agent-engineering-studio/dpc-radar) |
 | glofas-ewds | ~= 0.2.0 | scarica la portata prevista e storica dei fiumi | [documentazione](https://agentengineering.it/glofas-ewds/) · [GitHub](https://github.com/agent-engineering-studio/glofas-ewds) |
 
 ??? note "Per chi sviluppa: dove sono usate"

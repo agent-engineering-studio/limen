@@ -256,3 +256,45 @@ async def test_nessun_prodotto_elencato_degrada_a_none(rete: _Rete) -> None:
         200, json={"lastProducts": []}
     )
     assert await client.get_latest_sri() is None
+
+
+# --- lo stato dei radar (dpc-radar 0.3) -------------------------------------
+
+_STATO = "https://s3-prod-dpc-radar-webp-cache.s3.eu-south-1.amazonaws.com/SITES"
+
+
+def _stato(spenti: tuple[str, ...]) -> dict[str, Any]:
+    """Un file di stato fatto come quello del DPC, con due radar."""
+    radar = [("LAURO", "Monte Lauro", 14.82, 37.12), ("LINATE", "Linate", 9.28, 45.34)]
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {"type": "MultiPoint", "coordinates": [[lon, lat]]},
+                "properties": {"nome": codice, "localita": luogo, "status": codice not in spenti},
+            }
+            for codice, luogo, lon, lat in radar
+        ],
+    }
+
+
+async def test_lo_stato_dei_radar_a_un_ora(rete: _Rete) -> None:
+    url = f"{_STATO}/2026/07/06/1200/sites.geojson"
+    rete.risposte[f"GET {url}"] = httpx.Response(200, json=_stato(("LAURO",)))
+    stato = await client.get_radar_status(_T)
+    assert stato is not None and stato.time == _T
+    assert [r.code for r in stato.off] == ["LAURO"]
+    assert stato.of("Monte Lauro") is False and stato.of("LINATE") is True
+    assert "origin" not in rete.viste[0].headers, "una richiesta semplice, senza intestazioni"
+
+
+async def test_lo_stato_che_non_c_e_o_non_si_legge_e_none(rete: _Rete) -> None:
+    url = f"{_STATO}/2026/07/06/1200/sites.geojson"
+    rete.risposte[f"GET {url}"] = httpx.Response(403, text="AccessDenied")
+    assert await client.get_radar_status(_T) is None
+    assert len(rete.viste) == 1, "il 403 di S3 è «non c'è»: non si ritenta"
+    rete.risposte[f"GET {url}"] = httpx.Response(200, json={"features": []})
+    assert await client.get_radar_status(_T) is None
+    rete.risposte[f"GET {url}"] = httpx.Response(503)
+    assert await client.get_radar_status(_T) is None
