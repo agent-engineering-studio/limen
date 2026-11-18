@@ -63,10 +63,10 @@ vi.mock("maplibre-gl", () => {
     }
   }
   return {
-    default: { Map: FakeMap, NavigationControl: class {}, Popup: class {}, addProtocol: () => {} },
     Map: FakeMap,
     NavigationControl: class {},
     Popup: class {},
+    addProtocol: () => {},
   };
 });
 

@@ -5,7 +5,7 @@
 
 import { useEffect, useRef } from "react";
 import type { JSX } from "react";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { config } from "../lib/env";
