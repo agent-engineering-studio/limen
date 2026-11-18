@@ -4,7 +4,7 @@
 
 import type { JSX } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 
 import FreshnessBadge from "../components/FreshnessBadge";
 import HazardSelector from "../components/HazardSelector";

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { Popover, Switch, UnstyledButton } from "@mantine/core";
 
 import CellPopup from "./components/CellPopup";
