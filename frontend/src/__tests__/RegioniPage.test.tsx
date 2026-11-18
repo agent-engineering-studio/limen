@@ -210,7 +210,7 @@ describe("RegioniPage e la mappa", () => {
   it("non tocca i filtri prima che lo stile sia caricato", async () => {
     // Il 7 ottobre 2026 la pagina era nera: `setFilter` prima del caricamento
     // dello stile lancia in MapLibre, e l'eccezione smontava l'applicazione.
-    const maplibre = (await import("maplibre-gl")).default;
+    const maplibre = await import("maplibre-gl");
     const spia = vi
       .spyOn(maplibre.Map.prototype, "setFilter")
       .mockImplementation(() => {

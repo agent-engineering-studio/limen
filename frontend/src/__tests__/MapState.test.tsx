@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import type { JSX } from "react";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import HazardSelector from "../components/HazardSelector";

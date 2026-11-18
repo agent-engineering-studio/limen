@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import type { JSX } from "react";
-import maplibre from "maplibre-gl";
-import type maplibregl from "maplibre-gl";
+import * as maplibre from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import LegendPanel from "../components/LegendPanel";

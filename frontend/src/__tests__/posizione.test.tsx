@@ -1,5 +1,5 @@
 import { render } from "@testing-library/react";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import RiskMap from "../components/RiskMap";
