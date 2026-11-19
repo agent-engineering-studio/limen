@@ -117,3 +117,11 @@ def test_il_tetto_arriva_alla_cella_dal_suo_nodo() -> None:
     dyn = {b.cell_id: b.dynamic for b in assemble_bundles(ctx)}
     assert dyn["a"].fwi_normalisation_max == 35.0
     assert dyn["b"].fwi_normalisation_max is None
+
+
+def test_il_backtest_legge_il_tetto_dalla_variabile() -> None:
+    from limen.cli.backtest_wildfire import leggi_tetto
+
+    assert leggi_tetto("95:35:6-9") == _BLOCCO
+    with pytest.raises(ValueError):
+        leggi_tetto("95-35")

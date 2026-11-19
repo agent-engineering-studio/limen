@@ -38,6 +38,11 @@ Env knobs:
   (``alerts.min_predisposition``) al posto di quello di ``wildfire.yaml``, per
   confrontare due valori sugli stessi dati (#476). Solo misura: la produzione
   legge lo YAML. Finisce nella provenienza del report.
+* ``LIMEN_BACKTEST_WILDFIRE_TETTO`` — ``quantile:minimo:mesi`` (es. ``95:35:6-9``):
+  il FWI pieno per nodo dalla climatologia (#476) acceso per la misura, con
+  quei valori, anche se in ``wildfire.yaml`` è spento. Serve
+  ``fwi_climatology`` (``limen fwi-climatology``, con ``LIMEN_FWI_CLIM_FINO``
+  prima degli anni misurati).
 * ``LIMEN_BACKTEST_WILDFIRE_PIOGGIA`` — ``modello`` (default) o ``osservata``:
   la pioggia delle 24 ore fino a mezzogiorno dal «Merging» DPC archiviato
   (``RADAR_ARCHIVE__CARTELLA``) al posto di quella del modello, dove il radar
@@ -88,6 +93,7 @@ from limen.core.models.risk import (
     StaticFactors,
 )
 from limen.core.scoring.regional_thresholds import (
+    TettoPerNodoBlock,
     WildfireThresholds,
     load_hazard_thresholds,
 )
@@ -116,6 +122,7 @@ _PIOGGIA_ENV = "LIMEN_BACKTEST_WILDFIRE_PIOGGIA"
 _VERITA_ENV = "LIMEN_BACKTEST_WILDFIRE_VERITA"
 _ETTARI_ENV = "LIMEN_BACKTEST_WILDFIRE_ETTARI"
 _CANCELLO_ENV = "LIMEN_BACKTEST_WILDFIRE_CANCELLO"
+_TETTO_ENV = "LIMEN_BACKTEST_WILDFIRE_TETTO"
 
 _TABELLE_VERITA = {
     "effis": ("fire_perimeters",),
@@ -154,6 +161,18 @@ class Verita:
             hi = f"{self.ettari_max:g}" if self.ettari_max is not None else ""
             parti.append(f"{lo}-{hi}ha")
         return "".join(f"_{p}" for p in parti)
+
+
+def leggi_tetto(testo: str) -> TettoPerNodoBlock:
+    """``quantile:minimo:mesi`` (``95:35:6-9``) come blocco; ``ValueError`` se non si legge."""
+    try:
+        quantile, minimo, mesi = testo.split(":")
+        primo, ultimo = (int(m) for m in mesi.split("-"))
+    except ValueError as exc:
+        raise ValueError(f"{_TETTO_ENV}={testo!r}: atteso quantile:minimo:mese-mese") from exc
+    return TettoPerNodoBlock(
+        quantile=float(quantile), minimo=float(minimo), mesi=tuple(range(primo, ultimo + 1))
+    )
 
 
 def leggi_verita(fonte: str, ettari: str) -> Verita:
@@ -961,6 +980,17 @@ async def run() -> int:
             return 1
         loaded = loaded.model_copy(update={"alerts": alerts})
         log.info("backtest_wildfire.cancello", min_predisposition=float(cancello))
+    tetto = os.getenv(_TETTO_ENV, "").strip()
+    if tetto:
+        try:
+            blocco = leggi_tetto(tetto)
+        except ValueError as exc:
+            log.error("backtest_wildfire.bad_env", var=_TETTO_ENV, value=tetto, error=str(exc))
+            return 1
+        loaded = loaded.model_copy(
+            update={"fwi": loaded.fwi.model_copy(update={"tetto_per_nodo": blocco})}
+        )
+        log.info("backtest_wildfire.tetto", **blocco.model_dump())
 
     today = datetime.now(UTC).date()
     end = _parse_date(_END_ENV, today - timedelta(days=1))
