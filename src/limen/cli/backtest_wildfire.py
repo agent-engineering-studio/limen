@@ -34,6 +34,10 @@ Env knobs:
 * ``LIMEN_BACKTEST_WILDFIRE_ETTARI`` — ``min-max`` in ettari (un estremo può
   mancare: ``-10``, ``100-``): solo gli incendi di quella superficie, per
   leggere il backtest per classe di grandezza.
+* ``LIMEN_BACKTEST_WILDFIRE_CANCELLO`` — il cancello degli avvisi sotto «Alto»
+  (``alerts.min_predisposition``) al posto di quello di ``wildfire.yaml``, per
+  confrontare due valori sugli stessi dati (#476). Solo misura: la produzione
+  legge lo YAML. Finisce nella provenienza del report.
 * ``LIMEN_BACKTEST_WILDFIRE_PIOGGIA`` — ``modello`` (default) o ``osservata``:
   la pioggia delle 24 ore fino a mezzogiorno dal «Merging» DPC archiviato
   (``RADAR_ARCHIVE__CARTELLA``) al posto di quella del modello, dove il radar
@@ -110,6 +114,7 @@ _LEVEL_ENV = "LIMEN_BACKTEST_WILDFIRE_LEVEL"
 _PIOGGIA_ENV = "LIMEN_BACKTEST_WILDFIRE_PIOGGIA"
 _VERITA_ENV = "LIMEN_BACKTEST_WILDFIRE_VERITA"
 _ETTARI_ENV = "LIMEN_BACKTEST_WILDFIRE_ETTARI"
+_CANCELLO_ENV = "LIMEN_BACKTEST_WILDFIRE_CANCELLO"
 
 _TABELLE_VERITA = {
     "effis": ("fire_perimeters",),
@@ -920,6 +925,16 @@ async def run() -> int:
     if not isinstance(loaded, WildfireThresholds):
         log.error("backtest_wildfire.bad_config", got=type(loaded).__name__)
         return 1
+
+    cancello = os.getenv(_CANCELLO_ENV, "").strip()
+    if cancello:
+        try:
+            alerts = loaded.alerts.model_copy(update={"min_predisposition": float(cancello)})
+        except ValueError:
+            log.error("backtest_wildfire.bad_env", var=_CANCELLO_ENV, value=cancello)
+            return 1
+        loaded = loaded.model_copy(update={"alerts": alerts})
+        log.info("backtest_wildfire.cancello", min_predisposition=float(cancello))
 
     today = datetime.now(UTC).date()
     end = _parse_date(_END_ENV, today - timedelta(days=1))
