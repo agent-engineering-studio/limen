@@ -39,7 +39,12 @@ from limen.core.models.risk import (
     RiskScore,
 )
 from limen.core.scoring.base import ScoringEngine, classify_score
-from limen.core.scoring.flood.trigger import fluvial_trigger, pluvial_trigger, soglie_pioggia
+from limen.core.scoring.flood.trigger import (
+    fluvial_trigger,
+    pluvial_trigger,
+    rarity_trigger,
+    soglie_pioggia,
+)
 from limen.core.scoring.regional_thresholds import FloodThresholds
 
 
@@ -75,9 +80,15 @@ class FloodScoringEngine(ScoringEngine[FloodBreakdown]):
         # radar ne aveva misurati 152. L'osservata più la prevista sulle ore
         # che restano ricompone una finestra della stessa lunghezza; vale la
         # maggiore delle due letture.
+        # Il nowcast radar (#643) prende il posto della prevista sul resto della
+        # finestra quando è maggiore: copre solo le prossime ore, quindi non la
+        # sostituisce mai al ribasso.
         rain = dyn.flood_forecast_rain_72h_mm
+        oss = t.pluvial.observed
+        avanti = dyn.flood_rain_ahead_mm if oss is not None and oss.nowcast is not None else None
         if dyn.flood_rain_observed_mm is not None:
-            rain = max(rain or 0.0, dyn.flood_rain_observed_mm + (dyn.flood_rain_head_mm or 0.0))
+            resto = max(dyn.flood_rain_head_mm or 0.0, avanti or 0.0)
+            rain = max(rain or 0.0, dyn.flood_rain_observed_mm + resto)
 
         soglie = soglie_pioggia(t.pluvial, dyn.flood_rain_quantiles)
         pluvial = pluvial_trigger(
@@ -88,6 +99,9 @@ class FloodScoringEngine(ScoringEngine[FloodBreakdown]):
             imperviousness_cfg=t.imperviousness,
             soglie=soglie,
         )
+        rarita = oss.rarity if oss is not None else None
+        if rarita is not None and dyn.flood_rain_observed_years is not None:
+            pluvial = max(pluvial, rarity_trigger(dyn.flood_rain_observed_years, rarita))
         # Cascata incendio → alluvione, sul solo ramo pluviale.
         post_fire = post_fire_flood_multiplier(
             dyn.months_since_fire, rule=self._cascades.post_fire_flood
@@ -138,6 +152,8 @@ class FloodScoringEngine(ScoringEngine[FloodBreakdown]):
                 discharge_ratio=dyn.river_discharge_ratio,
                 rain_mm=rain,
                 rain_observed_mm=dyn.flood_rain_observed_mm,
+                rain_observed_years=dyn.flood_rain_observed_years,
+                rain_ahead_mm=dyn.flood_rain_ahead_mm,
                 rain_threshold_mm=soglie[0],
                 rain_saturation_mm=soglie[1],
                 post_fire_multiplier=post_fire,

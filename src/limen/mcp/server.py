@@ -24,6 +24,13 @@ from limen.mcp.tools import (
     hazards,
     multi_hazard_summary,
     national_report,
+    radar_area_summary,
+    radar_official_alert,
+    radar_rain_ahead,
+    radar_rain_at,
+    radar_rarity,
+    radar_status,
+    radar_storm_now,
     recent_alerts,
     risk_summary,
     run_forecast_history,
@@ -83,6 +90,56 @@ def _build_server() -> Any:
     from fastmcp import FastMCP
 
     mcp = FastMCP(name=SERVER_NAME, instructions=SERVER_INSTRUCTIONS)
+
+    @mcp.tool()
+    async def tool_radar_rain_at(lon: float, lat: float, hours: int = 1) -> dict[str, Any]:
+        """DPC radar: rain of the last 1/3/6/12/24 h at a point (mm), with its frame
+        and how far the radar can be trusted there. {} = not measured, not dry."""
+        return await radar_rain_at(lon, lat, hours)
+
+    @mcp.tool()
+    async def tool_radar_area_summary(
+        west: float, south: float, east: float, north: float, hours: int = 1
+    ) -> dict[str, Any]:
+        """DPC radar: rain over a lon/lat box — max, mean, km² over thresholds."""
+        return await radar_area_summary(west, south, east, north, hours)
+
+    @mcp.tool()
+    async def tool_radar_storm_now(
+        west: float | None = None,
+        south: float | None = None,
+        east: float | None = None,
+        north: float | None = None,
+    ) -> dict[str, Any]:
+        """DPC radar: storms (≥ 10 mm/h) on the newest frame and where they move."""
+        return await radar_storm_now(west, south, east, north)
+
+    @mcp.tool()
+    async def tool_radar_rain_ahead(
+        lon: float, lat: float, minutes: int = 60, mm: float = 20.0
+    ) -> dict[str, Any]:
+        """DPC radar NOWCAST (a forecast, 5-120 min): rain ahead at a point and the
+        chance of at least `mm`. Good on where the rain goes, poor on peaks."""
+        return await radar_rain_ahead(lon, lat, minutes, mm)
+
+    @mcp.tool()
+    async def tool_radar_official_alert(
+        lon: float | None = None, lat: float | None = None, place: str | None = None
+    ) -> dict[str, Any]:
+        """The official DPC criticality bulletin level, today and tomorrow."""
+        return await radar_official_alert(lon, lat, place)
+
+    @mcp.tool()
+    async def tool_radar_rarity(lon: float, lat: float, hours: int, mm: float) -> dict[str, Any]:
+        """How rare `mm` of rain in 1/3/6/24 h is at a place (return period, years)."""
+        return radar_rarity(lon, lat, hours, mm)
+
+    @mcp.tool()
+    async def tool_radar_status(
+        lon: float | None = None, lat: float | None = None
+    ) -> dict[str, Any]:
+        """Which DPC radars are reported on/off (a hint, not proof)."""
+        return await radar_status(lon, lat)
 
     @mcp.tool()
     async def tool_risk_summary(

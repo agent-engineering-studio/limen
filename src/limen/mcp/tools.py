@@ -897,3 +897,66 @@ def render_national_report_it(report: dict[str, Any]) -> str:
     )
     lines.append(f"Nelle ultime 24 ore: {report['alerts_24h']} allerte operative, {prev_txt}.")
     return "\n".join(lines)
+
+
+# ── Radar DPC (#643): i fatti di dpc-radar, ognuno con il suo fotogramma ─────
+
+
+async def radar_rain_at(lon: float, lat: float, hours: int = 1) -> dict[str, Any]:
+    from limen.integrations.dpc.fatti import chiedi
+
+    return await chiedi("rain_at", lambda f: f.rain_at(lon, lat, hours))
+
+
+async def radar_area_summary(
+    west: float, south: float, east: float, north: float, hours: int = 1
+) -> dict[str, Any]:
+    from limen.integrations.dpc.fatti import chiedi
+
+    return await chiedi("area_summary", lambda f: f.area_summary(west, south, east, north, hours))
+
+
+async def radar_storm_now(
+    west: float | None = None,
+    south: float | None = None,
+    east: float | None = None,
+    north: float | None = None,
+) -> dict[str, Any]:
+    from limen.integrations.dpc.fatti import chiedi
+
+    return await chiedi("storm_now", lambda f: f.storm_now(west, south, east, north))
+
+
+async def radar_rain_ahead(
+    lon: float, lat: float, minutes: int = 60, mm: float = 20.0
+) -> dict[str, Any]:
+    from limen.integrations.dpc.fatti import chiedi
+
+    return await chiedi("rain_ahead", lambda f: f.rain_ahead(lon, lat, minutes, mm))
+
+
+async def radar_official_alert(
+    lon: float | None = None, lat: float | None = None, place: str | None = None
+) -> dict[str, Any]:
+    from limen.integrations.dpc.fatti import chiedi
+
+    return await chiedi("official_alert", lambda f: f.official_alert(lon, lat, place))
+
+
+async def radar_status(lon: float | None = None, lat: float | None = None) -> dict[str, Any]:
+    from limen.integrations.dpc.fatti import chiedi
+
+    return await chiedi("radar_status", lambda f: f.radar_status(lon, lat))
+
+
+def radar_rarity(lon: float, lat: float, hours: int, mm: float) -> dict[str, Any]:
+    """Pura: la climatologia sta nel pacchetto, nessuna richiesta."""
+    from dpc_radar import DpcRadarError
+
+    from limen.integrations.dpc.fatti import fatti
+
+    try:
+        return fatti().rarity(lon, lat, hours, mm)
+    except (DpcRadarError, ValueError) as exc:
+        log.warning("integration.degraded", source="dpc_radar_facts", error=str(exc))
+        return {}

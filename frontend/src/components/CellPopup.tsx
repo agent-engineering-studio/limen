@@ -7,10 +7,19 @@ import { locale, testi, useLingua, useTesti, type Lingua } from "../lib/i18n";
 import ComeNasce from "./ComeNasce";
 import ContributoEsperto from "./ContributoEsperto";
 import DatiDiBase from "./DatiDiBase";
-import { AVVISO_DI_PIENA, copernicusModificato, meteoEcmwf } from "../lib/attribuzioni";
-import { RISK_COLOR_BY_LEVEL, RISK_SCURE, useEtichetteRischio } from "../lib/risk-colors";
+import {
+  AVVISO_DI_PIENA,
+  copernicusModificato,
+  meteoEcmwf,
+} from "../lib/attribuzioni";
+import {
+  RISK_COLOR_BY_LEVEL,
+  RISK_SCURE,
+  useEtichetteRischio,
+} from "../lib/risk-colors";
 import type {
   CellBreakdownResponse,
+  RadarCella,
   CellMultiHazardResponse,
   CellRainOutlookResponse,
   FwiNormale,
@@ -46,10 +55,11 @@ function distanzaEn(d: string): string {
 
 const T = testi(
   {
-    schede: { landslide: "Frana", flood: "Allagamento", wildfire: "Incendio" } as Record<
-      HazardType,
-      string
-    >,
+    schede: {
+      landslide: "Frana",
+      flood: "Allagamento",
+      wildfire: "Incendio",
+    } as Record<HazardType, string>,
     esposizione: {
       abitato: "un centro abitato",
       "vicino abitato": "case nelle vicinanze",
@@ -58,12 +68,14 @@ const T = testi(
     } as Record<string, string>,
     frase: (tag: string): string => {
       if (tag.startsWith("autostrada")) return `un'${tag}`;
-      if (tag.startsWith("statale") || tag.startsWith("ferrovia")) return `una ${tag}`;
+      if (tag.startsWith("statale") || tag.startsWith("ferrovia"))
+        return `una ${tag}`;
       return tag;
     },
     e: " e ",
     verdetto: {
-      altoEsposto: "Da attenzionare subito: rischio alto vicino a case o strade.",
+      altoEsposto:
+        "Da attenzionare subito: rischio alto vicino a case o strade.",
       altoIsolato: "Da attenzionare: rischio alto, versante isolato.",
       moderatoEsposto:
         "Da tenere sotto osservazione: rischio moderato, ma la zona è " +
@@ -111,7 +123,14 @@ const T = testi(
       norma: "Nella norma",
       sotto: "Sotto il solito",
     },
-    rispetto: (giudizio: string, mese: string, p: string, a0: number, a1: number, med: string) =>
+    rispetto: (
+      giudizio: string,
+      mese: string,
+      p: string,
+      a0: number,
+      a1: number,
+      med: string,
+    ) =>
       `${giudizio} per ${mese}: più alto del ${p} % dei giorni di ${mese} ` +
       `${a0}–${a1} in questo punto, dove la mediana è FWI ${med}.`,
     dc: {
@@ -121,7 +140,25 @@ const T = testi(
       moderata: "siccità moderata",
       nessuna: "nessuna siccità di fondo",
     },
-    codiceDc: (dc: string, lettura: string) => `Codice di siccità DC ${dc}: ${lettura}.`,
+    codiceDc: (dc: string, lettura: string) =>
+      `Codice di siccità DC ${dc}: ${lettura}.`,
+    radar: {
+      titolo: "Radar della Protezione civile",
+      affidabile: (sito: string, km: string, quota: string) =>
+        `Qui il radar vede bene: il più vicino è ${sito} (${km} km), fascio a ${quota} m dal suolo.`,
+      cieco: (sito: string, km: string, quota: string) =>
+        `Qui il radar vede male (${sito}, ${km} km, fascio a ${quota} m dal suolo): ` +
+        "uno zero del radar non vuol dire che non piove.",
+      fuori: "Questo punto è fuori dalla mappa del radar.",
+      raro: (mm: string, ore: number, anni: string) =>
+        `I ${mm} mm caduti nelle ultime ${ore} ore qui capitano circa una volta ogni ${anni} anni.`,
+      rarissimo: (mm: string, ore: number) =>
+        `I ${mm} mm caduti nelle ultime ${ore} ore qui capitano meno di una volta ogni 50 anni.`,
+      comune: (mm: string, ore: number) =>
+        `I ${mm} mm caduti nelle ultime ${ore} ore qui capitano quasi ogni anno.`,
+      fonte:
+        "dpc-radar: climatologia del solo radar 2018-2025 e mappa di affidabilità stimata",
+    },
     alluvione: {
       avanti: (mm: string) =>
         "Questo numero guarda avanti: è calcolato sulla pioggia prevista nelle " +
@@ -134,19 +171,23 @@ const T = testi(
       fiume: "Il segnale viene dal fiume, non dalla pioggia che cade qui.",
       piena: (anni: number | null, giorno: string | null) => {
         const quando = giorno ? `, picco previsto il ${giorno}` : "";
-        const fonte = giorno ? "soglie GloFAS, corsa di controllo" : "soglie GloFAS";
+        const fonte = giorno
+          ? "soglie GloFAS, corsa di controllo"
+          : "soglie GloFAS";
         return anni === null
           ? `Portata prevista sotto la piena da 2 anni${quando} (${fonte}).`
           : `Portata prevista sopra la piena da ${anni} anni${quando} (${fonte}).`;
       },
-      locale: "Il segnale viene dalla pioggia locale, non da un fiume in piena.",
+      locale:
+        "Il segnale viene dalla pioggia locale, non da un fiume in piena.",
       nonMappata:
         "Questa cella è fuori dalle zone idrauliche mappate: il valore di " +
         "base è prudenziale, non una perimetrazione ufficiale.",
     },
     incendio: {
       umido:
-        "Le condizioni meteo non favoriscono il fuoco: combustibile umido " + "o aria fresca.",
+        "Le condizioni meteo non favoriscono il fuoco: combustibile umido " +
+        "o aria fresca.",
       secco: "Il tempo è secco ma non estremo.",
       estremo: "Caldo, siccità e vento stanno spingendo il pericolo in alto.",
       avviamento:
@@ -222,7 +263,8 @@ const T = testi(
         "Keep under observation: moderate risk, but the area is " +
         "inhabited or crossed by infrastructure.",
       moderatoIsolato:
-        "Routine checks: moderate risk on an isolated slope, " + "no immediate action.",
+        "Routine checks: moderate risk on an isolated slope, " +
+        "no immediate action.",
       bassoEsposto:
         "No immediate concern: the risk is low — the cell is " +
         "listed only because it is close to homes or roads.",
@@ -262,7 +304,14 @@ const T = testi(
       norma: "Normal",
       sotto: "Below normal",
     },
-    rispetto: (giudizio: string, mese: string, p: string, a0: number, a1: number, med: string) =>
+    rispetto: (
+      giudizio: string,
+      mese: string,
+      p: string,
+      a0: number,
+      a1: number,
+      med: string,
+    ) =>
       `${giudizio} for ${mese}: higher than ${p}% of ${mese} days ` +
       `${a0}–${a1} at this location, where the median is FWI ${med}.`,
     dc: {
@@ -272,7 +321,25 @@ const T = testi(
       moderata: "moderate drought",
       nessuna: "no underlying drought",
     },
-    codiceDc: (dc: string, lettura: string) => `Drought Code DC ${dc}: ${lettura}.`,
+    codiceDc: (dc: string, lettura: string) =>
+      `Drought Code DC ${dc}: ${lettura}.`,
+    radar: {
+      titolo: "Civil Protection radar",
+      affidabile: (sito: string, km: string, quota: string) =>
+        `The radar sees well here: the nearest is ${sito} (${km} km), beam ${quota} m above ground.`,
+      cieco: (sito: string, km: string, quota: string) =>
+        `The radar sees poorly here (${sito}, ${km} km, beam ${quota} m above ground): ` +
+        "a radar zero does not mean it is not raining.",
+      fuori: "This point is outside the radar map.",
+      raro: (mm: string, ore: number, anni: string) =>
+        `The ${mm} mm fallen in the last ${ore} hours happen here about once every ${anni} years.`,
+      rarissimo: (mm: string, ore: number) =>
+        `The ${mm} mm fallen in the last ${ore} hours happen here less than once every 50 years.`,
+      comune: (mm: string, ore: number) =>
+        `The ${mm} mm fallen in the last ${ore} hours happen here almost every year.`,
+      fonte:
+        "dpc-radar: radar-only climatology 2018-2025 and estimated reliability map",
+    },
     alluvione: {
       avanti: (mm: string) =>
         "This number looks ahead: it is computed on the rain forecast for the " +
@@ -285,7 +352,9 @@ const T = testi(
       fiume: "The signal comes from the river, not from the rain falling here.",
       piena: (anni: number | null, giorno: string | null) => {
         const quando = giorno ? `, peak forecast on ${giorno}` : "";
-        const fonte = giorno ? "GloFAS thresholds, control run" : "GloFAS thresholds";
+        const fonte = giorno
+          ? "GloFAS thresholds, control run"
+          : "GloFAS thresholds";
         return anni === null
           ? `Forecast discharge below the 2-year flood${quando} (${fonte}).`
           : `Forecast discharge above the ${anni}-year flood${quando} (${fonte}).`;
@@ -391,7 +460,48 @@ function verdict(
 }
 
 function cifra(n: number, loc: string, decimali = 1): string {
-  return n.toLocaleString(loc, { minimumFractionDigits: decimali, maximumFractionDigits: decimali });
+  return n.toLocaleString(loc, {
+    minimumFractionDigits: decimali,
+    maximumFractionDigits: decimali,
+  });
+}
+
+/** Le frasi del radar per la cella (#643); null se non c'è niente da dire. */
+export function letturaRadar(
+  r: RadarCella | null | undefined,
+  lingua: Lingua = "it",
+): string[] | null {
+  if (!r) return null;
+  const t = T[lingua].radar;
+  const loc = locale(lingua);
+  const km = r.distanza_km.toLocaleString(loc, { maximumFractionDigits: 0 });
+  const quota =
+    r.quota_fascio_m === null
+      ? "?"
+      : r.quota_fascio_m.toLocaleString(loc, { maximumFractionDigits: 0 });
+  const righe = [
+    r.affidabile === null
+      ? t.fuori
+      : r.affidabile
+        ? t.affidabile(r.radar_vicino, km, quota)
+        : t.cieco(r.radar_vicino, km, quota),
+  ];
+  const anni = r.ritorno_anni;
+  if (r.pioggia_mm != null && r.finestra_ore != null && anni != null) {
+    const mm = r.pioggia_mm.toLocaleString(loc, { maximumFractionDigits: 0 });
+    righe.push(
+      anni >= 50
+        ? t.rarissimo(mm, r.finestra_ore)
+        : anni < 2
+          ? t.comune(mm, r.finestra_ore)
+          : t.raro(
+              mm,
+              r.finestra_ore,
+              anni.toLocaleString(loc, { maximumFractionDigits: 0 }),
+            ),
+    );
+  }
+  return righe;
 }
 
 /** Come leggere il numero dell'incendio: cosa misura, a quale classe EFFIS
@@ -419,17 +529,25 @@ export function letturaIncendio(
   const classe = t.classiEffis.find(([max]) => fwi < max)?.[1] ?? "";
   const giorno =
     typeof meteo["day"] === "string"
-      ? t.meteoDel(new Date(meteo["day"]).toLocaleDateString(loc, { day: "numeric", month: "long" }))
+      ? t.meteoDel(
+          new Date(meteo["day"]).toLocaleDateString(loc, {
+            day: "numeric",
+            month: "long",
+          }),
+        )
       : "";
   righe.push(t.indiceFwi(cifra(fwi, loc), classe, giorno));
   if (normale !== null && typeof meteo["day"] === "string") {
     // Rispetto al solito: la classe è assoluta, uguale ad agosto e a
     // ottobre; questa riga dice dove cade il valore fra i giorni dello
     // stesso mese, nello stesso punto, negli anni dell'archivio.
-    const mese = new Date(meteo["day"]).toLocaleDateString(loc, { month: "long" });
+    const mese = new Date(meteo["day"]).toLocaleDateString(loc, {
+      month: "long",
+    });
     const p = normale.percentile;
     const g = t.giudizio;
-    const giudizio = p >= 90 ? g.moltoSopra : p >= 75 ? g.sopra : p > 25 ? g.norma : g.sotto;
+    const giudizio =
+      p >= 90 ? g.moltoSopra : p >= 75 ? g.sopra : p > 25 ? g.norma : g.sotto;
     righe.push(
       t.rispetto(
         giudizio,
@@ -446,7 +564,13 @@ export function letturaIncendio(
     // memoria lunga della siccità, ed è lui che tiene alto l'indice dopo
     // un'estate secca anche quando le giornate si fanno miti.
     const lettura =
-      dc >= 500 ? t.dc.molto : dc >= 350 ? t.dc.marcata : dc >= 200 ? t.dc.moderata : t.dc.nessuna;
+      dc >= 500
+        ? t.dc.molto
+        : dc >= 350
+          ? t.dc.marcata
+          : dc >= 200
+            ? t.dc.moderata
+            : t.dc.nessuna;
     righe.push(t.codiceDc(cifra(dc, loc, 0), lettura));
   }
   return righe;
@@ -472,7 +596,11 @@ function plainSummary(
     const pluvial = pickScalar(factors, "pluvial");
     const fluvial = pickScalar(factors, "fluvial");
     const pioggia = factors["rain_mm"];
-    parts.push(t.alluvione.avanti(typeof pioggia === "number" ? ` (${Math.round(pioggia)} mm)` : ""));
+    parts.push(
+      t.alluvione.avanti(
+        typeof pioggia === "number" ? ` (${Math.round(pioggia)} mm)` : "",
+      ),
+    );
     if (pluvial === 0 && fluvial === 0) {
       parts.push(t.alluvione.nessunSegnale);
     } else if (fluvial > pluvial) {
@@ -535,7 +663,10 @@ function pickScalar(factors: Record<string, unknown>, key: string): number {
 // diverse: S/M/E/F/H dicono come cede un versante e non significano nulla per
 // un incendio. Prima il popup leggeva solo i primi, quindi una cella
 // d'incendio mostrava cinque barre a 0.000 accanto a un punteggio non nullo.
-const COMPONENTS_BY_HAZARD: Record<string, readonly { key: string; color: string }[]> = {
+const COMPONENTS_BY_HAZARD: Record<
+  string,
+  readonly { key: string; color: string }[]
+> = {
   landslide: [
     { key: "s", color: "#7fa7e8" },
     { key: "m", color: "#ff8a1f" },
@@ -560,7 +691,8 @@ function readComponents(
   hazard: HazardType,
   factors: Record<string, unknown>,
 ): Component[] {
-  const spec = COMPONENTS_BY_HAZARD[hazard] ?? COMPONENTS_BY_HAZARD["landslide"] ?? [];
+  const spec =
+    COMPONENTS_BY_HAZARD[hazard] ?? COMPONENTS_BY_HAZARD["landslide"] ?? [];
   return spec.map((c) => ({
     ...c,
     label: t.componenti[c.key] ?? c.key,
@@ -569,11 +701,9 @@ function readComponents(
 }
 
 function asLevel(level: string): RiskLevel {
-  return (
-    ["None", "Low", "Moderate", "High", "VeryHigh"].includes(level)
-      ? (level as RiskLevel)
-      : "None"
-  );
+  return ["None", "Low", "Moderate", "High", "VeryHigh"].includes(level)
+    ? (level as RiskLevel)
+    : "None";
 }
 
 /**
@@ -596,7 +726,8 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
     | { tipo: "ignoto" }
     | null
   >(null);
-  const [outlook, setOutlook] = useState<CellRainOutlookResponse["outlook"]>(null);
+  const [outlook, setOutlook] =
+    useState<CellRainOutlookResponse["outlook"]>(null);
   const [fwiNormale, setFwiNormale] = useState<FwiNormale | null>(null);
   const t = useTesti(T);
   const { lingua } = useLingua();
@@ -723,14 +854,27 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
     data?.factors && typeof data.factors["fire_weather"] === "object"
       ? (data.factors["fire_weather"] as Record<string, unknown>)
       : null;
-  const fwiOggi = typeof meteoIncendio?.["fwi"] === "number" ? meteoIncendio["fwi"] : null;
-  const giornoMeteo = typeof meteoIncendio?.["day"] === "string" ? meteoIncendio["day"] : null;
+  const fwiOggi =
+    typeof meteoIncendio?.["fwi"] === "number" ? meteoIncendio["fwi"] : null;
+  const giornoMeteo =
+    typeof meteoIncendio?.["day"] === "string" ? meteoIncendio["day"] : null;
   useEffect(() => {
     setFwiNormale(null);
-    if (!cellId || hazard !== "wildfire" || fwiOggi === null || giornoMeteo === null) return;
+    if (
+      !cellId ||
+      hazard !== "wildfire" ||
+      fwiOggi === null ||
+      giornoMeteo === null
+    )
+      return;
     const ctrl = new AbortController();
     defaultApiClient
-      .getCellFwiNormale(cellId, fwiOggi, new Date(giornoMeteo).getMonth() + 1, ctrl.signal)
+      .getCellFwiNormale(
+        cellId,
+        fwiOggi,
+        new Date(giornoMeteo).getMonth() + 1,
+        ctrl.signal,
+      )
       .then((r) => setFwiNormale(r.normale))
       .catch(() => {
         // Senza climatologia la lettura resta quella assoluta.
@@ -792,13 +936,33 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
         </h3>
         <p className="alert-meta" style={{ margin: "2px 0 0" }}>
           {props.place ? `${props.place} · ` : ""}
-          {t.meta(data.cell_id, data.pipeline_version, new Date(data.computed_at).toLocaleString(loc))}
+          {t.meta(
+            data.cell_id,
+            data.pipeline_version,
+            new Date(data.computed_at).toLocaleString(loc),
+          )}
         </p>
         <p className="verdict verdict-neutral" role="status">
           {t.spiegaNonMisurato}
         </p>
+        {(() => {
+          const righe = letturaRadar(data.radar, lingua);
+          return righe ? (
+            <p className="rain-outlook">
+              <span className="eyebrow" style={{ marginBottom: 2 }}>
+                {t.radar.titolo}
+              </span>
+              {righe.join(" ")}
+              <small className="fonte-meteo">{t.radar.fonte}</small>
+            </p>
+          ) : null;
+        })()}
         <DatiDiBase dati={data.dati_di_base} completezza={data.completezza} />
-        <ContributoEsperto key={`${data.cell_id}|${rowHazard}`} cellId={data.cell_id} hazard={rowHazard} />
+        <ContributoEsperto
+          key={`${data.cell_id}|${rowHazard}`}
+          cellId={data.cell_id}
+          hazard={rowHazard}
+        />
       </aside>
     );
   }
@@ -817,7 +981,11 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
       </h3>
       <p className="alert-meta" style={{ margin: "2px 0 0" }}>
         {props.place ? `${props.place} · ` : ""}
-        {t.meta(data.cell_id, data.pipeline_version, new Date(data.computed_at).toLocaleString(loc))}
+        {t.meta(
+          data.cell_id,
+          data.pipeline_version,
+          new Date(data.computed_at).toLocaleString(loc),
+        )}
       </p>
       {(() => {
         const v = verdict(t, level, props.exposure);
@@ -827,7 +995,9 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
           </p>
         );
       })()}
-      <p className="plain-summary">{plainSummary(t, rowHazard, components, factors, props.exposure)}</p>
+      <p className="plain-summary">
+        {plainSummary(t, rowHazard, components, factors, props.exposure)}
+      </p>
       {rowHazard === "wildfire"
         ? ((righe) =>
             righe ? (
@@ -869,7 +1039,8 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
           <span className="eyebrow" style={{ marginBottom: 2 }}>
             {t.meteoPrevisto}
           </span>
-          {t.pioggia} <span className="mono">{outlook.total_mm.toFixed(1)} mm</span>
+          {t.pioggia}{" "}
+          <span className="mono">{outlook.total_mm.toFixed(1)} mm</span>
           {" · "}
           {t.picco}{" "}
           <span className="mono">{outlook.peak_mmh.toFixed(1)} mm/h</span>
@@ -881,7 +1052,9 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
           {t.alluvione.piena(
             data.piena.anni,
             data.piena.giorno_picco
-              ? new Date(`${data.piena.giorno_picco}T12:00:00Z`).toLocaleDateString(loc, {
+              ? new Date(
+                  `${data.piena.giorno_picco}T12:00:00Z`,
+                ).toLocaleDateString(loc, {
                   day: "numeric",
                   month: "long",
                   timeZone: "UTC",
@@ -895,7 +1068,11 @@ export function CellPopup(props: CellPopupProps): JSX.Element | null {
       ) : null}
       <DatiDiBase dati={data.dati_di_base} completezza={data.completezza} />
       <ComeNasce cellId={data.cell_id} hazard={rowHazard} />
-      <ContributoEsperto key={`${data.cell_id}|${rowHazard}`} cellId={data.cell_id} hazard={rowHazard} />
+      <ContributoEsperto
+        key={`${data.cell_id}|${rowHazard}`}
+        cellId={data.cell_id}
+        hazard={rowHazard}
+      />
 
       {onDismiss ? (
         <button type="button" onClick={onDismiss} style={{ marginTop: 8 }}>

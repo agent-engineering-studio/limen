@@ -152,6 +152,10 @@ class DynamicInputs(_Frozen):
     #: DPC, e la prevista sulle sole ore della finestra che restano dopo
     #: quelle osservate. Le frane non le leggono.
     flood_rain_observed_mm: float | None = Field(default=None, ge=0.0)
+    #: Ogni quanti anni capita lì l'osservata (#643); None = spento o non si sa.
+    flood_rain_observed_years: float | None = Field(default=None, ge=1.0)
+    #: La pioggia dei prossimi minuti dal nowcast radar, mm (#643).
+    flood_rain_ahead_mm: float | None = Field(default=None, ge=0.0)
     flood_rain_head_mm: float | None = Field(default=None, ge=0.0)
     # coastal: normalised sea surge / wave signal in [0,1] (Open-Meteo Marine).
     coastal_surge_norm: float | None = Field(default=None, ge=0.0, le=1.0)
@@ -488,6 +492,9 @@ class FloodBreakdown(HazardBreakdown):
     #: La cumulata misurata dal radar DPC sulla cella, mm. ``None`` = nessun
     #: fotogramma utilizzabile, non «asciutto».
     rain_observed_mm: float | None = None
+    #: Tempo di ritorno dell'osservata e pioggia del nowcast (#643); None = spenti.
+    rain_observed_years: float | None = None
+    rain_ahead_mm: float | None = None
     #: Le soglie della pioggia usate per questa cella, mm: locali quando il
     #: nodo ha una climatologia (migrazione 065), nazionali altrimenti. Nel
     #: breakdown perché «105 mm, soglia 92» e «105 mm, soglia 40» sono due
@@ -523,6 +530,16 @@ class FloodBreakdown(HazardBreakdown):
             "rain_saturation_mm": self.rain_saturation_mm,
             "post_fire_multiplier": self.post_fire_multiplier,
             "months_since_fire": self.months_since_fire,
+            # Solo quando ci sono (#643): spenti gli usi del radar, le righe
+            # restano identiche a prima, e un'immagine precedente le rilegge.
+            **{
+                k: v
+                for k, v in (
+                    ("rain_observed_years", self.rain_observed_years),
+                    ("rain_ahead_mm", self.rain_ahead_mm),
+                )
+                if v is not None
+            },
         }
 
     def predisposition(self) -> float:

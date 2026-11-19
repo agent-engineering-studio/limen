@@ -425,10 +425,14 @@ def _observed_rain_step() -> ObservedRainExecutor | None:
     loaded = load_hazard_thresholds(HazardType.FLOOD)
     if not isinstance(loaded, FloodThresholds) or loaded.pluvial.observed is None:
         return None
+    oss = loaded.pluvial.observed
     return ObservedRainExecutor(
-        hours=loaded.pluvial.observed.hours,
-        max_age_minutes=loaded.pluvial.observed.max_age_minutes,
-        max_step_mm=loaded.pluvial.observed.max_step_mm,
+        hours=oss.hours,
+        max_age_minutes=oss.max_age_minutes,
+        max_step_mm=oss.max_step_mm,
+        blind=oss.blind,
+        rarity=oss.rarity is not None,
+        nowcast=oss.nowcast,
     )
 
 

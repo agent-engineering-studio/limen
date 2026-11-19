@@ -1234,6 +1234,16 @@ wheels = [
 bulletins = [
     { name = "shapely" },
 ]
+nowcast = [
+    { name = "scipy" },
+]
+report = [
+    { name = "matplotlib" },
+    { name = "shapely" },
+]
+storms = [
+    { name = "scipy" },
+]
 
 [[package]]
 name = "ecmwf-datastores-client"
@@ -2425,7 +2435,7 @@ dependencies = [
     { name = "cbor2" },
     { name = "copernicus-ems", extra = ["cdse"] },
     { name = "cryptography" },
-    { name = "dpc-radar", extra = ["bulletins"] },
+    { name = "dpc-radar", extra = ["bulletins", "nowcast", "storms"] },
     { name = "effis-client", extra = ["raster"] },
     { name = "egms-client", extra = ["raster"] },
     { name = "fastapi" },
@@ -2502,6 +2512,7 @@ radar = [
     { name = "numcodecs" },
 ]
 report = [
+    { name = "dpc-radar", extra = ["report"] },
     { name = "jinja2" },
     { name = "reportlab" },
 ]
@@ -2518,7 +2529,7 @@ requires-dist = [
     { name = "cbor2", specifier = ">=6.1" },
     { name = "copernicus-ems", extras = ["cdse"], specifier = "~=0.7.1" },
     { name = "cryptography", specifier = ">=43" },
-    { name = "dpc-radar", extras = ["bulletins"], specifier = "~=0.3.0" },
+    { name = "dpc-radar", extras = ["bulletins", "nowcast", "storms"], specifier = "~=0.3.0" },
     { name = "effis-client", extras = ["raster"], specifier = "~=0.1.2" },
     { name = "egms-client", extras = ["raster"], specifier = "~=0.7.0" },
     { name = "fastapi", specifier = ">=0.115" },
@@ -2587,6 +2598,7 @@ ml = [
 ]
 radar = [{ name = "numcodecs", specifier = ">=0.13" }]
 report = [
+    { name = "dpc-radar", extras = ["report"], specifier = "~=0.3.0" },
     { name = "jinja2", specifier = ">=3.1" },
     { name = "reportlab", specifier = ">=5.0.1" },
 ]

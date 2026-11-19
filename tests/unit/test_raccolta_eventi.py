@@ -709,3 +709,47 @@ async def test_un_evento_che_va_in_timeout_non_ferma_gli_altri(
     esito_raccolta = await raccogli(impostazioni)
     assert registrati == ["secondo"]
     assert esito_raccolta["rinviati"] == 1
+
+
+async def test_i_comuni_della_pioggia_rara_si_cercano_per_nome(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#643: dove il radar ha visto una pioggia rara confermata, una ricerca
+    mirata per frane e allagamenti; per gli incendi no."""
+    from limen.api.jobs import raccolta_eventi as job
+
+    chieste: list[str] = []
+
+    async def cerca(q: str, *, giorni: int) -> list[Titolo]:
+        chieste.append(q)
+        return []
+
+    async def comuni_recenti(_dal: Any, massimi: int) -> list[str]:
+        assert massimi == 2
+        return ["Melito di Porto Salvo"]
+
+    monkeypatch.setattr(job, "cerca", cerca)
+    monkeypatch.setattr(job.radar_piogge_rare_repo, "comuni_recenti", comuni_recenti)
+    await job.titoli_per_pericolo(giorni=3, massimi=10, comuni_radar=2)
+    mirate = [q for q in chieste if q.startswith('"Melito')]
+    assert mirate == [
+        '"Melito di Porto Salvo" frana',
+        '"Melito di Porto Salvo" allagamenti',
+        '"Melito di Porto Salvo" alluvione',
+    ]
+
+
+async def test_senza_comuni_radar_il_database_non_si_tocca(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from limen.api.jobs import raccolta_eventi as job
+
+    async def cerca(q: str, *, giorni: int) -> list[Titolo]:
+        return []
+
+    async def vietato(*_a: Any) -> list[str]:
+        raise AssertionError("non doveva leggere il database")
+
+    monkeypatch.setattr(job, "cerca", cerca)
+    monkeypatch.setattr(job.radar_piogge_rare_repo, "comuni_recenti", vietato)
+    await job.titoli_per_pericolo(giorni=3, massimi=10)

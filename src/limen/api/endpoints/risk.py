@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 from collections import Counter
+from dataclasses import asdict
 from functools import cache
 from typing import Any
 
@@ -17,6 +18,7 @@ from limen.api.schemas import (
     CellBreakdownResponse,
     LatestAssessmentResponse,
     PienaOut,
+    RadarOut,
 )
 from limen.config.catalogo_dati import carica_catalogo
 from limen.config.settings import ScoringMode
@@ -38,6 +40,7 @@ from limen.data.repos import (
     spiegazioni_repo,
 )
 from limen.data.repos.assessment_repo import record_from_row
+from limen.integrations.dpc.cella import radar_per_cella
 from limen.integrations.openmeteo.previous_runs import MODELLI as MODELLI_PIOGGIA
 from limen.integrations.openmeteo.previous_runs import NODI_CORRETTORE
 from limen.integrations.openmeteo.previous_runs import NOMI as NOMI_MODELLI
@@ -208,6 +211,8 @@ async def cell_breakdown(
         if hazard is HazardType.FLOOD
         else None
     )
+    letto = await radar_per_cella(cell_id, hazard, factors)
+    radar = RadarOut(**asdict(letto)) if letto is not None else None
     return CellBreakdownResponse(
         cell_id=str(row["cell_id"]),
         hazard_type=HazardType(row["hazard_type"]),
@@ -232,6 +237,7 @@ async def cell_breakdown(
             if piena is not None
             else None
         ),
+        radar=radar,
     )
 
 

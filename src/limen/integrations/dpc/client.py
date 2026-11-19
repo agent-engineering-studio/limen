@@ -22,6 +22,7 @@ Read-only integration: every failure degrades to ``None`` and logs
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any
@@ -124,6 +125,49 @@ async def _download(
 async def get_latest_sri() -> RainGrid | None:
     """Fetch + parse the most recent national SRI frame (None on failure)."""
     return await _download("SRI")
+
+
+#: Gli SRI già scaricati, per istante: a ogni giro della sveglia (15 minuti)
+#: la serie per il moto dei temporali e il nowcast ne chiede uno solo nuovo.
+_sri_cache: dict[datetime, RainGrid] = {}
+#: Quanti SRI tenere: due serie di mezz'ora anche se l'ultimo avanza di 5, 10 o
+#: 20 minuti invece che di 15 (l'intervallo della sveglia parte dall'avvio).
+_SRI_TENUTI = 12
+#: La serie appena letta: lo sweep alluvione la chiede per ogni regione, e in
+#: pochi minuti il DPC non ne pubblica una nuova (un SRI ogni 5 minuti).
+_serie: tuple[float, list[RainGrid]] | None = None
+_SERIE_VALIDA_S = 240.0
+
+
+async def get_sri_series(step: timedelta, count: int) -> list[RainGrid]:
+    """The newest SRI frame and the ``count - 1`` before it, ``step`` apart, oldest first.
+
+    Shorter when a frame is missing (``[]`` without the newest): a gap is
+    never filled with a frame from another time. A frame already held is never
+    downloaded again: at steady state a call costs the "which is the newest"
+    request and, when there is one, the new frame.
+    """
+    global _serie
+    adesso = time.monotonic()
+    if _serie is not None and adesso - _serie[0] < _SERIE_VALIDA_S and len(_serie[1]) >= count:
+        return _serie[1][-count:]
+    held = max(_sri_cache.values(), key=lambda g: g.time, default=None)
+    newest = await _download("SRI", held)
+    if newest is None:
+        return []
+    _sri_cache[newest.time] = newest
+    frames = [newest]
+    for k in range(1, count):
+        t = newest.time - k * step
+        grid = _sri_cache.get(t) or await _download("SRI", at=t)
+        if grid is None:
+            break
+        _sri_cache[t] = grid
+        frames.insert(0, grid)
+    for vecchio in sorted(_sri_cache)[:-_SRI_TENUTI]:
+        del _sri_cache[vecchio]
+    _serie = (adesso, frames)
+    return frames
 
 
 #: L'ultimo fotogramma CUM per durata. Una regione dopo l'altra chiede lo
@@ -230,5 +274,6 @@ __all__ = [
     "get_latest_cum",
     "get_latest_sri",
     "get_radar_status",
+    "get_sri_series",
     "radar_archivio",
 ]

@@ -11,6 +11,7 @@ calcolare, e un'AOI che esplode non ferma le altre.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
@@ -189,8 +190,13 @@ def _nowcast(
     fresh: frozenset[str] = frozenset(),
     fail_on: str | None = None,
 ) -> tuple[Any, _Workflow, list[str], list[dict[str, Any]]]:
-    async def _latest() -> _Sri | None:
-        return sri
+    async def _series(_step: Any, _count: int) -> list[_Sri]:
+        return [] if sri is None else [sri]
+
+    salvati: list[float] = []
+
+    async def _salva(_serie: list[Any], soglia: float) -> None:
+        salvati.append(soglia)
 
     class _Conn:
         async def fetch(self, _sql: str) -> list[dict[str, Any]]:
@@ -221,13 +227,20 @@ def _nowcast(
         yield metrics
         tracked_rows.append(metrics)
 
-    monkeypatch.setattr(nowcast, "get_latest_sri", _latest)
+    monkeypatch.setattr(nowcast, "get_sri_series", _series)
+    monkeypatch.setattr(nowcast, "_salva_temporali", _salva)
     monkeypatch.setattr(nowcast, "acquire", _acquire)
     monkeypatch.setattr(nowcast, "assessed_within", _assessed_within)
     monkeypatch.setattr(nowcast, "tracked", _tracked)
     deps = SimpleNamespace(
         settings=SimpleNamespace(
-            nowcast=SimpleNamespace(min_intensity_mmh=30.0, min_pixels=3, cooldown_minutes=45),
+            nowcast=SimpleNamespace(
+                min_intensity_mmh=30.0,
+                min_pixels=3,
+                cooldown_minutes=45,
+                storm_mmh=10.0,
+                bias_correction=False,
+            ),
             enable_insitu=False,
         ),
         build_workflow=_build,
@@ -276,3 +289,65 @@ async def test_a_failing_aoi_does_not_stop_the_others(monkeypatch: pytest.Monkey
 
     assert triggered == {"it-molise": 35.0}
     assert workflow.ran == ["it-molise"]
+
+
+async def test_i_temporali_si_salvano_e_un_errore_non_ferma_la_sveglia(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#643: i temporali vanno nella tabella dell'API; se la scrittura fallisce
+    la sveglia prosegue e scatta lo stesso."""
+    import numpy as np
+    from dpc_radar import RainGrid, product
+    from rasterio import Affine
+    from rasterio.crs import CRS
+
+    data = np.zeros((40, 40))
+    data[10:16, 10:16] = 25.0
+    griglia = RainGrid(
+        product("SRI"),
+        datetime(2026, 9, 15, 14, 5, tzinfo=UTC),
+        data,
+        Affine(1000.0, 0, 500000.0, 0, -1000.0, 4600000.0),
+        CRS.from_epsg(32633),
+    )
+    scritti: list[Any] = []
+
+    async def _sostituisci(t: list[Any]) -> None:
+        scritti.extend(t)
+
+    monkeypatch.setattr(nowcast.radar_temporali_repo, "sostituisci", _sostituisci)
+    await nowcast._salva_temporali([griglia], 10.0)
+    [t] = scritti
+    assert t.picco_mmh == 25.0 and t.area_km2 == 36.0
+    assert t.velocita_kmh is None  # un fotogramma solo: il moto non si sa
+
+    async def _rotto(_t: list[Any]) -> None:
+        raise RuntimeError("db giù")
+
+    monkeypatch.setattr(nowcast.radar_temporali_repo, "sostituisci", _rotto)
+    await nowcast._salva_temporali([griglia], 10.0)
+
+
+def test_il_temporale_va_dove_dice_il_moto() -> None:
+    from limen.data.repos.radar_temporali_repo import Temporale
+    from limen.integrations.dpc.temporali import fra_un_ora, geojson
+
+    t = Temporale(
+        datetime(2026, 11, 19, 9, 30, tzinfo=UTC),
+        0,
+        10.0,
+        12.0,
+        42.0,
+        36.0,
+        42.5,
+        30.0,
+        12.0,
+        42.0,
+        (11.9, 41.9, 12.1, 42.1),
+        30.0,
+        90.0,
+    )
+    lon, lat = fra_un_ora(t) or (0.0, 0.0)
+    assert lat == pytest.approx(42.0) and lon == pytest.approx(12.0 + 30 / (111.2 * 0.7431), 1e-3)
+    fc = geojson([t, replace(t, n=1, velocita_kmh=None, direzione_gradi=None)])
+    assert [f["geometry"]["type"] for f in fc["features"]] == ["Point", "LineString", "Point"]

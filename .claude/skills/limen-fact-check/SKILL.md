@@ -38,6 +38,8 @@ Il contenuto della pagina entra nel bundle a build time (`import.meta.glob`): pe
 
 Dal #347 la raccolta gira da sola ogni mattina. Prima di cercare, guarda cosa c'è già: gli eventi verificati in `verifiche_eventi`, e in `candidati_eventi` quelli rimasti con `stato = 'una_testata'` (una fonte sola) o `'comune_ignoto'`. Il lavoro a mano serve soprattutto qui: trovare la seconda fonte o il comune per un candidato, e scrivere gli articoli degli `anticipata`, che il job non pubblica.
 
+Guarda anche `radar_piogge_rare` (#643): le piogge che il radar DPC ha visto rare per quel posto (tempo di ritorno ≥ 10 anni), una notte alla volta, con il comune. Sono **candidati**, non eventi: il catalogo ne trova decine al giorno. Quelli con `confermato = true` (anche i pluviometri del «Merging» l'hanno vista) sono i posti dove cercare una notizia che la ricerca larga non ha trovato; il job lo fa già per i dieci più rari.
+
 ### 1. Trovare le notizie
 
 Carica WebSearch/WebFetch con `ToolSearch("select:WebSearch,WebFetch")`. Cerca nella finestra richiesta (default: ultimi 3 giorni), per ogni pericolo, lanciando le ricerche in parallelo:
@@ -122,6 +124,14 @@ Prendi i `fattori` della corsa che ha dato l'anticipo (o di `adesso_picco`) e tr
 - **incendio** (`score = fwi_norm × (base + fuel·f + slope·s)`): `fire_weather.fwi` (indice meteo incendi, Van Wagner; > 30 alto, > 50 estremo), `ffmc` (umidità del combustibile fine, > 85 = secco e infiammabile), `dmc`/`dc` (siccità dello strato organico/profondo), `isi` (velocità di propagazione col vento), `bui`; `fuel` (0-1, vegetazione da CORINE), `slope` (pendenza). `spinup: true` = catena FWI ancora in assestamento: dillo.
 - **frana**: componenti `s` (suscettibilità statica: PAI, IFFI, pendenza, litologia in `static_terms`), `m` (innesco meteo: `meteo_terms.api_factor` pioggia antecedente, `caine_norm`/`caine_excess` soglia intensità-durata di Caine, `soil_factor` umidità del suolo, `snow_factor`), `e` (sisma), `f` (post-incendio), `h` (idrologia: pioggia prevista/portata).
 - **alluvione** (`susceptibility × max(pluvial, fluvial)`): `rain_mm` contro `rain_threshold_mm`/`rain_saturation_mm`, `pluvial`, `fluvial`/`discharge_ratio` (portata GloFAS rispetto alla piena ordinaria del nodo), `susceptibility` (mosaico ISPRA; `mapped: false` = area non studiata).
+
+Per frane e alluvioni, la pioggia vera si legge dal radar con
+
+```bash
+uv run limen resoconto-radar <slug>
+```
+
+che scrive in `reports/resoconti-radar/<slug>/` `facts.json` (ogni numero con il fotogramma da cui viene), `report.md`, `map.png` (solo radar accanto al «Merging») e `hourly.png`. Un numero di pioggia nell'articolo viene da `facts.json`, non da altrove: «la previsione dava 20 mm, il radar ne ha misurati 152» è il perché più chiaro di un evento mancato o colto. `map.png` è dato aperto DPC (CC BY-SA 4.0): può andare nell'articolo con quell'attribuzione.
 
 Per gli eventi non anticipati il «perché» va nel riepilogo all'utente, non sulla pagina: quale fattore era basso (es. pioggia locale sottostimata dal nodo meteo a 9 km, temporale convettivo non risolto, `fuel` nullo per CORINE mancante, `susc_ispra` 0 in area non mappata).
 

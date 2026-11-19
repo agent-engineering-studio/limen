@@ -11,6 +11,7 @@ Usage:
     limen ingest-events      Dated event catalogue: --hazard landslide|flood.
     limen ems-sentinel1      Sentinel-1 / EMS label pairs for flood ML (CDSE, PU budget).
     limen registra-verifica  Fact check: un evento verificato entra nel registro (074).
+    limen resoconto-radar    Il radar DPC di un evento verificato, in quattro file (#643).
     limen verifiche-report   Eventi verificati contro le previsioni, col tasso di base.
     limen qualita-dati       Job fermi o falliti e celle non misurate, in parole (#421).
     limen glofas-soglie      Soglie GloFAS dei periodi di ritorno per nodo (#522).
@@ -427,6 +428,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     dem_tiles.add_argument("--aoi", default=None, help="AOI regionale (default: l'Italia)")
     dem_tiles.add_argument("--zoom-max", type=int, default=11)
+    resoconto = sub.add_parser(
+        "resoconto-radar",
+        help="il radar DPC di un evento verificato: fatti, testo, mappa e grafico orario (#643)",
+    )
+    resoconto.add_argument("slug", help="lo slug dell'evento in verifiche_eventi")
     registra = sub.add_parser(
         "registra-verifica",
         help="salva gli eventi del fact check in verifiche_eventi (e le frane nel truth set)",
@@ -645,6 +651,13 @@ def main(argv: list[str] | None = None) -> int:
 
         try:
             return asyncio.run(run_importa_eventi(args.file, ente=args.ente, licenza=args.licenza))
+        except KeyboardInterrupt:  # pragma: no cover
+            return 130
+    if args.command == "resoconto-radar":
+        from limen.cli.resoconto_radar import run as run_resoconto_radar
+
+        try:
+            return asyncio.run(run_resoconto_radar(args.slug))
         except KeyboardInterrupt:  # pragma: no cover
             return 130
     if args.command == "registra-verifica":

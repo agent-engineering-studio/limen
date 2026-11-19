@@ -306,6 +306,9 @@ class LLMSettings(BaseSettings):
     eventi_ora_utc: int = Field(default=6, ge=0, le=23)
     eventi_giorni: int = Field(default=3, ge=1, le=7)
     eventi_titoli_massimi: int = Field(default=150, ge=1)
+    #: Comuni dove il radar ha visto una pioggia rara (#643) cercati per nome
+    #: nella stampa, i più rari prima. Ogni comune costa sei ricerche RSS.
+    eventi_comuni_radar: int = Field(default=10, ge=0)
     eventi_attesa_massima_minuti: int = Field(default=120, ge=1)
 
     @field_validator("llamacpp_role_timeout_seconds")
@@ -1200,6 +1203,14 @@ class NowcastSettings(BaseSettings):
     min_pixels: int = Field(default=3, ge=1)
     # Skip AOIs whose latest assessment is fresher than this.
     cooldown_minutes: int = Field(default=45, ge=0)
+    # I temporali che la sveglia salva per la mappa e l'API (#643): macchie
+    # sopra questa intensità. 10 mm/h disegna i nuclei convettivi
+    # (dpc-radar); è un'informazione, non decide la sveglia.
+    storm_mmh: float = Field(default=10.0, gt=0)
+    # Spento (#643): la sveglia legge l'SRI corretto con la mappa del bias di
+    # dpc-radar (il solo radar legge 1,6-1,7 volte il «Merging» intorno a Roma,
+    # Genova e Milano, meno della metà a Palermo). Si accende dopo la misura.
+    bias_correction: bool = False
 
 
 class FirmsSettings(BaseSettings):

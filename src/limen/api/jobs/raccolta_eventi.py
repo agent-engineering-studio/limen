@@ -29,7 +29,7 @@ import asyncio
 import re
 import unicodedata
 from collections import Counter
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -52,6 +52,7 @@ from limen.data.db import connessione_dedicata
 from limen.data.repos import (
     anticipo_repo,
     candidati_eventi_repo,
+    radar_piogge_rare_repo,
     verifiche_eventi_repo,
 )
 from limen.data.repos.candidati_eventi_repo import Candidato
@@ -73,6 +74,8 @@ PAROLE_VERIFICA: dict[HazardType, tuple[str, ...]] = {
     HazardType.FLOOD: ("allagamenti", "alluvione"),
     HazardType.WILDFIRE: ("incendio",),
 }
+#: I pericoli che una pioggia rara vista dal radar può aver causato (#643).
+_PERICOLI_DELLA_PIOGGIA = frozenset({HazardType.LANDSLIDE, HazardType.FLOOD})
 _ROMA = ZoneInfo("Europe/Rome")
 #: L'ora locale convenzionale di ogni parte del giorno, e la precisione ITALICA.
 _ORA = {
@@ -84,12 +87,32 @@ _ORA = {
 }
 
 
-async def titoli_per_pericolo(*, giorni: int, massimi: int) -> dict[HazardType, list[Titolo]]:
-    """I titoli di ogni pericolo, senza doppioni, i più recenti per primi."""
+async def titoli_per_pericolo(
+    *, giorni: int, massimi: int, comuni_radar: int = 0
+) -> dict[HazardType, list[Titolo]]:
+    """I titoli di ogni pericolo, senza doppioni, i più recenti per primi.
+
+    ``comuni_radar``: quanti dei comuni dove il radar ha visto una pioggia rara
+    confermata (#643) cercare per nome, per frane e allagamenti. La stampa
+    nazionale non racconta l'allagamento di un paese, quella locale sì, e la
+    ricerca larga la trova solo per caso.
+    """
+    comuni = (
+        await radar_piogge_rare_repo.comuni_recenti(
+            datetime.now(_ROMA) - timedelta(days=giorni), comuni_radar
+        )
+        if comuni_radar
+        else []
+    )
     out: dict[HazardType, list[Titolo]] = {}
     for hazard, parole in PAROLE.items():
+        mirate = (
+            [f'"{c}" {p}' for c in comuni for p in PAROLE_VERIFICA[hazard]]
+            if hazard in _PERICOLI_DELLA_PIOGGIA
+            else []
+        )
         risposte: list[list[Titolo]] = await asyncio.gather(
-            *(cerca(p, giorni=giorni) for p in parole)
+            *(cerca(p, giorni=giorni) for p in (*parole, *mirate))
         )
         visti: dict[str, Titolo] = {}
         for t in (t for r in risposte for t in r):
@@ -313,7 +336,11 @@ async def _raccolta(settings: Settings, modello: str) -> dict[str, Any]:
         await budget.verifica(modello)
     except budget.BudgetSuperatoError as exc:
         return {"status": "skipped", "reason": str(exc), "model": modello, "ripresi": ripresi}
-    titoli = await titoli_per_pericolo(giorni=llm.eventi_giorni, massimi=llm.eventi_titoli_massimi)
+    titoli = await titoli_per_pericolo(
+        giorni=llm.eventi_giorni,
+        massimi=llm.eventi_titoli_massimi,
+        comuni_radar=llm.eventi_comuni_radar,
+    )
     estrattore = EstrattoreEventi(
         api_key=chiave, model=modello, attesa_massima_s=llm.eventi_attesa_massima_minuti * 60
     )

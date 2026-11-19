@@ -95,7 +95,7 @@ async def archivia(
 
 
 @cache
-def _condiviso(cartella: Path) -> dpc_archive.MergingArchive:
+def archivio_condiviso(cartella: Path) -> dpc_archive.MergingArchive:
     return dpc_archive.MergingArchive(cartella, cache_frames=_FOTOGRAMMI_IN_MEMORIA)
 
 
@@ -103,7 +103,7 @@ class MergingArchive:
     """Pioggia oraria corretta con i pluviometri, dall'archivio su disco."""
 
     def __init__(self, cartella: Path) -> None:
-        self._archivio = _condiviso(cartella)
+        self._archivio = archivio_condiviso(cartella)
 
     def oraria(
         self, points: list[tuple[float, float]], start: datetime, end: datetime
