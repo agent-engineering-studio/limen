@@ -448,7 +448,7 @@ stesso problema che misura il carico della [#345](https://github.com/agent-engin
 lo sfondo delle frane tiene in Moderato molte celle in ogni zona, e una
 zona ne ha centinaia. Nove giorni di novembre non sono una stagione; il
 confronto si rifà con lo stesso comando quando l'archivio delle previsioni
-sarà più lungo.
+sarà più lungo ([rapporto](https://github.com/agent-engineering-studio/limen/blob/main/docs/misure/misura_radar_2026-11-06_2026-11-18.md)).
 
 ## Per approfondire
 
