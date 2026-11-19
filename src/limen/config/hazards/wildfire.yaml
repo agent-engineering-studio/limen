@@ -48,6 +48,19 @@ fwi:
   # normalizzazione satura.
   normalisation_max: 50.0
 
+  # SPENTO (#476): il FWI pieno di ogni nodo dalla sua climatologia estiva
+  # (`fwi_climatology`), non 50 ovunque. Con 50 le classi coincidono con le
+  # bande EFFIS solo dove il terreno vale 1, e al Nord «Alto» scatta a FWI
+  # 33-46: d'estate ci arriva lo 0,4-2,8 % delle celle (analisi del 13/11).
+  # Il tetto del nodo è la media, sui mesi, del suo quantile mensile, fra
+  # `minimo` e `normalisation_max`: al Sud, dove il quantile passa 50, non
+  # cambia niente. Si accende dopo `limen backtest-wildfire` con una
+  # climatologia che finisce prima degli anni misurati (LIMEN_FWI_CLIM_FINO).
+  # tetto_per_nodo:
+  #   quantile: 95
+  #   mesi: [6, 7, 8, 9]
+  #   minimo: 35.0
+
   # L'ora (UTC) del campione meteo del giorno: T, umidità e vento di
   # quell'ora, pioggia delle 24 ore prima. Van Wagner vuole il mezzogiorno
   # solare, che in Italia sono le 11 UTC, e Copernicus (CEMS/GEFF-ERA5) usa

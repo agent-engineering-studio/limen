@@ -7,7 +7,11 @@ percentile cade il valore di oggi.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from limen.core.scoring.regional_thresholds import TettoPerNodoBlock
 
 #: I livelli dei quantili salvati: 0, 5, …, 100.
 LIVELLI: tuple[float, ...] = tuple(5.0 * i for i in range(21))
@@ -55,3 +59,20 @@ def percentile(valore: float, q: Sequence[float]) -> float:
             uguali = [lv for lv, v in zip(LIVELLI, q, strict=True) if v == q[i]]
             return (uguali[0] + uguali[-1]) / 2
     return 100.0
+
+
+def tetto_del_nodo(
+    per_mese: Mapping[int, Sequence[float]], blocco: TettoPerNodoBlock, massimo: float
+) -> float | None:
+    """Il FWI che vale 1 in questo nodo (#476); ``None`` senza climatologia dei mesi chiesti.
+
+    La media, sui mesi del blocco, del quantile mensile, fra ``blocco.minimo``
+    e ``massimo`` (``normalisation_max``).
+    """
+    i = LIVELLI.index(blocco.quantile)
+    valori = [
+        per_mese[m][i] for m in blocco.mesi if m in per_mese and len(per_mese[m]) == len(LIVELLI)
+    ]
+    if not valori:
+        return None
+    return min(max(sum(valori) / len(valori), blocco.minimo), massimo)

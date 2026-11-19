@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from limen.core.scoring.regional_thresholds import TettoPerNodoBlock
+from limen.core.scoring.wildfire.climatology import tetto_del_nodo
 from limen.data.db import acquire
 from limen.data.repos.fwi_state_repo import quantize
 
@@ -96,3 +98,43 @@ async def per_punto(lon: float, lat: float, month: int, raggio: float) -> NodoMe
         year_from=int(row["year_from"]),
         year_to=int(row["year_to"]),
     )
+
+
+async def per_nodi(
+    nodi: list[tuple[float, float]], mesi: tuple[int, ...]
+) -> dict[tuple[float, float], dict[int, list[float]]]:
+    """I quantili di ``mesi`` per ogni nodo, con le coordinate quantizzate come la tabella."""
+    if not nodi:
+        return {}
+    chiavi = [quantize(lon, lat) for lon, lat in nodi]
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT c.node_lon, c.node_lat, c.month, c.quantiles
+            FROM fwi_climatology c
+            JOIN unnest($1::numeric[], $2::numeric[]) AS n(lon, lat)
+              ON c.node_lon = n.lon AND c.node_lat = n.lat
+            WHERE c.month = ANY($3::smallint[])
+            """,
+            [k[0] for k in chiavi],
+            [k[1] for k in chiavi],
+            list(mesi),
+        )
+    out: dict[tuple[float, float], dict[int, list[float]]] = {}
+    for r in rows:
+        out.setdefault((float(r["node_lon"]), float(r["node_lat"])), {})[int(r["month"])] = list(
+            r["quantiles"]
+        )
+    return out
+
+
+async def tetti(
+    nodi: list[tuple[float, float]], blocco: TettoPerNodoBlock, massimo: float
+) -> list[float | None]:
+    """Il FWI pieno di ogni nodo (#476), allineato a ``nodi``; ``None`` senza climatologia."""
+    per_nodo = await per_nodi(nodi, blocco.mesi)
+    out: list[float | None] = []
+    for lon, lat in nodi:
+        q = quantize(lon, lat)
+        out.append(tetto_del_nodo(per_nodo.get((float(q[0]), float(q[1])), {}), blocco, massimo))
+    return out

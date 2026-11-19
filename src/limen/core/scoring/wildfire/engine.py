@@ -49,7 +49,13 @@ class WildfireScoringEngine(ScoringEngine[WildfireBreakdown]):
         # form that leaves nothing to say. The cell scores zero and the
         # breakdown says the chain is untrustworthy -- a dark cell that
         # declares why beats a plausible number nobody can source.
-        fwi_norm = 0.0 if fw is None else min(fw.fwi / t.fwi.normalisation_max, 1.0)
+        # Il tetto del nodo (#476) solo se il blocco è nello YAML: «spento» non
+        # deve dipendere da chi riempie il bundle.
+        pieno = t.fwi.normalisation_max
+        tetto = bundle.dynamic.fwi_normalisation_max if t.fwi.tetto_per_nodo is not None else None
+        if tetto is not None:
+            pieno = tetto
+        fwi_norm = 0.0 if fw is None else min(fw.fwi / pieno, 1.0)
 
         fuel = t.fuel.for_code(bundle.static.landuse_code)
 
@@ -73,6 +79,7 @@ class WildfireScoringEngine(ScoringEngine[WildfireBreakdown]):
             level=classify_score(score, t.classes),
             breakdown=WildfireBreakdown(
                 fwi_norm=fwi_norm,
+                fwi_normalisation_max=tetto,
                 fuel=fuel,
                 slope=slope,
                 fire_weather=fw,

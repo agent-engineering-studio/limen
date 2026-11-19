@@ -676,6 +676,32 @@ class FwiObservedRainBlock(_StrictModel):
     max_step_mm: float = Field(..., gt=0.0)
 
 
+class TettoPerNodoBlock(_StrictModel):
+    """Il FWI «pieno» di ogni nodo dalla sua climatologia estiva, non 50 ovunque (#476).
+
+    ``normalisation_max`` = 50 fa coincidere le classi con le bande EFFIS solo
+    dove il terreno vale 1; al Nord, dove l'FWI estivo raramente arriva a 30,
+    «Alto» resta irraggiungibile su quasi tutto il territorio. Qui il tetto
+    del nodo è la media, sui ``mesi``, del suo ``quantile`` mensile
+    (``fwi_climatology``), tenuta fra ``minimo`` e ``normalisation_max``: al
+    Sud, dove il quantile passa 50, non cambia niente per costruzione. Un nodo
+    senza climatologia resta a ``normalisation_max``.
+    """
+
+    #: Uno dei livelli salvati in `fwi_climatology` (0, 5, …, 100).
+    quantile: float = Field(..., ge=0.0, le=100.0)
+    mesi: tuple[int, ...] = Field(..., min_length=1)
+    minimo: float = Field(..., gt=0.0)
+
+    @model_validator(mode="after")
+    def _valido(self) -> TettoPerNodoBlock:
+        if self.quantile % 5:
+            raise ValueError("tetto_per_nodo.quantile must be one of 0, 5, …, 100")
+        if any(not 1 <= m <= 12 for m in self.mesi):
+            raise ValueError("tetto_per_nodo.mesi must be months 1-12")
+        return self
+
+
 class FwiBlock(_StrictModel):
     """Everything the FWI chain needs that a deployment may legitimately set.
 
@@ -695,6 +721,8 @@ class FwiBlock(_StrictModel):
     #: FWI value mapped to a normalised 1.0. EFFIS calls ≥ 50 "extreme"; above
     #: it the index keeps climbing but the operational answer stops changing.
     normalisation_max: float = Field(..., gt=0.0)
+    #: Il tetto per nodo dalla climatologia (#476). Assente ⇒ 50 ovunque, come prima.
+    tetto_per_nodo: TettoPerNodoBlock | None = None
     #: L'ora UTC del campione meteo del giorno (#289): Van Wagner vuole il
     #: mezzogiorno solare, 11 UTC in Italia.
     ora_osservazione_utc: int = Field(..., ge=0, le=23)

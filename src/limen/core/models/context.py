@@ -149,6 +149,8 @@ class MonitoringContext(BaseModel):
     # sostituire con uno zero.
     fwi_nodes: Sequence[tuple[float, float]] = Field(default_factory=tuple)
     fwi_by_node: Sequence[FireWeatherState | None] = Field(default_factory=tuple)
+    #: Il FWI pieno di ogni nodo, allineato a ``fwi_nodes`` (#476); vuoto = spento.
+    fwi_tetto_by_node: Sequence[float | None] = Field(default_factory=tuple)
     # Per cella (#284): solo i terremoti che hanno scosso **quella** cella,
     # con la PGA della ShakeMap INGV in quel punto.
     seismic_per_cella: Mapping[str, tuple[SeismicHistoryEvent, ...]] = Field(default_factory=dict)

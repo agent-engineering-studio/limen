@@ -92,10 +92,14 @@ def assemble_bundles(
                 if series.samples:
                     rainfall = series
         fire_weather = None
+        fwi_tetto: float | None = None
         if use_fwi_grid:
             centroid = ctx.cell_centroids.get(cell_id)
             if centroid is not None:
-                fire_weather = ctx.fwi_by_node[nearest_node(centroid[0], centroid[1], fwi_nodes)]
+                nodo = nearest_node(centroid[0], centroid[1], fwi_nodes)
+                fire_weather = ctx.fwi_by_node[nodo]
+                if len(ctx.fwi_tetto_by_node) == len(fwi_nodes):
+                    fwi_tetto = ctx.fwi_tetto_by_node[nodo]
 
         flood_rain = ctx.flood_forecast_rain_72h_mm
         flood_river = ctx.river_discharge_ratio
@@ -133,6 +137,7 @@ def assemble_bundles(
             months_since_fire=fuoco[0] if (fuoco := ctx.fuoco_per_cella.get(cell_id)) else None,
             fire_severity=fuoco[1] if fuoco else None,
             fire_weather=fire_weather,
+            fwi_normalisation_max=fwi_tetto,
             sensor_features=ctx.sensor_features_by_cell.get(cell_id),
         )
         bundles.append(

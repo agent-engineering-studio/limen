@@ -173,6 +173,8 @@ class DynamicInputs(_Frozen):
     # celle senza stato ricorsivo: il motore incendio lo dichiara invece di
     # inventare un indice da uno stato che non c'è.
     fire_weather: FireWeatherState | None = None
+    #: Il FWI che vale 1 nel nodo della cella (#476); None = ``normalisation_max``.
+    fwi_normalisation_max: float | None = Field(default=None, gt=0.0)
     # V1.5 — per-cell in-situ aggregate. Absent on cells without sensors;
     # the engine then runs the pure V1 path for that cell.
     sensor_features: SensorFeatures | None = None
@@ -420,6 +422,8 @@ class WildfireBreakdown(HazardBreakdown):
     #: La catena grezza, per verificabilità: un operatore che contesta un
     #: punteggio deve poter risalire ai sei numeri di Van Wagner.
     fire_weather: FireWeatherState | None = None
+    #: Il FWI pieno usato per questa cella, quando è quello del nodo (#476).
+    fwi_normalisation_max: float | None = None
     #: Vero quando la catena non ha ancora abbastanza giorni alle spalle,
     #: o non c'è affatto. Il punteggio esiste comunque, ma va letto sapendolo.
     spinup: bool = False
@@ -435,6 +439,13 @@ class WildfireBreakdown(HazardBreakdown):
             "spinup": self.spinup,
             "fire_weather": (
                 self.fire_weather.model_dump(mode="json") if self.fire_weather is not None else None
+            ),
+            # Solo quando c'è (#476): senza il tetto per nodo le righe restano
+            # quelle di prima.
+            **(
+                {"fwi_normalisation_max": self.fwi_normalisation_max}
+                if self.fwi_normalisation_max is not None
+                else {}
             ),
         }
 

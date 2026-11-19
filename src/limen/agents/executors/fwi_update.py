@@ -39,7 +39,7 @@ from limen.core.scoring.regional_thresholds import (
     WildfireThresholds,
     load_hazard_thresholds,
 )
-from limen.data.repos import fwi_state_repo
+from limen.data.repos import fwi_climatology_repo, fwi_state_repo
 from limen.data.repos.fwi_state_repo import NodeDay, StoredChain
 from limen.integrations.openmeteo.client import OpenMeteoHttpClient
 from limen.integrations.openmeteo.dtos import FireWeatherObservation, MeteoSnapshot
@@ -96,7 +96,11 @@ class FwiUpdateExecutor(Executor):
                     nodes=len(nodes),
                     day=target.isoformat(),
                 )
-                return ctx.with_update(fwi_nodes=tuple(nodes), fwi_by_node=tuple(already))
+                return ctx.with_update(
+                    fwi_nodes=tuple(nodes),
+                    fwi_by_node=tuple(already),
+                    fwi_tetto_by_node=await self._tetti(nodes),
+                )
 
         stored_by_node = [
             await fwi_state_repo.latest_before(lon, lat, target) for lon, lat in nodes
@@ -168,7 +172,18 @@ class FwiUpdateExecutor(Executor):
             # a warning, because the usual cause is that `limen fwi-backfill`
             # was never run for this AOI.
             log.warning("fwi_update.no_chain", aoi_id=ctx.aoi_id, day=target.isoformat())
-        return ctx.with_update(fwi_nodes=tuple(nodes), fwi_by_node=tuple(chains))
+        return ctx.with_update(
+            fwi_nodes=tuple(nodes),
+            fwi_by_node=tuple(chains),
+            fwi_tetto_by_node=await self._tetti(nodes),
+        )
+
+    async def _tetti(self, nodes: list[tuple[float, float]]) -> tuple[float | None, ...]:
+        """Il FWI pieno di ogni nodo dalla climatologia (#476); vuoto se il blocco manca."""
+        blocco = self._t.fwi.tetto_per_nodo
+        if blocco is None:
+            return ()
+        return tuple(await fwi_climatology_repo.tetti(nodes, blocco, self._t.fwi.normalisation_max))
 
     def _span(self, target: date, stored: list[StoredChain | None]) -> list[date]:
         """Every day some node still has to walk, earliest first.

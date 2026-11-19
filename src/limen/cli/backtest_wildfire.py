@@ -93,6 +93,7 @@ from limen.core.scoring.regional_thresholds import (
 )
 from limen.core.scoring.wildfire import WildfireScoringEngine
 from limen.data.db import acquire, lifespan_pool
+from limen.data.repos import fwi_climatology_repo
 from limen.data.repos.aoi_repo import list_aoi_ids
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.dpc.fwi_pioggia import Fonte, fonte_archivio
@@ -359,6 +360,7 @@ def evaluate(
     thresholds: WildfireThresholds,
     alert_level: RiskLevel,
     season: tuple[date, date] | None = None,
+    tetti: Sequence[float | None] = (),
 ) -> WildfireBacktestMetrics:
     """Score every burnt cell across the window and measure the warning.
 
@@ -374,7 +376,9 @@ def evaluate(
     horizon_days = int(_LEAD_MAX_HOURS // 24)
     scored_days = set(days)
 
-    def alerted(cell_id: str, sf: StaticFactors, fw: FireWeatherState, day: date) -> bool:
+    def alerted(
+        cell_id: str, sf: StaticFactors, fw: FireWeatherState, day: date, tetto: float | None
+    ) -> bool:
         scored = engine.score(
             CellFeatureBundle(
                 aoi_id=aoi_id,
@@ -383,6 +387,7 @@ def evaluate(
                 dynamic=DynamicInputs(
                     valuation_time=datetime.combine(day, time(12), UTC),
                     fire_weather=fw,
+                    fwi_normalisation_max=tetto,
                 ),
             )
         )
@@ -408,7 +413,9 @@ def evaluate(
     warned_cells = 0
     leads: list[float] = []
     for cell_id, (fire_date, lon, lat) in truth.items():
-        chain = chains[nearest_node(lon, lat, nodes)]
+        nodo = nearest_node(lon, lat, nodes)
+        chain = chains[nodo]
+        tetto = tetti[nodo] if len(tetti) == len(nodes) else None
         sf = static.get(cell_id) or StaticFactors(cell_id=cell_id)
         # Solo i giorni dentro l'orizzonte di preavviso, dal più lontano al
         # giorno stesso. Scandire l'intera finestra prenderebbe la prima
@@ -430,7 +437,7 @@ def evaluate(
             if fw is None:
                 continue
             base_days += 1
-            if alerted(cell_id, sf, fw, day):
+            if alerted(cell_id, sf, fw, day, tetto):
                 base_alerted += 1
 
         earliest: date | None = None
@@ -438,7 +445,7 @@ def evaluate(
             fw = chain.get(day)
             if fw is None:
                 continue
-            if alerted(cell_id, sf, fw, day):
+            if alerted(cell_id, sf, fw, day, tetto):
                 earliest = day
                 break
         if earliest is None:
@@ -564,6 +571,7 @@ def carico_celle(
     thresholds: WildfireThresholds,
     alert_level: RiskLevel,
     bruciate: Mapping[str, date] | None = None,
+    tetti: Sequence[float | None] = (),
 ) -> CaricoCelle:
     """Le giornate-cella in ``[start, end]`` con la cella in ``alert_level``
     o oltre, su tutte le celle dell'AOI: in media e nel giorno peggiore.
@@ -621,7 +629,10 @@ def carico_celle(
             continue
         fwi = np.array([v for _, v in stati])
         t = np.array(terreni)
-        punteggi = np.minimum(np.outer(t, np.minimum(fwi / pieno, 1.0)), 1.0)
+        # Il FWI pieno del nodo (#476), come nel motore: solo col blocco nello YAML.
+        tetto = tetti[k] if len(tetti) == len(nodes) else None
+        del_nodo = tetto if tetto is not None and thresholds.fwi.tetto_per_nodo else pieno
+        punteggi = np.minimum(np.outer(t, np.minimum(fwi / del_nodo, 1.0)), 1.0)
         if gate is not None:
             accesa = np.outer(t >= gate.terrain_min, fwi >= gate.fwi_min)
             punteggi = np.where(accesa, np.maximum(punteggi, rosso), punteggi)
@@ -856,6 +867,19 @@ async def backtest_aoi(
         for k, ((lon, lat), samples) in enumerate(zip(nodes, series, strict=True))
     ]
 
+    blocco = thresholds.fwi.tetto_per_nodo
+    tetti = (
+        await fwi_climatology_repo.tetti(nodes, blocco, thresholds.fwi.normalisation_max)
+        if blocco is not None
+        else []
+    )
+    if blocco is not None:
+        log.info(
+            "backtest_wildfire.tetti",
+            aoi_id=aoi_id,
+            nodi=len(nodes),
+            con_climatologia=sum(x is not None for x in tetti),
+        )
     static = await _static_by_cell(list(truth))
     metrics = evaluate(
         aoi_id=aoi_id,
@@ -867,6 +891,7 @@ async def backtest_aoi(
         thresholds=thresholds,
         alert_level=alert_level,
         season=(start, end),
+        tetti=tetti,
     )
     carico = carico_celle(
         await celle_aoi(aoi_id),
@@ -877,6 +902,7 @@ async def backtest_aoi(
         thresholds=thresholds,
         alert_level=alert_level,
         bruciate={cella: giorno for cella, (giorno, _lon, _lat) in truth.items()},
+        tetti=tetti,
     )
     metrics = replace(
         metrics,
