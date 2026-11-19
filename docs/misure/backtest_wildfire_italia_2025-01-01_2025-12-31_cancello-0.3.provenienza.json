@@ -1,0 +1,26 @@
+{
+  "report": "backtest_wildfire_italia_2025-01-01_2025-12-31.md",
+  "generato": "2026-11-19T15:50:56+00:00",
+  "limen": "0.1.0",
+  "commit": "9ee1201dcb1d641ea944a6bd45525396796daea5",
+  "versioni": {
+    "landslide": "limen-deterministic-v1",
+    "flood": "flood-v1.4.0",
+    "wildfire": "wildfire-v1.1.1"
+  },
+  "comando": "limen backtest-wildfire",
+  "ambiente": {
+    "LIMEN_BACKTEST_WILDFIRE_CANCELLO": "0.3",
+    "LIMEN_BACKTEST_WILDFIRE_END": "2025-12-31",
+    "LIMEN_BACKTEST_WILDFIRE_LEVEL": "Moderate",
+    "LIMEN_BACKTEST_WILDFIRE_START": "2025-01-01",
+    "LIMEN_BACKUP_DIR": "<percorso locale>",
+    "LIMEN_DATA_ROOT": "<percorso locale>",
+    "LIMEN_DOMINIO": "localhost",
+    "LIMEN_IMAGE_PREFIX": "ghcr.io/agent-engineering-studio/limen-",
+    "LIMEN_IMAGE_TAG": "sha-9b96afc",
+    "LIMEN_IMPERVIOUSNESS_RASTER": "<percorso locale>",
+    "LIMEN_PROXY_BIND": "127.0.0.1",
+    "LIMEN_REPORTS_DIR": "<percorso locale>"
+  }
+}
