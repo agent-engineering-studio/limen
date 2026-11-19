@@ -474,6 +474,7 @@ def test_il_report_dell_adozione_mette_gli_eventi_accanto_alla_base() -> None:
             (12, 100),
             [OraNowcast("melito", e.at, 15.0, 20.0, 4, 2)],
             (2, 50, 30),
+            (10, 3, 4, 2),
             30.0,
         )
     )
@@ -481,3 +482,4 @@ def test_il_report_dell_adozione_mette_gli_eventi_accanto_alla_base() -> None:
     assert "**12 su 100** (12.0 %)" in testo
     assert "errore medio **5.0 mm**" in testo
     assert "colte 1 su 1" in testo
+    assert "**3 su 10** (30.0 %)" in testo and "**2 su 4** (50.0 %)" in testo

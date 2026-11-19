@@ -232,10 +232,52 @@ async def nowcast_evento(e: Evento, soglia_mmh: float) -> list[OraNowcast]:
     return out
 
 
+async def catalogo(dal: date, al: date) -> tuple[int, int, int, int]:
+    """Il catalogo delle piogge rare contro gli eventi verificati (#643, §4 della issue).
+
+    Candidati confermati dal «Merging» nel periodo, quanti hanno un evento
+    verificato (frana o alluvione) nello stesso comune entro un giorno; eventi
+    verificati, quanti avevano un candidato. Due quote, perché il catalogo da
+    solo passa i suoi livelli due-cinque volte troppo spesso.
+    """
+    async with acquire() as conn:
+        r = await conn.fetchrow(
+            """
+            WITH c AS (
+                SELECT evento_at, istat_code FROM radar_piogge_rare
+                WHERE confermato AND istat_code IS NOT NULL
+                  AND evento_at >= $1 AND evento_at < $2
+            ), v AS (
+                SELECT slug, evento_at, comuni FROM verifiche_eventi
+                WHERE hazard_type IN ('flood', 'landslide')
+                  AND evento_at >= $1 AND evento_at < $2
+            )
+            SELECT
+              (SELECT count(*) FROM c) AS candidati,
+              (SELECT count(*) FROM c WHERE EXISTS (
+                  SELECT 1 FROM v WHERE c.istat_code = ANY(v.comuni)
+                    AND abs(extract(epoch FROM v.evento_at - c.evento_at)) <= 86400)) AS presi,
+              (SELECT count(*) FROM v) AS eventi,
+              (SELECT count(*) FROM v WHERE EXISTS (
+                  SELECT 1 FROM c WHERE c.istat_code = ANY(v.comuni)
+                    AND abs(extract(epoch FROM v.evento_at - c.evento_at)) <= 86400)) AS visti
+            """,
+            datetime.combine(dal, time(), UTC),
+            datetime.combine(al + timedelta(days=1), time(), UTC),
+        )
+    assert r is not None
+    return int(r["candidati"]), int(r["presi"]), int(r["eventi"]), int(r["visti"])
+
+
 async def misura(
     dal: date, al: date, soglia_mmh: float
 ) -> tuple[
-    list[EsitoEvento], dict[str, Any], tuple[int, int], list[OraNowcast], tuple[int, int, int]
+    list[EsitoEvento],
+    dict[str, Any],
+    tuple[int, int],
+    list[OraNowcast],
+    tuple[int, int, int],
+    tuple[int, int, int, int],
 ]:
     """Tutta la parte «adozione»; serve il database (eventi e celle) e l'API del DPC."""
     trovati = await eventi(dal, al)
@@ -254,13 +296,14 @@ async def misura(
         for o in await nowcast_evento(e, soglia_mmh)
     ]
     sveglia = await base_sveglia(giorni, soglia_mmh)
+    cat = await catalogo(dal, al)
     log.info(
         "misura_radar.adozione",
         eventi=len(trovati),
         giorni=len(giorni),
         ore_nowcast=len(ore),
     )
-    return esiti, base, cieche, ore, sveglia
+    return esiti, base, cieche, ore, sveglia, cat
 
 
 async def base_sveglia(giorni: list[date], soglia_mmh: float) -> tuple[int, int, int]:
@@ -290,6 +333,7 @@ def righe_adozione(
     cieche: tuple[int, int],
     ore: list[OraNowcast],
     sveglia: tuple[int, int, int],
+    cat: tuple[int, int, int, int],
     soglia_mmh: float,
 ) -> list[str]:
     righe = [
@@ -375,5 +419,17 @@ def righe_adozione(
                 f"| {o.slug} | {o.ora:%d/%m %H:%M} | {_f(o.previsti_mm)} | {_f(o.caduti_mm)} | "
                 f"{o.sveglia_px} | {o.sveglia_corretta_px} |"
             )
-    righe.append("")
+    candidati, presi, eventi_v, visti = cat
+    righe += [
+        "",
+        "### Catalogo delle piogge rare",
+        "",
+        f"Candidati confermati dal «Merging» (`radar_piogge_rare`) con un evento verificato "
+        f"nello stesso comune entro un giorno: **{presi} su {candidati}** "
+        f"({_quota(presi, candidati)}); eventi verificati che avevano un candidato: "
+        f"**{visti} su {eventi_v}** ({_quota(visti, eventi_v)}). Il catalogo comincia la "
+        "notte in cui il passo `piogge_rare` gira la prima volta: prima, zero non vuol dire "
+        "niente.",
+        "",
+    ]
     return righe
