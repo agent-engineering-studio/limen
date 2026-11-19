@@ -187,6 +187,7 @@ SELECT c.cell_id,
        c.flood_hazard_norm,
        c.quota_sul_fondo_m,
        c.imperviousness_norm,
+       c.water_wetness_temp,
        s.score AS susc_ispra,
        i.insar_velocity_mmy, i.insar_accel_mmy2, i.scatterer_count,
        i.velocita_verticale_mmy, i.velocita_est_mmy, i.stagionalita_verticale_mm,
@@ -245,6 +246,7 @@ async def fattori_aoi(aoi_id: str) -> list[tuple[StaticFactors, float, float]]:
             imperviousness_norm=(
                 float(r["imperviousness_norm"]) if r["imperviousness_norm"] is not None else None
             ),
+            water_wetness_temp=_float(r["water_wetness_temp"]),
             insar_velocity_mmy=_float(r["insar_velocity_mmy"]),
             insar_accel_mmy2=_float(r["insar_accel_mmy2"]),
             insar_scatterer_count=(

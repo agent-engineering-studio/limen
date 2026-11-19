@@ -253,6 +253,7 @@ async def _fetch_cells(
             """
             SELECT c.cell_id, c.flood_hazard_norm, c.imperviousness_norm, c.slope_deg,
                    c.quota_sul_fondo_m,
+                   c.water_wetness_temp,
                    ST_X(ST_Centroid(g.geom)) AS lon,
                    ST_Y(ST_Centroid(g.geom)) AS lat
             FROM cell_static_factors c
@@ -282,6 +283,9 @@ async def _fetch_cells(
             # backtest misurerebbe un motore diverso.
             quota_sul_fondo_m=(
                 float(r["quota_sul_fondo_m"]) if r["quota_sul_fondo_m"] is not None else None
+            ),
+            water_wetness_temp=(
+                float(r["water_wetness_temp"]) if r["water_wetness_temp"] is not None else None
             ),
         )
         out.append((static, float(r["lon"]), float(r["lat"])))

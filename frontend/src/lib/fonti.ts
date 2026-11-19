@@ -18,7 +18,12 @@ import type { HazardType } from "../types";
 import { meteoEcmwf } from "./attribuzioni";
 import type { Lingua } from "./i18n";
 
-export type RuoloFonte = "calcolo" | "verifica" | "contesto" | "base" | "valutazione";
+export type RuoloFonte =
+  | "calcolo"
+  | "verifica"
+  | "contesto"
+  | "base"
+  | "valutazione";
 
 /** Il servizio Copernicus da cui viene il dato, per il riquadro di provenienza. */
 export type ServizioCopernicus = "CEMS" | "CLMS" | "C3S" | "EFFIS";
@@ -70,7 +75,7 @@ export const NOME_RUOLO: Record<RuoloFonte, Testo> = {
 export const SPIEGAZIONE_RUOLO: Record<RuoloFonte, Testo> = {
   calcolo: t(
     "Questi dati diventano i numeri della mappa: senza, il punteggio di una cella cambia o diventa «non misurato».",
-    "These data become the numbers on the map: without them, a cell's score changes or becomes \"not measured\".",
+    'These data become the numbers on the map: without them, a cell\'s score changes or becomes "not measured".',
   ),
   verifica: t(
     "Gli eventi accaduti davvero e i calcoli ufficiali: servono a tarare le soglie e a misurare Limen, mai a calcolare il punteggio di oggi.",
@@ -102,7 +107,10 @@ export const NOME_SERVIZIO: Record<ServizioCopernicus, Testo> = {
   CEMS: t("Emergency Management Service", "Emergency Management Service"),
   CLMS: t("Land Monitoring Service", "Land Monitoring Service"),
   C3S: t("Climate Change Service", "Climate Change Service"),
-  EFFIS: t("European Forest Fire Information System", "European Forest Fire Information System"),
+  EFFIS: t(
+    "European Forest Fire Information System",
+    "European Forest Fire Information System",
+  ),
 };
 
 const COPERNICUS_CEMS = t(
@@ -113,7 +121,10 @@ const COPERNICUS_C3S = t(
   "Contiene informazioni modificate del Copernicus Climate Change Service",
   "Contains modified Copernicus Climate Change Service information",
 );
-const OPEN_METEO = t("Weather data by Open-Meteo.com", "Weather data by Open-Meteo.com");
+const OPEN_METEO = t(
+  "Weather data by Open-Meteo.com",
+  "Weather data by Open-Meteo.com",
+);
 const COPERNICUS_CLMS = t(
   "Generated using European Union's Copernicus Land Monitoring Service information",
   "Generated using European Union's Copernicus Land Monitoring Service information",
@@ -165,7 +176,7 @@ export const FONTI: readonly Fonte[] = [
     ),
     interpretazione: t(
       "La pioggia dei 30 giorni entra nella componente M delle frane con una sigmoide centrata su 80 mm. Lo storico avvia la catena FWI dal 1° aprile e dà i percentili mensili per il «rispetto al solito»; nei backtest rigioca gli eventi del catalogo.",
-      "The 30-day rain enters the landslide M component through a sigmoid centred on 80 mm. The archive starts the FWI chain on 1 April and gives the monthly percentiles for \"compared with usual\"; in the backtests it replays the catalogued events.",
+      'The 30-day rain enters the landslide M component through a sigmoid centred on 80 mm. The archive starts the FWI chain on 1 April and gives the monthly percentiles for "compared with usual"; in the backtests it replays the catalogued events.',
     ),
     licenza: "Licenza Copernicus",
     attribuzione: COPERNICUS_C3S,
@@ -175,10 +186,16 @@ export const FONTI: readonly Fonte[] = [
   {
     id: "open-meteo-marine",
     ente: "Open-Meteo",
-    dataset: t("Previsione del moto ondoso (Marine API)", "Wave forecast (Marine API)"),
+    dataset: t(
+      "Previsione del moto ondoso (Marine API)",
+      "Wave forecast (Marine API)",
+    ),
     ruolo: "calcolo",
     pericoli: ["landslide"],
-    cosa: t("L'altezza d'onda dei prossimi tre giorni.", "Wave height for the next three days."),
+    cosa: t(
+      "L'altezza d'onda dei prossimi tre giorni.",
+      "Wave height for the next three days.",
+    ),
     accesso: t(
       "API REST, a ogni giro delle frane, al centro della regione.",
       "REST API, every landslide run, at the centre of the region.",
@@ -196,7 +213,7 @@ export const FONTI: readonly Fonte[] = [
     ente: "Dipartimento della Protezione Civile",
     dataset: t(
       "Radar meteorologico nazionale: SRI e «Merging» (radar corretto con i pluviometri)",
-      "National weather radar: SRI and \"Merging\" (radar corrected with rain gauges)",
+      'National weather radar: SRI and "Merging" (radar corrected with rain gauges)',
     ),
     ruolo: "calcolo",
     pericoli: ["landslide", "flood", "wildfire"],
@@ -206,11 +223,11 @@ export const FONTI: readonly Fonte[] = [
     ),
     accesso: t(
       "API REST della Protezione Civile. L'intensità SRI ogni 15 minuti; la cumulata «Merging» delle 24 ore a ogni giro dell'alluvione e ogni notte per la catena incendi; un archivio locale per le verifiche.",
-      "Civil Protection REST API. SRI intensity every 15 minutes; the 24-hour \"Merging\" accumulation every flood run and every night for the fire chain; a local archive for the checks.",
+      'Civil Protection REST API. SRI intensity every 15 minutes; the 24-hour "Merging" accumulation every flood run and every night for the fire chain; a local archive for the checks.',
     ),
     interpretazione: t(
       "Oltre 30 mm/h su almeno tre pixel di una regione, Limen la ricalcola subito. Alluvione: pioggia = il massimo fra le 72 ore previste e le 24 ore osservate più le 48 previste (mediana 3×3 sul centro della cella; un salto oltre 150 mm diventa «non misurato»). Incendio: rifà gli ultimi tre giorni della catena con la pioggia misurata.",
-      "Above 30 mm/h on at least three pixels of a region, Limen recomputes it at once. Flood: rain = the larger of the 72 forecast hours and the 24 observed hours plus the 48 forecast (3×3 median at the cell centre; a jump above 150 mm becomes \"not measured\"). Wildfire: it redoes the last three days of the chain with measured rain.",
+      'Above 30 mm/h on at least three pixels of a region, Limen recomputes it at once. Flood: rain = the larger of the 72 forecast hours and the 24 observed hours plus the 48 forecast (3×3 median at the cell centre; a jump above 150 mm becomes "not measured"). Wildfire: it redoes the last three days of the chain with measured rain.',
     ),
     licenza: "CC BY-SA 4.0",
     url: "https://radar.protezionecivile.it",
@@ -304,7 +321,10 @@ export const FONTI: readonly Fonte[] = [
     ),
     ruolo: "calcolo",
     pericoli: ["flood", "landslide"],
-    cosa: t("Dove l'acqua è già stata studiata arrivare.", "Where water has been studied to reach."),
+    cosa: t(
+      "Dove l'acqua è già stata studiata arrivare.",
+      "Where water has been studied to reach.",
+    ),
     accesso: t(
       "Dal database nazionale caricato sul server, valore per cella al bootstrap.",
       "From the national database loaded on the server, per-cell value at bootstrap.",
@@ -324,7 +344,10 @@ export const FONTI: readonly Fonte[] = [
   {
     id: "mase-geologia",
     ente: "Ministero dell'Ambiente e della Sicurezza Energetica, Geoportale Nazionale",
-    dataset: t("Carta geolitologica d'Italia 1:500.000", "Geolithological map of Italy 1:500,000"),
+    dataset: t(
+      "Carta geolitologica d'Italia 1:500.000",
+      "Geolithological map of Italy 1:500,000",
+    ),
     ruolo: "calcolo",
     pericoli: ["landslide"],
     cosa: t("La roccia sotto la cella.", "The rock under the cell."),
@@ -391,10 +414,16 @@ export const FONTI: readonly Fonte[] = [
   {
     id: "imperviousness",
     ente: "Copernicus Land Monitoring Service",
-    dataset: t("HRL Imperviousness Density 2018", "HRL Imperviousness Density 2018"),
+    dataset: t(
+      "HRL Imperviousness Density 2018",
+      "HRL Imperviousness Density 2018",
+    ),
     ruolo: "calcolo",
     pericoli: ["flood"],
-    cosa: t("Quanto suolo è asfaltato o costruito.", "How much soil is sealed."),
+    cosa: t(
+      "Quanto suolo è asfaltato o costruito.",
+      "How much soil is sealed.",
+    ),
     accesso: t(
       "Servizio ImageServer dell'Agenzia europea dell'ambiente, aperto e senza account, a 100 m; poi il bootstrap fa la media per cella.",
       "European Environment Agency ImageServer, open and without an account, at 100 m; then the bootstrap averages it per cell.",
@@ -410,6 +439,30 @@ export const FONTI: readonly Fonte[] = [
     copernicus: "CLMS",
   },
   {
+    id: "water-wetness",
+    ente: "Copernicus Land Monitoring Service",
+    dataset: t("HRL Water and Wetness 2018", "HRL Water and Wetness 2018"),
+    ruolo: "calcolo",
+    pericoli: ["flood"],
+    cosa: t(
+      "Dove il satellite ha visto acqua o terreno umido solo per una parte dell'anno (2009-2015).",
+      "Where satellites saw water or wet ground for only part of the year (2009-2015).",
+    ),
+    accesso: t(
+      "Servizio ImageServer dell'Agenzia europea dell'ambiente, aperto e senza account, a 50 m; poi il bootstrap conta la quota per cella.",
+      "European Environment Agency ImageServer, open and without an account, at 50 m; then the bootstrap computes the share per cell.",
+    ),
+    interpretazione: t(
+      "Per ora solo una misura: il fattore che ne nasce è spento (#420). Acceso, varrebbe solo dentro le aree a pericolo idraulico: la suscettibilità della classe ISPRA andrebbe da 0,925 volte, dove l'acqua temporanea non si è mai vista, a 1,25 volte, dove copre almeno il 15 % della cella.",
+      "For now only a measurement: the factor built on it is switched off (#420). Switched on, it would act only inside hydraulic hazard areas: the ISPRA class susceptibility would range from 0.925 times, where temporary water was never seen, to 1.25 times, where it covers at least 15% of the cell.",
+    ),
+    licenza: "Copernicus, accesso libero (Reg. UE 1159/2013)",
+    attribuzione: COPERNICUS_CLMS,
+    url: "https://land.copernicus.eu/en/products/high-resolution-layer-water-and-wetness",
+    facoltativa: true,
+    copernicus: "CLMS",
+  },
+  {
     id: "egms",
     ente: "Copernicus Land Monitoring Service",
     dataset: t(
@@ -418,7 +471,10 @@ export const FONTI: readonly Fonte[] = [
     ),
     ruolo: "calcolo",
     pericoli: ["landslide"],
-    cosa: t("Di quanti millimetri all'anno si muove il suolo.", "How many millimetres a year the ground moves."),
+    cosa: t(
+      "Di quanti millimetri all'anno si muove il suolo.",
+      "How many millimetres a year the ground moves.",
+    ),
     accesso: t(
       "API dell'archivio CLMS con chiave di servizio, una volta per release (oggi 2020-2025).",
       "CLMS archive API with a service key, once per release (today 2020-2025).",
@@ -443,13 +499,19 @@ export const FONTI: readonly Fonte[] = [
     ruolo: "calcolo",
     pericoli: ["landslide", "flood", "wildfire"],
     cosa: t("Strade e ferrovie.", "Roads and railways."),
-    accesso: t("File locale, al bootstrap: la distanza di ogni cella.", "Local file, at bootstrap: each cell's distance."),
+    accesso: t(
+      "File locale, al bootstrap: la distanza di ogni cella.",
+      "Local file, at bootstrap: each cell's distance.",
+    ),
     interpretazione: t(
       "Esposizione: una strada entro 250 m aggiunge 0,6, entro 1 km 0,3; una ferrovia 0,5 e 0,25. Alza la priorità di un'allerta, non il punteggio.",
       "Exposure: a road within 250 m adds 0.6, within 1 km 0.3; a railway 0.5 and 0.25. It raises an alert's priority, not the score.",
     ),
     licenza: "ODbL",
-    attribuzione: t("© OpenStreetMap contributors", "© OpenStreetMap contributors"),
+    attribuzione: t(
+      "© OpenStreetMap contributors",
+      "© OpenStreetMap contributors",
+    ),
     url: "https://www.openstreetmap.org",
     facoltativa: true,
   },
@@ -457,10 +519,16 @@ export const FONTI: readonly Fonte[] = [
   {
     id: "ingv-terremoti",
     ente: "INGV",
-    dataset: t("Terremoti (servizio FDSN) e ShakeMap", "Earthquakes (FDSN service) and ShakeMap"),
+    dataset: t(
+      "Terremoti (servizio FDSN) e ShakeMap",
+      "Earthquakes (FDSN service) and ShakeMap",
+    ),
     ruolo: "calcolo",
     pericoli: ["landslide"],
-    cosa: t("I terremoti dell'ultima settimana.", "Earthquakes of the last week."),
+    cosa: t(
+      "I terremoti dell'ultima settimana.",
+      "Earthquakes of the last week.",
+    ),
     accesso: t(
       "Servizio FDSN e ShakeMap dell'INGV. Oggi la sincronizzazione non è attiva (#284): la componente sismica vale zero.",
       "INGV FDSN service and ShakeMap. Today the synchronisation is not active (#284): the seismic component is zero.",
@@ -630,11 +698,17 @@ export const FONTI: readonly Fonte[] = [
     ),
     ruolo: "verifica",
     pericoli: ["landslide"],
-    cosa: t("Oltre seimila frane con data e luogo.", "Over six thousand landslides with date and place."),
-    accesso: t("Zenodo, con limen ingest-events.", "Zenodo, with limen ingest-events."),
+    cosa: t(
+      "Oltre seimila frane con data e luogo.",
+      "Over six thousand landslides with date and place.",
+    ),
+    accesso: t(
+      "Zenodo, con limen ingest-events.",
+      "Zenodo, with limen ingest-events.",
+    ),
     interpretazione: t(
       "Ha tarato le soglie di pioggia di Caine su 5.974 eventi. Nel backtest una frana è «vista» se la sua cella era almeno in classe Alta nelle ore prima; si chiede almeno il 70 % di frane viste con 18 ore d'anticipo, e una capacità di distinguerle almeno doppia del caso.",
-      "It calibrated the Caine rain thresholds on 5,974 events. In the backtest a landslide is \"seen\" if its cell was at least High in the hours before; the target is at least 70% seen with 18 hours' lead, and a discrimination at least twice chance.",
+      'It calibrated the Caine rain thresholds on 5,974 events. In the backtest a landslide is "seen" if its cell was at least High in the hours before; the target is at least 70% seen with 18 hours\' lead, and a discrimination at least twice chance.',
     ),
     licenza: "CC BY 4.0",
     url: "https://zenodo.org/records/14204473",
@@ -738,7 +812,10 @@ export const FONTI: readonly Fonte[] = [
   {
     id: "cems-rapid-mapping",
     ente: "Copernicus Emergency Management Service",
-    dataset: t("Rapid Mapping: le aree allagate osservate", "Rapid Mapping: observed flooded areas"),
+    dataset: t(
+      "Rapid Mapping: le aree allagate osservate",
+      "Rapid Mapping: observed flooded areas",
+    ),
     ruolo: "verifica",
     pericoli: ["flood"],
     cosa: t(
@@ -751,21 +828,33 @@ export const FONTI: readonly Fonte[] = [
     ),
     interpretazione: t(
       "La verità del backtest alluvione: almeno il 70 % di eventi visti con 12 ore d'anticipo e non più del 30 % di falsi allarmi, contati solo dove il satellite ha davvero guardato. Ha tarato le soglie 40/120 mm e 1,6/10. È anche il livello «Alluvioni osservate».",
-      "The truth of the flood backtest: at least 70% of events seen with 12 hours' lead and at most 30% false alarms, counted only where the satellite actually looked. It calibrated the 40/120 mm and 1.6/10 thresholds. It is also the \"Observed floods\" layer.",
+      'The truth of the flood backtest: at least 70% of events seen with 12 hours\' lead and at most 30% false alarms, counted only where the satellite actually looked. It calibrated the 40/120 mm and 1.6/10 thresholds. It is also the "Observed floods" layer.',
     ),
     licenza: "Copernicus, uso libero con attribuzione",
-    attribuzione: t("© European Union, Copernicus EMS", "© European Union, Copernicus EMS"),
+    attribuzione: t(
+      "© European Union, Copernicus EMS",
+      "© European Union, Copernicus EMS",
+    ),
     url: "https://rapidmapping.emergency.copernicus.eu",
     copernicus: "CEMS",
   },
   {
     id: "it-dpc-sri",
     ente: "FBK su dati del Dipartimento della Protezione Civile",
-    dataset: t("IT-DPC-SRI, archivio radar 2010-2025", "IT-DPC-SRI, radar archive 2010-2025"),
+    dataset: t(
+      "IT-DPC-SRI, archivio radar 2010-2025",
+      "IT-DPC-SRI, radar archive 2010-2025",
+    ),
     ruolo: "verifica",
     pericoli: ["landslide"],
-    cosa: t("Quindici anni di pioggia da radar.", "Fifteen years of radar rain."),
-    accesso: t("Copia locale dell'archivio Zenodo.", "Local copy of the Zenodo archive."),
+    cosa: t(
+      "Quindici anni di pioggia da radar.",
+      "Fifteen years of radar rain.",
+    ),
+    accesso: t(
+      "Copia locale dell'archivio Zenodo.",
+      "Local copy of the Zenodo archive.",
+    ),
     interpretazione: t(
       "Rigioca le frane del catalogo con la pioggia osservata invece di quella prevista, per sapere se un mancato allarme è colpa della pioggia in ingresso o del modello.",
       "It replays the catalogued landslides with observed instead of forecast rain, to tell whether a missed alarm is due to the input rain or to the model.",
@@ -799,7 +888,10 @@ export const FONTI: readonly Fonte[] = [
   {
     id: "sensori-cittadini",
     ente: "Rete dei sensori di Limen",
-    dataset: t("Stazioni dei cittadini e degli enti", "Citizen and institutional stations"),
+    dataset: t(
+      "Stazioni dei cittadini e degli enti",
+      "Citizen and institutional stations",
+    ),
     ruolo: "contesto",
     pericoli: ["landslide", "flood"],
     cosa: t(
@@ -827,8 +919,14 @@ export const FONTI: readonly Fonte[] = [
     ),
     ruolo: "base",
     pericoli: [],
-    cosa: t("Regioni, comuni e il contorno d'Italia.", "Regions, municipalities and the outline of Italy."),
-    accesso: t("Caricati una volta nel database.", "Loaded once into the database."),
+    cosa: t(
+      "Regioni, comuni e il contorno d'Italia.",
+      "Regions, municipalities and the outline of Italy.",
+    ),
+    accesso: t(
+      "Caricati una volta nel database.",
+      "Loaded once into the database.",
+    ),
     interpretazione: t(
       "Ogni cella appartiene a un comune; la lista dei comuni e il riepilogo per regione nascono da qui. Nessun peso nel punteggio.",
       "Each cell belongs to a municipality; the municipalities list and the regional summary come from here. No weight in the score.",
@@ -847,13 +945,19 @@ export const FONTI: readonly Fonte[] = [
     ruolo: "base",
     pericoli: [],
     cosa: t("Strade, città e nomi.", "Roads, towns and names."),
-    accesso: t("Tile raster di openstreetmap.org.", "Raster tiles from openstreetmap.org."),
+    accesso: t(
+      "Tile raster di openstreetmap.org.",
+      "Raster tiles from openstreetmap.org.",
+    ),
     interpretazione: t(
       "Solo lo sfondo, scurito perché i colori del rischio si leggano.",
       "Only the background, darkened so the risk colours can be read.",
     ),
     licenza: "ODbL",
-    attribuzione: t("© OpenStreetMap contributors", "© OpenStreetMap contributors"),
+    attribuzione: t(
+      "© OpenStreetMap contributors",
+      "© OpenStreetMap contributors",
+    ),
     url: "https://www.openstreetmap.org",
     logo: {
       file: "fonti/openstreetmap.svg",
@@ -884,7 +988,7 @@ export const FONTI: readonly Fonte[] = [
     ),
     interpretazione: t(
       "Provato e scartato (#281): a parità di indice FWI e di zona non cambia la probabilità di incendio. Misura l'anomalia, e un'estate siciliana arida è normale, quindi lì segna «nessuna siccità» proprio dove gli incendi sono di più. Ogni modo di aggiungerlo peggiorava la capacità di distinguere i giorni pericolosi.",
-      "Tried and discarded (#281): at equal FWI and area it does not change the probability of fire. It measures the anomaly, and an arid Sicilian summer is normal, so there it reads \"no drought\" exactly where fires are most frequent. Every way of adding it worsened how well dangerous days are told apart.",
+      'Tried and discarded (#281): at equal FWI and area it does not change the probability of fire. It measures the anomaly, and an arid Sicilian summer is normal, so there it reads "no drought" exactly where fires are most frequent. Every way of adding it worsened how well dangerous days are told apart.',
     ),
     licenza: "CC BY 4.0",
     url: "https://drought.emergency.copernicus.eu",
@@ -921,7 +1025,10 @@ export const FONTI: readonly Fonte[] = [
     dataset: t("Mappa europea del combustibile", "European fuel map"),
     ruolo: "valutazione",
     pericoli: ["wildfire"],
-    cosa: t("I tipi di vegetazione che bruciano.", "The kinds of vegetation that burn."),
+    cosa: t(
+      "I tipi di vegetazione che bruciano.",
+      "The kinds of vegetation that burn.",
+    ),
     accesso: t(
       "GeoTIFF aperto a 250 m (LAEA) con i codici NFFL dei tipi di combustibile, scaricabile senza account.",
       "Open 250 m GeoTIFF (LAEA) with the NFFL fuel-type codes, downloadable without an account.",
@@ -958,14 +1065,20 @@ export const FONTI: readonly Fonte[] = [
   {
     id: "sensor-community",
     ente: "Sensor.Community",
-    dataset: t("Sensori di temperatura e umidità", "Temperature and humidity sensors"),
+    dataset: t(
+      "Sensori di temperatura e umidità",
+      "Temperature and humidity sensors",
+    ),
     ruolo: "valutazione",
     pericoli: ["wildfire"],
     cosa: t(
       "Molti sensori in Emilia-Romagna, pochissimi al Sud, nessun pluviometro.",
       "Many sensors in Emilia-Romagna, very few in the South, no rain gauges.",
     ),
-    accesso: t("API aperta, aggiornata ogni pochi minuti.", "Open API, updated every few minutes."),
+    accesso: t(
+      "API aperta, aggiornata ogni pochi minuti.",
+      "Open API, updated every few minutes.",
+    ),
     interpretazione: t(
       "Utile al più come temperatura e umidità per l'indice incendi, come osservatore.",
       "Useful at most as temperature and humidity for the fire index, as an observer.",

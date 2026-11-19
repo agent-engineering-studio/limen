@@ -14,6 +14,7 @@ from __future__ import annotations
 import datetime as dt
 
 import pytest
+from pydantic import ValidationError
 
 from limen.config.settings import ScoringEngineKind
 from limen.core.models.hazard import HazardType
@@ -26,7 +27,11 @@ from limen.core.models.risk import (
 )
 from limen.core.scoring import registry
 from limen.core.scoring.flood import FloodScoringEngine, fluvial_trigger, pluvial_trigger
-from limen.core.scoring.regional_thresholds import FloodThresholds, load_hazard_thresholds
+from limen.core.scoring.regional_thresholds import (
+    FloodThresholds,
+    WaterWetnessBlock,
+    load_hazard_thresholds,
+)
 
 
 def _thresholds() -> FloodThresholds:
@@ -44,6 +49,7 @@ def _bundle(
     imperviousness: float | None = None,
     slope: float | None = None,
     quota_sul_fondo: float | None = None,
+    water_wetness: float | None = None,
 ) -> CellFeatureBundle:
     return CellFeatureBundle(
         aoi_id="aoi",
@@ -54,6 +60,7 @@ def _bundle(
             imperviousness_norm=imperviousness,
             slope_deg=slope,
             quota_sul_fondo_m=quota_sul_fondo,
+            water_wetness_temp=water_wetness,
         ),
         dynamic=DynamicInputs(
             valuation_time=dt.datetime(2026, 11, 3, 12, tzinfo=dt.UTC),
@@ -350,6 +357,84 @@ def test_unknown_height_is_not_the_valley_floor_nor_the_ridge() -> None:
     """Senza DTM la quota è ignota: la classe resta quella del mosaico."""
     scored = FloodScoringEngine(_con_terreno()).score(_bundle(rain_mm=120.0, quota_sul_fondo=None))
     assert scored.breakdown.susceptibility == 0.8
+
+
+# ---------------------------------------------------------------------------
+# Acqua temporanea dentro la mappa (#420)
+# ---------------------------------------------------------------------------
+def _con_acqua() -> FloodThresholds:
+    """Il blocco misurato l'8/11/2026, spento in flood.yaml (NO-GO)."""
+    blocco = WaterWetnessBlock(full=0.15, min_factor=0.925, max_factor=1.25)
+    return _thresholds().model_copy(update={"water_wetness": blocco})
+
+
+def test_the_water_wetness_block_is_off_in_production() -> None:
+    """#420 è NO-GO: il motore in produzione non legge l'acqua temporanea."""
+    assert _thresholds().water_wetness is None
+    engine = FloodScoringEngine(_thresholds())
+    asciutta = engine.score(_bundle(susceptibility=0.6, discharge_ratio=10.0, water_wetness=0.0))
+    golena = engine.score(_bundle(susceptibility=0.6, discharge_ratio=10.0, water_wetness=0.5))
+    assert asciutta.score == golena.score
+
+
+def test_temporary_water_reorders_cells_of_the_same_class() -> None:
+    """Fra due celle P2 quella dove l'acqua si è vista sale, l'altra scende."""
+    t = _con_acqua()
+    ww = t.water_wetness
+    assert ww is not None
+    engine = FloodScoringEngine(t)
+    asciutta = engine.score(_bundle(susceptibility=0.6, discharge_ratio=10.0, water_wetness=0.0))
+    golena = engine.score(_bundle(susceptibility=0.6, discharge_ratio=10.0, water_wetness=0.5))
+    assert asciutta.breakdown.susceptibility == pytest.approx(0.6 * ww.min_factor)
+    assert golena.breakdown.susceptibility == pytest.approx(0.6 * ww.max_factor)
+    assert golena.score > asciutta.score
+
+
+def test_the_factor_is_linear_up_to_full() -> None:
+    t = _thresholds().model_copy(
+        update={"water_wetness": WaterWetnessBlock(full=0.2, min_factor=0.5, max_factor=1.5)}
+    )
+    engine = FloodScoringEngine(t)
+    scored = engine.score(_bundle(susceptibility=0.4, water_wetness=0.1))
+    assert scored.breakdown.susceptibility == pytest.approx(0.4 * 1.0)
+
+
+def test_the_modulated_susceptibility_is_capped_at_one() -> None:
+    engine = FloodScoringEngine(_con_acqua())
+    scored = engine.score(_bundle(susceptibility=0.95, water_wetness=1.0))
+    assert scored.breakdown.susceptibility == 1.0
+
+
+def test_temporary_water_does_not_touch_unmapped_cells() -> None:
+    """Fuori mappa EMS ha visto 31 celle allagate: il termine non si applica."""
+    engine = FloodScoringEngine(_con_acqua())
+    con = engine.score(_bundle(susceptibility=None, rain_mm=92.0, water_wetness=0.5))
+    senza = engine.score(_bundle(susceptibility=None, rain_mm=92.0))
+    assert con == senza
+
+
+def test_unknown_temporary_water_leaves_the_class_alone() -> None:
+    """NULL è «ignoto», non «mai vista acqua»: niente `min_factor`."""
+    engine = FloodScoringEngine(_con_acqua())
+    scored = engine.score(_bundle(susceptibility=0.6, water_wetness=None))
+    assert scored.breakdown.susceptibility == 0.6
+
+
+def test_without_the_block_the_class_is_the_susceptibility() -> None:
+    t = _thresholds().model_copy(update={"water_wetness": None})
+    scored = FloodScoringEngine(t).score(_bundle(susceptibility=0.6, water_wetness=0.5))
+    assert scored.breakdown.susceptibility == 0.6
+
+
+@pytest.mark.parametrize(
+    ("full", "min_factor", "max_factor"),
+    [(0.0, 0.9, 1.2), (0.15, 0.0, 1.2), (0.15, 1.1, 1.2), (0.15, 0.9, 0.95)],
+)
+def test_a_nonsense_water_wetness_block_is_refused(
+    full: float, min_factor: float, max_factor: float
+) -> None:
+    with pytest.raises(ValidationError):
+        WaterWetnessBlock(full=full, min_factor=min_factor, max_factor=max_factor)
 
 
 # ---------------------------------------------------------------------------

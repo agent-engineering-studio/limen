@@ -28,7 +28,7 @@ def test_ogni_colonna_sta_in_una_sola_risorsa() -> None:
 
 def test_una_colonna_nuova_senza_licenza_si_vede() -> None:
     assert non_assegnate(["cell_id", "slope_deg", "lithology"]) == []
-    assert non_assegnate(["cell_id", "water_wetness_temp"]) == ["water_wetness_temp"]
+    assert non_assegnate(["cell_id", "colonna_di_domani"]) == ["colonna_di_domani"]
 
 
 def test_ispra_e_osm_non_stanno_con_altre_licenze() -> None:

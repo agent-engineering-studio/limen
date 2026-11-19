@@ -138,6 +138,7 @@ help:
 	@echo "  make flood-events       truth set alluvione da Copernicus EMS (pubblico)"
 	@echo "  make backtest-flood     rigioca i perimetri: hit rate, tasso di base, FAR"
 	@echo "  make imperviousness-data  scarica il raster CLMS del suolo sigillato (EEA, aperto)"
+	@echo "  make water-wetness-data   scarica l'HRL WaterWetness 2018 (EEA, aperto, #420)"
 	@echo "  make dtm-vrt            mosaico virtuale sulle tessere DTM (serve GDAL sull'host)"
 	@echo "  make calibrate          run §2.5 calibration (s_static + S↔ISPRA gate)"
 	@echo "  make backtest           replay the Oct 2018 storm and write the report"
@@ -393,6 +394,13 @@ imperviousness-data:
 	@echo
 	@echo "  Ora punta la variabile al file e riempi le celle:"
 	@echo "    LIMEN_IMPERVIOUSNESS_RASTER=$(LIMEN_DATA_ROOT)/sealing/clms_imd_2018/imd_2018_100m.tif"
+	@echo "    make bootstrap-static"
+
+water-wetness-data:
+	$(UV) run limen water-wetness-fetch
+	@echo
+	@echo "  Ora punta la variabile al file e riempi le celle:"
+	@echo "    LIMEN_WATER_WETNESS_RASTER=$(LIMEN_DATA_ROOT)/water_wetness/hrl_ww_2018/ww_2018_50m.tif"
 	@echo "    make bootstrap-static"
 
 # Storia del fuoco: archivio FIRMS per paese, 2000-2024. Nessuna credenziale

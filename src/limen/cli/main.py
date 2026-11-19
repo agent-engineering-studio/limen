@@ -38,6 +38,7 @@ Usage:
     limen geodati-sync       Gli shapefile di GeoServer: IFFI, PAI, idraulica, ISTAT, CORINE, …
     limen carica-vettori     IFFI, PAI, idraulica e comuni in Limen, senza GeoServer (#426).
     limen imperviousness-fetch  Download the CLMS sealed-soil raster (public EEA service).
+    limen water-wetness-fetch  Scarica l'HRL WaterWetness 2018 (EEA, aperto, #420).
     limen fetch-static       Sorgenti statiche pubbliche, verificate con il manifest (#305).
     limen review-alerts      Sampled manual-review checklist for the alert FAR protocol.
     limen fedelta-racconti   Revisore serale: le spiegazioni dell'AI sono fedeli ai dati?
@@ -134,6 +135,7 @@ from limen.cli.static_snapshot import run as _run_static_snapshot
 from limen.cli.sync_egms import run as _run_sync_egms
 from limen.cli.train import run as _run_train
 from limen.cli.verifiche_report import run as _run_verifiche_report
+from limen.cli.water_wetness_fetch import run as _run_water_wetness_fetch
 from limen.cli.worker import run as _run_worker
 from limen.config.settings import get_settings
 from limen.core.logging import configure_logging
@@ -167,6 +169,10 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "imperviousness-fetch",
         help="scarica il raster CLMS del suolo sigillato dal servizio pubblico EEA",
+    )
+    sub.add_parser(
+        "water-wetness-fetch",
+        help="scarica l'HRL WaterWetness 2018 dal servizio pubblico EEA (#420)",
     )
     sub.add_parser(
         "fetch-static",
@@ -528,6 +534,7 @@ def main(argv: list[str] | None = None) -> int:
         "data-status": _run_data_status,
         "jobs": _run_jobs,
         "imperviousness-fetch": _run_imperviousness_fetch,
+        "water-wetness-fetch": _run_water_wetness_fetch,
         "fetch-static": _run_fetch_static,
         "review-alerts": _run_review_alerts,
         "glofas-riferimenti": _run_glofas_riferimenti,
