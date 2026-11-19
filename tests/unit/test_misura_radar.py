@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,6 +18,7 @@ from shapely.geometry import box
 
 from limen.cli import misura_radar
 from limen.cli.misura_radar import (
+    CelleDelleZone,
     Maschere,
     Ora,
     ZonaGiorno,
@@ -24,16 +27,21 @@ from limen.cli.misura_radar import (
     copertura,
     fine_blocchi,
     giorni_completi,
+    livello_pc,
     mappa_di_qualita,
     pioggia_di_zona,
     rapporto_del_giorno,
     richieste_al_giorno,
     righe_bollettini,
+    righe_limen,
     righe_ore,
     righe_qualita,
     somma_del_giorno,
     zone_del_giorno,
+    zone_previste,
 )
+from limen.core.models.hazard import HazardType
+from limen.core.scoring.regional_thresholds import PcAlertMapping
 from limen.integrations.arpa_lombardia import pluviometri
 from limen.integrations.arpa_lombardia.pluviometri import Pluviometro
 from limen.integrations.dpc import bollettini
@@ -242,6 +250,24 @@ def _impostazioni(cartella: Path | str) -> SimpleNamespace:
     )
 
 
+def _senza_db(
+    monkeypatch: pytest.MonkeyPatch, classi: dict[str, dict[HazardType, list[str]]]
+) -> None:
+    @asynccontextmanager
+    async def _pool() -> AsyncIterator[None]:
+        yield
+
+    async def _centroidi() -> list[tuple[str, float, float]]:
+        return [("c1", 9.5, 45.5), ("fuori", 12.0, 42.0)]
+
+    async def _classi(*_a: Any) -> dict[str, dict[HazardType, list[str]]]:
+        return classi
+
+    monkeypatch.setattr(misura_radar, "lifespan_pool", _pool)
+    monkeypatch.setattr(misura_radar.carico_repo, "centroidi", _centroidi)
+    monkeypatch.setattr(misura_radar.carico_repo, "classi_previste", _classi)
+
+
 async def test_il_comando_scrive_il_report_con_le_cinque_parti(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -269,6 +295,7 @@ async def test_il_comando_scrive_il_report_con_le_cinque_parti(
         return {start + timedelta(hours=h): [1.5] * len(nodi) for h in range(1, ore + 1)}
 
     monkeypatch.setattr(misura_radar, "get_settings", lambda: _impostazioni(archivio))
+    _senza_db(monkeypatch, {"c1": {HazardType.FLOOD: ["High"]}})
     monkeypatch.setattr(bollettini, "nomi", _nomi)
     monkeypatch.setattr(bollettini, "scarica", _scarica)
     monkeypatch.setattr(pluviometri, "pluviometri", _pluviometri)
@@ -287,6 +314,7 @@ async def test_il_comando_scrive_il_report_con_le_cinque_parti(
     assert "Giorni confrontati: **5**; zone-giorno: **5**" in testo
     assert "senza un bollettino della vigilia: 1" in testo
     assert "| gialla | 5 | 24.0 | 24.0 | 24.0 | 24.0 |" in testo
+    assert "| gialla | 0 | 0 | 5 | 0 | 5 |" in testo
     assert "rapporto: mediana **0.50**" in testo
     assert "**120**, su **1** pluviometri" in testo
     assert "| solo radar (SRT1) | -1.00 | 1.00 | 0 su 0 | 0 |" in testo
@@ -335,3 +363,78 @@ def test_una_griglia_in_metri_cade_sugli_stessi_blocchi() -> None:
     assert misura_radar.blocco_dei_pixel(metri)[0] == in_gradi[0]
     lontano = RainGrid(SRT1, _T, dati, from_origin(30.0, 60.0, 0.05, 0.05), CRS.from_epsg(4326))
     assert set(misura_radar.blocco_dei_pixel(lontano)) == {-1}
+
+
+_PC = PcAlertMapping()
+_MAPPE = {HazardType.LANDSLIDE: _PC, HazardType.FLOOD: _PC}
+
+
+def test_la_classe_diventa_il_colore_del_bollettino() -> None:
+    assert livello_pc([], _PC) == 0
+    assert livello_pc(["Moderate"], _PC) == 1
+    assert livello_pc(["Moderate", "VeryHigh", "High"], _PC) == 3
+    assert livello_pc(["Low"], PcAlertMapping(low="gialla")) == 1
+
+
+def test_la_zona_prende_la_cella_piu_alta_per_pericolo() -> None:
+    celle = CelleDelleZone([("a", 9.2, 45.2), ("b", 9.8, 45.8), ("c", 15.0, 40.0)])
+    zone = [
+        _zona(_G, "Lario", 1, (9.0, 45.0, 10.0, 46.0)),
+        _zona(_G, "Vuota", 2, (11.0, 45.0, 12.0, 46.0)),
+        _zona(_G + timedelta(days=1), "Lario", 3, (9.0, 45.0, 10.0, 46.0)),
+    ]
+    classi = {
+        "a": {HazardType.LANDSLIDE: ["Moderate"]},
+        "b": {HazardType.LANDSLIDE: ["High"], HazardType.FLOOD: ["Moderate"]},
+        "c": {HazardType.FLOOD: ["VeryHigh"]},
+    }
+    [lario] = zone_previste(zone, _G, celle, classi, _MAPPE)
+    assert lario.bollettino == 1
+    assert lario.limen == {HazardType.LANDSLIDE: 2, HazardType.FLOOD: 1}
+    assert lario.massimo == 2
+
+
+def test_una_zona_senza_celle_previste_sopra_moderato_e_nessuna() -> None:
+    celle = CelleDelleZone([("a", 9.2, 45.2)])
+    [z] = zone_previste([_zona(_G, "Lario", 2, (9.0, 45.0, 10.0, 46.0))], _G, celle, {}, _MAPPE)
+    assert z.massimo == 0
+
+
+def test_il_report_di_limen_incrocia_i_colori() -> None:
+    zp = [
+        misura_radar.ZonaPrevista(_G, "A", 1, {HazardType.LANDSLIDE: 1, HazardType.FLOOD: 0}),
+        misura_radar.ZonaPrevista(_G, "B", 0, {HazardType.LANDSLIDE: 1, HazardType.FLOOD: 0}),
+        misura_radar.ZonaPrevista(_G, "C", 2, {HazardType.LANDSLIDE: 0, HazardType.FLOOD: 0}),
+    ]
+    testo = "\n".join(righe_limen(zp, 4))
+    assert "zone-giorno: **3**" in testo
+    assert "(non valutati, non calmi): 4" in testo
+    assert "| nessuna | 0 | 1 | 0 | 0 | 1 |" in testo
+    assert "| arancione | 1 | 0 | 0 | 0 | 1 |" in testo
+    assert "concordano 1 su 3 (33.3 %); Limen più alto in 1 (33.3 %), più basso in 1" in testo
+    assert "almeno gialla: 1 su 2 (50.0 %)" in testo
+    assert "Nessun giorno da confrontare." in "\n".join(righe_limen([], 0))
+
+
+async def test_limen_gira_senza_archivio(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _nomi() -> list[str]:
+        return ["20261009_1500_today.json"]
+
+    async def _scarica(nome: str) -> Bulletin:
+        zone = [_zona(_G, "Lario", 2, (9.0, 45.0, 10.0, 46.0))]
+        return Bulletin(nome, datetime(2026, 10, 9, 13, tzinfo=UTC), zone)
+
+    monkeypatch.setattr(misura_radar, "get_settings", lambda: _impostazioni(""))
+    _senza_db(monkeypatch, {"c1": {HazardType.LANDSLIDE: ["High"]}})
+    monkeypatch.setattr(bollettini, "nomi", _nomi)
+    monkeypatch.setattr(bollettini, "scarica", _scarica)
+    monkeypatch.setenv("LIMEN_RADAR_MISURE", "limen")
+    monkeypatch.setenv("LIMEN_RADAR_DAL", "2026-10-09")
+    monkeypatch.setenv("LIMEN_RADAR_AL", "2026-10-10")
+    monkeypatch.setenv("LIMEN_REPORTS_DIR", str(tmp_path))
+
+    assert await misura_radar.run() == 0
+    testo = (tmp_path / "misura_radar_2026-10-09_2026-10-10.md").read_text()
+    assert "Giorni confrontati: **1**; zone-giorno: **1**" in testo
+    assert "(non valutati, non calmi): 1" in testo
+    assert "| arancione | 0 | 0 | 1 | 0 | 1 |" in testo

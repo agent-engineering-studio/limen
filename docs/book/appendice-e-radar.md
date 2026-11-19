@@ -275,6 +275,14 @@ capitoli [3](03-i-dati.md), [4](04-i-motori.md) e [7](07-come-gira.md).
 3. **Il controllo delle immagini.** Ogni «Merging» è confrontato con quello
    di mezz'ora prima. Due immagini così vicine non possono differire di più
    di mezz'ora di pioggia: oltre 150 mm di salto, una delle due è guasta.
+   Dal novembre 2026 si aggiunge una regola che non ha bisogno
+   dell'immagine precedente: un valore sopra il record italiano per quella
+   durata, con un margine, diventa «non misurato». Sull'immagine guasta
+   dell'11 ottobre toglie 259 pixel anche senza la precedente; sul
+   nubifragio di Melito non tocca niente. La libreria ha anche una regola
+   per i pixel isolati molto sopra quelli intorno, ma Limen non la usa: un
+   temporale di pochi chilometri su terreno asciutto le somiglia troppo, e
+   sbagliare lì vorrebbe dire non vedere proprio un nubifragio.
 4. **La siccità per gli incendi.** L'indice degli incendi scende solo con
    la pioggia, e il modello meteorologico non vede i temporali. Per i giorni
    già passati Limen usa la pioggia del «Merging»[^fwi].
@@ -338,20 +346,21 @@ Ci sono anche quattro piccoli programmi, ciascuno in un solo file:
 | Non esiste un «Merging» di un'ora. | Le piene improvvise si giocano in un'ora. La ricostruzione della libreria è una stima ragionevole, non un prodotto ufficiale. | la cumulata oraria corretta con i pluviometri, pubblicata accanto a quelle di 3-24 ore | [#626](https://github.com/agent-engineering-studio/limen/issues/626) |
 | Il servizio non ha un manuale pubblico né condizioni d'uso scritte. | Chi costruisce un servizio sopra questi dati non sa che cosa può cambiare da un giorno all'altro, né quante richieste è lecito fare. | la documentazione del servizio e una pagina di condizioni d'uso | [#627](https://github.com/agent-engineering-studio/limen/issues/627) |
 | Non è pubblicata una mappa di qualità: dove il radar vede bene e dove no. | Oggi «non misurato» si riconosce solo dal dato mancante; una pioggia vista male sembra uguale a una vista bene. | la mappa della copertura e della qualità del mosaico, e la posizione dei pluviometri usati | [#628](https://github.com/agent-engineering-studio/limen/issues/628) |
-| Il confronto fra allerta ufficiale e pioggia caduta è fatto su singoli giorni. | Un giorno non dice quanto spesso l'allerta e la pioggia vanno d'accordo. | c'è già tutto: bollettini dal 2020 e, da ora, l'archivio del «Merging» | [#629](https://github.com/agent-engineering-studio/limen/issues/629) |
+| Il confronto fra allerta ufficiale e pioggia caduta era fatto su singoli giorni. | Un giorno non dice quanto spesso l'allerta e la pioggia vanno d'accordo. | fatto: 155 giorni di bollettini e «Merging», e nove giorni di bollettini accanto alle previsioni di Limen; da rifare con più storia | [#629](https://github.com/agent-engineering-studio/limen/issues/629) |
 
 Le righe sono riportate nel [registro dei gap](appendice-d-gap.md).
 
 I primi quattro gap li può chiudere solo la Protezione civile: la richiesta
-è scritta, pronta da inviare, in una
+è partita il 19 novembre 2026, con una
 [lettera](https://github.com/agent-engineering-studio/limen/blob/main/docs/lettere/2026-11-richiesta-radar-dpc.md)
 pubblica. Nel frattempo Limen misura quello che può. Un solo comando,
-`limen misura-radar`, legge l'archivio e scrive un rapporto con cinque
+`limen misura-radar`, legge l'archivio e scrive un rapporto con sei
 parti: quante immagini ci sono mese per mese e quante erano già perse;
 quante richieste Limen fa al servizio; la pioggia caduta in ogni zona di
 allerta accanto al colore annunciato, per tutti i giorni dell'archivio;
 quanto vede il solo radar rispetto al «Merging», riquadro per riquadro di
-dieci chilometri; e l'ora ricostruita messa a confronto con i pluviometri
+dieci chilometri; il colore più alto previsto da Limen in ogni zona,
+accanto a quello del bollettino; e l'ora ricostruita messa a confronto con i pluviometri
 della Lombardia.
 
 Una cosa si può già dire. Per venti aree sorvegliate Limen fa circa 750
@@ -394,6 +403,12 @@ Trapani. Due riquadri vicino a Foggia mostrano un'altra cosa: lì il
 ne vedono. Può essere un pluviometro guasto: è un'ipotesi, e l'abbiamo
 scritta nella lettera al Dipartimento.
 
+Che cosa ne fa Limen, per ora: **niente nei punteggi**. La mappa stimata
+resta un'informazione, e non decide quando una cella è «non misurata». Con
+tredici giorni di pioggia per riquadro la stima è ancora debole, e dove il
+«Merging» c'è Limen usa già quello, che ha dentro i pluviometri. La misura
+si rifà con un anno di archivio; solo allora si decide se farne una regola.
+
 **L'ora ricostruita.** Messa accanto a 262 pluviometri lombardi, su quasi
 47.000 ore di pioggia:
 
@@ -408,6 +423,32 @@ tre ore spalma il nubifragio. Due avvertenze: una parte di questi
 pluviometri è già dentro il «Merging», quindi il confronto non è
 indipendente; e un pluviometro misura un secchio, il radar un chilometro
 quadrato.
+
+**Limen accanto all'allerta.** Il bollettino è una previsione, e Limen ne
+fa una: si possono mettere una accanto all'altra. Per ogni zona e giorno si
+prende il colore più alto che Limen dava a una cella della zona, per frane
+o alluvioni, nelle previsioni fatte *prima* dell'uscita del bollettino. Le
+classi diventano colori con la stessa tabella che usa la mappa (Moderato è
+giallo, Alto arancione, Molto alto rosso). Per ora i giorni sono solo nove,
+dal 7 al 18 novembre 2026, quelli in cui le previsioni per cella di Limen
+erano già in archivio:
+
+| Bollettino \ Limen | nessuna | gialla | arancione | rossa |
+|---|---|---|---|---|
+| nessuna allerta | 123 | 859 | 173 | 216 |
+| gialla | 9 | 85 | 66 | 109 |
+| arancione | 0 | 15 | 9 | 16 |
+| rossa | 0 | 0 | 0 | 3 |
+
+Dove il bollettino dava almeno giallo, Limen dava almeno giallo in 303
+zone-giorno su 312. Ma dove il bollettino non dava allerta, Limen aveva
+almeno una cella in giallo o più in nove zone su dieci. Le due scale
+concordano solo una volta su otto, e quasi sempre Limen sta sopra. È lo
+stesso problema che misura il carico della [#345](https://github.com/agent-engineering-studio/limen/issues/345):
+lo sfondo delle frane tiene in Moderato molte celle in ogni zona, e una
+zona ne ha centinaia. Nove giorni di novembre non sono una stagione; il
+confronto si rifà con lo stesso comando quando l'archivio delle previsioni
+sarà più lungo.
 
 ## Per approfondire
 

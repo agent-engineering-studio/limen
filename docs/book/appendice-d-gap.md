@@ -162,7 +162,7 @@ gap si chiude dentro Limen.
 I primi quattro riguardano dati che solo chi li produce può pubblicare: le
 issue servono a scrivere la richiesta alla Protezione civile e a misurare,
 nel frattempo, quello che si può con i dati che ci sono. La richiesta è
-scritta
+partita il 19 novembre 2026
 ([lettera](https://github.com/agent-engineering-studio/limen/blob/main/docs/lettere/2026-11-richiesta-radar-dpc.md))
 e le misure si fanno con un solo comando, `limen misura-radar`: i numeri su
 155 giorni, dal 10 giugno al 15 novembre 2026, sono nell'appendice E e nel
@@ -174,4 +174,4 @@ e le misure si fanno con un solo comando, `limen misura-radar`: i numeri su
 | E | Non esiste un «Merging» di un'ora: Limen lo ricostruisce da quello di tre ore. | la cumulata oraria corretta con i pluviometri, pubblicata accanto a quelle di 3-24 ore | [#626](https://github.com/agent-engineering-studio/limen/issues/626) |
 | E | Il servizio del radar non ha un manuale pubblico né condizioni d'uso scritte. | la documentazione del servizio e una pagina di condizioni d'uso | [#627](https://github.com/agent-engineering-studio/limen/issues/627) |
 | E | Non è pubblicata una mappa di qualità del radar: dove vede bene e dove no. | la mappa della copertura e della qualità del mosaico, e la posizione dei pluviometri usati | [#628](https://github.com/agent-engineering-studio/limen/issues/628) |
-| E | Il confronto fra allerta ufficiale e pioggia caduta è fatto su singoli giorni. | c'è già: i [bollettini dal 2020](https://github.com/pcm-dpc/DPC-Bollettini-Criticita-Idrogeologica-Idraulica) (CC BY 4.0) e l'archivio del «Merging» | [#629](https://github.com/agent-engineering-studio/limen/issues/629) |
+| E | ~~Il confronto fra allerta ufficiale e pioggia caduta è fatto su singoli giorni.~~ Chiuso: 155 giorni di pioggia per colore, e la classe di Limen accanto al colore (nove giorni, da rifare con più storia). | i [bollettini dal 2020](https://github.com/pcm-dpc/DPC-Bollettini-Criticita-Idrogeologica-Idraulica) (CC BY 4.0) e l'archivio del «Merging» | [#629](https://github.com/agent-engineering-studio/limen/issues/629) |

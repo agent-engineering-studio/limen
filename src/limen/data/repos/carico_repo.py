@@ -6,8 +6,9 @@ alla quota di eventi colti di ``limen verifiche-report``.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from functools import cache
 from importlib import resources
 
@@ -36,8 +37,8 @@ class Carico:
 
 
 @cache
-def _sql() -> str:
-    return resources.files(__package__).joinpath("carico.sql").read_text(encoding="utf-8")
+def _sql(nome: str = "carico.sql") -> str:
+    return resources.files(__package__).joinpath(nome).read_text(encoding="utf-8")
 
 
 async def misura(*, dal: datetime | None, al: datetime | None) -> dict[HazardType, Carico]:
@@ -55,3 +56,46 @@ async def misura(*, dal: datetime | None, al: datetime | None) -> dict[HazardTyp
         )
         for r in rows
     }
+
+
+async def centroidi() -> list[tuple[str, float, float]]:
+    """``(cella, lon, lat)`` di ogni cella della griglia."""
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT id, ST_X(centroid) AS lon, ST_Y(centroid) AS lat FROM grid_cells",
+            timeout=ATTESA_S,
+        )
+    return [(r["id"], float(r["lon"]), float(r["lat"])) for r in rows]
+
+
+async def classi_previste(
+    giorno: date, prima_di: datetime, pericoli: list[HazardType]
+) -> dict[str, dict[HazardType, list[str]]] | None:
+    """Le classi ≥ Moderato previste per ``giorno`` dalle corse partite prima di ``prima_di``.
+
+    ``cella → pericolo → classi``; una cella assente era prevista sotto
+    Moderato. ``None`` se in quelle 72 ore nessuna corsa previsionale è
+    riuscita: senza previsione il giorno non è calmo, è non valutato.
+    """
+    async with acquire() as conn:
+        corse = await conn.fetchval(
+            "SELECT count(*) FROM job_runs WHERE job_id = $1 AND status = 'ok' "
+            "AND started_at >= $2 AND started_at < $3",
+            JOB_FORECAST_HISTORY,
+            datetime.combine(giorno - timedelta(days=3), time(), UTC),
+            prima_di,
+            timeout=ATTESA_S,
+        )
+        if not corse:
+            return None
+        rows = await conn.fetch(
+            _sql("classi_previste.sql"),
+            giorno,
+            prima_di,
+            [p.value for p in pericoli],
+            timeout=ATTESA_S,
+        )
+    out: dict[str, dict[HazardType, list[str]]] = defaultdict(lambda: defaultdict(list))
+    for r in rows:
+        out[r["cell_id"]][HazardType(r["hazard"])].append(r["class"])
+    return out

@@ -13,6 +13,8 @@ dall'istante valutato (un replay, un backtest), nessuna cella riceve
 l'osservata e il motore resta sulla previsione. Un fotogramma che si è mosso
 più di quanto possa piovere in mezz'ora rispetto a quello prima (#235) si
 giudica intero (#429): se è lui ad aver aggiunto pioggia si usa il precedente.
+I pixel sopra il record italiano della finestra (#643) diventano «non
+misurato».
 """
 
 from __future__ import annotations
@@ -23,7 +25,13 @@ from datetime import datetime
 from limen.agents.workflow_runtime.executor import Executor, handler
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
-from limen.integrations.dpc import CUM_PERIOD, RainGrid, get_cum_at, get_latest_cum
+from limen.integrations.dpc import (
+    CUM_PERIOD,
+    RainGrid,
+    frame_quality,
+    get_cum_at,
+    get_latest_cum,
+)
 
 log = get_logger(__name__)
 
@@ -84,14 +92,12 @@ class ObservedRainExecutor(Executor):
 
         Il giudizio è sul fotogramma intero (#429): la regola per pixel di
         #235 toglieva la cima di una campana corrotta e ne lasciava passare i
-        fianchi, migliaia di pixel sbagliati di 10-150 mm, e quando il guasto
-        era nel precedente bucava il fotogramma pulito. Il segno del salto dice
-        quale dei due è sbagliato: ogni corruzione vista finora *aggiunge*
-        pioggia. Respinto questo, si usa il precedente.
-
-        Senza il precedente il controllo non si può fare e il fotogramma passa
-        com'è: perdere il radar per un download mancato sarebbe peggio del
-        caso raro che il controllo copre.
+        fianchi. Il segno del salto dice quale dei due è sbagliato: ogni
+        corruzione vista finora *aggiunge* pioggia, e respinto questo si usa il
+        precedente. Poi, sul fotogramma usato, i pixel sopra il record italiano
+        della finestra diventano «non misurato» (#643): questo non ha bisogno
+        del precedente, quindi senza il precedente il fotogramma non passa più
+        com'è anche se il guasto supera ogni pioggia possibile.
         """
         previous = await self._fetch_at(self._hours, grid.time - CUM_PERIOD)
         if previous is None:
@@ -100,15 +106,16 @@ class ObservedRainExecutor(Executor):
                 aoi_id=aoi_id,
                 observed_at=grid.time.isoformat(),
             )
-            return grid
-        esito = grid.check(previous, max_step=self._max_step_mm)
-        if esito.verdict != "consistent":
+        q = frame_quality(grid, previous, max_step=self._max_step_mm)
+        if q.verdict not in (None, "consistent") or q.beyond_record:
             log.warning(
                 "executor.observed_rain.inconsistent",
                 aoi_id=aoi_id,
                 observed_at=grid.time.isoformat(),
-                verdict=esito.verdict,
-                pixels=esito.jumps,
+                used_at=q.grid.time.isoformat(),
+                verdict=q.verdict,
+                pixels=q.jumps,
+                beyond_record=q.beyond_record,
                 max_step_mm=self._max_step_mm,
             )
-        return esito.grid if esito.grid is not None else previous
+        return q.grid

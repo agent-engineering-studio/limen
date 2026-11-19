@@ -132,9 +132,12 @@ casella vuota a una disponibilità inventata.
   Il confronto sistematico ora c'è, su 155 giorni e quasi 29.000 coppie
   zona-giorno: la pioggia media di mezzo è 0 mm senza allerta, 4,5 in
   giallo, 22 in arancione, 63 in rosso; ma una zona arancione o rossa su
-  quattro ha avuto meno di 10 mm. Manca il confronto con la classe data da
-  Limen nella stessa zona
-  ([#629](https://github.com/agent-engineering-studio/limen/issues/629)).
+  quattro ha avuto meno di 10 mm. Il confronto con la classe prevista da
+  Limen nella stessa zona c'è su nove giorni di novembre 2026: dove il
+  bollettino dava almeno giallo Limen lo dava quasi sempre (303 zone-giorno
+  su 312), ma lo dava anche in nove zone su dieci senza allerta
+  ([#629](https://github.com/agent-engineering-studio/limen/issues/629),
+  [appendice E](appendice-e-radar.md)).
 
 ??? note "Per chi sviluppa"
     - Le prove citate: #282 (EDO, `scoring-analyst`, 1.117 frane contro 5.171

@@ -91,6 +91,7 @@ def test_il_radar_arriva_alla_cella_e_la_previsione_restante_al_nodo() -> None:
 
 
 def _frame(observed_at: dt.datetime) -> RainGrid:
+    """Un nubifragio di pochi chilometri su terreno asciutto: deve passare (#643)."""
     data = np.full((10, 10), 3.0, dtype=np.float32)
     data[4:7, 4:7] = 150.0
     return RainGrid(
@@ -241,3 +242,29 @@ async def test_il_precedente_chiesto_e_mezz_ora_prima() -> None:
 
     await _step(_fetch, _prima).run(_ctx())
     assert chiesti == [emesso - dt.timedelta(minutes=30)]
+
+
+async def test_senza_il_precedente_i_valori_oltre_il_record_non_valgono() -> None:
+    """#643: l'11/10/2026 alle 12:30 il CUM24 toccava 4597 mm. Senza il
+    fotogramma prima il confronto non si fa, ma il record italiano delle 24 ore
+    (948 mm) basta a dire che quei pixel non sono pioggia."""
+
+    async def _fetch(hours: int) -> RainGrid:
+        return _con(_T - dt.timedelta(minutes=20), 4597.0)
+
+    async def _manca(hours: int, at: dt.datetime) -> None:
+        return None
+
+    out = await _step(_fetch, _manca).run(_ctx())
+    assert out.flood_rain_observed_by_cell == {}
+
+
+async def test_il_record_vale_anche_sul_precedente_che_sostituisce_il_guasto() -> None:
+    async def _fetch(hours: int) -> RainGrid:
+        return _con(_T - dt.timedelta(minutes=20), 9000.0)
+
+    async def _prima(hours: int, at: dt.datetime) -> RainGrid:
+        return _con(at, 2000.0)
+
+    out = await _step(_fetch, _prima).run(_ctx())
+    assert out.flood_rain_observed_by_cell == {}
