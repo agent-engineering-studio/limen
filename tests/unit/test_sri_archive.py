@@ -91,3 +91,22 @@ def test_un_punto_fuori_griglia_non_legge_il_bordo(tmp_path: Path) -> None:
         datetime(2010, 1, 1, 1, tzinfo=UTC),
     )
     assert ore[datetime(2010, 1, 1, 1, tzinfo=UTC)] == [pytest.approx(8.0), None]
+
+
+def test_un_fotogramma_corrotto_si_legge_come_mancante(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#643: la lettura di dpc-radar scarta i fotogrammi corrotti dello storico."""
+    from limen.integrations.dpc import sri_archive
+
+    minuti = [_min(0, m) for m in range(0, 60, 15)] + [_min(1)]
+    z = _archivio(tmp_path, minuti, [6.0, 900.0, 6.0, 6.0, 0.0])
+    corrotto = lambda f: bool((f > 500).any())  # noqa: E731
+    monkeypatch.setattr(sri_archive, "suspect", corrotto)
+    monkeypatch.setattr("dpc_radar.history.suspect", corrotto)
+    a = SriArchive(z)
+    ore = a.oraria(
+        [(12.5, 42.0)], datetime(2009, 12, 31, 23, tzinfo=UTC), datetime(2010, 1, 1, 1, tzinfo=UTC)
+    )
+    assert ore[datetime(2010, 1, 1, 1, tzinfo=UTC)] == [pytest.approx(6.0)]
+    assert a._sospetti == 1

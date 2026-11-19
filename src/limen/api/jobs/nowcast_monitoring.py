@@ -17,7 +17,10 @@ never pile up on the same region.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from dpc_radar import DpcRadarError, correct
 
 from limen.api.dependencies import AppDependencies
 from limen.api.jobs._tracking import tracked
@@ -26,10 +29,40 @@ from limen.api.jobs.ids import JOB_NOWCAST_MONITORING
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
 from limen.data.db import acquire
+from limen.data.repos import radar_temporali_repo
 from limen.data.repos.aoi_repo import assessed_within
-from limen.integrations.dpc import get_latest_sri
+from limen.integrations.dpc.client import get_sri_series
+from limen.integrations.dpc.temporali import temporali
 
 log = get_logger(__name__)
+
+
+#: Gli SRI dell'ultima mezz'ora per il moto: il più vecchio non oltre i 30
+#: minuti e due vicini non oltre i 15 (dpc-radar ``MAX_BASELINE``/``MAX_STEP``).
+_PASSO_MOTO = timedelta(minutes=15)
+_FOTOGRAMMI_MOTO = 3
+
+
+async def _salva_temporali(serie: list[Any], soglia_mmh: float) -> None:
+    """I temporali di adesso per l'API (#643). Un errore qui non ferma la sveglia."""
+    try:
+        trovati = temporali(serie, soglia_mmh=soglia_mmh)
+        await radar_temporali_repo.sostituisci(trovati)
+    except Exception as exc:
+        log.error("job.nowcast.temporali_error", error=str(exc), error_type=type(exc).__name__)
+        return
+    log.info("job.nowcast.temporali", n=len(trovati), observed_at=serie[-1].time.isoformat())
+
+
+def _per_la_sveglia(sri: Any, *, correggi: bool) -> Any:
+    """L'SRI che decide la sveglia: corretto con la mappa del bias se acceso (#643)."""
+    if not correggi:
+        return sri
+    try:
+        return correct(sri)
+    except DpcRadarError as exc:
+        log.warning("integration.degraded", source="dpc_bias", error=str(exc))
+        return sri
 
 
 async def _aoi_bboxes() -> list[tuple[str, tuple[float, float, float, float]]]:
@@ -50,10 +83,12 @@ async def _aoi_bboxes() -> list[tuple[str, tuple[float, float, float, float]]]:
 async def run_nowcast_monitoring(deps: AppDependencies) -> dict[str, float]:
     """Radar sweep; returns max mm/h per triggered AOI."""
     cfg = deps.settings.nowcast
-    sri = await get_latest_sri()
-    if sri is None:
+    serie = await get_sri_series(_PASSO_MOTO, _FOTOGRAMMI_MOTO)
+    if not serie:
         log.info("job.nowcast.skip", reason="sri unavailable (degraded)")
         return {}
+    await _salva_temporali(serie, cfg.storm_mmh)
+    sri = _per_la_sveglia(serie[-1], correggi=cfg.bias_correction)
 
     triggered: dict[str, float] = {}
     for aoi_id, bbox in await _aoi_bboxes():

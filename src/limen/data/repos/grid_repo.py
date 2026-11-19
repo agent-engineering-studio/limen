@@ -146,3 +146,13 @@ __all__ = [
     "count_grid_cells",
     "generate_and_store_grid",
 ]
+
+
+async def centroide(cell_id: str) -> tuple[float, float] | None:
+    """``(lon, lat)`` del centroide di una cella, o ``None`` se la cella non c'è."""
+    async with acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT ST_X(centroid) AS lon, ST_Y(centroid) AS lat FROM grid_cells WHERE id = $1",
+            cell_id,
+        )
+    return None if row is None else (float(row["lon"]), float(row["lat"]))

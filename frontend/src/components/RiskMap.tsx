@@ -19,7 +19,7 @@ import {
   OMBREGGIATURA,
   useMotivoSenzaRilievo,
 } from "../lib/rilievo";
-import { COLORE_ALLERTA, OVERLAYS } from "../lib/overlays";
+import { COLORE_ALLERTA, COLORE_TEMPORALE, OVERLAYS } from "../lib/overlays";
 import { posizioneInItalia, ZOOM_POSIZIONE } from "../lib/posizione";
 import { COLORE_LIVELLO, popupStazione, RAGGIO_LIVELLO } from "../lib/stazioni";
 import type { ProprietaStazione } from "../lib/stazioni";
@@ -46,7 +46,9 @@ type Poligono = Anello[];
 
 /** Il mondo meno il comune: scurire **fuori** fa risaltare la zona senza
  *  coprire le celle che ci stanno dentro, che sono ciò che si vuole leggere. */
-export function maschera(feature: GeoJSON.Feature | null): GeoJSON.FeatureCollection {
+export function maschera(
+  feature: GeoJSON.Feature | null,
+): GeoJSON.FeatureCollection {
   if (feature === null || feature.geometry === null) {
     return { type: "FeatureCollection", features: [] };
   }
@@ -75,10 +77,16 @@ export function maschera(feature: GeoJSON.Feature | null): GeoJSON.FeatureCollec
           // L'anello esterno di ogni parte del comune diventa un buco nel
           // mondo. I buchi del comune stesso — un'enclave — restano velati,
           // ed è giusto: non sono suoi.
-          coordinates: [mondo, ...poligoni.flatMap((pg) => (pg[0] ? [pg[0]] : []))],
+          coordinates: [
+            mondo,
+            ...poligoni.flatMap((pg) => (pg[0] ? [pg[0]] : [])),
+          ],
         },
       },
-      { ...feature, properties: { ...(feature.properties ?? {}), ruolo: "confine" } },
+      {
+        ...feature,
+        properties: { ...(feature.properties ?? {}), ruolo: "confine" },
+      },
     ],
   };
 }
@@ -111,12 +119,30 @@ const COMUNE_MAX_ZOOM = 11;
 // una mappa lenta.
 const CELL_MIN_ZOOM_DEFAULT = 8;
 const CELL_MIN_ZOOM_OTHER = 7;
-const WMS_PAI_LAYER = "ispra:mosaicatura_ispra_2020_2021_aree_pericolosita_frana_pai";
+const WMS_PAI_LAYER =
+  "ispra:mosaicatura_ispra_2020_2021_aree_pericolosita_frana_pai";
 const IFFI_REGIONS = [
-  "abruzzo", "basilicata", "bolzano", "calabria", "campania",
-  "emilia_romagna", "friuli_venezia_giulia", "lazio", "liguria",
-  "lombardia", "marche", "molise", "piemonte", "puglia", "sardegna",
-  "sicilia", "toscana", "trento", "umbria", "valle_d_aosta", "veneto",
+  "abruzzo",
+  "basilicata",
+  "bolzano",
+  "calabria",
+  "campania",
+  "emilia_romagna",
+  "friuli_venezia_giulia",
+  "lazio",
+  "liguria",
+  "lombardia",
+  "marche",
+  "molise",
+  "piemonte",
+  "puglia",
+  "sardegna",
+  "sicilia",
+  "toscana",
+  "trento",
+  "umbria",
+  "valle_d_aosta",
+  "veneto",
 ];
 const WMS_IFFI_LAYERS = IFFI_REGIONS.map(
   (r) => `ispra:frane_poly_${r}_opendata`,
@@ -244,7 +270,10 @@ const SOPRA_SOGLIA = ["Moderate", "High", "VeryHigh"];
  *
  *  Le aree non misurate restano: sono grigie perché non si sa, e toglierle
  *  insieme alle tranquille le farebbe passare per tranquille (#143). */
-export function filtroSoglia(prop: string, attivo: boolean): maplibregl.FilterSpecification | null {
+export function filtroSoglia(
+  prop: string,
+  attivo: boolean,
+): maplibregl.FilterSpecification | null {
   if (!attivo) return null;
   return [
     "any",
@@ -256,9 +285,22 @@ export function filtroSoglia(prop: string, attivo: boolean): maplibregl.FilterSp
 // Le stazioni si scaricano solo a livello acceso: una sorgente GeoJSON con un
 // URL lo chiede appena entra nello stile, e la mappa si ricostruisce a ogni
 // cambio di pericolo (#255).
-function caricaStazioni(map: maplibregl.Map, attivi: ReadonlySet<string>, url: string): void {
-  if (!attivi.has("stazioni")) return;
-  (map.getSource("ovl-stazioni") as maplibregl.GeoJSONSource | undefined)?.setData(url);
+function caricaStazioni(
+  map: maplibregl.Map,
+  attivi: ReadonlySet<string>,
+  url: string,
+): void {
+  if (attivi.has("stazioni")) {
+    (
+      map.getSource("ovl-stazioni") as maplibregl.GeoJSONSource | undefined
+    )?.setData(url);
+  }
+  if (attivi.has("temporali")) {
+    const api = config.apiUrl.replace(/\/+$/, "");
+    (
+      map.getSource("ovl-temporali") as maplibregl.GeoJSONSource | undefined
+    )?.setData(`${api}/api/radar/temporali.geojson`);
+  }
 }
 
 /**
@@ -280,11 +322,16 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const stato = useMapStateOpzionale();
   const comuneEvidenziato =
-    props.comuneEvidenziato !== undefined ? props.comuneEvidenziato : (stato?.comune ?? null);
-  const overlayAttivi = props.overlayAttivi ?? stato?.overlayAttivi ?? NESSUN_OVERLAY;
+    props.comuneEvidenziato !== undefined
+      ? props.comuneEvidenziato
+      : (stato?.comune ?? null);
+  const overlayAttivi =
+    props.overlayAttivi ?? stato?.overlayAttivi ?? NESSUN_OVERLAY;
   const soloSopraSoglia = props.soloSopraSoglia ?? stato?.soloSoglia ?? false;
   const selectedCellId =
-    props.selectedCellId !== undefined ? props.selectedCellId : (stato?.cella?.cellId ?? null);
+    props.selectedCellId !== undefined
+      ? props.selectedCellId
+      : (stato?.cella?.cellId ?? null);
   const geolocalizza = props.geolocalizza ?? stato?.geolocalizza ?? false;
   const onCellClick = props.onCellClick ?? stato?.cliccaCella;
   const evidenziatoRef = useRef<GeoJSON.Feature | null>(comuneEvidenziato);
@@ -320,16 +367,23 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   // La vista della prima apertura, finché la posizione del browser non ha
   // risposto: un ref e non la vista della mappa corrente perché la mappa si
   // ricostruisce (e StrictMode la monta due volte) prima che la risposta arrivi.
-  const partenzaRef = useRef<{ lng: number; lat: number; zoom: number } | null>(null);
+  const partenzaRef = useRef<{ lng: number; lat: number; zoom: number } | null>(
+    null,
+  );
   const posizioneFattaRef = useRef(false);
   // Visibilità di un livello di contesto, letta allo stato corrente: la mappa
   // si ricostruisce a ogni cambio di pericolo, e senza questo i livelli
   // tornerebbero spenti mentre la casella resta spuntata.
   const visibile = (layerId: string): "visible" | "none" =>
-    OVERLAYS.some((o) => overlayRef.current.has(o.id) && o.layerIds.includes(layerId))
+    OVERLAYS.some(
+      (o) => overlayRef.current.has(o.id) && o.layerIds.includes(layerId),
+    )
       ? "visible"
       : "none";
-  const tileserv = (props.tileservUrl ?? config.tileservUrl).replace(/\/+$/, "");
+  const tileserv = (props.tileservUrl ?? config.tileservUrl).replace(
+    /\/+$/,
+    "",
+  );
   const { selected: hazard, view, multi, available } = useHazard();
   const { lingua } = useLingua();
   const t = useTesti(T);
@@ -384,7 +438,9 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   // riesce. Il layer MVT è sempre quello, qualunque sia la sorgente.
   // Ciò che obbliga a ricostruire la mappa: l'orizzonte no, si cambia con
   // `setTiles` (sotto).
-  const chiaveSorgente = futuro ? tileQuery.replace(/p_horizon=\d+/, "p_horizon=*") : tileQuery;
+  const chiaveSorgente = futuro
+    ? tileQuery.replace(/p_horizon=\d+/, "p_horizon=*")
+    : tileQuery;
   const sourceLayer =
     props.tileLayer ??
     (futuro
@@ -398,8 +454,8 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   const cellFillColor = futuro
     ? maplibreColorMatch("risk_level", hazard)
     : multi
-    ? maplibreMultiHazardColorMatch()
-    : maplibreColorMatch("risk_level", hazard);
+      ? maplibreMultiHazardColorMatch()
+      : maplibreColorMatch("risk_level", hazard);
   // Il nome lo dà il backend (`/api/hazards`); il ripiego serve al primo
   // render e a un backend irraggiungibile.
   // In inglese il database non ha il nome: lo dà la tabella condivisa.
@@ -436,8 +492,13 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     }
 
     const tilesUrl = `${tileserv}/${tileLayer}/{z}/{x}/{y}.pbf${tileQuery}`;
-    const conFiltro = (layerId: string): { filter?: maplibregl.FilterSpecification } => {
-      const f = filtroSoglia(attributoClasse[layerId] ?? "risk_level", sogliaRef.current);
+    const conFiltro = (
+      layerId: string,
+    ): { filter?: maplibregl.FilterSpecification } => {
+      const f = filtroSoglia(
+        attributoClasse[layerId] ?? "risk_level",
+        sogliaRef.current,
+      );
       return f ? { filter: f } : {};
     };
 
@@ -459,7 +520,9 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         // e l'alluvione (anche nella vista d'insieme) dalla portata GloFAS: le
         // due licenze chiedono di dirlo sulla mappa.
         attribution: [
-          ...(multi || hazard === "flood" ? [copernicusModificato(undefined, lingua)] : []),
+          ...(multi || hazard === "flood"
+            ? [copernicusModificato(undefined, lingua)]
+            : []),
           meteoEcmwf(undefined, lingua),
         ].join(" · "),
         // La sorgente parte dallo stesso zoom del livello che la disegna.
@@ -486,25 +549,33 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       "ovl-idraulica": {
         type: "vector",
         // La versione suddivisa: quella intera va in timeout a zoom 8.
-        tiles: [`${tileserv}/public.flood_hazard_subdiv/{z}/{x}/{y}.pbf?properties=hazard_class`],
+        tiles: [
+          `${tileserv}/public.flood_hazard_subdiv/{z}/{x}/{y}.pbf?properties=hazard_class`,
+        ],
         minzoom: 10,
         attribution: t.fonteIdraulica,
       },
       "ovl-alluvioni": {
         type: "vector",
-        tiles: [`${tileserv}/public.flood_events/{z}/{x}/{y}.pbf?properties=event_time,source`],
+        tiles: [
+          `${tileserv}/public.flood_events/{z}/{x}/{y}.pbf?properties=event_time,source`,
+        ],
         minzoom: 8,
         attribution: "Copernicus EMS",
       },
       // Le allerte ufficiali di oggi (migrazione 063): 187 zone, leggere.
       "ovl-dpc": {
         type: "vector",
-        tiles: [`${tileserv}/public.v_dpc_allerte_oggi/{z}/{x}/{y}.pbf?properties=zona,livello`],
+        tiles: [
+          `${tileserv}/public.v_dpc_allerte_oggi/{z}/{x}/{y}.pbf?properties=zona,livello`,
+        ],
         attribution: t.fonteDpc,
       },
       "ovl-bruciate": {
         type: "vector",
-        tiles: [`${tileserv}/public.fire_perimeters/{z}/{x}/{y}.pbf?properties=fire_date,area_ha`],
+        tiles: [
+          `${tileserv}/public.fire_perimeters/{z}/{x}/{y}.pbf?properties=fire_date,area_ha`,
+        ],
         minzoom: 6,
         attribution: "EFFIS",
       },
@@ -513,6 +584,12 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       "ovl-stazioni": {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
+      },
+      // I temporali del radar (#643): centri e linea fino a dove saranno fra un'ora.
+      "ovl-temporali": {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+        attribution: "DPC radar (CC BY-SA 4.0)",
       },
       "wms-pai": {
         type: "raster",
@@ -547,7 +624,11 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
               id: HILLSHADE_LAYER_ID,
               type: "hillshade" as const,
               source: DEM_SOURCE_ID,
-              layout: { visibility: rilievoRef.current ? ("visible" as const) : ("none" as const) },
+              layout: {
+                visibility: rilievoRef.current
+                  ? ("visible" as const)
+                  : ("none" as const),
+              },
               paint: {
                 "hillshade-shadow-color": OMBREGGIATURA.ombra,
                 "hillshade-highlight-color": OMBREGGIATURA.luce,
@@ -611,7 +692,11 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         "source-layer": "public.v_comune_tiles",
         minzoom: COMUNE_MIN_ZOOM,
         maxzoom: COMUNE_MAX_ZOOM,
-        filter: ["in", ["get", "worst_class"], ["literal", ["High", "VeryHigh"]]],
+        filter: [
+          "in",
+          ["get", "worst_class"],
+          ["literal", ["High", "VeryHigh"]],
+        ],
         layout: {
           visibility: futuro ? "none" : "visible",
           "text-field": ["to-string", ["get", "n_alert"]],
@@ -751,7 +836,11 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         type: "line",
         source: "ovl-idraulica",
         "source-layer": "public.flood_hazard_subdiv",
-        paint: { "line-color": "#9ecae1", "line-width": 0.6, "line-opacity": 0.6 },
+        paint: {
+          "line-color": "#9ecae1",
+          "line-width": 0.6,
+          "line-opacity": 0.6,
+        },
         layout: { visibility: visibile("ovl-idraulica-line") },
       },
       {
@@ -805,7 +894,11 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         type: "line",
         source: "ovl-dpc",
         "source-layer": "public.v_dpc_allerte_oggi",
-        paint: { "line-color": "#c3ccd6", "line-width": 0.8, "line-opacity": 0.6 },
+        paint: {
+          "line-color": "#c3ccd6",
+          "line-width": 0.8,
+          "line-opacity": 0.6,
+        },
         layout: { visibility: visibile("ovl-dpc-line") },
       },
       {
@@ -815,6 +908,41 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         "source-layer": "public.fire_perimeters",
         paint: { "line-color": "#ff9ad5", "line-width": 1.2 },
         layout: { visibility: visibile("ovl-bruciate-line") },
+      },
+      {
+        id: "ovl-temporali-moto",
+        type: "line",
+        source: "ovl-temporali",
+        filter: ["==", ["geometry-type"], "LineString"],
+        paint: {
+          "line-color": COLORE_TEMPORALE,
+          "line-width": 2,
+          "line-dasharray": [2, 1],
+        },
+        layout: { visibility: visibile("ovl-temporali-moto") },
+      },
+      {
+        id: "ovl-temporali",
+        type: "circle",
+        source: "ovl-temporali",
+        filter: ["==", ["geometry-type"], "Point"],
+        paint: {
+          "circle-color": COLORE_TEMPORALE,
+          "circle-opacity": 0.35,
+          // Il raggio di un cerchio della stessa area, in pixel a zoom medio.
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["sqrt", ["get", "area_km2"]],
+            1,
+            4,
+            50,
+            30,
+          ],
+          "circle-stroke-color": COLORE_TEMPORALE,
+          "circle-stroke-width": 1.5,
+        },
+        layout: { visibility: visibile("ovl-temporali") },
       },
       {
         id: "ovl-stazioni",
@@ -844,7 +972,13 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
           // Una stazione che non trasmette resta, sbiadita: sparire direbbe
           // che non c'è mai stata.
           "circle-opacity": ["match", ["get", "stato"], "online", 1, 0.45],
-          "circle-stroke-opacity": ["match", ["get", "stato"], "online", 1, 0.45],
+          "circle-stroke-opacity": [
+            "match",
+            ["get", "stato"],
+            "online",
+            1,
+            0.45,
+          ],
         },
         layout: { visibility: visibile("ovl-stazioni") },
       },
@@ -864,7 +998,11 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         type: "line",
         source: HIGHLIGHT_SOURCE_ID,
         filter: ["==", ["get", "ruolo"], "confine"],
-        paint: { "line-color": "#0a0e13", "line-width": 6, "line-opacity": 0.9 },
+        paint: {
+          "line-color": "#0a0e13",
+          "line-width": 6,
+          "line-opacity": 0.9,
+        },
       },
       {
         id: HIGHLIGHT_LINE_ID,
@@ -942,13 +1080,21 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         sources,
         layers,
         ...(rilievoRef.current
-          ? { terrain: { source: DEM_SOURCE_ID, exaggeration: esagerazioneRef.current } }
+          ? {
+              terrain: {
+                source: DEM_SOURCE_ID,
+                exaggeration: esagerazioneRef.current,
+              },
+            }
           : {}),
       },
       pitch: rilievoRef.current ? INCLINAZIONE_RILIEVO : 0,
       bearing: rilievoRef.current ? (cameraRef.current?.bearing ?? 0) : 0,
-      center: cameraRef.current?.center ??
-        (areaLink ? [areaLink.lon, areaLink.lat] : [config.defaultLon, config.defaultLat]),
+      center:
+        cameraRef.current?.center ??
+        (areaLink
+          ? [areaLink.lon, areaLink.lat]
+          : [config.defaultLon, config.defaultLat]),
       zoom: cameraRef.current?.zoom ?? areaLink?.zoom ?? config.defaultZoom,
     });
 
@@ -971,7 +1117,8 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       annullaPosizione = posizioneInItalia(
         (lon, lat) => {
           const c = map.getCenter();
-          if (c.lng !== p.lng || c.lat !== p.lat || map.getZoom() !== p.zoom) return;
+          if (c.lng !== p.lng || c.lat !== p.lat || map.getZoom() !== p.zoom)
+            return;
           map.flyTo({ center: [lon, lat], zoom: ZOOM_POSIZIONE });
         },
         () => {
@@ -981,31 +1128,57 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     }
 
     // In basso: in alto a destra stanno gli strumenti della mappa (#155).
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+    map.addControl(
+      new maplibregl.NavigationControl({ showCompass: false }),
+      "bottom-right",
+    );
 
-// MapLibre chiama tutti i listener dei livelli sotto il punto: un click su
+    // MapLibre chiama tutti i listener dei livelli sotto il punto: un click su
     // una stazione non deve aprire anche la cella o spostare la mappa.
     const suStazione = (e: maplibregl.MapMouseEvent): boolean =>
       map.getLayer("ovl-stazioni") !== undefined &&
-      map.queryRenderedFeatures(e.point, { layers: ["ovl-stazioni"] }).length > 0;
+      map.queryRenderedFeatures(e.point, { layers: ["ovl-stazioni"] }).length >
+        0;
 
     if (haClick) {
-      map.on("click", LAYER_ID, (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
-        if (suStazione(e)) return;
-        const cellId = e.features?.[0]?.properties?.["cell_id"];
-        if (typeof cellId === "string") {
-          onCellClickRef.current?.(cellId, e.lngLat, e.features?.[0]?.properties ?? undefined);
-        }
-      });
+      map.on(
+        "click",
+        LAYER_ID,
+        (
+          e: maplibregl.MapMouseEvent & {
+            features?: maplibregl.MapGeoJSONFeature[];
+          },
+        ) => {
+          if (suStazione(e)) return;
+          const cellId = e.features?.[0]?.properties?.["cell_id"];
+          if (typeof cellId === "string") {
+            onCellClickRef.current?.(
+              cellId,
+              e.lngLat,
+              e.features?.[0]?.properties ?? undefined,
+            );
+          }
+        },
+      );
     }
-    map.on("click", "ovl-stazioni", (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
-      const f = e.features?.[0];
-      if (!f || f.geometry.type !== "Point") return;
-      new maplibregl.Popup({ maxWidth: "280px" })
-        .setLngLat(f.geometry.coordinates as [number, number])
-        .setDOMContent(popupStazione(f.properties as unknown as ProprietaStazione, lingua))
-        .addTo(map);
-    });
+    map.on(
+      "click",
+      "ovl-stazioni",
+      (
+        e: maplibregl.MapMouseEvent & {
+          features?: maplibregl.MapGeoJSONFeature[];
+        },
+      ) => {
+        const f = e.features?.[0];
+        if (!f || f.geometry.type !== "Point") return;
+        new maplibregl.Popup({ maxWidth: "280px" })
+          .setLngLat(f.geometry.coordinates as [number, number])
+          .setDOMContent(
+            popupStazione(f.properties as unknown as ProprietaStazione, lingua),
+          )
+          .addTo(map);
+      },
+    );
     map.on("mouseenter", "ovl-stazioni", () => {
       map.getCanvas().style.cursor = "pointer";
     });
@@ -1013,7 +1186,9 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       map.getCanvas().style.cursor = "";
     });
 
-    map.once("load", () => caricaStazioni(map, overlayRef.current, urlStazioniRef.current));
+    map.once("load", () =>
+      caricaStazioni(map, overlayRef.current, urlStazioniRef.current),
+    );
     map.on("moveend", () => {
       const c = map.getCenter();
       impostaAreaRef.current?.({ lon: c.lng, lat: c.lat, zoom: map.getZoom() });
@@ -1051,13 +1226,18 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       if (sourceId === SOURCE_ID) setLivelloAssente(true);
     });
     map.on("sourcedata", (e: maplibregl.MapSourceDataEvent) => {
-      if (e.sourceId === SOURCE_ID && e.isSourceLoaded) setLivelloAssente(false);
+      if (e.sourceId === SOURCE_ID && e.isSourceLoaded)
+        setLivelloAssente(false);
     });
 
     return () => {
       annullaPosizione();
       const c = map.getCenter();
-      cameraRef.current = { center: [c.lng, c.lat], zoom: map.getZoom(), bearing: map.getBearing() };
+      cameraRef.current = {
+        center: [c.lng, c.lat],
+        zoom: map.getZoom(),
+        bearing: map.getBearing(),
+      };
       map.remove();
       mappaRef.current = null;
       if (props.mapRef) {
@@ -1073,7 +1253,9 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
   useEffect(() => {
     if (!futuro) return;
     const map = props.mapRef?.current;
-    const src = map?.getSource(SOURCE_ID) as maplibregl.VectorTileSource | undefined;
+    const src = map?.getSource(SOURCE_ID) as
+      | maplibregl.VectorTileSource
+      | undefined;
     src?.setTiles([`${tileserv}/${tileLayer}/{z}/{x}/{y}.pbf${tileQuery}`]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tileQuery]);
@@ -1085,7 +1267,10 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     if (areaLink === areaApplicataRef.current) return;
     areaApplicataRef.current = areaLink;
     if (!areaLink) return;
-    mappaRef.current?.jumpTo({ center: [areaLink.lon, areaLink.lat], zoom: areaLink.zoom });
+    mappaRef.current?.jumpTo({
+      center: [areaLink.lon, areaLink.lat],
+      zoom: areaLink.zoom,
+    });
   }, [areaLink]);
 
   // «Rilievo» acceso o spento sulla mappa che c'è: terreno, ombre e camera.
@@ -1102,9 +1287,17 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     const apply = (): void => {
       if (!map.getSource(DEM_SOURCE_ID)) return;
       const acceso = rilievoRef.current;
-      map.setTerrain(acceso ? { source: DEM_SOURCE_ID, exaggeration: esagerazioneRef.current } : null);
+      map.setTerrain(
+        acceso
+          ? { source: DEM_SOURCE_ID, exaggeration: esagerazioneRef.current }
+          : null,
+      );
       if (map.getLayer(HILLSHADE_LAYER_ID)) {
-        map.setLayoutProperty(HILLSHADE_LAYER_ID, "visibility", acceso ? "visible" : "none");
+        map.setLayoutProperty(
+          HILLSHADE_LAYER_ID,
+          "visibility",
+          acceso ? "visible" : "none",
+        );
       }
     };
     if (map.isStyleLoaded()) apply();
@@ -1128,7 +1321,10 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     if (!map || !rilievoRef.current) return;
     const apply = (): void => {
       if (!map.getSource(DEM_SOURCE_ID) || !rilievoRef.current) return;
-      map.setTerrain({ source: DEM_SOURCE_ID, exaggeration: esagerazioneRef.current });
+      map.setTerrain({
+        source: DEM_SOURCE_ID,
+        exaggeration: esagerazioneRef.current,
+      });
     };
     if (map.isStyleLoaded()) apply();
     else map.once("idle", apply);
@@ -1145,7 +1341,8 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     const apply = (): void => {
       for (const o of OVERLAYS) {
         for (const id of o.layerIds) {
-          if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", visibile(id));
+          if (map.getLayer(id))
+            map.setLayoutProperty(id, "visibility", visibile(id));
         }
       }
       caricaStazioni(map, overlayRef.current, urlStazioniRef.current);
@@ -1161,7 +1358,8 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     if (!map) return;
     const apply = (): void => {
       for (const [id, prop] of Object.entries(attributoClasse)) {
-        if (map.getLayer(id)) map.setFilter(id, filtroSoglia(prop, sogliaRef.current));
+        if (map.getLayer(id))
+          map.setFilter(id, filtroSoglia(prop, sogliaRef.current));
       }
     };
     if (map.isStyleLoaded()) apply();
@@ -1175,7 +1373,9 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
     const map = props.mapRef?.current;
     if (!map) return;
     const apply = (): void => {
-      const src = map.getSource(HIGHLIGHT_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+      const src = map.getSource(HIGHLIGHT_SOURCE_ID) as
+        | maplibregl.GeoJSONSource
+        | undefined;
       src?.setData(maschera(evidenziatoRef.current));
     };
     if (map.isStyleLoaded()) apply();

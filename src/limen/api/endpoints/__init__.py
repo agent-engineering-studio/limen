@@ -16,6 +16,7 @@ from limen.api.endpoints import (
     contributi,
     health,
     installazione,
+    radar,
     regioni,
     risk,
     sensori,
@@ -40,6 +41,7 @@ def all_routers() -> Iterable[APIRouter]:
         sensori.router,
         installazione.router,
         standard.router,
+        radar.router,
     )
 
 

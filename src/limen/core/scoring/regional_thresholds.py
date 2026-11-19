@@ -963,6 +963,53 @@ class PluvialLocalBlock(_StrictModel):
     floor_mm: float = Field(..., gt=0.0)
 
 
+class RadarCiecoBlock(_StrictModel):
+    """Dove il radar vede male uno zero non è «asciutto» (#643, il caso di Lipari).
+
+    Sotto ``min_reliability`` della mappa di affidabilità di dpc-radar, una
+    pioggia osservata sotto ``dry_mm`` non si usa: la cella resta sulla
+    previsione, e senza previsione è «non misurata» invece che calma. Una
+    pioggia sopra ``dry_mm`` resta: un radar che vede male legge poco, non
+    inventa.
+    """
+
+    min_reliability: float = Field(..., gt=0.0, le=1.0)
+    dry_mm: float = Field(..., ge=0.0)
+
+
+class RaritaBlock(_StrictModel):
+    """La pioggia caduta giudicata contro il posto, non contro una soglia nazionale (#643).
+
+    Il tempo di ritorno della cumulata osservata in quella cella (climatologia
+    radar 2018-2025 di dpc-radar) alza il ramo pluviale: 0 fino a
+    ``from_years``, 1 da ``full_years``, in mezzo in scala logaritmica. Vale il
+    maggiore fra questo e il trigger della pioggia in mm.
+    """
+
+    from_years: float = Field(..., gt=1.0)
+    full_years: float = Field(..., le=50.0)
+
+    @model_validator(mode="after")
+    def _ordine(self) -> RaritaBlock:
+        if self.full_years <= self.from_years:
+            raise ValueError("rarity.full_years must exceed from_years")
+        return self
+
+
+class NowcastBlock(_StrictModel):
+    """La pioggia dei prossimi ``minutes`` dal radar spostato lungo il suo moto (#643).
+
+    Si somma all'osservata al posto della prevista sul resto della finestra
+    quando è maggiore: un nubifragio in corso che il modello meteo non vede.
+    Il nowcast sposta la pioggia, non la fa crescere né nascere: vale un'ora o due.
+    """
+
+    minutes: int = Field(..., ge=5, le=120)
+    #: Più vecchio di così l'ultimo SRI non dice niente dei prossimi minuti:
+    #: quei minuti sono già passati, e la loro pioggia è già nell'osservata.
+    max_age_minutes: int = Field(..., gt=0, le=30)
+
+
 class PluvialObservedBlock(_StrictModel):
     """La pioggia già caduta, misurata dal radar DPC (#199).
 
@@ -980,6 +1027,18 @@ class PluvialObservedBlock(_StrictModel):
     #: Di quanto un pixel può muoversi fra due fotogrammi consecutivi (30
     #: minuti): oltre, il dato è guasto e il pixel vale «non misurato» (#235).
     max_step_mm: float = Field(..., gt=0.0)
+    #: Gli usi del radar adottati spenti, uno per uno dopo la misura (#643).
+    #: Assente ⇒ spento, come prima.
+    blind: RadarCiecoBlock | None = None
+    rarity: RaritaBlock | None = None
+    nowcast: NowcastBlock | None = None
+
+    @model_validator(mode="after")
+    def _rarita_su_una_finestra_della_climatologia(self) -> PluvialObservedBlock:
+        # La climatologia radar di dpc-radar ha le finestre di 1, 3, 6 e 24 ore.
+        if self.rarity is not None and self.hours not in (3, 6, 24):
+            raise ValueError("observed.rarity needs observed.hours in 3, 6 or 24")
+        return self
 
 
 class PluvialBlock(_StrictModel):

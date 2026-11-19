@@ -53,7 +53,7 @@ dependencies = [
     "ispra-idrogeo~=0.7.0",
     "imageserver-export~=0.2.0",
     "ingv-shakemap~=0.2.0",
-    "dpc-radar[bulletins]~=0.3.0",
+    "dpc-radar[bulletins,nowcast,storms]~=0.3.0",
     "glofas-ewds~=0.2.0",
 ]
 
@@ -115,6 +115,8 @@ dl = [
 report = [
     "jinja2>=3.1",
     "reportlab>=5.0.1",
+    # Il resoconto radar di un evento nelle verifiche (#643): mappa e grafico orario.
+    "dpc-radar[report]~=0.3.0",
 ]
 # Il libro (`docs/book/`, `zensical.toml`): `uv run --group docs zensical serve`.
 docs = [
@@ -220,6 +222,7 @@ module = [
     "fastmcp.*",
     "cdsapi.*",
     "numcodecs.*",
+    "scipy.*",
 ]
 ignore_missing_imports = true
 

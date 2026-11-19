@@ -15,127 +15,67 @@ di quella del modello, che il 10 ottobre 2026 a Melito vedeva 17 mm contro
 
 Un'ora coperta per meno di metà dai fotogrammi vale ``None``, «non
 misurata»: un buco dell'archivio non è un'ora asciutta.
+
+La lettura è quella di ``dpc_radar.history.SriHistory`` (#643): la stessa che
+Limen aveva scritto per conto suo, più il riconoscimento dei fotogrammi
+corrotti (752 su 1.039.785: il disco intero di un radar pieno di pioggia
+violenta, o chiazze piatte sopra i 100 mm/h, quasi tutti nel 2011 e nel 2014),
+che si leggono come mancanti. Qui si contano e si scrivono nel log di ogni
+backtest, e si segnala una finestra che comincia prima del 2018: fino al 2017
+il mosaico leggeva circa due terzi di oggi, e un backtest che attraversa il
+2018 confronta due strumenti diversi. La mappa del bias di dpc-radar non si
+applica allo storico: è costruita sui mesi del 2026, e lo strumento di prima
+del 2018 non è quello.
 """
 
 from __future__ import annotations
 
-import json
-import warnings
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
-from pyproj import Transformer
+from dpc_radar.history import SriHistory, suspect
 
 from limen.core.logging import get_logger
 
 log = get_logger(__name__)
 
-_EPOCA = datetime(2010, 1, 1, tzinfo=UTC)
-#: Il passo più lungo dell'archivio: un intervallo più largo è un buco, e il
-#: fotogramma prima del buco non lo copre.
-_PASSO_MAX_MIN = 15
+#: Da qui in poi il mosaico è lo strumento di oggi (climatologia di dpc-radar).
+STRUMENTO_DI_OGGI = datetime(2018, 1, 1, tzinfo=UTC)
 
 
-class SriArchive:
+class SriArchive(SriHistory):
     """Pioggia oraria in punti lon/lat, dallo Zarr IT-DPC-SRI su disco."""
 
     def __init__(self, path: Path) -> None:
-        from numcodecs import Blosc
+        super().__init__(path)
+        self._letti = 0
+        self._sospetti = 0
 
-        self._path = path
-        self._codec = Blosc()
-        arr = json.loads((path / "RR" / ".zarray").read_text())
-        self._shape = tuple(arr["shape"][1:])
-        crs = json.loads((path / "crs" / ".zattrs").read_text())
-        x0, dx, _, y0, _, dy = (float(v) for v in crs["GeoTransform"].split())
-        self._x0, self._dx, self._y0, self._dy = x0, dx, y0, dy
-        self._proj = Transformer.from_crs("EPSG:4326", crs["crs_wkt"], always_xy=True)
-        self._minuti = np.frombuffer(self._decode(path / "time" / "0"), dtype="<i8")
-
-    def _decode(self, file: Path) -> bytes:
-        return bytes(self._codec.decode(file.read_bytes()))
-
-    def pixel(self, points: list[tuple[float, float]]) -> list[tuple[int, int] | None]:
-        """(riga, colonna) di ogni punto lon/lat; ``None`` fuori dalla griglia."""
-        xs, ys = self._proj.transform([p[0] for p in points], [p[1] for p in points])
-        out: list[tuple[int, int] | None] = []
-        for x, y in zip(xs, ys, strict=True):
-            r = int((y - self._y0) // self._dy)
-            c = int((x - self._x0) // self._dx)
-            dentro = 0 <= r < self._shape[0] and 0 <= c < self._shape[1]
-            out.append((r, c) if dentro else None)
-        return out
-
-    def _finestre(self, pixel: list[tuple[int, int] | None]) -> tuple[np.ndarray, np.ndarray]:
-        """Indici dei 3x3 pixel attorno a ogni punto, per una lettura vettoriale.
-
-        Ai bordi l'indice si ripiega sul bordo; un punto fuori griglia legge il
-        pixel (0, 0), e il chiamante lo scarta con la maschera ``pixel is None``.
-        """
-        h, w = self._shape
-        righe = np.zeros((len(pixel), 9), dtype=np.intp)
-        colonne = np.zeros((len(pixel), 9), dtype=np.intp)
-        for k, rc in enumerate(pixel):
-            if rc is None:
-                continue
-            r, c = rc
-            dr, dc = np.meshgrid([-1, 0, 1], [-1, 0, 1], indexing="ij")
-            righe[k] = np.clip(r + dr.ravel(), 0, h - 1)
-            colonne[k] = np.clip(c + dc.ravel(), 0, w - 1)
-        return righe, colonne
-
-    def _fotogramma(self, i: int) -> np.ndarray | None:
-        file = self._path / "RR" / f"{i}.0.0"
-        if not file.exists():
-            return None
-        return np.frombuffer(self._decode(file), dtype="<f4").reshape(self._shape)
+    def frame(self, i: int) -> np.ndarray | None:
+        f = super().frame(i)
+        if f is not None:
+            self._letti += 1
+            self._sospetti += bool(suspect(f))
+        return f
 
     def oraria(
         self, points: list[tuple[float, float]], start: datetime, end: datetime
     ) -> dict[datetime, list[float | None]]:
-        """Pioggia di ogni ora ``(h-1, h]`` in ``(start, end]``, per punto (mm).
-
-        Media delle intensità dei fotogrammi dell'ora, ciascuno pesato per il
-        tratto che copre fino al successivo (al più 15 minuti); mediana 3x3
-        attorno al pixel, come la produzione legge il «Merging».
-        """
-        pixel = self.pixel(points)
-        fuori = np.array([rc is None for rc in pixel])
-        righe, colonne = self._finestre(pixel)
-        a = int((start - _EPOCA).total_seconds() // 60)
-        b = int((end - _EPOCA).total_seconds() // 60)
-        lo = int(np.searchsorted(self._minuti, a, side="right"))
-        hi = int(np.searchsorted(self._minuti, b, side="right"))
-        somme: dict[int, np.ndarray] = {}
-        coperti: dict[int, np.ndarray] = {}
-        letti = mancanti = 0
-        for i in range(lo, hi):
-            m = int(self._minuti[i])
-            dopo = int(self._minuti[i + 1]) if i + 1 < len(self._minuti) else m + 5
-            peso = min(dopo - m, _PASSO_MAX_MIN)
-            f = self._fotogramma(i)
-            if f is None:
-                mancanti += 1
-                continue
-            letti += 1
-            finestre = f[righe, colonne].astype(np.float64)
-            finestre[~(finestre >= 0)] = np.nan
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", RuntimeWarning)  # finestra tutta vuota
-                valori = np.nanmedian(finestre, axis=1)
-            valori[fuori] = np.nan
-            # Il fotogramma vale da `m` al successivo: sta nell'ora che si chiude dopo.
-            ora = m // 60 + 1
-            ok = np.isfinite(valori)
-            somme.setdefault(ora, np.zeros(len(points)))[ok] += valori[ok] * peso
-            coperti.setdefault(ora, np.zeros(len(points)))[ok] += peso
-        if mancanti:
-            log.warning("sri_archive.fotogrammi_mancanti", letti=letti, mancanti=mancanti)
-        out: dict[datetime, list[float | None]] = {}
-        for ora, somma in sorted(somme.items()):
-            cop = coperti[ora]
-            out[_EPOCA + timedelta(minutes=ora * 60)] = [
-                float(s / c) if c >= 30 else None for s, c in zip(somma, cop, strict=True)
-            ]
+        """Pioggia di ogni ora ``(h-1, h]`` in ``(start, end]``, per punto (mm)."""
+        self._letti = self._sospetti = 0
+        out = self.hourly(points, start, end)
+        log.info(
+            "sri_archive.letti",
+            dal=start.isoformat(),
+            al=end.isoformat(),
+            fotogrammi=self._letti,
+            corrotti=self._sospetti,
+        )
+        if start < STRUMENTO_DI_OGGI:
+            log.warning(
+                "sri_archive.prima_del_2018",
+                dal=start.isoformat(),
+                note="fino al 2017 il mosaico leggeva circa due terzi di oggi",
+            )
         return out

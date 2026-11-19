@@ -114,7 +114,9 @@ export interface ComuneCell {
 }
 
 /** Il confine di un comune: un Feature GeoJSON con il riquadro. */
-export type ComuneGeometry = GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon> & {
+export type ComuneGeometry = GeoJSON.Feature<
+  GeoJSON.Polygon | GeoJSON.MultiPolygon
+> & {
   bbox: [number, number, number, number];
 };
 
@@ -244,6 +246,28 @@ export interface CellBreakdownResponse {
   /** Alluvione: la piena prevista in periodi di ritorno GloFAS (#522).
    *  Un'etichetta, non entra nel punteggio; null = non si può dire. */
   piena?: Piena | null;
+  /** Il radar DPC visto dalla cella (#643): un'etichetta, non entra nel punteggio. */
+  radar?: RadarCella | null;
+}
+
+/** Quanto vede il radar qui e, per l'alluvione, quanto è rara la pioggia caduta (#643). */
+export interface RadarCella {
+  /** null fuori dalla mappa del radar. */
+  affidabile: boolean | null;
+  punteggio: number | null;
+  visibilita: number | null;
+  copertura: number | null;
+  accordo: number | null;
+  quota_fascio_m: number | null;
+  radar_vicino: string;
+  distanza_km: number;
+  pioggia_mm?: number | null;
+  finestra_ore?: number | null;
+  /** Ogni quanti anni capita qui quella pioggia (tetto 50). */
+  ritorno_anni?: number | null;
+  ritorno_basso?: number | null;
+  ritorno_alto?: number | null;
+  anni_di_dati?: number;
 }
 
 /** La piena prevista detta in periodi di ritorno (#522). */
@@ -658,7 +682,11 @@ export interface ProvenienzaResponse {
   motore: string;
   sfidante_ml_attivo: boolean;
   meteo_modello: string;
-  correttore_pioggia: { stato: string; nodi_raccolti: number; nodi_obiettivo: number };
+  correttore_pioggia: {
+    stato: string;
+    nodi_raccolti: number;
+    nodi_obiettivo: number;
+  };
   spiegazioni_modello: string | null;
 }
 
@@ -678,10 +706,21 @@ export interface RegioneMonitorata {
     rango: number;
   } | null;
   pericoli: Partial<
-    Record<HazardType, { alte: number; moderate: number; max_score: number; classe: RiskLevel }>
+    Record<
+      HazardType,
+      { alte: number; moderate: number; max_score: number; classe: RiskLevel }
+    >
   >;
-  previsto: Partial<Record<HazardType, { score: number; classe: RiskLevel; target_at: string }>>;
-  comuni: { istat_code: string; nome: string; hazard: HazardType; score: number; celle_alte: number }[];
+  previsto: Partial<
+    Record<HazardType, { score: number; classe: RiskLevel; target_at: string }>
+  >;
+  comuni: {
+    istat_code: string;
+    nome: string;
+    hazard: HazardType;
+    score: number;
+    celle_alte: number;
+  }[];
   allerta: { oggi: number | null; domani: number | null } | null;
   spiegazioni: Partial<
     Record<

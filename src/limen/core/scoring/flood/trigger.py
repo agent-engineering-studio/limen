@@ -17,6 +17,7 @@ not the other, and the two are mitigated by different things.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 
 from limen.core.scoring.flood.climatologia import LIVELLI, valore_al_livello
@@ -24,9 +25,10 @@ from limen.core.scoring.regional_thresholds import (
     FluvialBlock,
     ImperviousnessBlock,
     PluvialBlock,
+    RaritaBlock,
 )
 
-__all__ = ["fluvial_trigger", "pluvial_trigger", "soglie_pioggia"]
+__all__ = ["fluvial_trigger", "pluvial_trigger", "rarity_trigger", "soglie_pioggia"]
 
 
 def _ramp(value: float, lo: float, hi: float) -> float:
@@ -108,3 +110,13 @@ def fluvial_trigger(discharge_ratio: float | None, *, fluvial: FluvialBlock) -> 
     the breakdown carries the raw ratio.
     """
     return _ramp(discharge_ratio or 0.0, fluvial.normal_ratio, fluvial.saturation_ratio)
+
+
+def rarity_trigger(years: float, rarita: RaritaBlock) -> float:
+    """Il ramo pluviale dalla rarità dell'osservata (#643): 0 fino a ``from_years``,
+    1 da ``full_years``, in scala logaritmica in mezzo."""
+    if years <= rarita.from_years:
+        return 0.0
+    if years >= rarita.full_years:
+        return 1.0
+    return math.log(years / rarita.from_years) / math.log(rarita.full_years / rarita.from_years)

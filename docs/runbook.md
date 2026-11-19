@@ -340,6 +340,17 @@ abbassare l'intervallo della sveglia o del giro orario, o di aggiungere aree
 oltre le 20, rifare il conto: se supera il tetto, la scelta va scritta qui.
 I file scaricati si contano nei log (`dpc.radar.fetched`, `dpc.archivio.done`).
 
+Con dpc-radar 0.3.0 (#643) la sveglia legge gli SRI dell'ultima mezz'ora (t,
+t − 15, t − 30) per il moto dei temporali; i due più vecchi sono quelli dei
+giri prima, tenuti in memoria (gli ultimi dodici SRI), e l'ultimo si riscarica
+solo se il DPC ne ha pubblicato uno nuovo: a regime il conto non cambia. Il
+nowcast dell'alluvione, quando sarà acceso, legge la stessa serie, tenuta
+quattro minuti per tutte le regioni dello sweep. Fuori dal conto, perché
+a domanda: gli strumenti radar del server MCP (`tool_radar_*`, con i
+fotogrammi in memoria), `limen resoconto-radar` (33 richieste per evento,
+nessuna se l'archivio ha quel giorno) e la misura una tantum
+`LIMEN_RADAR_MISURE=adozione limen misura-radar` (circa 300 richieste).
+
 ## Osservabilità
 
 Avviare lo stack Grafana LGTM accanto alla demo:

@@ -23,14 +23,19 @@ libro:
   prima dell'emissione del bollettino, per frane e alluvioni, sulla scala
   della Protezione civile di ``pc_alert`` (YAML del pericolo). Legge il
   database, non l'archivio del radar.
+* **adozione** (#643): che cosa farebbero gli usi del radar ancora spenti
+  (radar cieco, rarità, nowcast, bias della sveglia) sugli eventi verificati e
+  su un campione di giorni: vedi ``misura_radar_adozione``. Legge il database e
+  l'API del DPC, non l'archivio.
 * **ore** (#626): le ore ricostruite (CUM3 ripartito con lo SRT1) e quelle del
   solo radar contro i pluviometri a 10 minuti di ARPA Lombardia. Una parte di
   quei pluviometri è già dentro il «Merging»: il confronto non è indipendente.
 
 Env: ``LIMEN_RADAR_DAL`` / ``LIMEN_RADAR_AL`` (giorni, default tutto
 l'archivio; per ``limen`` senza archivio, gli ultimi ``_GIORNI_LIMEN`` giorni),
-``LIMEN_RADAR_MISURE`` (default tutte: ``copertura,richieste,bollettini,
-qualita,limen,ore``; ``richieste`` e ``limen`` girano anche senza l'archivio),
+``LIMEN_RADAR_MISURE`` (default tutte tranne ``adozione``, che va chiesta:
+``copertura,richieste,bollettini,qualita,limen,ore``; ``richieste``, ``limen``
+e ``adozione`` girano anche senza l'archivio),
 ``LIMEN_RADAR_AREE`` (aree monitorate per il conto delle richieste, 20).
 Report in ``LIMEN_REPORTS_DIR``.
 """
@@ -49,6 +54,7 @@ from dpc_radar import RainGrid
 from dpc_radar.bulletins import COLOURS, Zone, issued
 from numpy.typing import NDArray
 
+from limen.cli import misura_radar_adozione as adozione
 from limen.cli import provenienza
 from limen.config.settings import get_settings
 from limen.core.logging import get_logger
@@ -63,8 +69,8 @@ from limen.integrations.dpc.merging_archive import PASSI, MergingArchive, istant
 
 log = get_logger(__name__)
 
-MISURE = ("copertura", "richieste", "bollettini", "qualita", "limen", "ore")
-_SENZA_ARCHIVIO = {"richieste", "limen"}
+MISURE = ("copertura", "richieste", "bollettini", "qualita", "limen", "ore", "adozione")
+_SENZA_ARCHIVIO = {"richieste", "limen", "adozione"}
 _COLORI = {0: "nessuna", 1: "gialla", 2: "arancione", 3: "rossa"}
 assert _COLORI.keys() == COLOURS.keys()
 _FILE_ASSENTI = ("absent.txt", "assenti.txt")
@@ -828,7 +834,9 @@ def _qualita(
 async def run() -> int:
     settings = get_settings()
     cfg = settings.radar_archive
-    misure = [m.strip() for m in os.getenv("LIMEN_RADAR_MISURE", ",".join(MISURE)).split(",")]
+    # «adozione» costa circa 300 richieste al DPC: solo quando la si chiede.
+    predefinite = ",".join(m for m in MISURE if m != "adozione")
+    misure = [m.strip() for m in os.getenv("LIMEN_RADAR_MISURE", predefinite).split(",")]
     if sconosciute := sorted(set(misure) - set(MISURE)):
         log.error("misura_radar.misura_sconosciuta", misure=sconosciute, note=list(MISURE))
         return 2
@@ -850,7 +858,7 @@ async def run() -> int:
         f"{con_cum[0]}_{con_cum[-1]}"
         if con_cum
         else f"{giorni_limen[0]}_{giorni_limen[-1]}"
-        if "limen" in misure
+        if {"limen", "adozione"} & set(misure)
         else "vuoto"
     )
     report = uscita / f"misura_radar_{periodo}.md"
@@ -895,6 +903,12 @@ async def run() -> int:
             righe += righe_limen(*await _limen(giorni_limen))
         if archivio is not None and "ore" in misure:
             righe += righe_ore(await _ore(archivio, con_tutto))
+        if "adozione" in misure:
+            async with lifespan_pool():
+                misurato = await adozione.misura(
+                    giorni_limen[0], giorni_limen[-1], settings.nowcast.min_intensity_mmh
+                )
+            righe += adozione.righe_adozione(*misurato, settings.nowcast.min_intensity_mmh)
     finally:
         await SharedHttpClient.aclose()
 

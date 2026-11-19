@@ -134,6 +134,10 @@ class MonitoringContext(BaseModel):
     #: La cumulata radar DPC per cella (#199). Una cella assente non ha un
     #: fotogramma utilizzabile: il motore resta sulla sola previsione.
     flood_rain_observed_by_cell: dict[str, float] = Field(default_factory=dict)
+    #: Tempo di ritorno (anni) dell'osservata per cella, se `observed.rarity` è acceso (#643).
+    flood_rain_observed_years_by_cell: dict[str, float] = Field(default_factory=dict)
+    #: Pioggia dei prossimi minuti dal nowcast radar, se `observed.nowcast` è acceso (#643).
+    flood_rain_ahead_by_cell: dict[str, float] = Field(default_factory=dict)
     flood_river_ratio_by_node: Sequence[float | None] = Field(default_factory=tuple)
     #: Quantili della pioggia a 72 ore per nodo (migrazione 065), allineati
     #: a ``flood_nodes``; ``None`` dove il nodo non ha climatologia.

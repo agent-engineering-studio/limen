@@ -298,3 +298,44 @@ async def test_lo_stato_che_non_c_e_o_non_si_legge_e_none(rete: _Rete) -> None:
     assert await client.get_radar_status(_T) is None
     rete.risposte[f"GET {url}"] = httpx.Response(503)
     assert await client.get_radar_status(_T) is None
+
+
+async def test_la_serie_sri_non_riscarica_quello_che_ha(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#643: a regime la sveglia scarica solo l'SRI nuovo; i due prima sono in memoria,
+    anche se l'ultimo avanza di 10 minuti invece che di 15."""
+    import datetime as dt
+
+    from limen.integrations.dpc import client as cli
+
+    chiesti: list[object] = []
+    t0 = dt.datetime(2026, 11, 19, 9, 0, tzinfo=dt.UTC)
+    ultimo = {"t": t0}
+
+    class _G:
+        def __init__(self, t: dt.datetime) -> None:
+            self.time = t
+
+    async def _download(_p: str, cached: object = None, *, at: dt.datetime | None = None) -> object:
+        chiesti.append(at or "ultimo")
+        if at is None:
+            if isinstance(cached, _G) and cached.time == ultimo["t"]:
+                return cached
+            return _G(ultimo["t"])
+        return _G(at)
+
+    monkeypatch.setattr(cli, "_download", _download)
+    monkeypatch.setattr(cli, "_sri_cache", {})
+    monkeypatch.setattr(cli, "_serie", None)
+    passo = dt.timedelta(minutes=15)
+    await cli.get_sri_series(passo, 3)
+    assert len(chiesti) == 3
+    for avanzo in (15, 10, 20):
+        chiesti.clear()
+        ultimo["t"] += dt.timedelta(minutes=avanzo)
+        monkeypatch.setattr(cli, "_serie", None)
+        serie = await cli.get_sri_series(passo, 3)
+        assert [g.time for g in serie][-1] == ultimo["t"]
+        assert len(chiesti) <= 3
+    chiesti.clear()
+    await cli.get_sri_series(passo, 3)  # stesso sweep: la serie appena letta
+    assert chiesti == []

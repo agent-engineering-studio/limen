@@ -123,6 +123,8 @@ def assemble_bundles(
             river_discharge_ratio=flood_river,
             flood_rain_quantiles=flood_quantili,
             flood_rain_observed_mm=ctx.flood_rain_observed_by_cell.get(cell_id),
+            flood_rain_observed_years=ctx.flood_rain_observed_years_by_cell.get(cell_id),
+            flood_rain_ahead_mm=ctx.flood_rain_ahead_by_cell.get(cell_id),
             flood_rain_head_mm=flood_head,
             coastal_surge_norm=ctx.coastal_surge_norm,
             seismic_history=ctx.seismic_per_cella.get(cell_id, ()),

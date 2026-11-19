@@ -245,7 +245,7 @@ def _impostazioni(cartella: Path | str) -> SimpleNamespace:
         radar_archive=SimpleNamespace(
             cartella=str(cartella), attivo=bool(cartella), file_per_notte=1500
         ),
-        nowcast=SimpleNamespace(interval_minutes=15),
+        nowcast=SimpleNamespace(interval_minutes=15, min_intensity_mmh=30.0),
         scheduler=SimpleNamespace(hourly_monitoring_minutes=60),
     )
 
@@ -266,6 +266,20 @@ def _senza_db(
     monkeypatch.setattr(misura_radar, "lifespan_pool", _pool)
     monkeypatch.setattr(misura_radar.carico_repo, "centroidi", _centroidi)
     monkeypatch.setattr(misura_radar.carico_repo, "classi_previste", _classi)
+
+    async def _adozione(*_a: Any) -> Any:
+        return (
+            [],
+            {"giorni": 0, "celle_giorno": 0, "sopra": dict.fromkeys((2.0, 5.0, 20.0), 0)},
+            (
+                0,
+                0,
+            ),
+            [],
+            (0, 0, 0),
+        )
+
+    monkeypatch.setattr(misura_radar.adozione, "misura", _adozione)
 
 
 async def test_il_comando_scrive_il_report_con_le_cinque_parti(
@@ -438,3 +452,34 @@ async def test_limen_gira_senza_archivio(tmp_path: Path, monkeypatch: pytest.Mon
     assert "Giorni confrontati: **1**; zone-giorno: **1**" in testo
     assert "(non valutati, non calmi): 1" in testo
     assert "| arancione | 0 | 0 | 1 | 0 | 1 |" in testo
+
+
+def test_la_finestra_dell_evento_segue_la_precisione_dell_ora() -> None:
+    from limen.cli.misura_radar_adozione import Evento, fine_finestra
+
+    t1 = Evento("x", "flood", datetime(2026, 11, 7, 15, 40, tzinfo=UTC), "T1", 12.9, 43.9)
+    t3 = Evento("y", "flood", datetime(2026, 11, 10, 11, 0, tzinfo=UTC), "T3", 10.2, 43.9)
+    assert fine_finestra(t1) == datetime(2026, 11, 7, 16, 0, tzinfo=UTC)
+    assert fine_finestra(t3) == datetime(2026, 11, 11, 0, 0, tzinfo=UTC)
+
+
+def test_il_report_dell_adozione_mette_gli_eventi_accanto_alla_base() -> None:
+    from limen.cli.misura_radar_adozione import EsitoEvento, Evento, OraNowcast, righe_adozione
+
+    e = Evento("melito", "flood", datetime(2026, 10, 10, 6, tzinfo=UTC), "T1", 15.78, 37.92)
+    testo = "\n".join(
+        righe_adozione(
+            [EsitoEvento(e, 0.9, 180.0, 50.0)],
+            {"giorni": 2, "celle_giorno": 100, "sopra": {2.0: 10, 5.0: 3, 20.0: 1}},
+            (12, 100),
+            [OraNowcast("melito", e.at, 15.0, 20.0, 4, 2)],
+            (2, 50, 30),
+            (10, 3, 4, 2),
+            30.0,
+        )
+    )
+    assert "| ≥ 20 anni | 1 su 1 (100.0 %) | 1 su 100 (1.0 %) |" in testo
+    assert "**12 su 100** (12.0 %)" in testo
+    assert "errore medio **5.0 mm**" in testo
+    assert "colte 1 su 1" in testo
+    assert "**3 su 10** (30.0 %)" in testo and "**2 su 4** (50.0 %)" in testo

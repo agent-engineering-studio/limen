@@ -102,6 +102,60 @@ class PienaOut(BaseModel):
     lettura: str
 
 
+class RadarOut(BaseModel):
+    """Il radar DPC visto dalla cella (#643): affidabilità e rarità della pioggia caduta.
+
+    Un'etichetta, non entra nel punteggio. Sotto ``affidabile`` falso uno zero
+    del radar non vuol dire «asciutto».
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    affidabile: bool | None
+    punteggio: float | None
+    visibilita: float | None
+    copertura: float | None
+    accordo: float | None
+    quota_fascio_m: float | None
+    radar_vicino: str
+    distanza_km: float
+    pioggia_mm: float | None = None
+    finestra_ore: int | None = None
+    #: Ogni quanti anni capita qui quella pioggia (tetto 50), con l'intervallo al 90 %.
+    ritorno_anni: float | None = None
+    ritorno_basso: float | None = None
+    ritorno_alto: float | None = None
+    anni_di_dati: int = 0
+
+
+class TemporaleOut(BaseModel):
+    """Un temporale dell'ultimo SRI (#643): macchia di pioggia sopra ``soglia_mmh``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    osservato_at: datetime
+    n: int
+    soglia_mmh: float
+    lon: float
+    lat: float
+    area_km2: float
+    picco_mmh: float
+    media_mmh: float
+    picco_lon: float
+    picco_lat: float
+    bbox: tuple[float, float, float, float]
+    #: None = il moto non si è trovato, non «fermo».
+    velocita_kmh: float | None
+    direzione_gradi: float | None
+
+
+class TemporaliResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    osservato_at: datetime | None
+    temporali: list[TemporaleOut]
+
+
 class CellBreakdownResponse(BaseModel):
     """Per-cell breakdown of the latest scoring run."""
 
@@ -128,6 +182,8 @@ class CellBreakdownResponse(BaseModel):
     #: Alluvione: la piena prevista in periodi di ritorno GloFAS (#522).
     #: Un'etichetta, non entra nel punteggio. None = non si può dire.
     piena: PienaOut | None = None
+    #: Quanto vede il radar qui e, per l'alluvione, quanto è rara la pioggia caduta (#643).
+    radar: RadarOut | None = None
 
 
 class AlertItem(BaseModel):

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from limen.api.dependencies import AppDependencies
@@ -54,6 +54,7 @@ STEPS = (
     "backup",
     "egms_release",
     "radar_archivio",
+    "piogge_rare",
     "effis_perimetri",
     "ems_alluvioni",
     "esposizione_ispra",
@@ -224,6 +225,7 @@ async def run_nightly_pipeline(deps: AppDependencies) -> dict[str, Any]:
     out["backup"] = await _step("backup", lambda: _backup(deps))
     out["egms_release"] = await _step("egms_release", lambda: _egms_release(deps))
     out["radar_archivio"] = await _step("radar_archivio", lambda: _radar_archivio(deps))
+    out["piogge_rare"] = await _step("piogge_rare", lambda: _piogge_rare(deps))
     out["effis_perimetri"] = await _step("effis_perimetri", _effis_perimetri)
     out["ems_alluvioni"] = await _step("ems_alluvioni", _ems_alluvioni)
     out["esposizione_ispra"] = await _step("esposizione_ispra", _esposizione_ispra)
@@ -283,7 +285,6 @@ async def _egms_release(deps: AppDependencies) -> dict[str, Any]:
 async def _fwi_pioggia_osservata() -> dict[str, Any]:
     """Gli ultimi giorni della catena FWI rifatti con la pioggia del DPC e il
     meteo analizzato al posto della previsione con cui erano stati scritti."""
-    from datetime import timedelta
 
     from limen.cli.fwi_backfill import params_from
     from limen.core.scoring.regional_thresholds import (
@@ -320,6 +321,33 @@ async def _radar_archivio(deps: AppDependencies) -> dict[str, Any]:
     if not cfg.attivo:
         return {"status": "skipped", "reason": "RADAR_ARCHIVE__CARTELLA non impostata"}
     return dict(await archivia(Path(cfg.cartella), giorni=cfg.giorni, massimo=cfg.file_per_notte))
+
+
+async def _piogge_rare(deps: AppDependencies) -> dict[str, Any]:
+    """Il catalogo radar delle piogge rare di ieri (#643): candidati per la raccolta eventi.
+
+    Dopo ``radar_archivio``, che ha appena salvato le ore di ieri. Rifatto ogni
+    notte anche sull'altro ieri: l'archivio ne completa le ultime ore solo il
+    giorno dopo.
+    """
+    from pathlib import Path
+
+    from limen.data.repos import radar_piogge_rare_repo
+    from limen.integrations.dpc.piogge_rare import piogge_rare_del_giorno
+
+    cfg = deps.settings.radar_archive
+    if not cfg.attivo:
+        return {"status": "skipped", "reason": "RADAR_ARCHIVE__CARTELLA non impostata"}
+    oggi = datetime.now(UTC).date()
+    out: dict[str, Any] = {}
+    for giorni_fa in (2, 1):
+        giorno = oggi - timedelta(days=giorni_fa)
+        eventi = await asyncio.to_thread(piogge_rare_del_giorno, Path(cfg.cartella), giorno)
+        out[giorno.isoformat()] = {
+            "eventi": await radar_piogge_rare_repo.salva(giorno, eventi),
+            "confermati": sum(e.confirmed is True for e in eventi),
+        }
+    return out
 
 
 async def _backup(deps: AppDependencies) -> dict[str, Any]:

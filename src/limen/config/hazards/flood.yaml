@@ -173,6 +173,29 @@ pluvial:
     # aggiunto pioggia si usa quello di mezz'ora prima, altrimenti si tiene;
     # meno di 5 pixel che saltano diventano «non misurato» — mai «asciutto».
     max_step_mm: 150
+    # Gli usi del radar di dpc-radar 0.3.0 (#643), adottati SPENTI: ognuno si
+    # accende togliendo il commento, dopo la sua misura in docs/misure.
+    #
+    # Dove il radar vede male (mappa di affidabilità sotto min_reliability) una
+    # pioggia osservata sotto dry_mm non vale «asciutto» ma «non misurato»: il
+    # caso di Lipari del 10/10/2026, dove il radar non ha visto il nubifragio.
+    # blind:
+    #   min_reliability: 0.5     # RELIABLE_FROM di dpc-radar
+    #   dry_mm: 1.0
+    #
+    # La pioggia caduta giudicata contro il posto: il ramo pluviale vale almeno
+    # la rarità dell'osservata, 0 fino a from_years, 1 da full_years (scala
+    # logaritmica; climatologia del solo radar 2018-2025, tetto 50 anni).
+    # rarity:
+    #   from_years: 2
+    #   full_years: 20
+    #
+    # La pioggia dei prossimi minuti dal radar spostato lungo il suo moto, al
+    # posto della prevista sul resto della finestra quando è maggiore. Vale
+    # un'ora o due: sposta la pioggia, non la fa crescere né nascere.
+    # nowcast:
+    #   minutes: 60
+    #   max_age_minutes: 15     # un SRI più vecchio parla di minuti già passati
 
   # Suolo già saturo ⇒ la stessa pioggia scorre invece di infiltrarsi.
   wet_soil: 0.35

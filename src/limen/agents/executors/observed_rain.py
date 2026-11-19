@@ -20,17 +20,19 @@ misurato».
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from limen.agents.workflow_runtime.executor import Executor, handler
 from limen.core.logging import get_logger
 from limen.core.models.context import MonitoringContext
+from limen.core.scoring.regional_thresholds import NowcastBlock, RadarCiecoBlock
 from limen.integrations.dpc import (
     CUM_PERIOD,
     RainGrid,
     frame_quality,
     get_cum_at,
     get_latest_cum,
+    osservata,
 )
 
 log = get_logger(__name__)
@@ -47,6 +49,9 @@ class ObservedRainExecutor(Executor):
         max_step_mm: float,
         fetch: Callable[[int], Awaitable[RainGrid | None]] = get_latest_cum,
         fetch_at: Callable[[int, datetime], Awaitable[RainGrid | None]] = get_cum_at,
+        blind: RadarCiecoBlock | None = None,
+        rarity: bool = False,
+        nowcast: NowcastBlock | None = None,
     ) -> None:
         super().__init__(name="ObservedRain")
         self._hours = hours
@@ -54,6 +59,9 @@ class ObservedRainExecutor(Executor):
         self._max_step_mm = max_step_mm
         self._fetch = fetch
         self._fetch_at = fetch_at
+        self._blind = blind
+        self._rarity = rarity
+        self._nowcast = nowcast
 
     @handler
     async def run(self, ctx: MonitoringContext) -> MonitoringContext:
@@ -64,8 +72,28 @@ class ObservedRainExecutor(Executor):
         if self._too_far(grid, ctx):
             return ctx
         cells = [c for c in ctx.cell_ids if c in ctx.cell_centroids]
-        values = grid.sample([ctx.cell_centroids[c] for c in cells])
+        punti = [ctx.cell_centroids[c] for c in cells]
+        values = grid.sample(punti)
+        if self._blind is not None:
+            values = self._senza_zeri_ciechi(grid, punti, values, self._blind)
         observed = {c: v for c, v in zip(cells, values, strict=True) if v is not None}
+        extra: dict[str, dict[str, float]] = {}
+        anni = osservata.ritorno(grid, punti) if self._rarity else None
+        if anni is not None:
+            extra["flood_rain_observed_years_by_cell"] = {
+                c: a for c, a in zip(cells, anni, strict=True) if a is not None and c in observed
+            }
+        if self._nowcast is not None:
+            avanti = await osservata.nowcast(
+                self._nowcast.minutes,
+                punti,
+                adesso=ctx.valuation_time,
+                eta_massima=timedelta(minutes=self._nowcast.max_age_minutes),
+            )
+            if avanti is not None:
+                extra["flood_rain_ahead_by_cell"] = {
+                    c: a for c, a in zip(cells, avanti, strict=True) if a is not None
+                }
         log.info(
             "executor.observed_rain.done",
             aoi_id=ctx.aoi_id,
@@ -74,7 +102,25 @@ class ObservedRainExecutor(Executor):
             cells=len(observed),
             max_mm=round(max(observed.values()), 1) if observed else None,
         )
-        return ctx.with_update(flood_rain_observed_by_cell=observed)
+        return ctx.with_update(flood_rain_observed_by_cell=observed, **extra)
+
+    @staticmethod
+    def _senza_zeri_ciechi(
+        grid: RainGrid,
+        punti: list[tuple[float, float]],
+        values: list[float | None],
+        cieco: RadarCiecoBlock,
+    ) -> list[float | None]:
+        """Dove il radar vede male, una pioggia sotto ``dry_mm`` diventa «non misurata»."""
+        punteggi = osservata.affidabilita(grid, punti)
+        if punteggi is None:  # mappa illeggibile: si resta come senza il blocco
+            return values
+        return [
+            None
+            if v is not None and v < cieco.dry_mm and (a is None or a < cieco.min_reliability)
+            else v
+            for v, a in zip(values, punteggi, strict=True)
+        ]
 
     def _too_far(self, grid: RainGrid, ctx: MonitoringContext) -> bool:
         if abs((ctx.valuation_time - grid.time).total_seconds()) <= self._max_age_s:

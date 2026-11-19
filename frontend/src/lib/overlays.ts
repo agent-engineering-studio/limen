@@ -13,7 +13,12 @@
 import type { Lingua } from "./i18n";
 import { COLORE_LIVELLO } from "./stazioni";
 
-export type GruppoOverlay = "ufficiale" | "landslide" | "flood" | "wildfire" | "cittadini";
+export type GruppoOverlay =
+  | "ufficiale"
+  | "landslide"
+  | "flood"
+  | "wildfire"
+  | "cittadini";
 
 export interface Overlay {
   /** Chiave dello stato acceso/spento. */
@@ -35,13 +40,20 @@ export interface Overlay {
 export function testoOverlay(
   o: Overlay,
   lingua: Lingua,
-): { label: string; fonte: string; classi: readonly { colore: string; label: string }[] } {
+): {
+  label: string;
+  fonte: string;
+  classi: readonly { colore: string; label: string }[];
+} {
   const classi = o.classi ?? [];
   if (lingua === "it") return { label: o.label, fonte: o.fonte, classi };
   return {
     label: o.en.label,
     fonte: o.en.fonte,
-    classi: classi.map((c, i) => ({ colore: c.colore, label: o.en.classi?.[i] ?? c.label })),
+    classi: classi.map((c, i) => ({
+      colore: c.colore,
+      label: o.en.classi?.[i] ?? c.label,
+    })),
   };
 }
 
@@ -53,6 +65,9 @@ export const COLORE_ALLERTA: Record<number, string> = {
   2: "#ff8c00",
   3: "#e2001a",
 };
+
+/** I temporali del radar: fuori dalla scala del rischio e dalle allerte. */
+export const COLORE_TEMPORALE = "#7fd6ff";
 
 export const OVERLAYS: readonly Overlay[] = [
   {
@@ -70,6 +85,24 @@ export const OVERLAYS: readonly Overlay[] = [
       label: "Civil Protection warnings (today)",
       fonte: "DPC, national criticality bulletin (CC-BY 4.0)",
       classi: ["yellow", "orange", "red"],
+    },
+  },
+  {
+    // I temporali dell'ultimo fotogramma radar (#643): li scrive la sveglia del
+    // worker, l'API li legge dal database — nessuna richiesta al DPC per pagina.
+    id: "temporali",
+    gruppo: "ufficiale",
+    label: "Temporali dal radar (adesso)",
+    fonte: "DPC, radar SRI (CC BY-SA 4.0), letto con dpc-radar",
+    layerIds: ["ovl-temporali", "ovl-temporali-moto"],
+    classi: [
+      { colore: COLORE_TEMPORALE, label: "nucleo di pioggia forte" },
+      { colore: COLORE_TEMPORALE, label: "dove sarà fra un'ora" },
+    ],
+    en: {
+      label: "Storms from radar (now)",
+      fonte: "DPC, SRI radar (CC BY-SA 4.0), read with dpc-radar",
+      classi: ["core of heavy rain", "where it will be in an hour"],
     },
   },
   {
