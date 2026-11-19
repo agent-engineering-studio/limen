@@ -56,10 +56,21 @@ def test_spenti_il_punteggio_non_cambia() -> None:
         "flood_rain_observed_mm": 20.0,
         "flood_rain_head_mm": 5.0,
     }
-    prima = FloodScoringEngine(_soglie()).score(_bundle(**base))
-    con_dati = FloodScoringEngine(_soglie()).score(_bundle(**base, flood_rain_observed_years=40.0))
+    spenti = _soglie(rarity=None, blind=None, nowcast=None)
+    prima = FloodScoringEngine(spenti).score(_bundle(**base))
+    con_dati = FloodScoringEngine(spenti).score(
+        _bundle(**base, flood_rain_observed_years=40.0, flood_rain_ahead_mm=50.0)
+    )
     assert con_dati.score == prima.score
     assert con_dati.breakdown.rain_observed_years == 40.0
+
+
+def test_in_produzione_la_rarita_e_accesa_e_gli_altri_no() -> None:
+    """flood-v1.4.0 (#643): rarità accesa; radar cieco e nowcast restano spenti."""
+    oss = _soglie().pluvial.observed
+    assert oss is not None
+    assert oss.rarity == RaritaBlock(from_years=2, full_years=20)
+    assert oss.blind is None and oss.nowcast is None
 
 
 def test_la_rarita_alza_il_ramo_pluviale_in_scala_logaritmica() -> None:

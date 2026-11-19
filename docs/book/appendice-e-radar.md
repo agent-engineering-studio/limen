@@ -301,7 +301,7 @@ non toccano i punteggi:
   con mappa, ore e numeri, ognuno con l'immagine da cui viene;
 - per un assistente, gli stessi fatti come strumenti del server MCP.
 
-Altri quattro usi cambierebbero i punteggi, e per questo sono nel codice ma
+Altri quattro usi cambiano i punteggi, e per questo sono entrati nel codice
 **spenti**: il radar «cieco» (dove vede male, uno zero non è asciutto), la
 rarità della pioggia caduta come soglia del posto, la pioggia della prossima
 ora dal nowcast, e la correzione del radar con i pluviometri sulla sveglia. La
@@ -310,7 +310,11 @@ prima misura, su 27 eventi veri e 45 giorni
 dice che la rarità separa bene: la pioggia caduta passa i due anni di ritorno
 sul 44 % degli eventi contro il 2 % delle celle-giorno qualunque. La
 correzione invece toglie proprio la sveglia di Melito delle 4 del mattino: resta
-spenta. Ognuno si accende solo dopo la sua misura.
+spenta. La rarità è stata accesa il 19 novembre 2026 (alluvione v1.4.0): dove
+la pioggia caduta è rara per quel posto, il ramo pluviale sale anche se i
+millimetri non passano la soglia nazionale. Quanto questo aggiunga, e quanto
+alzi il numero di comuni in allerta, è la prossima misura. Gli altri restano
+spenti fino alla loro.
 
 In più Limen tiene il proprio archivio del «Merging», aggiornato ogni notte,
 per poter rigiocare gli eventi passati ([capitolo 5](05-misurare.md)).

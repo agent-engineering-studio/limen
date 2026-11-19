@@ -12,7 +12,7 @@
 # layer che il progetto ha in casa da più tempo, e qui smette di essere solo
 # il componente H del motore frane per diventare la base di un pericolo suo.
 
-model_version: "flood-v1.3.0"
+model_version: "flood-v1.4.0"
 
 susceptibility:
   # Una cella fuori dalle zone mappate. Non zero: il mosaico copre i bacini
@@ -41,7 +41,7 @@ susceptibility:
 # passa il gate degli avvisi sotto «alto» (alerts.min_predisposition 0,5), che il backtest
 # applica come gli avvisi spediti. Sulle fiumare la quota sul fondo misura anche la discesa lungo
 # l'asta (3 % ≈ 90 m in 3 km): l'alveo nel tratto medio-alto può superare il
-# taglio. Si attiva (flood-v1.4.0) solo dopo un backtest con il ramo fluviale,
+# taglio. Si attiva (con un nuovo model_version) solo dopo un backtest con il ramo fluviale,
 # a livello «alto» e «moderato», con i tagli validati lasciando fuori una
 # regione alla volta, e una verità calabrese (GFM). Dettagli nella issue #469.
 #
@@ -186,9 +186,15 @@ pluvial:
     # La pioggia caduta giudicata contro il posto: il ramo pluviale vale almeno
     # la rarità dell'osservata, 0 fino a from_years, 1 da full_years (scala
     # logaritmica; climatologia del solo radar 2018-2025, tetto 50 anni).
-    # rarity:
-    #   from_years: 2
-    #   full_years: 20
+    # ACCESA dal 19/11/2026 (flood-v1.4.0), decisione del curatore. Misura su 27
+    # eventi e 45 giorni (docs/misure/misura_radar_2026-10-05_2026-11-18.md):
+    # la pioggia caduta entro 5 km passa i 2 anni nel 44 % degli eventi contro
+    # il 2,0 % delle celle-giorno qualunque, i 20 anni nel 22 % contro lo 0,4 %.
+    # Non misurato ancora: quanto aggiunge rispetto alla soglia in mm e quanto
+    # alza il carico di comuni-giorno (#345).
+    rarity:
+      from_years: 2
+      full_years: 20
     #
     # La pioggia dei prossimi minuti dal radar spostato lungo il suo moto, al
     # posto della prevista sul resto della finestra quando è maggiore. Vale
@@ -293,7 +299,7 @@ pluvial_susceptibility:
   flat_slope_deg: 15.0
 
 # SPENTO (#420): NO-GO dell'8/11/2026, da accendere solo dopo
-# `limen backtest-flood` contro main, e accenderlo è flood-v1.4.0. Il dato si
+# `limen backtest-flood` contro main, e accenderlo alza il model_version. Il dato si
 # carica comunque (`limen water-wetness-fetch`, passo `water_wetness` del
 # bootstrap), così la misura si può rifare in ogni momento.
 #
