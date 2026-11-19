@@ -34,6 +34,15 @@ Env knobs:
 * ``LIMEN_BACKTEST_WILDFIRE_ETTARI`` — ``min-max`` in ettari (un estremo può
   mancare: ``-10``, ``100-``): solo gli incendi di quella superficie, per
   leggere il backtest per classe di grandezza.
+* ``LIMEN_BACKTEST_WILDFIRE_CANCELLO`` — il cancello degli avvisi sotto «Alto»
+  (``alerts.min_predisposition``) al posto di quello di ``wildfire.yaml``, per
+  confrontare due valori sugli stessi dati (#476). Solo misura: la produzione
+  legge lo YAML. Finisce nella provenienza del report.
+* ``LIMEN_BACKTEST_WILDFIRE_TETTO`` — ``quantile:minimo:mesi`` (es. ``95:35:6-9``):
+  il FWI pieno per nodo dalla climatologia (#476) acceso per la misura, con
+  quei valori, anche se in ``wildfire.yaml`` è spento. Serve
+  ``fwi_climatology`` (``limen fwi-climatology``, con ``LIMEN_FWI_CLIM_FINO``
+  prima degli anni misurati).
 * ``LIMEN_BACKTEST_WILDFIRE_PIOGGIA`` — ``modello`` (default) o ``osservata``:
   la pioggia delle 24 ore fino a mezzogiorno dal «Merging» DPC archiviato
   (``RADAR_ARCHIVE__CARTELLA``) al posto di quella del modello, dove il radar
@@ -84,11 +93,13 @@ from limen.core.models.risk import (
     StaticFactors,
 )
 from limen.core.scoring.regional_thresholds import (
+    TettoPerNodoBlock,
     WildfireThresholds,
     load_hazard_thresholds,
 )
 from limen.core.scoring.wildfire import WildfireScoringEngine
 from limen.data.db import acquire, lifespan_pool
+from limen.data.repos import fwi_climatology_repo
 from limen.data.repos.aoi_repo import list_aoi_ids
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.dpc.fwi_pioggia import Fonte, fonte_archivio
@@ -110,6 +121,8 @@ _LEVEL_ENV = "LIMEN_BACKTEST_WILDFIRE_LEVEL"
 _PIOGGIA_ENV = "LIMEN_BACKTEST_WILDFIRE_PIOGGIA"
 _VERITA_ENV = "LIMEN_BACKTEST_WILDFIRE_VERITA"
 _ETTARI_ENV = "LIMEN_BACKTEST_WILDFIRE_ETTARI"
+_CANCELLO_ENV = "LIMEN_BACKTEST_WILDFIRE_CANCELLO"
+_TETTO_ENV = "LIMEN_BACKTEST_WILDFIRE_TETTO"
 
 _TABELLE_VERITA = {
     "effis": ("fire_perimeters",),
@@ -148,6 +161,18 @@ class Verita:
             hi = f"{self.ettari_max:g}" if self.ettari_max is not None else ""
             parti.append(f"{lo}-{hi}ha")
         return "".join(f"_{p}" for p in parti)
+
+
+def leggi_tetto(testo: str) -> TettoPerNodoBlock:
+    """``quantile:minimo:mesi`` (``95:35:6-9``) come blocco; ``ValueError`` se non si legge."""
+    try:
+        quantile, minimo, mesi = testo.split(":")
+        primo, ultimo = (int(m) for m in mesi.split("-"))
+    except ValueError as exc:
+        raise ValueError(f"{_TETTO_ENV}={testo!r}: atteso quantile:minimo:mese-mese") from exc
+    return TettoPerNodoBlock(
+        quantile=float(quantile), minimo=float(minimo), mesi=tuple(range(primo, ultimo + 1))
+    )
 
 
 def leggi_verita(fonte: str, ettari: str) -> Verita:
@@ -354,6 +379,7 @@ def evaluate(
     thresholds: WildfireThresholds,
     alert_level: RiskLevel,
     season: tuple[date, date] | None = None,
+    tetti: Sequence[float | None] = (),
 ) -> WildfireBacktestMetrics:
     """Score every burnt cell across the window and measure the warning.
 
@@ -369,7 +395,9 @@ def evaluate(
     horizon_days = int(_LEAD_MAX_HOURS // 24)
     scored_days = set(days)
 
-    def alerted(cell_id: str, sf: StaticFactors, fw: FireWeatherState, day: date) -> bool:
+    def alerted(
+        cell_id: str, sf: StaticFactors, fw: FireWeatherState, day: date, tetto: float | None
+    ) -> bool:
         scored = engine.score(
             CellFeatureBundle(
                 aoi_id=aoi_id,
@@ -378,6 +406,7 @@ def evaluate(
                 dynamic=DynamicInputs(
                     valuation_time=datetime.combine(day, time(12), UTC),
                     fire_weather=fw,
+                    fwi_normalisation_max=tetto,
                 ),
             )
         )
@@ -403,7 +432,9 @@ def evaluate(
     warned_cells = 0
     leads: list[float] = []
     for cell_id, (fire_date, lon, lat) in truth.items():
-        chain = chains[nearest_node(lon, lat, nodes)]
+        nodo = nearest_node(lon, lat, nodes)
+        chain = chains[nodo]
+        tetto = tetti[nodo] if len(tetti) == len(nodes) else None
         sf = static.get(cell_id) or StaticFactors(cell_id=cell_id)
         # Solo i giorni dentro l'orizzonte di preavviso, dal più lontano al
         # giorno stesso. Scandire l'intera finestra prenderebbe la prima
@@ -425,7 +456,7 @@ def evaluate(
             if fw is None:
                 continue
             base_days += 1
-            if alerted(cell_id, sf, fw, day):
+            if alerted(cell_id, sf, fw, day, tetto):
                 base_alerted += 1
 
         earliest: date | None = None
@@ -433,7 +464,7 @@ def evaluate(
             fw = chain.get(day)
             if fw is None:
                 continue
-            if alerted(cell_id, sf, fw, day):
+            if alerted(cell_id, sf, fw, day, tetto):
                 earliest = day
                 break
         if earliest is None:
@@ -559,6 +590,7 @@ def carico_celle(
     thresholds: WildfireThresholds,
     alert_level: RiskLevel,
     bruciate: Mapping[str, date] | None = None,
+    tetti: Sequence[float | None] = (),
 ) -> CaricoCelle:
     """Le giornate-cella in ``[start, end]`` con la cella in ``alert_level``
     o oltre, su tutte le celle dell'AOI: in media e nel giorno peggiore.
@@ -616,7 +648,10 @@ def carico_celle(
             continue
         fwi = np.array([v for _, v in stati])
         t = np.array(terreni)
-        punteggi = np.minimum(np.outer(t, np.minimum(fwi / pieno, 1.0)), 1.0)
+        # Il FWI pieno del nodo (#476), come nel motore: solo col blocco nello YAML.
+        tetto = tetti[k] if len(tetti) == len(nodes) else None
+        del_nodo = tetto if tetto is not None and thresholds.fwi.tetto_per_nodo else pieno
+        punteggi = np.minimum(np.outer(t, np.minimum(fwi / del_nodo, 1.0)), 1.0)
         if gate is not None:
             accesa = np.outer(t >= gate.terrain_min, fwi >= gate.fwi_min)
             punteggi = np.where(accesa, np.maximum(punteggi, rosso), punteggi)
@@ -851,6 +886,19 @@ async def backtest_aoi(
         for k, ((lon, lat), samples) in enumerate(zip(nodes, series, strict=True))
     ]
 
+    blocco = thresholds.fwi.tetto_per_nodo
+    tetti = (
+        await fwi_climatology_repo.tetti(nodes, blocco, thresholds.fwi.normalisation_max)
+        if blocco is not None
+        else []
+    )
+    if blocco is not None:
+        log.info(
+            "backtest_wildfire.tetti",
+            aoi_id=aoi_id,
+            nodi=len(nodes),
+            con_climatologia=sum(x is not None for x in tetti),
+        )
     static = await _static_by_cell(list(truth))
     metrics = evaluate(
         aoi_id=aoi_id,
@@ -862,6 +910,7 @@ async def backtest_aoi(
         thresholds=thresholds,
         alert_level=alert_level,
         season=(start, end),
+        tetti=tetti,
     )
     carico = carico_celle(
         await celle_aoi(aoi_id),
@@ -872,6 +921,7 @@ async def backtest_aoi(
         thresholds=thresholds,
         alert_level=alert_level,
         bruciate={cella: giorno for cella, (giorno, _lon, _lat) in truth.items()},
+        tetti=tetti,
     )
     metrics = replace(
         metrics,
@@ -920,6 +970,27 @@ async def run() -> int:
     if not isinstance(loaded, WildfireThresholds):
         log.error("backtest_wildfire.bad_config", got=type(loaded).__name__)
         return 1
+
+    cancello = os.getenv(_CANCELLO_ENV, "").strip()
+    if cancello:
+        try:
+            alerts = loaded.alerts.model_copy(update={"min_predisposition": float(cancello)})
+        except ValueError:
+            log.error("backtest_wildfire.bad_env", var=_CANCELLO_ENV, value=cancello)
+            return 1
+        loaded = loaded.model_copy(update={"alerts": alerts})
+        log.info("backtest_wildfire.cancello", min_predisposition=float(cancello))
+    tetto = os.getenv(_TETTO_ENV, "").strip()
+    if tetto:
+        try:
+            blocco = leggi_tetto(tetto)
+        except ValueError as exc:
+            log.error("backtest_wildfire.bad_env", var=_TETTO_ENV, value=tetto, error=str(exc))
+            return 1
+        loaded = loaded.model_copy(
+            update={"fwi": loaded.fwi.model_copy(update={"tetto_per_nodo": blocco})}
+        )
+        log.info("backtest_wildfire.tetto", **blocco.model_dump())
 
     today = datetime.now(UTC).date()
     end = _parse_date(_END_ENV, today - timedelta(days=1))

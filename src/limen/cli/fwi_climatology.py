@@ -13,6 +13,9 @@ già i dodici mesi per lo stesso intervallo di anni si saltano.
 
 * ``LIMEN_FWI_CLIM_YEARS`` — anni di archivio (default 10), fino all'ultimo
   anno intero.
+* ``LIMEN_FWI_CLIM_FINO``  — l'ultimo anno (default l'ultimo intero): per misurare
+  fuori campione il tetto per nodo (#476) la climatologia deve finire prima
+  degli anni del backtest.
 * ``LIMEN_FWI_CLIM_AOI``   — una sola AOI; assente ⇒ tutte.
 * ``LIMEN_FWI_CLIM_FORCE`` — ``1`` per ricalcolare anche i nodi già fatti.
 """
@@ -169,7 +172,7 @@ async def run() -> int:
         return 1
     thresholds: WildfireThresholds = loaded
     quanti = max(_int_env("LIMEN_FWI_CLIM_YEARS", 10), 1)
-    ultimo_anno = datetime.now(UTC).year - 1
+    ultimo_anno = _int_env("LIMEN_FWI_CLIM_FINO", datetime.now(UTC).year - 1)
     anni = range(ultimo_anno - quanti + 1, ultimo_anno + 1)
     params = params_from(thresholds)
     client = OpenMeteoHttpClient()
