@@ -30,7 +30,7 @@ from limen.core.models.hazard import HazardType
 from limen.core.scoring.regional_thresholds import WildfireThresholds, load_hazard_thresholds
 from limen.data.repos import fwi_state_repo
 from limen.data.repos.fwi_state_repo import NodeDay
-from limen.integrations.dpc.client import CUM_PERIOD, get_cum_at
+from limen.integrations.dpc.client import CUM_PERIOD, frame_quality, get_cum_at
 from limen.integrations.dpc.merging_archive import MergingArchive
 from limen.integrations.openmeteo.client import OpenMeteoHttpClient
 from limen.integrations.openmeteo.dtos import FireWeatherObservation, MeteoSnapshot
@@ -76,10 +76,7 @@ def fonte_dpc(max_step_mm: float) -> Fonte:
         if grid is None:
             return [None] * len(nodi)
         prima = await get_cum_at(24, t - CUM_PERIOD)
-        if prima is not None:
-            esito = grid.check(prima, max_step=max_step_mm)
-            grid = esito.grid if esito.grid is not None else prima
-        return grid.sample(nodi)
+        return frame_quality(grid, prima, max_step=max_step_mm).grid.sample(nodi)
 
     return pioggia
 

@@ -1,0 +1,25 @@
+{
+  "report": "misura_radar_2026-11-06_2026-11-18.md",
+  "generato": "2026-11-19T09:20:35+00:00",
+  "limen": "0.1.0",
+  "commit": "5c5bf0dd261ee5115b8a9d4a61643a8bf13548ae",
+  "versioni": {
+    "landslide": "limen-deterministic-v1",
+    "flood": "flood-v1.3.0",
+    "wildfire": "wildfire-v1.1.0"
+  },
+  "comando": "limen misura-radar",
+  "ambiente": {
+    "LIMEN_BACKUP_DIR": "<percorso locale>",
+    "LIMEN_DATA_ROOT": "<percorso locale>",
+    "LIMEN_DOMINIO": "localhost",
+    "LIMEN_IMAGE_PREFIX": "ghcr.io/agent-engineering-studio/limen-",
+    "LIMEN_IMAGE_TAG": "sha-24492a5",
+    "LIMEN_IMPERVIOUSNESS_RASTER": "<percorso locale>",
+    "LIMEN_PROXY_BIND": "127.0.0.1",
+    "LIMEN_RADAR_AL": "2026-11-18",
+    "LIMEN_RADAR_DAL": "2026-11-06",
+    "LIMEN_RADAR_MISURE": "limen",
+    "LIMEN_REPORTS_DIR": "<percorso locale>"
+  }
+}

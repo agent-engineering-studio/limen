@@ -1,7 +1,7 @@
 # Richiesta al Dipartimento della Protezione Civile sui dati del radar
 
-Testo pronto da inviare al Dipartimento della Protezione Civile (#625, #626,
-#627, #628). Il destinatario va preso dai contatti sul sito del Dipartimento
+Testo inviato al Dipartimento della Protezione Civile il 19/11/2026 (#625,
+#626, #627, #628). Il destinatario va preso dai contatti sul sito del Dipartimento
 (<https://www.protezionecivile.gov.it>; la PEC, se si vuole una risposta
 protocollata). Le parti fra parentesi quadre le completa chi invia. I numeri
 vengono dal [report](../misure/misura_radar_2026-06-10_2026-11-15.md) del

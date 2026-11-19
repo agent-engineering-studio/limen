@@ -18,14 +18,21 @@ libro:
   piovoso, il rapporto fra il solo radar (somma delle 24 SRT1) e il «Merging»
   (somma delle otto CUM3); la mediana per blocco è la mappa stimata, scritta
   anche come GeoTIFF accanto al report.
+* **limen** (#629): accanto al colore annunciato in ogni zona, la classe più
+  alta che le corse previsionali per cella di Limen avevano dato a quel giorno
+  prima dell'emissione del bollettino, per frane e alluvioni, sulla scala
+  della Protezione civile di ``pc_alert`` (YAML del pericolo). Legge il
+  database, non l'archivio del radar.
 * **ore** (#626): le ore ricostruite (CUM3 ripartito con lo SRT1) e quelle del
   solo radar contro i pluviometri a 10 minuti di ARPA Lombardia. Una parte di
   quei pluviometri è già dentro il «Merging»: il confronto non è indipendente.
 
 Env: ``LIMEN_RADAR_DAL`` / ``LIMEN_RADAR_AL`` (giorni, default tutto
-l'archivio), ``LIMEN_RADAR_MISURE`` (default tutte: ``copertura,richieste,
-bollettini,qualita,ore``), ``LIMEN_RADAR_AREE`` (aree monitorate per il conto
-delle richieste, 20). Report in ``LIMEN_REPORTS_DIR``.
+l'archivio; per ``limen`` senza archivio, gli ultimi ``_GIORNI_LIMEN`` giorni),
+``LIMEN_RADAR_MISURE`` (default tutte: ``copertura,richieste,bollettini,
+qualita,limen,ore``; ``richieste`` e ``limen`` girano anche senza l'archivio),
+``LIMEN_RADAR_AREE`` (aree monitorate per il conto delle richieste, 20).
+Report in ``LIMEN_REPORTS_DIR``.
 """
 
 from __future__ import annotations
@@ -45,6 +52,10 @@ from numpy.typing import NDArray
 from limen.cli import provenienza
 from limen.config.settings import get_settings
 from limen.core.logging import get_logger
+from limen.core.models.hazard import HazardType
+from limen.core.scoring.regional_thresholds import PcAlertMapping, load_hazard_thresholds
+from limen.data.db import lifespan_pool
+from limen.data.repos import carico_repo
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.arpa_lombardia import pluviometri
 from limen.integrations.dpc import bollettini
@@ -52,7 +63,8 @@ from limen.integrations.dpc.merging_archive import PASSI, MergingArchive, istant
 
 log = get_logger(__name__)
 
-MISURE = ("copertura", "richieste", "bollettini", "qualita", "ore")
+MISURE = ("copertura", "richieste", "bollettini", "qualita", "limen", "ore")
+_SENZA_ARCHIVIO = {"richieste", "limen"}
 _COLORI = {0: "nessuna", 1: "gialla", 2: "arancione", 3: "rossa"}
 assert _COLORI.keys() == COLOURS.keys()
 _FILE_ASSENTI = ("absent.txt", "assenti.txt")
@@ -73,6 +85,8 @@ _ORA_PIOVOSA_MM = 1.0
 _ORA_FORTE_MM = 30.0
 #: Il DPC pubblica una cumulata nuova ogni mezz'ora.
 _CUMULATE_AL_GIORNO = 48
+#: ``limen`` senza archivio e senza ``LIMEN_RADAR_DAL``: quanti giorni indietro.
+_GIORNI_LIMEN = 90
 
 
 # ── copertura (#625) ─────────────────────────────────────────────────────────
@@ -326,8 +340,137 @@ def righe_bollettini(zg: list[ZonaGiorno], senza_bollettino: int) -> list[str]:
         righe.append(f"| {mese} | " + " | ".join(celle) + " |")
     righe += [
         "",
-        "La classe più alta data da Limen nella stessa zona non è in questa tabella: sta nel "
-        "database di esercizio, non nell'archivio del radar.",
+        "La classe più alta data da Limen nella stessa zona è nella parte «Limen accanto al "
+        "bollettino» (`LIMEN_RADAR_MISURE=limen`), che legge il database.",
+        "",
+    ]
+    return righe
+
+
+# ── Limen accanto al bollettino (#629) ───────────────────────────────────────
+
+#: Il bollettino parla di frane, piene e temporali: i pericoli di Limen che gli corrispondono.
+PERICOLI_BOLLETTINO = (HazardType.LANDSLIDE, HazardType.FLOOD)
+_LIVELLO_PC = {"verde": 0, "gialla": 1, "arancione": 2, "rossa": 3}
+assert set(_LIVELLO_PC.values()) == _COLORI.keys()
+
+
+@dataclass(frozen=True, slots=True)
+class ZonaPrevista:
+    giorno: date
+    zona: str
+    bollettino: int
+    #: Il livello più alto previsto da Limen nella zona, per pericolo, sulla scala del bollettino.
+    limen: dict[HazardType, int]
+
+    @property
+    def massimo(self) -> int:
+        return max(self.limen.values(), default=0)
+
+
+def livello_pc(classi: list[str], mappa: PcAlertMapping) -> int:
+    """Il colore più alto delle classi, come livello del bollettino (0 = nessuna allerta)."""
+    return max((_LIVELLO_PC[mappa.for_level(c)] for c in classi), default=0)
+
+
+class CelleDelleZone:
+    """Le celle il cui centroide sta in ogni zona: si calcolano una volta per zona."""
+
+    def __init__(self, celle: list[tuple[str, float, float]]) -> None:
+        from shapely import STRtree, points
+
+        self._id = [c[0] for c in celle]
+        self._albero = STRtree(points([(c[1], c[2]) for c in celle]))
+        self._celle: dict[tuple[Any, ...], list[str]] = {}
+
+    def di(self, zona: Zone) -> list[str]:
+        chiave = (zona.name, zona.geometry.bounds)
+        if chiave not in self._celle:
+            dentro = self._albero.query(zona.geometry, predicate="covers")
+            self._celle[chiave] = [self._id[i] for i in dentro]
+        return self._celle[chiave]
+
+
+def zone_previste(
+    zone: list[Zone],
+    giorno: date,
+    celle: CelleDelleZone,
+    classi: dict[str, dict[HazardType, list[str]]],
+    mappe: dict[HazardType, PcAlertMapping],
+) -> list[ZonaPrevista]:
+    """Le zone del giorno con il livello di Limen; una zona senza celle è fuori dalla griglia."""
+    out: list[ZonaPrevista] = []
+    for z in zone:
+        if z.valid != giorno:
+            continue
+        mie = celle.di(z)
+        if not mie:
+            continue
+        limen = {
+            p: max((livello_pc(classi.get(c, {}).get(p, []), m) for c in mie), default=0)
+            for p, m in mappe.items()
+        }
+        out.append(ZonaPrevista(giorno, z.name, z.level, limen))
+    return out
+
+
+def _concordanza(coppie: list[tuple[int, int]]) -> str:
+    """Quota di coppie uguali, e di quelle in cui Limen sta sopra o sotto il bollettino."""
+    n = len(coppie)
+    uguali = sum(b == lim for b, lim in coppie)
+    sopra = sum(lim > b for b, lim in coppie)
+    return (
+        f"concordano {uguali} su {n} ({_quota(uguali, n)}); Limen più alto in {sopra} "
+        f"({_quota(sopra, n)}), più basso in {n - uguali - sopra} ({_quota(n - uguali - sopra, n)})"
+    )
+
+
+def righe_limen(zp: list[ZonaPrevista], non_valutati: int) -> list[str]:
+    nomi = " e ".join(p.value for p in PERICOLI_BOLLETTINO)
+    righe = [
+        "## Limen accanto al bollettino (#629)",
+        "",
+        f"Giorni confrontati: **{len({r.giorno for r in zp})}**; zone-giorno: **{len(zp)}**. "
+        f"Giorni senza bollettino della vigilia o senza una corsa previsionale riuscita "
+        f"prima della sua emissione (non valutati, non calmi): {non_valutati}.",
+        "",
+        f"Per ogni zona e giorno, il colore più alto che Limen dava a una cella della zona "
+        f"({nomi}), letto dalle corse previsionali per cella partite **prima** dell'emissione "
+        "del bollettino e puntate su quel giorno: previsione contro previsione. La classe "
+        "diventa colore con `pc_alert` dello YAML del pericolo; una cella sotto Moderato "
+        "conta «nessuna». Il colore del bollettino è il più alto fra idrogeologico, idraulico "
+        "e temporali; Limen non ha un pericolo «temporali». Nessun giudizio: le due scale "
+        "dicono cose vicine, non uguali. Lo storico previsionale non tiene il flag "
+        "`measured`: un pericolo degradato in una corsa riuscita (il tetto Open-Meteo del "
+        "29/09/2026) qui si legge «nessuna», quindi «Limen più basso» può essere un dato "
+        "mancato, non una previsione calma.",
+        "",
+    ]
+    if not zp:
+        return [*righe, "Nessun giorno da confrontare.", ""]
+    righe += [
+        "Zone-giorno per colore del bollettino (righe) e di Limen (colonne), "
+        "frane e alluvioni insieme:",
+        "",
+        "| bollettino \\ Limen | " + " | ".join(_COLORI.values()) + " | totale |",
+        "|---|" + "---|" * (len(_COLORI) + 1),
+    ]
+    for livello, nome in _COLORI.items():
+        mie = [r for r in zp if r.bollettino == livello]
+        conti = [sum(r.massimo == lim for r in mie) for lim in _COLORI]
+        righe.append(f"| {nome} | " + " | ".join(map(str, conti)) + f" | {len(mie)} |")
+    righe += [
+        "",
+        f"- frane e alluvioni insieme: {_concordanza([(r.bollettino, r.massimo) for r in zp])};",
+    ]
+    for p in PERICOLI_BOLLETTINO:
+        coppie = [(r.bollettino, r.limen[p]) for r in zp if p in r.limen]
+        righe.append(f"- solo {p.value}: {_concordanza(coppie)};")
+    con_allerta = [r for r in zp if r.bollettino >= 1]
+    righe += [
+        f"- zone con allerta almeno gialla in cui Limen dava almeno gialla: "
+        f"{sum(r.massimo >= 1 for r in con_allerta)} su {len(con_allerta)} "
+        f"({_quota(sum(r.massimo >= 1 for r in con_allerta), len(con_allerta))}).",
         "",
     ]
     return righe
@@ -630,6 +773,36 @@ async def _bollettini(archivio: MergingArchive, giorni: list[date]) -> tuple[lis
     return out, senza
 
 
+async def _limen(giorni: list[date]) -> tuple[list[ZonaPrevista], int]:
+    nomi = await bollettini.nomi()
+    mappe: dict[HazardType, PcAlertMapping] = {
+        p: load_hazard_thresholds(p).pc_alert for p in PERICOLI_BOLLETTINO
+    }
+    out: list[ZonaPrevista] = []
+    non_valutati = 0
+    async with lifespan_pool():
+        celle = CelleDelleZone(await carico_repo.centroidi())
+        for giorno in giorni:
+            nome = bollettino_per(nomi, giorno)
+            letto = await bollettini.scarica(nome) if nome is not None else None
+            classi = (
+                await carico_repo.classi_previste(giorno, letto.issued, list(PERICOLI_BOLLETTINO))
+                if letto is not None
+                else None
+            )
+            if letto is None or classi is None:
+                non_valutati += 1
+                continue
+            out += zone_previste(letto.zones, giorno, celle, classi, mappe)
+    return out, non_valutati
+
+
+def _giorni_limen(dal: date | None, al: date | None) -> list[date]:
+    fine = al or datetime.now(UTC).date() - timedelta(days=1)
+    inizio = dal or fine - timedelta(days=_GIORNI_LIMEN - 1)
+    return [inizio + timedelta(days=k) for k in range((fine - inizio).days + 1)]
+
+
 def _qualita(
     archivio: MergingArchive, giorni: list[date]
 ) -> tuple[NDArray[np.float64], NDArray[np.intp], int] | None:
@@ -655,31 +828,46 @@ def _qualita(
 async def run() -> int:
     settings = get_settings()
     cfg = settings.radar_archive
-    if not cfg.attivo:
-        log.error("misura_radar.non_configurato", hint="RADAR_ARCHIVE__CARTELLA")
-        return 1
-    cartella = Path(cfg.cartella)
     misure = [m.strip() for m in os.getenv("LIMEN_RADAR_MISURE", ",".join(MISURE)).split(",")]
     if sconosciute := sorted(set(misure) - set(MISURE)):
         log.error("misura_radar.misura_sconosciuta", misure=sconosciute, note=list(MISURE))
         return 2
+    if not cfg.attivo and set(misure) - _SENZA_ARCHIVIO:
+        log.error("misura_radar.non_configurato", hint="RADAR_ARCHIVE__CARTELLA")
+        return 1
+    cartella = Path(cfg.cartella)
     dal, al = _giorno("LIMEN_RADAR_DAL"), _giorno("LIMEN_RADAR_AL")
     aree = int(os.getenv("LIMEN_RADAR_AREE", "20"))
-    archivio = MergingArchive(cartella)
-    con_cum = giorni_completi(cartella, "CUM3", dal, al)
-    con_tutto = sorted(set(con_cum) & set(giorni_completi(cartella, "SRT1", dal, al)))
+    archivio = MergingArchive(cartella) if cfg.attivo else None
+    con_cum = giorni_completi(cartella, "CUM3", dal, al) if cfg.attivo else []
+    con_tutto = (
+        sorted(set(con_cum) & set(giorni_completi(cartella, "SRT1", dal, al))) if cfg.attivo else []
+    )
+    giorni_limen = con_cum or _giorni_limen(dal, al)
     uscita = Path(os.getenv("LIMEN_REPORTS_DIR", "reports"))
     uscita.mkdir(parents=True, exist_ok=True)
-    periodo = f"{con_cum[0]}_{con_cum[-1]}" if con_cum else "vuoto"
+    periodo = (
+        f"{con_cum[0]}_{con_cum[-1]}"
+        if con_cum
+        else f"{giorni_limen[0]}_{giorni_limen[-1]}"
+        if "limen" in misure
+        else "vuoto"
+    )
     report = uscita / f"misura_radar_{periodo}.md"
 
     righe = [
-        "# L'archivio del «Merging»: copertura, richieste, bollettini, qualità, ore",
+        "# L'archivio del «Merging»: copertura, richieste, bollettini, qualità, Limen, ore",
         "",
-        f"Giorni con tutte le CUM3: **{len(con_cum)}**"
-        + (f" (dal {con_cum[0]:%d/%m/%Y} al {con_cum[-1]:%d/%m/%Y})" if con_cum else "")
-        + f"; con anche tutte le SRT1: **{len(con_tutto)}**. Dati © Dipartimento della "
-        "Protezione Civile: radar e «Merging» CC BY-SA 4.0, bollettini CC BY 4.0.",
+        (
+            f"Giorni con tutte le CUM3: **{len(con_cum)}**"
+            + (f" (dal {con_cum[0]:%d/%m/%Y} al {con_cum[-1]:%d/%m/%Y})" if con_cum else "")
+            + f"; con anche tutte le SRT1: **{len(con_tutto)}**. "
+            if archivio is not None
+            else f"Senza l'archivio del «Merging»: giorni dal {giorni_limen[0]:%d/%m/%Y} al "
+            f"{giorni_limen[-1]:%d/%m/%Y}. "
+        )
+        + "Dati © Dipartimento della Protezione Civile: radar e «Merging» CC BY-SA 4.0, "
+        "bollettini CC BY 4.0.",
         "",
     ]
     try:
@@ -693,9 +881,9 @@ async def run() -> int:
                 giro_minuti=settings.scheduler.hourly_monitoring_minutes,
             )
             righe += righe_richieste(voci, aree=aree, per_notte=cfg.file_per_notte)
-        if "bollettini" in misure:
+        if archivio is not None and "bollettini" in misure:
             righe += righe_bollettini(*await _bollettini(archivio, con_cum))
-        if "qualita" in misure:
+        if archivio is not None and "qualita" in misure:
             stima = _qualita(archivio, con_tutto)
             if stima is None:
                 righe += righe_qualita(np.array([]), np.array([], dtype=np.intp), 0, None)
@@ -703,7 +891,9 @@ async def run() -> int:
                 mappa = report.with_suffix(".qualita.tif")
                 scrivi_mappa(mappa, stima[0], stima[1])
                 righe += righe_qualita(*stima, mappa.name)
-        if "ore" in misure:
+        if "limen" in misure:
+            righe += righe_limen(*await _limen(giorni_limen))
+        if archivio is not None and "ore" in misure:
             righe += righe_ore(await _ore(archivio, con_tutto))
     finally:
         await SharedHttpClient.aclose()

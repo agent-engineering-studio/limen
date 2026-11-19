@@ -22,11 +22,14 @@ Read-only integration: every failure degrades to ``None`` and logs
 
 from __future__ import annotations
 
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any
 
 import httpx
+import numpy as np
 from dpc_radar import Absent, DpcRadarError, NetworkStatus, RadarClient, RainGrid
+from dpc_radar.quality import record_ceiling
 from tenacity import RetryError
 
 from limen.core.logging import get_logger
@@ -154,6 +157,48 @@ async def get_cum_at(hours: int, observed_at: datetime) -> RainGrid | None:
     return grid
 
 
+@dataclass(frozen=True, slots=True)
+class FrameQuality:
+    """The frame to use, and what was not trusted on the way to it."""
+
+    grid: RainGrid
+    #: ``RainGrid.check`` against the frame 30 minutes earlier; ``None`` without it.
+    verdict: str | None
+    jumps: int
+    #: Pixels of ``grid`` set to ``NaN`` because they were above the record.
+    beyond_record: int
+
+
+def frame_quality(grid: RainGrid, previous: RainGrid | None, *, max_step: float) -> FrameQuality:
+    """The frame to use: the jump rule of #235/#429, then the Italian record (#643).
+
+    A rejected frame leaves its place to the previous one. Then, on the frame
+    actually used, the values above the Italian record for the window (with
+    dpc-radar's margin) become ``NaN``: a published record, not a calibration,
+    and it needs no previous frame. The other rules of ``RainGrid.quality``
+    are left out on purpose: its isolated-pixel rule also removes a real
+    downpour a few kilometres wide on dry ground, and its thresholds are a
+    calibration that no YAML could override.
+    """
+    verdict: str | None = None
+    jumps = 0
+    used = grid
+    if previous is not None:
+        esito = grid.check(previous, max_step=max_step)
+        verdict, jumps = esito.verdict, esito.jumps
+        used = esito.grid if esito.grid is not None else previous
+    ceiling = record_ceiling(used.product.hours)
+    if ceiling is None:
+        return FrameQuality(used, verdict, jumps, 0)
+    beyond = np.isfinite(used.data) & (used.data > ceiling)
+    n = int(beyond.sum())
+    if n:
+        data = used.data.copy()
+        data[beyond] = np.nan
+        used = replace(used, data=data)
+    return FrameQuality(used, verdict, jumps, n)
+
+
 async def get_radar_status(at: datetime | None = None) -> NetworkStatus | None:
     """Quali radar il visualizzatore del DPC dà per accesi, ora o ad ``at``.
 
@@ -177,8 +222,10 @@ async def get_radar_status(at: datetime | None = None) -> NetworkStatus | None:
 
 __all__ = [
     "CUM_PERIOD",
+    "FrameQuality",
     "NetworkStatus",
     "RainGrid",
+    "frame_quality",
     "get_cum_at",
     "get_latest_cum",
     "get_latest_sri",
