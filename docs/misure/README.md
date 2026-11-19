@@ -6,6 +6,7 @@ riscrive questo indice: non modificarlo a mano.
 
 | generato | report | versioni | commit | comando |
 |---|---|---|---|---|
+| 2026-11-19 | [misura_radar_2026-10-05_2026-11-18.md](misura_radar_2026-10-05_2026-11-18.md) | `limen-deterministic-v1`, `flood-v1.3.0`, `wildfire-v1.1.0` | `d94fc011e085` | `limen misura-radar` |
 | 2026-11-19 | [misura_radar_2026-11-06_2026-11-18.md](misura_radar_2026-11-06_2026-11-18.md) | `limen-deterministic-v1`, `flood-v1.3.0`, `wildfire-v1.1.0` | `5c5bf0dd261e` | `limen misura-radar` |
 | 2026-11-16 | [misura_radar_2026-06-10_2026-11-15.md](misura_radar_2026-06-10_2026-11-15.md) | `limen-deterministic-v1`, `flood-v1.3.0`, `wildfire-v1.1.0` | `1eda27b4399c` | `limen misura-radar` |
 | 2026-11-13 | [backtest_flood_it-lombardia_2024-04-30_2025-09-25.md](backtest_flood_it-lombardia_2024-04-30_2025-09-25.md) | `limen-deterministic-v1`, `flood-v1.3.0`, `wildfire-v1.1.0` | `f6bec8725848` | `main.py backtest-flood` |

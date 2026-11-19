@@ -288,6 +288,30 @@ capitoli [3](03-i-dati.md), [4](04-i-motori.md) e [7](07-come-gira.md).
    già passati Limen usa la pioggia del «Merging»[^fwi].
 5. **I bollettini ufficiali**, mostrati sulla mappa accanto ai punteggi.
 
+Dal novembre 2026 (versione 0.3.0 della libreria) se ne aggiungono altri, che
+non toccano i punteggi:
+
+- nel riquadro di ogni cella, **quanto vede il radar** in quel punto e, per
+  l'alluvione, **ogni quanti anni** capita lì la pioggia appena caduta;
+- sulla mappa, **i temporali di adesso** e dove saranno fra un'ora, letti
+  dalla sveglia ogni quarto d'ora;
+- ogni notte, **il catalogo delle piogge rare** del giorno prima: la raccolta
+  degli eventi cerca nella stampa locale i comuni dove sono cadute;
+- per ogni evento verificato, **un resoconto radar** (`limen resoconto-radar`)
+  con mappa, ore e numeri, ognuno con l'immagine da cui viene;
+- per un assistente, gli stessi fatti come strumenti del server MCP.
+
+Altri quattro usi cambierebbero i punteggi, e per questo sono nel codice ma
+**spenti**: il radar «cieco» (dove vede male, uno zero non è asciutto), la
+rarità della pioggia caduta come soglia del posto, la pioggia della prossima
+ora dal nowcast, e la correzione del radar con i pluviometri sulla sveglia. La
+prima misura, su 27 eventi veri e 45 giorni
+([rapporto](https://github.com/agent-engineering-studio/limen/blob/main/docs/misure/misura_radar_2026-10-05_2026-11-18.md)),
+dice che la rarità separa bene: la pioggia caduta passa i due anni di ritorno
+sul 44 % degli eventi contro il 2 % delle celle-giorno qualunque. La
+correzione invece toglie proprio la sveglia di Melito delle 4 del mattino: resta
+spenta. Ognuno si accende solo dopo la sua misura.
+
 In più Limen tiene il proprio archivio del «Merging», aggiornato ogni notte,
 per poter rigiocare gli eventi passati ([capitolo 5](05-misurare.md)).
 
