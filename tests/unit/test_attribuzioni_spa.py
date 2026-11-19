@@ -33,6 +33,7 @@ _CORRISPONDENZE: dict[str, tuple[str, str]] = {
     "dtm": ("cnr-irpi-dtm", "CNR-IRPI"),
     "corine": ("corine", "Copernicus Land Monitoring Service"),
     "impermeabilizzazione": ("imperviousness", "Copernicus Land Monitoring Service"),
+    "acqua_temporanea": ("water-wetness", "Copernicus Land Monitoring Service"),
     "comuni": ("istat", "ISTAT"),
     "strade": ("osm-reti", "OpenStreetMap"),
     "litologia": ("mase-geologia", "Ministero dell'Ambiente e della Sicurezza Energetica"),

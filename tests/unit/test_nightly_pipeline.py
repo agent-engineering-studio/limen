@@ -97,6 +97,12 @@ def stubbed(monkeypatch: pytest.MonkeyPatch) -> None:
         return {"status": "skipped"}
 
     monkeypatch.setattr(nightly, "_backup", backup)
+
+    async def egms(_deps: object) -> dict[str, object]:
+        # Con EGMS__SERVICE_KEY_FILE nel .env il passo chiederebbe un token al CLMS.
+        return {"status": "skipped"}
+
+    monkeypatch.setattr(nightly, "_egms_release", egms)
     monkeypatch.setattr(nightly, "_qualita_dati", qualita)
     monkeypatch.setattr(nightly, "_glofas", glofas)
 

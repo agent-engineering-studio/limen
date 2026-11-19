@@ -145,10 +145,10 @@ voci:
     nome: acqua e umido temporanei (HRL WaterWetness)
     a_cosa_serve: >-
       Dove il satellite ha visto acqua o terreno umido solo per una parte
-      dell'anno. Dentro le aree a pericolo idraulico distingue le celle che
-      l'acqua la tengono davvero. Senza, celle della stessa classe valgono uguale.
+      dell'anno. Serve a misurare un fattore dell'alluvione ancora spento (#420):
+      oggi non cambia nessun punteggio.
     pericoli: [flood]
-    livello: consigliato
+    livello: avanzato
     misura: {colonna: water_wetness_temp}
     variabile: LIMEN_WATER_WETNESS_RASTER
     procura_con: make water-wetness-data
