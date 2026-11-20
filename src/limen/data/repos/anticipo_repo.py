@@ -13,7 +13,7 @@ from functools import cache
 from importlib import resources
 from typing import Any
 
-from limen.api.jobs.ids import JOB_HOURLY_MONITORING
+from limen.api.jobs.ids import JOB_FORECAST_HISTORY, JOB_HOURLY_MONITORING
 from limen.core.models.hazard import HazardType
 from limen.data.db import acquire
 
@@ -39,6 +39,7 @@ async def misura(
             evento_at,
             tolleranza_ore,
             JOB_HOURLY_MONITORING,
+            JOB_FORECAST_HISTORY,
             timeout=ATTESA_S,
         )
     risultato: dict[str, Any] = json.loads(grezzo)

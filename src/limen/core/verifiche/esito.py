@@ -84,4 +84,8 @@ def esito(misura: dict[str, Any]) -> tuple[str, str]:
         and datetime.fromisoformat(primo) < evento
     ):
         return "contemporanea", f"lo sweep orario era salito a {adesso} prima dell'evento"
+    # `is False` come sopra. Una corsa sopra soglia dice già che la
+    # previsione ha girato; senza, il vuoto è «non guardato», non «calmo».
+    if misura.get("previsione_valutata") is False and not misura.get("corse"):
+        return "non_verificabile", "nessuna corsa previsionale riuscita puntava all'evento"
     return "mancata", f"previsione massima {prevista}, fondo {fondo}"

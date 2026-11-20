@@ -7,6 +7,7 @@
 -- $4 tol:      ore di tolleranza attorno all'evento per dire «la previsione
 --              puntava lì» (12 = la stessa mezza giornata)
 -- $5 job:      l'id del job orario in `job_runs` (`JOB_HOURLY_MONITORING`)
+-- $6 prev:     l'id del job della previsione per cella (`JOB_FORECAST_HISTORY`)
 --
 -- Ogni filtro su risk_assessments porta computed_at: è partizionata per
 -- giorno, e senza la finestra la query attraversa tutte le partizioni (su
@@ -150,6 +151,17 @@ SELECT json_build_object(
     -- «non valutato» non è «mancato».
     'pericolo_valutato', EXISTS (
         SELECT 1 FROM valutato, ev WHERE valutato.t BETWEEN ev.t - interval '80 hours' AND ev.t),
+    -- Le corse previsionali vuote dicono «sotto Moderato» solo se una corsa
+    -- riuscita puntava davvero all'evento: con il worker fermo dal 13 al
+    -- 19/11/2026 cinque eventi risultavano mancati senza che nessuna
+    -- previsione li avesse guardati. Gli orizzonti sono quelli di `carico.sql`.
+    'previsione_valutata', EXISTS (
+        SELECT 1 FROM job_runs jr, ev, unnest(ARRAY[24, 48, 72]) AS h
+        WHERE jr.job_id = $6::text
+          AND jr.status = 'ok'
+          AND jr.started_at BETWEEN ev.t - interval '80 hours' - ev.tol AND ev.t
+          AND jr.started_at + make_interval(hours => h)
+              BETWEEN ev.t - ev.tol AND ev.t + ev.tol),
     -- Né le partizioni (`partizioni_dal`) dicono se il fondo è stato misurato:
     -- sono di tutti i pericoli. Un pericolo acceso due giorni prima non ha
     -- fondo, e un fondo mai misurato si leggerebbe come un fondo basso.

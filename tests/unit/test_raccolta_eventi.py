@@ -210,6 +210,15 @@ def test_esito_come_il_paragrafo_5_della_skill() -> None:
     assert esito(tardi)[0] == "mancata"
     sweep = _misura(adesso_classe_max="High", adesso_primo_moderato="2026-10-10T06:00:00+00:00")
     assert esito(sweep)[0] == "contemporanea"
+    # Worker fermo dal 13 al 19/11/2026: nessuna corsa previsionale puntava
+    # all'evento, e il vuoto non è una previsione calma. Lo sweep salito
+    # prima resta contemporanea.
+    assert esito(_misura(previsione_valutata=False)) == (
+        "non_verificabile",
+        "nessuna corsa previsionale riuscita puntava all'evento",
+    )
+    assert esito(_misura(previsione_valutata=True))[0] == "mancata"
+    assert esito(sweep | {"previsione_valutata": False})[0] == "contemporanea"
 
 
 def _risposta(raw: str, stop: str = "end_turn") -> SimpleNamespace:
