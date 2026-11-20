@@ -931,6 +931,27 @@ class RadarArchiveSettings(BaseSettings):
         return self.attivo and self.frane
 
 
+class WorkerSettings(BaseSettings):
+    """Quando il worker si accorge di essere stato fermo, e a chi lo dice (#655).
+
+    Dal 13 al 19/11/2026 la macchina è rimasta sospesa per cinque giorni e
+    mezzo: nessuna riga in ``job_runs``, e se n'è accorto un report sei giorni
+    dopo. Dentro lo stack nessun controllo può vederlo, perché è sospeso
+    anche lui: al risveglio il worker lo dice, e mentre dorme lo dice il ping.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    # Un buco fra due battiti riusciti più lungo di così è un'interruzione.
+    # Il worker non scende mai sotto un riavvio da sentinella (watchdog +
+    # attesa dello schema + 5 minuti, oggi 25): quello non è una notizia.
+    interruzione_minuti: int = Field(default=30, ge=1)
+    # Un monitor «push» su un'altra macchina (Uptime Kuma, healthchecks):
+    # chiamato a ogni battito riuscito, avvisa quando smette di esserlo. Su
+    # questa stessa macchina non serve: si sospenderebbe con lei. Vuoto = spento.
+    ping_url: str = ""
+
+
 class BackupSettings(BaseSettings):
     """Il backup notturno dello stato, fuori dal server (#304).
 
@@ -1418,6 +1439,7 @@ class Settings(BaseSettings):
     copernicus: CopernicusSettings = Field(default_factory=CopernicusSettings)
     radar_archive: RadarArchiveSettings = Field(default_factory=RadarArchiveSettings)
     backup: BackupSettings = Field(default_factory=BackupSettings)
+    worker: WorkerSettings = Field(default_factory=WorkerSettings)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
     openmeteo: OpenMeteoSettings = Field(default_factory=OpenMeteoSettings)
     kg: KgSettings = Field(default_factory=KgSettings)

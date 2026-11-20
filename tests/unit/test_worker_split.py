@@ -20,7 +20,7 @@ from typing import Any
 import pytest
 
 from limen.cli import worker as worker_mod
-from limen.config.settings import IotSettings
+from limen.config.settings import IotSettings, Settings
 from limen.data.repos.job_runs_repo import JobRun
 
 
@@ -195,6 +195,9 @@ async def test_heartbeat_loop_writes_a_row_and_stops(monkeypatch: pytest.MonkeyP
         async def finish(self, run_id: int | None, *, status: str, **_: object) -> None:
             written.append(("finish", run_id))
 
+        async def recent(self, job_id: str | None = None, *, limit: int = 20) -> list[object]:
+            return []
+
     monkeypatch.setattr(worker_mod, "job_runs_repo", _BeatRepo())
     monkeypatch.setenv("LIMEN_WORKER_HEARTBEAT_SECONDS", "0.01")
     stop = asyncio.Event()
@@ -257,7 +260,9 @@ def _patch_lifecycle(monkeypatch: pytest.MonkeyPatch, *, schema_ok: bool) -> dic
         events["registered"] = True
         return ["limen-hourly-monitoring"]
 
-    async def _beat(stop: asyncio.Event, scheduler: object = None, _s: object = None) -> None:
+    async def _beat(
+        stop: asyncio.Event, scheduler: object = None, _s: object = None, _i: object = None
+    ) -> None:
         # Il battito finto ferma subito il worker: e' l'equivalente di un
         # SIGTERM arrivato appena partito.
         stop.set()
@@ -332,6 +337,9 @@ async def test_un_timeout_del_database_non_uccide_il_battito(
         async def finish(self, run_id: int | None, *, status: str, **_: object) -> None:
             tentativi.append("finish")
 
+        async def recent(self, job_id: str | None = None, *, limit: int = 20) -> list[object]:
+            return []
+
     monkeypatch.setattr(worker_mod, "job_runs_repo", _BeatRepo())
     monkeypatch.setenv("LIMEN_WORKER_HEARTBEAT_SECONDS", "0.01")
     stop = asyncio.Event()
@@ -357,3 +365,122 @@ def test_la_sentinella_tace_finche_il_battito_arriva() -> None:
     sentinella.ferma()
     filo.join(timeout=1)
     assert uscite == [] and not filo.is_alive()
+
+
+def test_un_buco_oltre_la_soglia_e_un_interruzione() -> None:
+    adesso = dt.datetime(2026, 11, 19, 7, 58, tzinfo=dt.UTC)
+    soglia = dt.timedelta(minutes=20)
+    assert worker_mod.interruzione(None, adesso, soglia) is None
+    assert worker_mod.interruzione(adesso - dt.timedelta(minutes=19), adesso, soglia) is None
+    # 13/11 18:29 → 19/11 07:58: la macchina sospesa.
+    dal = dt.datetime(2026, 11, 13, 18, 29, tzinfo=dt.UTC)
+    assert worker_mod.interruzione(dal, adesso, soglia) == dal
+
+
+@pytest.mark.asyncio
+async def test_al_risveglio_il_buco_si_scrive_e_si_segnala(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Il buco si legge dal database al primo battito, quindi attraversa un
+    riavvio; si segnala una volta sola, e il ping parte a ogni battito."""
+    righe: list[tuple[str, str, object]] = []
+    mail: list[dict[str, object]] = []
+    ping: list[str] = []
+    dal = dt.datetime.now(dt.UTC) - dt.timedelta(days=5)
+
+    class _Run:
+        status = "ok"
+        started_at = dal
+
+    class _BeatRepo:
+        n = 0
+
+        async def start(self, job_id: str, *, scope: str | None = None) -> int:
+            self.n += 1
+            if self.n >= 3:
+                stop.set()
+            righe.append(("start", job_id, None))
+            return self.n
+
+        async def finish(self, run_id: int | None, *, status: str, **kw: object) -> None:
+            righe.append(("finish", status, kw.get("metrics")))
+
+        async def recent(self, job_id: str | None = None, *, limit: int = 20) -> list[object]:
+            return [_Run()]
+
+    async def _invia(_s: object, **kw: object) -> bool:
+        mail.append(kw)
+        return True
+
+    async def _fetch(method: str, url: str, **_: object) -> object:
+        ping.append(url)
+        return type("R", (), {"status_code": 200})()
+
+    settings = Settings(
+        worker={"ping_url": "https://kuma.example/api/push/x"},
+        contributi={"destinatari": ["curatore@example.org"]},
+    )
+    monkeypatch.setattr(worker_mod, "job_runs_repo", _BeatRepo())
+    monkeypatch.setattr(worker_mod, "invia_testo", _invia)
+    monkeypatch.setattr(worker_mod, "fetch_with_retry", _fetch)
+    monkeypatch.setenv("LIMEN_WORKER_HEARTBEAT_SECONDS", "0.01")
+    stop = asyncio.Event()
+    await asyncio.wait_for(worker_mod._heartbeat_loop(stop, None, None, settings), timeout=5)
+
+    interruzioni = [r for r in righe if r[1] == worker_mod.JOB_WORKER_INTERRUZIONE]
+    assert len(interruzioni) == 1
+    errore = next(r for r in righe if r[0] == "finish" and r[1] == "error")
+    metriche = errore[2]
+    assert isinstance(metriche, dict)
+    assert metriche["dal"] == dal.isoformat()
+    assert metriche["ore"] == pytest.approx(120, abs=0.2)
+    assert len(mail) == 1
+    assert mail[0]["destinatari"] == ["curatore@example.org"]
+    assert ping == ["https://kuma.example/api/push/x"] * 2
+
+
+def test_la_soglia_non_scende_mai_sotto_un_riavvio_da_sentinella() -> None:
+    # 900 s di watchdog + 300 di attesa dello schema + 5 minuti = 25 minuti.
+    assert worker_mod.soglia_interruzione(30, 900.0) == dt.timedelta(minutes=30)
+    assert worker_mod.soglia_interruzione(10, 900.0) == dt.timedelta(minutes=25)
+    assert worker_mod.soglia_interruzione(30, 1800.0) == dt.timedelta(minutes=40)
+
+
+@pytest.mark.asyncio
+async def test_un_battito_non_scritto_non_pinga_e_non_chiude_la_lettura(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Database giù: `start` degrada a None. Il ping non deve dire «vivo», e
+    l'ultimo battito si rilegge al giro dopo invece di restare None."""
+    letture: list[str] = []
+    ping: list[str] = []
+
+    class _BeatRepo:
+        n = 0
+
+        async def start(self, job_id: str, *, scope: str | None = None) -> int | None:
+            self.n += 1
+            if self.n >= 2:
+                stop.set()
+                return 9
+            return None
+
+        async def finish(self, run_id: int | None, *, status: str, **_: object) -> None:
+            return None
+
+        async def recent(self, job_id: str | None = None, *, limit: int = 20) -> list[object]:
+            letture.append("recent")
+            return []
+
+    async def _fetch(method: str, url: str, **_: object) -> object:
+        ping.append(url)
+        return type("R", (), {"status_code": 200})()
+
+    monkeypatch.setattr(worker_mod, "job_runs_repo", _BeatRepo())
+    monkeypatch.setattr(worker_mod, "fetch_with_retry", _fetch)
+    monkeypatch.setenv("LIMEN_WORKER_HEARTBEAT_SECONDS", "0.01")
+    stop = asyncio.Event()
+    settings = Settings(worker={"ping_url": "https://kuma.example/api/push/x"})
+    await asyncio.wait_for(worker_mod._heartbeat_loop(stop, None, None, settings), timeout=5)
+    assert letture == ["recent", "recent"]
+    assert ping == ["https://kuma.example/api/push/x"]

@@ -20,6 +20,9 @@ Env:
   battito perché ``--health`` dica ancora "vivo" (default 180).
 * ``LIMEN_WORKER_WATCHDOG_SECONDS`` — dopo quanto senza un battito riuscito il
   worker esce da sé, perché Docker lo riavvii (default 900).
+* ``WORKER__INTERRUZIONE_MINUTI`` / ``WORKER__PING_URL`` — quando un buco fra
+  due battiti è un'interruzione da segnalare, e il monitor esterno che vede
+  il worker fermo mentre lo è (#655).
 """
 
 from __future__ import annotations
@@ -32,19 +35,21 @@ import signal
 import threading
 import time
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from limen.api.dependencies import AppDependencies
-from limen.api.jobs.ids import JOB_WORKER_HEARTBEAT
+from limen.api.jobs.ids import JOB_WORKER_HEARTBEAT, JOB_WORKER_INTERRUZIONE
 from limen.api.jobs.registration import register_jobs
 from limen.config.percorsi import radice_dati
-from limen.config.settings import get_settings
+from limen.config.settings import Settings, get_settings
 from limen.core.logging import get_logger
 from limen.data.db import close_pool, get_pool, init_pool
 from limen.data.repos import job_runs_repo, salute_repo
 from limen.integrations import salute
+from limen.integrations._http import fetch_with_retry
+from limen.notifications.email import invia_testo
 
 log = get_logger(__name__)
 
@@ -179,21 +184,112 @@ async def _riversa_salute() -> None:
         log.warning("worker.salute.failed", error=str(exc), error_type=type(exc).__name__)
 
 
+def interruzione(
+    precedente: datetime | None, adesso: datetime, soglia: timedelta
+) -> datetime | None:
+    """L'inizio del buco, se fra l'ultimo battito riuscito e questo c'è più di ``soglia``."""
+    if precedente is None or adesso - precedente <= soglia:
+        return None
+    return precedente
+
+
+async def _ultimo_battito() -> datetime | None:
+    """L'ultimo battito riuscito nel database: un buco attraversa anche un riavvio."""
+    for run in await job_runs_repo.recent(HEARTBEAT_JOB, limit=5):
+        if run.status == "ok":
+            return run.started_at
+    return None
+
+
+async def _segnala_interruzione(dal: datetime, al: datetime, settings: Settings) -> None:
+    """Una riga in ``job_runs``, un log d'errore e una mail a chi cura il progetto."""
+    ore = round((al - dal).total_seconds() / 3600, 1)
+    testo = (
+        f"Il worker di Limen non ha battuto dal {dal:%d/%m/%Y %H:%M} al {al:%d/%m/%Y %H:%M} UTC "
+        f"({ore} ore). In quel periodo non sono girati sweep, previsioni per cella, "
+        "passo notturno e backup: gli eventi di quei giorni risulteranno non verificabili. "
+        "Se la macchina era sospesa, va tolto il risparmio energetico."
+    )
+    log.error("worker.interruzione", dal=dal.isoformat(), al=al.isoformat(), ore=ore)
+    run_id = await job_runs_repo.start(JOB_WORKER_INTERRUZIONE)
+    await job_runs_repo.finish(
+        run_id,
+        status="error",
+        metrics={"dal": dal.isoformat(), "al": al.isoformat(), "ore": ore},
+        error=testo,
+    )
+    await invia_testo(
+        settings.notifications.email,
+        destinatari=settings.contributi.destinatari,
+        oggetto=f"Limen: worker fermo per {ore} ore",
+        testo=testo,
+    )
+
+
+async def _ping(url: str) -> None:
+    """Il monitor esterno: un ping fallito non tocca il battito."""
+    try:
+        risposta = await asyncio.wait_for(fetch_with_retry("GET", url), timeout=30)
+    except Exception as exc:
+        log.warning("worker.ping.failed", error=str(exc)[:200], error_type=type(exc).__name__)
+        return
+    # Un 4xx non si ripete e non solleva: un token di push sbagliato
+    # lascerebbe il monitor rosso senza una riga nei log.
+    if risposta.status_code >= 400:
+        log.warning("worker.ping.failed", status=risposta.status_code)
+
+
+def soglia_interruzione(minuti: int, watchdog_s: float) -> timedelta:
+    """Mai sotto un riavvio da sentinella: il watchdog, l'attesa dello schema e
+    cinque minuti di margine. Alzare il watchdog non deve far partire una mail
+    a ogni riavvio."""
+    riavvio = timedelta(seconds=watchdog_s + _MIGRATION_WAIT_MAX_S) + timedelta(minutes=5)
+    return max(timedelta(minutes=minuti), riavvio)
+
+
 async def _heartbeat_loop(
-    stop: asyncio.Event, scheduler: Any = None, sentinella: Sentinella | None = None
+    stop: asyncio.Event,
+    scheduler: Any = None,
+    sentinella: Sentinella | None = None,
+    settings: Settings | None = None,
 ) -> None:
     """Una riga in `job_runs` a intervalli, finché non arriva lo stop."""
     period = _heartbeat_seconds()
+    impostazioni = settings or get_settings()
+    soglia = soglia_interruzione(impostazioni.worker.interruzione_minuti, _watchdog_seconds())
+    precedente: datetime | None = None
+    letto = False
     while not stop.is_set():
         # Un timeout del database non deve uccidere il battito: il task
         # morirebbe in silenzio e il worker, vivo, risulterebbe fermo.
         try:
+            if not letto:
+                precedente = await _ultimo_battito()
+            adesso = datetime.now(UTC)
             run_id = await job_runs_repo.start(HEARTBEAT_JOB)
             await job_runs_repo.finish(
                 run_id, status="ok", metrics={"period_s": period, **_disco()}
             )
+            # `start` degrada a None invece di sollevare: senza la riga il
+            # battito non è riuscito, e né il buco né il ping si toccano. La
+            # prima lettura conta solo se il database ha risposto.
+            if run_id is None:
+                raise RuntimeError("battito non scritto")
+            letto = True
             if sentinella is not None:
                 sentinella.battito()
+            if (dal := interruzione(precedente, adesso, soglia)) is not None:
+                try:
+                    await _segnala_interruzione(dal, adesso, impostazioni)
+                except Exception as exc:
+                    log.warning(
+                        "worker.interruzione.failed",
+                        error=str(exc)[:200],
+                        error_type=type(exc).__name__,
+                    )
+            precedente = adesso
+            if impostazioni.worker.ping_url:
+                await _ping(impostazioni.worker.ping_url)
         except Exception as exc:
             log.warning("worker.heartbeat.failed", error=str(exc), error_type=type(exc).__name__)
         await _riversa_salute()
@@ -302,7 +398,7 @@ async def run(*, check_health: bool = False) -> int:
 
         sentinella = Sentinella(_watchdog_seconds())
         sentinella.avvia()
-        heartbeat = asyncio.create_task(_heartbeat_loop(stop, scheduler, sentinella))
+        heartbeat = asyncio.create_task(_heartbeat_loop(stop, scheduler, sentinella, settings))
         await stop.wait()
         log.info("worker.stopping")
         sentinella.ferma()

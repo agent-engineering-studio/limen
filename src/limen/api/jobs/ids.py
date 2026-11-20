@@ -29,6 +29,8 @@ JOB_FEDELTA_RACCONTI = "limen-fedelta-racconti"
 JOB_RACCOLTA_EVENTI = "limen-raccolta-eventi"
 #: Il battito del worker (`limen worker`): porta anche lo spazio su disco (#408).
 JOB_WORKER_HEARTBEAT = "limen-worker-heartbeat"
+#: Un buco fra due battiti, scritto al risveglio (#655).
+JOB_WORKER_INTERRUZIONE = "limen-worker-interruzione"
 
 
 __all__ = [
@@ -52,4 +54,5 @@ __all__ = [
     "JOB_PARTITIONS",
     "JOB_RACCOLTA_EVENTI",
     "JOB_WORKER_HEARTBEAT",
+    "JOB_WORKER_INTERRUZIONE",
 ]
