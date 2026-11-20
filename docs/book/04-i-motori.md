@@ -597,7 +597,8 @@ Quattro scelte di progetto valgono per tutti e tre i motori.
       Van Wagner (standard pubblicato, nel pacchetto `fwi-chain`).
     - **Avvisi sotto «alto».** Una cella sotto «alto» genera un avviso solo
       se la sua predisposizione statica arriva a `alerts.min_predisposition`
-      nello YAML del pericolo (0,5 per tutti e tre, #477).
+      nello YAML del pericolo (0,5 per frana e alluvione, #477; 0,3 per
+      l'incendio da `wildfire-v1.1.1`, #476).
 
 ??? note "Per chi sviluppa: come rifare le figure di questo capitolo"
     - Grafici delle funzioni (leggono solo gli YAML dei pericoli):
@@ -618,7 +619,7 @@ dettaglio tecnico sta nelle issue del progetto.
 | **L'alluvione non sa dove l'acqua si incanala** | Otto allerte su dieci in Emilia-Romagna non trovano un allagamento osservato. | Un indicatore di quota sopra il corso d'acqua più vicino. **Open data**: il reticolo idrografico europeo EU-Hydro di Copernicus (accesso libero), con un modello del terreno. | ([#474](https://github.com/agent-engineering-studio/limen/issues/474)) |
 | **«Piena ordinaria» del fiume da due fonti diverse** | Lo stesso fiume può dare rapporti diversi a seconda della fonte; muove i punteggi. | Una fonte sola per il riferimento, poi una misura. | #448 |
 | **Pochi dati sui nubifragi in città** | La regola per le celle urbane fuori mappa è tarata su alluvioni di fiume, non su allagamenti urbani. | **Open data**: un catalogo aperto e datato degli allagamenti urbani (Comuni, vigili del fuoco), oggi non disponibile a livello nazionale. | ([#475](https://github.com/agent-engineering-studio/limen/issues/475)) |
-| **Incendio al Nord e d'inverno** | Al Nord «alto» non scatta quasi mai d'estate, e un terzo degli incendi del Nord avviene fra dicembre e aprile, fuori dalla stagione misurata. | Misurare il Nord tutto l'anno, valutare pesi separati Nord/Sud. | ([#476](https://github.com/agent-engineering-studio/limen/issues/476)) |
+| **Incendio al Nord** | Al Nord il FWI arriva di rado alla fascia d'allerta: nel 2026 a «moderato» Limen coglie il 46 % delle celle bruciate del Nord contro il 90 % del Sud. Gli incendi del Nord registrati da EFFIS sono d'estate, non d'inverno. | Misurato il 19/11/2026 su 2024-2026: il cancello degli avvisi a 0,3 (al posto di 0,5) coglie l'82-88 % delle celle bruciate in Italia contro il 66-72 %, ma al Sud raddoppia le allerte; resta a 0,3 per scelta del curatore. Un FWI «pieno» per nodo, tarato sulla climatologia estiva 2014-2023, alza il Nord (46 → 61 %) ma discrimina meno ovunque, e resta spento. Il Nord non si recupera con la scala del FWI: servono pesi o dati del territorio del Nord. | ([#476](https://github.com/agent-engineering-studio/limen/issues/476)) |
 | **Una soglia unica per gli avvisi sotto «alto»** *(chiuso)* | Era lo stesso 0,5 per tre pericoli, in `settings.py`. Ora sta nel file di ogni pericolo, misurata: per l'alluvione separa bene (96 % delle celle allagate contro il 38 % dell'Italia), per la frana filtra poco, per l'incendio lavora contro il segnale (32 % delle celle bruciate contro il 41 %) ma toglie poco. | Per l'incendio, decidere con un replay degli avvisi d'estate se abbassarla. | ([#477](https://github.com/agent-engineering-studio/limen/issues/477)) |
 | **Documentazione tecnica del motore frana non aggiornata** *(chiuso)* | Alcuni pesi e criteri di accettazione descritti nei documenti tecnici non erano più quelli in uso. | Fatto: `scoring-model.md` e `warning-logic.md` riportano i pesi, i gate e i blocchi di `landslide.yaml`, e un test confronta i pesi di S scritti nel documento con quelli del file. | Chiuso da [#493](https://github.com/agent-engineering-studio/limen/issues/493) |
 
