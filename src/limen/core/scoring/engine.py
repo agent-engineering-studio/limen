@@ -124,6 +124,8 @@ class _StaticAggregate:
 class _MeteoAggregate:
     m: float
     breakdown: MeteoBreakdown
+    #: Il termine d'innesco che entra in M (Caine, la cumulata o il sensore).
+    innesco: float = 0.0
 
 
 class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
@@ -257,6 +259,7 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
         m = w.caine * innesco + w.api * api_f + w.soil * soil_f + snow_weight * snow_f
         return _MeteoAggregate(
             m=_clamp01(m),
+            innesco=innesco,
             breakdown=MeteoBreakdown(
                 caine_excess=caine_excess_val,
                 caine_norm=caine_norm,
@@ -394,6 +397,9 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
                 + w.hydrology * h
             )
         score_val = _clamp01(total)
+        cancello = self._t.cancello_innesco
+        if cancello is not None and not monitored and e <= 0.0 and meteo.innesco <= cancello.soglia:
+            score_val = min(score_val, cancello.tetto)
 
         return RiskScore(
             score=score_val,

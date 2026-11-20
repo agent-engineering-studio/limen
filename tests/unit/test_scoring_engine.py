@@ -415,3 +415,79 @@ def test_senza_riferimento_resta_caine(tmp_path: Path) -> None:
         _bundle(rainfall_hourly=pioggia, soil=0.4)
     )
     assert cumulata.score == caine.score
+
+
+# ---------------------------------------------------------------------------
+# Cancello d'innesco (#656)
+# ---------------------------------------------------------------------------
+def _con_cancello(
+    tmp_path: Path, soglia: float = 0.0, tetto: float = 0.34
+) -> MultiFactorScoringEngine:
+    cfg = yaml.safe_load(DEFAULT_THRESHOLDS_PATH.read_text(encoding="utf-8"))
+    cfg["cancello_innesco"] = {"soglia": soglia, "tetto": tetto}
+    out = tmp_path / "cancello.yaml"
+    out.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    return MultiFactorScoringEngine(load_regional_thresholds(out))
+
+
+_PREDISPOSTA = StaticFactors(
+    cell_id="c",
+    iffi_density_500=10.0,
+    slope_deg=45.0,
+    pai_class_norm=1.0,
+    litho_weight=1.0,
+)
+
+
+def test_senza_cancello_il_punteggio_e_quello_di_prima() -> None:
+    assert load_regional_thresholds().cancello_innesco is None
+
+
+def test_il_cancello_tiene_sotto_moderato_un_versante_bagnato_senza_innesco(
+    tmp_path: Path,
+) -> None:
+    # Versante predisposto, autunno bagnato, nessuna pioggia d'innesco: il
+    # Moderato di fondo di novembre 2026.
+    b = _bundle(static=_PREDISPOSTA, api_30_mm=400.0, soil=0.9)
+    libero = score(b)
+    assert libero.breakdown.meteo_terms.caine_norm == 0.0
+    assert libero.score > 0.34
+    chiuso = _con_cancello(tmp_path).score(b)
+    assert chiuso.score == pytest.approx(0.34)
+    assert chiuso.level in {RiskLevel.None_, RiskLevel.Low}
+    # Il breakdown resta quello del motore: il cancello tocca solo il punteggio.
+    assert chiuso.breakdown == libero.breakdown
+
+
+def test_la_pioggia_d_innesco_o_il_sisma_aprono_il_cancello(tmp_path: Path) -> None:
+    engine = _con_cancello(tmp_path)
+    pioggia = _bundle(static=_PREDISPOSTA, rainfall_hourly=[30] * 6, api_30_mm=400.0, soil=0.9)
+    assert pioggia_innesco(pioggia) > 0.0
+    assert engine.score(pioggia).score == pytest.approx(score(pioggia).score)
+    scossa = SeismicHistoryEvent(
+        event_id="q", origin_time=VALUATION_TIME, magnitude=5.5, distance_km=5.0, pga_g=0.40
+    )
+    sisma = _bundle(static=_PREDISPOSTA, api_30_mm=400.0, soil=0.9, seismic=[scossa])
+    assert score(sisma).breakdown.e > 0.0
+    assert engine.score(sisma).score == pytest.approx(score(sisma).score)
+
+
+def test_sotto_la_soglia_l_innesco_non_apre(tmp_path: Path) -> None:
+    debole = next(
+        b
+        for mm in (2, 3, 4, 5, 6, 8, 10, 12)
+        if 0.0
+        < pioggia_innesco(
+            b := _bundle(static=_PREDISPOSTA, rainfall_hourly=[mm] * 6, api_30_mm=400.0, soil=0.9)
+        )
+        < 0.9
+    )
+    innesco = pioggia_innesco(debole)
+    assert _con_cancello(tmp_path, soglia=innesco + 0.05).score(debole).score <= 0.34
+    assert _con_cancello(tmp_path, soglia=innesco - 0.01).score(debole).score == pytest.approx(
+        score(debole).score
+    )
+
+
+def pioggia_innesco(b: CellFeatureBundle) -> float:
+    return score(b).breakdown.meteo_terms.caine_norm

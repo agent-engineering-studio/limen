@@ -325,6 +325,23 @@ class CumulataBlock(_StrictModel):
     modo: Literal["sostituisce", "massimo"]
 
 
+class CancelloInnescoBlock(_StrictModel):
+    """Senza un innesco la cella non sale sopra ``tetto`` (#656).
+
+    Il punteggio frana è una somma, e 0,35·S più l'umidità antecedente di un
+    autunno portano a Moderato un versante predisposto senza una goccia di
+    pioggia d'innesco: dal 7 al 20/11/2026 il 65 % dei comuni-giorno, con
+    Caine a zero nell'83 % delle celle ≥ Moderato. È l'errore che l'incendio
+    ha corretto facendo del meteo un cancello. Il cancello è aperto se
+    l'innesco (Caine o la cumulata, quello che entra in M) supera ``soglia``,
+    se la componente sismica è attiva o se la cella ha un sensore cinematico
+    che misura. Assente ⇒ il punteggio è quello di prima.
+    """
+
+    soglia: float = Field(default=0.0, ge=0.0, lt=1.0)
+    tetto: float = Field(..., ge=0.0, le=1.0)
+
+
 class SnowBlock(_StrictModel):
     """Rain-on-snow amplification of M (additive, baseline-preserving).
 
@@ -583,6 +600,8 @@ class RegionalThresholds(HazardThresholds):
     snow: SnowBlock | None = None
     # Opzionale (#243): senza il blocco l'innesco è Caine, come prima.
     cumulata: CumulataBlock | None = None
+    # Opzionale (#656): senza il blocco nessun cancello, come prima.
+    cancello_innesco: CancelloInnescoBlock | None = None
     seismic: SeismicBlock
     post_fire: PostFireBlock
     # V1.5: optional. Older YAMLs without a `kinematic` block still

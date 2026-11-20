@@ -63,6 +63,12 @@ Configuration knobs (env vars, kept off the dispatcher for parity with
 * ``LIMEN_BACKTEST_SOGLIE_REGIONALI`` — ``1``: la curva di Caine regionale
   di ``config/soglie_frane_regionali.yaml`` al posto di quella della
   macroregione, nelle AOI che ne hanno una (#506). Default: le macroregioni.
+* ``LIMEN_BACKTEST_CANCELLO_INNESCO`` — ``tetto`` o ``soglia:tetto`` (es.
+  ``0.34`` o ``0.2:0.34``): il cancello d'innesco di #656 al posto di quello
+  del YAML (nessuno, oggi). Senza pioggia d'innesco sopra ``soglia`` (default
+  0), sisma o sensore cinematico, il punteggio non supera ``tetto``. Da
+  leggere con ``LIMEN_BACKTEST_HIGH_LEVEL=Moderate``: è il Moderato di fondo
+  che il cancello toglie.
 * ``LIMEN_BACKTEST_SISMICA``     — ``no`` (default) o ``shakemap``: la componente
   E dalle ShakeMap storiche INGV (#287). Per ogni terremoto della finestra,
   più ``seismic.lookback_days`` prima, con ``M ≥ seismic.min_magnitude``, la
@@ -128,6 +134,7 @@ from limen.core.models.risk import (
 from limen.core.scoring.base import ScoringEngine
 from limen.core.scoring.engine import MultiFactorScoringEngine
 from limen.core.scoring.regional_thresholds import (
+    CancelloInnescoBlock,
     MetricaComuni,
     RegionalThresholds,
     SeismicBlock,
@@ -1061,6 +1068,22 @@ def soglie_backtest(
     return soglie.model_copy(update={"seismic": seismic})
 
 
+def cancello_da_env(raw: str) -> CancelloInnescoBlock | None:
+    """``tetto`` o ``soglia:tetto``; vuoto ⇒ nessun cancello. ``ValueError`` se malformato."""
+    raw = raw.strip()
+    if not raw:
+        return None
+    parti = raw.split(":")
+    if len(parti) > 2:
+        raise ValueError(f"atteso tetto o soglia:tetto, non {raw!r}")
+    try:
+        if len(parti) == 1:
+            return CancelloInnescoBlock(tetto=float(parti[0]))
+        return CancelloInnescoBlock(soglia=float(parti[0]), tetto=float(parti[1]))
+    except (ValidationError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+
+
 def _parse_level(env_name: str, default: RiskLevel) -> RiskLevel:
     raw = os.getenv(env_name)
     if not raw:
@@ -1126,6 +1149,13 @@ async def run() -> int:
         from limen.core.scoring.soglie_regionali import con_soglie_regionali
 
         soglie = con_soglie_regionali(soglie)
+    try:
+        cancello = cancello_da_env(os.getenv("LIMEN_BACKTEST_CANCELLO_INNESCO", ""))
+    except ValueError as exc:
+        log.error("backtest.bad_cancello_innesco", error=str(exc))
+        return 1
+    if cancello is not None:
+        soglie = soglie.model_copy(update={"cancello_innesco": cancello})
     cache_env = os.getenv("LIMEN_BACKTEST_SHAKEMAP_CACHE", "").strip()
     cache_shakemap = Path(cache_env) if cache_env else None
     pioggia = os.getenv("LIMEN_BACKTEST_PIOGGIA", "modello").strip() or "modello"
@@ -1179,6 +1209,11 @@ async def run() -> int:
                 f"; soglia di pioggia ridotta fino al {sp.riduzione_max:.0%} dopo le scosse, "
                 f"memoria {sp.memoria_giorni:g} giorni"
             )
+    if soglie.cancello_innesco is not None:
+        configurazione += (
+            f"; cancello d'innesco: senza innesco > {soglie.cancello_innesco.soglia:g} "
+            f"il punteggio non supera {soglie.cancello_innesco.tetto:g}"
+        )
     if cumulata is not None and clima:
         configurazione += (
             f"; innesco cumulata {cumulata.window_hours} h / q{clima.get('quantile')} del nodo "
