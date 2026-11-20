@@ -18,6 +18,11 @@ già i dodici mesi per lo stesso intervallo di anni si saltano.
   degli anni del backtest.
 * ``LIMEN_FWI_CLIM_AOI``   — una sola AOI; assente ⇒ tutte.
 * ``LIMEN_FWI_CLIM_FORCE`` — ``1`` per ricalcolare anche i nodi già fatti.
+
+Il modello è quello di ``OPENMETEO__MODELS``: un'istanza propria che serve
+``ecmwf_ifs025`` lo ha solo dal 2024, e per gli anni prima risponde a vuoto.
+Per la climatologia serve ``OPENMETEO__MODELS=era5``. Se nessun nodo da fare
+ha anni interi, il comando esce con 1 invece di chiudere con zero righe.
 """
 
 from __future__ import annotations
@@ -39,7 +44,7 @@ from limen.data.repos import fwi_climatology_repo
 from limen.data.repos.aoi_repo import list_aoi_ids
 from limen.data.repos.fwi_climatology_repo import NodoMese
 from limen.integrations._http import SharedHttpClient
-from limen.integrations.openmeteo.client import OpenMeteoHttpClient
+from limen.integrations.openmeteo.client import OpenMeteoHttpClient, weather_model
 from limen.integrations.openmeteo.dtos import FireWeatherObservation, MeteoSnapshot
 from limen.integrations.openmeteo.grid import build_snapped_nodes
 
@@ -84,6 +89,16 @@ def accumula(
         if avviati > _AVVIAMENTO:
             per_mese[giorno.month].append(uscita.fwi)
     return stato, avviati
+
+
+def esito(da_fare: int, nodi_scritti: int) -> int:
+    """0 se almeno un nodo da fare è stato scritto (o non ce n'era nessuno), 1 altrimenti.
+
+    Un nodo con un anno bucato non si scrive e resta da fare: qualche nodo
+    scartato è normale, tutti scartati vuol dire che l'archivio non ha
+    servito quegli anni (#476, 19/11/2026: 0 righe con ``ecmwf_ifs025``).
+    """
+    return 1 if da_fare and not nodi_scritti else 0
 
 
 def copertura_valida(osservati: list[date], giorni: list[date], max_buco: int) -> bool:
@@ -198,6 +213,7 @@ async def run() -> int:
             years=f"{anni.start}-{anni.stop - 1}",
         )
         scritti = 0
+        nodi_scritti = 0
         for i in range(0, len(da_fare), _LOTTO):
             righe = await _lotto(
                 da_fare[i : i + _LOTTO],
@@ -208,6 +224,7 @@ async def run() -> int:
                 ora_utc=thresholds.fwi.ora_osservazione_utc,
             )
             scritti += await fwi_climatology_repo.upsert_many(righe)
+            nodi_scritti += len({(r.lon, r.lat) for r in righe})
             log.info(
                 "fwi.climatology.batch",
                 done=min(i + _LOTTO, len(da_fare)),
@@ -215,7 +232,21 @@ async def run() -> int:
                 rows=scritti,
             )
     await SharedHttpClient.aclose()
-    log.info("fwi.climatology.done", rows=scritti)
+    if esito(len(da_fare), nodi_scritti):
+        log.error(
+            "fwi.climatology.nothing_written",
+            nodes=len(da_fare),
+            years=f"{anni.start}-{anni.stop - 1}",
+            model=weather_model(),
+            hint="l'archivio non ha servito questi anni: OPENMETEO__MODELS=era5",
+        )
+        return 1
+    log.info(
+        "fwi.climatology.done",
+        rows=scritti,
+        nodes=nodi_scritti,
+        skipped=len(da_fare) - nodi_scritti,
+    )
     return 0
 
 

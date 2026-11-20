@@ -14,7 +14,7 @@ from datetime import date, timedelta
 import pytest
 
 from limen.cli.fwi_backfill import params_from
-from limen.cli.fwi_climatology import _AVVIAMENTO, accumula, copertura_valida
+from limen.cli.fwi_climatology import _AVVIAMENTO, accumula, copertura_valida, esito
 from limen.core.models.hazard import HazardType
 from limen.core.scoring.regional_thresholds import WildfireThresholds, load_hazard_thresholds
 from limen.core.scoring.wildfire.climatology import LIVELLI, percentile, quantili
@@ -77,3 +77,9 @@ def test_un_anno_bucato_non_entra_nella_distribuzione() -> None:
     assert len(bucato) >= 0.95 * len(giorni)
     assert not copertura_valida(bucato, giorni, max_buco=5)
     assert copertura_valida(giorni[:100] + giorni[103:], giorni, max_buco=5)
+
+
+def test_nessun_nodo_scritto_e_un_errore_qualche_nodo_scartato_no() -> None:
+    assert esito(1115, 0) == 1
+    assert esito(1115, 1100) == 0
+    assert esito(0, 0) == 0
