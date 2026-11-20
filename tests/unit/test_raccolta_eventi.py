@@ -74,6 +74,40 @@ def test_due_titoli_dello_stesso_giornale_sono_una_testata() -> None:
     assert conta_testate(fonti) == 2
 
 
+def test_un_titolo_ricopiato_non_e_una_seconda_testata() -> None:
+    originale = {
+        "testata": "Quotidiano Di Puglia",
+        "titolo": "Allagamenti a Taranto: chiusa la SS7",
+    }
+    copia = {"testata": "Zazoom Social News", "titolo": "Allagamenti a Taranto | chiusa la SS7"}
+    assert conta_testate((originale, copia)) == 1
+    # Chi ha copiato resta la stessa voce anche con un secondo titolo, in
+    # qualunque ordine arrivino le fonti.
+    altra = {"testata": "Zazoom Social News", "titolo": "Taranto sott'acqua"}
+    assert conta_testate((altra, copia, originale)) == 1
+    assert conta_testate((originale, copia, altra)) == 1
+    indipendente = {"testata": "ANSA", "titolo": "Maltempo, Taranto allagata"}
+    assert conta_testate((originale, copia, indipendente)) == 2
+
+
+async def test_delle_copie_resta_il_primo_titolo_uscito(monkeypatch: pytest.MonkeyPatch) -> None:
+    from limen.api.jobs import raccolta_eventi as job
+
+    ora = datetime(2026, 11, 20, 8, tzinfo=UTC)
+    primo = Titolo("Frana a Melito: chiusa la SS106", "Gazzetta del Sud", "https://x/1", ora)
+    copia = Titolo(
+        "Frana a Melito | chiusa la SS106", "Zazoom", "https://x/2", ora + timedelta(hours=1)
+    )
+    altro = Titolo("Smottamento a Scilla", "ANSA", "https://x/3", ora + timedelta(hours=2))
+
+    async def cerca(parola: str, *, giorni: int) -> list[Titolo]:
+        return [copia, primo, altro]
+
+    monkeypatch.setattr(job, "cerca", cerca)
+    titoli = await job.titoli_per_pericolo(giorni=3, massimi=10)
+    assert titoli[HazardType.LANDSLIDE] == [altro, primo]
+
+
 @pytest.mark.parametrize(
     ("regione", "aoi"),
     [
