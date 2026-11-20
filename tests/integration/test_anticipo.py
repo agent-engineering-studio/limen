@@ -114,3 +114,40 @@ async def test_il_pericolo_e_valutato_se_ha_girato_la_regione_dell_evento(
         # `job_runs` non è fra le tabelle di `reset_db`.
         async with acquire() as conn:
             await conn.execute("DELETE FROM job_runs WHERE host = 'test'")
+
+
+async def test_la_previsione_e_valutata_se_una_corsa_riuscita_puntava_all_evento(
+    reset_db: None, pg_pool: object
+) -> None:
+    from limen.api.jobs.ids import JOB_FORECAST_HISTORY
+
+    evento = datetime.now(UTC) - timedelta(hours=2)
+
+    async def valutata() -> bool:
+        m = await anticipo_repo.misura(
+            comuni=["000000"], hazard=HazardType.LANDSLIDE, evento_at=evento, tolleranza_ore=12
+        )
+        return bool(m["previsione_valutata"])
+
+    async def corsa(prima: timedelta, stato: str = "ok") -> None:
+        async with acquire() as conn:
+            await conn.execute(
+                "INSERT INTO job_runs (job_id, scope, host, status, started_at)"
+                " VALUES ($1, 'all', 'test', $2, $3)",
+                JOB_FORECAST_HISTORY,
+                stato,
+                evento - prima,
+            )
+
+    try:
+        assert not await valutata()
+        # Fallita, o partita sei giorni prima: non puntava all'evento.
+        await corsa(timedelta(hours=48), "error")
+        await corsa(timedelta(days=6))
+        assert not await valutata()
+        # Partita 48 h prima: il suo +48h cade sull'evento.
+        await corsa(timedelta(hours=48))
+        assert await valutata()
+    finally:
+        async with acquire() as conn:
+            await conn.execute("DELETE FROM job_runs WHERE host = 'test'")

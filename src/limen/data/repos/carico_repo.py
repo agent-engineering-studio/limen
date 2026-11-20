@@ -17,6 +17,11 @@ from limen.core.models.hazard import HazardType
 from limen.data.db import acquire
 from limen.data.repos.anticipo_repo import ATTESA_S
 
+#: Il carico legge tutto lo storico previsionale (9,5 milioni di righe al
+#: 20/11/2026): 157 s a database scarico, oltre i 180 s di ``ATTESA_S`` con un
+#: backtest che gira. È un report a mano, non la mappa.
+ATTESA_CARICO_S = 900.0
+
 
 @dataclass(frozen=True, slots=True)
 class Carico:
@@ -44,7 +49,7 @@ def _sql(nome: str = "carico.sql") -> str:
 async def misura(*, dal: datetime | None, al: datetime | None) -> dict[HazardType, Carico]:
     """Un pericolo senza giorni valutati nella finestra non c'è nel risultato."""
     async with acquire() as conn:
-        rows = await conn.fetch(_sql(), dal, al, JOB_FORECAST_HISTORY, timeout=ATTESA_S)
+        rows = await conn.fetch(_sql(), dal, al, JOB_FORECAST_HISTORY, timeout=ATTESA_CARICO_S)
     return {
         HazardType(r["hazard"]): Carico(
             hazard=HazardType(r["hazard"]),

@@ -109,7 +109,8 @@ Nell'ordine, il primo che vale:
 1. **`non_verificabile`** (nessun file, solo nel riepilogo) — evento prima di `storico_dal`; comune fuori copertura; oppure nessuna corsa di quel pericolo girata nei giorni prima; oppure `adesso_non_misurato` > 0 e nessun'altra riga misurata (il dato non c'era: «non misurato» non è «nessun pericolo»).
 2. **`anticipata`** — `anticipo_ore_moderato` ≥ 6 **e** `classe_prevista_max` è sopra `fondo_classe_max`. Se la classe prevista è la stessa che il comune aveva tutti i giorni prima, l'anticipo è lo sfondo, non un segnale: in quel caso l'anticipo che conta è `anticipo_ore_alto` (se il fondo è Moderato) e, se è `null`, si passa alle regole sotto.
 3. **`contemporanea`** — nessuna previsione utile, ma lo sweep orario era salito sopra il fondo prima dell'evento (`adesso_classe_max` sopra `fondo_classe_max`, con `adesso_primo_moderato` prima dell'evento).
-4. **`mancata`** — tutto il resto.
+4. **`non_verificabile`** anche qui se `previsione_valutata` è `false` e `corse` è vuoto: nessuna corsa previsionale riuscita puntava all'evento (worker fermo dal 13 al 19/11/2026), e il vuoto non è una previsione calma.
+5. **`mancata`** — tutto il resto.
 
 Esempio vero (frana di Melito di Porto Salvo, 10 ottobre 2026): 71 ore di «anticipo ≥ Moderato», ma Melito aveva celle in Moderato ogni giorno dal 29 settembre e la previsione non è mai salita ad Alto → `mancata`: niente file, solo il riepilogo all'utente con l'anticipo apparente e perché non conta.
 
