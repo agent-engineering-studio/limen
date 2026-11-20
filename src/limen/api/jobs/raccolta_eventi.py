@@ -90,7 +90,7 @@ _ORA = {
 async def titoli_per_pericolo(
     *, giorni: int, massimi: int, comuni_radar: int = 0
 ) -> dict[HazardType, list[Titolo]]:
-    """I titoli di ogni pericolo, senza doppioni, i più recenti per primi.
+    """I titoli di ogni pericolo, senza doppioni né copie, i più recenti per primi.
 
     ``comuni_radar``: quanti dei comuni dove il radar ha visto una pioggia rara
     confermata (#643) cercare per nome, per frane e allagamenti. La stampa
@@ -117,7 +117,14 @@ async def titoli_per_pericolo(
         visti: dict[str, Titolo] = {}
         for t in (t for r in risposte for t in r):
             visti.setdefault(t.url, t)
-        out[hazard] = sorted(visti.values(), key=lambda t: t.pubblicato, reverse=True)[:massimi]
+        # Di un titolo ricopiato da più testate resta il primo uscito: le copie
+        # non sono una seconda fonte (`conta_testate`) e sotto il tetto
+        # toglievano il posto a eventi veri (189 titoli di alluvione su 150
+        # il 20/11/2026).
+        originali: dict[str, Titolo] = {}
+        for t in sorted(visti.values(), key=lambda t: t.pubblicato):
+            originali.setdefault(candidati_eventi_repo.chiave_titolo(t.titolo) or t.url, t)
+        out[hazard] = sorted(originali.values(), key=lambda t: t.pubblicato, reverse=True)[:massimi]
     return out
 
 

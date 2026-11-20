@@ -323,11 +323,13 @@ extension points already:
 - **Fase 2a-2b wildfire (#61, #62) is DONE and the hazard is ENABLED**: the
   FWI chain, `wildfire.yaml`, the engine, the `FwiUpdate` workflow step,
   `limen fwi-backfill`, `limen backtest-wildfire`, the WUI static factor and
-  the SPA's per-hazard palette. Two caveats an operator must know:
-  `landuse_code` (CORINE) and `slope_deg` (DEM) are unpopulated in most
-  deployments, so the terrain term is constant and the wildfire map is
-  effectively the FWI map — which is what EFFIS publishes, but not yet
-  territory-modulated risk. The EFFIS perimeter service, on the other hand,
+  the SPA's per-hazard palette. `landuse_code` (CORINE 2018) and `slope_deg`
+  (DTM) are downloaded by the init (`scripts/load_static_data.sh`, step 3/7)
+  and filled for the whole country (312,547 and 311,879 cells out of 312,550
+  on 2026-11-20): the terrain term does modulate the FWI, and the `fuel`
+  table in `wildfire.yaml` is calibrated per CORINE class on the 2024-2026
+  backtests. Only a deployment that skips the geodata download falls back to
+  the FWI map. The EFFIS perimeter service
   **needs no credentials** — the earlier conclusion that it required CEMS
   accreditation was wrong, and the fix was in our own client. Measured on
   Basilicata against real perimeters: hit rate 79 % against a 43 % base rate
@@ -340,8 +342,8 @@ extension points already:
   `auth_codes` tables (dropped by migration 045). An operator web area is
   explicitly parked, not planned — see memory `auth-decision`.
 - DEM, CORINE and the geological map have ingest pipelines
-  (`integrations/{dem,corine,geological}`), but each is opt-in on a local
-  raster/shapefile: where the source is not configured the
+  (`integrations/{dem,corine,geological}`) and the init downloads their
+  sources (`limen geodati-sync`). Where a source is missing the
   `cell_static_factors` columns stay NULL and the bootstrap logs
   `static_bootstrap.skip`. `limen data-status` says which are loaded.
 

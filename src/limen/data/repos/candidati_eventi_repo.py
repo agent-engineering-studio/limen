@@ -51,9 +51,36 @@ def aoi_della_regione(regione: str | None) -> str | None:
     return "it-" + re.sub(r"[^a-z]+", "-", ascii_.lower()).strip("-")
 
 
+def chiave_titolo(titolo: str) -> str:
+    """Il titolo senza maiuscole, accenti e punteggiatura: un aggregatore che
+    ricopia un articolo cambia solo quelli («finiti gli ultimi ritocchi: ora»
+    diventa «finiti gli ultimi ritocchi | ora»)."""
+    return _norma(titolo)
+
+
 def conta_testate(fonti: tuple[dict[str, Any], ...]) -> int:
-    """Le testate diverse: due titoli dello stesso giornale sono una fonte."""
-    return len({f["testata"].strip().casefold() for f in fonti if f.get("testata")})
+    """Le testate indipendenti: due titoli dello stesso giornale sono una
+    fonte, e due testate con lo stesso titolo anche — un aggregatore che
+    ricopia (il 20/11/2026 Zazoom era la terza testata per numero di titoli,
+    tutti copie) o due giornali dello stesso gruppo con lo stesso articolo.
+    Chi ha copiato una volta resta la stessa voce per tutto l'evento."""
+    voce: dict[str, str] = {}
+
+    def capo(t: str) -> str:
+        while voce[t] != t:
+            t = voce[t]
+        return t
+
+    di_chi: dict[str, str] = {}
+    for f in fonti:
+        if not f.get("testata"):
+            continue
+        testata = f["testata"].strip().casefold()
+        voce.setdefault(testata, testata)
+        chiave = chiave_titolo(f.get("titolo") or "")
+        if chiave:
+            voce[capo(testata)] = capo(di_chi.setdefault(chiave, testata))
+    return len({capo(t) for t in voce})
 
 
 async def risolvi_comuni(nomi: tuple[str, ...], regione: str | None) -> list[str]:
