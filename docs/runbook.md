@@ -58,7 +58,20 @@ riavvia un container solo *unhealthy*, quindi il worker si sorveglia da sé:
 un thread fuori dall'event loop lo fa uscire se il battito non riesce per
 `LIMEN_WORKER_WATCHDOG_SECONDS` (900), e `restart: unless-stopped` lo
 riavvia (#611; il 13/11/2026 era rimasto fermo sei ore). Nei log l'uscita è
-`worker.sentinella.scaduta`. Le query del worker hanno 120 s di tetto
+`worker.sentinella.scaduta`.
+
+La sentinella non vede uno stop di **tutta** la macchina: dal 13 al 19/11/2026
+Docker è rimasto sospeso cinque giorni e mezzo, e con lui la sentinella. Al
+risveglio il worker misura il buco dall'ultimo battito nel database e, oltre
+`WORKER__INTERRUZIONE_MINUTI` (30; mai sotto un riavvio da sentinella), scrive `limen-worker-interruzione` in
+`job_runs`, logga `worker.interruzione` e manda una mail a
+`CONTRIBUTI__DESTINATARI` (#655). Per saperlo *mentre* succede serve
+`WORKER__PING_URL`: un monitor «push» (Uptime Kuma, healthchecks) **su un'altra
+macchina**, che avvisa quando i ping smettono. Su un Mac va tolta la
+sospensione automatica. Gli eventi di un periodo fermo risultano non
+verificabili, mai mancati.
+
+Le query del worker hanno 120 s di tetto
 (`LIMEN_WORKER_DB_TIMEOUT_SECONDS`), quelle dell'API 30. Non esistono più il sync
 settimanale ISPRA IdroGEO (il WFS risponde 401 agli anonimi, vedi «Mancano
 dati ISPRA»), né schedule autonomi per pulizia cache, drift o previsione:
