@@ -32,11 +32,11 @@ from pathlib import Path
 
 from ispra_idrogeo import (
     LANDSLIDE_LAYERS,
-    MOSAICS,
     PROVINCES,
     REGIONS,
     Dataset,
     IdroGEO,
+    Mosaic,
     extract,
     mosaic,
     opendata,
@@ -54,11 +54,14 @@ log = get_logger(__name__)
 #: Le aree con file IFFI propri: le 19 regioni e le due province autonome
 #: (il Trentino-Alto Adige non ne ha uno regionale).
 AREE: tuple[str, ...] = (*REGIONS.values(), PROVINCES[21], PROVINCES[22])
+#: I mosaici che legge ``geoserver_source``, nominati uno per uno: da 0.10.0
+#: ``MOSAICS`` contiene anche ``pai_frane_2024``, che si adotta con #670.
+MOSAICI: tuple[Mosaic, ...] = ("pai_frane", "idraulica")
 
 
 def dataset() -> list[Dataset]:
     """Cosa serve a ``geoserver_source``: 105 file IFFI e 2 mosaici."""
-    return [*iffi(), *(mosaic(nome) for nome in MOSAICS)]
+    return [*iffi(), *(mosaic(nome) for nome in MOSAICI)]
 
 
 @dataclass

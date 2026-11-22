@@ -56,6 +56,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+* **`ispra-idrogeo` 0.10.0.** Pin `~=0.10.0` (pyproject, `.mcp.json`, il
+  servizio `idrogeo-mcp` in compose, README e appendice C). Porta, senza
+  cambiare le risposte esistenti: `mosaic("pai_frane_2024")` (#670),
+  `dated_landslides` con la precisione di data e posizione (#668),
+  `reliability` per Comune (#669), `freshness`, `predisposition`, i tool MCP
+  `data_reliability` e `data_freshness`, e la correzione dei warehouse in sola
+  lettura aperti insieme. Download e indicatori PIR non cambiano: punteggi e
+  allerte restano uguali. Primo passo di #672.
+
 * **`ispra-idrogeo` 0.8.0.** Pin `~=0.8.0` (pyproject, `.mcp.json`, il
   servizio `idrogeo-mcp` in compose, README e appendice C). Ogni risposta di
   `idrogeo-mcp` ora porta la fonte con la licenza (IFFI ed eventi CC BY-SA
