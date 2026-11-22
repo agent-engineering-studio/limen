@@ -2008,14 +2008,14 @@ wheels = [
 
 [[package]]
 name = "ispra-idrogeo"
-version = "0.7.1"
+version = "0.8.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8f/63/7a26b67deafd6fe68215e8251ab6e8f7fe2632f452582d9ebc7f97d8966b/ispra_idrogeo-0.7.1.tar.gz", hash = "sha256:6972b3716108995913a7fba13fa64427252e70fe2ad232a69517f36c470f5367", size = 88569, upload-time = "2026-11-22T15:55:29.389Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1a/51/70c08e1e262d08e7832bee41453fc6312e7bc6dd44e7d9f83f141ea90555/ispra_idrogeo-0.8.0.tar.gz", hash = "sha256:b2ba02e126eb4c1e86c83c8f6f3df37591394f00f137ba0ef549731b447d005d", size = 98319, upload-time = "2026-11-22T16:29:09.764Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9a/07/0de6f25786d1d50bfacde0c2cc37940581a5828facdf0bfda83b0ed5ce10/ispra_idrogeo-0.7.1-py3-none-any.whl", hash = "sha256:775e09e0ad7d59bbf26544bd4eb72a954368d532b6a0ef52e6eb80a50a31cb1f", size = 74686, upload-time = "2026-11-22T15:55:28.173Z" },
+    { url = "https://files.pythonhosted.org/packages/41/5b/1455ae028e93d0cdc3dfc9529af2fa72461cb121ed1eb9033e3820e5d977/ispra_idrogeo-0.8.0-py3-none-any.whl", hash = "sha256:b714989e1cdb561cef266fdd7f9e2a4527ac8bdeae26371129a07dc5d490527c", size = 82038, upload-time = "2026-11-22T16:29:08.188Z" },
 ]
 
 [[package]]
@@ -2541,7 +2541,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "imageserver-export", specifier = "~=0.2.0" },
     { name = "ingv-shakemap", specifier = "~=0.2.0" },
-    { name = "ispra-idrogeo", specifier = "~=0.7.1" },
+    { name = "ispra-idrogeo", specifier = "~=0.8.0" },
     { name = "opentelemetry-api", specifier = ">=1.27" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.27" },
     { name = "opentelemetry-instrumentation-asyncpg", specifier = ">=0.48b0" },
