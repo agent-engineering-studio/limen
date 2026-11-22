@@ -107,3 +107,24 @@ def test_caine_excess_grows_with_intensity(thresholds) -> None:
 
 def test_caine_excess_handles_none_event(thresholds) -> None:
     assert caine_excess(None, caine=thresholds.caine) == 0.0
+
+
+def test_the_last_event_forgets_a_storm_followed_by_drizzle(thresholds) -> None:
+    """Default (``ultimo``): six dry hours and 2.5 mm after a storm reset the excess."""
+    storm_then_drizzle = _series([20, 30, 40, 20, 0, 0, 0, 0, 0, 0, 1.0, 1.5])
+    excess, event = compute_caine(storm_then_drizzle, caine=thresholds.caine)
+    assert thresholds.caine.event_reconstruction.scelta_evento == "ultimo"
+    assert event is not None and event.total_mm == pytest.approx(2.5)
+    assert excess == 0.0
+
+
+def test_the_strongest_event_keeps_the_storm(thresholds) -> None:
+    """``piu_forte``: the storm, not the drizzle after it, is compared with the curve."""
+    ricostruzione = thresholds.caine.event_reconstruction.model_copy(
+        update={"scelta_evento": "piu_forte"}
+    )
+    caine = thresholds.caine.model_copy(update={"event_reconstruction": ricostruzione})
+    storm_then_drizzle = _series([20, 30, 40, 20, 0, 0, 0, 0, 0, 0, 1.0, 1.5])
+    excess, event = compute_caine(storm_then_drizzle, caine=caine)
+    assert event is not None and event.total_mm == pytest.approx(110.0)
+    assert excess > 0.5

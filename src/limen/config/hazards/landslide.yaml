@@ -105,6 +105,12 @@ caine:
   event_reconstruction:
     no_rain_break_hours: 6
     min_event_mm:        2.0
+    # Quale evento della finestra si confronta con la curva: `ultimo` (oggi) o
+    # `piu_forte` (rainfall-thresholds 0.2). Con `ultimo` un nubifragio seguito
+    # da sei ore asciutte e 2,5 mm di pioviggine dà eccesso zero. Resta
+    # `ultimo` finché il backtest delle dodici finestre della #122 non misura
+    # `piu_forte`.
+    scelta_evento: ultimo
   # I-units: mm/h; D-units: h.
   macroregions:
     italy_default:

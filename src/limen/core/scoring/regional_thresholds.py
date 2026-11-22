@@ -166,6 +166,12 @@ class MeteoBlock(_StrictModel):
 class CaineEventReconstruction(_StrictModel):
     no_rain_break_hours: int = Field(..., gt=0)
     min_event_mm: float = Field(..., gt=0.0)
+    # Quale evento della serie si confronta con la curva. ``ultimo`` è il
+    # comportamento storico: dopo un nubifragio, sei ore asciutte e 2,5 mm di
+    # pioviggine l'eccesso torna a zero. ``piu_forte`` tiene l'evento più
+    # sopra la curva nella finestra del bundle (rainfall-thresholds 0.2,
+    # ``strongest_event``). Spento finché il backtest non lo misura.
+    scelta_evento: Literal["ultimo", "piu_forte"] = "ultimo"
 
 
 class CaineMacroregion(_StrictModel):
