@@ -2552,7 +2552,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.5" },
     { name = "pyyaml", specifier = ">=6.0" },
-    { name = "rainfall-thresholds", specifier = "~=0.2.0" },
+    { name = "rainfall-thresholds", specifier = "~=0.3.0" },
     { name = "rasterio", specifier = ">=1.3" },
     { name = "shapely", specifier = ">=2.0" },
     { name = "structlog", specifier = ">=24.4" },
@@ -4707,11 +4707,11 @@ wheels = [
 
 [[package]]
 name = "rainfall-thresholds"
-version = "0.2.0"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/c6/79/8fa269c864d80ae20e85f7808219312dc4547e93452e71c8cdcbcfc5a7a4/rainfall_thresholds-0.2.0.tar.gz", hash = "sha256:b0befe9e92b7b08cb8e1a13d3a7c31d49059c89939dc2c23e7c7b8e9e82d39a1", size = 25885, upload-time = "2026-11-22T15:37:10.747Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4f/d5/7920ceb695f366d23edd89af7f8969a4c9f1a9c5588b30b54f658e1b22df/rainfall_thresholds-0.3.0.tar.gz", hash = "sha256:526854025d7519fefe1cac9b12423f5532a6db2509b958c20cf5d354f5efb070", size = 37663, upload-time = "2026-11-22T16:27:53.454Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/89/51/208177f166ed021d735086d0f02806bb362379be96c88d018a293b02779d/rainfall_thresholds-0.2.0-py3-none-any.whl", hash = "sha256:76989b5bce6d18362599dc9864b8ff1b8d64f9c797251e03e4e7d27f82014fd3", size = 20526, upload-time = "2026-11-22T15:37:09.532Z" },
+    { url = "https://files.pythonhosted.org/packages/42/ce/5ef4170b13f07996a3068d84cb5770fdfb6e4b52d71dbe1167b2c2dbc323/rainfall_thresholds-0.3.0-py3-none-any.whl", hash = "sha256:e4de9aad6710c8815e95856eb34efe86bc6897f6a272024247206e1adbf2dcb7", size = 32401, upload-time = "2026-11-22T16:27:52.4Z" },
 ]
 
 [[package]]
