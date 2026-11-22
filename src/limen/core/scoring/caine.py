@@ -29,7 +29,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import timedelta
 
-from rainfall_thresholds import PowerLawThreshold, RainfallEvent, latest_event
+from rainfall_thresholds import PowerLawThreshold, RainfallEvent, latest_event, strongest_event
 from rainfall_thresholds import reconstruct_events as _reconstruct
 
 from limen.core.models.risk import RainfallSample, RainfallSeries
@@ -108,7 +108,9 @@ def compute_caine(
 ) -> tuple[float, RainfallEvent | None]:
     """End-to-end Caine computation for a rainfall series.
 
-    Returns ``(caine_excess, latest_event)``. ``as_of_window``, when set,
+    Returns ``(caine_excess, event)``: the last event, or with
+    ``event_reconstruction.scelta_evento: piu_forte`` the one furthest above
+    the curve. ``as_of_window``, when set,
     restricts event reconstruction to samples within that trailing
     window relative to the latest sample — useful at runtime where the
     bundle assembler may hand the engine a long series.
@@ -124,7 +126,10 @@ def compute_caine(
         no_rain_break_hours=caine.event_reconstruction.no_rain_break_hours,
         min_event_mm=caine.event_reconstruction.min_event_mm,
     )
-    event = latest_event(events)
+    if caine.event_reconstruction.scelta_evento == "piu_forte":
+        event = strongest_event(events, _threshold(caine, macroregion, alpha_factor))
+    else:
+        event = latest_event(events)
     excess = caine_excess(event, caine=caine, macroregion=macroregion, alpha_factor=alpha_factor)
     return excess, event
 
