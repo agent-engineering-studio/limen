@@ -56,6 +56,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+* **`ispra-idrogeo` 0.7.1.** Pin `~=0.7.1` (pyproject, `.mcp.json`, il
+  servizio `idrogeo-mcp` in compose, README e appendice C). La 0.7.1 corregge
+  le ricerche delle frane, che dal 9/11 ricevevano HTTP 400 da IdroGEO
+  (ispra-idrogeo#9), e porta i campi di data e di accuratezza della posizione.
+  Riconosce anche che IFFI ed eventi sono CC BY-SA 4.0, come già dice
+  `config/dati.yaml`. Limen usa solo i download e gli indicatori PIR, che non
+  cambiano: punteggi e allerte restano uguali.
+
 * **L'installazione carica anche gli eventi alluvione.** `make init` e
   `nuovo_host.sh --da-zero` lanciano `ingest-events --hazard flood`: il truth
   set di `backtest-flood` e i perimetri sulla mappa ci sono subito, non dopo la
