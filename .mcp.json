@@ -2,7 +2,7 @@
   "mcpServers": {
     "idrogeo": {
       "command": "uvx",
-      "args": ["--from", "ispra-idrogeo[mcp]~=0.7.1", "idrogeo-mcp"]
+      "args": ["--from", "ispra-idrogeo[mcp]~=0.8.0", "idrogeo-mcp"]
     },
     "imageserver": {
       "command": "uvx",

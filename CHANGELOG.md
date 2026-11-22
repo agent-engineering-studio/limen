@@ -56,6 +56,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+* **`ispra-idrogeo` 0.8.0.** Pin `~=0.8.0` (pyproject, `.mcp.json`, il
+  servizio `idrogeo-mcp` in compose, README e appendice C). Ogni risposta di
+  `idrogeo-mcp` ora porta la fonte con la licenza (IFFI ed eventi CC BY-SA
+  4.0, indicatori CC BY 4.0) e l'ora di lettura; le liste arrivano sotto
+  `results`; c'è un tool `check_answer` per i numeri inventati. Gli agenti che
+  usano il server (Claude Code, mcp-geo-server) leggono la nuova forma senza
+  modifiche; nessun codice di Limen legge quel JSON. Download e indicatori PIR
+  non cambiano: punteggi e allerte restano uguali.
+
 * **`ispra-idrogeo` 0.7.1.** Pin `~=0.7.1` (pyproject, `.mcp.json`, il
   servizio `idrogeo-mcp` in compose, README e appendice C). La 0.7.1 corregge
   le ricerche delle frane, che dal 9/11 ricevevano HTTP 400 da IdroGEO
