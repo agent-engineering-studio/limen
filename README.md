@@ -460,7 +460,7 @@ rule stays in Limen. The numbers that tune a hazard stay in
 | [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) · [docs](https://agentengineering.it/copernicus-ems/) | `~=0.7.1` | Apache-2.0 |
 | [`egms-client`](https://pypi.org/project/egms-client/) · [docs](https://agentengineering.it/egms-client/) | `~=0.7.0` | Apache-2.0 |
 | [`firms-client`](https://pypi.org/project/firms-client/) · [docs](https://agentengineering.it/firms-client/) | `~=0.5.0` | Apache-2.0 |
-| [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) · [docs](https://agentengineering.it/ispra-idrogeo/) | `~=0.8.0` | Apache-2.0 |
+| [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) · [docs](https://agentengineering.it/ispra-idrogeo/) | `~=0.10.0` | Apache-2.0 |
 | [`fwi-chain`](https://pypi.org/project/fwi-chain/) · [docs](https://agentengineering.it/fwi-chain/) | `~=1.0.0` | Apache-2.0 |
 | [`effis-client`](https://pypi.org/project/effis-client/) · [docs](https://agentengineering.it/effis-client/) | `~=0.1.2` | Apache-2.0 |
 | [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) · [docs](https://agentengineering.it/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |
