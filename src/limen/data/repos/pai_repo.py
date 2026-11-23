@@ -112,6 +112,23 @@ async def upsert_many(items: Iterable[PAIHazard]) -> int:
     return len(items_list)
 
 
+async def delete_prefisso(prefisso: str, bbox: tuple[float, float, float, float]) -> int:
+    """Toglie dal riquadro i poligoni il cui id comincia per ``prefisso``, e i loro suddivisi."""
+    async with acquire() as conn, conn.transaction():
+        righe = await conn.fetch(
+            "DELETE FROM pai_hazard WHERE starts_with(id, $1) "
+            "AND geom && ST_MakeEnvelope($2, $3, $4, $5, 4326) RETURNING id",
+            prefisso,
+            *bbox,
+        )
+        ids = [r["id"] for r in righe]
+        if ids:
+            await conn.execute("DELETE FROM pai_hazard_subdiv WHERE id = ANY($1::text[])", ids)
+    if ids:
+        log.info("pai.delete_prefisso", prefisso=prefisso, count=len(ids))
+    return len(ids)
+
+
 async def count_pai() -> int:
     async with acquire() as conn:
         row = await conn.fetchrow("SELECT COUNT(*)::bigint AS n FROM pai_hazard")

@@ -12,7 +12,8 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from limen.config.catalogo_dati import CatalogoDati, Livello, carica_catalogo
+from limen.config.catalogo_dati import CatalogoDati, Livello, carica_catalogo, catalogo_per
+from limen.config.settings import get_settings
 from limen.core.models.hazard import HazardType
 
 
@@ -112,3 +113,39 @@ def test_gli_indicatori_pir_hanno_licenza_e_citazione() -> None:
     assert pir.misura.tabella == "esposizione_comuni"
     for voce in ("iffi", "pai_frana", "idraulica"):
         assert catalogo.voce(voce).licenza == "CC BY-SA 4.0"
+
+
+def test_la_voce_pai_segue_il_mosaico_scelto(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#670: la v. 5.0 è CC BY 4.0 e ha un'altra citazione; il resto del catalogo non cambia."""
+    v4 = catalogo_per("pai_frane")
+    v5 = catalogo_per("pai_frane_2024")
+    assert carica_catalogo() == v4
+    assert "(v. 4.0 \u2013 2020-2021)" in (v4.voce("pai_frana").attribuzione or "")
+
+    pai = v5.voce("pai_frana")
+    assert pai.licenza == "CC BY 4.0"
+    assert pai.attribuzione == (
+        "ISPRA - Mosaicatura nazionale delle aree a pericolosità da frana PAI "
+        "(v. 5.0 \u2013 2024) \u2013 Piattaforma IdroGEO"
+    )
+    assert pai.fonte.endswith("2024")
+    assert pai.peso_gb == 0.79
+    assert pai.misura == v4.voce("pai_frana").misura
+    assert [v for v in v5.voci if v.id != "pai_frana"] == [
+        v for v in v4.voci if v.id != "pai_frana"
+    ]
+
+    monkeypatch.setenv("GEODATI__MOSAICO_PAI", "pai_frane_2024")
+    get_settings.cache_clear()
+    try:
+        assert carica_catalogo().voce("pai_frana").licenza == "CC BY 4.0"
+    finally:
+        monkeypatch.delenv("GEODATI__MOSAICO_PAI")
+        get_settings.cache_clear()
+
+
+def test_un_mosaico_pai_sconosciuto_non_passa() -> None:
+    from limen.config.settings import GeodatiSettings
+
+    with pytest.raises(ValidationError):
+        GeodatiSettings(mosaico_pai="pai_frane_2030")  # type: ignore[arg-type]

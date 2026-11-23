@@ -69,6 +69,18 @@ async def find(source: str, dataset: str, version: str) -> DatasetVersion | None
     )
 
 
+async def latest(source: str, dataset: str) -> DatasetVersion | None:
+    """L'ultima versione registrata per ``(source, dataset)``, se c'è."""
+    async with acquire() as conn:
+        versione = await conn.fetchval(
+            "SELECT version FROM dataset_versions WHERE source = $1 AND dataset = $2 "
+            "ORDER BY fetched_at DESC, id DESC LIMIT 1",
+            source,
+            dataset,
+        )
+    return None if versione is None else await find(source, dataset, versione)
+
+
 async def record(
     *,
     source: str,

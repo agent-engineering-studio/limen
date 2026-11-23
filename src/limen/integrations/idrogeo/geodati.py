@@ -62,14 +62,15 @@ log = get_logger(__name__)
 #: Le aree con file IFFI propri: le 19 regioni e le due province autonome
 #: (il Trentino-Alto Adige non ne ha uno regionale).
 AREE: tuple[str, ...] = (*REGIONS.values(), PROVINCES[21], PROVINCES[22])
-#: I mosaici che legge ``geoserver_source``, nominati uno per uno: da 0.10.0
-#: ``MOSAICS`` contiene anche ``pai_frane_2024``, che si adotta con #670.
-MOSAICI: tuple[Mosaic, ...] = ("pai_frane", "idraulica")
 
 
-def dataset() -> list[Dataset]:
-    """Cosa serve a ``geoserver_source``: 105 file IFFI e 2 mosaici."""
-    return [*iffi(), *(mosaic(nome) for nome in MOSAICI)]
+def dataset(mosaico_pai: Mosaic) -> list[Dataset]:
+    """Cosa serve a ``geoserver_source``: 105 file IFFI e 2 mosaici.
+
+    Il mosaico PAI è quello scelto con ``GEODATI__MOSAICO_PAI`` (#670):
+    l'altro non si scarica.
+    """
+    return [*iffi(), mosaic(mosaico_pai), mosaic("idraulica")]
 
 
 @dataclass
@@ -152,7 +153,7 @@ async def sync_geodati(s: GeodatiSettings) -> Esito:
     dove = cartella_geoserver()
     dove.mkdir(parents=True, exist_ok=True)
     pulisci_appoggi(dove)
-    esito = await scarica_idrogeo(dataset(), s, dove)
+    esito = await scarica_idrogeo(dataset(s.mosaico_pai), s, dove)
     idrogeo = IdroGEO(await SharedHttpClient.get(), retries=0)
     # Il resto di quello che geoserver-init carica: ISTAT, CORINE, geolitologia.
     scaricati, falliti = await sync_dati_base(idrogeo, dove)

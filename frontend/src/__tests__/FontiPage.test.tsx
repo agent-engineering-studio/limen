@@ -1,13 +1,35 @@
 // La pagina delle fonti (#277): tutte le fonti, per ruolo, e il logo solo
 // dove il titolare lo concede.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { render, screen } from "../test-utils";
+import { defaultApiClient } from "../lib/api-client";
+import { render, screen, within } from "../test-utils";
 import FontiPage, { URL_PROPOSTA_DATO } from "../components/FontiPage";
 import { FONTI, ORDINE_RUOLI } from "../lib/fonti";
 
 describe("fonti dei dati", () => {
+  // Per primo: la provenienza si chiede una volta per pagina, e un render
+  // precedente la terrebbe già in volo senza la risposta di questo test.
+  it("la scheda PAI dichiara licenza e citazione del mosaico in uso (#670)", async () => {
+    vi.spyOn(defaultApiClient, "getProvenienza").mockResolvedValue({
+      motore: "deterministic",
+      sfidante_ml_attivo: false,
+      meteo_modello: "best_match",
+      correttore_pioggia: { stato: "raccolta_dati", nodi_raccolti: 0, nodi_obiettivo: 150 },
+      spiegazioni_modello: null,
+      pai_frana: {
+        licenza: "CC BY 4.0",
+        attribuzione: "ISPRA - Mosaicatura PAI (v. 5.0 – 2024) – Piattaforma IdroGEO",
+      },
+    });
+    render(<FontiPage />);
+    const scheda = document.getElementById("fonte-ispra-pai");
+    expect(scheda).not.toBeNull();
+    expect(await within(scheda!).findByText("CC BY 4.0")).toBeInTheDocument();
+    expect(within(scheda!).getByText(/v\. 5\.0 – 2024/)).toBeInTheDocument();
+  });
+
   it("ogni fonte ha un id unico, un ruolo noto, licenza e link", () => {
     const ids = FONTI.map((f) => f.id);
     expect(new Set(ids).size).toBe(ids.length);

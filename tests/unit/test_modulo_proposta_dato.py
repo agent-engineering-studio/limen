@@ -17,7 +17,7 @@ CATALOGO = RADICE / "src" / "limen" / "config" / "dati.yaml"
 
 # Le chiavi che scrive solo Limen, dopo la misura: come si conta la copertura,
 # con quale comando o variabile si procura il dato, da quale altro dato deriva.
-SOLO_DI_LIMEN = {"id", "misura", "procura_con", "variabile", "deriva_da"}
+SOLO_DI_LIMEN = {"id", "misura", "procura_con", "variabile", "deriva_da", "varianti"}
 OBBLIGATORI = {
     "nome",
     "a_cosa_serve",

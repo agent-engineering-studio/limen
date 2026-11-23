@@ -60,13 +60,23 @@ async def test_il_retry_riprova_un_503_ma_non_un_404() -> None:
 
 
 def test_i_file_sono_quelli_che_legge_geoserver_source() -> None:
-    nomi = [d.filename for d in geodati.dataset()]
+    nomi = [d.filename for d in geodati.dataset("pai_frane")]
     assert len(nomi) == 5 * 21 + 2
+    assert "Mosaicatura_ISPRA_2020_2021_aree_pericolosita_frana_PAI.zip" in nomi
     # Regione per regione, con i nomi delle tabelle che il loader cerca.
     assert "frane_piff_puglia_opendata.zip" in nomi
     assert "frane_poly_bolzano_opendata.zip" in nomi
     assert not any("_ispra_opendata" in n for n in nomi)
     assert "Mosaicatura_ISPRA_2020_aree_pericolosita_idraulica.zip" in nomi
+
+
+def test_il_mosaico_pai_scaricato_e_quello_scelto() -> None:
+    """#670: con la v. 5.0 scelta la v. 4.0 (1,2 GB) non si scarica più."""
+    assert GeodatiSettings().mosaico_pai == "pai_frane"
+    nomi = [d.filename for d in geodati.dataset("pai_frane_2024")]
+    assert len(nomi) == 5 * 21 + 2
+    assert "Mosaicatura_ISPRA_2024_pericolosita_frana_PAI.zip" in nomi
+    assert not any("2020_2021" in n for n in nomi)
 
 
 def test_la_cartella_e_quella_di_geoserver_init(monkeypatch: pytest.MonkeyPatch) -> None:

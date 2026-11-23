@@ -707,6 +707,8 @@ export interface ProvenienzaResponse {
     nodi_obiettivo: number;
   };
   spiegazioni_modello: string | null;
+  /** Licenza e citazione del mosaico PAI in uso (#670); assente su un'API più vecchia. */
+  pai_frana?: { licenza: string; attribuzione: string | null };
 }
 
 /** `GET /api/regioni`: una regione nella pagina «Regioni da monitorare».

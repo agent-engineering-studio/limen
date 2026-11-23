@@ -19,6 +19,12 @@ tabella nuova si costruisce accanto alla vecchia e si scambia alla fine, in
 una transazione: chi legge vede o la vecchia o la nuova, mai una a metà.
 Rieseguire non scrive niente se lo shapefile non è cambiato (mtime e
 dimensione nel commento della tabella).
+
+La mosaicatura PAI v. 5.0 (2024, #670) non è uno shapefile ma un File
+Geodatabase: una cartella ``.gdb`` con un solo layer, che GDAL legge con il
+driver OpenFileGDB. Entra con le stesse convenzioni; cambia solo come si
+prende un blocco (vedi ``_blocco``). Dei due mosaici PAI si carica quello
+scelto con ``GEODATI__MOSAICO_PAI``: l'altro, se è nella cartella, resta lì.
 """
 
 from __future__ import annotations
@@ -32,7 +38,9 @@ from pathlib import Path
 from typing import Any
 
 import asyncpg
+from ispra_idrogeo import MOSAICS, Mosaic
 
+from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.data.db import acquire
 
@@ -55,7 +63,6 @@ _CARTELLE = (
     "frane_piff_*_opendata",
     "aree_poly_*_opendata",
     "dgpv_poly_*_opendata",
-    "Mosaicatura_ISPRA_2020_2021_aree_pericolosita_frana_PAI",
     "Mosaicatura_ISPRA_2020_aree_pericolosita_idraulica",
     "Limiti01012023_g/Com01012023_g",
 )
@@ -72,20 +79,29 @@ def _identificatore(nome: str, *, accorcia: bool = True) -> str:
     return pulito or "layer"
 
 
+def _in_cartella(cartella: Path) -> list[Path]:
+    return [*cartella.glob("*.shp"), *cartella.glob("*.gdb")]
+
+
 def nome_tabella(shp: Path) -> str:
-    """Il nome che mcp-geo-server dà alla tabella di ``shp``."""
-    fratelli = [p for p in shp.parent.glob("*.shp") if p.is_file()]
-    base = shp.parent.name if len(fratelli) == 1 else f"{shp.parent.name}_{shp.stem}"
+    """Il nome che mcp-geo-server dà alla tabella di ``shp`` (shapefile o ``.gdb``)."""
+    base = (
+        shp.parent.name if len(_in_cartella(shp.parent)) == 1 else f"{shp.parent.name}_{shp.stem}"
+    )
     return _identificatore(base)
 
 
-def shapefile(dove: Path) -> list[Path]:
-    """Gli shapefile che Limen legge, in ordine stabile."""
-    cartelle = (c for schema in _CARTELLE for c in dove.glob(schema))
-    return sorted(shp for cartella in cartelle for shp in cartella.glob("*.shp"))
+def sorgenti(dove: Path, mosaico_pai: Mosaic) -> list[Path]:
+    """Gli shapefile (e il ``.gdb`` del mosaico PAI 2024) che Limen legge, in ordine stabile."""
+    cartelle = (c for schema in (*_CARTELLE, MOSAICS[mosaico_pai]) for c in dove.glob(schema))
+    return sorted(s for cartella in cartelle for s in _in_cartella(cartella))
 
 
 def _impronta(shp: Path) -> str:
+    if shp.is_dir():
+        # Un File Geodatabase è una cartella: cambia se cambia uno dei suoi file.
+        stati = [p.stat() for p in shp.iterdir() if p.is_file()]
+        return f"{max((s.st_mtime_ns for s in stati), default=0)}:{sum(s.st_size for s in stati)}"
     parti = [shp, shp.with_suffix(".dbf")]
     return ";".join(f"{p.stat().st_mtime_ns}:{p.stat().st_size}" for p in parti if p.exists())
 
@@ -128,7 +144,13 @@ def _blocco(shp: Path, primo: int, quanti: int) -> list[tuple[Any, ...]]:
     import numpy as np
     from pyogrio.raw import read
 
-    _, _, geometrie, campi = read(shp, fids=np.arange(primo, primo + quanti))
+    if shp.suffix == ".gdb":
+        # Per posizione e non per FID: in un geodatabase il FID è `OBJECTID`,
+        # che parte da 1 e può avere buchi. Il salto è diretto anche qui
+        # (misurato sul mosaico 2024: 0,02 s per 1.000 poligoni, in coda al file).
+        _, _, geometrie, campi = read(shp, skip_features=primo, max_features=quanti)
+    else:
+        _, _, geometrie, campi = read(shp, fids=np.arange(primo, primo + quanti))
     return [
         (primo + i + 1, bytes(geometrie[i]), *(_testo(c[i]) for c in campi))
         for i in range(len(geometrie))
@@ -201,7 +223,7 @@ async def carica_vettori(dove: Path, *, forza: bool = False, scelti: Sequence[Pa
     """Carica gli shapefile di ``dove`` nello schema ``sorgenti``; uno che fallisce non
     ferma gli altri."""
     esito = Esito(caricate={}, invariate=[], fallite={})
-    for shp in scelti or shapefile(dove):
+    for shp in scelti or sorgenti(dove, get_settings().geodati.mosaico_pai):
         tabella = nome_tabella(shp)
         impronta = _impronta(shp)
         async with acquire() as conn:
@@ -228,4 +250,4 @@ async def carica_vettori(dove: Path, *, forza: bool = False, scelti: Sequence[Pa
     return esito
 
 
-__all__ = ["SCHEMA", "Esito", "carica_vettori", "nome_tabella", "shapefile"]
+__all__ = ["SCHEMA", "Esito", "carica_vettori", "nome_tabella", "sorgenti"]

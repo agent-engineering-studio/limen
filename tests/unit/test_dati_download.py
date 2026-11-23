@@ -32,6 +32,47 @@ def test_ogni_voce_che_si_scarica_ha_un_procuratore() -> None:
     assert set(proc) == scaricabili
 
 
+@pytest.mark.parametrize(
+    ("mosaico", "atteso"),
+    [
+        ("pai_frane", "Mosaicatura_ISPRA_2020_2021_aree_pericolosita_frana_PAI.zip"),
+        ("pai_frane_2024", "Mosaicatura_ISPRA_2024_pericolosita_frana_PAI.zip"),
+    ],
+)
+async def test_il_procuratore_pai_scarica_e_misura_il_mosaico_scelto(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, mosaico: str, atteso: str
+) -> None:
+    """#670: la pagina di installazione scarica lo stesso mosaico di `make static-data`."""
+    from limen.config.settings import get_settings
+    from limen.integrations.idrogeo import geodati
+
+    for nome in (
+        "Mosaicatura_ISPRA_2020_2021_aree_pericolosita_frana_PAI.zip",
+        "Mosaicatura_ISPRA_2024_pericolosita_frana_PAI.zip.part",
+        "Mosaicatura_ISPRA_2024_pericolosita_frana_PAI.zip",
+    ):
+        (tmp_path / nome).write_bytes(b"x")
+    chiesti: list[str] = []
+
+    async def scarica(scelti: list[Any], _s: object, _dove: Path) -> geodati.Esito:
+        chiesti.extend(d.filename for d in scelti)
+        return geodati.Esito()
+
+    monkeypatch.setattr(geodati, "scarica_idrogeo", scarica)
+    monkeypatch.setenv("GEOSERVER_SHAPEFILE_DIR", str(tmp_path))
+    monkeypatch.setenv("GEODATI__MOSAICO_PAI", mosaico)
+    get_settings.cache_clear()
+    try:
+        pai = dd.procuratori()["pai_frana"]
+        await pai.scarica()
+    finally:
+        monkeypatch.delenv("GEODATI__MOSAICO_PAI")
+        get_settings.cache_clear()
+    assert chiesti == [atteso]
+    assert all(p.name.startswith(atteso) for p in pai.file())
+    assert atteso in {p.name for p in pai.file()}
+
+
 def test_misura_byte_somma_file_e_cartelle(tmp_path: Path) -> None:
     (tmp_path / "a.zip").write_bytes(b"x" * 10)
     (tmp_path / "a.zip.part").write_bytes(b"x" * 5)
