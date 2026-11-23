@@ -585,7 +585,7 @@ def scrivi(
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     nome = f"misura_soglia_radar_{STRUMENTO_DI_OGGI.year}_{(fine - timedelta(days=1)).year}"
     with (REPORTS_DIR / f"{nome}.csv").open("w", newline="", encoding="utf-8") as f:
-        scrittore = csv.writer(f)
+        scrittore = csv.writer(f, lineterminator="\n")
         scrittore.writerow(_CAMPI)
         for frana in frane:
             valori = [frana.macro if c == "macro" else getattr(frana, c) for c in _CAMPI]
@@ -621,7 +621,7 @@ def scrivi(
         *_sezione_curva(frane),
     ]
     with (REPORTS_DIR / f"{nome}_gruppi.csv").open("w", newline="", encoding="utf-8") as f:
-        scrittore = csv.writer(f)
+        scrittore = csv.writer(f, lineterminator="\n")
         scrittore.writerow(_CAMPI_RIEPILOGO)
         for riga in riepilogo:
             scrittore.writerow([round(v, 4) if isinstance(v, float) else v for v in riga])
