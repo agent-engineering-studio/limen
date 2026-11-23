@@ -333,7 +333,13 @@ def controlla_pioggia(testo: str, fatti: list[dict[str, float]], messaggio: str)
     """
     if not fatti:
         return
-    sbagliati = check_text(senza_citazioni(testo), fatti, question=messaggio)
+    try:
+        sbagliati = check_text(senza_citazioni(testo), fatti, question=messaggio)
+    except ValueError as exc:
+        # La libreria legge «10.10.26» come un numero e non lo converte: un
+        # controllo che dà solo un avviso non deve fermare il racconto.
+        log.warning("briefing.pioggia.controllo_fallito", error=str(exc))
+        return
     if sbagliati:
         log.warning("briefing.pioggia.numeri_non_trovati", numeri=[m.text for m in sbagliati[:10]])
 

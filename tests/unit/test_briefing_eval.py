@@ -100,3 +100,15 @@ def test_i_numeri_di_pioggia_del_racconto_si_controllano_contro_l_evento() -> No
         controlla_pioggia("Sono caduti 99 mm.", [], messaggio)
     assert [e["event"] for e in log] == ["briefing.pioggia.numeri_non_trovati"]
     assert log[0]["numeri"] == ["99 mm"]
+
+
+def test_un_testo_che_il_controllo_non_sa_leggere_non_ferma_il_racconto() -> None:
+    """Una data scritta «10.10.26» fa sollevare ValueError alla libreria."""
+    import structlog
+
+    from limen.agents.chat_agents.briefing import controlla_pioggia
+
+    fatti = [{"cumulated_mm": 145}]
+    with structlog.testing.capture_logs() as log:
+        controlla_pioggia("Sono caduti 145 mm il 10.10.26.", fatti, "")
+    assert [e["event"] for e in log] == ["briefing.pioggia.controllo_fallito"]
