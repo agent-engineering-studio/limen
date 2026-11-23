@@ -20,6 +20,15 @@ ogni notte e l'ETag cambia con loro, quindi un file scaricato da meno di
 ``GEODATI__RIVALIDA_DOPO_GIORNI`` non si chiede neanche; passata la soglia,
 uno davvero invariato (i mosaici) costa un 304. Il download è in streaming
 (i mosaici pesano 1,2 e 0,75 GB) e il retry è quello comune di ``_http``.
+
+Solo l'API pubblica di ``ispra_idrogeo`` (#664). «Scaricato da poco» si legge
+dalla data dello ZIP, che ``IdroGEO.download`` riscrive solo quando arriva un
+file nuovo (un 304 non lo tocca), invece che dal ``.meta.json`` interno alla
+libreria. ``IdroGEO.head`` non serve qui: costa una richiesta, ed è proprio
+quella che il salto evita. ``IdroGEO.fetch`` farebbe scaricamento ed
+estrazione insieme, ma non dice se il file è cambiato (l'esito lo conta) né
+distingue un'estrazione fallita da un download fallito: si usano i suoi due
+pezzi pubblici, ``download`` ed ``extract``.
 """
 
 from __future__ import annotations
@@ -41,7 +50,6 @@ from ispra_idrogeo import (
     mosaic,
     opendata,
 )
-from ispra_idrogeo.cache import meta_path
 
 from limen.config.percorsi import cartella_geoserver
 from limen.config.settings import GeodatiSettings
@@ -80,7 +88,7 @@ def _recente(path: Path, giorni: int) -> bool:
 
 async def _uno(idrogeo: IdroGEO, ds: Dataset, dove: Path, esito: Esito, *, giorni: int) -> None:
     estratta = dove / ds.stem
-    if estratta.is_dir() and _recente(meta_path(dove / ds.filename), giorni):
+    if estratta.is_dir() and _recente(dove / ds.filename, giorni):
         esito.invariati += 1
         return
     try:
@@ -89,10 +97,10 @@ async def _uno(idrogeo: IdroGEO, ds: Dataset, dove: Path, esito: Esito, *, giorn
             try:
                 await asyncio.to_thread(extract, scaricato.path, estratta)
             except Exception:
-                # Uno ZIP rotto con il suo ETag riceverebbe 304 per sempre:
-                # via tutti e due, così il prossimo giro lo riscarica.
+                # Uno ZIP rotto con il suo ETag riceverebbe 304 per sempre: via
+                # lo ZIP, e senza file la libreria non manda più l'ETag (rifà
+                # un GET pieno), così il prossimo giro lo riscarica.
                 scaricato.path.unlink(missing_ok=True)
-                meta_path(scaricato.path).unlink(missing_ok=True)
                 raise
     except Exception as exc:  # un file che non arriva non ferma gli altri
         log.warning("geodati.file_fallito", file=ds.filename, error=str(exc)[:300])

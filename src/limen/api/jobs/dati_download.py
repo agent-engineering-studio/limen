@@ -31,8 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
-from ispra_idrogeo import Dataset
-from ispra_idrogeo.sources import Mosaic
+from ispra_idrogeo import Dataset, Mosaic
 
 from limen.config.catalogo_dati import CatalogoDati, carica_catalogo
 from limen.config.percorsi import cartella_geoserver, radice_dati
