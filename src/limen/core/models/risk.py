@@ -216,6 +216,20 @@ class StaticBreakdown(_Frozen):
     litho_weight: float = Field(..., ge=0.0, le=1.0)
 
 
+class EventoPioggia(_Frozen):
+    """L'evento di pioggia che la curva di Caine ha guardato, con le sue unità.
+
+    Serve a chi racconta il punteggio (#678): «145 mm in 7 ore contro una
+    soglia di 2,4 mm/h» invece di «soglia superata sì/no». Non entra nel
+    punteggio, che legge ``caine_excess``.
+    """
+
+    durata_h: float = Field(..., gt=0.0)
+    cumulata_mm: float = Field(..., ge=0.0)
+    intensita_mm_h: float = Field(..., ge=0.0)
+    soglia_mm_h: float = Field(..., ge=0.0)
+
+
 class MeteoBreakdown(_Frozen):
     caine_excess: float = Field(..., ge=0.0)
     caine_norm: float = Field(..., ge=0.0, le=1.0)
@@ -227,6 +241,8 @@ class MeteoBreakdown(_Frozen):
     cumulata_norm: float | None = Field(default=None, ge=0.0, le=1.0)
     # #441: di quanto è scesa la soglia di pioggia per i terremoti recenti.
     riduzione_sismica: float = Field(default=0.0, ge=0.0, lt=1.0)
+    # #678: l'evento confrontato con la curva; None senza pioggia nella finestra.
+    evento_pioggia: EventoPioggia | None = None
     # V1.5: which inputs came from in-situ sensors (vs Open-Meteo).
     # Empty tuple on the pure V1 path.
     measured_overrides: tuple[str, ...] = ()
@@ -397,7 +413,11 @@ class ComponentBreakdown(HazardBreakdown):
             "static_terms": self.static_terms.model_dump(),
             # Senza l'innesco `cumulata` le chiavi restano quelle di prima.
             "meteo_terms": self.meteo_terms.model_dump(
-                exclude={"cumulata_norm"} if self.meteo_terms.cumulata_norm is None else None
+                exclude={
+                    campo
+                    for campo in ("cumulata_norm", "evento_pioggia")
+                    if getattr(self.meteo_terms, campo) is None
+                }
             ),
         }
 
@@ -656,6 +676,7 @@ __all__: Sequence[str] = (
     "CellFeatureBundle",
     "ComponentBreakdown",
     "DynamicInputs",
+    "EventoPioggia",
     "FireWeatherState",
     "FloodBreakdown",
     "HazardBreakdown",

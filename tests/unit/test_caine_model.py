@@ -6,6 +6,7 @@ its YAML config + bundle, so we can test it deterministically.
 
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -128,3 +129,43 @@ def test_the_strongest_event_keeps_the_storm(thresholds) -> None:
     excess, event = compute_caine(storm_then_drizzle, caine=caine)
     assert event is not None and event.total_mm == pytest.approx(110.0)
     assert excess > 0.5
+
+
+def test_l_evento_di_pioggia_porta_le_sue_unita_nel_breakdown() -> None:
+    """#678: chi racconta il punteggio legge millimetri, ore e mm/h, non «sì/no»."""
+    from limen.core.scoring.caine import evento_pioggia
+
+    thresholds = load_regional_thresholds()
+    assert evento_pioggia(None, caine=thresholds.caine) is None
+    t0 = datetime(2026, 10, 10, tzinfo=UTC)
+    serie = RainfallSeries(
+        samples=tuple(
+            RainfallSample(timestamp=t0 + timedelta(hours=h), precipitation_mm=20.0)
+            for h in range(6)
+        )
+    )
+    excess, event = compute_caine(serie, caine=thresholds.caine)
+    e = evento_pioggia(event, caine=thresholds.caine)
+    assert e is not None
+    assert (e.durata_h, e.cumulata_mm, e.intensita_mm_h) == (6.0, 120.0, 20.0)
+    assert excess == pytest.approx(math.log10(e.intensita_mm_h / e.soglia_mm_h))
+    dimezzata = evento_pioggia(event, caine=thresholds.caine, alpha_factor=0.5)
+    assert dimezzata is not None
+    assert dimezzata.soglia_mm_h == pytest.approx(e.soglia_mm_h / 2)
+
+
+def test_le_curve_del_yaml_sono_quelle_di_italica_t5() -> None:
+    """#678: una sola taratura, quella della libreria; chi cambia lo YAML lo vede qui."""
+    from rainfall_thresholds import ITALICA_T5
+
+    macro = load_regional_thresholds().caine.macroregions
+    for yaml, libreria in (
+        ("italy_default", "italy"),
+        ("northern_italy", "northern"),
+        ("central_italy", "central"),
+        ("southern_italy", "southern"),
+    ):
+        assert (macro[yaml].alpha, macro[yaml].beta) == (
+            ITALICA_T5[libreria].alpha,
+            ITALICA_T5[libreria].beta,
+        )

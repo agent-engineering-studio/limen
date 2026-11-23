@@ -32,7 +32,7 @@ from datetime import timedelta
 from rainfall_thresholds import PowerLawThreshold, RainfallEvent, latest_event, strongest_event
 from rainfall_thresholds import reconstruct_events as _reconstruct
 
-from limen.core.models.risk import RainfallSample, RainfallSeries
+from limen.core.models.risk import EventoPioggia, RainfallSample, RainfallSeries
 from limen.core.scoring.regional_thresholds import (
     CaineBlock,
     CaineMacroregion,
@@ -134,10 +134,29 @@ def compute_caine(
     return excess, event
 
 
+def evento_pioggia(
+    event: RainfallEvent | None,
+    *,
+    caine: CaineBlock,
+    macroregion: str = "italy_default",
+    alpha_factor: float = 1.0,
+) -> EventoPioggia | None:
+    """L'evento con le sue unità e l'intensità di soglia alla sua durata (#678)."""
+    if event is None or event.duration_hours <= 0:
+        return None
+    return EventoPioggia(
+        durata_h=float(event.duration_hours),
+        cumulata_mm=event.total_mm,
+        intensita_mm_h=event.intensity_mm_h,
+        soglia_mm_h=_threshold(caine, macroregion, alpha_factor).intensity(event.duration_hours),
+    )
+
+
 __all__ = [
     "RainfallEvent",
     "caine_excess",
     "compute_caine",
+    "evento_pioggia",
     "latest_event",
     "reconstruct_events",
     "threshold_intensity_mm_h",

@@ -75,3 +75,40 @@ def test_garbled_llm_number_words_are_flagged() -> None:
     res = evaluate_briefing(text, allowed_numbers=set())
     joined = " ".join(res.violations)
     assert "ventiquillemilaquattrocentosessantaquattro" in joined
+
+
+def test_i_numeri_di_pioggia_del_racconto_si_controllano_contro_l_evento() -> None:
+    """#678: un «99 mm» che l'evento non ha finisce in un warning; i numeri del
+    messaggio (punteggi, conteggi) e quelli dell'evento passano."""
+    import structlog
+
+    from limen.agents.chat_agents.briefing import controlla_pioggia
+
+    fatti = [
+        {
+            "cumulated_mm": 145,
+            "duration_h": 7,
+            "intensity_mm_h": 20.7,
+            "threshold_intensity_mm_h": 2.4,
+        }
+    ]
+    messaggio = "Celle: 340; high+: 12"
+    with structlog.testing.capture_logs() as log:
+        controlla_pioggia("Sono caduti 145 mm in 7 ore, su 340 celle.", fatti, messaggio)
+        assert log == []
+        controlla_pioggia("Sono caduti 99 mm in 7 ore.", fatti, messaggio)
+        controlla_pioggia("Sono caduti 99 mm.", [], messaggio)
+    assert [e["event"] for e in log] == ["briefing.pioggia.numeri_non_trovati"]
+    assert log[0]["numeri"] == ["99 mm"]
+
+
+def test_un_testo_che_il_controllo_non_sa_leggere_non_ferma_il_racconto() -> None:
+    """Una data scritta «10.10.26» fa sollevare ValueError alla libreria."""
+    import structlog
+
+    from limen.agents.chat_agents.briefing import controlla_pioggia
+
+    fatti = [{"cumulated_mm": 145}]
+    with structlog.testing.capture_logs() as log:
+        controlla_pioggia("Sono caduti 145 mm il 10.10.26.", fatti, "")
+    assert [e["event"] for e in log] == ["briefing.pioggia.controllo_fallito"]

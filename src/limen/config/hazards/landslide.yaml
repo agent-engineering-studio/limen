@@ -98,6 +98,11 @@ meteo:
 # BELOW threshold → caine≈0). β is steeper (~0.5–0.65) than the old 0.39.
 # Measured effect on the gauge-rain validation: ≥Moderate 46.6% → 63.0%,
 # High 0.2% → 2.7%. Calibration jobs can still override per-AOI.
+#
+# I numeri sono `rainfall_thresholds.ITALICA_T5`, cifra per cifra (#678): lo
+# stesso fit, e un test li confronta. Fino al 23/11/2026 erano arrotondati a
+# tre cifre, e il Nord era 6,370 / 0,512: fra 1 e 100 ore la curva si è mossa
+# al più dello 0,5 % in intensità (0,002 decadi di `caine_excess`).
 caine:
   # Event reconstruction (Melillo 2018-inspired): hours of no-rain that
   # break an "event" into two events; minimum total mm to qualify as an
@@ -114,17 +119,17 @@ caine:
   # I-units: mm/h; D-units: h.
   macroregions:
     italy_default:
-      alpha: 7.190
-      beta:  0.568
+      alpha: 7.193
+      beta:  0.5685
     southern_italy:        # ITALICA T5, southern regions (Puglia..Sicilia)
-      alpha: 8.750
-      beta:  0.645
+      alpha: 8.754
+      beta:  0.6449
     central_italy:
-      alpha: 7.950
-      beta:  0.608
+      alpha: 7.953
+      beta:  0.6085
     northern_italy:
-      alpha: 6.370
-      beta:  0.512
+      alpha: 6.400
+      beta:  0.5134
 
 # Antecedent Precipitation Index parameters.
 # Kohler-Linsley: API_t = k · API_{t-1} + P_t (we approximate with a
