@@ -2,9 +2,16 @@
 
 For an AOI + time window:
 
-1. Pull IFFI features whose ``occurrence_date`` falls inside the
-   window — these are the **truth set** (one positive per cell-day
-   that hosts a recorded landslide).
+1. Pull the dated landslide events of ``landslide_events`` whose
+   ``event_time`` falls inside the window — ITALICA / e-ITALICA, FraneItalia,
+   the regional inventories and the fact check's ``stampa`` rows, filtered by
+   ``LIMEN_BACKTEST_SORGENTI`` and ``LIMEN_BACKTEST_PRECISIONE``. These are
+   the **truth set** (one positive per cell that hosts a recorded landslide,
+   anchored at its first event). Not the IFFI inventory: its open-data
+   shapefiles carry no dates, so ``iffi_landslides.occurrence_date`` is
+   always empty (#667). The ~28,000 IFFI records that do have a date are
+   only in the IdroGEO API (``ispra_idrogeo.dated.dated_landslides``) and are
+   not loaded yet.
 2. Fetch Open-Meteo historical (ERA5) precipitation for the AOI bbox
    covering ``[start - 48 h, end]`` so the engine sees the antecedent
    rain.
@@ -13,7 +20,7 @@ For an AOI + time window:
    evaluation time) and call :class:`MultiFactorScoringEngine`.
 4. A cell-hour is a **hit** iff the engine flags it ``High`` or
    ``VeryHigh`` within ``lead_time_hours_min`` hours before a recorded
-   IFFI event in the same cell; **false alarm** if a high score is not
+   event in the same cell; **false alarm** if a high score is not
    followed by an event in the same lookahead window; **lead time** is
    the average hours-ahead of the earliest high score before each hit.
 5. Write a short Markdown report.
