@@ -512,6 +512,13 @@ async def top_comuni(
     return comuni[:limit]
 
 
+def _affidabilita(istat_code: str) -> dict[str, Any] | None:
+    from limen.core.affidabilita_iffi import affidabilita_iffi
+
+    a = affidabilita_iffi("comuni", istat_code)
+    return a.model_dump() if a is not None else None
+
+
 async def comune_detail(istat_code: str) -> dict[str, Any] | None:
     async with acquire() as conn:
         row = await conn.fetchrow(
@@ -548,6 +555,8 @@ async def comune_detail(istat_code: str) -> dict[str, Any] | None:
         ),
         "allerta_ufficiale": allerte.get(istat_code),
         "esposizione_ispra": esposizione.get(istat_code),
+        # Quanto fidarsi di IFFI qui (#669): accanto al dato, non nel punteggio.
+        "affidabilita_iffi": _affidabilita(istat_code),
     }
     return {
         "comune": out,

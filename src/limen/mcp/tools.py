@@ -305,6 +305,10 @@ async def comune_risk(istat_code: str) -> dict[str, Any]:
     Non più a pericolo unico (migrazione 051): la riga porta i tre pericoli
     affiancati in `hazards`, e `worst_class` resta il peggiore fra essi —
     la stessa chiave di prima, con un significato più largo.
+
+    `affidabilita_iffi` dice quanto fidarsi dell'inventario IFFI in quel
+    comune (#669): riportane la `lettura` quando parli delle frane censite.
+    Poche frane in un comune poco rilevato non vogliono dire terreno sicuro.
     """
     from limen.data.repos.comune_risk import comune_detail
 

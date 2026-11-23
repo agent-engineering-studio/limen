@@ -9,6 +9,7 @@ distingue «fuori dalle aree PAI» da «PAI non caricato».
 from __future__ import annotations
 
 from limen.config.catalogo_dati import CatalogoDati
+from limen.core.affidabilita_iffi import affidabilita_iffi
 from limen.core.dati_di_base import DatoDiBase, dati_di_base
 from limen.core.models.hazard import HazardType
 from limen.data.db import acquire
@@ -32,7 +33,8 @@ async def leggi(catalogo: CatalogoDati, cell_id: str, pericolo: HazardType) -> l
     )
     async with acquire() as conn:
         riga = await conn.fetchrow(
-            f"SELECT {valori_sql}, f.flood_hazard_class, f.lithology, k.* "
+            f"SELECT {valori_sql}, f.flood_hazard_class, f.lithology, k.*, "
+            "(SELECT cc.istat_code FROM cell_comune cc WHERE cc.cell_id = g.id) AS istat_code "
             "FROM grid_cells g "
             "LEFT JOIN cell_static_factors f ON f.cell_id = g.id "
             f"CROSS JOIN LATERAL (SELECT {caricati_sql} FROM grid_cells g2 "
@@ -55,7 +57,12 @@ async def leggi(catalogo: CatalogoDati, cell_id: str, pericolo: HazardType) -> l
     caricati = {c: bool(riga[f"c_{c}"]) for c in colonne}
     for c in veri - {c for c, presente in caricati.items() if presente}:
         valori[c] = None
-    return dati_di_base(catalogo, pericolo, valori, classi, caricati)
+    # Quanto fidarsi di IFFI nel comune della cella (#669): tabella inclusa in
+    # ispra-idrogeo, nessuna chiamata di rete. Solo accanto al dato IFFI.
+    affidabilita = (
+        affidabilita_iffi("comuni", riga["istat_code"]) if "iffi_density_500" in colonne else None
+    )
+    return dati_di_base(catalogo, pericolo, valori, classi, caricati, affidabilita)
 
 
 __all__ = ["leggi"]

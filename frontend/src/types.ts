@@ -306,6 +306,18 @@ export interface DatoDiBase {
   licenza: string;
   attribuzione: string | null;
   url: string | null;
+  /** Solo IFFI (#669): quanto fidarsi dell'inventario nel comune della cella. */
+  affidabilita?: AffidabilitaIffi | null;
+}
+
+/** Quanto fidarsi di IFFI in un'area, dalla tabella di ispra-idrogeo (#669). */
+export interface AffidabilitaIffi {
+  frane: number;
+  frane_al_giorno: number;
+  quota_modificate_dal_2021: number | null;
+  lettura: string;
+  lettura_en: string;
+  aggiornata_al: string;
 }
 
 export interface AlertItem {
