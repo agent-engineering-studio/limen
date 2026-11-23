@@ -41,6 +41,17 @@ Configuration knobs (env vars, kept off the dispatcher for parity with
   da 1 km² un evento noto al comune (``P10``) cade sulla cella del
   centroide, che non è quella franata. Vuota = tutti, anche quelli senza
   precisione dichiarata.
+* ``LIMEN_BACKTEST_PRECISIONE_DATA`` — la precisione di data più larga ammessa
+  (``T1`` all'ora < ``T2`` alla parte del giorno < ``T3`` al giorno). Vuota =
+  tutte, anche gli eventi senza precisione dichiarata (#668).
+* ``LIMEN_BACKTEST_TOLLERANZA_DATA_ORE`` — per gli eventi senza ora (``T3`` o
+  senza precisione, messi a mezzanotte) l'evento può cadere fino a tante ore
+  prima o dopo: un'allerta conta se sta fra ``lead_max + tolleranza`` ore prima
+  e ``tolleranza`` ore dopo l'istante del catalogo. ``24`` è il ±1 giorno della
+  #668. Default 0: il conto di prima.
+* ``LIMEN_BACKTEST_SCELTA_EVENTO`` — ``ultimo`` o ``piu_forte``: quale evento di
+  pioggia guarda la curva di Caine, al posto di
+  ``event_reconstruction.scelta_evento`` del YAML (#675).
 * ``LIMEN_BACKTEST_SORGENTI``    — sorgenti ammesse, separate da virgola
   (``IR,NR`` per ITALICA, ``franeitalia`` per FraneItalia 2010-2024,
   ``marche_umbria_2022`` per l'inventario del 15/09/2022,
@@ -116,6 +127,7 @@ import heapq
 import math
 import os
 from array import array
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -191,6 +203,11 @@ _DEFAULT_LEAD_MAX_HOURS = 120.0
 #: Scala di precisione di luogo di ITALICA, dalla più stretta alla più larga.
 _ROMA = ZoneInfo("Europe/Rome")
 PRECISIONI_LUOGO = ("P0", "P1", "P10", "P100")
+#: Scala di precisione di data di ITALICA: all'ora, alla parte del giorno, al giorno.
+PRECISIONI_DATA = ("T1", "T2", "T3")
+#: Le date che il catalogo dà senza ora (messe a mezzanotte).
+_SENZA_ORA = (None, "T3")
+SCELTE_EVENTO = ("ultimo", "piu_forte")
 _ALERT_LEVELS_ORDERED = (
     RiskLevel.None_,
     RiskLevel.Low,
@@ -237,15 +254,18 @@ async def _fetch_truth_events(
     end: datetime,
     precisioni: list[str] | None = None,
     sorgenti: list[str] | None = None,
-) -> dict[str, datetime]:
+    precisioni_data: list[str] | None = None,
+) -> tuple[dict[str, datetime], set[str]]:
     """Return ``{cell_id: first_event_time}`` from the dated landslide-event
     catalogue (ITALICA / e-ITALICA, plus the fact check's ``stampa`` rows) for
-    events in ``[start, end]`` inside ``aoi_id``. Times are UTC; the earliest
+    events in ``[start, end]`` inside ``aoi_id``, and the cells whose first
+    event has no hour (``T3`` or undeclared). Times are UTC; the earliest
     event per cell is the anchor. ``None`` on a filter means no filter."""
     async with acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT g.id AS cell_id, MIN(e.event_time) AS first_event
+            SELECT g.id AS cell_id, MIN(e.event_time) AS first_event,
+                   (array_agg(e.temporal_accuracy ORDER BY e.event_time))[1] AS precisione_data
             FROM landslide_events e
             JOIN grid_cells g
               ON ST_Intersects(g.geom, e.geom)
@@ -254,6 +274,7 @@ async def _fetch_truth_events(
               AND e.event_time <= $3
               AND ($4::text[] IS NULL OR e.geographic_accuracy = ANY($4))
               AND ($5::text[] IS NULL OR e.source = ANY($5))
+              AND ($6::text[] IS NULL OR e.temporal_accuracy = ANY($6))
             GROUP BY g.id
             """,
             aoi_id,
@@ -261,8 +282,12 @@ async def _fetch_truth_events(
             end,
             precisioni,
             sorgenti,
+            precisioni_data,
         )
-    return {str(r["cell_id"]): r["first_event"] for r in rows}
+    return (
+        {str(r["cell_id"]): r["first_event"] for r in rows},
+        {str(r["cell_id"]) for r in rows if r["precisione_data"] in _SENZA_ORA},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -384,6 +409,7 @@ def _match_truth(
     truth: dict[str, datetime],
     *,
     lead_max_hours: float,
+    tolleranza: Mapping[str, float] | None = None,
 ) -> tuple[int, int, list[float]]:
     """Hit, mancate e preavvisi, confrontando allerte ed eventi.
 
@@ -397,21 +423,26 @@ def _match_truth(
 
     Il preavviso riportato e' quello dell'allerta piu' precoce **ancora dentro
     l'orizzonte**: il tempo che un operatore ha avuto davvero.
+
+    ``tolleranza`` dà, per le celle il cui evento non ha un'ora, di quante ore
+    l'istante del catalogo può sbagliare, prima o dopo (#668): la finestra si
+    allarga di tanto ai due capi, e il preavviso non scende sotto zero.
     """
     hits = 0
     misses = 0
     leads: list[float] = []
     for cell_id, event_time in truth.items():
+        tol = (tolleranza or {}).get(cell_id, 0.0)
         dentro = [
             t
             for t in alert_times.get(cell_id, ())
-            if 0 < (event_time - t).total_seconds() / 3600.0 <= lead_max_hours
+            if -tol < (event_time - t).total_seconds() / 3600.0 <= lead_max_hours + tol
         ]
         if not dentro:
             misses += 1
             continue
         hits += 1
-        leads.append((event_time - min(dentro)).total_seconds() / 3600.0)
+        leads.append(max(0.0, (event_time - min(dentro)).total_seconds() / 3600.0))
     return hits, misses, leads
 
 
@@ -447,6 +478,7 @@ def per_comune(
     soglia_classe: float,
     finestra_ore: float,
     carico: float,
+    tolleranza: Mapping[str, float] | None = None,
 ) -> PerComune:
     """Eventi colti e carico per comune.
 
@@ -461,13 +493,18 @@ def per_comune(
         giorni.setdefault(t.astimezone(_ROMA).date(), []).append(h)
     massimi = [max(serie[h] for h in idx) for serie in orario.values() for idx in giorni.values()]
 
+    tol = tolleranza or {}
+
     def quota(soglia: float) -> float:
         return sum(x >= soglia for x in massimi) / len(massimi) if massimi else 0.0
 
     def colti(soglia: float) -> int:
         return sum(
             any(
-                orario[c][h] >= soglia and 0 < (evento - t).total_seconds() / 3600.0 <= finestra_ore
+                orario[c][h] >= soglia
+                and -tol.get(c, 0.0)
+                < (evento - t).total_seconds() / 3600.0
+                <= finestra_ore + tol.get(c, 0.0)
                 for h, t in enumerate(ore)
             )
             for c, evento in verita.items()
@@ -492,6 +529,7 @@ def colte_a_carico(
     *,
     carico: float,
     lead_max_hours: float,
+    tolleranza: Mapping[str, float] | None = None,
 ) -> tuple[float, float, int]:
     """Soglia, carico effettivo e frane colte con ``carico`` delle celle in allerta.
 
@@ -505,7 +543,7 @@ def colte_a_carico(
     """
     soglia, effettivo = _soglia_a_carico(punteggi_max, carico)
     sopra = {c: [t for t, x in serie if x >= soglia] for c, serie in punteggi_verita.items()}
-    hits, _, _ = _match_truth(sopra, truth, lead_max_hours=lead_max_hours)
+    hits, _, _ = _match_truth(sopra, truth, lead_max_hours=lead_max_hours, tolleranza=tolleranza)
     return soglia, effettivo, hits
 
 
@@ -529,6 +567,7 @@ def _evaluate(
     engine: ScoringEngine[Any] | None = None,
     carico: float | None = None,
     motore: str = "V1",
+    tolleranza: Mapping[str, float] | None = None,
 ) -> _BacktestMetrics:
     """``antecedenti`` è allineato ai nodi (modalità `nodo`) o lungo 1 (modalità
     `regione`, un valore per tutta l'area come in produzione); ``None`` lascia
@@ -620,7 +659,9 @@ def _evaluate(
                         alert_times[cell_id].append(hours[h])
         configurazione += f"; {motore} in allerta a punteggio ≥ {soglia_carico:.4f}"
 
-    hits, misses, leads = _match_truth(alert_times, truth, lead_max_hours=lead_max_hours)
+    hits, misses, leads = _match_truth(
+        alert_times, truth, lead_max_hours=lead_max_hours, tolleranza=tolleranza
+    )
 
     false_alarms = max(0, len(alerted_cells) - hits)
     hit_rate = hits / len(truth) if truth else 0.0
@@ -633,6 +674,7 @@ def _evaluate(
             truth,
             carico=gate.carico_riferimento,
             lead_max_hours=lead_max_hours,
+            tolleranza=tolleranza,
         )
         if gate.carico_riferimento is not None
         else None
@@ -640,9 +682,12 @@ def _evaluate(
     comuni = None
     if metro_comuni is not None and cella_comune is not None:
         verita_comuni: dict[str, datetime] = {}
+        tolleranza_comuni: dict[str, float] = {}
         for cella, evento in truth.items():
             for c in cella_comune.get(cella, ()):
-                verita_comuni[c] = min(evento, verita_comuni.get(c, evento))
+                if c not in verita_comuni or evento < verita_comuni[c]:
+                    verita_comuni[c] = evento
+                    tolleranza_comuni[c] = (tolleranza or {}).get(cella, 0.0)
         comuni = per_comune(
             orario,
             hours,
@@ -650,6 +695,7 @@ def _evaluate(
             soglia_classe=thresholds.classes.moderate.lo,
             finestra_ore=metro_comuni.finestra_ore,
             carico=metro_comuni.carico_massimo,
+            tolleranza=tolleranza_comuni,
         )
 
     report = _write_report(
@@ -994,10 +1040,10 @@ def _parse_dt(env_name: str, default: datetime) -> datetime:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
-def precisioni_fino_a(massima: str) -> list[str]:
+def precisioni_fino_a(massima: str, scala: tuple[str, ...] = PRECISIONI_LUOGO) -> list[str]:
     """Le precisioni ammesse con ``massima`` come la più larga: ``P10`` tiene
     ``P0``, ``P1`` e ``P10``."""
-    return list(PRECISIONI_LUOGO[: PRECISIONI_LUOGO.index(massima) + 1])
+    return list(scala[: scala.index(massima) + 1])
 
 
 def _righe_gate_far_e_discriminazione(
@@ -1024,11 +1070,20 @@ def _righe_gate_far_e_discriminazione(
     return [riga_far, riga_disc]
 
 
-def descrivi_verita(precisioni: list[str] | None, sorgenti: list[str] | None) -> str:
+def descrivi_verita(
+    precisioni: list[str] | None,
+    sorgenti: list[str] | None,
+    precisioni_data: list[str] | None = None,
+    tolleranza_ore: float = 0.0,
+) -> str:
     parti = [
         f"precisione {precisioni[-1]} o migliore" if precisioni else "ogni precisione",
         f"sorgenti {', '.join(sorgenti)}" if sorgenti else "ogni sorgente",
     ]
+    if precisioni_data:
+        parti.append(f"data {precisioni_data[-1]} o migliore")
+    if tolleranza_ore:
+        parti.append(f"date senza ora ±{tolleranza_ore:g} h")
     return "; ".join(parti)
 
 
@@ -1073,6 +1128,13 @@ def soglie_backtest(
         return soglie
     seismic = soglie.seismic.model_copy(update=update)
     return soglie.model_copy(update={"seismic": seismic})
+
+
+def con_scelta_evento(soglie: RegionalThresholds, scelta: str) -> RegionalThresholds:
+    """Le soglie con ``caine.event_reconstruction.scelta_evento`` sovrascritta."""
+    ricostruzione = soglie.caine.event_reconstruction.model_copy(update={"scelta_evento": scelta})
+    caine = soglie.caine.model_copy(update={"event_reconstruction": ricostruzione})
+    return soglie.model_copy(update={"caine": caine})
 
 
 def cancello_da_env(raw: str) -> CancelloInnescoBlock | None:
@@ -1122,6 +1184,26 @@ async def run() -> int:
         log.error("backtest.bad_precisione", value=precisione, ammesse=PRECISIONI_LUOGO)
         return 1
     precisioni = precisioni_fino_a(precisione) if precisione else None
+    precisione_data = os.getenv("LIMEN_BACKTEST_PRECISIONE_DATA", "").strip().upper()
+    if precisione_data and precisione_data not in PRECISIONI_DATA:
+        log.error("backtest.bad_precisione_data", value=precisione_data, ammesse=PRECISIONI_DATA)
+        return 1
+    precisioni_data = (
+        precisioni_fino_a(precisione_data, PRECISIONI_DATA) if precisione_data else None
+    )
+    try:
+        tolleranza_ore = float(os.getenv("LIMEN_BACKTEST_TOLLERANZA_DATA_ORE", "").strip() or 0)
+    except ValueError:
+        tolleranza_ore = -1.0
+    if tolleranza_ore < 0:
+        log.error(
+            "backtest.bad_tolleranza_data", value=os.getenv("LIMEN_BACKTEST_TOLLERANZA_DATA_ORE")
+        )
+        return 1
+    scelta_evento = os.getenv("LIMEN_BACKTEST_SCELTA_EVENTO", "").strip()
+    if scelta_evento and scelta_evento not in SCELTE_EVENTO:
+        log.error("backtest.bad_scelta_evento", value=scelta_evento, ammesse=SCELTE_EVENTO)
+        return 1
     sorgenti = [
         x.strip() for x in os.getenv("LIMEN_BACKTEST_SORGENTI", "").split(",") if x.strip()
     ] or None
@@ -1163,6 +1245,8 @@ async def run() -> int:
         return 1
     if cancello is not None:
         soglie = soglie.model_copy(update={"cancello_innesco": cancello})
+    if scelta_evento:
+        soglie = con_scelta_evento(soglie, scelta_evento)
     cache_env = os.getenv("LIMEN_BACKTEST_SHAKEMAP_CACHE", "").strip()
     cache_shakemap = Path(cache_env) if cache_env else None
     pioggia = os.getenv("LIMEN_BACKTEST_PIOGGIA", "modello").strip() or "modello"
@@ -1204,10 +1288,13 @@ async def run() -> int:
     )
     giorni_api = load_regional_thresholds().api.horizon_days
     configurazione = (
-        f"verità {descrivi_verita(precisioni, sorgenti)}; pioggia {pioggia}; antecedenti {modo} "
+        f"verità {descrivi_verita(precisioni, sorgenti, precisioni_data, tolleranza_ore)}; "
+        f"pioggia {pioggia}; antecedenti {modo} "
         f"(riferimento {api_rif}); "
         f"sismica {'ShakeMap INGV' if sismica == 'shakemap' else 'spenta'}"
     )
+    if scelta_evento:
+        configurazione += f"; evento di pioggia {scelta_evento}"
     if sismica == "shakemap":
         configurazione += f" (soglia E {soglie.seismic.pga_min_g:g} g)"
         sp = soglie.seismic.soglia_pioggia
@@ -1283,9 +1370,15 @@ async def run() -> int:
                         log.warning("backtest.clima_mancante", aoi_id=aoi_id)
                     else:
                         cells = con_riferimento(cells, riferimenti)
-                truth = await _fetch_truth_events(
-                    aoi_id, start=start, end=end, precisioni=precisioni, sorgenti=sorgenti
+                truth, senza_ora = await _fetch_truth_events(
+                    aoi_id,
+                    start=start,
+                    end=end,
+                    precisioni=precisioni,
+                    sorgenti=sorgenti,
+                    precisioni_data=precisioni_data,
                 )
+                tolleranza = dict.fromkeys(senza_ora, tolleranza_ore) if tolleranza_ore else None
                 nodes = build_rain_nodes(bbox, spacing=node_deg)
                 antecedenti: list[Antecedenti | None] | None = None
                 if modo == "neutro":
@@ -1392,6 +1485,7 @@ async def run() -> int:
                     end=end,
                     alert_level=alert_level,
                     lead_max_hours=lead_max,
+                    tolleranza=tolleranza,
                     antecedenti=antecedenti,
                     configurazione=configurazione,
                     scosse=scosse,
@@ -1419,6 +1513,7 @@ async def run() -> int:
                         end=end,
                         alert_level=alert_level,
                         lead_max_hours=lead_max,
+                        tolleranza=tolleranza,
                         antecedenti=antecedenti,
                         configurazione=configurazione,
                         scosse=scosse,
