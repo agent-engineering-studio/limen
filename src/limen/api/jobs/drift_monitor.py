@@ -8,16 +8,24 @@ the EGMS sync.
 
 from __future__ import annotations
 
+import math
+from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 
 from limen.api.dependencies import AppDependencies
 from limen.core.logging import get_logger
 from limen.data.repos.model_runs_repo import recent_for_role
 from limen.data.repos.training_samples_repo import fetch_samples
+from limen.ml.dataset import valore_assente
 from limen.ml.monitoring import RetrainingTrigger
 from limen.ml.monitoring.drift import DriftReport, make_report, peggiore
 
 log = get_logger(__name__)
+
+
+def _misurati(valori: Iterable[float | None], assente: float) -> list[float]:
+    pieni = (assente if v is None else float(v) for v in valori)
+    return [v for v in pieni if not math.isnan(v)]
 
 
 async def run_drift_monitor_job(deps: AppDependencies) -> int:
@@ -52,18 +60,25 @@ async def run_drift_monitor_job(deps: AppDependencies) -> int:
     candidate_probs = [r.probability for r in recent]
     reports: dict[str, DriftReport] = {}
     for feature in features:
-        candidate = [
-            float(r.breakdown["features"][feature])
-            for r in recent
-            if feature in (r.breakdown.get("features") or {})
-        ]
-        if not candidate:
-            continue
+        # Un non misurato (#698) esce dal confronto da tutte e due le parti:
+        # la deriva si misura sui valori, non su quante celle il satellite vede.
+        assente = valore_assente(feature)
+        candidate = _misurati(
+            (
+                r.breakdown["features"][feature]
+                for r in recent
+                if feature in (r.breakdown.get("features") or {})
+            ),
+            assente,
+        )
         top, _, sub = feature.partition(".")
+        reference = _misurati(
+            ((s.features.get(top) or {}).get(sub) for s in training_samples), assente
+        )
+        if not candidate or not reference:
+            continue
         reports[feature] = make_report(
-            reference=[
-                float((s.features.get(top) or {}).get(sub) or 0.0) for s in training_samples
-            ],
+            reference=reference,
             candidate=candidate,
             reference_probs=reference_labels,
             candidate_probs=candidate_probs,
