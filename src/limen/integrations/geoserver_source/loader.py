@@ -9,7 +9,8 @@ operational ``iffi_landslides`` / ``pai_hazard`` tables, so the existing
 Ogni riga porta in ``attributes`` la voce di ``config/dati.yaml`` da cui viene
 (``dataset``) e la citazione che la licenza chiede (``citazione``, #666):
 IFFI per regione, i mosaici con la loro versione. IFFI e i mosaici sono
-CC BY-SA 4.0, quindi chi esporta celle o report deve poterle riportare. Le
+CC BY-SA 4.0 (la PAI v. 5.0, se è quella scelta, CC BY 4.0: #670), quindi chi
+esporta celle o report deve poterle riportare. Le
 righe scritte prima le ricevono al sync dopo, con un ``UPDATE`` che tocca solo
 quelle senza ``dataset``: non cambia la versione del dato, e il bootstrap non
 ricalcola niente.
@@ -29,6 +30,7 @@ import json
 import re
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Iterable
+from datetime import UTC, datetime
 from typing import Any
 
 import asyncpg
@@ -37,12 +39,13 @@ from limen.config.catalogo_dati import carica_catalogo
 from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.data.db import acquire, register_postgis
-from limen.data.repos.dataset_versions_repo import content_hash, find, record
+from limen.data.repos.dataset_versions_repo import content_hash, find, latest, record
 from limen.data.repos.flood_repo import FloodHazard
 from limen.data.repos.flood_repo import upsert_many as flood_upsert
 from limen.data.repos.iffi_repo import IFFILandslide
 from limen.data.repos.iffi_repo import upsert_many as iffi_upsert
 from limen.data.repos.pai_repo import PAIHazard
+from limen.data.repos.pai_repo import delete_prefisso as pai_delete_prefisso
 from limen.data.repos.pai_repo import upsert_many as pai_upsert
 
 log = get_logger(__name__)
@@ -117,8 +120,16 @@ def _citazione(voce: str) -> str:
     return carica_catalogo().voce(voce).attribuzione or carica_catalogo().voce(voce).fonte
 
 
-# National PAI landslide-hazard mosaic (single table, ~900k polygons).
-_PAI_TABLE = "mosaicatura_ispra_2020_2021_aree_pericolosita_frana_pai"
+# National PAI landslide-hazard mosaic (single table, ~900k polygons), per
+# valore di ``GEODATI__MOSAICO_PAI`` (#670): la tabella che ``carica-vettori``
+# crea e il prefisso degli id in ``pai_hazard``. Il prefisso è diverso perché
+# l'id è il ``fid``, e lo stesso numero nei due mosaici è un altro poligono in
+# un'altra regione: con un prefisso solo, il sync di una regione
+# sovrascriverebbe i poligoni di un'altra.
+_PAI_MOSAICI: dict[str, tuple[str, str]] = {
+    "pai_frane": ("mosaicatura_ispra_2020_2021_aree_pericolosita_frana_pai", "pai"),
+    "pai_frane_2024": ("mosaicatura_ispra_2024_pericolosita_frana_pai", "pai2024"),
+}
 _PAI_ATTR = "per_fr_ita"
 
 # Preferred stable id columns; fall back to a geometry hash when absent.
@@ -240,16 +251,19 @@ async def _load_pai(
     schema: str,
     bbox: tuple[float, float, float, float],
     mancanti: list[str] | None = None,
+    *,
+    mosaico: str,
 ) -> list[PAIHazard]:
-    cols = await _table_columns(conn, schema, _PAI_TABLE)
+    tabella, prefisso = _PAI_MOSAICI[mosaico]
+    cols = await _table_columns(conn, schema, tabella)
     if "geom" not in cols or _PAI_ATTR not in cols:
-        _manca(schema, _PAI_TABLE, mancanti)
+        _manca(schema, tabella, mancanti)
         return []
     id_col = next((c for c in _ID_COL_PREFERENCE if c in cols), None)
     id_expr = f'"{id_col}"::text' if id_col else 'md5(ST_AsEWKB("geom"))'
     rows = await conn.fetch(
         f'SELECT {id_expr} AS rid, "{_PAI_ATTR}"::text AS cls, "geom" AS geom '
-        f'FROM "{schema}"."{_PAI_TABLE}" '
+        f'FROM "{schema}"."{tabella}" '
         "WHERE ST_Intersects(geom, ST_MakeEnvelope($1, $2, $3, $4, 4326))",
         bbox[0],
         bbox[1],
@@ -265,7 +279,7 @@ async def _load_pai(
             continue
         items.append(
             PAIHazard(
-                id=f"pai:{r['rid']}",
+                id=f"{prefisso}:{r['rid']}",
                 hazard_class=token,
                 authority=None,
                 geom=geom,
@@ -358,7 +372,12 @@ async def _load_idraulica(
 
 
 async def _se_cambiato(
-    dataset: str, aoi_id: str, righe: list[bytes], scrivi: Callable[[], Awaitable[int]]
+    dataset: str,
+    aoi_id: str,
+    righe: list[bytes],
+    scrivi: Callable[[], Awaitable[int]],
+    *,
+    mosaico: str | None = None,
 ) -> int:
     """Scrive solo se le righe dell'AOI non sono quelle dell'ultimo sync.
 
@@ -367,21 +386,45 @@ async def _se_cambiato(
     poligoni idraulici della Puglia sono nove minuti di ST_Subdivide (#407).
     Le righe si **ordinano** prima dell'hash: la query non ha ORDER BY, e la
     versione dell'alluvione, che già c'era, cambiava a ogni giro su Puglia.
+
+    ``mosaico`` (solo il PAI, #670): se l'ultimo sync dell'AOI ne ha letto un
+    altro si scrive comunque, e il cambio si registra con una versione sua.
+    ``dataset_versions`` ricorda una versione per sempre, e così il bootstrap
+    statico: tornando a un mosaico già usato, sia qui sia il passo ``pai``
+    risponderebbero «invariato» con in tabella i poligoni dell'altro.
     """
     if not righe:
         return 0
+    nome = f"{dataset}:{aoi_id}"
     versione = content_hash(sorted(righe))
-    if await find("geoserver", f"{dataset}:{aoi_id}", versione):
+    cambio = mosaico is not None and await _mosaico_dell_ultimo_sync(nome) not in (None, mosaico)
+    if not cambio and await find("geoserver", nome, versione):
         log.info("geoserver_source.unchanged", aoi_id=aoi_id, dataset=dataset, items=len(righe))
         return 0
     n = await scrivi()
-    await record(
-        source="geoserver",
-        dataset=f"{dataset}:{aoi_id}",
-        version=versione,
-        metadata={"items": len(righe)},
-    )
+    metadata: dict[str, Any] = {"items": len(righe)}
+    if mosaico is not None:
+        metadata["mosaico"] = mosaico
+    await record(source="geoserver", dataset=nome, version=versione, metadata=metadata)
+    if cambio:
+        await record(
+            source="geoserver",
+            dataset=nome,
+            version=content_hash([versione, datetime.now(UTC).isoformat()]),
+            metadata=metadata,
+        )
     return n
+
+
+async def _mosaico_dell_ultimo_sync(nome: str) -> str | None:
+    """Il mosaico PAI dell'ultima versione scritta, ``None`` se non c'è mai stato un sync.
+
+    Una riga senza ``mosaico`` è di prima di #670, quando c'era solo la v. 4.0.
+    """
+    ultima = await latest("geoserver", nome)
+    if ultima is None:
+        return None
+    return str(ultima.metadata.get("mosaico", "pai_frane"))
 
 
 async def _completa_attributi(tabella: str, items: Iterable[Any]) -> int:
@@ -444,6 +487,7 @@ async def sync_geoserver_source_for_aoi(aoi_id: str) -> dict[str, int]:
     """
     settings = get_settings()
     dsn, schema = settings.geoserver_source.sorgente(settings.db)
+    mosaico = settings.geodati.mosaico_pai
 
     region = _region_token(aoi_id)
     bbox = await _aoi_bbox(aoi_id)
@@ -458,7 +502,7 @@ async def sync_geoserver_source_for_aoi(aoi_id: str) -> dict[str, int]:
     try:
         await register_postgis(conn)
         iffi_items = await _load_iffi(conn, schema, region, mancanti)
-        pai_items = await _load_pai(conn, schema, bbox, mancanti) if bbox else []
+        pai_items = await _load_pai(conn, schema, bbox, mancanti, mosaico=mosaico) if bbox else []
         flood_items = await _load_idraulica(conn, schema, bbox, mancanti) if bbox else []
     except (OSError, asyncpg.PostgresError) as exc:
         log.warning("integration.degraded", source="geoserver_source", op="read", error=str(exc))
@@ -481,11 +525,24 @@ async def sync_geoserver_source_for_aoi(aoi_id: str) -> dict[str, int]:
         [f"{i.id}|{i.movement_type}".encode() + i.geom.wkb for i in iffi_items],
         lambda: iffi_upsert(iffi_items),
     )
+
+    async def scrivi_pai() -> int:
+        n = await pai_upsert(pai_items)
+        # Dopo un cambio di mosaico i poligoni dell'altro resterebbero accanto
+        # ai nuovi, e la cella prenderebbe la classe più alta fra i due. Dopo
+        # l'upsert: se fallisce, il giro dopo trova ancora il cambio da fare.
+        if bbox:
+            for altro, (_, prefisso) in _PAI_MOSAICI.items():
+                if altro != mosaico:
+                    await pai_delete_prefisso(f"{prefisso}:", bbox)
+        return n
+
     pai_n = await _se_cambiato(
         "pai",
         aoi_id,
         [f"{i.id}|{i.hazard_class}".encode() + i.geom.wkb for i in pai_items],
-        lambda: pai_upsert(pai_items),
+        scrivi_pai,
+        mosaico=mosaico,
     )
     # Flood upsert is the slow step (ST_Subdivide over Po-plain mega-polygons,
     # minutes per region).

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import cast
 
 import asyncpg
@@ -151,12 +152,113 @@ async def test_pai_e_idraulica_portano_la_voce_e_la_citazione_del_catalogo() -> 
     mp = pytest.MonkeyPatch()
     mp.setattr(loader, "_table_columns", colonne)
     try:
-        pai = await loader._load_pai(cast(asyncpg.Connection, Conn()), "s", (0, 0, 1, 1))
+        pai = await loader._load_pai(
+            cast(asyncpg.Connection, Conn()), "s", (0, 0, 1, 1), mosaico="pai_frane"
+        )
     finally:
         mp.undo()
+    assert pai[0].id == "pai:7"
     assert pai[0].attributes is not None
     assert pai[0].attributes["dataset"] == "pai_frana"
     assert "(v. 4.0" in pai[0].attributes["citazione"]
+
+
+async def test_il_mosaico_pai_2024_ha_tabella_id_e_citazione_suoi(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#670: stesso `fid`, altro poligono — gli id dei due mosaici non si devono toccare."""
+    from limen.config.settings import get_settings
+
+    lette: list[str] = []
+
+    class Conn:
+        async def fetch(self, sql: str, *_a: object) -> list[dict[str, object]]:
+            lette.append(sql)
+            return [{"rid": "7", "cls": "Elevata P3", "geom": Point(16, 41)}]
+
+    async def colonne(_conn: object, _schema: str, tabella: str) -> set[str]:
+        assert tabella == "mosaicatura_ispra_2024_pericolosita_frana_pai"
+        return {"geom", "per_fr_ita", "fid", "shape_length", "shape_area"}
+
+    monkeypatch.setattr(loader, "_table_columns", colonne)
+    monkeypatch.setenv("GEODATI__MOSAICO_PAI", "pai_frane_2024")
+    get_settings.cache_clear()
+    try:
+        pai = await loader._load_pai(
+            cast(asyncpg.Connection, Conn()), "s", (0, 0, 1, 1), mosaico="pai_frane_2024"
+        )
+    finally:
+        monkeypatch.delenv("GEODATI__MOSAICO_PAI")
+        get_settings.cache_clear()
+    assert '"s"."mosaicatura_ispra_2024_pericolosita_frana_pai"' in lette[0]
+    assert pai[0].id == "pai2024:7"
+    assert pai[0].hazard_class == "P3"
+    assert pai[0].attributes is not None
+    assert pai[0].attributes["dataset"] == "pai_frana"
+    assert "(v. 5.0 \u2013 2024)" in pai[0].attributes["citazione"]
+
+
+def test_le_tabelle_pai_sono_quelle_che_carica_vettori_crea(tmp_path: Path) -> None:
+    from ispra_idrogeo import MOSAICS
+
+    from limen.integrations.geoserver_source import vettori
+
+    v4 = tmp_path / MOSAICS["pai_frane"] / f"{MOSAICS['pai_frane']}.shp"
+    v5 = tmp_path / MOSAICS["pai_frane_2024"] / f"{MOSAICS['pai_frane_2024']}.gdb"
+    v4.parent.mkdir()
+    v4.touch()
+    v5.mkdir(parents=True)
+    assert vettori.nome_tabella(v4) == loader._PAI_MOSAICI["pai_frane"][0]
+    assert vettori.nome_tabella(v5) == loader._PAI_MOSAICI["pai_frane_2024"][0]
+    assert len({prefisso for _, prefisso in loader._PAI_MOSAICI.values()}) == 2
+
+
+async def test_un_cambio_di_mosaico_riscrive_e_lascia_una_versione_sua(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tornando a un mosaico già usato le righe sono quelle di una versione già
+    registrata: senza il cambio, il sync e il passo `pai` direbbero «invariato»."""
+    from types import SimpleNamespace
+
+    registrate: list[tuple[str, dict[str, object]]] = []
+
+    async def trova(_fonte: str, _dataset: str, versione: str) -> object | None:
+        return object() if any(v == versione for v, _ in registrate) else None
+
+    async def ultima(_fonte: str, _dataset: str) -> object | None:
+        return SimpleNamespace(metadata=registrate[-1][1]) if registrate else None
+
+    async def registra(
+        *, source: str, dataset: str, version: str, metadata: dict[str, object]
+    ) -> None:
+        registrate.append((version, metadata))
+
+    async def scrivi() -> int:
+        return 1
+
+    monkeypatch.setattr(loader, "find", trova)
+    monkeypatch.setattr(loader, "latest", ultima)
+    monkeypatch.setattr(loader, "record", registra)
+
+    async def sync(righe: list[bytes], mosaico: str) -> int:
+        return await loader._se_cambiato("pai", "it-puglia", righe, scrivi, mosaico=mosaico)
+
+    # Primo sync, poi lo stesso: niente cambio, una sola versione.
+    assert await sync([b"v4"], "pai_frane") == 1
+    assert await sync([b"v4"], "pai_frane") == 0
+    assert len(registrate) == 1
+    # Una versione di prima di #670 non ha il mosaico: era la v. 4.0.
+    registrate[0] = (registrate[0][0], {"items": 1})
+    assert await sync([b"v4"], "pai_frane") == 0
+    # Alla v. 5.0, e ritorno: le righe v4 hanno una versione già vista, ma si riscrivono.
+    assert await sync([b"v5"], "pai_frane_2024") == 1
+    assert await sync([b"v5"], "pai_frane_2024") == 0
+    prima = len(registrate)
+    assert await sync([b"v4"], "pai_frane") == 1
+    assert len(registrate) == prima + 2
+    assert registrate[-1][0] not in {v for v, _ in registrate[:-1]}
+    assert registrate[-1][1]["mosaico"] == "pai_frane"
+    assert await sync([b"v4"], "pai_frane") == 0
 
 
 async def test_le_righe_di_prima_ricevono_la_citazione_una_volta(
@@ -251,6 +353,8 @@ async def test_una_tabella_mancante_finisce_nell_esito_e_nello_stato(
     monkeypatch.setattr(loader, "record", registra)
     monkeypatch.setattr(loader, "iffi_upsert", scrivi)
     monkeypatch.setattr(loader, "pai_upsert", scrivi)
+    monkeypatch.setattr(loader, "latest", niente)
+    monkeypatch.setattr(loader, "pai_delete_prefisso", niente)
 
     async def completa(_tabella: str, _items: object) -> int:  # #666, sul DB
         return 0

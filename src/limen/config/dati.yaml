@@ -55,6 +55,16 @@ voci:
       ISPRA - Mosaicatura nazionale delle aree a pericolosità da frana PAI
       (v. 4.0 – 2020-2021), https://idrogeo.isprambiente.it
     peso_gb: 1.09
+    # Con GEODATI__MOSAICO_PAI=pai_frane_2024 (#670) la voce è questa: altra
+    # versione, altra licenza (non più share-alike), altra citazione.
+    varianti:
+      pai_frane_2024:
+        fonte: ISPRA IdroGEO — mosaicatura nazionale PAI frane 2024
+        licenza: CC BY 4.0
+        attribuzione: >-
+          ISPRA - Mosaicatura nazionale delle aree a pericolosità da frana PAI
+          (v. 5.0 – 2024) – Piattaforma IdroGEO
+        peso_gb: 0.79
 
   - id: idraulica
     nome: pericolosità idraulica ISPRA

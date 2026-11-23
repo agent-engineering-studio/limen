@@ -16,6 +16,7 @@ from typing import Annotated, Literal, Self
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
+from limen.config.settings import get_settings
 from limen.core.models.hazard import HazardType
 
 _Testo = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
@@ -61,6 +62,15 @@ class Misura(_Rigido):
         return self
 
 
+class Variante(_Rigido):
+    """Ciò che cambia di una voce quando la configurazione sceglie un'altra sorgente."""
+
+    fonte: _Testo
+    licenza: _Testo
+    attribuzione: _Testo
+    peso_gb: float = Field(ge=0)
+
+
 class VoceDato(_Rigido):
     id: _Testo
     nome: _Testo
@@ -79,6 +89,9 @@ class VoceDato(_Rigido):
     licenza: _Testo
     attribuzione: str | None = None
     peso_gb: float = Field(ge=0)
+    #: Per valore di ``GEODATI__MOSAICO_PAI``: la sola voce che ne ha è
+    #: ``pai_frana`` (#670).
+    varianti: dict[str, Variante] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _si_sa_come_caricarlo(self) -> Self:
@@ -114,9 +127,29 @@ class CatalogoDati(_Rigido):
 
 
 @cache
-def carica_catalogo() -> CatalogoDati:
+def catalogo_per(mosaico_pai: str) -> CatalogoDati:
+    """Il catalogo con la voce PAI del mosaico scelto: fonte, licenza, citazione, peso."""
     testo = resources.files("limen.config").joinpath("dati.yaml").read_text(encoding="utf-8")
-    return CatalogoDati.model_validate(yaml.safe_load(testo))
+    catalogo = CatalogoDati.model_validate(yaml.safe_load(testo))
+    voci = tuple(
+        v.model_copy(update=v.varianti[mosaico_pai].model_dump())
+        if mosaico_pai in v.varianti
+        else v
+        for v in catalogo.voci
+    )
+    return catalogo.model_copy(update={"voci": voci})
 
 
-__all__ = ["CatalogoDati", "Livello", "Misura", "VoceDato", "carica_catalogo"]
+def carica_catalogo() -> CatalogoDati:
+    return catalogo_per(get_settings().geodati.mosaico_pai)
+
+
+__all__ = [
+    "CatalogoDati",
+    "Livello",
+    "Misura",
+    "Variante",
+    "VoceDato",
+    "carica_catalogo",
+    "catalogo_per",
+]

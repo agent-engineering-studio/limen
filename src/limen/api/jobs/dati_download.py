@@ -262,14 +262,14 @@ def procuratori() -> dict[str, Procuratore]:
     """
     from ispra_idrogeo import MOSAICS
 
+    pai = get_settings().geodati.mosaico_pai
+
     def gs(*nomi: str) -> Callable[[], list[Path]]:
         return lambda: [p for nome in nomi for p in cartella_geoserver().glob(nome)]
 
     return {
         "iffi": Procuratore(_idrogeo(_iffi), gs("*_opendata.zip*")),
-        "pai_frana": Procuratore(
-            _idrogeo(_mosaico("pai_frane")), gs(f"{MOSAICS['pai_frane']}.zip*")
-        ),
+        "pai_frana": Procuratore(_idrogeo(_mosaico(pai)), gs(f"{MOSAICS[pai]}.zip*")),
         "idraulica": Procuratore(
             _idrogeo(_mosaico("idraulica")), gs(f"{MOSAICS['idraulica']}.zip*")
         ),

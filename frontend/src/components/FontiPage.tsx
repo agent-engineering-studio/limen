@@ -16,6 +16,8 @@ import {
 import type { Fonte } from "../lib/fonti";
 import { NOMI_PERICOLO } from "../lib/hazard";
 import { testi, useLingua, useTesti } from "../lib/i18n";
+import type { ProvenienzaResponse } from "../types";
+import { useProvenienza } from "./ComeNasce";
 
 const T = testi(
   {
@@ -214,9 +216,24 @@ function scorriAllaScheda(): void {
 export const URL_PROPOSTA_DATO =
   "https://github.com/agent-engineering-studio/limen/issues/new?template=proposta-dato.yml";
 
+// Il mosaico PAI si sceglie in configurazione (#670): licenza e citazione
+// sono quelle che l'API dichiara, non per forza quelle scritte in `fonti.ts`.
+function conMosaicoPai(f: Fonte, p: ProvenienzaResponse | null): Fonte {
+  const pai = p?.pai_frana;
+  if (f.id !== "ispra-pai" || !pai) return f;
+  return {
+    ...f,
+    licenza: pai.licenza,
+    attribuzione: pai.attribuzione
+      ? { it: pai.attribuzione, en: pai.attribuzione }
+      : f.attribuzione,
+  };
+}
+
 export function FontiPage(): JSX.Element {
   const { lingua } = useLingua();
   const t = useTesti(T);
+  const provenienza = useProvenienza();
   useEffect(() => {
     scorriAllaScheda();
     window.addEventListener("hashchange", scorriAllaScheda);
@@ -230,7 +247,9 @@ export function FontiPage(): JSX.Element {
       <p className="fonti-avviso">{t.nonAffiliato}</p>
       <Copernicus />
       {ORDINE_RUOLI.map((ruolo) => {
-        const elenco = FONTI.filter((f) => f.ruolo === ruolo);
+        const elenco = FONTI.filter((f) => f.ruolo === ruolo).map((f) =>
+          conMosaicoPai(f, provenienza),
+        );
         if (elenco.length === 0) return null;
         return (
           <section key={ruolo} aria-labelledby={`ruolo-${ruolo}`}>

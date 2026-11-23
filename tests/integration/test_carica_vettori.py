@@ -132,3 +132,56 @@ async def test_un_secondo_giro_senza_cambiamenti_non_scrive(
     esito = await vettori.carica_vettori(cartella)
     assert esito.caricate == {}
     assert len(esito.invariate) == 5
+
+
+async def test_il_mosaico_pai_2024_entra_dal_geodatabase(pg_pool: object, tmp_path: Path) -> None:
+    """#670: la v. 5.0 è un File Geodatabase, ma la tabella ha le convenzioni delle altre."""
+    import geopandas as gpd
+    from ispra_idrogeo import MOSAICS
+
+    from limen.data.repos import pai_repo
+    from limen.integrations.geoserver_source.loader import _load_pai
+
+    nome = MOSAICS["pai_frane_2024"]
+    gdb = tmp_path / nome / f"{nome}.gdb"
+    gdb.parent.mkdir()
+    bari = Polygon(
+        [
+            (1_100_000, 4_560_000),
+            (1_101_000, 4_560_000),
+            (1_101_000, 4_561_000),
+            (1_100_000, 4_561_000),
+        ]
+    )
+    gpd.GeoDataFrame(
+        {"Shape_Area": [1e6, 6.4e5], "per_fr_ita": ["Elevata P3", "Aree di Attenzione AA"]},
+        geometry=[bari, bari.buffer(-100)],
+        crs="EPSG:32632",
+    ).to_file(gdb, driver="OpenFileGDB", layer="Mosaicatura_ISPRA_2024_aree_pericolosita_frana_PAI")
+
+    assert vettori.sorgenti(tmp_path, "pai_frane_2024") == [gdb]
+    assert vettori.sorgenti(tmp_path, "pai_frane") == []
+    esito = await vettori.carica_vettori(tmp_path, forza=True, scelti=[gdb])
+    assert esito.caricate == {"mosaicatura_ispra_2024_pericolosita_frana_pai": 2}
+    assert (await vettori.carica_vettori(tmp_path, scelti=[gdb])).caricate == {}
+
+    riquadro = (16.0, 40.0, 18.0, 42.0)
+    async with acquire() as conn:
+        righe = await conn.fetch(
+            "SELECT fid, per_fr_ita, shape_area, ST_SRID(geom) AS srid, GeometryType(geom) AS tipo "
+            "FROM sorgenti.mosaicatura_ispra_2024_pericolosita_frana_pai ORDER BY fid"
+        )
+        assert [(r["fid"], r["per_fr_ita"]) for r in righe] == [
+            (1, "Elevata P3"),
+            (2, "Aree di Attenzione AA"),
+        ]
+        assert {(r["srid"], r["tipo"]) for r in righe} == {(4326, "MULTIPOLYGON")}
+        aree = await _load_pai(conn, vettori.SCHEMA, riquadro, mosaico="pai_frane_2024")
+    assert {(a.id, a.hazard_class) for a in aree} == {("pai2024:1", "P3"), ("pai2024:2", "AA")}
+
+    # Tornando alla v. 4.0 i poligoni della v. 5.0 escono dal riquadro, con i suddivisi.
+    await pai_repo.upsert_many(aree)
+    assert await pai_repo.delete_prefisso("pai:", riquadro) == 0
+    assert await pai_repo.delete_prefisso("pai2024:", riquadro) == 2
+    async with acquire() as conn:
+        assert await conn.fetchval("SELECT count(*) FROM pai_hazard_subdiv") == 0
