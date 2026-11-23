@@ -71,3 +71,36 @@ def test_il_briefing_frane_riceve_l_affidabilita_della_regione() -> None:
     assert "Affidabilità dell'inventario IFFI: In questa regione IFFI censisce" in nota
     assert nota_affidabilita_iffi(_valutazione("it-puglia", HazardType.FLOOD)) == ""
     assert nota_affidabilita_iffi(_valutazione("non-una-regione", HazardType.LANDSLIDE)) == ""
+
+
+def test_il_source_di_idrogeo_mcp() -> None:
+    from limen.core.grounding_idrogeo import fonte
+
+    assert fonte({"source": " ISPRA IFFI, CC BY-SA 4.0 "}) == "ISPRA IFFI, CC BY-SA 4.0"
+    assert fonte({"source": 3, "idrogeo_source": "ISPRA PIR"}) == "ISPRA PIR"
+    assert fonte({}) is None
+
+
+def test_i_numeri_non_trovati_nei_fatti() -> None:
+    from limen.core.grounding_idrogeo import numeri_non_trovati
+
+    assert numeri_non_trovati("Bari ha 9 frane.", {"frane": 9}) == []
+    assert numeri_non_trovati("Bari ha 53 frane.", {"frane": 9}) == ["53"]
+    assert numeri_non_trovati("Caddero 40 mm.", {"frane": 9}, "pioggia 40 mm") == []
+
+
+def test_il_briefing_frane_cita_il_source_iffi_e_controlla_i_numeri(
+    caplog: object,
+) -> None:
+    from limen.agents.chat_agents.briefing import affidabilita_regione, con_fonte_idrogeo
+
+    a = affidabilita_regione(_valutazione("it-puglia", HazardType.LANDSLIDE))
+    assert a is not None
+    testo = con_fonte_idrogeo("Un racconto senza numeri.", a, "messaggio")
+    assert testo.endswith(f"**Fonti**\n- {a.fonte}")
+    # Con un blocco di fonti già presente, la riga si aggiunge lì, una volta.
+    con_blocco = con_fonte_idrogeo("Racconto.\n\n**Fonti**\n- Altro", a, "m")
+    assert con_blocco == f"Racconto.\n\n**Fonti**\n- Altro\n- {a.fonte}"
+    assert con_fonte_idrogeo(con_blocco, a, "m") == con_blocco
+    # Senza affidabilità (altri pericoli) il testo non cambia.
+    assert con_fonte_idrogeo("Racconto.", None, "m") == "Racconto."

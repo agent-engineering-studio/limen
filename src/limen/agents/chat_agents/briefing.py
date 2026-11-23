@@ -24,9 +24,11 @@ from importlib import resources
 
 from limen.agents.chat_agents.prompts_registry import PROMPT_PACKAGE, prompt_file
 from limen.agents.chat_agents.risk_analyst import RiskAnalysis
-from limen.agents.grounding.format import format_citations
+from limen.agents.grounding.format import format_citations, senza_citazioni
 from limen.agents.grounding.service import GroundingService
 from limen.agents.llm_factory.base import ChatClient, ChatMessage
+from limen.core.affidabilita_iffi import AffidabilitaIffi
+from limen.core.grounding_idrogeo import numeri_non_trovati
 from limen.core.logging import get_logger
 from limen.core.models.context import AggregateAssessment, CellRiskRecord
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
@@ -232,6 +234,15 @@ def _cod_reg(aoi_id: str) -> int | None:
     return None
 
 
+def affidabilita_regione(assessment: AggregateAssessment) -> AffidabilitaIffi | None:
+    """Quanto fidarsi di IFFI nella regione dell'AOI (#669); solo per le frane."""
+    from limen.core.affidabilita_iffi import affidabilita_iffi
+
+    if assessment.hazard_type is not HazardType.LANDSLIDE:
+        return None
+    return affidabilita_iffi("regioni", _cod_reg(assessment.aoi_id))
+
+
 def nota_affidabilita_iffi(assessment: AggregateAssessment) -> str:
     """Quanto fidarsi di IFFI nella regione (#669), per il racconto delle frane.
 
@@ -239,14 +250,34 @@ def nota_affidabilita_iffi(assessment: AggregateAssessment) -> str:
     IFFI bassa non è una prova di sicurezza. Vuota per gli altri pericoli e
     per un'AOI che non è una regione. Non tocca il punteggio.
     """
-    from limen.core.affidabilita_iffi import affidabilita_iffi
-
-    if assessment.hazard_type is not HazardType.LANDSLIDE:
-        return ""
-    a = affidabilita_iffi("regioni", _cod_reg(assessment.aoi_id))
+    a = affidabilita_regione(assessment)
     if a is None:
         return ""
     return f"\nAffidabilità dell'inventario IFFI: {a.lettura}\n"
+
+
+def con_fonte_idrogeo(testo: str, affidabilita: AffidabilitaIffi | None, messaggio: str) -> str:
+    """Il briefing con la citazione IFFI tra le fonti, e i suoi numeri controllati (#671).
+
+    Solo se il modello ha ricevuto l'affidabilità dell'inventario. La
+    citazione è il ``source`` di ispra-idrogeo, non una fonte generica, e va
+    nel blocco «Fonti» (che i controlli dei numeri tolgono). I numeri del
+    racconto si controllano con ``ispra_idrogeo.grounding.check_text`` contro
+    l'affidabilità e il messaggio: uno non trovato finisce in un warning, il
+    testo non cambia (decide una persona, come per il revisore).
+    """
+    if affidabilita is None:
+        return testo
+    racconto = senza_citazioni(testo)
+    non_trovati = numeri_non_trovati(racconto, affidabilita.model_dump(), messaggio)
+    if non_trovati:
+        log.warning("briefing.idrogeo.numeri_non_trovati", numeri=non_trovati[:10])
+    riga = f"- {affidabilita.fonte}"
+    if riga in testo:
+        return testo
+    if racconto == testo:
+        return f"{testo}\n\n**Fonti**\n{riga}"
+    return f"{testo}\n{riga}"
 
 
 def _caine_note(cell: CellRiskRecord) -> str:
@@ -348,10 +379,16 @@ class BriefingAgent:
         assessment: AggregateAssessment,
         analysis: RiskAnalysis | None = None,
     ) -> str:
+        messaggio = self.user_message(assessment, analysis)
         messages: list[ChatMessage] = [
             ChatMessage(role="system", content=_load_system_prompt(assessment.hazard_type)),
-            ChatMessage(role="user", content=self.user_message(assessment, analysis)),
+            ChatMessage(role="user", content=messaggio),
         ]
+        affidabilita = affidabilita_regione(assessment)
+
+        async def finale(testo: str) -> str:
+            con_citazioni = await self._append_citations(testo, grounding_task)
+            return con_fonte_idrogeo(con_citazioni, affidabilita, messaggio)
 
         # Kick off the advisory KG lookup CONCURRENTLY so its latency
         # overlaps with the LLM call — it can never extend total budget
@@ -380,9 +417,9 @@ class BriefingAgent:
         log.info("briefing.length", words=words)
 
         if MIN_WORDS <= words <= MAX_WORDS:
-            return await self._append_citations(text, grounding_task)
+            return await finale(text)
         if words > MAX_WORDS:
-            return await self._append_citations(trim_to_max(text, MAX_WORDS), grounding_task)
+            return await finale(trim_to_max(text, MAX_WORDS))
 
         # Too short → one regeneration with explicit instruction.
         log.info("briefing.regenerate", reason="too_short", words=words)
@@ -411,9 +448,9 @@ class BriefingAgent:
         retry_words = count_words(retry)
         log.info("briefing.length.retry", words=retry_words)
         if MIN_WORDS <= retry_words <= MAX_WORDS:
-            return await self._append_citations(retry, grounding_task)
+            return await finale(retry)
         if retry_words > MAX_WORDS:
-            return await self._append_citations(trim_to_max(retry, MAX_WORDS), grounding_task)
+            return await finale(trim_to_max(retry, MAX_WORDS))
         if grounding_task is not None:
             grounding_task.cancel()
         return _fallback_briefing(
