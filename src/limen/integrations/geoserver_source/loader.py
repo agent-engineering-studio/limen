@@ -163,6 +163,10 @@ async def _load_iffi(
                         movement_type=r["movement"],
                         state=None,
                         velocity_class=None,
+                        # Gli shapefile open-data IFFI hanno solo tipo di
+                        # movimento e geometria (#667). Le date (~28.000 frane
+                        # su 721.000) sono solo nell'API di IdroGEO:
+                        # `ispra_idrogeo.dated.dated_landslides`, non caricate.
                         occurrence_date=None,
                         geom=geom,
                         attributes={"source": "geoserver", "family": family, "region": region},

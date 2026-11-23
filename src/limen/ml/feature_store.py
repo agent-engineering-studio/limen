@@ -1,6 +1,8 @@
 """Offline feature-store extraction (V2).
 
-Walks the IFFI inventory + a balanced background sample, reconstructs
+Walks the dated landslide events of ``landslide_events`` (e-ITALICA and the
+other dated catalogues, not the undated IFFI inventory, #667) + a balanced
+background sample, reconstructs
 the point-in-time-correct feature vector for each cell using the
 existing :func:`assemble_bundles` path (so train/serve parity is
 guaranteed), assigns a coarse spatial-block id for CV, and writes the
@@ -69,7 +71,10 @@ class SpatialBlockGrid:
 
 @dataclass(frozen=True, slots=True)
 class _PositiveEvent:
-    """One IFFI event, mapped to its containing grid cell."""
+    """One dated landslide event, mapped to its containing grid cell.
+
+    ``iffi_id`` is the ``landslide_events`` id: the name is historical.
+    """
 
     iffi_id: str
     cell_id: str
