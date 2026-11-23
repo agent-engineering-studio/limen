@@ -295,6 +295,13 @@ layer e nessuna tabella grezza.
    `GEO_INIT_FORCE=true make geoserver-init`.
 3. Un file che non è arrivato lo dice il log `geodati.file_fallito` (o
    `geodati.base_fallito`); il giro dopo lo riprova.
+4. Una tabella attesa che manca in `sorgenti` (#665) non ferma
+   `geoserver-sync`, ma lo dicono il log `geoserver_source.tabelle_mancanti`,
+   la riga `geoserver` / `tabelle_mancanti:<aoi>` di `dataset_versions` e il
+   riepilogo `limen qualita-dati`. Con `--rigoroso`
+   (`LIMEN_GEOSERVER_SYNC_RIGOROSO=1`) il comando esce con 1. Una tabella
+   vuota invece è normale: per un layer che IdroGEO non ha, ispra-idrogeo
+   scarica un file vuoto.
 
 ### "La mappa è vuota"
 

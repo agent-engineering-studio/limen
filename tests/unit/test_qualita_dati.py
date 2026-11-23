@@ -85,6 +85,7 @@ def test_metriche_per_la_settimana_dopo() -> None:
         "job_con_errori": 1,
         "in_ritardo": [],
         "non_misurate": {"flood": 0.25},
+        "tabelle_mancanti": {},
     }
 
 
@@ -122,3 +123,27 @@ def test_un_job_con_la_riga_nazionale_si_giudica_su_quella() -> None:
         "limen-nowcast-monitoring", None, ORA - timedelta(hours=2), timedelta(minutes=15), 900
     )
     assert [r.scope for r in _fatti(cadenze=[fermo, regione]).ritardi()] == [None]
+
+
+def test_una_tabella_iffi_mancante_si_dice_per_regione() -> None:
+    """#665: una regione senza la tabella non è una regione senza frane."""
+    f = Fatti(
+        ORA,
+        [],
+        [],
+        {},
+        tabelle_mancanti={
+            "it-molise": ["frane_poly_molise_opendata"],
+            "it-puglia": ["a", "b", "c", "d"],
+        },
+    )
+    out = righe(f, None)
+    assert out == [
+        "**it-molise**: una tabella attesa non trovata all'ultimo geoserver-sync "
+        "(frane_poly_molise_opendata): le celle perdono quel termine, "
+        "non sono senza frane o senza pericolo.",
+        "**it-puglia**: 4 tabelle attese non trovate all'ultimo geoserver-sync "
+        "(a, b, c e altre 1): le celle perdono quel termine, "
+        "non sono senza frane o senza pericolo.",
+    ]
+    assert f.metriche()["tabelle_mancanti"] == {"it-molise": 1, "it-puglia": 4}
