@@ -73,6 +73,27 @@ voci:
       https://idrogeo.isprambiente.it
     peso_gb: 0.70
 
+  - id: pir_comuni
+    nome: residenti esposti per comune (indicatori di rischio ISPRA)
+    a_cosa_serve: >-
+      Quanti residenti, edifici e imprese di ogni comune stanno nelle aree a
+      pericolosità frana P3-P4 e idraulica P2. Dice quanto pesa un evento in un
+      comune, non se arriverà: non entra nei punteggi, si mostra accanto.
+    pericoli: [landslide, flood]
+    livello: consigliato
+    misura: {tabella: esposizione_comuni}
+    procura_con: limen esposizione-sync
+    fonte: ISPRA IdroGEO — indicatori di rischio per comune (API /pir/comuni)
+    url: https://idrogeo.isprambiente.it
+    # Licenza degli indicatori PIR verificata sul PDF della pagina open-data
+    # di IdroGEO (22/11/2026, ispra-idrogeo#11): CC BY 4.0, non share-alike.
+    licenza: CC BY 4.0
+    attribuzione: >-
+      ISPRA (2024) Pericolosità e indicatori di rischio frane; ISPRA (2020)
+      Pericolosità e indicatori di rischio alluvioni – Piattaforma IdroGEO,
+      https://idrogeo.isprambiente.it
+    peso_gb: 0.02
+
   - id: dtm
     nome: pendenza (DTM)
     a_cosa_serve: >-

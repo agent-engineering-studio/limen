@@ -294,6 +294,10 @@ class EsposizioneIspra(BaseModel):
     edifici: int | None = None
     imprese: int | None = None
     aggiornato: str
+    #: La voce di ``config/dati.yaml`` e la citazione che la licenza chiede (#666).
+    dataset: str | None = None
+    licenza: str | None = None
+    attribuzione: str | None = None
 
 
 class AllertaUfficiale(BaseModel):

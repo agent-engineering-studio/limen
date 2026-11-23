@@ -237,6 +237,18 @@ def _cartella_firms() -> list[Path]:
     return [cartella_cache()]
 
 
+async def _esposizione() -> None:
+    from limen.integrations.idrogeo.esposizione import sync_esposizione
+
+    await sync_esposizione()
+
+
+def _cartella_esposizione() -> list[Path]:
+    from limen.integrations.idrogeo.esposizione import cartella
+
+    return [cartella()]
+
+
 def _cartella_catasti() -> list[Path]:
     from limen.cli.catasti_incendi import cartella
 
@@ -266,6 +278,7 @@ def procuratori() -> dict[str, Procuratore]:
         "corine": Procuratore(_corine, gs("clc2018_it", "clc2018_it.part")),
         "litologia": Procuratore(_litologia, gs("carta_geolitologica*")),
         "comuni": Procuratore(_confini_comuni, gs("Limiti01012023_g*")),
+        "pir_comuni": Procuratore(_esposizione, _cartella_esposizione),
         "impermeabilizzazione": Procuratore(_impermeabilizzazione, _cartella_impermeabilizzazione),
         "acqua_temporanea": Procuratore(_acqua_temporanea, _cartella_acqua_temporanea),
         "strade": Procuratore(_strade, lambda: [radice_dati() / "osm"]),

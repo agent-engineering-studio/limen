@@ -6,6 +6,7 @@ import json
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
+from limen.config.catalogo_dati import carica_catalogo
 from limen.data.db import acquire
 
 if TYPE_CHECKING:
@@ -68,10 +69,15 @@ async def per_comuni(conn: Any, istat_codes: Sequence[str]) -> dict[str, dict[st
         "FROM esposizione_comuni WHERE istat_code = ANY($1::text[])",
         list(istat_codes),
     )
+    voce = carica_catalogo().voce("pir_comuni")
     return {
         str(r["istat_code"]): {
             **{c: r[c] for c in CAMPI_PUBBLICI},
             "aggiornato": r["aggiornato"].isoformat(),
+            # La citazione che la CC BY 4.0 chiede, dalla voce del catalogo (#666).
+            "dataset": voce.id,
+            "licenza": voce.licenza,
+            "attribuzione": voce.attribuzione,
         }
         for r in rows
     }
