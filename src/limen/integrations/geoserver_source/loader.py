@@ -6,6 +6,14 @@ families and the PAI hazard mosaic for one AOI and upserts them into the
 operational ``iffi_landslides`` / ``pai_hazard`` tables, so the existing
 ``bootstrap-static`` per-cell aggregation runs unchanged.
 
+Ogni riga porta in ``attributes`` la voce di ``config/dati.yaml`` da cui viene
+(``dataset``) e la citazione che la licenza chiede (``citazione``, #666):
+IFFI per regione, i mosaici con la loro versione. IFFI e i mosaici sono
+CC BY-SA 4.0, quindi chi esporta celle o report deve poterle riportare. Le
+righe scritte prima le ricevono al sync dopo, con un ``UPDATE`` che tocca solo
+quelle senza ``dataset``: non cambia la versione del dato, e il bootstrap non
+ricalcola niente.
+
 Una tabella attesa che non c'è (#665) non ferma il caricamento, ma non passa
 più in silenzio: finisce nell'esito (``mancanti``), in ``dataset_versions``
 (``geoserver`` / ``tabelle_mancanti:<aoi>``, letto dal riepilogo
@@ -17,11 +25,15 @@ tabella vuota, non una tabella assente.
 
 from __future__ import annotations
 
+import json
 import re
-from collections.abc import Awaitable, Callable
+from collections import defaultdict
+from collections.abc import Awaitable, Callable, Iterable
+from typing import Any
 
 import asyncpg
 
+from limen.config.catalogo_dati import carica_catalogo
 from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.data.db import acquire, register_postgis
@@ -62,6 +74,48 @@ _IFFI_FAMILIES = ("frane_poly", "frane_line", "frane_piff", "aree_poly", "dgpv_p
 
 # IFFI has no Trentino-Alto Adige: it publishes the two autonomous provinces.
 _IFFI_AREE = {"trentino_alto_adige": ("bolzano", "trento")}
+
+# Chi pubblica l'IFFI di ogni area, per la citazione che la licenza chiede:
+# «ISPRA - Regione X. Inventario dei Fenomeni Franosi in Italia - IFFI.
+# idrogeo.isprambiente.it» (le 21 licenze per area, #406).
+_ENTE_IFFI: dict[str, str] = {
+    "piemonte": "Regione Piemonte",
+    "valle_d_aosta": "Regione Valle d'Aosta",
+    "lombardia": "Regione Lombardia",
+    "bolzano": "Provincia Autonoma di Bolzano",
+    "trento": "Provincia Autonoma di Trento",
+    "veneto": "Regione Veneto",
+    "friuli_venezia_giulia": "Regione Friuli Venezia Giulia",
+    "liguria": "Regione Liguria",
+    "emilia_romagna": "Regione Emilia-Romagna",
+    "toscana": "Regione Toscana",
+    "umbria": "Regione Umbria",
+    "marche": "Regione Marche",
+    "lazio": "Regione Lazio",
+    "abruzzo": "Regione Abruzzo",
+    "molise": "Regione Molise",
+    "campania": "Regione Campania",
+    "puglia": "Regione Puglia",
+    "basilicata": "Regione Basilicata",
+    "calabria": "Regione Calabria",
+    "sicilia": "Regione Siciliana",
+    "sardegna": "Regione Sardegna",
+}
+
+
+def citazione_iffi(area: str) -> str:
+    """La citazione dell'IFFI di un'area (``puglia``, ``bolzano``), CC BY-SA 4.0."""
+    ente = _ENTE_IFFI.get(area, "Regioni e Province Autonome")
+    return (
+        f"ISPRA \u2013 {ente}. Inventario dei Fenomeni Franosi in Italia - IFFI. "
+        "idrogeo.isprambiente.it"
+    )
+
+
+def _citazione(voce: str) -> str:
+    """L'attribuzione della voce del catalogo (``pai_frana``, ``idraulica``)."""
+    return carica_catalogo().voce(voce).attribuzione or carica_catalogo().voce(voce).fonte
+
 
 # National PAI landslide-hazard mosaic (single table, ~900k polygons).
 _PAI_TABLE = "mosaicatura_ispra_2020_2021_aree_pericolosita_frana_pai"
@@ -169,7 +223,13 @@ async def _load_iffi(
                         # `ispra_idrogeo.dated.dated_landslides`, non caricate.
                         occurrence_date=None,
                         geom=geom,
-                        attributes={"source": "geoserver", "family": family, "region": region},
+                        attributes={
+                            "source": "geoserver",
+                            "family": family,
+                            "region": region,
+                            "dataset": "iffi",
+                            "citazione": citazione_iffi(area),
+                        },
                     )
                 )
     return items
@@ -197,6 +257,7 @@ async def _load_pai(
         bbox[3],
     )
     items: list[PAIHazard] = []
+    citazione = _citazione("pai_frana")
     for r in rows:
         token = _pai_class_token(r["cls"])
         geom = r["geom"]
@@ -208,7 +269,12 @@ async def _load_pai(
                 hazard_class=token,
                 authority=None,
                 geom=geom,
-                attributes={"source": "geoserver", "per_fr_ita": r["cls"]},
+                attributes={
+                    "source": "geoserver",
+                    "per_fr_ita": r["cls"],
+                    "dataset": "pai_frana",
+                    "citazione": citazione,
+                },
             )
         )
     return items
@@ -255,6 +321,7 @@ async def _load_idraulica(
     mancanti: list[str] | None = None,
 ) -> list[FloodHazard]:
     items: list[FloodHazard] = []
+    citazione = _citazione("idraulica")
     for table, cls in (await _idraulica_tables(conn, schema, mancanti)).items():
         cols = await _table_columns(conn, schema, table)
         if "geom" not in cols:
@@ -279,7 +346,12 @@ async def _load_idraulica(
                     id=f"idr:{table}:{r['rid']}",
                     hazard_class=cls,
                     geom=geom,
-                    attributes={"source": "geoserver", "table": table},
+                    attributes={
+                        "source": "geoserver",
+                        "table": table,
+                        "dataset": "idraulica",
+                        "citazione": citazione,
+                    },
                 )
             )
     return items
@@ -310,6 +382,35 @@ async def _se_cambiato(
         metadata={"items": len(righe)},
     )
     return n
+
+
+async def _completa_attributi(tabella: str, items: Iterable[Any]) -> int:
+    """Dataset e citazione alle righe scritte prima di #666; quante ne tocca.
+
+    Solo le righe senza ``dataset``: dal secondo giro non tocca niente. Non
+    passa da ``_se_cambiato``, perché non cambia il dato né la sua versione.
+    """
+    gruppi: dict[str, list[str]] = defaultdict(list)
+    extra: dict[str, dict[str, Any]] = {}
+    for item in items:
+        chiave = json.dumps(
+            {"dataset": item.attributes["dataset"], "citazione": item.attributes["citazione"]},
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        gruppi[chiave].append(item.id)
+        extra[chiave] = json.loads(chiave)
+    toccate = 0
+    async with acquire() as conn:
+        for chiave, ids in gruppi.items():
+            esito = await conn.execute(
+                f"UPDATE {tabella} SET attributes = attributes || $2::jsonb "
+                "WHERE id = ANY($1::text[]) AND NOT (attributes ? 'dataset')",
+                ids,
+                json.dumps(extra[chiave], ensure_ascii=False),
+            )
+            toccate += int(str(esito).rsplit(" ", 1)[-1] or 0)
+    return toccate
 
 
 #: Il dataset di ``dataset_versions`` con le tabelle attese e non trovate.
@@ -394,6 +495,17 @@ async def sync_geoserver_source_for_aoi(aoi_id: str) -> dict[str, int]:
         [f"{i.id}|{i.hazard_class}".encode() + i.geom.wkb for i in flood_items],
         lambda: flood_upsert(flood_items),
     )
+    # Le righe di prima di #666, che `_se_cambiato` ha trovato invariate.
+    completate = 0
+    for tabella, items in (
+        ("iffi_landslides", iffi_items),
+        ("pai_hazard", pai_items),
+        ("flood_hazard", flood_items),
+    ):
+        if items:
+            completate += await _completa_attributi(tabella, items)
+    if completate:
+        log.info("geoserver_source.citazioni_aggiunte", aoi_id=aoi_id, righe=completate)
     log.info(
         "geoserver_source.synced",
         aoi_id=aoi_id,

@@ -865,6 +865,34 @@ export const FONTI: readonly Fonte[] = [
   },
   // --- contesto --------------------------------------------------------------
   {
+    id: "ispra-pir",
+    ente: "ISPRA",
+    dataset: t(
+      "Indicatori di rischio frane e alluvioni per comune (IdroGEO)",
+      "Landslide and flood risk indicators by municipality (IdroGEO)",
+    ),
+    ruolo: "contesto",
+    pericoli: ["landslide", "flood"],
+    cosa: t(
+      "Residenti, edifici e imprese nelle aree a pericolosità frana P3-P4 e idraulica P2.",
+      "Residents, buildings and businesses in landslide hazard areas P3-P4 and flood hazard P2.",
+    ),
+    accesso: t(
+      "API di IdroGEO, una volta al mese, con le risposte salvate su disco.",
+      "IdroGEO API, once a month, with the answers saved on disk.",
+    ),
+    interpretazione: t(
+      "Non entra nel punteggio: si mostra nella scheda del comune, per dire quanto pesa un evento lì.",
+      "It does not enter the score: it is shown on the municipality page, to say how much an event weighs there.",
+    ),
+    licenza: "CC BY 4.0",
+    attribuzione: t(
+      "ISPRA (2024) Pericolosità e indicatori di rischio frane; ISPRA (2020) Pericolosità e indicatori di rischio alluvioni – Piattaforma IdroGEO, https://idrogeo.isprambiente.it",
+      "ISPRA (2024) Pericolosità e indicatori di rischio frane; ISPRA (2020) Pericolosità e indicatori di rischio alluvioni – Piattaforma IdroGEO, https://idrogeo.isprambiente.it",
+    ),
+    url: "https://idrogeo.isprambiente.it",
+  },
+  {
     id: "dpc-bollettini",
     ente: "Dipartimento della Protezione Civile",
     dataset: t(

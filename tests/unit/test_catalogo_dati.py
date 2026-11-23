@@ -99,3 +99,16 @@ def test_essenziali_esclude_consigliati_e_altri_pericoli() -> None:
     )
     assert [v.id for v in catalogo.essenziali(HazardType.LANDSLIDE)] == ["dtm"]
     assert catalogo.voce("strade").livello is Livello.CONSIGLIATO
+
+
+def test_gli_indicatori_pir_hanno_licenza_e_citazione() -> None:
+    """#666: gli indicatori di rischio ISPRA sono CC BY 4.0, IFFI e mosaici CC BY-SA."""
+    catalogo = carica_catalogo()
+    pir = catalogo.voce("pir_comuni")
+    assert pir.licenza == "CC BY 4.0"
+    assert pir.attribuzione is not None
+    assert pir.attribuzione.startswith("ISPRA (2024) Pericolosità e indicatori di rischio frane")
+    assert "ISPRA (2020) Pericolosità e indicatori di rischio alluvioni" in pir.attribuzione
+    assert pir.misura.tabella == "esposizione_comuni"
+    for voce in ("iffi", "pai_frana", "idraulica"):
+        assert catalogo.voce(voce).licenza == "CC BY-SA 4.0"

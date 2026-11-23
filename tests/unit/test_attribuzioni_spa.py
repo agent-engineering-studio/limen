@@ -30,6 +30,7 @@ _CORRISPONDENZE: dict[str, tuple[str, str]] = {
     "iffi": ("ispra-iffi", "ISPRA"),
     "pai_frana": ("ispra-pai", "ISPRA"),
     "idraulica": ("ispra-idraulica", "ISPRA"),
+    "pir_comuni": ("ispra-pir", "ISPRA"),
     "dtm": ("cnr-irpi-dtm", "CNR-IRPI"),
     "corine": ("corine", "Copernicus Land Monitoring Service"),
     "impermeabilizzazione": ("imperviousness", "Copernicus Land Monitoring Service"),

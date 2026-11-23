@@ -93,6 +93,11 @@ async def test_trentino_alto_adige_legge_le_due_province(
     assert sum("_bolzano_" in t for t in lette) == famiglie
     assert sum("_trento_" in t for t in lette) == famiglie
     assert len({f.id for f in frane}) == len(frane)
+    # La citazione è quella dell'ente che pubblica l'area, non della regione (#666).
+    bolzano = next(f for f in frane if "_bolzano_" in f.id)
+    assert bolzano.attributes is not None
+    assert bolzano.attributes["dataset"] == "iffi"
+    assert "Provincia Autonoma di Bolzano" in bolzano.attributes["citazione"]
 
 
 async def test_lo_stesso_insieme_in_altro_ordine_non_si_riscrive(
@@ -120,6 +125,80 @@ async def test_lo_stesso_insieme_in_altro_ordine_non_si_riscrive(
     assert await loader._se_cambiato("flood", "it-molise", [b"b", b"a"], scrivi) == 2
     assert await loader._se_cambiato("flood", "it-puglia", [b"a", b"c"], scrivi) == 2
     assert len(scritture) == 3
+
+
+def test_la_citazione_iffi_nomina_l_ente_dell_area() -> None:
+    assert loader.citazione_iffi("puglia") == (
+        "ISPRA \u2013 Regione Puglia. Inventario dei Fenomeni Franosi in Italia - IFFI. "
+        "idrogeo.isprambiente.it"
+    )
+    assert "Regione Siciliana" in loader.citazione_iffi("sicilia")
+    # Ogni area che il loader legge ha il suo ente.
+    from limen.integrations.idrogeo.geodati import AREE
+
+    for area in AREE:
+        assert area.replace("-", "_") in loader._ENTE_IFFI, area
+
+
+async def test_pai_e_idraulica_portano_la_voce_e_la_citazione_del_catalogo() -> None:
+    class Conn:
+        async def fetch(self, _sql: str, *_a: object) -> list[dict[str, object]]:
+            return [{"rid": "7", "cls": "Elevata P3", "geom": Point(16, 41)}]
+
+    async def colonne(_conn: object, _schema: str, _tabella: str) -> set[str]:
+        return {"geom", "per_fr_ita", "objectid"}
+
+    mp = pytest.MonkeyPatch()
+    mp.setattr(loader, "_table_columns", colonne)
+    try:
+        pai = await loader._load_pai(cast(asyncpg.Connection, Conn()), "s", (0, 0, 1, 1))
+    finally:
+        mp.undo()
+    assert pai[0].attributes is not None
+    assert pai[0].attributes["dataset"] == "pai_frana"
+    assert "(v. 4.0" in pai[0].attributes["citazione"]
+
+
+async def test_le_righe_di_prima_ricevono_la_citazione_una_volta(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Un UPDATE per citazione, solo sulle righe senza `dataset`."""
+    from collections.abc import AsyncIterator
+    from contextlib import asynccontextmanager
+
+    from limen.data.repos.iffi_repo import IFFILandslide
+
+    eseguite: list[tuple[str, list[str], str]] = []
+
+    class Conn:
+        async def execute(self, sql: str, ids: list[str], extra: str) -> str:
+            eseguite.append((sql, ids, extra))
+            return f"UPDATE {len(ids)}"
+
+    @asynccontextmanager
+    async def acquisisci() -> AsyncIterator[Conn]:
+        yield Conn()
+
+    monkeypatch.setattr(loader, "acquire", acquisisci)
+
+    def frana(id_: str, area: str) -> IFFILandslide:
+        return IFFILandslide(
+            id=id_,
+            movement_type=None,
+            state=None,
+            velocity_class=None,
+            occurrence_date=None,
+            geom=Point(11, 46),
+            attributes={"dataset": "iffi", "citazione": loader.citazione_iffi(area)},
+        )
+
+    n = await loader._completa_attributi(
+        "iffi_landslides", [frana("a", "bolzano"), frana("b", "trento"), frana("c", "bolzano")]
+    )
+    assert n == 3
+    assert len(eseguite) == 2
+    assert all("NOT (attributes ? 'dataset')" in sql for sql, _, _ in eseguite)
+    assert sorted(ids for _, ids, _ in eseguite) == [["a", "c"], ["b"]]
 
 
 async def test_una_tabella_mancante_finisce_nell_esito_e_nello_stato(
@@ -172,6 +251,11 @@ async def test_una_tabella_mancante_finisce_nell_esito_e_nello_stato(
     monkeypatch.setattr(loader, "record", registra)
     monkeypatch.setattr(loader, "iffi_upsert", scrivi)
     monkeypatch.setattr(loader, "pai_upsert", scrivi)
+
+    async def completa(_tabella: str, _items: object) -> int:  # #666, sul DB
+        return 0
+
+    monkeypatch.setattr(loader, "_completa_attributi", completa)
 
     esito = await loader.sync_geoserver_source_for_aoi("it-puglia")
 
