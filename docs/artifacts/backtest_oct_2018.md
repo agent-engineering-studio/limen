@@ -27,7 +27,7 @@ Window: **2018-10-28T00:00:00+00:00 → 2018-11-02T00:00:00+00:00**
 Generated: <utc-iso>
 
 - Cells scored per hour: <n>
-- Truth events (IFFI in window): <k>
+- Truth events (in window): <k>
 - Alert-level cell-hours: <m>
 - Hits: <h>, false alarms: <f>, misses: <i>
 
@@ -45,7 +45,8 @@ The replay is fully deterministic given:
 * the same `regional_thresholds.yaml`,
 * the same Open-Meteo ERA5 archive responses (cached in
   `app_cache` by `CachedOpenMeteoClient` so a second run is offline),
-* the same `iffi_landslides.occurrence_date` truth set.
+* the same `landslide_events` truth set (the dated catalogues; the IFFI
+  open-data inventory has no dates, #667).
 
 If you tweak weights in the YAML, regenerate this artifact and commit
 both — they form the design audit trail for the V2 ML model.

@@ -123,11 +123,13 @@ async def test_un_file_recente_non_si_chiede_e_uno_rotto_si_riscarica(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     richieste: list[str] = []
+    intestazioni: list[dict[str, str]] = []
     rotto = [True]
 
     def idrogeo(request: httpx.Request) -> httpx.Response:
         nome = request.url.path.rsplit("/", 1)[1]
         richieste.append(nome)
+        intestazioni.append(dict(request.headers))
         if nome == "dgpv_poly_puglia_opendata.zip" and rotto:
             rotto.clear()
             return httpx.Response(200, content=b"<html>non uno zip</html>", headers={"ETag": '"x"'})
@@ -144,13 +146,13 @@ async def test_un_file_recente_non_si_chiede_e_uno_rotto_si_riscarica(
 
     primo = await geodati.sync_geodati(impostazioni)
     assert list(primo.falliti) == ["dgpv_poly_puglia_opendata.zip"]
-    # Lo ZIP rotto e il suo ETag sono andati: niente 304 eterno.
+    # Lo ZIP rotto è andato: senza file non si manda il suo ETag, niente 304 eterno.
     assert not (tmp_path / "dgpv_poly_puglia_opendata.zip").exists()
-    assert not (tmp_path / "dgpv_poly_puglia_opendata.zip.meta.json").exists()
 
     richieste.clear()
     secondo = await geodati.sync_geodati(impostazioni)
     # Gli altri 106 sono recenti: si chiede solo quello che mancava.
     assert richieste == ["dgpv_poly_puglia_opendata.zip"]
+    assert "if-none-match" not in intestazioni[-1]
     assert secondo.cambiati == ["dgpv_poly_puglia_opendata.zip"]
     assert secondo.invariati == 106 and not secondo.falliti

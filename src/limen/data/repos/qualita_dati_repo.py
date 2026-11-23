@@ -58,6 +58,15 @@ async def raccogli(adesso: datetime) -> Fatti:
              GROUP BY hazard_type
             """
         )
+        # L'ultimo stato per AOI delle tabelle mancanti di geoserver-sync (#665).
+        mancanti = await conn.fetch(
+            """
+            SELECT DISTINCT ON (dataset) dataset, metadata
+              FROM dataset_versions
+             WHERE source = 'geoserver' AND dataset LIKE 'tabelle_mancanti:%'
+             ORDER BY dataset, fetched_at DESC, id DESC
+            """
+        )
     return Fatti(
         adesso=adesso,
         errori=[
@@ -83,7 +92,20 @@ async def raccogli(adesso: datetime) -> Fatti:
         non_misurate={
             str(r["hazard_type"]): (int(r["non_misurate"]), int(r["totale"])) for r in misurate
         },
+        tabelle_mancanti=_tabelle_mancanti(mancanti),
     )
+
+
+def _tabelle_mancanti(righe: list[Any]) -> dict[str, list[str]]:
+    out: dict[str, list[str]] = {}
+    for r in righe:
+        meta = r["metadata"]
+        if isinstance(meta, str):
+            meta = json.loads(meta)
+        tabelle = meta.get("tabelle") if isinstance(meta, dict) else None
+        if tabelle:
+            out[str(r["dataset"]).split(":", 1)[1]] = [str(t) for t in tabelle]
+    return out
 
 
 async def settimana_prima(adesso: datetime) -> dict[str, Any] | None:

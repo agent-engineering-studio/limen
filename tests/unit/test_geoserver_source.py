@@ -199,3 +199,122 @@ async def test_le_righe_di_prima_ricevono_la_citazione_una_volta(
     assert len(eseguite) == 2
     assert all("NOT (attributes ? 'dataset')" in sql for sql, _, _ in eseguite)
     assert sorted(ids for _, ids, _ in eseguite) == [["a", "c"], ["b"]]
+
+
+async def test_una_tabella_mancante_finisce_nell_esito_e_nello_stato(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#665: la tabella che manca si conta e si registra; quella vuota no."""
+
+    async def colonne(_conn: object, _schema: str, tabella: str) -> set[str]:
+        # frane_line: tabella assente. frane_piff: presente ma vuota (IdroGEO
+        # non ha il layer e ispra-idrogeo scarica un file vuoto).
+        return set() if tabella.startswith("frane_line_") else {"geom", "id_frana", "per_fr_ita"}
+
+    class Conn:
+        async def fetch(self, sql: str, *_a: object) -> list[dict[str, object]]:
+            if "frane_piff_" in sql:
+                return []
+            return [{"rid": "1", "movement": None, "cls": "Elevata P3", "geom": Point(16, 41)}]
+
+        async def fetchrow(self, *_a: object) -> dict[str, object] | None:
+            return None  # nessuna tabella idraulica
+
+        async def close(self) -> None:
+            return None
+
+    registrati: list[tuple[str, str, object]] = []
+
+    async def trova(*_a: object) -> None:
+        return None
+
+    async def registra(*, source: str, dataset: str, version: str, metadata: object) -> None:
+        registrati.append((dataset, version, metadata))
+
+    async def connetti(_dsn: str) -> Conn:
+        return Conn()
+
+    async def niente(*_a: object, **_k: object) -> None:
+        return None
+
+    async def riquadro(_aoi: str) -> tuple[float, float, float, float]:
+        return (15.0, 40.0, 17.0, 42.0)
+
+    async def scrivi(items: list[object]) -> int:
+        return len(items)
+
+    monkeypatch.setattr(loader, "_table_columns", colonne)
+    monkeypatch.setattr(loader.asyncpg, "connect", connetti)
+    monkeypatch.setattr(loader, "register_postgis", niente)
+    monkeypatch.setattr(loader, "_aoi_bbox", riquadro)
+    monkeypatch.setattr(loader, "find", trova)
+    monkeypatch.setattr(loader, "record", registra)
+    monkeypatch.setattr(loader, "iffi_upsert", scrivi)
+    monkeypatch.setattr(loader, "pai_upsert", scrivi)
+
+    async def completa(_tabella: str, _items: object) -> int:  # #666, sul DB
+        return 0
+
+    monkeypatch.setattr(loader, "_completa_attributi", completa)
+
+    esito = await loader.sync_geoserver_source_for_aoi("it-puglia")
+
+    assert esito["mancanti"] == 2
+    assert esito["iffi"] == 3  # poly, aree, dgpv: la piff vuota non manca
+    stato = [r for r in registrati if r[0] == "tabelle_mancanti:it-puglia"]
+    assert len(stato) == 1
+    assert stato[0][2] == {
+        "tabelle": [
+            "frane_line_puglia_opendata",
+            "mosaicatura_ispra_2020_aree_pericolosita_idraulica_*",
+        ]
+    }
+
+
+async def test_lo_stato_senza_tabelle_mancanti_si_registra_una_volta(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Uno stato vuoto chiude quello vecchio, ma non si riscrive a ogni giro."""
+    versioni: set[tuple[str, str]] = set()
+
+    async def trova(_fonte: str, dataset: str, versione: str) -> object | None:
+        return object() if (dataset, versione) in versioni else None
+
+    async def registra(*, source: str, dataset: str, version: str, metadata: object) -> None:
+        versioni.add((dataset, version))
+
+    monkeypatch.setattr(loader, "find", trova)
+    monkeypatch.setattr(loader, "record", registra)
+    await loader._registra_mancanti("it-puglia", [])
+    await loader._registra_mancanti("it-puglia", [])
+    assert versioni == {("tabelle_mancanti:it-puglia", "nessuna")}
+
+
+@pytest.mark.parametrize(("rigoroso", "uscita"), [("", 0), ("1", 1)])
+async def test_geoserver_sync_rigoroso_esce_con_1_se_manca_una_tabella(
+    monkeypatch: pytest.MonkeyPatch, rigoroso: str, uscita: int
+) -> None:
+    from collections.abc import AsyncIterator
+    from contextlib import asynccontextmanager
+
+    from limen.cli import geoserver_sync
+
+    @asynccontextmanager
+    async def pool() -> AsyncIterator[None]:
+        yield
+
+    async def niente() -> None:
+        return None
+
+    async def aoi() -> list[str]:
+        return ["it-molise", "it-puglia"]
+
+    async def sync(aoi_id: str) -> dict[str, int]:
+        return {"iffi": 0, "pai": 0, "flood": 0, "mancanti": int(aoi_id == "it-molise")}
+
+    monkeypatch.setattr(geoserver_sync, "lifespan_pool", pool)
+    monkeypatch.setattr(geoserver_sync, "run_migrations", niente)
+    monkeypatch.setattr(geoserver_sync, "list_aoi_ids", aoi)
+    monkeypatch.setattr(geoserver_sync, "sync_geoserver_source_for_aoi", sync)
+    monkeypatch.setenv(geoserver_sync.RIGOROSO_ENV, rigoroso)
+    assert await geoserver_sync.run() == uscita
