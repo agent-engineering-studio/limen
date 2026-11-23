@@ -29,8 +29,7 @@ from functools import partial
 from pathlib import Path
 
 import httpx
-from ispra_idrogeo import Dataset, IdroGEO, extract
-from ispra_idrogeo.cache import meta_path
+from ispra_idrogeo import Dataset, IdroGEO
 
 from limen.core.logging import get_logger
 from limen.integrations._http import SharedHttpClient, call_with_retry, fetch_with_retry
@@ -100,19 +99,18 @@ async def istat(idrogeo: IdroGEO, dove: Path) -> bool:
     finale = dove / ISTAT.stem
     if finale.is_dir():
         return False
-    scaricato = await call_with_retry(lambda: idrogeo.download(ISTAT, dove))
-    # Lo ZIP ha già la sua cartella in cima: si estrae a parte e la si sposta,
-    # o finirebbe in Limiti01012023_g/Limiti01012023_g.
+    # Lo ZIP ha già la sua cartella in cima: ``IdroGEO.fetch`` lo scarica e lo
+    # estrae in una cartella d'appoggio, da cui si sposta quella interna, o
+    # finirebbe in Limiti01012023_g/Limiti01012023_g.
     appoggio = dove / f"{ISTAT.stem}.zip.d"
     try:
-        await asyncio.to_thread(extract, scaricato.path, appoggio)
-        await asyncio.to_thread(_sposta, appoggio / ISTAT.stem, finale)
+        estratta = await call_with_retry(lambda: idrogeo.fetch(ISTAT, appoggio))
+        await asyncio.to_thread(_sposta, estratta / ISTAT.stem, finale)
     finally:
-        # Anche se fallisce: uno ZIP rotto con il suo ETag riceverebbe 304 per
-        # sempre, e la cartella d'appoggio geoserver-init la caricherebbe.
+        # Anche se fallisce: via la cartella con lo ZIP e i suoi metadati. Uno
+        # ZIP rotto con il suo ETag riceverebbe 304 per sempre, e la cartella
+        # d'appoggio geoserver-init la caricherebbe.
         shutil.rmtree(appoggio, ignore_errors=True)
-        scaricato.path.unlink(missing_ok=True)
-        meta_path(scaricato.path).unlink(missing_ok=True)
     return True
 
 
