@@ -1,0 +1,29 @@
+insieme,gruppo,pioggia,frane_misurate,frane_sopra_la_curva,ordinarie_misurate,ordinarie_sopra_la_curva,soglia_2,colte_2,soglia_5,colte_5,auc
+italica,tutte,radar,1053,643,99272,9675,0.3446,354,0.1752,503,0.8502
+italica,tutte,radar corretto,1053,496,99272,5161,0.19,341,0.0095,489,0.8474
+italica,dove il radar è affidabile (≥ 0.5),radar,1013,628,95447,9526,0.3504,343,0.1807,484,0.8517
+italica,dove il radar è affidabile (≥ 0.5),radar corretto,1013,487,95447,5129,0.1956,335,0.0171,477,0.85
+italica,dove il radar è poco affidabile,radar,40,15,3825,149,0.144,11,-0.0581,15,0.8266
+italica,dove il radar è poco affidabile,radar corretto,40,9,3825,32,-0.1693,13,-0.3697,17,0.8075
+italica,senza Liguria,radar,269,95,25790,1406,0.2019,63,0.0214,90,0.8176
+italica,senza Liguria,radar corretto,269,74,25790,799,0.0798,56,-0.1117,97,0.8056
+italica,northern,radar,807,556,75750,8443,0.3815,296,0.2105,417,0.8627
+italica,northern,radar corretto,807,428,75750,4479,0.2165,289,0.0379,403,0.8623
+italica,central,radar,120,26,11430,544,0.1625,18,-0.0055,26,0.7649
+italica,central,radar corretto,120,15,11430,195,-0.0236,18,-0.2031,25,0.7473
+italica,southern,radar,126,61,12092,688,0.2108,41,0.0374,55,0.8663
+italica,southern,radar corretto,126,53,12092,487,0.1364,35,-0.0518,62,0.8612
+idrogeo,tutte,radar,3055,1074,288791,16469,0.2219,645,0.0336,1020,0.7327
+idrogeo,tutte,radar corretto,3054,837,288744,9302,0.0927,645,-0.0983,1013,0.7333
+idrogeo,dove il radar è affidabile (≥ 0.5),radar,2954,1040,279292,16072,0.2235,611,0.0358,982,0.7319
+idrogeo,dove il radar è affidabile (≥ 0.5),radar corretto,2954,810,279292,9131,0.0953,612,-0.095,974,0.7324
+idrogeo,dove il radar è poco affidabile,radar,101,34,9499,397,0.1577,25,-0.0432,38,0.7541
+idrogeo,dove il radar è poco affidabile,radar corretto,100,27,9452,171,-0.0174,27,-0.2157,43,0.7575
+idrogeo,senza Trentino-Alto Adige,radar,1625,750,157513,11779,0.2787,431,0.1044,630,0.779
+idrogeo,senza Trentino-Alto Adige,radar corretto,1624,577,157466,6408,0.1354,405,-0.0436,633,0.7815
+idrogeo,northern,radar,2453,935,230445,14244,0.2411,523,0.0555,863,0.7305
+idrogeo,northern,radar corretto,2453,737,230445,7868,0.1032,541,-0.086,861,0.7299
+idrogeo,central,radar,194,60,18847,945,0.1644,34,0.0007,60,0.698
+idrogeo,central,radar corretto,194,35,18847,444,0.024,33,-0.1345,54,0.6958
+idrogeo,southern,radar,408,79,39499,1280,0.0977,60,-0.1004,104,0.7691
+idrogeo,southern,radar corretto,407,65,39452,990,0.0445,57,-0.1476,95,0.7726

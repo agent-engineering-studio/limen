@@ -6,6 +6,7 @@ riscrive questo indice: non modificarlo a mano.
 
 | generato | report | versioni | commit | comando |
 |---|---|---|---|---|
+| 2026-11-23 | [misura_soglia_radar_2018_2025.md](misura_soglia_radar_2018_2025.md) | `limen-deterministic-v1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `d6cda0e60059` | `limen misura-soglia-radar` |
 | 2026-11-19 | [backtest_wildfire_italia_2026-01-01_2026-11-18.md](backtest_wildfire_italia_2026-01-01_2026-11-18.md) | `limen-deterministic-v1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `b2f7b2157a4f` | `limen backtest-wildfire` |
 | 2026-11-19 | [backtest_wildfire_italia_2025-01-01_2025-12-31.md](backtest_wildfire_italia_2025-01-01_2025-12-31.md) | `limen-deterministic-v1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `b2f7b2157a4f` | `limen backtest-wildfire` |
 | 2026-11-19 | [backtest_wildfire_italia_2024-01-01_2024-12-31.md](backtest_wildfire_italia_2024-01-01_2024-12-31.md) | `limen-deterministic-v1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `b2f7b2157a4f` | `limen backtest-wildfire` |
