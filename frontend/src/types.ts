@@ -161,6 +161,13 @@ export interface MeteoBreakdown {
   caine_norm: number;
   api_factor: number;
   soil_factor: number;
+  /** L'evento di pioggia confrontato con la soglia (#678); assente senza pioggia. */
+  evento_pioggia?: {
+    durata_h: number;
+    cumulata_mm: number;
+    intensita_mm_h: number;
+    soglia_mm_h: number;
+  } | null;
 }
 
 /** Mirror di limen.core.models.hazard.HazardType. */

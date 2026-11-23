@@ -22,6 +22,8 @@ from collections.abc import Mapping
 from functools import cache
 from importlib import resources
 
+from rainfall_thresholds.check import check_text
+
 from limen.agents.chat_agents.prompts_registry import PROMPT_PACKAGE, prompt_file
 from limen.agents.chat_agents.risk_analyst import RiskAnalysis
 from limen.agents.grounding.format import format_citations, senza_citazioni
@@ -290,7 +292,50 @@ def _caine_note(cell: CellRiskRecord) -> str:
     if not isinstance(breakdown, ComponentBreakdown):
         return ""
     superata = "sì" if breakdown.meteo_terms.caine_excess > 0 else "no"
-    return f" soglia_caine_superata={superata}"
+    nota = f" soglia_caine_superata={superata}"
+    evento = breakdown.meteo_terms.evento_pioggia
+    if evento is None:
+        return nota
+    return (
+        f"{nota} pioggia_evento_mm={evento.cumulata_mm:.0f} durata_evento_h={evento.durata_h:.0f} "
+        f"intensita_evento_mm_h={evento.intensita_mm_h:.1f} "
+        f"intensita_di_soglia_mm_h={evento.soglia_mm_h:.1f}"
+    )
+
+
+def fatti_pioggia(assessment: AggregateAssessment) -> list[dict[str, float]]:
+    """Gli eventi di pioggia che il messaggio dà al modello, con le unità nei nomi.
+
+    Sono i fatti contro cui ``rainfall_thresholds.check`` legge il racconto:
+    ogni numero con «mm», «mm/h» o «ore» deve essere uno di questi, arrotondato
+    come nel messaggio.
+    """
+    fatti = []
+    for c in assessment.top_cells[:5]:
+        b = c.breakdown
+        if isinstance(b, ComponentBreakdown) and b.meteo_terms.evento_pioggia is not None:
+            e = b.meteo_terms.evento_pioggia
+            fatti.append(
+                {
+                    "cumulated_mm": round(e.cumulata_mm),
+                    "duration_h": round(e.durata_h),
+                    "intensity_mm_h": round(e.intensita_mm_h, 1),
+                    "threshold_intensity_mm_h": round(e.soglia_mm_h, 1),
+                }
+            )
+    return fatti
+
+
+def controlla_pioggia(testo: str, fatti: list[dict[str, float]], messaggio: str) -> None:
+    """Un numero di pioggia del racconto che i fatti non hanno finisce in un warning (#678).
+
+    Come per IdroGEO il testo non cambia: decide una persona.
+    """
+    if not fatti:
+        return
+    sbagliati = check_text(senza_citazioni(testo), fatti, question=messaggio)
+    if sbagliati:
+        log.warning("briefing.pioggia.numeri_non_trovati", numeri=[m.text for m in sbagliati[:10]])
 
 
 def _note_pericolo(cell: CellRiskRecord) -> str:
@@ -385,8 +430,10 @@ class BriefingAgent:
             ChatMessage(role="user", content=messaggio),
         ]
         affidabilita = affidabilita_regione(assessment)
+        pioggia = fatti_pioggia(assessment)
 
         async def finale(testo: str) -> str:
+            controlla_pioggia(testo, pioggia, messaggio)
             con_citazioni = await self._append_citations(testo, grounding_task)
             return con_fonte_idrogeo(con_citazioni, affidabilita, messaggio)
 

@@ -34,7 +34,7 @@ from limen.core.models.risk import (
 )
 from limen.core.scoring.api import api_factor
 from limen.core.scoring.base import ScoringEngine, classify_score
-from limen.core.scoring.caine import compute_caine
+from limen.core.scoring.caine import compute_caine, evento_pioggia
 from limen.core.scoring.flood_forecast import flood_forecast_bonus
 from limen.core.scoring.kinematic import compute_kinematic
 from limen.core.scoring.post_fire import post_fire_factor, severity_multiplier
@@ -200,7 +200,7 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
             as_of=bundle.dynamic.valuation_time,
             seismic=self._t.seismic,
         )
-        caine_excess_val, _event = compute_caine(
+        caine_excess_val, evento = compute_caine(
             bundle.dynamic.rainfall,
             caine=self._t.caine,
             macroregion=self._macroregion(bundle),
@@ -268,6 +268,12 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
                 snow_factor=snow_f,
                 cumulata_norm=cumulata_norm,
                 riduzione_sismica=riduzione,
+                evento_pioggia=evento_pioggia(
+                    evento,
+                    caine=self._t.caine,
+                    macroregion=self._macroregion(bundle),
+                    alpha_factor=1.0 - riduzione,
+                ),
                 measured_overrides=tuple(overrides),
             ),
         )
