@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 #: Quante volte l'intervallo mediano prima di dire «in ritardo». Due: un
@@ -83,6 +83,9 @@ class Fatti:
     cadenze: Sequence[Cadenza]
     #: pericolo → (celle non misurate, celle con un punteggio)
     non_misurate: Mapping[str, tuple[int, int]]
+    #: AOI → tabelle IFFI/PAI/idraulica attese e non trovate all'ultimo
+    #: ``geoserver-sync`` (#665); solo le AOI con almeno una.
+    tabelle_mancanti: Mapping[str, Sequence[str]] = field(default_factory=dict)
 
     def ritardi(self) -> list[Ritardo]:
         out: list[Ritardo] = []
@@ -107,6 +110,7 @@ class Fatti:
             "job_con_errori": len({e.job_id for e in self.errori}),
             "in_ritardo": [_nome(r.job_id, r.scope) for r in self.ritardi()],
             "non_misurate": {h: round(q, 4) for h, q in self.quote_non_misurate().items()},
+            "tabelle_mancanti": {a: len(t) for a, t in self.tabelle_mancanti.items()},
         }
 
 
@@ -180,6 +184,19 @@ def righe(fatti: Fatti, settimana_prima: Mapping[str, object] | None) -> list[st
         if isinstance(vecchia, int | float):
             riga += f" (una settimana fa {_quota(float(vecchia))})"
         out.append(riga + ": manca il dato meteo, non è quiete.")
+    for aoi, tabelle in sorted(fatti.tabelle_mancanti.items()):
+        elenco = ", ".join(tabelle[:3]) + (
+            f" e altre {len(tabelle) - 3}" if len(tabelle) > 3 else ""
+        )
+        quante = (
+            "una tabella attesa non trovata"
+            if len(tabelle) == 1
+            else f"{len(tabelle)} tabelle attese non trovate"
+        )
+        out.append(
+            f"**{aoi}**: {quante} all'ultimo geoserver-sync ({elenco}): "
+            "le celle perdono quel termine, non sono senza frane o senza pericolo."
+        )
     return out
 
 
@@ -194,7 +211,8 @@ def testo(
             [
                 *testa,
                 "Niente da segnalare: nessun job fermo o fallito, "
-                "nessun pericolo con metà delle celle non misurate.",
+                "nessun pericolo con metà delle celle non misurate, "
+                "nessuna tabella IFFI o PAI mancante.",
             ]
         )
     if sintesi:

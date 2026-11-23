@@ -5,6 +5,14 @@ per-region PostGIS tables. This loader reads the landslide inventory
 families and the PAI hazard mosaic for one AOI and upserts them into the
 operational ``iffi_landslides`` / ``pai_hazard`` tables, so the existing
 ``bootstrap-static`` per-cell aggregation runs unchanged.
+
+Una tabella attesa che non c'è (#665) non ferma il caricamento, ma non passa
+più in silenzio: finisce nell'esito (``mancanti``), in ``dataset_versions``
+(``geoserver`` / ``tabelle_mancanti:<aoi>``, letto dal riepilogo
+``qualita-dati``) e in un log ``error``. Così una regione la cui tabella non è
+arrivata si distingue da una regione senza frane censite: per un layer che
+IdroGEO non ha, ``ispra-idrogeo`` scarica un file vuoto, che diventa una
+tabella vuota, non una tabella assente.
 """
 
 from __future__ import annotations
@@ -67,10 +75,12 @@ _ID_COL_PREFERENCE = ("id_frana", "fid", "ogc_fid", "gid", "objectid")
 _PAI_TOKEN_RE = re.compile(r"\b(AA|P[1-4])\b", re.IGNORECASE)
 
 
-def _manca(schema: str, table: str) -> None:
+def _manca(schema: str, table: str, mancanti: list[str] | None = None) -> None:
     # Con le tabelle nel database di Limen (#426) una tabella assente è il
     # guasto normale — `carica-vettori` mai eseguito, o uno shapefile non
     # entrato — e lascerebbe la regione senza PAI o mosaico senza un errore.
+    if mancanti is not None:
+        mancanti.append(table)
     log.warning(
         "integration.degraded",
         source="geoserver_source",
@@ -124,14 +134,16 @@ async def _aoi_bbox(aoi_id: str) -> tuple[float, float, float, float] | None:
     return (float(row["minx"]), float(row["miny"]), float(row["maxx"]), float(row["maxy"]))
 
 
-async def _load_iffi(conn: asyncpg.Connection, schema: str, region: str) -> list[IFFILandslide]:
+async def _load_iffi(
+    conn: asyncpg.Connection, schema: str, region: str, mancanti: list[str] | None = None
+) -> list[IFFILandslide]:
     items: list[IFFILandslide] = []
     for area in _IFFI_AREE.get(region, (region,)):
         for family in _IFFI_FAMILIES:
             table = f"{family}_{area}_opendata"
             cols = await _table_columns(conn, schema, table)
             if "geom" not in cols:
-                _manca(schema, table)
+                _manca(schema, table, mancanti)
                 continue
             id_col = next((c for c in _ID_COL_PREFERENCE if c in cols), None)
             id_expr = f'"{id_col}"::text' if id_col else 'md5(ST_AsEWKB("geom"))'
@@ -160,11 +172,14 @@ async def _load_iffi(conn: asyncpg.Connection, schema: str, region: str) -> list
 
 
 async def _load_pai(
-    conn: asyncpg.Connection, schema: str, bbox: tuple[float, float, float, float]
+    conn: asyncpg.Connection,
+    schema: str,
+    bbox: tuple[float, float, float, float],
+    mancanti: list[str] | None = None,
 ) -> list[PAIHazard]:
     cols = await _table_columns(conn, schema, _PAI_TABLE)
     if "geom" not in cols or _PAI_ATTR not in cols:
-        _manca(schema, _PAI_TABLE)
+        _manca(schema, _PAI_TABLE, mancanti)
         return []
     id_col = next((c for c in _ID_COL_PREFERENCE if c in cols), None)
     id_expr = f'"{id_col}"::text' if id_col else 'md5(ST_AsEWKB("geom"))'
@@ -195,7 +210,9 @@ async def _load_pai(
     return items
 
 
-async def _idraulica_tables(conn: asyncpg.Connection, schema: str) -> dict[str, str]:
+async def _idraulica_tables(
+    conn: asyncpg.Connection, schema: str, mancanti: list[str] | None = None
+) -> dict[str, str]:
     """Discover the idraulica tables by severity → class token.
 
     Prova i nomi accettati per ciascuna severità e si ferma al primo che
@@ -223,15 +240,18 @@ async def _idraulica_tables(conn: asyncpg.Connection, schema: str) -> dict[str, 
             found[table] = cls
             break
     if not found:
-        _manca(schema, "mosaicatura_ispra_2020_aree_pericolosita_idraulica_*")
+        _manca(schema, "mosaicatura_ispra_2020_aree_pericolosita_idraulica_*", mancanti)
     return found
 
 
 async def _load_idraulica(
-    conn: asyncpg.Connection, schema: str, bbox: tuple[float, float, float, float]
+    conn: asyncpg.Connection,
+    schema: str,
+    bbox: tuple[float, float, float, float],
+    mancanti: list[str] | None = None,
 ) -> list[FloodHazard]:
     items: list[FloodHazard] = []
-    for table, cls in (await _idraulica_tables(conn, schema)).items():
+    for table, cls in (await _idraulica_tables(conn, schema, mancanti)).items():
         cols = await _table_columns(conn, schema, table)
         if "geom" not in cols:
             continue
@@ -288,12 +308,34 @@ async def _se_cambiato(
     return n
 
 
+#: Il dataset di ``dataset_versions`` con le tabelle attese e non trovate.
+DATASET_MANCANTI = "tabelle_mancanti"
+
+
+async def _registra_mancanti(aoi_id: str, mancanti: list[str]) -> None:
+    """Lo stato delle tabelle mancanti dell'AOI in ``dataset_versions`` (#665).
+
+    Una riga per ogni stato nuovo, anche quello vuoto: così il riepilogo
+    ``qualita-dati`` legge l'ultimo e una tabella tornata smette di comparire.
+    """
+    tabelle = sorted(set(mancanti))
+    versione = content_hash(tabelle) if tabelle else "nessuna"
+    dataset = f"{DATASET_MANCANTI}:{aoi_id}"
+    if await find("geoserver", dataset, versione):
+        return
+    await record(
+        source="geoserver", dataset=dataset, version=versione, metadata={"tabelle": tabelle}
+    )
+
+
 async def sync_geoserver_source_for_aoi(aoi_id: str) -> dict[str, int]:
     """Sync IFFI + PAI for ``aoi_id`` from GeoServer PostGIS.
 
-    Returns per-dataset row counts. No-op (all zeros) when the source DSN is
-    unset; degrades to zeros + an ``integration.degraded`` log when the
-    GeoServer PostGIS is unreachable (read side never raises).
+    Returns per-dataset row counts, plus ``mancanti``: how many expected
+    tables were not found (#665; their names are in ``dataset_versions``).
+    No-op (all zeros) when the source DSN is unset; degrades to zeros + an
+    ``integration.degraded`` log when the GeoServer PostGIS is unreachable
+    (read side never raises).
     """
     settings = get_settings()
     dsn, schema = settings.geoserver_source.sorgente(settings.db)
@@ -305,18 +347,28 @@ async def sync_geoserver_source_for_aoi(aoi_id: str) -> dict[str, int]:
         conn = await asyncpg.connect(dsn)
     except (OSError, asyncpg.PostgresError) as exc:
         log.warning("integration.degraded", source="geoserver_source", op="connect", error=str(exc))
-        return {"iffi": 0, "pai": 0, "flood": 0}
+        return {"iffi": 0, "pai": 0, "flood": 0, "mancanti": 0}
 
+    mancanti: list[str] = []
     try:
         await register_postgis(conn)
-        iffi_items = await _load_iffi(conn, schema, region)
-        pai_items = await _load_pai(conn, schema, bbox) if bbox else []
-        flood_items = await _load_idraulica(conn, schema, bbox) if bbox else []
+        iffi_items = await _load_iffi(conn, schema, region, mancanti)
+        pai_items = await _load_pai(conn, schema, bbox, mancanti) if bbox else []
+        flood_items = await _load_idraulica(conn, schema, bbox, mancanti) if bbox else []
     except (OSError, asyncpg.PostgresError) as exc:
         log.warning("integration.degraded", source="geoserver_source", op="read", error=str(exc))
-        return {"iffi": 0, "pai": 0, "flood": 0}
+        return {"iffi": 0, "pai": 0, "flood": 0, "mancanti": 0}
     finally:
         await conn.close()
+
+    if mancanti:
+        log.error(
+            "geoserver_source.tabelle_mancanti",
+            aoi_id=aoi_id,
+            tabelle=mancanti,
+            hint="limen geodati-sync, poi limen carica-vettori",
+        )
+    await _registra_mancanti(aoi_id, mancanti)
 
     iffi_n = await _se_cambiato(
         "iffi",
@@ -345,5 +397,6 @@ async def sync_geoserver_source_for_aoi(aoi_id: str) -> dict[str, int]:
         iffi=iffi_n,
         pai=pai_n,
         flood=flood_n,
+        mancanti=len(mancanti),
     )
-    return {"iffi": iffi_n, "pai": pai_n, "flood": flood_n}
+    return {"iffi": iffi_n, "pai": pai_n, "flood": flood_n, "mancanti": len(mancanti)}

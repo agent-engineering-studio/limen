@@ -94,6 +94,7 @@ from limen.cli.fwi_climatology import run as _run_fwi_climatology
 from limen.cli.fwi_confronto import run as _run_fwi_confronto
 from limen.cli.fwi_pioggia import run as _run_fwi_pioggia
 from limen.cli.geodati_sync import run as _run_geodati_sync
+from limen.cli.geoserver_sync import RIGOROSO_ENV as GEOSERVER_SYNC_RIGOROSO_ENV
 from limen.cli.geoserver_sync import run as _run_geoserver_sync
 from limen.cli.glofas_ewds import run as _run_glofas_ewds
 from limen.cli.glofas_riferimenti import run as _run_glofas_riferimenti
@@ -395,6 +396,13 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "geoserver-sync",
         help="load ISPRA IFFI + PAI from GeoServer PostGIS (GEOSERVER_SOURCE__DB_DSN)",
+    ).add_argument(
+        "--rigoroso",
+        action="store_true",
+        help=(
+            "esce con 1 se una tabella IFFI, PAI o idraulica attesa manca "
+            f"(equivale a {GEOSERVER_SYNC_RIGOROSO_ENV}=1, #665)"
+        ),
     )
     sub.add_parser(
         "firms-sync",
@@ -624,6 +632,8 @@ def main(argv: list[str] | None = None) -> int:
             return 130
     if args.command == "carica-vettori" and args.forza:
         os.environ[VETTORI_FORZA_ENV] = "1"
+    if args.command == "geoserver-sync" and args.rigoroso:
+        os.environ[GEOSERVER_SYNC_RIGOROSO_ENV] = "1"
     if args.command == "bootstrap-static" and args.force:
         # Alias della variabile invece di un parametro al runner: i runner
         # hanno firma uniforme (`Runner`, nessun argomento) e leggono l'env,

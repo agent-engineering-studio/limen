@@ -520,6 +520,14 @@ async def bootstrap_static_for_aoi(aoi_id: str, *, force: bool = False) -> Boots
     gs_counts = await sync_geoserver_source_for_aoi(aoi_id)
     if gs_counts["iffi"] or gs_counts["pai"] or gs_counts.get("flood"):
         log.info("static_bootstrap.geoserver_source", aoi_id=aoi_id, **gs_counts)
+    if gs_counts.get("mancanti"):
+        # Il bootstrap continua con le tabelle che ci sono (#665): le celle
+        # perdono un termine, e il riepilogo qualita-dati lo dice.
+        log.warning(
+            "static_bootstrap.geoserver_source_incompleto",
+            aoi_id=aoi_id,
+            mancanti=gs_counts["mancanti"],
+        )
 
     # La griglia va seminata comunque: è la tabella su cui ogni altro passo
     # scrive, costa un INSERT ... ON CONFLICT DO NOTHING, e gateggiarla
