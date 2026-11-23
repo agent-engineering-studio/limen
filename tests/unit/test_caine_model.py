@@ -152,3 +152,20 @@ def test_l_evento_di_pioggia_porta_le_sue_unita_nel_breakdown() -> None:
     dimezzata = evento_pioggia(event, caine=thresholds.caine, alpha_factor=0.5)
     assert dimezzata is not None
     assert dimezzata.soglia_mm_h == pytest.approx(e.soglia_mm_h / 2)
+
+
+def test_le_curve_del_yaml_sono_quelle_di_italica_t5() -> None:
+    """#678: una sola taratura, quella della libreria; chi cambia lo YAML lo vede qui."""
+    from rainfall_thresholds import ITALICA_T5
+
+    macro = load_regional_thresholds().caine.macroregions
+    for yaml, libreria in (
+        ("italy_default", "italy"),
+        ("northern_italy", "northern"),
+        ("central_italy", "central"),
+        ("southern_italy", "southern"),
+    ):
+        assert (macro[yaml].alpha, macro[yaml].beta) == (
+            ITALICA_T5[libreria].alpha,
+            ITALICA_T5[libreria].beta,
+        )
