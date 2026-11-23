@@ -20,7 +20,7 @@ from limen.api.schemas import (
     PienaOut,
     RadarOut,
 )
-from limen.config.catalogo_dati import carica_catalogo
+from limen.config.catalogo_dati import carica_catalogo, catalogo_per
 from limen.config.settings import ScoringMode
 from limen.core.dati_di_base import completezza
 from limen.core.models.context import RiskAnalysisDTO
@@ -520,6 +520,7 @@ async def provenienza(response: Response, deps: DepsDep) -> dict[str, Any]:
     cosa fanno oggi ML e AI. Lo stato reale della configurazione, non una
     descrizione — se uno sfidante si accende, questa risposta cambia."""
     cfg = deps.settings
+    pai = catalogo_per(cfg.geodati.mosaico_pai).voce("pai_frana")
     async with acquire() as conn:
         nodi = await conn.fetchval(
             "SELECT count(*) FROM (SELECT DISTINCT node_lon, node_lat FROM rain_ens_forecast) n"
@@ -535,6 +536,9 @@ async def provenienza(response: Response, deps: DepsDep) -> dict[str, Any]:
             "nodi_obiettivo": NODI_CORRETTORE,
         },
         "spiegazioni_modello": cfg.llm.models.briefing or None,
+        # Il mosaico PAI si sceglie in configurazione (#670), e con lui licenza
+        # e citazione: la pagina Fonti le prende da qui.
+        "pai_frana": {"licenza": pai.licenza, "attribuzione": pai.attribuzione},
     }
 
 

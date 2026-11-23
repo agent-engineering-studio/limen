@@ -852,6 +852,12 @@ class GeodatiSettings(BaseSettings):
     #: `make up` di un giorno nuovo riscaricherebbe ~1 GB. I mosaici, fermi dal
     #: 2023, passata la soglia rispondono 304.
     rivalida_dopo_giorni: int = Field(default=30, ge=0)
+    #: Quale mosaicatura PAI frane si scarica, si carica e si legge (#670), con
+    #: i nomi di ``ispra_idrogeo.MOSAICS``: ``pai_frane`` è la v. 4.0
+    #: (2020-2021), ``pai_frane_2024`` la v. 5.0. Il default resta la 4.0:
+    #: passare alla 5.0 cambia ``pai_class_norm`` di molte celle, quindi il
+    #: campione V1, e lo decide un backtest.
+    mosaico_pai: Literal["pai_frane", "pai_frane_2024"] = "pai_frane"
 
 
 class CopernicusSettings(BaseSettings):
