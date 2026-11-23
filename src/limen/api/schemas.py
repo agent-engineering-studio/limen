@@ -13,6 +13,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from limen.config.catalogo_dati import Livello
+from limen.core.affidabilita_iffi import AffidabilitaIffi
 from limen.core.dati_di_base import Completezza, DatoDiBase
 from limen.core.models.context import (
     CellRiskRecord,
@@ -346,6 +347,9 @@ class ComuneRisk(BaseModel):
     #: L'esposizione ISPRA del comune; `None` finché il passo notturno non
     #: l'ha importata, o per un comune che IdroGEO non elenca.
     esposizione_ispra: EsposizioneIspra | None = None
+    #: Quanto fidarsi dell'inventario IFFI nel comune (#669), dalla tabella di
+    #: ispra-idrogeo; solo nel dettaglio di un comune. Non entra nel punteggio.
+    affidabilita_iffi: AffidabilitaIffi | None = None
     #: Lo stesso numero di `attention`, sul futuro e con la stessa regola:
     #: se è più alto, il comune sta salendo.
     forecast_attention: float | None = None

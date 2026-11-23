@@ -220,6 +220,35 @@ def briefing_di_ripiego(assessment: AggregateAssessment) -> str:
     )
 
 
+@cache
+def _cod_reg(aoi_id: str) -> int | None:
+    """Il codice ISTAT della regione dell'AOI, dal seme; ``None`` se non è una regione."""
+    from limen.data.seed.loader import load_regions
+
+    for aoi in load_regions():
+        if aoi.id == aoi_id:
+            codice = aoi.metadata.get("cod_reg")
+            return int(codice) if codice is not None else None
+    return None
+
+
+def nota_affidabilita_iffi(assessment: AggregateAssessment) -> str:
+    """Quanto fidarsi di IFFI nella regione (#669), per il racconto delle frane.
+
+    Una riga per il modello, che la riporta come limite del dato: una densità
+    IFFI bassa non è una prova di sicurezza. Vuota per gli altri pericoli e
+    per un'AOI che non è una regione. Non tocca il punteggio.
+    """
+    from limen.core.affidabilita_iffi import affidabilita_iffi
+
+    if assessment.hazard_type is not HazardType.LANDSLIDE:
+        return ""
+    a = affidabilita_iffi("regioni", _cod_reg(assessment.aoi_id))
+    if a is None:
+        return ""
+    return f"\nAffidabilità dell'inventario IFFI: {a.lettura}\n"
+
+
 def _caine_note(cell: CellRiskRecord) -> str:
     """La menzione della soglia Caine, solo dove esiste.
 
@@ -308,7 +337,10 @@ class BriefingAgent:
             f"Celle: {assessment.n_cells}; "
             f"high+: {assessment.cells_high_or_above}; "
             f"distribuzione: {assessment.cells_by_level}\n"
-            f"Top cells:\n" + "\n".join(top_lines) + analysis_part
+            f"Top cells:\n"
+            + "\n".join(top_lines)
+            + analysis_part
+            + nota_affidabilita_iffi(assessment)
         )
 
     async def brief(

@@ -48,6 +48,35 @@ describe("DatiDiBase", () => {
     expect(screen.getByText(/ISPRA IdroGEO/)).toBeInTheDocument();
   });
 
+  it("mette accanto al dato IFFI quanto fidarsi dell'inventario (#669)", () => {
+    const iffi: DatoDiBase = {
+      id: "iffi",
+      nome: "densità frane storiche (IFFI)",
+      colonna: "iffi_density_500",
+      stato: "presente",
+      valore: 3,
+      classe: null,
+      lettura: "3 frane censite entro 500 m",
+      fonte: "ISPRA IdroGEO",
+      licenza: "CC BY-SA 4.0",
+      attribuzione: null,
+      url: null,
+      affidabilita: {
+        frane: 9,
+        frane_al_giorno: 0,
+        quota_modificate_dal_2021: 0,
+        lettura: "In questo comune IFFI censisce 9 frane: nessuna datata al giorno.",
+        lettura_en: "In this municipality IFFI maps 9 landslides: none dated to the day.",
+        aggiornata_al: "2026-11-22",
+      },
+    };
+    const { unmount } = render(<DatiDiBase dati={[iffi]} />);
+    expect(screen.getByText(/IFFI censisce 9 frane/)).toHaveClass("db-nota");
+    unmount();
+    render(<DatiDiBase dati={[iffi]} />, { lingua: "en" });
+    expect(screen.getByText(/IFFI maps 9 landslides/)).toBeInTheDocument();
+  });
+
   it("non disegna niente senza dati", () => {
     const { container } = render(<DatiDiBase dati={[]} />);
     expect(container.querySelector(".dati-di-base")).toBeNull();

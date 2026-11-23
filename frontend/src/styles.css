@@ -3762,6 +3762,11 @@ html[lang="en"] .app-nav a {
 .dati-di-base .db-fonte a {
   color: inherit;
 }
+/* Quanto fidarsi di IFFI nel comune (#669): accanto al dato, non nel punteggio. */
+.dati-di-base .db-nota {
+  display: block;
+  font-size: 11px;
+}
 .dati-di-base .is-vuoto {
   color: var(--muted);
   font-style: italic;

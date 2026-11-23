@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict
 
 from limen.config.catalogo_dati import CatalogoDati, VoceDato
 from limen.config.corine import legenda_corine
+from limen.core.affidabilita_iffi import AffidabilitaIffi
 from limen.core.models.hazard import HazardType
 
 
@@ -53,6 +54,10 @@ class DatoDiBase(BaseModel):
     licenza: str
     attribuzione: str | None = None
     url: str | None = None
+    #: Solo per IFFI (#669): quanto fidarsi dell'inventario nel comune della
+    #: cella. Da leggere accanto a «N frane censite entro 500 m»: non cambia il
+    #: punteggio.
+    affidabilita: AffidabilitaIffi | None = None
 
 
 #: Classi della pericolosità idraulica ISPRA (Direttiva Alluvioni).
@@ -177,18 +182,23 @@ def dati_di_base(
     valori: Mapping[str, float | str | None],
     classi: Mapping[str, str | None],
     caricati: Mapping[str, bool],
+    affidabilita_iffi: AffidabilitaIffi | None = None,
 ) -> list[DatoDiBase]:
     """I dati di base di una cella per ``pericolo``, nell'ordine del catalogo.
 
     ``valori`` e ``classi`` sono per colonna; ``caricati`` dice, per colonna,
-    se la regione della cella ha almeno un valore.
+    se la regione della cella ha almeno un valore. ``affidabilita_iffi`` è
+    quella del comune della cella, e va accanto al dato IFFI.
     """
     out: list[DatoDiBase] = []
     for voce in catalogo.voci:
         colonna = voce.misura.colonna
         if colonna is None or pericolo not in voce.pericoli:
             continue
-        out.append(_dato(voce, colonna, valori.get(colonna), classi.get(colonna), caricati))
+        dato = _dato(voce, colonna, valori.get(colonna), classi.get(colonna), caricati)
+        if colonna == "iffi_density_500" and affidabilita_iffi is not None:
+            dato = dato.model_copy(update={"affidabilita": affidabilita_iffi})
+        out.append(dato)
     return out
 
 

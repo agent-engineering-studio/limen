@@ -121,6 +121,11 @@ export default function DatiDiBase({
             <li key={d.id}>
               <span className="db-nome">{nome}: </span>
               <span className={d.stato === "presente" ? undefined : "is-vuoto"}>{lettura}</span>
+              {d.affidabilita ? (
+                <span className="db-nota">
+                  {lingua === "en" ? d.affidabilita.lettura_en : d.affidabilita.lettura}
+                </span>
+              ) : null}
               <span className="db-fonte">
                 {d.url ? (
                   <a href={d.url} target="_blank" rel="noreferrer">
