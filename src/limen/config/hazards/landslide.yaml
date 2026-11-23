@@ -103,6 +103,14 @@ meteo:
 # stesso fit, e un test li confronta. Fino al 23/11/2026 erano arrotondati a
 # tre cifre, e il Nord era 6,370 / 0,512: fra 1 e 100 ore la curva si è mossa
 # al più dello 0,5 % in intensità (0,002 decadi di `caine_excess`).
+#
+# Valgono anche sulla pioggia del radar, e si sa quanto (#677, radar storico
+# 2018-2025, `limen misura-soglia-radar`): al pluviometro supera la curva il
+# 96 % delle frane di e-ITALICA, sul radar il 66 % (il 22 % al Centro), perché
+# sugli eventi d'innesco il radar legge 0,68 volte il pluviometro. Una curva
+# tarata sul radar non è stabile, e la mappa del bias di dpc-radar abbassa la
+# pioggia senza cambiare l'ordine: la curva resta questa e la correzione resta
+# fuori dall'innesco (decisione del curatore, 23/11/2026).
 caine:
   # Event reconstruction (Melillo 2018-inspired): hours of no-rain that
   # break an "event" into two events; minimum total mm to qualify as an

@@ -113,6 +113,7 @@ from limen.cli.migrate import run as _run_migrate
 from limen.cli.misura import build_subparser as _build_misura_subparser
 from limen.cli.misura import run as _run_misura
 from limen.cli.misura_radar import run as _run_misura_radar
+from limen.cli.misura_soglia_radar import run as _run_misura_soglia_radar
 from limen.cli.misura_swi import run as _run_misura_swi
 from limen.cli.monitor_once import run as _run_monitor_once
 from limen.cli.partitions import run as _run_partitions
@@ -195,6 +196,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "misura-radar",
         help="misura: copertura, bollettini, qualità e ore dell'archivio «Merging» (#625-#629; "
         "RADAR_ARCHIVE__CARTELLA, LIMEN_RADAR_DAL / _AL / _MISURE)",
+    )
+    sub.add_parser(
+        "misura-soglia-radar",
+        help="misura: la soglia dei pluviometri sulla pioggia del radar storico, frane datate "
+        "contro momenti ordinari (#677; vuole lo Zarr di `make radar-data`)",
     )
     sub.add_parser(
         "misura-swi",
@@ -551,6 +557,7 @@ def main(argv: list[str] | None = None) -> int:
         "fedelta-racconti": _run_fedelta_racconti,
         "raccolta-eventi": _run_raccolta_eventi,
         "misura-radar": _run_misura_radar,
+        "misura-soglia-radar": _run_misura_soglia_radar,
         "misura-swi": _run_misura_swi,
         "partitions": _run_partitions,
         "seed": _run_seed,
