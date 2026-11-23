@@ -360,6 +360,13 @@ abbassare l'intervallo della sveglia o del giro orario, o di aggiungere aree
 oltre le 20, rifare il conto: se supera il tetto, la scelta va scritta qui.
 I file scaricati si contano nei log (`dpc.radar.fetched`, `dpc.archivio.done`).
 
+Dalla dpc-radar 0.4.0 (#674) la mappa di affidabilità non conta più i
+pluviometri guasti del «Merging»: 8.056 km² diventano affidabili (≥ 0,5) e
+2.054 smettono di esserlo (Foggia da 0,18 a 0,93). I report `misura_radar_*`
+archiviati in `docs/misure` fino al 19/11/2026 sono fatti con la mappa della
+0.3.0: prima di accendere `pluvial.observed.blind` la misura di adozione va
+rifatta.
+
 Con dpc-radar 0.3.0 (#643) la sveglia legge gli SRI dell'ultima mezz'ora (t,
 t − 15, t − 30) per il moto dei temporali; i due più vecchi sono quelli dei
 giri prima, tenuti in memoria (gli ultimi dodici SRI), e l'ultimo si riscarica
