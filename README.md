@@ -463,7 +463,7 @@ rule stays in Limen. The numbers that tune a hazard stay in
 | [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) · [docs](https://agentengineering.it/ispra-idrogeo/) | `~=0.11.0` | Apache-2.0 |
 | [`fwi-chain`](https://pypi.org/project/fwi-chain/) · [docs](https://agentengineering.it/fwi-chain/) | `~=1.0.0` | Apache-2.0 |
 | [`effis-client`](https://pypi.org/project/effis-client/) · [docs](https://agentengineering.it/effis-client/) | `~=0.1.2` | Apache-2.0 |
-| [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) · [docs](https://agentengineering.it/rainfall-thresholds/) | `~=0.1.0` | Apache-2.0 |
+| [`rainfall-thresholds`](https://pypi.org/project/rainfall-thresholds/) · [docs](https://agentengineering.it/rainfall-thresholds/) | `~=0.3.0` | Apache-2.0 |
 | [`imageserver-export`](https://pypi.org/project/imageserver-export/) · [docs](https://agentengineering.it/imageserver-export/) | `~=0.2.0` | Apache-2.0 |
 | [`ingv-shakemap`](https://pypi.org/project/ingv-shakemap/) · [docs](https://agentengineering.it/ingv-shakemap/) | `~=0.2.0` | Apache-2.0 |
 | [`dpc-radar`](https://pypi.org/project/dpc-radar/) · [docs](https://agentengineering.it/dpc-radar/) | `~=0.3.0` | Apache-2.0 |
