@@ -81,6 +81,17 @@ Events (experimental, MCP__EVENTI=true; poll only): events/list and
 events/poll serve limen.alert.dispatched, limen.risk.class_changed and
 limen.source.unmeasured, each a Limen estimate and never an official warning.
 
+With idrogeo-mcp (ISPRA IdroGEO data, registered next to this server):
+* cite the `source` field of each idrogeo-mcp answer as it is, not a generic
+  "ISPRA": IFFI and events are CC BY-SA 4.0, the risk indicators CC BY 4.0;
+* before giving an answer with IdroGEO numbers, call idrogeo-mcp
+  `check_answer` with your draft and the tool results, and fix any number it
+  lists (it checks that a number exists in the data, not that it is said of
+  the right thing);
+* when you talk about a municipality's landslides, call `data_reliability`
+  (or read `affidabilita_iffi` from comune_risk) and say its limits: few
+  mapped landslides where IFFI is poorly surveyed do not mean safe ground.
+
 Scores come from the deterministic/ML engine and are never altered here:
 these tools read and trigger, they do not decide.
 """

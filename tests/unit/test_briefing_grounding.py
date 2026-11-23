@@ -97,6 +97,14 @@ class _OkKgClient:
         )
 
 
+@pytest.fixture(autouse=True)
+def _senza_fonte_iffi(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Questi test guardano le citazioni del KG: la riga IFFI (#671) ha i suoi."""
+    import limen.agents.chat_agents.briefing as modulo
+
+    monkeypatch.setattr(modulo, "affidabilita_regione", lambda _a: None)
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
