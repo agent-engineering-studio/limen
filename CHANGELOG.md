@@ -56,6 +56,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+* **`ispra-idrogeo` 0.10.1.** Pin `~=0.10.1` (pyproject, `.mcp.json`, il
+  servizio `idrogeo-mcp` in compose, README e appendice C). Release di sole
+  correzioni, senza cambi di API: sulla Mappa dei dati i punti delle frane
+  stanno sopra i poligoni e le frane datate sopra i punti IFFI, i testi della
+  pagina sono in italiano, i file statici arrivano `no-cache`; in più `make
+  start` e la documentazione. Per Limen non cambia nulla nel codice.
+
 * **`ispra-idrogeo` 0.10.0.** Pin `~=0.10.0` (pyproject, `.mcp.json`, il
   servizio `idrogeo-mcp` in compose, README e appendice C). Porta, senza
   cambiare le risposte esistenti: `mosaic("pai_frane_2024")` (#670),
