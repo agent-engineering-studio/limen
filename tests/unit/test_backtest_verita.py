@@ -103,3 +103,49 @@ def test_il_report_per_comune_dice_il_traguardo() -> None:
     # Colto tutto, ma con tutti i comuni-giorno accesi a pari merito: FAIL.
     righe = _righe_comuni(PerComune(10, 10, 1.0, 0.5, 10, 1.0), metro)
     assert righe[-2].endswith("**FAIL**")
+
+
+def test_la_precisione_di_data_ha_la_sua_scala() -> None:
+    from limen.cli.backtest import PRECISIONI_DATA
+
+    assert precisioni_fino_a("T2", PRECISIONI_DATA) == ["T1", "T2"]
+    assert descrivi_verita(None, None, ["T1", "T2"], 24.0) == (
+        "ogni precisione; ogni sorgente; data T2 o migliore; date senza ora ±24 h"
+    )
+
+
+def test_una_data_senza_ora_allarga_la_finestra_ai_due_capi() -> None:
+    """#668: una frana datata al giorno sta a mezzanotte, ma può essere caduta
+    la sera. Con ±24 h vale l'allerta di dodici ore dopo e quella di 130 ore
+    prima; senza tolleranza nessuna delle due, e una cella con l'ora nota non
+    cambia."""
+    from datetime import UTC, datetime, timedelta
+
+    from limen.cli.backtest import _match_truth
+
+    evento = datetime(2019, 11, 24, tzinfo=UTC)
+    verita = {"senza_ora": evento, "con_ora": evento}
+    allerte = {
+        "senza_ora": [evento + timedelta(hours=12)],
+        "con_ora": [evento + timedelta(hours=12)],
+    }
+    assert _match_truth(allerte, verita, lead_max_hours=120.0) == (0, 2, [])
+    hits, misses, leads = _match_truth(
+        allerte, verita, lead_max_hours=120.0, tolleranza={"senza_ora": 24.0}
+    )
+    assert (hits, misses, leads) == (1, 1, [0.0])
+    prima = {"senza_ora": [evento - timedelta(hours=130)]}
+    assert _match_truth(
+        prima, {"senza_ora": evento}, lead_max_hours=120.0, tolleranza={"senza_ora": 24.0}
+    ) == (1, 0, [130.0])
+
+
+def test_la_scelta_dell_evento_si_cambia_solo_per_il_backtest() -> None:
+    from limen.cli.backtest import con_scelta_evento
+    from limen.core.scoring.regional_thresholds import load_regional_thresholds
+
+    yaml = load_regional_thresholds()
+    forte = con_scelta_evento(yaml, "piu_forte")
+    assert forte.caine.event_reconstruction.scelta_evento == "piu_forte"
+    assert yaml.caine.event_reconstruction.scelta_evento == "ultimo"
+    assert forte.classes == yaml.classes
