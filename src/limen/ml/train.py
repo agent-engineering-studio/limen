@@ -198,6 +198,7 @@ def _algorithm_candidates(seed: int, weights: dict[int, float]) -> dict[str, Any
     non-lineare non sta comprando niente.
     """
     from sklearn.ensemble import RandomForestClassifier
+    from sklearn.impute import SimpleImputer
     from sklearn.linear_model import LogisticRegression
     from sklearn.pipeline import make_pipeline
     from sklearn.preprocessing import StandardScaler
@@ -213,7 +214,11 @@ def _algorithm_candidates(seed: int, weights: dict[int, float]) -> dict[str, Any
         # Standardizzata: la logistica senza scala dà coefficienti dominati
         # dalla feature con l'unità più grande, e qui convivono indici in
         # [0,1] e millimetri di pioggia.
+        # La logistica non accetta i non misurati (#698): mediana più una
+        # colonna «mancava», così non li legge come terreno fermo. Foresta e
+        # boosting li gestiscono da soli.
         "logistic": make_pipeline(
+            SimpleImputer(strategy="median", add_indicator=True),
             StandardScaler(),
             LogisticRegression(max_iter=2000, class_weight="balanced", random_state=seed),
         ),

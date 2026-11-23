@@ -7,6 +7,7 @@ can ``import limen.ml.dataset`` without the `ml` group installed.
 from __future__ import annotations
 
 import hashlib
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -108,6 +109,26 @@ def features_for(hazard: HazardType) -> tuple[str, ...]:
     return FEATURES_BY_HAZARD.get(hazard, CANONICAL_FEATURES)
 
 
+#: Le misure EGMS che una cella senza pixel non ha (#698). Mancanti restano
+#: NaN fino al modello, in addestramento e in servizio: a 0.0 un bosco dove il
+#: satellite non vede entrava come un versante fermo. `insar.scatterer_count`
+#: resta fuori: zero pixel è un conteggio vero.
+NON_MISURATA_SE_ASSENTE: frozenset[str] = frozenset(
+    {
+        "insar.velocity_mmy",
+        "insar.accel_mmy2",
+        "insar.velocita_verticale_mmy",
+        "insar.velocita_est_mmy",
+        "insar.stagionalita_verticale_mm",
+    }
+)
+
+
+def valore_assente(name: str) -> float:
+    """Il valore di una feature che il campione, o il bundle, non porta."""
+    return math.nan if name in NON_MISURATA_SE_ASSENTE else 0.0
+
+
 @dataclass(frozen=True, slots=True)
 class TrainingMatrix:
     """X, y, groups (spatial block) + the ordered feature schema."""
@@ -121,6 +142,8 @@ class TrainingMatrix:
 def _flatten(features: dict[str, Any]) -> dict[str, float]:
     """Appiattisce il vettore, ignorando ciò che non è un numero.
 
+    Un `None` non entra: lo riempie `to_matrix` con `valore_assente`.
+
     Il dizionario delle feature porta anche gli **input grezzi** che servono a
     rigiocare il motore V1 sullo stesso campione — `landuse_code` è una
     stringa CLC. Sono provenienza, non colonne: senza questo filtro un
@@ -132,9 +155,6 @@ def _flatten(features: dict[str, Any]) -> dict[str, float]:
         if not isinstance(child, dict):
             continue
         for k, v in child.items():
-            if v is None:
-                flat[f"{top}.{k}"] = 0.0
-                continue
             if isinstance(v, bool) or not isinstance(v, (int, float)):
                 continue
             flat[f"{top}.{k}"] = float(v)
@@ -153,7 +173,7 @@ def to_matrix(
     groups: list[str] = []
     for s in samples:
         flat = _flatten(s.features)
-        rows.append([flat.get(name, 0.0) for name in names])
+        rows.append([flat.get(name, valore_assente(name)) for name in names])
         labels.append(int(s.label))
         groups.append(s.split_block)
     matrix_x = np.array(rows, dtype=float)
@@ -206,9 +226,11 @@ def prune_collinear(
 
     x = np.asarray(matrix.X, dtype=float)
     names = list(matrix.feature_names)
-    # Zero-variance columns produce NaN correlations — treat as 0.
-    with np.errstate(invalid="ignore"):
-        corr = np.corrcoef(x, rowvar=False)
+    # Zero-variance columns produce NaN correlations — treat as 0. Mascherata:
+    # la correlazione di una colonna con dei non misurati (#698) si calcola
+    # sulle righe dove entrambe sono misurate, invece di uscire NaN e quindi 0.
+    with np.errstate(invalid="ignore", divide="ignore"):
+        corr = np.ma.corrcoef(np.ma.masked_invalid(x), rowvar=False).filled(np.nan)
     corr = np.nan_to_num(corr, nan=0.0)
 
     dropped: list[tuple[str, str, float]] = []

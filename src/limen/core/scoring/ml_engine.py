@@ -12,6 +12,7 @@ Model Registry.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -209,14 +210,18 @@ class MLScoringEngine(ScoringEngine[ComponentBreakdown]):
         c = self._artefacts.conformal
         return float(c["q90"]) if c and "q90" in c else None
 
-    def feature_row(self, bundle: CellFeatureBundle) -> dict[str, float]:
+    def feature_row(self, bundle: CellFeatureBundle) -> dict[str, float | None]:
         """Named canonical feature vector — persisted by the shadow so the
-        drift monitor compares training vs live on identical keys/scales."""
+        drift monitor compares training vs live on identical keys/scales.
+
+        Una feature non misurata esce `None`: NaN non è JSON valido per
+        `model_runs.breakdown`, e la scrittura dello shadow fallirebbe intera.
+        """
         names = self._artefacts.feature_names
         if not names:
             return {}
         row = _bundle_to_feature_row(bundle, names=names)
-        return dict(zip(names, row, strict=True))
+        return {n: None if math.isnan(v) else v for n, v in zip(names, row, strict=True)}
 
     @property
     def _shap_top_k(self) -> int:
@@ -341,8 +346,13 @@ def _clamp01_scaled(x: float | None, cap: float) -> float:
     return _clamp01(float(x) / cap)
 
 
+def _misura(x: float | None) -> float:
+    return math.nan if x is None else float(x)
+
+
 def _bundle_to_feature_row(bundle: CellFeatureBundle, *, names: list[str]) -> list[float]:
     """Project a bundle onto the ordered feature vector the model expects."""
+    from limen.ml.dataset import valore_assente
     from limen.ml.rain_features import compute_rain_aggregates
 
     rain = compute_rain_aggregates(
@@ -360,12 +370,13 @@ def _bundle_to_feature_row(bundle: CellFeatureBundle, *, names: list[str]) -> li
         "static.curvature": float(bundle.static.curvature or 0.0),
         # Dal bundle dalla correzione della #568: prima mancavano qui e lo
         # sfidante le riceveva a zero dopo averle imparate sui valori veri.
-        "insar.velocity_mmy": float(bundle.static.insar_velocity_mmy or 0.0),
-        "insar.accel_mmy2": float(bundle.static.insar_accel_mmy2 or 0.0),
+        # Senza pixel EGMS restano NaN, come in addestramento (#698).
+        "insar.velocity_mmy": _misura(bundle.static.insar_velocity_mmy),
+        "insar.accel_mmy2": _misura(bundle.static.insar_accel_mmy2),
         "insar.scatterer_count": float(bundle.static.insar_scatterer_count or 0),
-        "insar.velocita_verticale_mmy": float(bundle.static.velocita_verticale_mmy or 0.0),
-        "insar.velocita_est_mmy": float(bundle.static.velocita_est_mmy or 0.0),
-        "insar.stagionalita_verticale_mm": float(bundle.static.stagionalita_verticale_mm or 0.0),
+        "insar.velocita_verticale_mmy": _misura(bundle.static.velocita_verticale_mmy),
+        "insar.velocita_est_mmy": _misura(bundle.static.velocita_est_mmy),
+        "insar.stagionalita_verticale_mm": _misura(bundle.static.stagionalita_verticale_mm),
         # Same antecedent-rain aggregates the model trained on (CERRA
         # replay). The monitoring window is 48 h, so rain_72h is a lower
         # bound; the 30-day total comes from the API_30 archive lookup.
@@ -386,7 +397,7 @@ def _bundle_to_feature_row(bundle: CellFeatureBundle, *, names: list[str]) -> li
         # Resolver fallback path: no feature schema → uniform vector,
         # the model isn't trained anyway.
         return list(flat.values())
-    return [float(flat.get(n, 0.0)) for n in names]
+    return [float(flat.get(n, valore_assente(n))) for n in names]
 
 
 def _predict(artefacts: _MLArtefacts, row: list[float]) -> float:
@@ -596,7 +607,7 @@ def _component_attribution(
     # lo stesso percorso già previsto quando l'explainer manca.
     contributions = _shap_contributions(artefacts, feature_row) if use_shap else None
     if contributions is None or len(contributions) != len(names):
-        contributions = [abs(float(v)) for v in feature_row]
+        contributions = [0.0 if math.isnan(v) else abs(float(v)) for v in feature_row]
     else:
         contributions = [abs(v) for v in contributions]
 

@@ -51,16 +51,19 @@ def test_to_matrix_handles_missing_fields(samples: list[TrainingSample]) -> None
     susc_idx = CANONICAL_FEATURES.index("static.susc_ispra")
     twi_idx = CANONICAL_FEATURES.index("static.twi")
     assert matrix.X[0, susc_idx] == pytest.approx(0.6)
-    # Missing fields project to 0.0 — no NaN propagation into the model.
+    # Missing fields project to 0.0; only the EGMS measures stay NaN (#698).
     assert matrix.X[0, twi_idx] == pytest.approx(0.0)
     assert matrix.X[1, susc_idx] == pytest.approx(0.2)
 
 
-def test_to_matrix_treats_none_as_zero(samples: list[TrainingSample]) -> None:
+def test_to_matrix_keeps_unmeasured_insar_as_nan(samples: list[TrainingSample]) -> None:
+    import math
+
     matrix = to_matrix(samples)
     velocity_idx = CANONICAL_FEATURES.index("insar.velocity_mmy")
-    # Row 1 set velocity_mmy=None explicitly → 0.0 in the matrix.
-    assert matrix.X[1, velocity_idx] == pytest.approx(0.0)
+    assert matrix.X[0, velocity_idx] == pytest.approx(-8.0)
+    # Row 1 set velocity_mmy=None: not measured, not «still ground» (#698).
+    assert math.isnan(matrix.X[1, velocity_idx])
 
 
 def test_prune_collinear_drops_twin_keeps_canonical_first() -> None:
