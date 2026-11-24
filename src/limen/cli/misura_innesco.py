@@ -472,6 +472,10 @@ def _sezione(misurate: Sequence[Misurata], titolo: str, filtro: Filtro) -> list[
         "",
         "### AUC media per finestra",
         "",
+        "Più alta che nella #243: il punteggio di una frana è il massimo delle "
+        f"{_ANTICIPO_ORE} ore prima, quello di un'unità ordinaria un istante solo. "
+        "Vale per confrontare le letture fra loro, non come numero assoluto.",
+        "",
         "| Lettura | Taratura | Verifica |",
         "|---|---|---|",
     ]
