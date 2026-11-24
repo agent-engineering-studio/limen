@@ -117,9 +117,18 @@ async def test_accelerazione_e_stagionalita_si_scrivono_e_si_rileggono(
         insar_accel_mmy2=0.8,
         scatterer_count=90,
         stagionalita_verticale_mm=3.5,
+        accelerazione_verticale_mmy2=-0.4,
+        accelerazione_verticale_p10_mmy2=-1.1,
+        velocita_verticale_p10_mmy=-6.2,
+        copertura=0.9,
     )
     assert await upsert_many([riga]) == 1
     letta = await get_for_cell(riga.cell_id)
     assert letta is not None
     assert letta.insar_accel_mmy2 == pytest.approx(0.8)
     assert letta.stagionalita_verticale_mm == pytest.approx(3.5)
+    # Migrazione 098 (#700): con segno, e la copertura.
+    assert letta.accelerazione_verticale_mmy2 == pytest.approx(-0.4)
+    assert letta.accelerazione_verticale_p10_mmy2 == pytest.approx(-1.1)
+    assert letta.velocita_verticale_p10_mmy == pytest.approx(-6.2)
+    assert letta.copertura == pytest.approx(0.9)

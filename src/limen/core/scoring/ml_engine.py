@@ -377,6 +377,11 @@ def _bundle_to_feature_row(bundle: CellFeatureBundle, *, names: list[str]) -> li
         "insar.velocita_verticale_mmy": _misura(bundle.static.velocita_verticale_mmy),
         "insar.velocita_est_mmy": _misura(bundle.static.velocita_est_mmy),
         "insar.stagionalita_verticale_mm": _misura(bundle.static.stagionalita_verticale_mm),
+        "insar.accelerazione_verticale_mmy2": _misura(bundle.static.accelerazione_verticale_mmy2),
+        "insar.accelerazione_verticale_p10_mmy2": _misura(
+            bundle.static.accelerazione_verticale_p10_mmy2
+        ),
+        "insar.velocita_verticale_p10_mmy": _misura(bundle.static.velocita_verticale_p10_mmy),
         # Same antecedent-rain aggregates the model trained on (CERRA
         # replay). The monitoring window is 48 h, so rain_72h is a lower
         # bound; the 30-day total comes from the API_30 archive lookup.

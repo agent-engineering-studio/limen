@@ -413,6 +413,22 @@ async def _build_wildfire_features(cell_id: str, valuation_time: datetime) -> di
     }
 
 
+def _insar_al(
+    insar: cell_insar_features_repo.CellInsarFeatures | None, valuation_time: datetime
+) -> cell_insar_features_repo.CellInsarFeatures | None:
+    """Le misure EGMS per un campione, o niente se cominciano dopo di lui (#699).
+
+    Una frana di marzo 2020 non può avere una velocità misurata da dicembre
+    2020: quel numero allora non esisteva. Un campione **dopo** la fine della
+    serie la tiene: è quello che fa il servizio, che oggi legge una release
+    chiusa mesi fa. Senza `period_start` (release non ancora letta dalla
+    libreria) non si può dire, e la misura resta.
+    """
+    if insar is None or insar.period_start is None:
+        return insar
+    return None if valuation_time.date() < insar.period_start else insar
+
+
 async def _build_features(cell_id: str, valuation_time: datetime) -> dict[str, Any]:
     """Pull the static + InSAR + exposure feature vector for one cell.
 
@@ -422,7 +438,7 @@ async def _build_features(cell_id: str, valuation_time: datetime) -> dict[str, A
     passes will splice in cached ERA5 windows via ``DistributedCache``.
     """
     static = await cell_static_factors_repo.get_for_cell(cell_id)
-    insar = await cell_insar_features_repo.get_for_cell(cell_id)
+    insar = _insar_al(await cell_insar_features_repo.get_for_cell(cell_id), valuation_time)
     features: dict[str, Any] = {
         "static": {
             # Da `susceptibility`, come lo step `StaticFactors`: il dataclass
@@ -447,6 +463,15 @@ async def _build_features(cell_id: str, valuation_time: datetime) -> dict[str, A
             "velocita_est_mmy": insar.velocita_est_mmy if insar is not None else None,
             "stagionalita_verticale_mm": (
                 insar.stagionalita_verticale_mm if insar is not None else None
+            ),
+            "accelerazione_verticale_mmy2": (
+                insar.accelerazione_verticale_mmy2 if insar is not None else None
+            ),
+            "accelerazione_verticale_p10_mmy2": (
+                insar.accelerazione_verticale_p10_mmy2 if insar is not None else None
+            ),
+            "velocita_verticale_p10_mmy": (
+                insar.velocita_verticale_p10_mmy if insar is not None else None
             ),
         },
     }
