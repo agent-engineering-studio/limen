@@ -130,8 +130,8 @@ async def sync_egms(*, aoi_id: str, settings: Settings | None = None) -> int:
         # all'archivio: il secondo sync scarica zero byte.
         async with cancello:
             try:
-                return await archivio.fetch_tile(
-                    tile, componente, s.release, cartella, attributi=True
+                return await clms.scarica_tile(
+                    archivio, tile, componente, s.release, cartella, attributi=True
                 )
             except EgmsError as exc:
                 fallite.append(tile_prefix(tile, componente, s.release))
@@ -226,7 +226,7 @@ async def controlla_release(settings: Settings | None = None) -> dict[str, objec
     archivio = await clms.archivio(s)
     if archivio is None:
         return {"status": "skipped", "reason": clms.perche_no(s)}
-    disponibili = await archivio.releases()
+    disponibili = await clms.releases(archivio)
     configurata = api_release(s.release)
     ultima = max(disponibili) if disponibili else None
     if ultima is not None and ultima > configurata:

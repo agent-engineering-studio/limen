@@ -1280,15 +1280,15 @@ raster = [
 
 [[package]]
 name = "egms-client"
-version = "0.7.0"
+version = "0.8.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
     { name = "httpx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7d/d3/bced97819736311e2d4b284ab34df84b69753acad906e58243d66da310e7/egms_client-0.7.0.tar.gz", hash = "sha256:13ae9f7badd59368ff7b3799f7469ee3969f00b6d0456195a91d4f010543d4f3", size = 65920, upload-time = "2026-11-04T10:00:39.951Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ba/6e/c76805046611dd10b7edddb6c860bc97b70306d1d865366c98776c4b9d2b/egms_client-0.8.0.tar.gz", hash = "sha256:c0cec2ff42ceb3804f87623b1636b8192e527f92442d385bf3042114718aa1a1", size = 100399, upload-time = "2026-11-24T08:00:37.594Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ed/f8/2ef7b0032cf9340c44bca46c95ce6ec23cfedc0d97b5803c687d36ddb160/egms_client-0.7.0-py3-none-any.whl", hash = "sha256:a15236c3c846c0b93c74cfcb841b2fdb8537c8287987aad0579389a1017866e8", size = 58612, upload-time = "2026-11-04T10:00:38.208Z" },
+    { url = "https://files.pythonhosted.org/packages/0a/57/71590b10b151b238a9a00e799be165498014e808ae50defb303a68a9e476/egms_client-0.8.0-py3-none-any.whl", hash = "sha256:c3eb21f93e86689ad858e230b57c987c342b21b227d2c966fd18fea3c24bb2b4", size = 91399, upload-time = "2026-11-24T08:00:36.343Z" },
 ]
 
 [package.optional-dependencies]
@@ -2531,7 +2531,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=43" },
     { name = "dpc-radar", extras = ["bulletins", "nowcast", "storms"], specifier = "~=0.4.0" },
     { name = "effis-client", extras = ["raster"], specifier = "~=0.1.2" },
-    { name = "egms-client", extras = ["raster"], specifier = "~=0.7.0" },
+    { name = "egms-client", extras = ["raster"], specifier = "~=0.8.0" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "firms-client", specifier = "~=0.5.0" },
     { name = "fwi-chain", specifier = "~=1.0.0" },
