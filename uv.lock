@@ -2508,6 +2508,9 @@ ml = [
     { name = "scikit-learn" },
     { name = "shap" },
 ]
+pluviometri = [
+    { name = "pyarrow" },
+]
 radar = [
     { name = "numcodecs" },
 ]
@@ -2596,6 +2599,7 @@ ml = [
     { name = "scikit-learn", specifier = ">=1.5" },
     { name = "shap", specifier = ">=0.46" },
 ]
+pluviometri = [{ name = "pyarrow", specifier = ">=21" }]
 radar = [{ name = "numcodecs", specifier = ">=0.13" }]
 report = [
     { name = "dpc-radar", extras = ["report"], specifier = "~=0.4.0" },

@@ -69,8 +69,10 @@ Configuration knobs (env vars, kept off the dispatcher for parity with
   ``pluviometri`` usa i pluviometri ARPA Lombardia (open data CC0, a 10
   minuti dal 1987, #505): ogni nodo prende il pluviometro più vicino entro
   ``LIMEN_BACKTEST_PLUVIOMETRI_KM`` (5); i nodi senza, e i giorni in cui il
-  pluviometro non ha misurato, restano sul modello. Ha senso solo su
-  ``it-lombardia``.
+  pluviometro non ha misurato, restano sul modello. Ha senso su
+  ``it-lombardia`` e su ``it-trentino-alto-adige``, dove legge i pluviometri
+  Meteotrentino (CC BY 4.0, a 5 minuti dal 1985; gruppo uv ``pluviometri``):
+  solo la provincia di Trento, i nodi dell'Alto Adige restano sul modello.
 * ``LIMEN_BACKTEST_LITOLOGIA``   — ``db`` (default, il ``litho_weight`` scritto
   in ``cell_static_factors``) o ``carta``: lo ricalcola in memoria dalla carta
   geolitologica (``LIMEN_GEOLOGICAL_SHAPEFILE``, colonna
@@ -1412,8 +1414,16 @@ async def run() -> int:
                     elif pioggia == "pluviometri":
                         from limen.integrations.arpa_lombardia import pluviometri
                         from limen.integrations.dpc.merging_archive import pioggia_dal_radar
+                        from limen.integrations.meteotrentino import (
+                            pluviometri as pluviometri_trentino,
+                        )
 
-                        misurata = await pluviometri.oraria(
+                        lettore = (
+                            pluviometri_trentino.oraria
+                            if aoi_id == "it-trentino-alto-adige"
+                            else pluviometri.oraria
+                        )
+                        misurata = await lettore(
                             nodes,
                             start - timedelta(days=31),
                             end,

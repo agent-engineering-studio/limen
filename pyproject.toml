@@ -136,6 +136,11 @@ copernicus = [
 radar = [
     "numcodecs>=0.13",
 ]
+# `limen backtest` con LIMEN_BACKTEST_PIOGGIA=pluviometri sul Trentino: i
+# Parquet mensili dell'archivio Meteotrentino. Gira sull'host.
+pluviometri = [
+    "pyarrow>=21",
+]
 
 [build-system]
 requires = ["uv_build>=0.11.16,<0.14.0"]
@@ -234,6 +239,18 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "limen.integrations.dem.terrain_tiles"
 disallow_untyped_calls = false
+
+# pyarrow non annota `parquet.read_table`: lo chiama solo il lettore dei
+# Parquet mensili di Meteotrentino.
+[[tool.mypy.overrides]]
+module = "limen.integrations.meteotrentino.pluviometri"
+disallow_untyped_calls = false
+
+# Le funzioni di `pyarrow.compute` sono generate a runtime dal registro dei
+# kernel: mypy non le vede e le darebbe tutte per inesistenti.
+[[tool.mypy.overrides]]
+module = "pyarrow.compute"
+follow_imports = "skip"
 
 # ---------------------------------------------------------------------------
 # pytest
