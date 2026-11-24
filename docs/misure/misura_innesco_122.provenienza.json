@@ -1,0 +1,23 @@
+{
+  "report": "misura_innesco_122.md",
+  "generato": "2026-11-24T18:14:12+00:00",
+  "limen": "0.1.0",
+  "commit": "336752b3b6d1dae9ada7b538458845dcdba1a84a",
+  "versioni": {
+    "landslide": "limen-deterministic-v1",
+    "flood": "flood-v1.4.0",
+    "wildfire": "wildfire-v1.1.1"
+  },
+  "comando": "limen misura-innesco",
+  "ambiente": {
+    "LIMEN_BACKUP_DIR": "<percorso locale>",
+    "LIMEN_CLIMA_PIOGGIA": "<percorso locale>",
+    "LIMEN_DATA_ROOT": "<percorso locale>",
+    "LIMEN_DOMINIO": "localhost",
+    "LIMEN_IMAGE_PREFIX": "ghcr.io/agent-engineering-studio/limen-",
+    "LIMEN_IMAGE_TAG": "sha-fa4dccd",
+    "LIMEN_IMPERVIOUSNESS_RASTER": "<percorso locale>",
+    "LIMEN_PROXY_BIND": "127.0.0.1",
+    "LIMEN_REPORTS_DIR": "<percorso locale>"
+  }
+}
