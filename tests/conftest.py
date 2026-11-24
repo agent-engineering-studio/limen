@@ -112,8 +112,11 @@ def postgres_container() -> Iterator[str]:
     # slow to fsync (the dedicated server: overlay2 on LVM) `initdb` stalls
     # past the 120 s wait strategy and every integration test errors out.
     # tmpfs takes container startup from "never" to ~10 s there.
-    container = container.with_env("PGDATA", "/var/lib/postgresql/data/pgdata").with_kwargs(
-        tmpfs={"/var/lib/postgresql/data": "rw,size=2g"}
+    # Dalla 4.15 testcontainers passa un suo `tmpfs` a Docker, e darlo anche
+    # in `with_kwargs` è un TypeError. `with_tmpfs_mount` scrive il valore
+    # così com'è fra le opzioni del mount: «2g» da solo non è un'opzione.
+    container = container.with_env("PGDATA", "/var/lib/postgresql/data/pgdata").with_tmpfs_mount(
+        "/var/lib/postgresql/data", "rw,size=2g"
     )
     container.start()
     try:

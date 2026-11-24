@@ -72,7 +72,7 @@ dev = [
     "ruff>=0.7",
     "mypy>=1.13",
     "pre-commit>=4.0",
-    "testcontainers>=4.8",
+    "testcontainers>=4.15",
     "respx>=0.21",
     # LLM SDKs needed only to exercise the concrete LlmClientFactory
     # construction paths in tests. Runtime deployment installs them
