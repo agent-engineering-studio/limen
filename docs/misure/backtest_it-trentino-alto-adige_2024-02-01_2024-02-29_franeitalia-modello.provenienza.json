@@ -1,0 +1,27 @@
+{
+  "report": "backtest_it-trentino-alto-adige_2024-02-01_2024-02-29.md",
+  "generato": "2026-11-24T14:19:44+00:00",
+  "limen": "0.1.0",
+  "commit": "4ac5bf4bebf2ce15abcb4fe37bc791a4a6845ecf",
+  "versioni": {
+    "landslide": "limen-deterministic-v1",
+    "flood": "flood-v1.4.0",
+    "wildfire": "wildfire-v1.1.1"
+  },
+  "comando": "limen backtest",
+  "ambiente": {
+    "LIMEN_BACKTEST_AOI": "it-trentino-alto-adige",
+    "LIMEN_BACKTEST_END": "2024-02-29T23:00:00+00:00",
+    "LIMEN_BACKTEST_SORGENTI": "franeitalia",
+    "LIMEN_BACKTEST_START": "2024-02-01T00:00:00+00:00",
+    "LIMEN_BACKTEST_TOLLERANZA_DATA_ORE": "24",
+    "LIMEN_BACKUP_DIR": "<percorso locale>",
+    "LIMEN_DATA_ROOT": "<percorso locale>",
+    "LIMEN_DOMINIO": "localhost",
+    "LIMEN_IMAGE_PREFIX": "ghcr.io/agent-engineering-studio/limen-",
+    "LIMEN_IMAGE_TAG": "sha-fa4dccd",
+    "LIMEN_IMPERVIOUSNESS_RASTER": "<percorso locale>",
+    "LIMEN_PROXY_BIND": "127.0.0.1",
+    "LIMEN_REPORTS_DIR": "<percorso locale>"
+  }
+}
