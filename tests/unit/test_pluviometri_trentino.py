@@ -178,7 +178,7 @@ async def test_oraria_per_nodo_e_degrado(monkeypatch: pytest.MonkeyPatch) -> Non
             return httpx.Response(200, json=manifest, request=richiesta)
         return httpx.Response(200, content=contenuto, request=richiesta)
 
-    monkeypatch.setattr(pt, "_scarica", scarica)
+    monkeypatch.setattr(pt, "scarica", scarica)
     nodi = [(11.01, 46.0), (12.0, 46.0)]
     bbox = (10.0, 45.0, 12.5, 47.0)
     ore = await pt.oraria(nodi, start, end, raggio_km=5.0, bbox=bbox)
@@ -190,12 +190,12 @@ async def test_oraria_per_nodo_e_degrado(monkeypatch: pytest.MonkeyPatch) -> Non
             return await scarica(percorso)
         raise httpx.ConnectError("giù")
 
-    monkeypatch.setattr(pt, "_scarica", giu)
+    monkeypatch.setattr(pt, "scarica", giu)
     assert await pt.oraria(nodi, start, end, raggio_km=5.0, bbox=bbox) == {}
 
     async def anagrafica_giu(percorso: str) -> Any:
         raise httpx.ConnectError("giù")
 
-    monkeypatch.setattr(pt, "_scarica", anagrafica_giu)
+    monkeypatch.setattr(pt, "scarica", anagrafica_giu)
     assert await pt.pluviometri(bbox) == []
     assert await pt.oraria(nodi, start, end, raggio_km=5.0, bbox=bbox) == {}

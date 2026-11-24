@@ -964,3 +964,57 @@ def radar_rarity(lon: float, lat: float, hours: int, mm: float) -> dict[str, Any
     except (DpcRadarError, ValueError) as exc:
         log.warning("integration.degraded", source="dpc_radar_facts", error=str(exc))
         return {}
+
+
+def _istante(valore: str | None) -> datetime | None:
+    if not valore:
+        return None
+    t = datetime.fromisoformat(valore)
+    return t if t.tzinfo else t.replace(tzinfo=UTC)
+
+
+async def landslide_zone_rain(
+    cell_id: str | None = None,
+    istat_code: str | None = None,
+    hours: int = 72,
+    until: str | None = None,
+) -> dict[str, Any]:
+    """Rain measured by the regional gauges near a landslide zone, against the trigger threshold.
+
+    Archived nightly (ARPA Lombardia, Meteotrentino): ``until`` defaults to now,
+    but the last hours may not be in the archive yet — use the radar tools for those.
+    """
+    from limen.config.settings import get_settings
+    from limen.core.pioggia_frane import pioggia_zona_franosa
+
+    return await pioggia_zona_franosa(
+        cell_id=cell_id,
+        istat_code=istat_code,
+        ore=max(1, min(hours, 24 * 30)),
+        fino_a=_istante(until),
+        raggio_km=get_settings().pluviometri.raggio_km,
+    )
+
+
+async def rain_before_landslides(
+    cell_id: str | None = None,
+    istat_code: str | None = None,
+    since: str = "2009-01-01",
+    until: str | None = None,
+    hours_before: int = 72,
+) -> dict[str, Any]:
+    """The dated landslides of a zone and the gauge rain in the hours before each."""
+    from limen.config.settings import get_settings
+    from limen.core.pioggia_frane import pioggia_prima_delle_frane
+
+    dal = _istante(since)
+    if dal is None:
+        return {"error": "since must be an ISO date"}
+    return await pioggia_prima_delle_frane(
+        cell_id=cell_id,
+        istat_code=istat_code,
+        dal=dal,
+        al=_istante(until),
+        ore_prima=max(1, min(hours_before, 24 * 30)),
+        raggio_km=get_settings().pluviometri.raggio_km,
+    )

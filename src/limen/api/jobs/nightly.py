@@ -58,6 +58,7 @@ STEPS = (
     "effis_perimetri",
     "ems_alluvioni",
     "esposizione_ispra",
+    "pluviometri",
     "qualita_dati",
     "glofas_riferimenti",
     "glofas_soglie",
@@ -229,6 +230,7 @@ async def run_nightly_pipeline(deps: AppDependencies) -> dict[str, Any]:
     out["effis_perimetri"] = await _step("effis_perimetri", _effis_perimetri)
     out["ems_alluvioni"] = await _step("ems_alluvioni", _ems_alluvioni)
     out["esposizione_ispra"] = await _step("esposizione_ispra", _esposizione_ispra)
+    out["pluviometri"] = await _step("pluviometri", lambda: _pluviometri(deps))
     # Dopo gli altri passi, così vede i loro errori di stanotte; prima di
     # GloFAS, che dura ore e non deve ritardare il riepilogo (#421).
     out["qualita_dati"] = await _step("qualita_dati", lambda: _qualita_dati(deps))
@@ -406,6 +408,17 @@ async def _ems_alluvioni() -> dict[str, Any]:
     from limen.cli.ingest_events import sincronizza_alluvioni
 
     return await sincronizza_alluvioni()
+
+
+async def _pluviometri(deps: AppDependencies) -> dict[str, Any]:
+    """L'archivio orario dei pluviometri regionali per le zone franose: i mesi
+    recenti, più un blocco dello storico per notte (``PLUVIOMETRI__*``)."""
+    from limen.integrations.pluviometri_sync import sincronizza
+
+    cfg = deps.settings.pluviometri
+    if not cfg.attivo:
+        return {"status": "skipped", "reason": "PLUVIOMETRI__ATTIVO=false"}
+    return dict(await sincronizza(dal_anno=cfg.dal_anno, limite=cfg.mesi_per_notte))
 
 
 async def _esposizione_ispra() -> dict[str, Any]:

@@ -59,6 +59,7 @@ class Pluviometro:
     lat: float
     dal: date | None
     al: date | None
+    quota_m: float | None = None
 
 
 def _km(a: tuple[float, float], b: tuple[float, float]) -> float:
@@ -180,22 +181,53 @@ async def pluviometri(bbox: tuple[float, float, float, float]) -> list[Pluviomet
     try:
         # lng/lat sono testo nel dataset: il filtro sul riquadro si fa qui.
         righe = await _pagine(ANAGRAFICA, {"tipologia": "Precipitazione"})
-    except (httpx.HTTPError, ValueError) as exc:
+        tutti = [
+            Pluviometro(
+                idsensore=str(r["idsensore"]),
+                nome=str(r.get("nomestazione", "")),
+                lon=float(r["lng"]),
+                lat=float(r["lat"]),
+                dal=_giorno(r.get("datastart")),
+                al=_giorno(r.get("datastop")),
+                quota_m=float(r["quota"]) if r.get("quota") else None,
+            )
+            for r in righe
+            if r.get("lng") and r.get("lat")
+        ]
+    except (httpx.HTTPError, ValueError, KeyError) as exc:
         log.warning("integration.degraded", source="arpa_lombardia", error=str(exc))
         return []
-    tutti = [
-        Pluviometro(
-            idsensore=str(r["idsensore"]),
-            nome=str(r.get("nomestazione", "")),
-            lon=float(r["lng"]),
-            lat=float(r["lat"]),
-            dal=_giorno(r.get("datastart")),
-            al=_giorno(r.get("datastop")),
-        )
-        for r in righe
-        if r.get("lng") and r.get("lat")
-    ]
     return [p for p in tutti if min_lon <= p.lon <= max_lon and min_lat <= p.lat <= max_lat]
+
+
+async def orarie(
+    sensori: list[str], start: datetime, end: datetime
+) -> dict[datetime, list[float | None]]:
+    """Ore UTC ``(h-1, h]`` in ``(start, end]`` → mm per sensore, nell'ordine di ``sensori``.
+
+    Solleva sugli errori della sorgente: chi la chiama decide come degradare.
+    """
+    elenco = ",".join(f"'{s}'" for s in sensori)
+    # In CET: l'ora UTC (h-1, h] ha le etichette (h, h+1].
+    finestra = f"data between '{_soql(start)}' and '{_soql(end)}'"
+    filtro = f"idsensore in ({elenco}) AND {finestra} AND stato in {_STATI_VALIDI}"
+    pioggia: list[tuple[str, str, float]] = []
+    conteggi: list[tuple[str, date, int]] = []
+    for ds, oltre in await _fonti(start, end):
+        for r in await _pagine(ds, {"$where": f"{filtro}{oltre} AND valore > 0", "$order": "data"}):
+            pioggia.append((str(r["idsensore"]), str(r["data"]), float(r["valore"])))
+        for r in await _pagine(
+            ds,
+            {
+                "$select": "idsensore, date_trunc_ymd(data) as giorno, count(*) as n",
+                "$where": f"{filtro}{oltre} AND valore >= 0",
+                "$group": "idsensore, giorno",
+            },
+        ):
+            giorno = _giorno(r["giorno"])
+            if giorno is not None:
+                conteggi.append((str(r["idsensore"]), giorno, int(r["n"])))
+    return ore_dai_dieci_minuti(pioggia, conteggi, sensori=sensori, start=start, end=end)
 
 
 async def oraria(
@@ -221,40 +253,17 @@ async def oraria(
     sensori = sorted({p.idsensore for p in scelti if p is not None})
     if not sensori:
         return {}
-    elenco = ",".join(f"'{s}'" for s in sensori)
-    # In CET: l'ora UTC (h-1, h] ha le etichette (h, h+1].
-    finestra = f"data between '{_soql(start)}' and '{_soql(end)}'"
-    filtro = f"idsensore in ({elenco}) AND {finestra} AND stato in {_STATI_VALIDI}"
-    pioggia: list[tuple[str, str, float]] = []
-    conteggi: list[tuple[str, date, int]] = []
     try:
-        for ds, oltre in await _fonti(start, end):
-            for r in await _pagine(
-                ds, {"$where": f"{filtro}{oltre} AND valore > 0", "$order": "data"}
-            ):
-                pioggia.append((str(r["idsensore"]), str(r["data"]), float(r["valore"])))
-            for r in await _pagine(
-                ds,
-                {
-                    "$select": "idsensore, date_trunc_ymd(data) as giorno, count(*) as n",
-                    "$where": f"{filtro}{oltre} AND valore >= 0",
-                    "$group": "idsensore, giorno",
-                },
-            ):
-                giorno = _giorno(r["giorno"])
-                if giorno is not None:
-                    conteggi.append((str(r["idsensore"]), giorno, int(r["n"])))
+        per_sensore = await orarie(sensori, start, end)
     except (httpx.HTTPError, ValueError, KeyError, IndexError) as exc:
         log.warning("integration.degraded", source="arpa_lombardia", error=str(exc))
         return {}
-    per_sensore = ore_dai_dieci_minuti(pioggia, conteggi, sensori=sensori, start=start, end=end)
     indice = {s: k for k, s in enumerate(sensori)}
     log.info(
         "arpa_lombardia.oraria",
         nodi=len(nodi),
         nodi_con_pluviometro=sum(p is not None for p in scelti),
         sensori=len(sensori),
-        righe_pioggia=len(pioggia),
     )
     return {
         ora: [None if p is None else valori[indice[p.idsensore]] for p in scelti]

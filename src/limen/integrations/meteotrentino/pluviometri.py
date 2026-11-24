@@ -84,10 +84,10 @@ def _giorno(istante: datetime) -> date:
     return (istante.astimezone(_CET) - timedelta(minutes=1)).date()
 
 
-def _mese(anno: int, mese: int) -> tuple[datetime, datetime]:
+def confini_mese(anno: int, numero: int) -> tuple[datetime, datetime]:
     """Primo istante del mese e del successivo, in ora solare."""
-    dopo = (anno + 1, 1) if mese == 12 else (anno, mese + 1)
-    return datetime(anno, mese, 1, tzinfo=_CET), datetime(*dopo, 1, tzinfo=_CET)
+    dopo = (anno + 1, 1) if numero == 12 else (anno, numero + 1)
+    return datetime(anno, numero, 1, tzinfo=_CET), datetime(*dopo, 1, tzinfo=_CET)
 
 
 def file_per(
@@ -96,7 +96,7 @@ def file_per(
     """``(file, inizio, fine del mese)`` dei mesi che toccano ``(start, end]``."""
     out = []
     for percorso, voce in manifest.items():
-        da, a = _mese(int(voce["year"]), int(voce["month"]))
+        da, a = confini_mese(int(voce["year"]), int(voce["month"]))
         if da <= end and a > start:
             out.append((percorso, da, a))
     return sorted(out, key=lambda f: f[1])
@@ -192,7 +192,7 @@ def ore_dai_cinque_minuti(
     return out
 
 
-async def _scarica(percorso: str) -> httpx.Response:
+async def scarica(percorso: str) -> httpx.Response:
     client = await SharedHttpClient.get()
     return await fetch_with_retry("GET", f"{BASE}/{percorso}", client=client)
 
@@ -201,7 +201,7 @@ async def pluviometri(bbox: tuple[float, float, float, float]) -> list[Pluviomet
     """Le stazioni con pioggia a cinque minuti dentro ``bbox`` (lon/lat), dismesse comprese."""
     min_lon, min_lat, max_lon, max_lat = bbox
     try:
-        stazioni = (await _scarica(STAZIONI)).json()["features"]
+        stazioni = (await scarica(STAZIONI)).json()["features"]
         tutte = [
             Pluviometro(
                 idsensore=str(f["properties"]["code"]),
@@ -210,6 +210,9 @@ async def pluviometri(bbox: tuple[float, float, float, float]) -> list[Pluviomet
                 lat=float(f["geometry"]["coordinates"][1]),
                 dal=datetime.fromisoformat(f["properties"]["first"]).date(),
                 al=datetime.fromisoformat(f["properties"]["last"]).date(),
+                quota_m=float(f["properties"]["alt"])
+                if f["properties"].get("alt") is not None
+                else None,
             )
             for f in stazioni
             if CODICE in f["properties"].get("codes", [])
@@ -245,9 +248,9 @@ async def oraria(
         return {}
     ore: list[OraStazione] = []
     try:
-        mesi = file_per((await _scarica(MANIFEST)).json()["files"], start, end)
+        mesi = file_per((await scarica(MANIFEST)).json()["files"], start, end)
         for percorso, da, a in mesi:
-            ore.extend(ore_del_file((await _scarica(percorso)).content, sensori, da=da, a=a))
+            ore.extend(ore_del_file((await scarica(percorso)).content, sensori, da=da, a=a))
     except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
         log.warning("integration.degraded", source="meteotrentino", error=str(exc))
         return {}

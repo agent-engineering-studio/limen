@@ -329,7 +329,7 @@ else
   echo "  saltato: ${gs_host}:${gs_port} non risponde (vedi il passo 1/7)"
 fi
 
-say "5/7  Perimetri EFFIS, catasti regionali e storico FIRMS (verità e storia degli incendi)"
+say "5/7  Perimetri EFFIS, catasti regionali, storico FIRMS e pluviometri regionali"
 # Comando a se' e non un passo del bootstrap: e' un dataset di verita', non un
 # fattore per cella, e il bootstrap per cella non fa chiamate HTTP. Sta pero'
 # in questa sequenza, che e' cio' che la #101 chiedeva.
@@ -342,6 +342,11 @@ if [ "$SCARICA" = 1 ]; then
   # I catasti regionali (#498): gli incendi piccoli che EFFIS non censisce,
   # solo per il backtest. Pochi MB; un ente giu' non ferma gli altri.
   limen catasti-incendi || echo "  (un catasto regionale non ha risposto: si prosegue)"
+  # I pluviometri regionali per le zone franose (migrazione 099): l'ultimo anno
+  # subito, il resto dello storico lo recupera il passo notturno
+  # `pluviometri` un blocco di mesi per notte (LIMEN_PLUVIOMETRI_TUTTI=1 per
+  # farlo qui in una volta, ore di download).
+  limen pluviometri-sync || echo "  (pluviometri regionali non raggiungibili: si prosegue)"
 fi
 
 say "6/7  Velocità del terreno EGMS (feature InSAR del modello ML)"

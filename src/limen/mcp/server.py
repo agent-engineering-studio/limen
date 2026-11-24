@@ -22,6 +22,7 @@ from limen.mcp.tools import (
     cell_breakdown,
     comune_risk,
     hazards,
+    landslide_zone_rain,
     multi_hazard_summary,
     national_report,
     radar_area_summary,
@@ -31,6 +32,7 @@ from limen.mcp.tools import (
     radar_rarity,
     radar_status,
     radar_storm_now,
+    rain_before_landslides,
     recent_alerts,
     risk_summary,
     run_forecast_history,
@@ -64,6 +66,18 @@ Read tools (open):
   one; `hazards` and `cascades` cover all of them regardless.
 * multi_hazard_summary(cell_id? | aoi_id?) → one place, every hazard. Use
   this for "what is threatening here", not N calls to the per-hazard tools.
+* landslide_zone_rain(cell_id | istat_code, hours?, until?) → rain measured by
+  the regional gauges (Lombardy, Trentino) near a landslide zone — a cell, or
+  the PAI/IFFI cells of a comune — with 1/3/6/24/72 h totals and the rain
+  event against the Caine trigger threshold of its macroregion. Rain is
+  never asked for a bare coordinate: always for a landslide zone. Outside
+  the archived networks the answer is "non coperto", never zero; with
+  unmeasured hours inside the event the ratio is a lower bound ("almeno").
+  The archive is nightly: for the last hours use the radar tools.
+* rain_before_landslides(cell_id | istat_code, since?, until?, hours_before?)
+  → the zone's dated landslides (e-ITALICA, FraneItalia, fact check) and the
+  gauge rain before each, against the same threshold. Cite the gauge's
+  `attribuzione` (Meteotrentino is CC BY 4.0).
 * top_comuni(limit?, aoi_id?) e comune_risk(istat_code) → rollup per comune,
   su tutti i pericoli (migrazione 051).
   **Landslide only**: the rollup view is pinned to it, so passing another
@@ -151,6 +165,27 @@ def _build_server() -> Any:
     ) -> dict[str, Any]:
         """Which DPC radars are reported on/off (a hint, not proof)."""
         return await radar_status(lon, lat)
+
+    @mcp.tool()
+    async def tool_landslide_zone_rain(
+        cell_id: str | None = None,
+        istat_code: str | None = None,
+        hours: int = 72,
+        until: str | None = None,
+    ) -> dict[str, Any]:
+        """Gauge rain near a landslide zone (cell or comune) against the trigger threshold."""
+        return await landslide_zone_rain(cell_id, istat_code, hours, until)
+
+    @mcp.tool()
+    async def tool_rain_before_landslides(
+        cell_id: str | None = None,
+        istat_code: str | None = None,
+        since: str = "2009-01-01",
+        until: str | None = None,
+        hours_before: int = 72,
+    ) -> dict[str, Any]:
+        """A zone's dated landslides and the gauge rain in the hours before each."""
+        return await rain_before_landslides(cell_id, istat_code, since, until, hours_before)
 
     @mcp.tool()
     async def tool_risk_summary(

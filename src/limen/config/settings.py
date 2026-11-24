@@ -905,6 +905,26 @@ class CopernicusSettings(BaseSettings):
         return self.ewds_key is not None and bool(self.ewds_key.get_secret_value())
 
 
+class PluviometriSettings(BaseSettings):
+    """I pluviometri regionali per le zone franose (ARPA Lombardia, Meteotrentino).
+
+    Il passo notturno ``pluviometri`` tiene l'archivio orario: riprende i mesi
+    recenti e recupera lo storico un blocco di mesi per notte, così un server
+    nuovo lo completa da solo senza tenere ferma la pipeline.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    attivo: bool = True
+    #: Primo anno dell'archivio: prima del 2009 Meteotrentino salvava solo gli
+    #: intervalli piovosi, e le ore asciutte non sarebbero misurate.
+    dal_anno: int = Field(default=2009, ge=1987)
+    #: Mesi dello storico recuperati al massimo per notte, per fonte.
+    mesi_per_notte: int = Field(default=12, ge=1)
+    #: Quanto lontano da una cella franosa un pluviometro le si associa.
+    raggio_km: float = Field(default=5.0, gt=0.0)
+
+
 class RadarArchiveSettings(BaseSettings):
     """L'archivio locale del radar DPC «Merging» (corretto con i pluviometri).
 
@@ -1444,6 +1464,7 @@ class Settings(BaseSettings):
     geodati: GeodatiSettings = Field(default_factory=GeodatiSettings)
     copernicus: CopernicusSettings = Field(default_factory=CopernicusSettings)
     radar_archive: RadarArchiveSettings = Field(default_factory=RadarArchiveSettings)
+    pluviometri: PluviometriSettings = Field(default_factory=PluviometriSettings)
     backup: BackupSettings = Field(default_factory=BackupSettings)
     worker: WorkerSettings = Field(default_factory=WorkerSettings)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
