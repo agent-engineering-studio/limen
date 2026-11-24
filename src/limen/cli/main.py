@@ -113,6 +113,7 @@ from limen.cli.mcp_serve import run as _run_mcp_serve
 from limen.cli.migrate import run as _run_migrate
 from limen.cli.misura import build_subparser as _build_misura_subparser
 from limen.cli.misura import run as _run_misura
+from limen.cli.misura_innesco import run as _run_misura_innesco
 from limen.cli.misura_radar import run as _run_misura_radar
 from limen.cli.misura_soglia_radar import run as _run_misura_soglia_radar
 from limen.cli.misura_swi import run as _run_misura_swi
@@ -198,6 +199,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "misura-radar",
         help="misura: copertura, bollettini, qualità e ore dell'archivio «Merging» (#625-#629; "
         "RADAR_ARCHIVE__CARTELLA, LIMEN_RADAR_DAL / _AL / _MISURE)",
+    )
+    sub.add_parser(
+        "misura-innesco",
+        help="misura: caine, cumulata 24 h e cumulata relativa al nodo a parità di carico "
+        "sulle dodici finestre della #122 (#676; vuole `limen clima-pioggia`)",
     )
     sub.add_parser(
         "misura-soglia-radar",
@@ -563,6 +569,7 @@ def main(argv: list[str] | None = None) -> int:
         "idrometri-misura": _run_idrometri_misura,
         "fedelta-racconti": _run_fedelta_racconti,
         "raccolta-eventi": _run_raccolta_eventi,
+        "misura-innesco": _run_misura_innesco,
         "misura-radar": _run_misura_radar,
         "misura-soglia-radar": _run_misura_soglia_radar,
         "misura-swi": _run_misura_swi,
