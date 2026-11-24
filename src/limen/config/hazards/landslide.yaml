@@ -352,6 +352,12 @@ kinematic:
 
 # Final classification cutoffs. Inclusive lower bound, exclusive upper
 # bound, except for the final class which is inclusive on both sides.
+# Misura #676/#656 (solo branch di misura): innesco = cumulata 24 h / q999 del nodo.
+cumulata:
+  window_hours: 24
+  saturazione: 1.0
+  modo: sostituisce
+
 classes:
   none:      [0.00, 0.15]
   low:       [0.15, 0.35]
