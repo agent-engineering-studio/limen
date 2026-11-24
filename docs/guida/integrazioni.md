@@ -103,6 +103,27 @@ pericolo è misurato, `attention` è `null`, non zero.
 | `GET /api/alerts/forecast?hazard=&since_hours=72&limit=50` | Gli avvisi di previsione inviati: regione, pericolo, orizzonte, classe massima, celle coinvolte e testo. Senza `hazard`, tutti i pericoli. |
 | `GET /api/alerts/forecast/schedule` | Quando gira la prossima previsione per cella e quando è girata l'ultima per ogni pericolo. |
 
+### Pioggia misurata per zona franosa
+
+I pluviometri delle reti regionali, archiviati ogni notte (oggi ARPA
+Lombardia e Meteotrentino, dal 2009). Si chiedono sempre per una zona
+franosa, mai per una coordinata: per una cella, o per le celle di un comune
+in un'area PAI o a meno di 500 m da una frana IFFI. Indicare `cell_id`
+oppure `istat_code`.
+
+| Rotta | Cosa restituisce |
+|---|---|
+| `GET /api/pluviometri/zona?cell_id=&istat_code=&ore=72&fino_a=` | I tre pluviometri attivi più vicini alla zona (entro `PLUVIOMETRI__RAGGIO_KM`, 5 km), con licenza e attribuzione; per ognuno le cumulate a 1, 3, 6, 24 e 72 ore e l'evento di pioggia con la soglia d'innesco di Caine della macroregione alla sua durata. |
+| `GET /api/pluviometri/frane?dal=&al=&cell_id=&istat_code=&ore_prima=72` | Le frane datate della zona, le più recenti per prime (al massimo 20), ciascuna con il pluviometro più vicino e la pioggia delle ore prima. Una frana datata al giorno prende tutto quel giorno. |
+
+Un'ora non misurata resta non misurata: una cumulata con un buco è `null`
+con il numero di ore che mancano, e un evento con ore non misurate ha
+`almeno: true`, perché il totale è quello misurato. Senza pluviometri
+entro il raggio la risposta è `"copertura": "non coperto"`, che non vuol
+dire che non piova. L'archivio si aggiorna di notte: per le ultime ore c'è
+il radar. Meteotrentino è CC BY 4.0: chi ripubblica i valori cita
+«Provincia Autonoma di Trento - Meteotrentino».
+
 ### Formati standard: CAP 1.2 e OGC API Features
 
 Per chi ha già un sistema che legge gli standard e non vuole scrivere un
@@ -222,6 +243,8 @@ Strumenti di lettura (aperti):
 | `tool_comune_risk(istat_code)` | Il quadro di un comune su tutti i pericoli, con l'indice di attenzione. |
 | `tool_top_comuni(limit?, aoi_id?)` | I comuni da tenere d'occhio, ordinati per attenzione (default 10). |
 | `tool_national_report()` | Quadro nazionale aggregato + testo pronto in `report_it` e `report_en`; accetta `hazard` per scegliere il pericolo che guida i totali. |
+| `tool_landslide_zone_rain(cell_id?, istat_code?, hours?, until?)` | La pioggia dei pluviometri regionali vicini a una zona franosa (una cella, o le celle PAI/IFFI di un comune): cumulate a 1, 3, 6, 24 e 72 ore e l'evento di pioggia contro la soglia d'innesco della macroregione. Mai per una coordinata qualunque. Fuori dalle reti archiviate (oggi Lombardia e Trentino) risponde «non coperto», mai zero. |
+| `tool_rain_before_landslides(cell_id?, istat_code?, since?, until?, hours_before?)` | Le frane datate della zona (e-ITALICA, FraneItalia, fact check) e la pioggia misurata nelle ore prima di ognuna, contro la stessa soglia. |
 
 Strumenti di scrittura (abilitati solo da `MCP_ADMIN_TOKEN`: variabile non
 impostata ⇒ disabilitati, e lo strumento risponde con un errore invece di

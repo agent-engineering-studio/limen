@@ -679,8 +679,8 @@ export const FONTI: readonly Fonte[] = [
       "The rain that fell in about 250 active gauges, since 1987.",
     ),
     accesso: t(
-      "Open data di Regione Lombardia (dati.lombardia.it), senza credenziali; solo nel backtest frane, con LIMEN_BACKTEST_PIOGGIA=pluviometri.",
-      "Lombardy Region open data (dati.lombardia.it), no credentials; only in the landslide backtest, with LIMEN_BACKTEST_PIOGGIA=pluviometri.",
+      "Open data di Regione Lombardia (dati.lombardia.it), senza credenziali; archiviata ogni notte dal 2009 e interrogabile per zona franosa (API /api/pluviometri, MCP landslide_zone_rain); nel backtest frane con LIMEN_BACKTEST_PIOGGIA=pluviometri.",
+      "Lombardy Region open data (dati.lombardia.it), no credentials; archived nightly since 2009 and queryable per landslide zone (API /api/pluviometri, MCP landslide_zone_rain); in the landslide backtest with LIMEN_BACKTEST_PIOGGIA=pluviometri.",
     ),
     interpretazione: t(
       "Al posto della pioggia del modello, ogni nodo prende il pluviometro più vicino entro 5 km: dice quanto di una frana mancata è colpa della pioggia stimata e quanto del motore. Un giorno in cui il pluviometro non ha misurato resta sul modello, non diventa asciutto.",
@@ -703,8 +703,8 @@ export const FONTI: readonly Fonte[] = [
       "The rain that fell in 106 active gauges in Trentino, since 1985 (daily since 1920).",
     ),
     accesso: t(
-      "Archivio aperto della Provincia (Parquet mensili con un manifest, ora solare UTC+1), senza credenziali; solo nel backtest frane su it-trentino-alto-adige, con LIMEN_BACKTEST_PIOGGIA=pluviometri.",
-      "The Province's open archive (monthly Parquet files with a manifest, solar time UTC+1), no credentials; only in the landslide backtest on it-trentino-alto-adige, with LIMEN_BACKTEST_PIOGGIA=pluviometri.",
+      "Archivio aperto della Provincia (Parquet mensili con un manifest, ora solare UTC+1), senza credenziali; archiviato ogni notte dal 2009 e interrogabile per zona franosa (API /api/pluviometri, MCP landslide_zone_rain); nel backtest frane su it-trentino-alto-adige con LIMEN_BACKTEST_PIOGGIA=pluviometri.",
+      "The Province's open archive (monthly Parquet files with a manifest, solar time UTC+1), no credentials; archived nightly since 2009 and queryable per landslide zone (API /api/pluviometri, MCP landslide_zone_rain); in the landslide backtest on it-trentino-alto-adige with LIMEN_BACKTEST_PIOGGIA=pluviometri.",
     ),
     interpretazione: t(
       "Come i pluviometri lombardi: ogni nodo prende il pluviometro più vicino entro 5 km, e un giorno non misurato resta sul modello. Contano i dati validati e i teletrasmessi non ancora validati, perché la validazione arriva dopo più di un anno; mai i dubbi, la neve o le serie ricostruite con l'intelligenza artificiale, che sono stime. L'Alto Adige non è coperto e resta sul modello.",

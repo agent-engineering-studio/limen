@@ -100,6 +100,27 @@ measured, `attention` is `null`, not zero.
 | `GET /api/alerts/forecast?hazard=&since_hours=72&limit=50` | The forecast notices that were sent: region, hazard, horizon, maximum class, cells involved and text. Without `hazard`, all hazards. |
 | `GET /api/alerts/forecast/schedule` | When the next per-cell forecast runs and when the last one ran for each hazard. |
 
+### Measured rain for a landslide zone
+
+The regional networks' rain gauges, archived every night (today ARPA
+Lombardia and Meteotrentino, since 2009). They are always asked for a
+landslide zone, never for a coordinate: for a cell, or for a comune's cells
+inside a PAI area or within 500 m of an IFFI landslide. Give `cell_id` or
+`istat_code`.
+
+| Route | What it returns |
+|---|---|
+| `GET /api/pluviometri/zona?cell_id=&istat_code=&ore=72&fino_a=` | The three active gauges nearest the zone (within `PLUVIOMETRI__RAGGIO_KM`, 5 km), with licence and attribution; for each, the 1, 3, 6, 24 and 72 hour totals and the rain event with its macroregion's Caine trigger threshold at its duration. |
+| `GET /api/pluviometri/frane?dal=&al=&cell_id=&istat_code=&ore_prima=72` | The zone's dated landslides, most recent first (at most 20), each with its nearest gauge and the rain of the hours before. A landslide dated to the day takes that whole day. |
+
+An unmeasured hour stays unmeasured: a total with a gap is `null` with the
+number of missing hours, and an event with unmeasured hours has `almeno:
+true`, because the total is what was measured. With no gauge within the
+radius the answer is `"copertura": "non coperto"`, which does not mean it
+is not raining. The archive is updated nightly: for the last hours there is
+the radar. Meteotrentino is CC BY 4.0: whoever republishes the values cites
+"Provincia Autonoma di Trento - Meteotrentino".
+
 ### Standard formats: CAP 1.2 and OGC API Features
 
 For anyone who already has a system that reads the standards and does not
@@ -218,6 +239,8 @@ Read tools (open):
 | `tool_comune_risk(istat_code)` | A municipality's picture across all hazards, with the attention index. |
 | `tool_top_comuni(limit?, aoi_id?)` | The municipalities to watch, ordered by attention (default 10). |
 | `tool_national_report()` | Aggregated national picture + ready-made text in `report_it` and `report_en`; accepts `hazard` to choose the hazard that leads the totals. |
+| `tool_landslide_zone_rain(cell_id?, istat_code?, hours?, until?)` | Rain from the regional gauges near a landslide zone (a cell, or a comune's PAI/IFFI cells): 1, 3, 6, 24 and 72 hour totals and the rain event against its macroregion's trigger threshold. Never for an arbitrary coordinate. Outside the archived networks (today Lombardy and Trentino) it answers "non coperto", never zero. |
+| `tool_rain_before_landslides(cell_id?, istat_code?, since?, until?, hours_before?)` | The zone's dated landslides (e-ITALICA, FraneItalia, fact check) and the gauge rain in the hours before each, against the same threshold. |
 
 Write tools (enabled only by `MCP_ADMIN_TOKEN`: variable unset ⇒
 disabled, and the tool answers with an error instead of acting):

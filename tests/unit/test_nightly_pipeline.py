@@ -113,6 +113,12 @@ def stubbed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(nightly, "_effis_perimetri", effis)
     monkeypatch.setattr(nightly, "_ems_alluvioni", ems)
     monkeypatch.setattr(nightly, "_esposizione_ispra", esposizione)
+
+    async def pluviometri(_deps: object) -> dict[str, object]:
+        # Altrimenti il passo scarica dai portali regionali e scrive nel database.
+        return {"meteotrentino": {"mesi": 0}, "arpa_lombardia": {"mesi": 0}}
+
+    monkeypatch.setattr(nightly, "_pluviometri", pluviometri)
     monkeypatch.setattr(nightly, "_fwi_pioggia_osservata", fwi_pioggia)
     monkeypatch.setattr(nightly, "_storage", storage)
     monkeypatch.setattr(nightly, "_shadow_ml", shadow)

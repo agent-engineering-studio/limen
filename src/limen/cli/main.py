@@ -28,6 +28,7 @@ Usage:
     limen radar-archivio     Salva il radar DPC «Merging» prima che il DPC lo perda.
     limen misura-radar       Copertura, bollettini, qualità e ore dell'archivio «Merging».
     limen fwi-pioggia        Rifà la catena FWI con la pioggia misurata dal DPC.
+    limen pluviometri-sync   Archivio orario dei pluviometri regionali per le zone franose.
     limen ingest-fire-history  FIRMS country archive (2000+), fire_density + truth set.
     limen effis-sync         Perimetri di area bruciata EFFIS: truth set del backtest incendio.
     limen catasti-incendi    Catasti regionali degli incendi: verità degli incendi piccoli (#498).
@@ -142,6 +143,7 @@ from limen.cli.worker import run as _run_worker
 from limen.config.settings import get_settings
 from limen.core.logging import configure_logging
 from limen.core.models.hazard import HazardType
+from limen.integrations.pluviometri_sync import run as _run_pluviometri_sync
 from limen.report.verify import run as _run_verify
 
 Runner = Callable[[], Coroutine[Any, Any, int]]
@@ -230,6 +232,11 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "effis-sync",
         help="scarica i perimetri di area bruciata EFFIS per ogni AOI (truth set incendio)",
+    )
+    sub.add_parser(
+        "pluviometri-sync",
+        help="archivio orario dei pluviometri regionali per le zone franose "
+        "(LIMEN_PLUVIOMETRI_TUTTI=1: tutto lo storico in una volta)",
     )
     sub.add_parser(
         "catasti-incendi",
@@ -564,6 +571,7 @@ def main(argv: list[str] | None = None) -> int:
         "seed-comuni": _run_seed_comuni,
         "bootstrap-static": _run_bootstrap_static,
         "effis-sync": _run_effis_sync,
+        "pluviometri-sync": _run_pluviometri_sync,
         "catasti-incendi": _run_catasti_incendi,
         "calibrate": _run_calibrate,
         "backtest": _run_backtest,
