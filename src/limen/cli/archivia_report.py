@@ -45,17 +45,24 @@ def build_subparser(top: argparse._SubParsersAction[argparse.ArgumentParser]) ->
 
 
 def indice(cartella: Path) -> str:
-    voci: list[dict[str, Any]] = [
-        json.loads(f.read_text(encoding="utf-8"))
+    # Il nome viene dal file archiviato, non dal campo `report` della
+    # provenienza: due varianti dello stesso backtest escono con lo stesso nome
+    # e si archiviano con un suffisso (`_modello`, `_cancello-0.5`), e la
+    # provenienza resta quella scritta dal comando.
+    voci: list[tuple[str, dict[str, Any]]] = [
+        (
+            f.name.removesuffix(".provenienza.json") + ".md",
+            json.loads(f.read_text(encoding="utf-8")),
+        )
         for f in sorted(cartella.glob("*.provenienza.json"))
     ]
-    voci.sort(key=lambda v: (v["generato"], v["report"]), reverse=True)
+    voci.sort(key=lambda v: (v[1]["generato"], v[0]), reverse=True)
     righe = list(_TESTA)
-    for v in voci:
+    for nome, v in voci:
         versioni = ", ".join(f"`{x}`" for x in v["versioni"].values())
         commit = (v["commit"] or "ignoto")[:12]
         righe.append(
-            f"| {v['generato'][:10]} | [{v['report']}]({v['report']}) | {versioni} "
+            f"| {v['generato'][:10]} | [{nome}]({nome}) | {versioni} "
             f"| `{commit}` | `{v['comando']}` |"
         )
     return "\n".join(righe) + "\n"

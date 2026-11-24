@@ -92,6 +92,29 @@ def test_archivia_copia_e_indicizza_dal_piu_recente(
     assert [v.split(" | ")[1] for v in voci] == ["[b.md](b.md)", "[a.md](a.md)"]
 
 
+def test_archivia_varianti_dello_stesso_report_col_loro_nome(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LIMEN_COMMIT", "0ec0570")
+    copie = []
+    for variante in ("modello", "pluviometri"):
+        cartella = tmp_path / variante
+        cartella.mkdir()
+        r = _report(cartella, "backtest.md", ORA)
+        copia = tmp_path / f"backtest_{variante}.md"
+        copia.write_bytes(r.read_bytes())
+        gemello(copia).write_bytes(gemello(r).read_bytes())
+        copie.append(str(copia))
+    misure = tmp_path / "misure"
+    assert archivia_report.run(argparse.Namespace(report=copie, cartella=str(misure))) == 0
+    righe = (misure / archivia_report.INDICE).read_text(encoding="utf-8").splitlines()
+    voci = [r.split(" | ")[1] for r in righe if r.startswith("| 20")]
+    assert voci == [
+        "[backtest_pluviometri.md](backtest_pluviometri.md)",
+        "[backtest_modello.md](backtest_modello.md)",
+    ]
+
+
 def test_archivia_rifiuta_un_report_senza_provenienza(tmp_path: Path) -> None:
     vecchio = tmp_path / "vecchio.md"
     vecchio.write_text("# senza provenienza\n", encoding="utf-8")
