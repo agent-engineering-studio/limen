@@ -130,13 +130,13 @@ def _impostazioni(**kw: Any) -> EgmsSettings:
 async def test_le_tile_si_scaricano_una_volta_sola(archivio: _Archivio, tmp_path: Path) -> None:
     a = await clms.archivio(_impostazioni())
     assert a is not None
-    tiff = await a.fetch_tile((47, 19), "U", "2020_2024", tmp_path)
+    tiff = await clms.scarica_tile(a, (47, 19), "U", "2020_2024", tmp_path)
     assert tiff is not None and tiff.read_bytes() == b"TIFF"
-    assert await a.fetch_tile((40, 15), "U", "2020_2024", tmp_path) is None  # mare
+    assert await clms.scarica_tile(a, (40, 15), "U", "2020_2024", tmp_path) is None  # mare
     # Il secondo giro non chiede niente: il tiff c'è, il mare è ricordato.
     prima = len(archivio.richieste)
-    assert await a.fetch_tile((47, 19), "U", "2020_2024", tmp_path) == tiff
-    assert await a.fetch_tile((40, 15), "U", "2020_2024", tmp_path) is None
+    assert await clms.scarica_tile(a, (47, 19), "U", "2020_2024", tmp_path) == tiff
+    assert await clms.scarica_tile(a, (40, 15), "U", "2020_2024", tmp_path) is None
     assert len(archivio.richieste) == prima
     assert archivio.scaricati() == 1
     assert not list(tmp_path.glob("*.zip")) and not list(tmp_path.glob("*.part"))
@@ -180,7 +180,7 @@ async def test_una_tile_in_mare_migrata_non_chiede_niente(
     sync_job.migra_segnaposto(tmp_path)
     a = await clms.archivio(_impostazioni())
     assert a is not None
-    assert await a.fetch_tile((40, 15), "U", "2020_2024", tmp_path) is None
+    assert await clms.scarica_tile(a, (40, 15), "U", "2020_2024", tmp_path) is None
     assert archivio.richieste == []
 
 
@@ -192,7 +192,9 @@ async def test_le_tile_in_parallelo_usano_un_token_solo(
     a = await clms.archivio(_impostazioni())
     assert a is not None
     tile = [(47, 19), (40, 15), (41, 15), (42, 15)]
-    trovate = await asyncio.gather(*(a.fetch_tile(t, "U", "2020_2024", tmp_path) for t in tile))
+    trovate = await asyncio.gather(
+        *(clms.scarica_tile(a, t, "U", "2020_2024", tmp_path) for t in tile)
+    )
     assert [p is not None for p in trovate] == [True, False, False, False]
     token = [r for r in archivio.richieste if r.url.path.endswith("oauth2-token")]
     assert len(token) == 1
@@ -231,7 +233,7 @@ async def test_il_download_passa_dal_retry_di_limen(
     monkeypatch.setattr(SharedHttpClient, "get", classmethod(_get))
     a = await clms.archivio(_impostazioni())
     assert a is not None
-    tiff = await a.fetch_tile((47, 19), "U", "2020_2024", tmp_path)
+    tiff = await clms.scarica_tile(a, (47, 19), "U", "2020_2024", tmp_path)
     assert tiff is not None and tiff.read_bytes() == b"TIFF"
     assert finto.scaricati() == 2
     assert not list(tmp_path.glob("*.part"))
@@ -241,16 +243,16 @@ async def test_gli_attributi_vengono_dallo_stesso_zip(archivio: _Archivio, tmp_p
     a = await clms.archivio(_impostazioni())
     assert a is not None
     # Una tile scaricata prima della #380: c'è il GeoTIFF, mancano gli attributi.
-    vecchia = await a.fetch_tile((47, 19), "U", "2020_2024", tmp_path)
+    vecchia = await clms.scarica_tile(a, (47, 19), "U", "2020_2024", tmp_path)
     assert vecchia is not None and not clms.attributi_di(vecchia).exists()
-    tiff = await a.fetch_tile((47, 19), "U", "2020_2024", tmp_path, attributi=True)
+    tiff = await clms.scarica_tile(a, (47, 19), "U", "2020_2024", tmp_path, attributi=True)
     assert tiff == vecchia
     with np.load(clms.attributi_di(tiff)) as attr:
         assert attr["acceleration"].tolist() == [0.5, -0.2]
         assert attr["seasonality"].tolist() == [3.0, 1.5]
         assert attr["easting"].tolist() == [4700050, 4700150]
     # Ora c'è tutto: nessun altro download.
-    assert await a.fetch_tile((47, 19), "U", "2020_2024", tmp_path, attributi=True) == tiff
+    assert await clms.scarica_tile(a, (47, 19), "U", "2020_2024", tmp_path, attributi=True) == tiff
     assert archivio.scaricati() == 2
     assert not list(tmp_path.glob("*.csv")) and not list(tmp_path.glob("*.part"))
 
@@ -261,11 +263,11 @@ async def test_un_csv_senza_colonne_lascia_attributi_vuoti(
     archivio.csv = b"pid,easting,northing,mean_velocity\na,1,2,3\n"
     a = await clms.archivio(_impostazioni())
     assert a is not None
-    tiff = await a.fetch_tile((47, 19), "U", "2020_2024", tmp_path, attributi=True)
+    tiff = await clms.scarica_tile(a, (47, 19), "U", "2020_2024", tmp_path, attributi=True)
     assert tiff is not None
     with np.load(clms.attributi_di(tiff)) as attr:
         assert attr["acceleration"].size == 0
-    assert await a.fetch_tile((47, 19), "U", "2020_2024", tmp_path, attributi=True) == tiff
+    assert await clms.scarica_tile(a, (47, 19), "U", "2020_2024", tmp_path, attributi=True) == tiff
     assert archivio.scaricati() == 1
 
 
@@ -301,7 +303,7 @@ async def test_un_401_rifa_la_ricerca_e_scarica(
     finto = _archivio_con_401(monkeypatch, rifiuti=1)
     a = await clms.archivio(_impostazioni())
     assert a is not None
-    tiff = await a.fetch_tile((47, 19), "U", "2020_2024", tmp_path)
+    tiff = await clms.scarica_tile(a, (47, 19), "U", "2020_2024", tmp_path)
     assert tiff is not None and tiff.read_bytes() == b"TIFF"
     assert _ricerche(finto) == 2
     assert finto.scaricati() == 2

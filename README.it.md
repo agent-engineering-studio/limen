@@ -455,7 +455,7 @@ una libreria.
 | Pacchetto | Versione in Limen | Licenza |
 |---|---|---|
 | [`copernicus-ems`](https://pypi.org/project/copernicus-ems/) · [documentazione](https://agentengineering.it/copernicus-ems/) | `~=0.7.1` | Apache-2.0 |
-| [`egms-client`](https://pypi.org/project/egms-client/) · [documentazione](https://agentengineering.it/egms-client/) | `~=0.7.0` | Apache-2.0 |
+| [`egms-client`](https://pypi.org/project/egms-client/) · [documentazione](https://agentengineering.it/egms-client/) | `~=0.8.0` | Apache-2.0 |
 | [`firms-client`](https://pypi.org/project/firms-client/) · [documentazione](https://agentengineering.it/firms-client/) | `~=0.5.0` | Apache-2.0 |
 | [`ispra-idrogeo`](https://pypi.org/project/ispra-idrogeo/) · [documentazione](https://agentengineering.it/ispra-idrogeo/) | `~=0.11.0` | Apache-2.0 |
 | [`fwi-chain`](https://pypi.org/project/fwi-chain/) · [documentazione](https://agentengineering.it/fwi-chain/) | `~=1.0.0` | Apache-2.0 |

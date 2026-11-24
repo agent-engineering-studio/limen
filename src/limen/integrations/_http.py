@@ -60,6 +60,7 @@ def make_retry_policy(
     multiplier: float = 2.0,
     max_wait: float = 60.0,
     only_retryable_status: bool = False,
+    anche: Callable[[BaseException], bool] | None = None,
 ) -> AsyncRetrying:
     """Build an :class:`AsyncRetrying` policy with Limen's defaults.
 
@@ -67,10 +68,14 @@ def make_retry_policy(
     retries on transport / timeout errors and 5xx / 429 responses.
     ``only_retryable_status`` is for callers that *raise* every status
     (:func:`call_with_retry`): without it a 404 would be retried like a 503.
+    ``anche`` adds what a library raises in its own type for a busy source
+    (``egms-client`` with ``retries=0``).
     """
     retry: retry_base = retry_if_exception_type(_RETRYABLE_EXC)
     if only_retryable_status:
         retry = retry & retry_if_exception(_is_retryable_status)
+    if anche is not None:
+        retry = retry | retry_if_exception(anche)
     return AsyncRetrying(
         stop=stop_after_attempt(max_attempts),
         wait=wait_exponential(multiplier=multiplier, max=max_wait),
@@ -165,7 +170,9 @@ async def _fetch(cli: httpx.AsyncClient, method: str, url: str, **kwargs: Any) -
     raise RuntimeError("fetch_with_retry: retry loop exited without returning")
 
 
-async def call_with_retry[T](call: Callable[[], Awaitable[T]]) -> T:
+async def call_with_retry[T](
+    call: Callable[[], Awaitable[T]], *, anche: Callable[[BaseException], bool] | None = None
+) -> T:
     """``call()`` under :data:`RETRY_POLICY`, for what :func:`fetch_with_retry` cannot carry.
 
     The exception to "every call goes through ``fetch_with_retry``" is the
@@ -174,7 +181,7 @@ async def call_with_retry[T](call: Callable[[], Awaitable[T]]) -> T:
     retries transport errors and 5xx/429 with the same policy. A 4xx
     propagates at once.
     """
-    async for attempt in make_retry_policy(only_retryable_status=True):
+    async for attempt in make_retry_policy(only_retryable_status=True, anche=anche):
         with attempt:
             return await call()
     raise RuntimeError("call_with_retry: retry loop exited without returning")
