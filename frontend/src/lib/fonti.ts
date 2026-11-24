@@ -690,6 +690,34 @@ export const FONTI: readonly Fonte[] = [
     url: "https://www.dati.lombardia.it/Ambiente/Stazioni-Idro-Nivo-Meteorologiche/nf78-nj6b",
   },
   {
+    id: "meteotrentino-archivio",
+    ente: "Provincia autonoma di Trento - Meteotrentino",
+    dataset: t(
+      "Archivio dati delle stazioni meteorologiche, pioggia a 5 minuti",
+      "Weather station data archive, rain every 5 minutes",
+    ),
+    ruolo: "verifica",
+    pericoli: ["landslide"],
+    cosa: t(
+      "La pioggia caduta in 106 pluviometri attivi del Trentino, dal 1985 (giornaliera dal 1920).",
+      "The rain that fell in 106 active gauges in Trentino, since 1985 (daily since 1920).",
+    ),
+    accesso: t(
+      "Archivio aperto della Provincia (Parquet mensili con un manifest, ora solare UTC+1), senza credenziali; solo nel backtest frane su it-trentino-alto-adige, con LIMEN_BACKTEST_PIOGGIA=pluviometri.",
+      "The Province's open archive (monthly Parquet files with a manifest, solar time UTC+1), no credentials; only in the landslide backtest on it-trentino-alto-adige, with LIMEN_BACKTEST_PIOGGIA=pluviometri.",
+    ),
+    interpretazione: t(
+      "Come i pluviometri lombardi: ogni nodo prende il pluviometro più vicino entro 5 km, e un giorno non misurato resta sul modello. Contano i dati validati e i teletrasmessi non ancora validati, perché la validazione arriva dopo più di un anno; mai i dubbi, la neve o le serie ricostruite con l'intelligenza artificiale, che sono stime. L'Alto Adige non è coperto e resta sul modello.",
+      "Like the Lombardy gauges: each node takes the nearest gauge within 5 km, and a day not measured stays on the model. Validated values count, and so do telemetered ones not yet validated, because validation comes more than a year later; never the doubtful ones, snow, or the series reconstructed with artificial intelligence, which are estimates. South Tyrol is not covered and stays on the model.",
+    ),
+    licenza: "CC BY 4.0",
+    attribuzione: t(
+      "Provincia Autonoma di Trento - Meteotrentino",
+      "Provincia Autonoma di Trento - Meteotrentino",
+    ),
+    url: "https://archivio.meteotrentino.it/share/",
+  },
+  {
     id: "italica",
     ente: "CNR-IRPI",
     dataset: t(
