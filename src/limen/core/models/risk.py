@@ -91,14 +91,18 @@ class StaticFactors(_Frozen):
     pioggia_riferimento_mm: float | None = Field(default=None, gt=0.0)
     # Dal `cell_insar_features` (EGMS), non da `cell_static_factors`: il motore
     # V1 non le legge, lo sfidante ML sì, e finché il bundle non le portava le
-    # imparava sui valori veri e le riceveva a zero (#568). NULL = nessuno
-    # scatterer nella cella, che lo sfidante legge come 0 come in addestramento.
+    # imparava sui valori veri e le riceveva a zero (#568). NULL = nessun
+    # pixel nella cella: lo sfidante lo legge come non misurato (#698).
     insar_velocity_mmy: float | None = None
     insar_accel_mmy2: float | None = None
     insar_scatterer_count: int | None = Field(default=None, ge=0)
     velocita_verticale_mmy: float | None = None
     velocita_est_mmy: float | None = None
     stagionalita_verticale_mm: float | None = None
+    # Con segno, sugli stessi pixel della velocità (#700).
+    accelerazione_verticale_mmy2: float | None = None
+    accelerazione_verticale_p10_mmy2: float | None = None
+    velocita_verticale_p10_mmy: float | None = None
 
 
 class RainfallSample(_Frozen):

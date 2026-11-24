@@ -2,36 +2,42 @@
 
 Le celle sono quadrati da 1 km in EPSG:3035 con un'origine per AOI, quindi
 non allineati ai pixel da 100 m delle tile: una cella prende i pixel il cui
-**centro** cade dentro di lei, di norma 10 x 10. Per cella:
+**centro** cade dentro di lei, di norma 10 x 10. Le statistiche sono di
+``egms_client.cells.per_cell`` (#700), tutte sugli stessi pixel, quelli con
+entrambe le componenti della velocità:
 
 * ``velocita_verticale_mmy`` / ``velocita_est_mmy`` — la mediana di ciascuna
   componente, con segno (su/giù, est/ovest);
+* ``velocita_verticale_p10_mmy`` — il 10° percentile della verticale: i pixel
+  che scendono di più;
 * ``insar_velocity_mmy`` — il 90° percentile del modulo ``sqrt(E² + U²)``:
   una frana occupa pochi pixel di una cella da 1 km, e la mediana la
   cancellerebbe;
-* ``scatterer_count`` — i pixel con entrambe le componenti valide. Zero vuol
-  dire «il satellite qui non vede» (bosco, ombra radar), non «terreno fermo»;
-* ``insar_accel_mmy2`` — il 90° percentile del modulo dell'accelerazione, con
-  la stessa logica della velocità (#380);
+* ``scatterer_count`` — i pixel validi (da 100 m, non bersagli radar). Zero
+  vuol dire «il satellite qui non vede» (bosco, ombra radar), non «terreno
+  fermo»; ``copertura`` è la loro parte sui pixel della cella;
+* ``accelerazione_verticale_mmy2`` e ``…_p10_mmy2`` — mediana e 10°
+  percentile dell'accelerazione verticale, con segno. Il modulo di prima
+  (``insar_accel_mmy2``) non si calcola più: era sempre positivo;
 * ``stagionalita_verticale_mm`` — la mediana dell'ampiezza del ciclo annuale
   della componente verticale.
 
-Accelerazione e stagionalità vengono dal CSV della tile, non dal GeoTIFF:
-:func:`su_griglia` li riporta sulla griglia del mosaico, pixel per pixel.
+Accelerazione e stagionalità vengono dal CSV della tile verticale, non dal
+GeoTIFF: :func:`su_griglia` li riporta sulla griglia del mosaico.
 """
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from limen.data.repos.cell_insar_features_repo import CellInsarFeatures
 
-PASSO_M = 100.0
+if TYPE_CHECKING:
+    from egms_client.mosaic import Mosaic
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,22 +51,7 @@ class Cella:
     maxy: float
 
 
-@dataclass(frozen=True, slots=True)
-class Griglia:
-    """Le due componenti sulla stessa griglia: ``top``/``left`` dell'angolo
-    in alto a sinistra, NaN dove il dato manca."""
-
-    verticale: Any
-    est: Any
-    left: float
-    top: float
-    #: Dal CSV (:func:`su_griglia`); None se la tile non l'aveva.
-    accelerazione_verticale: Any = None
-    accelerazione_est: Any = None
-    stagionalita_verticale: Any = None
-
-
-def mosaico(tiff: list[Path], *, minx: float, miny: float, maxx: float, maxy: float) -> Any:
+def mosaico(tiff: list[Path], *, minx: float, miny: float, maxx: float, maxy: float) -> Mosaic:
     """Le tile di una componente incollate sul rettangolo, NaN dove mancano.
 
     Dal pacchetto ``egms-client``: i limiti si allargano ai multipli di 100 m,
@@ -69,7 +60,7 @@ def mosaico(tiff: list[Path], *, minx: float, miny: float, maxx: float, maxy: fl
     """
     from egms_client.mosaic import mosaic
 
-    return mosaic(tiff, minx=minx, miny=miny, maxx=maxx, maxy=maxy).values
+    return mosaic(tiff, minx=minx, miny=miny, maxx=maxx, maxy=maxy)
 
 
 #: Le colonne del CSV L3 che servono, oltre alla posizione del pixel.
@@ -87,81 +78,66 @@ def leggi_attributi(csv: Any) -> dict[str, Any]:
     return {c: tabella[c].to_numpy(dtype="float64") for c in tabella.columns}
 
 
-def su_griglia(
-    attributi: list[Path], colonna: str, *, forma: tuple[int, int], left: float, top: float
-) -> Any:
-    """Una colonna dei CSV (salvati come ``.npz``) sulla griglia del mosaico.
+def su_griglia(attributi: list[Path], colonna: str, come: Mosaic) -> Any:
+    """Una colonna dei CSV (salvati come ``.npz``) sulla griglia di un mosaico.
 
     ``easting``/``northing`` sono il centro del pixel in EPSG:3035, quindi la
     cella della griglia è esatta, senza ricampionare. NaN dove manca.
     """
-    out = np.full(forma, np.nan, dtype="float32")
+    righe, colonne = come.values.shape
+    out = np.full((righe, colonne), np.nan, dtype="float32")
     for path in attributi:
         with np.load(path) as a:
-            col = np.floor((a["easting"] - left) / PASSO_M).astype(np.int64)
-            riga = np.floor((top - a["northing"]) / PASSO_M).astype(np.int64)
-            dentro = (riga >= 0) & (riga < forma[0]) & (col >= 0) & (col < forma[1])
+            col = np.floor((a["easting"] - come.left) / come.pixel).astype(np.int64)
+            riga = np.floor((come.top - a["northing"]) / come.pixel).astype(np.int64)
+            dentro = (riga >= 0) & (riga < righe) & (col >= 0) & (col < colonne)
             out[riga[dentro], col[dentro]] = a[colonna][dentro]
     return out
 
 
-def _p90_modulo(a: Any, b: Any) -> float | None:
-    validi = ~np.isnan(a) & ~np.isnan(b)
-    if not validi.any():
-        return None
-    return float(np.percentile(np.sqrt(a[validi] ** 2 + b[validi] ** 2), 90))
+def per_cella(
+    celle: list[Cella],
+    verticale: Mosaic,
+    est: Mosaic,
+    *,
+    accelerazione: Any = None,
+    stagionalita: Any = None,
+) -> list[CellInsarFeatures]:
+    """Una riga per cella. Pura: nessun I/O.
 
+    ``accelerazione`` e ``stagionalita`` sono le colonne del CSV verticale
+    sulla griglia dei mosaici (:func:`su_griglia`); ``None`` se mancano.
+    """
+    from egms_client.cells import Cell, per_cell
 
-def _mediana(a: Any) -> float | None:
-    validi = ~np.isnan(a)
-    return float(np.median(a[validi])) if validi.any() else None
-
-
-def per_cella(celle: list[Cella], griglia: Griglia) -> list[CellInsarFeatures]:
-    """Una riga per cella. Pura: nessun I/O."""
-    v, e = griglia.verticale, griglia.est
-    out: list[CellInsarFeatures] = []
-    for c in celle:
-        # Centro del pixel j a left + (j + 0.5) * passo: dentro la cella se
-        # minx <= centro < maxx.
-        c0 = max(0, math.ceil((c.minx - griglia.left) / PASSO_M - 0.5))
-        c1 = min(v.shape[1], math.ceil((c.maxx - griglia.left) / PASSO_M - 0.5))
-        r0 = max(0, math.ceil((griglia.top - c.maxy) / PASSO_M - 0.5))
-        r1 = min(v.shape[0], math.ceil((griglia.top - c.miny) / PASSO_M - 0.5))
-        vv = v[r0:r1, c0:c1]
-        ee = e[r0:r1, c0:c1]
-        entrambi = ~np.isnan(vv) & ~np.isnan(ee)
-        n = int(entrambi.sum())
-        if n == 0:
-            out.append(CellInsarFeatures(cell_id=c.cell_id, scatterer_count=0))
-            continue
-        modulo = np.sqrt(vv[entrambi] ** 2 + ee[entrambi] ** 2)
-        accelerazione = stagionalita = None
-        if griglia.accelerazione_verticale is not None and griglia.accelerazione_est is not None:
-            accelerazione = _p90_modulo(
-                griglia.accelerazione_verticale[r0:r1, c0:c1],
-                griglia.accelerazione_est[r0:r1, c0:c1],
-            )
-        if griglia.stagionalita_verticale is not None:
-            stagionalita = _mediana(griglia.stagionalita_verticale[r0:r1, c0:c1])
-        out.append(
-            CellInsarFeatures(
-                cell_id=c.cell_id,
-                insar_velocity_mmy=float(np.percentile(modulo, 90)),
-                insar_accel_mmy2=accelerazione,
-                velocita_verticale_mmy=float(np.median(vv[entrambi])),
-                velocita_est_mmy=float(np.median(ee[entrambi])),
-                scatterer_count=n,
-                stagionalita_verticale_mm=stagionalita,
-            )
+    statistiche = per_cell(
+        [Cell(c.cell_id, c.minx, c.miny, c.maxx, c.maxy) for c in celle],
+        verticale,
+        est,
+        acceleration=accelerazione,
+        seasonality=stagionalita,
+    )
+    return [
+        CellInsarFeatures(
+            cell_id=s.id,
+            insar_velocity_mmy=s.speed_p90,
+            velocita_verticale_mmy=s.vertical_median,
+            velocita_est_mmy=s.east_median,
+            scatterer_count=s.valid_pixels,
+            stagionalita_verticale_mm=s.seasonality_median,
+            accelerazione_verticale_mmy2=s.acceleration_median,
+            accelerazione_verticale_p10_mmy2=s.acceleration_p10,
+            velocita_verticale_p10_mmy=s.vertical_p10,
+            # Senza pixel della griglia nella cella non c'è una copertura da dire.
+            copertura=s.coverage if s.pixels else None,
         )
-    return out
+        for s in statistiche
+    ]
 
 
 __all__ = [
     "COLONNE_ATTRIBUTI",
     "Cella",
-    "Griglia",
     "leggi_attributi",
     "mosaico",
     "per_cella",

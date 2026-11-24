@@ -7,8 +7,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 from egms_client import tiles_for_bounds
+from egms_client.mosaic import Mosaic
 
-from limen.integrations.egms.aggregate import Cella, Griglia, mosaico, per_cella, su_griglia
+from limen.integrations.egms.aggregate import Cella, mosaico, per_cella, su_griglia
 
 
 def test_le_tile_sono_le_centinaia_di_km_dell_angolo() -> None:
@@ -21,12 +22,10 @@ def test_le_tile_sono_le_centinaia_di_km_dell_angolo() -> None:
     ]
 
 
-def _griglia(verticale: list[list[float]], est: list[list[float]]) -> Griglia:
-    return Griglia(
-        verticale=np.array(verticale, dtype="float32"),
-        est=np.array(est, dtype="float32"),
-        left=0.0,
-        top=400.0,
+def _griglia(verticale: list[list[float]], est: list[list[float]]) -> tuple[Mosaic, Mosaic]:
+    return (
+        Mosaic(np.array(verticale, dtype="float32"), left=0.0, top=400.0),
+        Mosaic(np.array(est, dtype="float32"), left=0.0, top=400.0),
     )
 
 
@@ -36,27 +35,33 @@ def test_la_cella_prende_i_pixel_col_centro_dentro() -> None:
     # delle colonne 1-2 e delle righe 1-2.
     v = [[9, 9, 9, 9], [9, 1, 2, 9], [9, 3, nan, 9], [9, 9, 9, 9]]
     e = [[9, 9, 9, 9], [9, 0, 0, 9], [9, 4, 1, 9], [9, 9, 9, 9]]
-    (r,) = per_cella([Cella("c", 100.0, 100.0, 300.0, 300.0)], _griglia(v, e))
+    (r,) = per_cella([Cella("c", 100.0, 100.0, 300.0, 300.0)], *_griglia(v, e))
     assert r.scatterer_count == 3
     assert r.velocita_verticale_mmy == pytest.approx(2.0)
     assert r.velocita_est_mmy == pytest.approx(0.0)
     # moduli 1, 2, 5: il 90° percentile sta verso il pixel che si muove.
     assert r.insar_velocity_mmy == pytest.approx(np.percentile([1.0, 2.0, 5.0], 90))
+    # La coda che scende di più, e tre pixel validi su quattro.
+    assert r.velocita_verticale_p10_mmy == pytest.approx(np.percentile([1.0, 2.0, 3.0], 10))
+    assert r.copertura == pytest.approx(0.75)
 
 
 def test_una_cella_senza_pixel_validi_non_e_ferma() -> None:
     nan = float("nan")
     v = [[nan, nan], [nan, nan]]
-    (r,) = per_cella([Cella("c", 0.0, 200.0, 200.0, 400.0)], _griglia(v, v))
+    (r,) = per_cella([Cella("c", 0.0, 200.0, 200.0, 400.0)], *_griglia(v, v))
     assert r.scatterer_count == 0
     assert r.insar_velocity_mmy is None
     assert r.velocita_verticale_mmy is None
+    assert r.accelerazione_verticale_mmy2 is None
+    assert r.copertura == 0.0
 
 
 def test_una_cella_fuori_dalla_griglia_non_alza() -> None:
     v = [[1.0]]
-    (r,) = per_cella([Cella("c", 5000.0, 5000.0, 6000.0, 6000.0)], _griglia(v, v))
+    (r,) = per_cella([Cella("c", 5000.0, 5000.0, 6000.0, 6000.0)], *_griglia(v, v))
     assert r.scatterer_count == 0
+    assert r.copertura is None
 
 
 def _tiff(path: Path, left: float, top: float, dati: list[list[float]]) -> None:
@@ -83,7 +88,7 @@ def test_il_mosaico_cuce_due_tile_e_lascia_nan_dove_mancano(tmp_path: Path) -> N
     a, b = tmp_path / "a.tiff", tmp_path / "b.tiff"
     _tiff(a, 0.0, 200.0, [[1, 2], [3, -9999]])
     _tiff(b, 200.0, 200.0, [[5, 6], [7, 8]])
-    m = mosaico([a, b], minx=0.0, miny=0.0, maxx=500.0, maxy=200.0)
+    m = mosaico([a, b], minx=0.0, miny=0.0, maxx=500.0, maxy=200.0).values
     assert m.shape == (2, 5)
     assert m[0, :4].tolist() == [1, 2, 5, 6]
     assert np.isnan(m[1, 1])
@@ -111,7 +116,7 @@ def test_una_tile_con_l_etichetta_ignf_entra_nel_mosaico(tmp_path: Path) -> None
         nodata=-9999.0,
     ) as dst:
         dst.write(np.array([[4.0, 5.0]], dtype="float32"), 1)
-    m = mosaico([path], minx=0.0, miny=0.0, maxx=300.0, maxy=100.0)
+    m = mosaico([path], minx=0.0, miny=0.0, maxx=300.0, maxy=100.0).values
     assert np.isnan(m[0, 0])
     assert m[0, 1:].tolist() == [4.0, 5.0]
 
@@ -137,47 +142,42 @@ def test_una_tile_in_un_altra_proiezione_alza(tmp_path: Path) -> None:
         mosaico([path], minx=0.0, miny=0.0, maxx=100.0, maxy=100.0)
 
 
-def test_accelerazione_e_stagionalita_dal_csv_sulla_stessa_griglia(tmp_path: Path) -> None:
+def test_accelerazione_con_segno_sugli_stessi_pixel_della_velocita(tmp_path: Path) -> None:
     nan = float("nan")
     # I centri dei pixel: (150, 250) è la riga 1, colonna 1 di una griglia con
     # l'angolo in (0, 400); un punto fuori dalla griglia si ignora.
     u = tmp_path / "u.attributi.npz"
-    e = tmp_path / "e.attributi.npz"
     np.savez(
         u,
-        easting=np.array([150.0, 250.0, 150.0, 9050.0]),
-        northing=np.array([250.0, 250.0, 150.0, 50.0]),
-        acceleration=np.array([3.0, 0.0, nan, 7.0]),
-        seasonality=np.array([2.0, 4.0, 6.0, 7.0]),
+        easting=np.array([150.0, 250.0, 150.0, 250.0, 9050.0]),
+        northing=np.array([250.0, 250.0, 150.0, 150.0, 50.0]),
+        acceleration=np.array([-3.0, 1.0, nan, 50.0, 7.0]),
+        seasonality=np.array([2.0, 4.0, 6.0, 90.0, 7.0]),
     )
-    np.savez(
-        e,
-        easting=np.array([150.0, 250.0]),
-        northing=np.array([250.0, 250.0]),
-        acceleration=np.array([4.0, 1.0]),
-        seasonality=np.array([0.0, 0.0]),
-    )
-    angolo = {"forma": (4, 4), "left": 0.0, "top": 400.0}
-    acc_u = su_griglia([u], "acceleration", **angolo)
-    assert acc_u[1, 1] == 3.0 and acc_u[1, 2] == 0.0 and np.isnan(acc_u[2, 1])
     uno = [[1.0] * 4 for _ in range(4)]
-    griglia = Griglia(
-        verticale=np.array(uno, dtype="float32"),
-        est=np.array(uno, dtype="float32"),
-        left=0.0,
-        top=400.0,
-        accelerazione_verticale=acc_u,
-        accelerazione_est=su_griglia([e], "acceleration", **angolo),
-        stagionalita_verticale=su_griglia([u], "seasonality", **angolo),
+    verticale, est = _griglia(uno, uno)
+    # Il pixel (riga 2, colonna 2) non ha la velocità: la sua accelerazione
+    # (50) e la sua stagionalità (90) non entrano, come non entra lui.
+    verticale.values[2, 2] = nan
+    acc = su_griglia([u], "acceleration", verticale)
+    assert acc[1, 1] == -3.0 and acc[1, 2] == 1.0 and np.isnan(acc[2, 1])
+    (r,) = per_cella(
+        [Cella("c", 100.0, 100.0, 300.0, 300.0)],
+        verticale,
+        est,
+        accelerazione=acc,
+        stagionalita=su_griglia([u], "seasonality", verticale),
     )
-    (r,) = per_cella([Cella("c", 100.0, 100.0, 300.0, 300.0)], griglia)
-    # moduli 5 e 1 (il terzo pixel non ha l'accelerazione est).
-    assert r.insar_accel_mmy2 == pytest.approx(np.percentile([5.0, 1.0], 90))
+    assert r.scatterer_count == 3
+    # Con segno: un versante che accelera verso il basso resta negativo.
+    assert r.accelerazione_verticale_mmy2 == pytest.approx(-1.0)
+    assert r.accelerazione_verticale_p10_mmy2 == pytest.approx(np.percentile([-3.0, 1.0], 10))
+    assert r.insar_accel_mmy2 is None
     assert r.stagionalita_verticale_mm == pytest.approx(4.0)
 
 
 def test_senza_csv_accelerazione_e_stagionalita_restano_nulle() -> None:
     v = [[1.0, 1.0], [1.0, 1.0]]
-    (r,) = per_cella([Cella("c", 0.0, 200.0, 200.0, 400.0)], _griglia(v, v))
+    (r,) = per_cella([Cella("c", 0.0, 200.0, 200.0, 400.0)], *_griglia(v, v))
     assert r.scatterer_count == 4
-    assert r.insar_accel_mmy2 is None and r.stagionalita_verticale_mm is None
+    assert r.accelerazione_verticale_mmy2 is None and r.stagionalita_verticale_mm is None
