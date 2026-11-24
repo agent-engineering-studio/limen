@@ -73,6 +73,9 @@ _SENZA_PIXEL = {
     "velocita_verticale_mmy": None,
     "velocita_est_mmy": None,
     "stagionalita_verticale_mm": None,
+    "accelerazione_verticale_mmy2": None,
+    "accelerazione_verticale_p10_mmy2": None,
+    "velocita_verticale_p10_mmy": None,
 }
 
 
@@ -98,6 +101,9 @@ def test_una_cella_misurata_e_ferma_resta_zero() -> None:
         "velocita_verticale_mmy": 0.0,
         "velocita_est_mmy": 0.0,
         "stagionalita_verticale_mm": 0.0,
+        "accelerazione_verticale_mmy2": 0.0,
+        "accelerazione_verticale_p10_mmy2": 0.0,
+        "velocita_verticale_p10_mmy": 0.0,
     }
     riga = dict(zip(NOMI, _bundle_to_feature_row(_bundle(**fermo), names=NOMI), strict=True))
     for nome in NON_MISURATA_SE_ASSENTE:
@@ -110,6 +116,9 @@ def test_una_cella_misurata_e_ferma_resta_zero() -> None:
             "velocita_verticale_mmy": 0.0,
             "velocita_est_mmy": 0.0,
             "stagionalita_verticale_mm": 0.0,
+            "accelerazione_verticale_mmy2": 0.0,
+            "accelerazione_verticale_p10_mmy2": 0.0,
+            "velocita_verticale_p10_mmy": 0.0,
         }
     )
     matrice = to_matrix([campione])

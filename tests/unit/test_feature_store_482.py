@@ -62,6 +62,9 @@ def test_lo_schema_frane_si_allunga_solo_in_coda() -> None:
         "insar.velocita_verticale_mmy",
         "insar.velocita_est_mmy",
         "insar.stagionalita_verticale_mm",
+        "insar.accelerazione_verticale_mmy2",
+        "insar.accelerazione_verticale_p10_mmy2",
+        "insar.velocita_verticale_p10_mmy",
     )
 
 
@@ -94,6 +97,9 @@ def _bundle() -> CellFeatureBundle:
             velocita_verticale_mmy=-3.9,
             velocita_est_mmy=1.2,
             stagionalita_verticale_mm=2.5,
+            accelerazione_verticale_mmy2=-0.4,
+            accelerazione_verticale_p10_mmy2=-1.1,
+            velocita_verticale_p10_mmy=-6.2,
         ),
         dynamic=DynamicInputs(
             valuation_time=T,
@@ -132,6 +138,9 @@ def test_ogni_feature_dello_schema_e_servita(schema: tuple[str, ...]) -> None:
         "velocita_verticale_mmy": statiche.velocita_verticale_mmy,
         "velocita_est_mmy": statiche.velocita_est_mmy,
         "stagionalita_verticale_mm": statiche.stagionalita_verticale_mm,
+        "accelerazione_verticale_mmy2": statiche.accelerazione_verticale_mmy2,
+        "accelerazione_verticale_p10_mmy2": statiche.accelerazione_verticale_p10_mmy2,
+        "velocita_verticale_p10_mmy": statiche.velocita_verticale_p10_mmy,
     }
     for nome in nomi:
         top, _, sub = nome.partition(".")

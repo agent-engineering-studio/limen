@@ -191,6 +191,8 @@ SELECT c.cell_id,
        s.score AS susc_ispra,
        i.insar_velocity_mmy, i.insar_accel_mmy2, i.scatterer_count,
        i.velocita_verticale_mmy, i.velocita_est_mmy, i.stagionalita_verticale_mm,
+       i.accelerazione_verticale_mmy2, i.accelerazione_verticale_p10_mmy2,
+       i.velocita_verticale_p10_mmy,
        ST_X(ST_Centroid(g.geom)) AS lon, ST_Y(ST_Centroid(g.geom)) AS lat
 FROM cell_static_factors c
 JOIN grid_cells g ON g.id = c.cell_id
@@ -255,6 +257,9 @@ async def fattori_aoi(aoi_id: str) -> list[tuple[StaticFactors, float, float]]:
             velocita_verticale_mmy=_float(r["velocita_verticale_mmy"]),
             velocita_est_mmy=_float(r["velocita_est_mmy"]),
             stagionalita_verticale_mm=_float(r["stagionalita_verticale_mm"]),
+            accelerazione_verticale_mmy2=_float(r["accelerazione_verticale_mmy2"]),
+            accelerazione_verticale_p10_mmy2=_float(r["accelerazione_verticale_p10_mmy2"]),
+            velocita_verticale_p10_mmy=_float(r["velocita_verticale_p10_mmy"]),
         )
         out.append((sf, float(r["lon"]), float(r["lat"])))
     return out

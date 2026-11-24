@@ -51,6 +51,13 @@ CANONICAL_FEATURES: tuple[str, ...] = (
     # Dal CSV L3 (#380): l'accelerazione riempie `insar.accel_mmy2`, che
     # prima era sempre NULL.
     "insar.stagionalita_verticale_mm",
+    # #700: accelerazione verticale con segno (mediana e 10° percentile) e la
+    # coda della velocità verticale, sugli stessi pixel della velocità. Da qui
+    # `insar.accel_mmy2`, il modulo p90, non si calcola più: resta nello schema
+    # per l'ordine, ed è mancante.
+    "insar.accelerazione_verticale_mmy2",
+    "insar.accelerazione_verticale_p10_mmy2",
+    "insar.velocita_verticale_p10_mmy",
 )
 
 #: Feature dell'incendio (#68). **Lista separata, non in coda alla comune.**
@@ -120,6 +127,9 @@ NON_MISURATA_SE_ASSENTE: frozenset[str] = frozenset(
         "insar.velocita_verticale_mmy",
         "insar.velocita_est_mmy",
         "insar.stagionalita_verticale_mm",
+        "insar.accelerazione_verticale_mmy2",
+        "insar.accelerazione_verticale_p10_mmy2",
+        "insar.velocita_verticale_p10_mmy",
     }
 )
 

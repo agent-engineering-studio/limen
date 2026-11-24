@@ -8,7 +8,6 @@ la release, e una AOI che la trova già registrata non riscrive niente.
 from __future__ import annotations
 
 import asyncio
-import math
 import re
 from dataclasses import replace
 from datetime import date
@@ -23,27 +22,24 @@ from egms_client import (
     tile_prefix,
     tiles_for_bounds,
 )
+from egms_client.releases import window
 
 from limen.config.settings import Settings, get_settings
 from limen.core.logging import get_logger
 from limen.data.db import acquire
 from limen.data.repos import cell_insar_features_repo, dataset_versions_repo
 from limen.integrations.egms import clms
-from limen.integrations.egms.aggregate import (
-    PASSO_M,
-    Cella,
-    Griglia,
-    mosaico,
-    per_cella,
-    su_griglia,
-)
+from limen.integrations.egms.aggregate import Cella, mosaico, per_cella, su_griglia
 
 log = get_logger(__name__)
 
 SOURCE = "copernicus.egms"
 #: Da cambiare quando cambia il modo di aggregare, non il dato.
 #: v2: accelerazione e stagionalità dal CSV della tile (#380).
-VERSIONE_CALCOLO = "ortho-l3-v2"
+#: v3: statistiche di `egms_client.cells` (accelerazione verticale con segno
+#: sugli stessi pixel della velocità, #700) e la finestra vera della release
+#: in `period_start`/`period_end` (#699).
+VERSIONE_CALCOLO = "ortho-l3-v3"
 
 
 async def _celle(aoi_id: str) -> list[Cella]:
@@ -97,9 +93,15 @@ def migra_segnaposto(cartella: Path) -> int:
     return rinominati
 
 
-def _periodo(release: str) -> tuple[date, date]:
-    inizio, fine = release.split("_")
-    return date(int(inizio), 1, 1), date(int(fine), 12, 31)
+def _periodo(release: str) -> tuple[date | None, date | None]:
+    """Prima e ultima acquisizione della release, ``None`` se non sono note.
+
+    Il nome non è la finestra: la 2020-2025 comincia il 9 dicembre 2020, e
+    scrivere il 1° gennaio metteva la misura undici mesi prima di sé (#699).
+    Per una release che la libreria non ha ancora letto non si inventano date.
+    """
+    finestra = window(api_release(release))
+    return finestra.first, finestra.last
 
 
 async def sync_egms(*, aoi_id: str, settings: Settings | None = None) -> int:
@@ -130,8 +132,10 @@ async def sync_egms(*, aoi_id: str, settings: Settings | None = None) -> int:
         # all'archivio: il secondo sync scarica zero byte.
         async with cancello:
             try:
+                # Accelerazione e stagionalità sono verticali: il CSV della
+                # componente est (~250 MB a tile) non serve più (#700).
                 return await clms.scarica_tile(
-                    archivio, tile, componente, s.release, cartella, attributi=True
+                    archivio, tile, componente, s.release, cartella, attributi=componente == "U"
                 )
             except EgmsError as exc:
                 fallite.append(tile_prefix(tile, componente, s.release))
@@ -163,29 +167,15 @@ async def sync_egms(*, aoi_id: str, settings: Settings | None = None) -> int:
     limiti = {"minx": minx, "miny": miny, "maxx": maxx, "maxy": maxy}
     verticale = await asyncio.to_thread(mosaico, tiff["U"], **limiti)
     est = await asyncio.to_thread(mosaico, tiff["E"], **limiti)
-    # Lo stesso angolo su cui `mosaico` ha allineato la griglia.
-    griglia = Griglia(
-        verticale=verticale,
-        est=est,
-        left=math.floor(minx / PASSO_M) * PASSO_M,
-        top=math.ceil(maxy / PASSO_M) * PASSO_M,
+    attributi = [clms.attributi_di(p) for p in tiff["U"]]
+    righe = await asyncio.to_thread(
+        per_cella,
+        celle,
+        verticale,
+        est,
+        accelerazione=await asyncio.to_thread(su_griglia, attributi, "acceleration", verticale),
+        stagionalita=await asyncio.to_thread(su_griglia, attributi, "seasonality", verticale),
     )
-    attributi = {c: [clms.attributi_di(p) for p in tiff[c]] for c in COMPONENTS}
-    forma = verticale.shape
-    angolo = {"forma": forma, "left": griglia.left, "top": griglia.top}
-    griglia = replace(
-        griglia,
-        accelerazione_verticale=await asyncio.to_thread(
-            su_griglia, attributi["U"], "acceleration", **angolo
-        ),
-        accelerazione_est=await asyncio.to_thread(
-            su_griglia, attributi["E"], "acceleration", **angolo
-        ),
-        stagionalita_verticale=await asyncio.to_thread(
-            su_griglia, attributi["U"], "seasonality", **angolo
-        ),
-    )
-    righe = await asyncio.to_thread(per_cella, celle, griglia)
 
     inizio, fine = _periodo(s.release)
     version_id = await dataset_versions_repo.record(
