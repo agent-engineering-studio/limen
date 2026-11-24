@@ -18,7 +18,10 @@ classifiers = [
     "Topic :: Scientific/Engineering :: GIS",
 ]
 dependencies = [
-    "asyncpg>=0.30",
+    # La 0.32 va in IndexError dentro `copy_records_to_table` su
+    # `carica-vettori` (CI di #564 e di #705). L'`ignore` di Dependabot non
+    # basta: l'aggiornamento di gruppo la rimette nel lock.
+    "asyncpg>=0.30,!=0.32.*",
     "geoalchemy2>=0.15",
     "geopandas>=1.0",
     "shapely>=2.0",
@@ -72,7 +75,7 @@ dev = [
     "ruff>=0.7",
     "mypy>=1.13",
     "pre-commit>=4.0",
-    "testcontainers>=4.8",
+    "testcontainers>=4.15",
     "respx>=0.21",
     # LLM SDKs needed only to exercise the concrete LlmClientFactory
     # construction paths in tests. Runtime deployment installs them
