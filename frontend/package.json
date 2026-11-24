@@ -15,7 +15,7 @@
     "@mantine/core": "^9.8.2",
     "@mantine/hooks": "^9.6.3",
     "maplibre-gl": "^6.19.0",
-    "pmtiles": "^3.2.0",
+    "pmtiles": "^4.5.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
