@@ -194,6 +194,17 @@ bruciato» d'Italia era l'acciaieria di Taranto. Il **tempo reale**: quando in
 una regione compaiono nuovi fuochi, Limen la ricalcola subito invece di
 aspettare l'ora successiva.
 
+**Quanto fidarsi.** Dalla versione 0.6 la libreria dice anche quando un
+silenzio non vuol dire niente. Sui 10.290 incendi che EFFIS ha mappato in
+Italia, FIRMS ne ha visto uno su cinque sotto i 30 ettari, e quasi nove su
+dieci fra 300 e 1.000 (2022-2025). In più, certi giorni un satellite non
+manda proprio niente: il VIIRS S-NPP tace dal 27 luglio al 10 agosto 2022, in
+piena stagione degli incendi. In quei casi la risposta giusta è «non
+misurato», non «nessun fuoco». Per dire invece se un punto caldo è un
+incendio di vegetazione, la libreria guarda la maschera delle fonti fisse e
+la copertura del suolo intorno: per questo l'installazione scarica la carta
+ESA WorldCover dell'Italia (circa 1,3 GB, una volta sola).
+
 ### imageserver-export: le mappe europee del suolo
 
 *Documentazione: [agentengineering.it/imageserver-export](https://agentengineering.it/imageserver-export/) · codice su [GitHub](https://github.com/agent-engineering-studio/imageserver-export).*

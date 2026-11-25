@@ -51,7 +51,15 @@ PAUSA_DOPO_ERRORE_S = 30.0
 #: Lo script dei dati statici, dove lo mette l'immagine.
 _SCRIPT_STATICI = "/app/scripts/load_static_data.sh"
 #: Dopo i fattori per cella: quello che lo script lascia a `nuovo_host.sh`.
-_PASSI_FINALI = ("seed-comuni", "ingest-events", "calibrate", "pluviometri-sync")
+_PASSI_FINALI = (
+    "seed-comuni",
+    "ingest-events",
+    "calibrate",
+    "pluviometri-sync",
+    # La copertura del suolo per firms_client.trust (#714): lo script statico qui
+    # gira senza download (LIMEN_STATICI_SCARICA=0), il comando scarica da solo.
+    "worldcover-sync",
+)
 
 
 class DownloadFallitoError(RuntimeError):

@@ -1420,14 +1420,14 @@ wheels = [
 
 [[package]]
 name = "firms-client"
-version = "0.5.0"
+version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d5/34/40ae221a45cc83407b0ecc911fdfd13feb7f932588a4c8b0575f889f94e8/firms_client-0.5.0.tar.gz", hash = "sha256:3cf49516ae7fbd1cad9e699b572c2c56648b52a40d5cd0ce5527f154dc0bc0c7", size = 67024, upload-time = "2026-11-04T10:11:56.775Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0d/2e/1d2f2301cfcd56063139704262dfcc3bc367323a191735a7db203b824a0f/firms_client-0.6.0.tar.gz", hash = "sha256:f8c503aef74bfa45d1e1b8456e7eae9094f00d0645d002e4f63c834c2b7d84a0", size = 88038, upload-time = "2026-11-25T13:07:24.339Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/47/a8/d72ae1d43d39305733844e39832676bf3348c3e7bdc2d415015afb6ccd03/firms_client-0.5.0-py3-none-any.whl", hash = "sha256:8049ee4ed2298c2686821dbd9578ef300124920f4dc821ac4b9f60050e4fe467", size = 61555, upload-time = "2026-11-04T10:11:55.16Z" },
+    { url = "https://files.pythonhosted.org/packages/53/6e/61e10b048a7b221746897a0cbeb6f329370037e17d2c26f88a1885471bf2/firms_client-0.6.0-py3-none-any.whl", hash = "sha256:fa686964648acbd20c8b289575d503587bb42d89d79d1b008ef3db0102b3ef76", size = 79521, upload-time = "2026-11-25T13:07:23.159Z" },
 ]
 
 [[package]]
@@ -2536,7 +2536,7 @@ requires-dist = [
     { name = "effis-client", extras = ["raster"], specifier = "~=0.1.2" },
     { name = "egms-client", extras = ["raster"], specifier = "~=0.8.0" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "firms-client", specifier = "~=0.5.0" },
+    { name = "firms-client", specifier = "~=0.6.0" },
     { name = "fwi-chain", specifier = "~=1.0.0" },
     { name = "geoalchemy2", specifier = ">=0.15" },
     { name = "geopandas", specifier = ">=1.0" },

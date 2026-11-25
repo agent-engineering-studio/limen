@@ -30,6 +30,7 @@ Usage:
     limen fwi-pioggia        Rifà la catena FWI con la pioggia misurata dal DPC.
     limen pluviometri-sync   Archivio orario dei pluviometri regionali per le zone franose.
     limen ingest-fire-history  FIRMS country archive (2000+), fire_density + truth set.
+    limen worldcover-sync    ESA WorldCover sull'Italia, la terra che firms_client.trust legge.
     limen effis-sync         Perimetri di area bruciata EFFIS: truth set del backtest incendio.
     limen catasti-incendi    Catasti regionali degli incendi: verità degli incendi piccoli (#498).
     limen monitor-once       Run the MAF landslide workflow once for an AOI.
@@ -141,6 +142,7 @@ from limen.cli.train import run as _run_train
 from limen.cli.verifiche_report import run as _run_verifiche_report
 from limen.cli.water_wetness_fetch import run as _run_water_wetness_fetch
 from limen.cli.worker import run as _run_worker
+from limen.cli.worldcover_sync import run as _run_worldcover_sync
 from limen.config.settings import get_settings
 from limen.core.logging import configure_logging
 from limen.core.models.hazard import HazardType
@@ -243,6 +245,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "pluviometri-sync",
         help="archivio orario dei pluviometri regionali per le zone franose "
         "(LIMEN_PLUVIOMETRI_TUTTI=1: tutto lo storico in una volta)",
+    )
+    sub.add_parser(
+        "worldcover-sync",
+        help="ESA WorldCover sull'Italia nell'init (~1,3 GB una volta): la terra di firms trust",
     )
     sub.add_parser(
         "catasti-incendi",
@@ -580,6 +586,7 @@ def main(argv: list[str] | None = None) -> int:
         "effis-sync": _run_effis_sync,
         "pluviometri-sync": _run_pluviometri_sync,
         "catasti-incendi": _run_catasti_incendi,
+        "worldcover-sync": _run_worldcover_sync,
         "calibrate": _run_calibrate,
         "backtest": _run_backtest,
         "backtest-flood": _run_backtest_flood,
