@@ -15,7 +15,11 @@ nuovo lo completa in poche notti senza tenere ferma la pipeline;
 ``LIMEN_PLUVIOMETRI_TUTTI=1`` lo fa in una volta sola.
 
 Una fonte che non risponde si salta e lo dice (``integration.degraded``): il
-mese non registrato si riprova la notte dopo.
+mese non registrato si riprova la notte dopo. Un mese che risponde vuoto si
+salta senza fermare gli altri: le fonti hanno buchi veri (la Lombardia non
+pubblica dal 1° marzo al 25 aprile 2026), e fermarsi lì bloccherebbe per sempre
+lo storico più vecchio. Il mese vuoto conta nel limite della notte, così una
+fonte che risponde vuoto a tutto non fa scorrere ogni notte l'intero archivio.
 """
 
 from __future__ import annotations
@@ -170,14 +174,14 @@ async def sincronizza_trentino(*, dal_anno: int, limite: int | None) -> dict[str
             )
             conti["stato"] = "degradato"
             break
+        conti["mesi"] = int(conti["mesi"]) + 1
         if _vuoto_sospetto(TRENTINO, dataset, sensori, giorni):
-            conti["stato"] = "degradato"
-            break
+            conti["vuoti"] = int(conti.get("vuoti", 0)) + 1
+            continue
         conti["giorni"] = int(conti["giorni"]) + await _scrivi(TRENTINO, anno, mese, giorni)
         await dataset_versions_repo.record(
             source=TRENTINO, dataset=dataset, version=versione, metadata={"giorni": len(giorni)}
         )
-        conti["mesi"] = int(conti["mesi"]) + 1
     return conti
 
 
@@ -218,11 +222,11 @@ async def sincronizza_lombardia(*, dal_anno: int, limite: int | None) -> dict[st
             conti["stato"] = "degradato"
             break
         giorni = per_giorno(ore, [id_di(LOMBARDIA, s) for s in sensori])
-        if _vuoto_sospetto(LOMBARDIA, dataset, sensori, giorni):
-            conti["stato"] = "degradato"
-            break
-        versione = _impronta(giorni)
         conti["mesi"] = int(conti["mesi"]) + 1
+        if _vuoto_sospetto(LOMBARDIA, dataset, sensori, giorni):
+            conti["vuoti"] = int(conti.get("vuoti", 0)) + 1
+            continue
+        versione = _impronta(giorni)
         if await dataset_versions_repo.find(LOMBARDIA, dataset, versione) is not None:
             conti["uguali"] = int(conti["uguali"]) + 1
             continue

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 
+import pytest
+
 from limen.core.pioggia_frane import cumulate, evento_contro_soglia
 from limen.core.scoring.caine import threshold_intensity_mm_h
 from limen.core.scoring.regional_thresholds import load_regional_thresholds
@@ -96,3 +98,40 @@ def test_una_risposta_vuota_con_sensori_attivi_non_cancella_il_mese() -> None:
     assert _vuoto_sospetto("x", "pluviometri/2026-10", ["1"], []) is True
     assert _vuoto_sospetto("x", "pluviometri/2026-10", [], []) is False
     assert _vuoto_sospetto("x", "pluviometri/2026-10", ["1"], [giorno]) is False
+
+
+async def test_un_mese_vuoto_non_ferma_lo_storico(monkeypatch: pytest.MonkeyPatch) -> None:
+    """La Lombardia non pubblica marzo 2026: i mesi prima vanno letti lo stesso."""
+    from limen.integrations import pluviometri_sync as sync
+    from limen.integrations.arpa_lombardia.pluviometri import Pluviometro
+
+    vuoto = datetime(2026, 3, 1, tzinfo=UTC)
+    scritti: list[str] = []
+
+    async def stazioni(_bbox: object) -> list[Pluviometro]:
+        return [Pluviometro("1", "A", 9.0, 45.5, date(2000, 1, 1), None)]
+
+    async def orarie(
+        _s: list[str], start: datetime, _end: datetime
+    ) -> dict[datetime, list[float | None]]:
+        return {} if start == vuoto else {start + timedelta(hours=1): [0.5]}
+
+    async def niente(*_a: object, **_k: object) -> None:
+        return None
+
+    async def scrivi(_f: str, anno: int, mese: int, giorni: list[GiornoPioggia]) -> int:
+        scritti.append(f"{anno}-{mese:02d}")
+        return len(giorni)
+
+    monkeypatch.setattr(sync.lombardia, "pluviometri", stazioni)
+    monkeypatch.setattr(sync.lombardia, "orarie", orarie)
+    monkeypatch.setattr(sync.pluviometri_repo, "salva_stazioni", niente)
+    monkeypatch.setattr(sync.dataset_versions_repo, "latest", niente)
+    monkeypatch.setattr(sync.dataset_versions_repo, "find", niente)
+    monkeypatch.setattr(sync.dataset_versions_repo, "record", niente)
+    monkeypatch.setattr(sync, "_scrivi", scrivi)
+    monkeypatch.setattr(sync, "mesi", lambda _a, _o: [(2026, 4), (2026, 3), (2026, 2), (2026, 1)])
+
+    conti = await sync.sincronizza_lombardia(dal_anno=2026, limite=None)
+    assert scritti == ["2026-04", "2026-02", "2026-01"]
+    assert conti["vuoti"] == 1 and "stato" not in conti
