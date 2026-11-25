@@ -52,7 +52,7 @@ def test_un_anno_non_scaricato_non_diventa_un_riferimento() -> None:
     from limen.core.models.risk import RainfallSample
 
     class _Client:
-        async def get_rainfall_grid(self, *, nodes, window_start, window_end, batch_size):  # type: ignore[no-untyped-def]
+        async def get_rainfall_grid(self, *, nodes, window_start, window_end, batch_size, model):  # type: ignore[no-untyped-def]
             if window_start.year == 2001:
                 return [[] for _ in nodes]
             return [
@@ -105,3 +105,13 @@ def test_i_riferimenti_mensili_si_leggono_solo_con_la_stessa_finestra() -> None:
     assert riferimenti_api(clima, "x", giorni=30) == [(10.0, 44.0, ((50.0, 20.0),) + (None,) * 11)]
     assert riferimenti_api(clima, "x", giorni=20) is None
     assert riferimenti_api(clima, "y", giorni=30) is None
+
+
+def test_nel_db_ogni_cella_prende_il_nodo_piu_vicino() -> None:
+    from limen.cli.clima_pioggia import riferimento_per_cella
+
+    riferimenti = [(10.0, 44.0, 30.0), (10.1, 44.0, None), (10.0, 44.1, 50.0)]
+    celle = [("a", 10.01, 44.01), ("b", 10.09, 44.0), ("c", 10.0, 44.08)]
+    assert riferimento_per_cella(celle, riferimenti) == [("a", 30.0), ("b", None), ("c", 50.0)]
+    assert riferimento_per_cella([], riferimenti) == []
+    assert riferimento_per_cella(celle, []) == []

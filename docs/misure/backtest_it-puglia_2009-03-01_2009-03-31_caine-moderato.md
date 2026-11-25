@@ -1,0 +1,50 @@
+# Limen backtest report — AOI `it-puglia` — V1
+
+Window: **2009-03-01T00:00:00+00:00 → 2009-03-31T23:00:00+00:00**
+Generated: 2026-11-24T22:01:11.306206+00:00
+
+- Cells scored per hour: **20075**
+- Configurazione: verità ogni precisione; sorgenti IR, NR; pioggia modello; antecedenti regione (riferimento nazionale); sismica spenta
+- Truth events (in window): **11**
+- Alert-level cell-hours: **274993**
+- Hits: **11**, false alarms: **467**, misses: **0**
+
+## §2.5 metrics
+
+- **Hit rate**: 100.00% (non è un gate, vedi #243)
+- **Colte a parità di carico**: 100.00% (11) con il 5.00% di celle in allerta (punteggio ≥ 0.2921) — il confronto fra varianti
+- **FAR**: 97.70% (non è un gate a 1 km², vedi #122)
+- **Discriminazione**: 42.00 (hit rate su 2.38% di celle in allerta) (target ≥ 2.0) — **PASS**
+- **Mean lead time**: 103.4 h (target ≥ 18 h) — **PASS**
+
+## Per comune (il metro dell'epica #345)
+
+- Comuni con un evento: **6**
+- **Colti ≥ Moderato entro 72 h**: 100.00% (6) con il 19.84% di comuni-giorno ≥ Moderato
+- **Colti con il 10% di comuni-giorno in allerta**: 83.33% (5), punteggio ≥ 0.3966, carico effettivo 10.00% (target ≥ 90%) — **FAIL**
+
+## Provenienza
+
+| | |
+|---|---|
+| generato | 2026-11-24T22:01:11+00:00 |
+| commit | `5ed0fe4d0f758d55da88ca7f0f10dc1747637e14` |
+| limen | 0.1.0 |
+| landslide | `limen-deterministic-v1` |
+| flood | `flood-v1.4.0` |
+| wildfire | `wildfire-v1.1.1` |
+| comando | `limen backtest` |
+| `LIMEN_BACKTEST_AOI` | `it-puglia` |
+| `LIMEN_BACKTEST_CLIMA` | `<percorso locale>` |
+| `LIMEN_BACKTEST_END` | `2009-03-31T23:00:00+00:00` |
+| `LIMEN_BACKTEST_HIGH_LEVEL` | `Moderate` |
+| `LIMEN_BACKTEST_SORGENTI` | `IR,NR` |
+| `LIMEN_BACKTEST_START` | `2009-03-01T00:00:00+00:00` |
+| `LIMEN_BACKUP_DIR` | `<percorso locale>` |
+| `LIMEN_DATA_ROOT` | `<percorso locale>` |
+| `LIMEN_DOMINIO` | `localhost` |
+| `LIMEN_IMAGE_PREFIX` | `ghcr.io/agent-engineering-studio/limen-` |
+| `LIMEN_IMAGE_TAG` | `sha-c1e3ded` |
+| `LIMEN_IMPERVIOUSNESS_RASTER` | `<percorso locale>` |
+| `LIMEN_PROXY_BIND` | `127.0.0.1` |
+| `LIMEN_REPORTS_DIR` | `<percorso locale>` |

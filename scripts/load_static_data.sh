@@ -60,6 +60,10 @@ predefinito LIMEN_OSM_ROADS "$RADICE/osm/osm_roads.gpkg"
 predefinito LIMEN_OSM_RAILWAYS "$RADICE/osm/osm_rails.gpkg"
 predefinito LIMEN_IMPERVIOUSNESS_RASTER "$RADICE/sealing/clms_imd_2018/imd_2018_100m.tif"
 predefinito LIMEN_WATER_WETNESS_RASTER "$RADICE/water_wetness/hrl_ww_2018/ww_2018_50m.tif"
+# Il riferimento della cumulata d'innesco frane (#676): il file è la cache del
+# download, che sono ore; si tiene sotto la radice e non nel container.
+export LIMEN_CLIMA_PIOGGIA="${LIMEN_CLIMA_PIOGGIA:-$RADICE/clima/clima_pioggia.json}"
+mkdir -p "$(dirname "$LIMEN_CLIMA_PIOGGIA")"
 # Le tile EGMS si tengono sotto la radice e non in /tmp (il default di
 # EgmsSettings): con il container usa e getta qui sotto ogni `make up`
 # riscaricherebbe ~7 GB. Con le tile già lì, un sync ripetuto non va in rete
@@ -139,6 +143,9 @@ if [ "$MODO" = docker ]; then
     fi
     [ -n "$egms_chiave_shell" ] && CONTAINER+=(-e "EGMS__SERVICE_KEY=$egms_chiave_shell")
   fi
+  # La cache di clima-pioggia in scrittura: senza, ogni giro riscaricherebbe tutto.
+  cartella_clima="$(cd "$(dirname "$LIMEN_CLIMA_PIOGGIA")" && pwd)"
+  CONTAINER+=(-v "$cartella_clima:$cartella_clima" -e "LIMEN_CLIMA_PIOGGIA=$cartella_clima/$(basename "$LIMEN_CLIMA_PIOGGIA")")
   # Le tile del rilievo in scrittura, con la loro attribuzione.
   if [ -n "${LIMEN_DEM_RASTER:-}" ] && [ -e "${LIMEN_DEM_RASTER}" ]; then
     mkdir -p "$LIMEN_DEM_TILES_DIR"
@@ -367,6 +374,18 @@ say "7/7  Fattori per cella"
 # registra `static_bootstrap.skip` per gli altri: una sola chiamata copre
 # DTM, CORINE, imperviousness, WUI, distanze OSM e litologia.
 limen bootstrap-static || exit 1
+if [ "$SCARICA" = 1 ]; then
+  # Il q999 della cumulata 24 h per nodo, 1995-2007, dall'archivio ERA5: il
+  # metro dell'innesco frane (#676). Scrive pioggia_riferimento_mm per cella,
+  # quindi dopo il bootstrap che crea le righe; un'AOI già nel file non si
+  # riscarica. Sono 13 anni orari per ~4.000 nodi:
+  # serve l'istanza Open-Meteo propria con l'archivio ERA5 (profilo meteo,
+  # OPENMETEO__ARCHIVE_URL): senza, il comando non scarica e scrive solo ciò
+  # che è già nel file, perché l'API pubblica finirebbe la quota dello sweep.
+  # Un'AOI incompleta si riprende al prossimo giro; finché manca, le sue celle
+  # restano su Caine, senza cancello.
+  limen clima-pioggia || echo "  (riferimento della pioggia incompleto: le celle senza restano su Caine)"
+fi
 # Dallo stesso DTM, le tile del rilievo per la vista «Rilievo» (#318). Con il
 # DTM invariato il comando non rifà niente; la prima volta sull'Italia sono
 # ore, e un errore non ferma il resto: il prossimo giro le riprende.

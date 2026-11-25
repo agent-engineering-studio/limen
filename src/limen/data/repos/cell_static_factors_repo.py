@@ -188,6 +188,7 @@ SELECT c.cell_id,
        c.quota_sul_fondo_m,
        c.imperviousness_norm,
        c.water_wetness_temp,
+       c.pioggia_riferimento_mm,
        s.score AS susc_ispra,
        i.insar_velocity_mmy, i.insar_accel_mmy2, i.scatterer_count,
        i.velocita_verticale_mmy, i.velocita_est_mmy, i.stagionalita_verticale_mm,
@@ -249,6 +250,7 @@ async def fattori_aoi(aoi_id: str) -> list[tuple[StaticFactors, float, float]]:
                 float(r["imperviousness_norm"]) if r["imperviousness_norm"] is not None else None
             ),
             water_wetness_temp=_float(r["water_wetness_temp"]),
+            pioggia_riferimento_mm=_float(r["pioggia_riferimento_mm"]),
             insar_velocity_mmy=_float(r["insar_velocity_mmy"]),
             insar_accel_mmy2=_float(r["insar_accel_mmy2"]),
             insar_scatterer_count=(
@@ -263,3 +265,39 @@ async def fattori_aoi(aoi_id: str) -> list[tuple[StaticFactors, float, float]]:
         )
         out.append((sf, float(r["lon"]), float(r["lat"])))
     return out
+
+
+async def centroidi_aoi(aoi_id: str) -> list[tuple[str, float, float]]:
+    """``(cell_id, lon, lat)`` del centroide di ogni cella dell'AOI."""
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, ST_X(ST_Centroid(geom)) AS lon, ST_Y(ST_Centroid(geom)) AS lat
+            FROM grid_cells WHERE aoi_id = $1
+            """,
+            aoi_id,
+        )
+    return [(str(r["id"]), float(r["lon"]), float(r["lat"])) for r in rows]
+
+
+async def scrivi_pioggia_riferimento(righe: list[tuple[str, float | None]]) -> int:
+    """``pioggia_riferimento_mm`` per cella (#676). Riscrive solo ciò che cambia.
+
+    Tocca solo le celle che hanno già una riga: il riferimento è un fattore
+    come gli altri, e la riga la crea il bootstrap statico.
+    """
+    if not righe:
+        return 0
+    async with acquire() as conn:
+        esito = await conn.execute(
+            """
+            UPDATE cell_static_factors c
+               SET pioggia_riferimento_mm = n.mm, updated_at = now()
+              FROM unnest($1::text[], $2::float8[]) AS n(cell_id, mm)
+             WHERE c.cell_id = n.cell_id
+               AND c.pioggia_riferimento_mm IS DISTINCT FROM n.mm
+            """,
+            [c for c, _ in righe],
+            [mm for _, mm in righe],
+        )
+    return int(esito.split()[-1])

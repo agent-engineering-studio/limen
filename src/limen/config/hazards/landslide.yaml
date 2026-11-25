@@ -14,7 +14,7 @@
 #   * Melillo et al. 2018 — Rainfall-event reconstruction
 #   * Kohler & Linsley 1951 — Antecedent precipitation index decay
 
-model_version: "limen-deterministic-v1"
+model_version: "limen-deterministic-v1.1"
 
 # Top-level component weights for the final risk = sum(w_i · component_i).
 weights:
@@ -158,6 +158,28 @@ caine:
 # le due regioni giravano su una curva fittata senza i loro eventi.
 # Un'AOI non elencata — una provincia, un bacino, una regione nuova — ricade
 # su `italy_default`, che è la curva prudente.
+# L'innesco è la cumulata relativa al nodo, non più Caine (#676, #656, dal
+# 25/11/2026, limen-deterministic-v1.1). La pioggia delle ultime 24 ore divisa
+# per il q999 della stessa cumulata al nodo ERA5 della cella (1995-2007,
+# `cell_static_factors.pioggia_riferimento_mm`, da `limen clima-pioggia`).
+# Sulle dodici finestre della #122 ordina i comuni meglio di Caine: con il
+# 10 % dei comuni-giorno in allerta coglie il 75 % dei comuni con una frana
+# contro il 51 % (verifica: 74 contro 42 %). Una cella senza riferimento
+# resta su Caine. Report in docs/misure/*_relativa-cancello-*.md.
+cumulata:
+  window_hours: 24
+  saturazione: 1.0
+  modo: sostituisce
+
+# Senza pioggia d'innesco il punteggio non supera Basso (#656): oggi lo
+# 0,35·S di un versante predisposto più l'umidità d'autunno lo portavano a
+# Moderato da soli, il 77 % dei comuni-giorno. Con il cancello il Moderato
+# scende sotto il 10 % e coglie il 74 % dei comuni con una frana. Il cancello
+# non chiude le celle senza riferimento, né quelle con sisma o sensore.
+cancello_innesco:
+  soglia: 0.6
+  tetto: 0.34
+
 macroregion_by_aoi:
   northern_italy:
     - it-piemonte

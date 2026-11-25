@@ -1,0 +1,22 @@
+{
+  "report": "backtest_it-marche_2014-05-01_2014-05-31.md",
+  "generato": "2026-11-25T12:17:53+00:00",
+  "limen": "0.1.0",
+  "commit": "1fcb98c4f9212391f15c770d242ce5b2e0f2d404",
+  "versioni": {
+    "landslide": "limen-deterministic-v1",
+    "flood": "flood-v1.4.0",
+    "wildfire": "wildfire-v1.1.1"
+  },
+  "comando": "limen backtest",
+  "ambiente": {
+    "LIMEN_BACKTEST_AOI": "it-marche",
+    "LIMEN_BACKTEST_CANCELLO_INNESCO": "0.5:0.34",
+    "LIMEN_BACKTEST_CLIMA": "<percorso locale>",
+    "LIMEN_BACKTEST_END": "2014-05-31T23:00:00+00:00",
+    "LIMEN_BACKTEST_HIGH_LEVEL": "Moderate",
+    "LIMEN_BACKTEST_SORGENTI": "IR,NR",
+    "LIMEN_BACKTEST_START": "2014-05-01T00:00:00+00:00",
+    "LIMEN_REPORTS_DIR": "<percorso locale>"
+  }
+}

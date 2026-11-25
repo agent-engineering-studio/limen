@@ -126,6 +126,10 @@ class _MeteoAggregate:
     breakdown: MeteoBreakdown
     #: Il termine d'innesco che entra in M (Caine, la cumulata o il sensore).
     innesco: float = 0.0
+    #: Falso se il YAML vuole la cumulata e la cella, senza riferimento, è
+    #: ricaduta su Caine: il cancello è stato misurato sulla cumulata (#676),
+    #: e chiuderlo su Caine farebbe di un dato mancante un «Basso».
+    innesco_atteso: bool = True
 
 
 class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
@@ -214,13 +218,21 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
         if cum is not None and riferimento is not None:
             fine = bundle.dynamic.valuation_time
             inizio = fine - timedelta(hours=cum.window_hours)
-            mm = sum(
+            ore = [
                 s.precipitation_mm
                 for s in bundle.dynamic.rainfall.samples
                 if inizio < s.timestamp <= fine
-            )
-            cumulata_norm = _clamp01(mm / (cum.saturazione * riferimento * (1.0 - riduzione)))
-            innesco = cumulata_norm if cum.modo == "sostituisce" else max(caine_norm, cumulata_norm)
+            ]
+            # Nessuna ora nella finestra è una pioggia non letta (Open-Meteo
+            # degradato), non una pioggia nulla: contarla zero chiuderebbe il
+            # cancello su tutta l'Italia e la mappa direbbe «Basso».
+            if ore:
+                cumulata_norm = _clamp01(
+                    sum(ore) / (cum.saturazione * riferimento * (1.0 - riduzione))
+                )
+                innesco = (
+                    cumulata_norm if cum.modo == "sostituisce" else max(caine_norm, cumulata_norm)
+                )
 
         api_f = api_factor(
             bundle.dynamic.api_30_mm,
@@ -234,6 +246,7 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
         # carries in-situ readings, they replace the Open-Meteo / soil
         # estimates for the duration of this scoring call. The list of
         # overridden inputs is recorded on the breakdown for auditability.
+        innesco_atteso = cum is None or cumulata_norm is not None
         overrides: list[str] = []
         sensor = bundle.dynamic.sensor_features
         if sensor is not None:
@@ -241,6 +254,7 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
                 caine_norm = innesco = _clamp01(
                     sensor.rainfall_mm / max(self._t.caine.event_reconstruction.min_event_mm, 1e-6)
                 )
+                innesco_atteso = True
                 overrides.append("caine")
             if sensor.pore_pressure_kpa is not None:
                 # Treat pore pressure as a direct API proxy normalised by
@@ -260,6 +274,7 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
         return _MeteoAggregate(
             m=_clamp01(m),
             innesco=innesco,
+            innesco_atteso=innesco_atteso,
             breakdown=MeteoBreakdown(
                 caine_excess=caine_excess_val,
                 caine_norm=caine_norm,
@@ -404,7 +419,13 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
             )
         score_val = _clamp01(total)
         cancello = self._t.cancello_innesco
-        if cancello is not None and not monitored and e <= 0.0 and meteo.innesco <= cancello.soglia:
+        if (
+            cancello is not None
+            and meteo.innesco_atteso
+            and not monitored
+            and e <= 0.0
+            and meteo.innesco <= cancello.soglia
+        ):
             score_val = min(score_val, cancello.tetto)
 
         return RiskScore(
