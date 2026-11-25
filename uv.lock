@@ -1218,16 +1218,16 @@ wheels = [
 
 [[package]]
 name = "dpc-radar"
-version = "0.4.0"
+version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "numpy" },
     { name = "rasterio" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6b/34/e064918bc8c857073d7d086d3492de74588a22e85d8429565cf19bccd47a/dpc_radar-0.4.0.tar.gz", hash = "sha256:4e7737e65a2e0493033cc1061768cef25de03bd31e269dd19ddb32c659f847df", size = 2546365, upload-time = "2026-11-23T09:09:53.879Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d1/95/2953a8156941cd03f64c92cb55a7196b3b3cd71daaa994f7c4467fc23d7d/dpc_radar-0.5.0.tar.gz", hash = "sha256:fe79a5e408d4be4e8dc0221fa12ae8216d34bb3977f809c0402ef7a2ded0c972", size = 2552618, upload-time = "2026-11-25T16:10:44.094Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e0/a8/32f075f4336adb3825ec2c05f818d0a4160bfbcd03aeb18797a6c43c812e/dpc_radar-0.4.0-py3-none-any.whl", hash = "sha256:bb0438da548fed91d6fc57fb3a3975f8d5fe4e2e35e6902cce59c5e3626851e1", size = 2528250, upload-time = "2026-11-23T09:09:51.816Z" },
+    { url = "https://files.pythonhosted.org/packages/cd/45/63ad0c9544bde42844e808528b4af28332a3877aa0a2b0d5183e7cbe83ea/dpc_radar-0.5.0-py3-none-any.whl", hash = "sha256:233d70982c9fd25d7396d3ed4c9be22b0685f19a112d3f0af48839431158c95e", size = 2533774, upload-time = "2026-11-25T16:10:42.126Z" },
 ]
 
 [package.optional-dependencies]
@@ -1280,15 +1280,15 @@ raster = [
 
 [[package]]
 name = "egms-client"
-version = "0.8.0"
+version = "0.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
     { name = "httpx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ba/6e/c76805046611dd10b7edddb6c860bc97b70306d1d865366c98776c4b9d2b/egms_client-0.8.0.tar.gz", hash = "sha256:c0cec2ff42ceb3804f87623b1636b8192e527f92442d385bf3042114718aa1a1", size = 100399, upload-time = "2026-11-24T08:00:37.594Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a2/f0/d962e0f28f81a43c883ce138a697cd70a4c517e21077d7f7b5b1c541f7a3/egms_client-0.9.0.tar.gz", hash = "sha256:1810dac8f47cf72499d4ff7832b997a592bae9980331e1a36dd65e46a4eb44a0", size = 109095, upload-time = "2026-11-25T16:10:27.546Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0a/57/71590b10b151b238a9a00e799be165498014e808ae50defb303a68a9e476/egms_client-0.8.0-py3-none-any.whl", hash = "sha256:c3eb21f93e86689ad858e230b57c987c342b21b227d2c966fd18fea3c24bb2b4", size = 91399, upload-time = "2026-11-24T08:00:36.343Z" },
+    { url = "https://files.pythonhosted.org/packages/70/91/43626639f69030882a994bb4524eb598c250ab238610b6e1af190542720a/egms_client-0.9.0-py3-none-any.whl", hash = "sha256:e1e134e66ec8ae9b0bf1ef5e995231bfcc5c7e4c084a33da4a82fa91185437d7", size = 98559, upload-time = "2026-11-25T16:10:26.336Z" },
 ]
 
 [package.optional-dependencies]
@@ -2008,14 +2008,14 @@ wheels = [
 
 [[package]]
 name = "ispra-idrogeo"
-version = "0.11.0"
+version = "0.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/32/60/5e408f333e1cf0770c2b6b980dd8d87886e47712c07a18faccad57f1d98c/ispra_idrogeo-0.11.0.tar.gz", hash = "sha256:95a3f5fe2651ba55696358a04c64bef662c1a153b876e5cff704da87d0d4b845", size = 255330, upload-time = "2026-11-23T09:42:28.281Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/aa/91/094a38b98b143ae70225ba17479e93aa8070a6af46a7c391f9b823a6e19e/ispra_idrogeo-0.12.0.tar.gz", hash = "sha256:2caeca8fede8c55269f1abf463abf4d493c8d028d08c37b2d27e3fc398bbde5e", size = 260822, upload-time = "2026-11-25T16:15:02.99Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e6/f3/7447db685d57a29900c82eabc463d1894e79c09f2978d504b23f28d650a6/ispra_idrogeo-0.11.0-py3-none-any.whl", hash = "sha256:de601d195e47935cbf8e51d6cfccb7e7a5147d00f06864e16adcdd52ebba3a6a", size = 232981, upload-time = "2026-11-23T09:42:26.704Z" },
+    { url = "https://files.pythonhosted.org/packages/b4/a6/095df53b136c2c17d5ab44000fa77996d9e1bf5b73902501ad6d60e007e0/ispra_idrogeo-0.12.0-py3-none-any.whl", hash = "sha256:ae6eade0d642890bf7fc74d9e41b4e35185801d061318c99f700c6bc5f6ce1a9", size = 238184, upload-time = "2026-11-25T16:15:01.277Z" },
 ]
 
 [[package]]
@@ -2532,9 +2532,9 @@ requires-dist = [
     { name = "cbor2", specifier = ">=6.1" },
     { name = "copernicus-ems", extras = ["cdse"], specifier = "~=0.7.1" },
     { name = "cryptography", specifier = ">=43" },
-    { name = "dpc-radar", extras = ["bulletins", "nowcast", "storms"], specifier = "~=0.4.0" },
+    { name = "dpc-radar", extras = ["bulletins", "nowcast", "storms"], specifier = "~=0.5.0" },
     { name = "effis-client", extras = ["raster"], specifier = "~=0.1.2" },
-    { name = "egms-client", extras = ["raster"], specifier = "~=0.8.0" },
+    { name = "egms-client", extras = ["raster"], specifier = "~=0.9.0" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "firms-client", specifier = "~=0.6.0" },
     { name = "fwi-chain", specifier = "~=1.0.0" },
@@ -2544,7 +2544,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "imageserver-export", specifier = "~=0.2.0" },
     { name = "ingv-shakemap", specifier = "~=0.2.0" },
-    { name = "ispra-idrogeo", specifier = "~=0.11.0" },
+    { name = "ispra-idrogeo", specifier = "~=0.12.0" },
     { name = "opentelemetry-api", specifier = ">=1.27" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.27" },
     { name = "opentelemetry-instrumentation-asyncpg", specifier = ">=0.48b0" },
@@ -2602,7 +2602,7 @@ ml = [
 pluviometri = [{ name = "pyarrow", specifier = ">=21" }]
 radar = [{ name = "numcodecs", specifier = ">=0.13" }]
 report = [
-    { name = "dpc-radar", extras = ["report"], specifier = "~=0.4.0" },
+    { name = "dpc-radar", extras = ["report"], specifier = "~=0.5.0" },
     { name = "jinja2", specifier = ">=3.1" },
     { name = "reportlab", specifier = ">=5.0.1" },
 ]

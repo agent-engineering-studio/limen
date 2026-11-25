@@ -183,7 +183,8 @@ log = get_logger(__name__)
 #: dentro un container la directory di lavoro non e' scrivibile.
 REPORTS_DIR = Path(os.getenv("LIMEN_REPORTS_DIR", "reports"))
 # Sotto la radice dati, dove lo scarica `make radar-data` (#302).
-_RADAR_ZARR = Path("radar/it_dpc_sri/italian-radar-dpc-sri.zarr")
+#: Lo store IT-DPC-SRI dove lo mette `dpc-radar init --history` (`make radar-data`).
+_RADAR_ZARR = Path("dpc-radar/it_dpc_sri")
 # March 2009 Southern-Italy storm — 23 ITALICA events in Puglia/Basilicata
 # cluster on the 7th, so the default window has a real truth set.
 _DEFAULT_START = datetime(2009, 3, 4, 0, 0, tzinfo=UTC)

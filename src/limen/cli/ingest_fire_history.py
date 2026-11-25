@@ -253,7 +253,7 @@ def _write_report(
                 "si ferma all'anno scorso, quindi le stagioni EFFIS più "
                 "recenti non hanno hotspot d'archivio con cui confrontarsi. "
                 "Per coprirle serve il feed NRT (`limen firms-sync`, richiede "
-                "`FIRMS__MAP_KEY`).",
+                "`FIRMS_MAP_KEY`).",
                 "",
             ]
     if density:

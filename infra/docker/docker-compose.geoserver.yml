@@ -304,7 +304,7 @@ services:
     container_name: limen-idrogeo-mcp
     restart: unless-stopped
     profiles: ["geoserver"]
-    command: ["uvx", "--from", "ispra-idrogeo[mcp]~=0.11.0", "idrogeo-mcp"]
+    command: ["uvx", "--from", "ispra-idrogeo[mcp]~=0.12.0", "idrogeo-mcp"]
     environment:
       IDROGEO_MCP_TRANSPORT: streamable-http
       IDROGEO_MCP_HOST: 0.0.0.0
@@ -312,11 +312,12 @@ services:
       # Su 0.0.0.0 l'SDK non controlla l'header Host: lo si limita ai nomi da
       # cui arrivano le chiamate (gli altri container, e l'host per le prove).
       IDROGEO_MCP_ALLOWED_HOSTS: "idrogeo-mcp:*,localhost:*,127.0.0.1:*"
-      IDROGEO_DATA_DIR: /data/idrogeo
+      # La cartella di ispra-idrogeo sotto la radice comune: $DATA_ROOT/ispra-idrogeo.
+      DATA_ROOT: /data
       UV_CACHE_DIR: /cache/uv
     volumes:
       - limen-idrogeo-cache:/cache/uv
-      - limen-idrogeo-data:/data/idrogeo
+      - ${DATA_ROOT:-${LIMEN_DATA_ROOT:-../../data}}/ispra-idrogeo:/data/ispra-idrogeo
     ports:
       - "${LIMEN_IDROGEO_MCP_BIND:-127.0.0.1}:8767:8767"
     healthcheck:
@@ -375,9 +376,6 @@ volumes:
     external: true
   limen-idrogeo-cache:
     name: limen-idrogeo-cache
-    external: true
-  limen-idrogeo-data:
-    name: limen-idrogeo-data
     external: true
   limen-copernicus-ems-cache:
     name: limen-copernicus-ems-cache

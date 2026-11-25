@@ -124,3 +124,45 @@ def test_broker_e_webhook_espliciti_vincono_sull_url() -> None:
     r = s.iot.cittadini.registrazione
     assert r.broker_pubblico == "mqtts://sensori.example.org:8883"
     assert r.webhook_ttn_pubblico == "https://ttn.example.org/hook"
+
+
+@pytest.mark.parametrize(
+    ("nome", "leggi"),
+    [
+        ("EGMS_SERVICE_KEY", lambda s: s.egms.service_key.get_secret_value()),
+        ("EGMS__SERVICE_KEY", lambda s: s.egms.service_key.get_secret_value()),
+        ("EGMS_SERVICE_KEY_FILE", lambda s: s.egms.service_key_file),
+        ("EGMS__SERVICE_KEY_FILE", lambda s: s.egms.service_key_file),
+        ("FIRMS_MAP_KEY", lambda s: s.firms.map_key.get_secret_value()),
+        ("FIRMS__MAP_KEY", lambda s: s.firms.map_key.get_secret_value()),
+    ],
+)
+def test_le_chiavi_col_nome_della_libreria_e_con_quello_di_prima(
+    monkeypatch: pytest.MonkeyPatch, nome: str, leggi: Any
+) -> None:
+    for v in (
+        "EGMS_SERVICE_KEY",
+        "EGMS__SERVICE_KEY",
+        "EGMS_SERVICE_KEY_FILE",
+        "EGMS__SERVICE_KEY_FILE",
+        "FIRMS_MAP_KEY",
+        "FIRMS__MAP_KEY",
+    ):
+        monkeypatch.delenv(v, raising=False)
+    monkeypatch.setenv(nome, "valore")
+    assert leggi(_make_settings()) == "valore"
+
+
+def test_il_nome_della_libreria_vince(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FIRMS__MAP_KEY", "vecchia")
+    monkeypatch.setenv("FIRMS_MAP_KEY", "nuova")
+    s = _make_settings()
+    assert s.firms.map_key is not None and s.firms.map_key.get_secret_value() == "nuova"
+
+
+def test_le_tile_egms_stanno_nella_cartella_della_libreria(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("EGMS__CARTELLA", raising=False)
+    monkeypatch.setenv("DATA_ROOT", "/dati")
+    assert _make_settings().egms.cartella == "/dati/egms-client"

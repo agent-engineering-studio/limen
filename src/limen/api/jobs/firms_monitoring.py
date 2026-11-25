@@ -13,7 +13,7 @@ Same contract as the radar nowcast: FIRMS decides *when* to run, never
 (escalation, per-cell dedup, channels), and a cooldown skips AOIs that
 were assessed recently.
 
-Fail-closed: no ``FIRMS__MAP_KEY`` ⇒ the job is never registered, and
+Fail-closed: no ``FIRMS_MAP_KEY`` ⇒ the job is never registered, and
 even if invoked directly it returns without touching the network.
 """
 
@@ -39,7 +39,7 @@ async def run_firms_monitoring(deps: AppDependencies) -> dict[str, int]:
     """Hotspot sweep; returns the hotspot count per triggered AOI."""
     cfg = deps.settings.firms
     if not cfg.active:
-        log.info("job.firms.skip", reason="feed inactive (no FIRMS__MAP_KEY)")
+        log.info("job.firms.skip", reason="feed inactive (no FIRMS_MAP_KEY)")
         return {}
 
     client = FirmsHttpClient(

@@ -283,8 +283,11 @@ radice del repository. [`.env.example`](./.env.example) elenca ogni variabile
 con i commenti: copialo e cambia solo quello che ti serve.
 
 **Una regola per leggerlo:** il doppio trattino basso vuol dire «sezione →
-campo». `FIRMS__MAP_KEY` è il campo `map_key` della sezione `firms`; le
-impostazioni sono tipizzate e validate all'avvio da
+campo». `FIRMS__INTERVAL_MINUTES` è il campo `interval_minutes` della
+sezione `firms`. Fanno eccezione le chiavi delle librerie estratte, che
+tengono il nome della libreria così che una riga valga per tutte e due:
+`EGMS_SERVICE_KEY`, `EGMS_SERVICE_KEY_FILE`, `FIRMS_MAP_KEY`, e la radice
+comune dei dati `DATA_ROOT`. Le impostazioni sono tipizzate e validate all'avvio da
 [`limen.config.settings`](./src/limen/config/settings.py).
 
 Limen è fatto per **partire senza nessuna chiave** e arricchirsi man mano che
@@ -295,7 +298,7 @@ flusso resta spento (e lo dice nei log), il resto continua a funzionare.
 flowchart LR
     L0["<b>Livello 0 · nessuna chiave</b><br/>meteo Open-Meteo pubblico, radar DPC,<br/>terremoti INGV, aree bruciate EFFIS,<br/>archivio FIRMS, alluvioni Copernicus EMS,<br/>frane e-ITALICA"]
     L1["<b>Livello 1 · strati statici</b><br/>GEOSERVER_SOURCE__DB_DSN → ISPRA, ISTAT,<br/>CORINE, geologia, DTM scaricati all'init<br/>impermeabilizzazione, OSM: make fetch-static"]
-    L2["<b>Livello 2 · chiavi gratuite</b><br/>FIRMS__MAP_KEY → fuochi da satellite in diretta<br/>COPERNICUS__EWDS_KEY → fiumi GloFAS<br/>EGMS__SERVICE_KEY → moto del suolo"]
+    L2["<b>Livello 2 · chiavi gratuite</b><br/>FIRMS_MAP_KEY → fuochi da satellite in diretta<br/>COPERNICUS__EWDS_KEY → fiumi GloFAS<br/>EGMS_SERVICE_KEY → moto del suolo"]
     L3["<b>Livello 3 · produzione</b><br/>OPENMETEO__FORECAST_URL → server meteo proprio<br/>gateway LLM + ANTHROPIC_API_KEY → sintesi<br/>NOTIFICATIONS__* → avvisi · BACKUP__* → backup"]
     L0 --> L1 --> L2 --> L3
 ```
@@ -308,9 +311,9 @@ Sono tutte **gratuite**. Nessuna serve per partire.
 |---|---|---|---|
 | `GEOSERVER_SOURCE__DB_DSN` | lo scarico dei dati di base all'init e i fattori per cella che ne derivano: IFFI, carte PAI di frana e allagamento, confini ISTAT, CORINE, geologia, DTM, tenuti nel PostGIS di [mcp-geo-server](#mcp-geo-server) | lo stack GeoServer, avviato da `make init` | termine del terreno più povero per le frane; mappa allagamenti uniforme |
 | `LIMEN_DEM_RASTER` | usare un proprio modello del terreno (es. TINITALY 10 m) al posto dell'HR-DTM 5 m scaricato all'init | un GeoTIFF su disco ([`data/README.md`](./data/README.md)) | si usa l'HR-DTM scaricato |
-| `FIRMS__MAP_KEY` | i fuochi NASA da satellite in tempo quasi reale ogni 45 min; un incendio può far partire un calcolo entro poche ore | [firms.modaps.eosdis.nasa.gov/api/map_key](https://firms.modaps.eosdis.nasa.gov/api/map_key/) | solo l'archivio annuale (senza chiave) |
+| `FIRMS_MAP_KEY` | i fuochi NASA da satellite in tempo quasi reale ogni 45 min; un incendio può far partire un calcolo entro poche ore | [firms.modaps.eosdis.nasa.gov/api/map_key](https://firms.modaps.eosdis.nasa.gov/api/map_key/) | solo l'archivio annuale (senza chiave) |
 | `COPERNICUS__EWDS_KEY` | la previsione di portata dei fiumi e la *piena ordinaria* di ciascun fiume da Copernicus GloFAS | account ECMWF su [ewds.climate.copernicus.eu](https://ewds.climate.copernicus.eu/how-to-api); accettare una volta la licenza CEMS-Floods | GloFAS tramite l'API pubblica di Open-Meteo |
-| `EGMS__SERVICE_KEY` (o `__SERVICE_KEY_FILE`) | le velocità del suolo da Sentinel-1 (EGMS), per le feature del modello ML | [land.copernicus.eu](https://land.copernicus.eu) → profilo → *API Tokens* (il JSON si vede una volta sola) | nessuna feature di moto del suolo |
+| `EGMS_SERVICE_KEY` (o `EGMS_SERVICE_KEY_FILE`) | le velocità del suolo da Sentinel-1 (EGMS), per le feature del modello ML | [land.copernicus.eu](https://land.copernicus.eu) → profilo → *API Tokens* (il JSON si vede una volta sola) | nessuna feature di moto del suolo |
 | `OPENMETEO__FORECAST_URL` / `__ARCHIVE_URL` | un proprio server Open-Meteo (`make meteo-up`); le 10.000 chiamate al giorno dell'API pubblica non bastano per tutta l'Italia | self-hosted, profilo compose `meteo` | API pubblica (va bene per una regione) |
 | `ANTHROPIC_API_KEY` | le sintesi regionali con Claude, sotto un tetto mensile (`LLM__ANTHROPIC_BUDGET_MENSILE_USD`, 10 $ di default) | [console.anthropic.com](https://console.anthropic.com) | modello locale via llama.cpp, o un testo deterministico |
 | `NOTIFICATIONS__*` | avvisi su Telegram, e-mail, MQTT o webhook (`NOTIFICATIONS__ENABLED_CHANNELS`) | il tuo bot / SMTP / broker | gli avvisi restano nel database e sulla mappa |
@@ -339,7 +342,7 @@ Sono tutte **gratuite**. Nessuna serve per partire.
 | Variabile | Default | Note |
 |-----------|---------|------|
 | `SCHEDULER__CACHE_CLEANUP` | `apscheduler` | `pg_cron` o `apscheduler`. **Su Neon usa APScheduler.** |
-| `EGMS__CARTELLA` | `data/egms` | Tile EGMS, conservate fra una sincronizzazione e l'altra (in Docker: il volume `LIMEN_EGMS_DIR` su `/var/lib/limen/egms`). |
+| `DATA_ROOT` | `data/` | La radice unica dei dati di Limen e delle librerie: ogni libreria che scarica scrive in `$DATA_ROOT/<pacchetto>` (tile EGMS in `egms-client/`, IT-DPC-SRI in `dpc-radar/it_dpc_sri/`). `make migra-cartelle` sposta le cartelle della disposizione di prima. |
 | `LLM__MODELS__<RUOLO>` | id Claude | Mappa ruolo → modello. `LLM__MODELS__FEDELTA` è un id Claude inviato come Message Batch. Vedi [`docs/inference.md`](./docs/inference.md). |
 | `LLM__LLAMACPP_TIMEOUT_SECONDS` | `120` | Tetto per i ruoli senza override; `LLM__LLAMACPP_ROLE_TIMEOUT_SECONDS` (JSON) per ruolo. |
 | `LLM__OLLAMA_BASE_URL` / `LLM__OLLAMA_MODEL` | `http://localhost:11434` / `qwen3.6:latest` | Host e modello Ollama (serve `LLM__PROVIDER=ollama`). |
@@ -506,7 +509,7 @@ chiave c'è) scarica le tile Ortho L3 dell'Italia, verticale ed est-ovest a
 Limen usa la ricerca e il parsing della libreria e scarica le tile da sé
 (`integrations/egms/clms.py`), poi calcola per ogni cella il 90° percentile
 della velocità e il numero di pixel validi (`cell_insar_features`). Un passo
-notturno controlla se è uscita una nuova release. Serve `EGMS__SERVICE_KEY`;
+notturno controlla se è uscita una nuova release. Serve `EGMS_SERVICE_KEY`;
 oggi alimenta le feature ML, non la mappa. Codice:
 [`integrations/egms/`](./src/limen/integrations/egms/).
 
@@ -528,7 +531,7 @@ reale** (con una `MAP_KEY` gratuita) e classifica i rilevamenti, così da
   degli incendi e per pesare quanto un incendio passato ha colpito un
   versante. Senza il filtro sul tipo, il luogo «più bruciato» d'Italia era
   l'acciaieria ex ILVA di Taranto.
-- **Innesco in diretta** (`FIRMS__MAP_KEY`): ogni 45 minuti, nuovi fuochi in
+- **Innesco in diretta** (`FIRMS_MAP_KEY`): ogni 45 minuti, nuovi fuochi in
   una regione fanno partire subito un calcolo, e il termine post-incendio
   delle frane si accende in poche ore invece di aspettare la carta delle aree
   bruciate.

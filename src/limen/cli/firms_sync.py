@@ -1,6 +1,6 @@
 """``limen firms-sync`` — ingest NASA FIRMS active-fire hotspots.
 
-Fail-closed on ``FIRMS__MAP_KEY``: without a key the command reports the
+Fail-closed on ``FIRMS_MAP_KEY``: without a key the command reports the
 missing configuration and exits non-zero rather than silently doing
 nothing (a scheduled job stays quiet, an operator running a command
 wants to know).
@@ -38,7 +38,7 @@ async def run() -> int:
     settings = get_settings()
     cfg = settings.firms
     if cfg.map_key is None:
-        log.error("firms_sync.no_map_key", hint="set FIRMS__MAP_KEY (free FIRMS registration)")
+        log.error("firms_sync.no_map_key", hint="set FIRMS_MAP_KEY (free FIRMS registration)")
         return 1
 
     day_range = int(os.getenv("LIMEN_FIRMS_DAY_RANGE", str(cfg.day_range)))

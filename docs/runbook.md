@@ -25,7 +25,7 @@ worker non li sposta.
 |---|---|---|---|
 | `limen-hourly-monitoring` | Sweep V1 di ogni regione e pericolo: persiste, aggiorna `latest_risk`, manda gli alert. Niente LLM, niente shadow | ogni `SCHEDULER__HOURLY_MONITORING_MINUTES` (60) | `SCHEDULER__ENABLE_HOURLY_MONITORING` (true) |
 | `limen-nowcast-monitoring` | Innesco radar DPC: le regioni dove il radar vede pioggia intensa fanno subito lo sweep, senza aspettare l'ora | ogni `NOWCAST__INTERVAL_MINUTES` (15) | `NOWCAST__ENABLED` (true) |
-| `limen-firms-monitoring` | Innesco FIRMS: salva i fuochi attivi e fa subito lo sweep delle regioni con abbastanza focolai | ogni `FIRMS__INTERVAL_MINUTES` (45) | solo con `FIRMS__MAP_KEY` |
+| `limen-firms-monitoring` | Innesco FIRMS: salva i fuochi attivi e fa subito lo sweep delle regioni con abbastanza focolai | ogni `FIRMS__INTERVAL_MINUTES` (45) | solo con `FIRMS_MAP_KEY` |
 | `limen-forecast-history` | Previsione per cella a +24/+48/+72 h (celle ≥ Moderato); prima scarica la portata GloFAS EWDS | `SCHEDULER__FORECAST_CELLS_HOURS_UTC` (02/08/14/20) al minuto `SCHEDULER__FORECAST_CELLS_MINUTE` (20) | sempre |
 | `limen-forecast-monitoring` | Avvisi di previsione, dopo che la previsione per cella ha rinfrescato `glofas_previsione` | `FORECAST__HOURS_UTC` (02/08/14/20) al minuto `FORECAST__MINUTE` (50), cron e non intervallo dal boot (#489) | `FORECAST__ENABLED` (true) |
 | `limen-briefing-enrichment` | Racconto LLM delle regioni salite di classe, in `spiegazioni_regione` | ogni `LLM__BRIEFING_INTERVAL_MINUTES` (10) | sempre (senza candidati è una query) |
