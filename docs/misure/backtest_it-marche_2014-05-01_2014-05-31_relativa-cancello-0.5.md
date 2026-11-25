@@ -1,0 +1,44 @@
+# Limen backtest report — AOI `it-marche` — V1
+
+Window: **2014-05-01T00:00:00+00:00 → 2014-05-31T23:00:00+00:00**
+Generated: 2026-11-25T12:17:53.906870+00:00
+
+- Cells scored per hour: **9697**
+- Configurazione: verità ogni precisione; sorgenti IR, NR; pioggia modello; antecedenti regione (riferimento nazionale); sismica spenta; cancello d'innesco: senza innesco > 0.5 il punteggio non supera 0.34; innesco cumulata 24 h / q0.999 del nodo (sostituisce, saturazione 1.0)
+- Truth events (in window): **170**
+- Alert-level cell-hours: **302592**
+- Hits: **154**, false alarms: **9311**, misses: **16**
+
+## §2.5 metrics
+
+- **Hit rate**: 90.59% (non è un gate, vedi #243)
+- **Colte a parità di carico**: 1.76% (3) con il 5.00% di celle in allerta (punteggio ≥ 0.5975) — il confronto fra varianti
+- **FAR**: 98.37% (non è un gate a 1 km², vedi #122)
+- **Discriminazione**: 0.93 (hit rate su 97.61% di celle in allerta) (target ≥ 2.0) — **FAIL**
+- **Mean lead time**: 26.1 h (target ≥ 18 h) — **PASS**
+
+## Per comune (il metro dell'epica #345)
+
+- Comuni con un evento: **71**
+- **Colti ≥ Moderato entro 72 h**: 90.14% (64) con il 8.82% di comuni-giorno ≥ Moderato
+- **Colti con il 10% di comuni-giorno in allerta**: 100.00% (71), punteggio ≥ 0.3400, carico effettivo 99.31% (target ≥ 90%) — **FAIL**
+
+## Provenienza
+
+| | |
+|---|---|
+| generato | 2026-11-25T12:17:53+00:00 |
+| commit | `1fcb98c4f9212391f15c770d242ce5b2e0f2d404` |
+| limen | 0.1.0 |
+| landslide | `limen-deterministic-v1` |
+| flood | `flood-v1.4.0` |
+| wildfire | `wildfire-v1.1.1` |
+| comando | `limen backtest` |
+| `LIMEN_BACKTEST_AOI` | `it-marche` |
+| `LIMEN_BACKTEST_CANCELLO_INNESCO` | `0.5:0.34` |
+| `LIMEN_BACKTEST_CLIMA` | `<percorso locale>` |
+| `LIMEN_BACKTEST_END` | `2014-05-31T23:00:00+00:00` |
+| `LIMEN_BACKTEST_HIGH_LEVEL` | `Moderate` |
+| `LIMEN_BACKTEST_SORGENTI` | `IR,NR` |
+| `LIMEN_BACKTEST_START` | `2014-05-01T00:00:00+00:00` |
+| `LIMEN_REPORTS_DIR` | `<percorso locale>` |
