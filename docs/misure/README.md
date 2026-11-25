@@ -6,6 +6,18 @@ riscrive questo indice: non modificarlo a mano.
 
 | generato | report | versioni | commit | comando |
 |---|---|---|---|---|
+| 2026-11-25 | [backtest_it-sicilia_2009-01-01_2009-01-31_pai2024.md](backtest_it-sicilia_2009-01-01_2009-01-31_pai2024.md) | `limen-deterministic-v1.1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `2d5fa9324975` | `limen backtest` |
+| 2026-11-25 | [backtest_it-piemonte_2009-04-01_2009-04-30_pai2024.md](backtest_it-piemonte_2009-04-01_2009-04-30_pai2024.md) | `limen-deterministic-v1.1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `2d5fa9324975` | `limen backtest` |
+| 2026-11-25 | [backtest_it-lombardia_2014-11-01_2014-11-30_pai2024.md](backtest_it-lombardia_2014-11-01_2014-11-30_pai2024.md) | `limen-deterministic-v1.1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `2d5fa9324975` | `limen backtest` |
+| 2026-11-25 | [backtest_it-toscana_2008-12-01_2008-12-31_pai2024.md](backtest_it-toscana_2008-12-01_2008-12-31_pai2024.md) | `limen-deterministic-v1.1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `2d5fa9324975` | `limen backtest` |
+| 2026-11-25 | [backtest_it-calabria_2009-01-01_2009-01-31_pai2024.md](backtest_it-calabria_2009-01-01_2009-01-31_pai2024.md) | `limen-deterministic-v1.1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `2d5fa9324975` | `limen backtest` |
+| 2026-11-25 | [backtest_it-marche_2014-05-01_2014-05-31_pai2024.md](backtest_it-marche_2014-05-01_2014-05-31_pai2024.md) | `limen-deterministic-v1.1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `2d5fa9324975` | `limen backtest` |
+| 2026-11-25 | [backtest_it-campania_2009-01-01_2009-01-31_pai2024.md](backtest_it-campania_2009-01-01_2009-01-31_pai2024.md) | `limen-deterministic-v1.1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `2d5fa9324975` | `limen backtest` |
+| 2026-11-25 | [backtest_it-liguria_2019-11-01_2019-11-30_pai2024.md](backtest_it-liguria_2019-11-01_2019-11-30_pai2024.md) | `limen-deterministic-v1.1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `2d5fa9324975` | `limen backtest` |
+| 2026-11-25 | [backtest_it-lazio_2010-05-01_2010-05-31_pai2024.md](backtest_it-lazio_2010-05-01_2010-05-31_pai2024.md) | `limen-deterministic-v1.1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `2d5fa9324975` | `limen backtest` |
+| 2026-11-25 | [backtest_it-sardegna_2018-05-01_2018-05-31_pai2024.md](backtest_it-sardegna_2018-05-01_2018-05-31_pai2024.md) | `limen-deterministic-v1.1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `2d5fa9324975` | `limen backtest` |
+| 2026-11-25 | [backtest_it-puglia_2009-03-01_2009-03-31_pai2024.md](backtest_it-puglia_2009-03-01_2009-03-31_pai2024.md) | `limen-deterministic-v1.1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `2d5fa9324975` | `limen backtest` |
+| 2026-11-25 | [backtest_it-umbria_2008-12-01_2008-12-31_pai2024.md](backtest_it-umbria_2008-12-01_2008-12-31_pai2024.md) | `limen-deterministic-v1.1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `2d5fa9324975` | `limen backtest` |
 | 2026-11-25 | [backtest_it-sicilia_2009-01-01_2009-01-31_relativa-cancello-0.5.md](backtest_it-sicilia_2009-01-01_2009-01-31_relativa-cancello-0.5.md) | `limen-deterministic-v1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `1fcb98c4f921` | `limen backtest` |
 | 2026-11-25 | [backtest_it-piemonte_2009-04-01_2009-04-30_relativa-cancello-0.5.md](backtest_it-piemonte_2009-04-01_2009-04-30_relativa-cancello-0.5.md) | `limen-deterministic-v1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `1fcb98c4f921` | `limen backtest` |
 | 2026-11-25 | [backtest_it-lombardia_2014-11-01_2014-11-30_relativa-cancello-0.5.md](backtest_it-lombardia_2014-11-01_2014-11-30_relativa-cancello-0.5.md) | `limen-deterministic-v1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `1fcb98c4f921` | `limen backtest` |
