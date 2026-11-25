@@ -12,7 +12,7 @@ archivi per paese e anno sono CSV statici in chiaro (vedi
 
 Cosa fa, in ordine:
 
-1. scarica gli anni mancanti (cache in `LIMEN_DATA_DIR/fires/firms/`, o un
+1. scarica gli anni mancanti (cache in `$DATA_ROOT/datasets/fires/firms/`, o un
    file locale con `LIMEN_FIRMS_CSV` per lavorare offline);
 2. scrive in `fire_hotspots` — la stessa tabella dell'NRT, con `source`
    distinta e la stessa chiave naturale, quindi l'upsert è idempotente;

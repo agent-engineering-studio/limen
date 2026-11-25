@@ -1,6 +1,6 @@
 """``limen fetch-static`` — le sorgenti statiche pubbliche, con un manifest (#305).
 
-Scarica sotto ``LIMEN_DATA_ROOT`` quello che si ottiene senza un account:
+Scarica sotto ``DATA_ROOT`` quello che si ottiene senza un account:
 
 * il suolo sigillato CLMS dall'ImageServer aperto dell'EEA
   (``sealing/clms_imd_2018/imd_2018_100m.tif``, come ``imperviousness-fetch``);

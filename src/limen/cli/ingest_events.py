@@ -21,7 +21,7 @@ cache, quindi rieseguire il comando non riscrive nulla e non riscarica nulla.
 Source resolution (for reproducible init on a fresh machine):
 1. ``LIMEN_ITALICA_CSV`` — explicit local path wins (offline / custom file);
 2. otherwise download e-ITALICA v4 from the pinned Zenodo DOI
-   (10.5281/zenodo.14204473, CC-BY-4.0) into ``LIMEN_DATA_DIR`` and cache it.
+   (10.5281/zenodo.14204473, CC-BY-4.0) into ``$DATA_ROOT/datasets`` and cache it.
 
 Idempotent: the download is skipped when the cached file already exists, and
 the upsert is keyed by catalogue id.
@@ -40,7 +40,7 @@ from shapely.geometry import Point
 
 from limen.cli import ingest_franeitalia, ingest_marche_umbria, ingest_rer2023
 from limen.cli.bootstrap_static import FORCE_ENV
-from limen.config.percorsi import radice_dati
+from limen.config.percorsi import cartella_dataset, radice_dati
 from limen.core.logging import get_logger
 from limen.data.db import lifespan_pool
 from limen.data.migrate import run_migrations
@@ -75,7 +75,7 @@ async def _resolve_csv() -> Path | None:
             return None
         return path
 
-    data_dir = Path(os.getenv("LIMEN_DATA_DIR", "./data")).expanduser()
+    data_dir = cartella_dataset()
     dest = data_dir / _ITALICA_FILENAME
     if dest.is_file() and dest.stat().st_size > 0:
         log.info("ingest_events.cache_hit", path=str(dest))

@@ -2,7 +2,7 @@
 
 Legge ``LIMEN_DEM_RASTER`` (lo stesso DTM della pendenza per cella) e
 scrive ``rilievo-<aoi>.pmtiles`` in ``LIMEN_DEM_TILES_DIR`` (di default
-``<LIMEN_DATA_ROOT>/tiles``). Senza AOI fa l'Italia intera. Rilanciato con
+``<DATA_ROOT>/tiles``). Senza AOI fa l'Italia intera. Rilanciato con
 la sorgente invariata non rifà niente.
 """
 

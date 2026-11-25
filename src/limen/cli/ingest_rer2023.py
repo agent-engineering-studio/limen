@@ -34,6 +34,7 @@ from zoneinfo import ZoneInfo
 
 from shapely.geometry import Point
 
+from limen.config.percorsi import cartella_dataset
 from limen.core.logging import get_logger
 from limen.data.db import acquire
 from limen.data.repos import dataset_versions_repo
@@ -74,7 +75,7 @@ async def risolvi_file() -> Path | None:
             log.error("rer2023.file_mancante", path=str(path))
             return None
         return path
-    dest = Path(os.getenv("LIMEN_DATA_DIR", "./data")).expanduser() / FILE
+    dest = cartella_dataset() / FILE
     if dest.is_file() and dest.stat().st_size > 0:
         return dest
     log.info("rer2023.download", url=URL, dest=str(dest))

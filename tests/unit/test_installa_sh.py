@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 _RADICE = Path(__file__).resolve().parents[2]
-_COMPLETO = "LIMEN_DATA_ROOT=/dati\nLIMEN_DOMINIO=localhost\nLIMEN_PROXY_BIND=127.0.0.1\n"
+_COMPLETO = "DATA_ROOT=/dati\nLIMEN_DOMINIO=localhost\nLIMEN_PROXY_BIND=127.0.0.1\n"
 _SEGRETO = "sk-non-si-stampa"
 
 
@@ -93,7 +93,7 @@ def test_i_segreti_generati_dopo_possono_essere_vuoti(clone: Path) -> None:
 
 
 def test_una_radice_relativa_non_passa(clone: Path) -> None:
-    (clone / ".env").write_text("LIMEN_DATA_ROOT=dati\nLIMEN_DOMINIO=localhost\n")
+    (clone / ".env").write_text("DATA_ROOT=dati\nLIMEN_DOMINIO=localhost\n")
     esito = _lancia(clone)
     assert "PARTITO" not in esito.stdout
     assert "assoluto" in esito.stderr

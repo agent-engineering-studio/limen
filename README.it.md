@@ -320,7 +320,7 @@ Sono tutte **gratuite**. Nessuna serve per partire.
 
 | Variabile | Default | Cosa fa |
 |---|---|---|
-| `LIMEN_DATA_ROOT` | la cartella `data/` del repo | **Una sola cartella per tutti i dati** del deployment: dataset, report, modelli, dati di GeoServer, OSM, radar. Spostare Limen = copiare questa cartella e cambiare questa riga. Se impostata, deve essere assoluta. |
+| `DATA_ROOT` | la cartella `data/` del repo | **Una sola cartella per tutti i dati** del deployment: dataset, report, modelli, dati di GeoServer, OSM, radar. Spostare Limen = copiare questa cartella e cambiare questa riga. Se impostata, deve essere assoluta. |
 | `DB__CONNECTION_STRING` | `postgresql://limen:limen@localhost:5432/limen` | PostgreSQL 16 + PostGIS. Aggiungi `?sslmode=require` per Neon. |
 | `OBJECT_STORE__BACKEND` | `filesystem` | `filesystem` o `s3` (qualsiasi store S3-compatibile: MinIO, R2, B2, via `OBJECT_STORE__ENDPOINT_URL`). |
 | `SCHEDULER__ENABLED` | `true` | I job periodici girano nel processo `limen worker`; `false` nel container dell'API. |
@@ -597,7 +597,7 @@ e la geologia. `make init` lo avvia e carica tutto da sé; a mano:
 
 ```bash
 make geoserver-up       # GeoServer :8081, web UI :8000, agente MCP :9000, PostGIS :55433
-uv run limen geodati-sync   # scarica i dati di base in $LIMEN_DATA_ROOT/geoserver
+uv run limen geodati-sync   # scarica i dati di base in $DATA_ROOT/geoserver
 make geoserver-init     # carica gli shapefile in PostGIS (GEO_INIT_FORCE=true per ricaricare)
 make geoserver-sync     # copia IFFI + PAI nel database di Limen
 ```
@@ -762,14 +762,14 @@ nel worker, non nel crontab dell'host.
 
 ```sh
 git clone https://github.com/agent-engineering-studio/limen.git && cd limen
-cp .env.example .env                   # almeno LIMEN_DATA_ROOT (assoluto)
+cp .env.example .env                   # almeno DATA_ROOT (assoluto)
 ./scripts/nuovo_host.sh --controlla    # solo i prerequisiti, non cambia niente
 ./scripts/nuovo_host.sh --ripristina   # dal backup notturno (servono le BACKUP__*)
 ./scripts/nuovo_host.sh --da-zero      # uno stack nuovo: seed, eventi, calibrazione, FWI
 ```
 
 `--controlla` verifica Docker e Compose, lo spazio libero sotto
-`LIMEN_DATA_ROOT` (`NUOVO_HOST_DISCO_GB`, 50) e la **latenza di fsync** del
+`DATA_ROOT` (`NUOVO_HOST_DISCO_GB`, 50) e la **latenza di fsync** del
 disco di Docker (`NUOVO_HOST_FSYNC_MS_MAX`, 20 ms): su un disco a ~1 s per
 fsync, `initdb` va in timeout. Gli altri due modi si possono rilanciare e
 finiscono con `limen data-status` e `limen jobs`.

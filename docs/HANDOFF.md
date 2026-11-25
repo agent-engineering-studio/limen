@@ -13,12 +13,12 @@
 notturno, #304) o `--da-zero` (#306): fa da solo i passi sotto che riguardano
 cartelle, volumi, ripristino e avvio. README, «Installing on a new server».
 
-1. **Una sola radice per i dati (#302)**: `LIMEN_DATA_ROOT` nel `.env`
+1. **Una sola radice per i dati (#302)**: `DATA_ROOT` nel `.env`
    (assoluta), con sotto `datasets/ reports/ mlruns/ models/ geoserver/ osm/
    sealing/ radar/` — l'albero completo è in testa a `.env.example`. Copiare
    la cartella e cambiare quella riga basta: compose, Makefile e
    `make static-data` ricavano i path da lì (DTM, CORINE e geolitologia li
-   cercano in `GEOSERVER_SHAPEFILE_DIR`, o in `$LIMEN_DATA_ROOT/geoserver`).
+   cercano in `GEOSERVER_SHAPEFILE_DIR`, o in `$DATA_ROOT/geoserver`).
    Gli shapefile di quella cartella non vanno più copiati: IFFI, mosaici PAI e
    idraulico, confini ISTAT, CORINE 2018 e geolitologia li scarica
    `limen geodati-sync` (passo 3/7 di `make init`, ~3,3 GB la prima volta) e

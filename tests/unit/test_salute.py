@@ -169,8 +169,6 @@ def test_l_endpoint_dice_la_fonte_guasta_e_il_pericolo_che_ne_risente(
     per_pericolo = {n["pericolo"]: n for n in corpo["non_misurate"]}
     assert per_pericolo["wildfire"]["cause"] == ["Open-Meteo pubblico"]
     assert per_pericolo["landslide"]["cause"] == []
-    assert corpo["dischi"] == [
-        {"nome": "Dati (LIMEN_DATA_ROOT)", "libero_gb": 120.0, "totale_gb": 500.0}
-    ]
+    assert corpo["dischi"] == [{"nome": "Dati (DATA_ROOT)", "libero_gb": 120.0, "totale_gb": 500.0}]
     assert corpo["backup"]["stato"] == "saltato"
     assert "usd" not in r.text.lower() and "$" not in r.text

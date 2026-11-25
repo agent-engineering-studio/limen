@@ -83,7 +83,7 @@ def test_la_cartella_e_quella_di_geoserver_init(monkeypatch: pytest.MonkeyPatch)
     from limen.config.percorsi import cartella_geoserver
 
     monkeypatch.delenv("GEOSERVER_SHAPEFILE_DIR", raising=False)
-    monkeypatch.setenv("LIMEN_DATA_ROOT", "/dati")
+    monkeypatch.setenv("DATA_ROOT", "/dati")
     assert cartella_geoserver() == Path("/dati/geoserver")
     monkeypatch.setenv("GEOSERVER_SHAPEFILE_DIR", "/gs")
     assert cartella_geoserver() == Path("/gs")

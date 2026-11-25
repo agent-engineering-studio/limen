@@ -15,7 +15,7 @@ from limen.cli import fetch_static
 
 @pytest.fixture
 def radice(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    monkeypatch.setenv("LIMEN_DATA_ROOT", str(tmp_path))
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
     monkeypatch.delenv("LIMEN_IMPERVIOUSNESS_DEST", raising=False)
 
     @contextlib.asynccontextmanager

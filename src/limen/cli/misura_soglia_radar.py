@@ -20,7 +20,7 @@ con il radar storico (IT-DPC-SRI, dal 2018: prima lo strumento è un altro).
   parità di carico, AUC), e una curva tarata sul radar con ``fit_threshold``.
 
 La pioggia oraria nei punti si estrae una volta, un file per mese, in
-``LIMEN_SOGLIA_RADAR_CACHE`` (default ``$LIMEN_DATA_ROOT/radar/soglia_radar``):
+``LIMEN_SOGLIA_RADAR_CACHE`` (default ``$DATA_ROOT/radar/soglia_radar``):
 è il passo lungo, mezz'ora per anno. Env: ``LIMEN_BACKTEST_RADAR_ZARR`` (lo
 Zarr di ``make radar-data``), ``LIMEN_ITALICA_CSV``. Report e CSV (una riga per
 frana) in ``LIMEN_REPORTS_DIR``.

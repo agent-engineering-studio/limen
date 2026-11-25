@@ -28,7 +28,7 @@ function salute(extra: Partial<SaluteStato> = {}): SaluteStato {
       { pericolo: "wildfire", celle: 312550, totali: 312550, cause: ["Open-Meteo pubblico"] },
       { pericolo: "landslide", celle: 0, totali: 312550, cause: [] },
     ],
-    dischi: [{ nome: "Dati (LIMEN_DATA_ROOT)", libero_gb: 20, totale_gb: 500 }],
+    dischi: [{ nome: "Dati (DATA_ROOT)", libero_gb: 20, totale_gb: 500 }],
     db_gb: 41.3,
     battito: new Date().toISOString(),
     backup: { nome: "backup", stato: "ok", finito_il: ADESSO, nota: null },

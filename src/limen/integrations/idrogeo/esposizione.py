@@ -7,7 +7,7 @@ mosaico 2020, edifici e imprese.
 
 Una volta al mese e non a richiesta: un'allerta non deve dipendere da
 IdroGEO acceso durante un'emergenza, e un backtest vuole un dato fermo. Gira
-nel passo notturno, ma le risposte stanno su disco (``LIMEN_DATA_DIR/idrogeo``,
+nel passo notturno, ma le risposte stanno su disco (``$DATA_ROOT/datasets/idrogeo``,
 un volume nel container) e si richiedono solo dopo ``MAX_AGE``: la notte
 qualunque legge i file in ~2 s, una notte al mese li scarica in ~70 s
 (~17 MB). Le scritture si saltano se il contenuto non è cambiato
@@ -21,7 +21,6 @@ salvati, che il tentativo dopo rilegge dal disco.
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from datetime import timedelta
 from functools import partial
@@ -30,6 +29,7 @@ from typing import Any
 
 from ispra_idrogeo import IdroGEO
 
+from limen.config.percorsi import cartella_dataset
 from limen.core.logging import get_logger
 from limen.data.repos import dataset_versions_repo, esposizione_comuni_repo
 from limen.integrations._http import SharedHttpClient, call_with_retry
@@ -58,7 +58,7 @@ class EsposizioneComune:
 
 
 def cartella() -> Path:
-    return Path(os.getenv("LIMEN_DATA_DIR", "./data")).expanduser() / "idrogeo"
+    return cartella_dataset() / "idrogeo"
 
 
 def _intero(valore: Any) -> int | None:

@@ -9,7 +9,7 @@ le tile intere di 3 gradi per lato che coprono il riquadro di FIRMS
 (``FIRMS__BBOX``): sul riquadro di default 25, di cui 23 esistono, 1,3 GB una
 volta sola. Una tile di solo mare non esiste (404) e si salta.
 
-Le tile restano col loro nome, sotto ``<LIMEN_DATA_DIR>/landcover/worldcover``
+Le tile restano col loro nome, sotto ``$DATA_ROOT/datasets/landcover/worldcover``
 come nel bucket. Chi le legge passa **sempre** da :func:`worldcover_locale`, e
 un ``None`` è «non misurato»: mai ``firms_client.WorldCover.synced()`` né il
 default della libreria, che senza tile locali leggerebbero il bucket via GDAL,
@@ -23,7 +23,6 @@ sul client condiviso, come i mosaici ISPRA.
 from __future__ import annotations
 
 import math
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -32,6 +31,7 @@ from firms_client import WorldCover
 from firms_client.landcover import WORLDCOVER_URL as WORLDCOVER_URL
 from tenacity import RetryError
 
+from limen.config.percorsi import cartella_dataset
 from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.integrations._http import SharedHttpClient, call_with_retry
@@ -44,8 +44,8 @@ _LATO = 3
 
 
 def cartella_worldcover() -> Path:
-    """Dove stanno le tile: accanto agli archivi FIRMS, sotto ``LIMEN_DATA_DIR``."""
-    return Path(os.getenv("LIMEN_DATA_DIR", "./data")).expanduser() / "landcover" / "worldcover"
+    """Dove stanno le tile: accanto agli archivi FIRMS, sotto ``$DATA_ROOT/datasets``."""
+    return cartella_dataset() / "landcover" / "worldcover"
 
 
 def tile_per_riquadro(bbox: tuple[float, float, float, float]) -> list[str]:

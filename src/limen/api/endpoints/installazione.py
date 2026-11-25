@@ -122,7 +122,7 @@ async def stato(settings: SettingsDep) -> InstallazioneStato:
     )
 
 
-_DISCHI = {"dati": "Dati (LIMEN_DATA_ROOT)", "docker": "Docker (volume di Postgres)"}
+_DISCHI = {"dati": "Dati (DATA_ROOT)", "docker": "Docker (volume di Postgres)"}
 
 
 def _passo(run: job_runs_repo.JobRun) -> PassoSalute:

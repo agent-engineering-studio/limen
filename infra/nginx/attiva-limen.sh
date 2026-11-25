@@ -30,7 +30,8 @@ DOMINIO="${DOMINIO%%/*}"
 DOMINIO="$(printf '%s' "${DOMINIO%%:*}" | tr '[:upper:]' '[:lower:]')"
 TILES_DIR="$(valore LIMEN_DEM_TILES_DIR)"
 # Lo stesso default di `load_static_data.sh`, che le scrive: la radice dei dati.
-radice="$(valore LIMEN_DATA_ROOT)"
+radice="$(valore DATA_ROOT)"
+[ -n "$radice" ] || radice="$(valore LIMEN_DATA_ROOT)"  # .env di prima del 2026-11-25
 TILES_DIR="${TILES_DIR:-${radice:+$radice/tiles}}"
 TILES_DIR="${TILES_DIR:-/srv/data/limen-tiles}"
 case "$TILES_DIR" in
