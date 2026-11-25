@@ -205,6 +205,16 @@ incendio di vegetazione, la libreria guarda la maschera delle fonti fisse e
 la copertura del suolo intorno: per questo l'installazione scarica la carta
 ESA WorldCover dell'Italia (circa 1,3 GB, una volta sola).
 
+**Che terra brucia.** Dalla versione 0.7 la libreria conta il fuoco per
+cella su una griglia qualunque, compresa quella da 1 km di Limen, che Limen
+le passa. Per ogni cella dice anche quanto coltivo c'era sotto i suoi incendi. Sugli
+incendi EFFIS su terra agricola la quota esce fra 0,6 e 0,9, sui boschivi
+praticamente zero. Limen la scrive per ogni cella (`crop_burning_share`; vuota
+dove non è mai bruciato, perché lì non c'è terra *sotto un fuoco* da
+descrivere) per rispondere a una domanda aperta: al Nord, dove l'indice di
+pericolo meteo a «moderato» prende in Lombardia un incendio su cinque, i roghi
+agricoli sono il segnale che manca? La risposta verrà dalla misura, prima di toccare il modello.
+
 ### imageserver-export: le mappe europee del suolo
 
 *Documentazione: [agentengineering.it/imageserver-export](https://agentengineering.it/imageserver-export/) · codice su [GitHub](https://github.com/agent-engineering-studio/imageserver-export).*
