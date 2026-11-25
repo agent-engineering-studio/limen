@@ -68,7 +68,8 @@ from limen.integrations.dpc.sri_archive import STRUMENTO_DI_OGGI, SriArchive
 log = get_logger(__name__)
 
 REPORTS_DIR = Path(os.getenv("LIMEN_REPORTS_DIR", "reports"))
-_RADAR_ZARR = Path("radar/it_dpc_sri/italian-radar-dpc-sri.zarr")
+#: Lo store IT-DPC-SRI dove lo mette `dpc-radar init --history` (`make radar-data`).
+_RADAR_ZARR = Path("dpc-radar/it_dpc_sri")
 #: Un mese prima del 2018: gli eventi di pioggia delle prime frane cominciano lì.
 _BASE = STRUMENTO_DI_OGGI - timedelta(days=31)
 _ROMA = ZoneInfo("Europe/Rome")

@@ -35,7 +35,7 @@ Usage:
     limen catasti-incendi    Catasti regionali degli incendi: verità degli incendi piccoli (#498).
     limen monitor-once       Run the MAF landslide workflow once for an AOI.
     limen forecast           Predictive run at now+H hours (forecast rain, no persistence).
-    limen firms-sync         Ingest NASA FIRMS active-fire hotspots (FIRMS__MAP_KEY).
+    limen firms-sync         Ingest NASA FIRMS active-fire hotspots (FIRMS_MAP_KEY).
     limen esposizione-sync   Residenti in aree a pericolo frana/alluvione per comune (ISPRA).
     limen geodati-sync       Gli shapefile di GeoServer: IFFI, PAI, idraulica, ISTAT, CORINE, …
     limen carica-vettori     IFFI, PAI, idraulica e comuni in Limen, senza GeoServer (#426).
@@ -431,7 +431,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     sub.add_parser(
         "firms-sync",
-        help="ingest NASA FIRMS active-fire hotspots (needs FIRMS__MAP_KEY)",
+        help="ingest NASA FIRMS active-fire hotspots (needs FIRMS_MAP_KEY)",
     )
     ingest_events = sub.add_parser(
         "ingest-events",

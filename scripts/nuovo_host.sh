@@ -55,7 +55,7 @@ dotenv() {  # dotenv NOME: il valore che compose userà
   printf '%s' "$AMBIENTE" | { grep -E "^$1=" || true; } | tail -n 1 | cut -d= -f2-
 }
 for nome in DATA_ROOT LIMEN_DATA_ROOT LIMEN_DATASETS_DIR LIMEN_REPORTS_HOST_DIR LIMEN_MLRUNS_DIR \
-  LIMEN_EGMS_DIR LIMEN_SENSORI_DIR BACKUP__BUCKET BACKUP__ROOT SCHEDULER__NIGHTLY_HOUR_UTC POSTGIS_BASE; do
+  LIMEN_SENSORI_DIR BACKUP__BUCKET BACKUP__ROOT SCHEDULER__NIGHTLY_HOUR_UTC POSTGIS_BASE; do
   printf -v "$nome" '%s' "$(dotenv "$nome")"
 done
 RADICE="${DATA_ROOT:-${LIMEN_DATA_ROOT:-$(pwd)/data}}"
@@ -215,7 +215,7 @@ ok "limen ($uid:$gid): ${scritte[*]}"
 # Lo stesso vale per le cartelle in cui il worker scarica i dati statici
 # (#402) e in cui `make static-data` scarica dall'host.
 condivise=(
-  "${LIMEN_EGMS_DIR:-$RADICE/egms}"
+  "$RADICE/egms-client"
   "$(dotenv GEOSERVER_SHAPEFILE_DIR)"
   "$RADICE/sealing"
   "$RADICE/osm"

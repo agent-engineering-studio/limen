@@ -33,7 +33,7 @@ FOCUS="${1:-tutti}"
 # quella del .env il container la riceve già dal compose, intatta, mentre
 # quella della shell andrebbe persa con l'ambiente pulito del container
 # (Codex, #367).
-egms_chiave_shell="${EGMS__SERVICE_KEY:-}"
+egms_chiave_shell="${EGMS_SERVICE_KEY:-${EGMS__SERVICE_KEY:-}}"
 if [ -f .env ]; then
   set -a
   # shellcheck disable=SC1091
@@ -68,7 +68,14 @@ mkdir -p "$(dirname "$LIMEN_CLIMA_PIOGGIA")"
 # EgmsSettings): con il container usa e getta qui sotto ogni `make up`
 # riscaricherebbe ~7 GB. Con le tile già lì, un sync ripetuto non va in rete
 # e non scrive niente (dataset_versions).
-export EGMS__CARTELLA="${EGMS__CARTELLA:-$RADICE/egms}"
+export EGMS__CARTELLA="${EGMS__CARTELLA:-$RADICE/egms-client}"
+# I nomi di egms-client (EGMS_SERVICE_KEY*); quelli di prima, con due
+# trattini bassi, valgono ancora per un rilascio.
+EGMS_SERVICE_KEY="${EGMS_SERVICE_KEY:-${EGMS__SERVICE_KEY:-}}"
+EGMS_SERVICE_KEY_FILE="${EGMS_SERVICE_KEY_FILE:-${EGMS__SERVICE_KEY_FILE:-}}"
+# Le cartelle di prima del 2026-11-25 nella disposizione nuova, prima che
+# qualunque comando le cerchi (scripts/migra_cartelle.sh, rieseguibile).
+RADICE="$RADICE" ./scripts/migra_cartelle.sh || exit 1
 # Le tile del rilievo (#318) stanno sotto la radice: il compose le monta nel
 # frontend su /rilievo/, nginx le serve da lì sul server (attiva-limen.sh).
 export LIMEN_DEM_TILES_DIR="${LIMEN_DEM_TILES_DIR:-$RADICE/tiles}"
@@ -94,7 +101,7 @@ else
   echo "  [manca]   $GEOSERVER_DATI non si crea: dati di base ISPRA saltati" >&2
 fi
 have_egms=0
-if [ -n "${EGMS__SERVICE_KEY:-}" ] || [ -n "${EGMS__SERVICE_KEY_FILE:-}" ]; then
+if [ -n "$EGMS_SERVICE_KEY" ] || [ -n "$EGMS_SERVICE_KEY_FILE" ]; then
   have_egms=1
 fi
 
@@ -138,10 +145,10 @@ if [ "$MODO" = docker ]; then
     mkdir -p "$EGMS__CARTELLA"
     CONTAINER+=(-v "$EGMS__CARTELLA:$EGMS__CARTELLA" -e "EGMS__CARTELLA=$EGMS__CARTELLA")
     # Il file della chiave, se è così che la si dà, montato in sola lettura.
-    if [ -n "${EGMS__SERVICE_KEY_FILE:-}" ]; then
-      CONTAINER+=(-v "$EGMS__SERVICE_KEY_FILE:$EGMS__SERVICE_KEY_FILE:ro" -e "EGMS__SERVICE_KEY_FILE=$EGMS__SERVICE_KEY_FILE")
+    if [ -n "$EGMS_SERVICE_KEY_FILE" ]; then
+      CONTAINER+=(-v "$EGMS_SERVICE_KEY_FILE:$EGMS_SERVICE_KEY_FILE:ro" -e "EGMS_SERVICE_KEY_FILE=$EGMS_SERVICE_KEY_FILE")
     fi
-    [ -n "$egms_chiave_shell" ] && CONTAINER+=(-e "EGMS__SERVICE_KEY=$egms_chiave_shell")
+    [ -n "$egms_chiave_shell" ] && CONTAINER+=(-e "EGMS_SERVICE_KEY=$egms_chiave_shell")
   fi
   # La cache di clima-pioggia in scrittura: senza, ogni giro riscaricherebbe tutto.
   cartella_clima="$(cd "$(dirname "$LIMEN_CLIMA_PIOGGIA")" && pwd)"
@@ -258,7 +265,7 @@ fi
 if [ "$have_egms" -eq 1 ]; then
   ok "EGMS — velocità del terreno (tile in $EGMS__CARTELLA)"
 else
-  skip "né EGMS__SERVICE_KEY né EGMS__SERVICE_KEY_FILE"
+  skip "né EGMS_SERVICE_KEY né EGMS_SERVICE_KEY_FILE"
   echo "            → chiave di servizio CLMS: land.copernicus.eu, EU Login, profilo"
   echo "              → «API Tokens». Senza, le feature InSAR del modello ML restano vuote."
 fi
@@ -371,7 +378,7 @@ elif [ "$have_egms" -eq 1 ]; then
   mkdir -p "$EGMS__CARTELLA"
   limen sync-egms || echo "  (EGMS non completato: si prosegue, il prossimo giro riprende dalle tile già scaricate)"
 else
-  echo "  saltato: né EGMS__SERVICE_KEY né EGMS__SERVICE_KEY_FILE"
+  echo "  saltato: né EGMS_SERVICE_KEY né EGMS_SERVICE_KEY_FILE"
 fi
 
 say "7/7  Fattori per cella"

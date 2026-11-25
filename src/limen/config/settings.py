@@ -20,6 +20,7 @@ from typing import Literal
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from limen.config.percorsi import radice_dati
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
 from limen.core.models.risk import RiskLevel
 
@@ -799,8 +800,8 @@ class EgmsSettings(BaseSettings):
     → «API Tokens») il sync e il controllo delle release si saltano. La
     chiave si dà in uno dei due modi, il primo vince:
 
-    * ``EGMS__SERVICE_KEY`` — il JSON della chiave, su una riga;
-    * ``EGMS__SERVICE_KEY_FILE`` — il percorso del file JSON (un secret
+    * ``EGMS_SERVICE_KEY`` — il JSON della chiave, su una riga;
+    * ``EGMS_SERVICE_KEY_FILE`` — il percorso del file JSON (un secret
       Docker, per esempio).
 
     ``EGMS__TOKEN`` (l'``id`` copiato da un link dell'Explorer) non vale più:
@@ -819,9 +820,10 @@ class EgmsSettings(BaseSettings):
     #: la 2020-2024 è uscita la 2020-2025 (verificato sull'archivio il 2026-11-02).
     release: str = "2020_2025"
     #: Dove tenere i GeoTIFF delle tile (~4 MB l'uno, due per tile; ~0,5 GB
-    #: per l'Italia). Deve sopravvivere ai riavvii: in Docker è il volume
-    #: ``/var/lib/limen/egms`` (compose), fuori da Docker ``data/egms``.
-    cartella: str = "data/egms"
+    #: per l'Italia): ``$DATA_ROOT/egms-client``, la cartella della libreria,
+    #: che deve sopravvivere ai riavvii. Nel compose è montata su
+    #: ``/var/lib/limen/egms``.
+    cartella: str = Field(default_factory=lambda: str(radice_dati() / "egms-client"))
     #: Tile scaricate insieme (~60 MB l'una). Non più di 2: l'archivio
     #: risponde 429 «At most 2 downloads may be performed simultaneously» al
     #: terzo download in corso dello stesso account (verificato il 2026-11-03).
@@ -1263,7 +1265,7 @@ class NowcastSettings(BaseSettings):
 class FirmsSettings(BaseSettings):
     """NASA FIRMS active-fire hotspots (VIIRS 375 m / MODIS 1 km, NRT).
 
-    Fail-closed: without ``FIRMS__MAP_KEY`` the feed is inert — the free
+    Fail-closed: without ``FIRMS_MAP_KEY`` the feed is inert — the free
     key is per-user, so there is no sensible default to fall back on.
     """
 
@@ -1506,6 +1508,22 @@ class Settings(BaseSettings):
     azure_ai_api_key: SecretStr | None = None
     anthropic_foundry_endpoint: str | None = None
     anthropic_foundry_api_key: SecretStr | None = None
+    # Le chiavi delle librerie col nome che hanno nella libreria (egms-client,
+    # firms-client): una variabile sola per Limen e per la libreria. Vincono
+    # su EGMS__SERVICE_KEY*, FIRMS__MAP_KEY, letti ancora per un rilascio.
+    egms_service_key: SecretStr | None = None
+    egms_service_key_file: str | None = None
+    firms_map_key: SecretStr | None = None
+
+    @model_validator(mode="after")
+    def _chiavi_delle_librerie(self) -> Settings:
+        if self.egms_service_key is not None and self.egms_service_key.get_secret_value().strip():
+            self.egms.service_key = self.egms_service_key
+        if (self.egms_service_key_file or "").strip():
+            self.egms.service_key_file = self.egms_service_key_file
+        if self.firms_map_key is not None and self.firms_map_key.get_secret_value().strip():
+            self.firms.map_key = self.firms_map_key
+        return self
 
     @model_validator(mode="after")
     def _ingressi_sensori_da_url_pubblico(self) -> Settings:

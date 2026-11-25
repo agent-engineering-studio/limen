@@ -95,7 +95,7 @@ COMPOSE_BUILD := $(if $(wildcard .env),--env-file .env) \
 # here — it runs from its own repo (see the note in docker-compose.demo.yml).
 BUILD_PROFILES ?= --profile geoserver --profile frontend
 
-.PHONY: fetch-static inference-up inference-up-cpu inference-down inference-logs inference-check help install docs-links docs-bundle \
+.PHONY: migra-cartelle fetch-static inference-up inference-up-cpu inference-down inference-logs inference-check help install docs-links docs-bundle \
         up down build rebuild pull up-host-ollama \
         up-dev down-dev logs migrate seed immagine db-up up-stack backup backup-elenco backup-up backup-down restore bootstrap-static calibrate backtest serve \
         data-status static-data flood-data flood-events backtest-flood fire-history \
@@ -186,7 +186,7 @@ gs-volumes:
 	@docker volume create limen-geoserver-pgdata >/dev/null
 	@docker volume create limen-geoserver-gsdata >/dev/null
 	@docker volume create limen-idrogeo-cache >/dev/null
-	@docker volume create limen-idrogeo-data >/dev/null
+	@mkdir -p "$(DATA_ROOT)/ispra-idrogeo"   # i dati di idrogeo-mcp, sotto la radice comune
 	@docker volume create limen-copernicus-ems-cache >/dev/null
 	@docker volume create limen-copernicus-ems-data >/dev/null
 
@@ -632,9 +632,11 @@ OSM_DIR     ?= $(DATA_ROOT)/osm
 OSM_PBF_URL ?= https://download.geofabrik.de/europe/italy-latest.osm.pbf
 OSM_PBF      = $(OSM_DIR)/$(notdir $(OSM_PBF_URL))
 
-radar-data:                    # IT-DPC-SRI 2010-2025 (~51 GB) dall'object store ECMWF, riprendibile; solo per il backtest
-	$(UV) run python scripts/mirror_it_dpc_sri.py $(DATA_ROOT)/radar/it_dpc_sri/italian-radar-dpc-sri.zarr 32 179087
-	$(UV) run python scripts/mirror_it_dpc_sri.py $(DATA_ROOT)/radar/it_dpc_sri/italian-radar-dpc-sri.zarr 32 0 179087
+radar-data:                    # IT-DPC-SRI 2010-2025 (~51 GB) con l'init di dpc-radar, riprendibile; solo per il backtest
+	$(UV) run dpc-radar init $(DATA_ROOT)/dpc-radar --history
+
+migra-cartelle:                # le cartelle dati di prima del 2026-11-25 in $(DATA_ROOT)/<libreria>; rieseguibile
+	RADICE="$(DATA_ROOT)" ./scripts/migra_cartelle.sh
 
 osm-data:                      # download the Geofabrik PBF + extract road/rail GPKGs (needs host GDAL)
 	mkdir -p $(OSM_DIR)

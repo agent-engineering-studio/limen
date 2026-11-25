@@ -42,9 +42,9 @@ def test_un_dato_mancante_resta_none() -> None:
     assert esposizione.da_indicatori({"nome": "senza codice"}) is None
 
 
-def test_la_cartella_sta_sotto_i_dataset(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LIMEN_DATA_DIR", "/var/lib/limen/datasets")
-    assert esposizione.cartella() == Path("/var/lib/limen/datasets/idrogeo")
+def test_la_cartella_e_quella_della_libreria(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATA_ROOT", "/var/lib/limen/dati")
+    assert esposizione.cartella() == Path("/var/lib/limen/dati/ispra-idrogeo")
 
 
 class _Repo:

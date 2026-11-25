@@ -4,7 +4,7 @@ Token, ricerche, download, cache e segnaposto del mare sono di
 ``egms_client.EgmsArchive`` (estratto da Limen, Apache-2.0). Limen gli dà il
 client condiviso e ``retries=0``: ogni chiamata gira dentro
 ``call_with_retry``, la policy di ogni chiamata esterna. Qui restano come
-Limen trova la chiave (``EGMS__SERVICE_KEY`` o ``EGMS__SERVICE_KEY_FILE``) e
+Limen trova la chiave (``EGMS_SERVICE_KEY`` o ``EGMS_SERVICE_KEY_FILE``) e
 gli attributi che ricava dal CSV di ogni tile.
 """
 
@@ -136,10 +136,10 @@ async def archivio(s: EgmsSettings) -> EgmsArchive | None:
 def perche_no(s: EgmsSettings) -> str:
     """Il motivo, per il log, per cui non c'è un archivio."""
     if s.token is not None and s.token.get_secret_value().strip():
-        return "EGMS__TOKEN non è più supportato (scadeva): serve EGMS__SERVICE_KEY"
+        return "EGMS__TOKEN non è più supportato (scadeva): serve EGMS_SERVICE_KEY"
     if s.attivo:
         return "chiave EGMS impostata ma illeggibile"
-    return "né EGMS__SERVICE_KEY né EGMS__SERVICE_KEY_FILE"
+    return "né EGMS_SERVICE_KEY né EGMS_SERVICE_KEY_FILE"
 
 
 __all__ = [

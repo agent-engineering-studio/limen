@@ -150,16 +150,16 @@ shadow branch is never allowed to abort the workflow.
 product: the 100 m mean-velocity GeoTIFFs of the vertical (`U`) and
 east-west (`E`) components, downloaded per 100 km tile and aggregated onto
 the 1 km cells (p90 of the magnitude, median of each component, valid-pixel
-count — migration 072). Credentials: `EGMS__SERVICE_KEY`, the CLMS service
+count — migration 072). Credentials: `EGMS_SERVICE_KEY`, the CLMS service
 key JSON (land.copernicus.eu → profile → «API Tokens»; it does not expire,
-and each sync runs its own archive searches), or `EGMS__SERVICE_KEY_FILE`,
+and each sync runs its own archive searches), or `EGMS_SERVICE_KEY_FILE`,
 the path of that JSON. Signing, search bodies, response parsing and the
 GeoTIFF extraction come from the
 [`egms-client`](https://github.com/agent-engineering-studio/egms-client)
 package; the traffic stays in `integrations/egms/clms.py` on
 `fetch_with_retry`, like every outbound call (the package's own
 `EgmsArchive` retries by itself, so Limen does not use it). Tiles already in
-`EGMS__CARTELLA` (a persistent volume in Docker, `/var/lib/limen/egms`) are
+`$DATA_ROOT/egms-client` (mounted on `/var/lib/limen/egms` in Docker) are
 never downloaded again, with the same file names as the package's cache. Cadence is yearly: the nightly `egms_release` step logs
 `egms.release.nuova` when the archive lists a release newer than
 `EGMS__RELEASE`; the operator bumps it and runs `limen sync-egms`.

@@ -284,8 +284,11 @@ file at the repository root. [`.env.example`](./.env.example) lists every
 variable with comments: copy it and change only what you need.
 
 **One rule to read it:** a double underscore means "section → field".
-`FIRMS__MAP_KEY` is the `map_key` field of the `firms` section; the settings
-are typed and validated at start-up by
+`FIRMS__INTERVAL_MINUTES` is the `interval_minutes` field of the `firms`
+section. The exceptions are the keys of the extracted libraries, which keep
+the library's own name so one line serves both: `EGMS_SERVICE_KEY`,
+`EGMS_SERVICE_KEY_FILE`, `FIRMS_MAP_KEY`, and the shared data root
+`DATA_ROOT`. The settings are typed and validated at start-up by
 [`limen.config.settings`](./src/limen/config/settings.py).
 
 Limen is built to **start with zero keys** and get richer as you add them.
@@ -296,7 +299,7 @@ Every external source is *fail-closed*: without its key, that feed stays off
 flowchart LR
     L0["<b>Level 0 · no keys</b><br/>public Open-Meteo weather, DPC radar,<br/>INGV quakes, EFFIS burnt areas,<br/>FIRMS archive, Copernicus EMS floods,<br/>e-ITALICA landslides"]
     L1["<b>Level 1 · static layers</b><br/>make static-data → ISPRA, ISTAT,<br/>CORINE, geology, DTM, no keys<br/>imperviousness, OSM: make fetch-static"]
-    L2["<b>Level 2 · free keys</b><br/>FIRMS__MAP_KEY → live satellite fires<br/>COPERNICUS__EWDS_KEY → GloFAS rivers<br/>EGMS__SERVICE_KEY → ground motion"]
+    L2["<b>Level 2 · free keys</b><br/>FIRMS_MAP_KEY → live satellite fires<br/>COPERNICUS__EWDS_KEY → GloFAS rivers<br/>EGMS_SERVICE_KEY → ground motion"]
     L3["<b>Level 3 · production</b><br/>OPENMETEO__FORECAST_URL → own weather server<br/>LLM gateway + ANTHROPIC_API_KEY → summaries<br/>NOTIFICATIONS__* → alerts · BACKUP__* → backups"]
     L0 --> L1 --> L2 --> L3
 ```
@@ -310,9 +313,9 @@ All of these are **free**. None is needed to start.
 | `LIMEN_GEOSERVER=1` | the [mcp-geo-server](#mcp-geo-server) stack: GeoServer, its PostGIS, web UI and geo MCP servers, for the PAI/IFFI WMS overlays (~2 GB of RAM). The numbers do not need it: the ISPRA and ISTAT vectors are loaded into Limen's own database by `limen carica-vettori` | nothing to get | no WMS overlays (PMTiles ones still work) |
 | `LIMEN_AGENTI=1` | the `limen-ops` MCP server for AI agents (OpenClaw & co.) | nothing to get | no MCP for agents |
 | `LIMEN_DEM_RASTER` | use your own terrain model (e.g. TINITALY 10 m) instead of the HR-DTM 5 m downloaded at init | a GeoTIFF on disk ([`data/README.md`](./data/README.md)) | the downloaded HR-DTM is used |
-| `FIRMS__MAP_KEY` | live NASA satellite fire detections every 45 min; a fire can start a run within hours | [firms.modaps.eosdis.nasa.gov/api/map_key](https://firms.modaps.eosdis.nasa.gov/api/map_key/): *Get MAP_KEY*, type your e-mail, the key (32 lowercase letters and digits) arrives by e-mail; check it with `uv run firms status Italy` (that command reads `FIRMS_MAP_KEY`, one underscore) | only the yearly archive (no key needed) |
+| `FIRMS_MAP_KEY` | live NASA satellite fire detections every 45 min; a fire can start a run within hours | [firms.modaps.eosdis.nasa.gov/api/map_key](https://firms.modaps.eosdis.nasa.gov/api/map_key/): *Get MAP_KEY*, type your e-mail, the key (32 lowercase letters and digits) arrives by e-mail; check it with `uv run firms status Italy` (that command reads `FIRMS_MAP_KEY`, one underscore) | only the yearly archive (no key needed) |
 | `COPERNICUS__EWDS_KEY` | river discharge forecast and each river's *ordinary high flow* from Copernicus GloFAS | ECMWF account on [ewds.climate.copernicus.eu](https://ewds.climate.copernicus.eu/how-to-api); accept the CEMS-Floods licence once | GloFAS via the public Open-Meteo API |
-| `EGMS__SERVICE_KEY` (or `__SERVICE_KEY_FILE`) | ground-motion velocities from Sentinel-1 (EGMS), feeding the ML features | [land.copernicus.eu](https://land.copernicus.eu) → profile → *API Tokens* (the JSON is shown once) | no ground-motion features |
+| `EGMS_SERVICE_KEY` (or `EGMS_SERVICE_KEY_FILE`) | ground-motion velocities from Sentinel-1 (EGMS), feeding the ML features | [land.copernicus.eu](https://land.copernicus.eu) → profile → *API Tokens* (the JSON is shown once) | no ground-motion features |
 | `OPENMETEO__FORECAST_URL` / `__ARCHIVE_URL` | your own Open-Meteo server (`make meteo-up`); the public API's 10,000 calls/day are not enough for all of Italy | self-hosted, compose profile `meteo` | public API (fine for one region) |
 | `ANTHROPIC_API_KEY` | regional summaries with Claude, under a monthly cap (`LLM__ANTHROPIC_BUDGET_MENSILE_USD`, default 10 $) | [console.anthropic.com](https://console.anthropic.com) | local model via llama.cpp, or a deterministic text |
 | `NOTIFICATIONS__*` | alerts on Telegram, e-mail, MQTT or a webhook (`NOTIFICATIONS__ENABLED_CHANNELS`) | your bot / SMTP / broker | alerts stay in the database and on the map |
@@ -341,7 +344,7 @@ All of these are **free**. None is needed to start.
 | Variable | Default | Notes |
 |-----------|---------|------|
 | `SCHEDULER__CACHE_CLEANUP` | `apscheduler` | `pg_cron` or `apscheduler`. **Use APScheduler on Neon.** |
-| `EGMS__CARTELLA` | `data/egms` | EGMS tiles, kept between syncs (Docker: the `LIMEN_EGMS_DIR` volume on `/var/lib/limen/egms`). |
+| `DATA_ROOT` | `data/` | The one data root of Limen and of the libraries: every library that downloads writes in `$DATA_ROOT/<package>` (EGMS tiles in `egms-client/`, IT-DPC-SRI in `dpc-radar/it_dpc_sri/`). `make migra-cartelle` moves the folders of the old layout. |
 | `LLM__MODELS__<ROLE>` | Claude id | Role → model map. `LLM__MODELS__FEDELTA` is a Claude id sent as a Message Batch. See [`docs/inference.md`](./docs/inference.md). |
 | `LLM__LLAMACPP_TIMEOUT_SECONDS` | `120` | Ceiling for roles without an override; `LLM__LLAMACPP_ROLE_TIMEOUT_SECONDS` (JSON) per role. |
 | `LLM__OLLAMA_BASE_URL` / `LLM__OLLAMA_MODEL` | `http://localhost:11434` / `qwen3.6:latest` | Ollama host and model (needs `LLM__PROVIDER=ollama`). |
@@ -509,7 +512,7 @@ uses the library's search and parsing and fetches the tiles itself
 (`integrations/egms/clms.py`), then computes per cell the 90th
 percentile of the velocity and the number of valid pixels
 (`cell_insar_features`). A nightly step checks for a new release. Needs
-`EGMS__SERVICE_KEY`; today it feeds the ML features, not the map. Code:
+`EGMS_SERVICE_KEY`; today it feeds the ML features, not the map. Code:
 [`integrations/egms/`](./src/limen/integrations/egms/).
 
 ### firms-client
@@ -530,7 +533,7 @@ API** (with a free `MAP_KEY`), and classifies detections, so that a
   wildfire ML features and to weigh how hard a past fire hit a slope.
   Without the type filter, the "most burnt" place in Italy was the ILVA
   steelworks in Taranto.
-- **Live trigger** (`FIRMS__MAP_KEY`): every 45 min, new hotspots in a
+- **Live trigger** (`FIRMS_MAP_KEY`): every 45 min, new hotspots in a
   region start a scoring run at once, and the post-fire landslide term
   switches on within hours instead of waiting for the burnt-area map.
 - **How far to trust it** (0.6): `seen(area_ha)` says how often FIRMS
