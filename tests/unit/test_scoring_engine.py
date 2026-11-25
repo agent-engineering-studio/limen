@@ -463,7 +463,7 @@ def test_il_cancello_si_chiude_sulla_cumulata_sotto_soglia() -> None:
     assert t.cumulata is not None and t.cancello_innesco is not None
     rif = 100.0
     con = _PREDISPOSTA.model_copy(update={"pioggia_riferimento_mm": rif})
-    asciutta = _bundle(static=con, api_30_mm=400.0, soil=0.9)
+    asciutta = _bundle(static=con, rainfall_hourly=[0.0] * 24, api_30_mm=400.0, soil=0.9)
     assert score(asciutta).score <= t.cancello_innesco.tetto
     # Nelle ultime 24 ore più della soglia, in quota del riferimento: aperto.
     mm = (t.cancello_innesco.soglia + 0.1) * rif * t.cumulata.saturazione
@@ -477,7 +477,17 @@ def test_una_cella_senza_riferimento_non_e_chiusa_dal_cancello(tmp_path: Path) -
     # cella torna su Caine e il cancello, misurato sulla cumulata, resta aperto.
     b = _bundle(static=_PREDISPOSTA, api_30_mm=400.0, soil=0.9)
     assert score(b).score == pytest.approx(_caine_solo(tmp_path).score(b).score)
-    assert score(b).score > load_regional_thresholds().cancello_innesco.tetto  # type: ignore[union-attr]
+    cancello = load_regional_thresholds().cancello_innesco
+    assert cancello is not None
+    assert score(b).score > cancello.tetto
+
+
+def test_senza_pioggia_letta_il_cancello_resta_aperto(tmp_path: Path) -> None:
+    # Open-Meteo degradato: nessuna ora nella finestra. Non è pioggia zero.
+    con = _PREDISPOSTA.model_copy(update={"pioggia_riferimento_mm": 100.0})
+    b = _bundle(static=con, rainfall_hourly=[], api_30_mm=400.0, soil=0.9)
+    assert score(b).breakdown.meteo_terms.cumulata_norm is None
+    assert score(b).score == pytest.approx(_caine_solo(tmp_path).score(b).score)
 
 
 def test_il_cancello_tiene_sotto_moderato_un_versante_bagnato_senza_innesco(

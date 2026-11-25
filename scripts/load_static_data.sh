@@ -379,9 +379,11 @@ if [ "$SCARICA" = 1 ]; then
   # metro dell'innesco frane (#676). Scrive pioggia_riferimento_mm per cella,
   # quindi dopo il bootstrap che crea le righe; un'AOI già nel file non si
   # riscarica. Sono 13 anni orari per ~4.000 nodi:
-  # serve l'istanza Open-Meteo propria con l'archivio ERA5 (profilo meteo),
-  # l'API pubblica finisce la quota del giorno. Un'AOI incompleta si riprende
-  # al prossimo giro; finché manca, le sue celle restano su Caine.
+  # serve l'istanza Open-Meteo propria con l'archivio ERA5 (profilo meteo,
+  # OPENMETEO__ARCHIVE_URL): senza, il comando non scarica e scrive solo ciò
+  # che è già nel file, perché l'API pubblica finirebbe la quota dello sweep.
+  # Un'AOI incompleta si riprende al prossimo giro; finché manca, le sue celle
+  # restano su Caine, senza cancello.
   limen clima-pioggia || echo "  (riferimento della pioggia incompleto: le celle senza restano su Caine)"
 fi
 # Dallo stesso DTM, le tile del rilievo per la vista «Rilievo» (#318). Con il

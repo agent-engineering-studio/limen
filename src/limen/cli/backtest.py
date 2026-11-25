@@ -107,7 +107,8 @@ Configuration knobs (env vars, kept off the dispatcher for parity with
 * ``LIMEN_BACKTEST_CLIMA``       — il file di ``limen clima-pioggia``. Con un
   blocco ``cumulata`` in ``landslide.yaml`` dà a ogni cella il riferimento del
   suo nodo, e l'innesco diventa la cumulata relativa (#243). Senza il file, o
-  senza l'AOI nel file, le celle restano su Caine.
+  senza l'AOI nel file, le celle hanno il riferimento del database
+  (``pioggia_riferimento_mm``, come lo sweep), e senza quello restano su Caine.
 * ``LIMEN_BACKTEST_API_RIFERIMENTO`` — ``nazionale`` (default, come lo
   sweep) o ``nodo``: la pioggia antecedente si legge contro media e deviazione del
   nodo della cella nel mese, dal file di ``LIMEN_BACKTEST_CLIMA`` (#357).
@@ -1310,9 +1311,10 @@ async def run() -> int:
             f"; cancello d'innesco: senza innesco > {soglie.cancello_innesco.soglia:g} "
             f"il punteggio non supera {soglie.cancello_innesco.tetto:g}"
         )
-    if cumulata is not None and clima:
+    if cumulata is not None:
+        metro = f"q{clima.get('quantile')}" if clima else "riferimento del database"
         configurazione += (
-            f"; innesco cumulata {cumulata.window_hours} h / q{clima.get('quantile')} del nodo "
+            f"; innesco cumulata {cumulata.window_hours} h / {metro} del nodo "
             f"({cumulata.modo}, saturazione {cumulata.saturazione})"
         )
 

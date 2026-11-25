@@ -218,13 +218,21 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
         if cum is not None and riferimento is not None:
             fine = bundle.dynamic.valuation_time
             inizio = fine - timedelta(hours=cum.window_hours)
-            mm = sum(
+            ore = [
                 s.precipitation_mm
                 for s in bundle.dynamic.rainfall.samples
                 if inizio < s.timestamp <= fine
-            )
-            cumulata_norm = _clamp01(mm / (cum.saturazione * riferimento * (1.0 - riduzione)))
-            innesco = cumulata_norm if cum.modo == "sostituisce" else max(caine_norm, cumulata_norm)
+            ]
+            # Nessuna ora nella finestra è una pioggia non letta (Open-Meteo
+            # degradato), non una pioggia nulla: contarla zero chiuderebbe il
+            # cancello su tutta l'Italia e la mappa direbbe «Basso».
+            if ore:
+                cumulata_norm = _clamp01(
+                    sum(ore) / (cum.saturazione * riferimento * (1.0 - riduzione))
+                )
+                innesco = (
+                    cumulata_norm if cum.modo == "sostituisce" else max(caine_norm, cumulata_norm)
+                )
 
         api_f = api_factor(
             bundle.dynamic.api_30_mm,

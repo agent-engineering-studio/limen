@@ -31,7 +31,8 @@ backtest, e in ``cell_static_factors.pioggia_riferimento_mm`` (migrazione
 vicino della sua AOI, come nel backtest (#676). Il database si scrive solo se
 la finestra è quella del blocco ``cumulata`` di ``landslide.yaml``.
 Rieseguire salta il download delle AOI già nel file con gli stessi
-parametri, e riscrive solo le celle che cambiano. Il modello è sempre ERA5,
+parametri, e riscrive solo le celle che cambiano. Senza
+``OPENMETEO__ARCHIVE_URL`` (un'istanza propria) non scarica niente. Il modello è sempre ERA5,
 quello della misura, qualunque sia ``OPENMETEO__MODELS``.
 
 Env knobs:
@@ -53,6 +54,7 @@ from typing import Any
 
 import numpy as np
 
+from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.core.scoring.regional_thresholds import load_regional_thresholds
 from limen.data.db import lifespan_pool
@@ -268,6 +270,13 @@ async def run() -> int:
         log.warning("clima_pioggia.db_saltato", ore=ore, yaml_ore=cumulata.window_hours)
         nel_db = False
 
+    # Tredici anni orari per ~4.000 nodi finiscono in una AOI le 10.000
+    # chiamate al giorno dell'API pubblica, che lo sweep divide con questo
+    # comando: senza un'istanza propria si scrive solo ciò che è già nel file.
+    scarica = bool(get_settings().openmeteo.archive_url)
+    if not scarica:
+        log.warning("clima_pioggia.senza_istanza", hint="OPENMETEO__ARCHIVE_URL")
+
     client = OpenMeteoHttpClient()
     esito = 0
     async with lifespan_pool():
@@ -278,6 +287,8 @@ async def run() -> int:
                 log.info("clima_pioggia.skip", aoi_id=aoi_id)
                 if nel_db:
                     await _scrivi_db(aoi_id, clima, ore=ore)
+                continue
+            if not scarica:
                 continue
             aoi = await get_aoi(aoi_id)
             if aoi is None:
