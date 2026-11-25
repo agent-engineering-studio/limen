@@ -310,7 +310,7 @@ All of these are **free**. None is needed to start.
 | `LIMEN_GEOSERVER=1` | the [mcp-geo-server](#mcp-geo-server) stack: GeoServer, its PostGIS, web UI and geo MCP servers, for the PAI/IFFI WMS overlays (~2 GB of RAM). The numbers do not need it: the ISPRA and ISTAT vectors are loaded into Limen's own database by `limen carica-vettori` | nothing to get | no WMS overlays (PMTiles ones still work) |
 | `LIMEN_AGENTI=1` | the `limen-ops` MCP server for AI agents (OpenClaw & co.) | nothing to get | no MCP for agents |
 | `LIMEN_DEM_RASTER` | use your own terrain model (e.g. TINITALY 10 m) instead of the HR-DTM 5 m downloaded at init | a GeoTIFF on disk ([`data/README.md`](./data/README.md)) | the downloaded HR-DTM is used |
-| `FIRMS__MAP_KEY` | live NASA satellite fire detections every 45 min; a fire can start a run within hours | [firms.modaps.eosdis.nasa.gov/api/map_key](https://firms.modaps.eosdis.nasa.gov/api/map_key/) | only the yearly archive (no key needed) |
+| `FIRMS__MAP_KEY` | live NASA satellite fire detections every 45 min; a fire can start a run within hours | [firms.modaps.eosdis.nasa.gov/api/map_key](https://firms.modaps.eosdis.nasa.gov/api/map_key/): *Get MAP_KEY*, type your e-mail, the key (32 lowercase letters and digits) arrives by e-mail; check it with `uv run firms status Italy` (that command reads `FIRMS_MAP_KEY`, one underscore) | only the yearly archive (no key needed) |
 | `COPERNICUS__EWDS_KEY` | river discharge forecast and each river's *ordinary high flow* from Copernicus GloFAS | ECMWF account on [ewds.climate.copernicus.eu](https://ewds.climate.copernicus.eu/how-to-api); accept the CEMS-Floods licence once | GloFAS via the public Open-Meteo API |
 | `EGMS__SERVICE_KEY` (or `__SERVICE_KEY_FILE`) | ground-motion velocities from Sentinel-1 (EGMS), feeding the ML features | [land.copernicus.eu](https://land.copernicus.eu) → profile → *API Tokens* (the JSON is shown once) | no ground-motion features |
 | `OPENMETEO__FORECAST_URL` / `__ARCHIVE_URL` | your own Open-Meteo server (`make meteo-up`); the public API's 10,000 calls/day are not enough for all of Italy | self-hosted, compose profile `meteo` | public API (fine for one region) |
@@ -533,6 +533,15 @@ API** (with a free `MAP_KEY`), and classifies detections, so that a
 - **Live trigger** (`FIRMS__MAP_KEY`): every 45 min, new hotspots in a
   region start a scoring run at once, and the post-fire landslide term
   switches on within hours instead of waiting for the burnt-area map.
+- **How far to trust it** (0.6): `seen(area_ha)` says how often FIRMS
+  sees a fire of a given size, measured on 10,290 EFFIS burnt areas of
+  Italy (2022-2025: 20 % under 30 ha, 87 % at 300-1,000 ha), so an empty
+  answer is read as *not measured*, not as *no fire*; `missing_days()`
+  lists the days a satellite has no data at all (VIIRS S-NPP: 27 July-
+  10 August 2022). `trust(lat, lon)` scores whether a detection can be
+  read as a vegetation fire from the static mask and the land cover: the
+  init downloads ESA WorldCover over Italy for it (`limen worldcover-sync`,
+  ~1.3 GB once, in `make static-data`).
 
 Code: [`integrations/firms/`](./src/limen/integrations/firms/).
 

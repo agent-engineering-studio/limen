@@ -339,6 +339,11 @@ if [ "$SCARICA" = 1 ]; then
   # Riscrive fire_events e fire_density; un archivio non cambiato salta le
   # scritture (impronta in dataset_versions).
   limen ingest-fire-history || echo "  (archivio FIRMS non completato: si prosegue)"
+  # La copertura del suolo ESA WorldCover (#714): ~1,3 GB di tile intere
+  # sull'Italia, una volta sola, per firms_client.trust (una rilevazione FIRMS
+  # su bosco, campi, prato, costruito o acqua). Tile presenti: non si
+  # riscaricano (si chiedono solo le due di mare, 404).
+  limen worldcover-sync || echo "  (qualche tile WorldCover non e' arrivata: il prossimo giro la riprova)"
   # I catasti regionali (#498): gli incendi piccoli che EFFIS non censisce,
   # solo per il backtest. Pochi MB; un ente giu' non ferma gli altri.
   limen catasti-incendi || echo "  (un catasto regionale non ha risposto: si prosegue)"

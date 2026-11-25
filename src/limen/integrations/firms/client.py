@@ -146,10 +146,9 @@ class FirmsHttpClient:
         day_range: int,
         on_date: date | None,
     ) -> str:
-        url = area_url(self._map_key, source, bbox, days=day_range, on_date=on_date)
-        if not url.startswith(AREA_API_BASE):
-            raise ValueError(f"firms-client built an unexpected area URL: {url}")
-        return self._base_url + url[len(AREA_API_BASE) :]
+        return area_url(
+            self._map_key, source, bbox, days=day_range, on_date=on_date, base=self._base_url
+        )
 
     async def fetch_hotspots(
         self,
