@@ -166,7 +166,7 @@ async def _close_http():
 async def test_a_downloaded_year_is_cached_and_then_read_from_disk(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("LIMEN_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
     url = firms.archive_url(firms.MODIS, 2021, "Italy")
     route = respx.get(url).mock(return_value=httpx.Response(200, text=_CSV))
 
@@ -177,7 +177,7 @@ async def test_a_downloaded_year_is_cached_and_then_read_from_disk(
     assert len(first) == len(second) == 1
     assert first[0].source == "MODIS_SP"
     assert route.call_count == 1
-    assert (tmp_path / "fires" / "firms" / "modis_2021_Italy.csv").read_text() == _CSV
+    assert (tmp_path / "firms-client" / "modis_2021_Italy.csv").read_text() == _CSV
 
 
 @respx.mock
@@ -185,20 +185,20 @@ async def test_an_unpublished_year_answering_200_is_not_parsed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """211 byte di JSON con esito 200: niente cache, niente righe fantasma."""
-    monkeypatch.setenv("LIMEN_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
     respx.get(firms.archive_url(firms.MODIS, 2030, "Italy")).mock(
         return_value=httpx.Response(200, json={"error": "not available"})
     )
     respx.get(firms.archive_url(firms.MODIS, 2031, "Italy")).mock(return_value=httpx.Response(404))
     assert await archive.fetch_archive_year(product=_MODIS, year=2030) == []
     assert await archive.fetch_archive_year(product=_MODIS, year=2031) == []
-    assert not (tmp_path / "fires").exists()
+    assert not (tmp_path / "firms-client").exists()
 
 
 async def test_an_unreachable_archive_degrades_to_an_empty_year(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("LIMEN_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
 
     async def _down(*_a: Any, **_k: Any) -> Any:
         raise httpx.ConnectError("nasa giù")
@@ -211,7 +211,7 @@ async def test_an_unreachable_archive_degrades_to_an_empty_year(
 async def test_use_cache_false_downloads_again(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("LIMEN_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
     route = respx.get(firms.archive_url(firms.MODIS, 2021, "Italy")).mock(
         return_value=httpx.Response(200, text=_CSV)
     )

@@ -23,7 +23,7 @@ def radice_dati() -> Path:
 
 
 def cartella_dataset() -> Path:
-    """Cataloghi e archivi scaricati (e-ITALICA, FraneItalia, FIRMS, WorldCover).
+    """Cataloghi e archivi scaricati (e-ITALICA, FraneItalia).
 
     ``$DATA_ROOT/datasets``. ``LIMEN_DATA_DIR`` resta letta per un rilascio:
     era una seconda radice, ``./data`` per default, e sull'host metteva questi

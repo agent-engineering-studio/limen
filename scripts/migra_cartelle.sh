@@ -31,3 +31,5 @@ sposta() {  # sposta VECCHIA NUOVA
 sposta egms egms-client
 sposta radar/it_dpc_sri/italian-radar-dpc-sri.zarr dpc-radar/it_dpc_sri
 sposta datasets/idrogeo ispra-idrogeo
+sposta datasets/fires/firms firms-client
+sposta datasets/landcover/worldcover firms-client/worldcover

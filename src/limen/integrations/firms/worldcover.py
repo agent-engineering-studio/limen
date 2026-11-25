@@ -9,7 +9,7 @@ le tile intere di 3 gradi per lato che coprono il riquadro di FIRMS
 (``FIRMS__BBOX``): sul riquadro di default 25, di cui 23 esistono, 1,3 GB una
 volta sola. Una tile di solo mare non esiste (404) e si salta.
 
-Le tile restano col loro nome, sotto ``$DATA_ROOT/datasets/landcover/worldcover``
+Le tile restano col loro nome, sotto ``$DATA_ROOT/firms-client/worldcover``
 come nel bucket. Chi le legge passa **sempre** da :func:`worldcover_locale`, e
 un ``None`` è «non misurato»: mai ``firms_client.WorldCover.synced()`` né il
 default della libreria, che senza tile locali leggerebbero il bucket via GDAL,
@@ -35,17 +35,17 @@ from firms_client.init import worldcover_path
 from firms_client.landcover import WORLDCOVER_DIR
 from tenacity import RetryError
 
-from limen.config.percorsi import cartella_dataset
 from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.integrations._http import SharedHttpClient, call_with_retry
+from limen.integrations.firms.archive import cartella_cache
 
 log = get_logger(__name__)
 
 
 def cartella_worldcover() -> Path:
-    """Dove stanno le tile: accanto agli archivi FIRMS, sotto ``$DATA_ROOT/datasets``."""
-    return cartella_dataset() / "landcover" / "worldcover"
+    """Dove stanno le tile: ``$DATA_ROOT/firms-client/worldcover``, accanto agli archivi FIRMS."""
+    return cartella_cache() / WORLDCOVER_DIR
 
 
 @dataclass(slots=True)

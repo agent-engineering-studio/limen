@@ -80,7 +80,7 @@ async def _no_network(**_: object) -> None:
 async def test_built_from_the_cached_archives_then_read_back(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("LIMEN_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
     years = _cache_every_year(tmp_path)
 
     mask = await load_static_mask(today=_TODAY)
@@ -99,7 +99,7 @@ async def test_built_from_the_cached_archives_then_read_back(
 async def test_a_missing_middle_year_is_used_but_not_saved(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("LIMEN_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
     years = _cache_every_year(tmp_path, skip={2018})
     real = archive.archive_text
 
@@ -119,6 +119,6 @@ async def test_a_missing_middle_year_is_used_but_not_saved(
 async def test_no_archive_at_all_degrades_to_none(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("LIMEN_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
     monkeypatch.setattr(static_mask, "archive_text", _no_network)
     assert await load_static_mask(today=_TODAY) is None

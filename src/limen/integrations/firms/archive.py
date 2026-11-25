@@ -42,7 +42,7 @@ import firms_client as firms
 import httpx
 from tenacity import RetryError
 
-from limen.config.percorsi import cartella_dataset
+from limen.config.percorsi import radice_dati
 from limen.core.logging import get_logger
 from limen.data.repos.fire_repo import FireHotspot
 from limen.integrations._http import SharedHttpClient, fetch_with_retry
@@ -87,8 +87,13 @@ DEFAULT_COUNTRY = "Italy"
 
 
 def cartella_cache() -> Path:
-    """La cartella della cache. Layout theme-first: `data/fires/firms/`."""
-    return cartella_dataset() / "fires" / "firms"
+    """La cartella di firms-client sotto la radice comune: ``$DATA_ROOT/firms-client``.
+
+    È quella di ``firms init`` (``firms_client.default_directory``): archivi,
+    maschera delle fonti fisse e WorldCover in un posto solo, letti da Limen e
+    dalla libreria.
+    """
+    return radice_dati() / "firms-client"
 
 
 def _cache_path(*, product: ArchiveProduct, year: int, country: str) -> Path:

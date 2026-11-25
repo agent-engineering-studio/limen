@@ -22,7 +22,6 @@ from pathlib import Path
 
 import firms_client as firms
 
-from limen.config.percorsi import cartella_dataset
 from limen.core.logging import get_logger
 from limen.integrations.firms.archive import (
     ARCHIVE_PRODUCTS,
@@ -30,6 +29,7 @@ from limen.integrations.firms.archive import (
     ArchiveProduct,
     archive_text,
     archive_years,
+    cartella_cache,
 )
 
 log = get_logger(__name__)
@@ -40,9 +40,8 @@ _PRODUCT: ArchiveProduct = next(p for p in ARCHIVE_PRODUCTS if p.product == firm
 
 
 def _mask_path(*, country: str, first: int, last: int) -> Path:
-    root = cartella_dataset()
     name = f"static-mask_{_PRODUCT.slug}_{country}_{first}-{last}.json"
-    return root / "fires" / "firms" / name
+    return cartella_cache() / name
 
 
 async def load_static_mask(
