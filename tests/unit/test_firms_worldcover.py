@@ -65,6 +65,6 @@ def test_the_folder_must_be_named_as_the_library_reads_it(tmp_path: Path) -> Non
         _run(httpx.MockTransport(lambda r: httpx.Response(200)), tmp_path / "tiles")
 
 
-def test_the_folder_follows_limen_data_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv("LIMEN_DATA_DIR", str(tmp_path))
-    assert wc.cartella_worldcover() == tmp_path / "landcover" / "worldcover"
+def test_the_folder_is_firms_client_s(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    assert wc.cartella_worldcover() == tmp_path / "firms-client" / "worldcover"
