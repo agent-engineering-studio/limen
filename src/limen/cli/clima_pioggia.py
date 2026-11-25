@@ -23,9 +23,16 @@ leggeva contro un riferimento nazionale fisso.
 Non è ``limen rain-climatology``: quella scrive ``pioggia_climatologia``
 (migrazione 065), che l'alluvione legge in produzione, con gli ultimi dieci
 anni interi — dentro cui cadono le finestre da verificare — e una riga sola
-per nodo. Il risultato qui è un file JSON (``LIMEN_CLIMA_PIOGGIA``), perché
-per ora lo legge solo il backtest. Rieseguire salta le AOI già calcolate con
-gli stessi parametri.
+per nodo.
+
+Il risultato va in un file JSON (``LIMEN_CLIMA_PIOGGIA``), che legge il
+backtest, e in ``cell_static_factors.pioggia_riferimento_mm`` (migrazione
+100), che legge lo sweep: ogni cella prende il riferimento del nodo più
+vicino della sua AOI, come nel backtest (#676). Il database si scrive solo se
+la finestra è quella del blocco ``cumulata`` di ``landslide.yaml``.
+Rieseguire salta il download delle AOI già nel file con gli stessi
+parametri, e riscrive solo le celle che cambiano. Il modello è sempre ERA5,
+quello della misura, qualunque sia ``OPENMETEO__MODELS``.
 
 Env knobs:
 
@@ -50,6 +57,10 @@ from limen.core.logging import get_logger
 from limen.core.scoring.regional_thresholds import load_regional_thresholds
 from limen.data.db import lifespan_pool
 from limen.data.repos.aoi_repo import get_aoi, list_aoi_ids
+from limen.data.repos.cell_static_factors_repo import (
+    centroidi_aoi,
+    scrivi_pioggia_riferimento,
+)
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.openmeteo.client import OpenMeteoHttpClient
 from limen.integrations.openmeteo.grid import build_rain_nodes
@@ -60,6 +71,8 @@ log = get_logger(__name__)
 _PASSO_NODI = 0.1
 _CAMPIONE_ORE = 6
 _NODI_PER_GRUPPO = 50
+#: Il riferimento della misura #676; un'istanza Open-Meteo propria serve ERA5.
+_MODELLO = "era5"
 
 CLIMA_ENV = "LIMEN_CLIMA_PIOGGIA"
 CLIMA_DEFAULT = "data/clima_pioggia.json"
@@ -125,6 +138,28 @@ def riferimenti_aoi(
     return [(float(lon), float(lat), mm) for lon, lat, mm in clima["aoi"][aoi_id]]
 
 
+def riferimento_per_cella(
+    celle: list[tuple[str, float, float]],
+    riferimenti: list[tuple[float, float, float | None]],
+) -> list[tuple[str, float | None]]:
+    """Ogni cella col riferimento del nodo più vicino (a parità, il primo),
+    come ``con_riferimento`` del backtest."""
+    if not celle or not riferimenti:
+        return []
+    nodi = np.array([(lon, lat) for lon, lat, _ in riferimenti])
+    out: list[tuple[str, float | None]] = []
+    # A blocchi: la Sicilia intera contro tutti i suoi nodi sono ~10^7 distanze.
+    for k in range(0, len(celle), 5000):
+        blocco = celle[k : k + 5000]
+        punti = np.array([(lon, lat) for _, lon, lat in blocco])
+        d = ((punti[:, None, :] - nodi[None, :, :]) ** 2).sum(axis=2)
+        out.extend(
+            (cid, riferimenti[int(i)][2])
+            for (cid, _, _), i in zip(blocco, d.argmin(axis=1), strict=True)
+        )
+    return out
+
+
 def riferimenti_api(
     clima: dict[str, Any], aoi_id: str, *, giorni: int
 ) -> list[tuple[float, float, Mensile]] | None:
@@ -171,6 +206,7 @@ async def clima_aoi(
                 # Un anno orario per nodo pesa ~9.000 valori: a 100 nodi per
                 # richiesta la risposta supera le decine di MB.
                 batch_size=25,
+                model=_MODELLO,
             )
             serie_anno = grid[: len(gruppo)]
             if len(serie_anno) < len(gruppo) or not all(serie_anno):
@@ -188,6 +224,21 @@ async def clima_aoi(
         )
         log.info("clima_pioggia.gruppo", aoi_id=aoi_id, fatti=len(out), nodi=len(nodes))
     return out, api
+
+
+async def _scrivi_db(aoi_id: str, clima: dict[str, Any], *, ore: int) -> None:
+    riferimenti = riferimenti_aoi(clima, aoi_id, ore=ore)
+    if riferimenti is None:
+        return
+    righe = riferimento_per_cella(await centroidi_aoi(aoi_id), riferimenti)
+    scritte = await scrivi_pioggia_riferimento(righe)
+    log.info(
+        "clima_pioggia.db",
+        aoi_id=aoi_id,
+        celle=len(righe),
+        senza_riferimento=sum(mm is None for _, mm in righe),
+        aggiornate=scritte,
+    )
 
 
 async def run() -> int:
@@ -210,6 +261,13 @@ async def run() -> int:
         # Parametri diversi: i riferimenti vecchi non si mescolano ai nuovi.
         clima = {**parametri, "aoi": {}, "api": {}}
 
+    cumulata = load_regional_thresholds().cumulata
+    nel_db = True
+    if cumulata is not None and cumulata.window_hours != ore:
+        # Un riferimento a 48 h sotto una cumulata a 24 h la farebbe sembrare piccola.
+        log.warning("clima_pioggia.db_saltato", ore=ore, yaml_ore=cumulata.window_hours)
+        nel_db = False
+
     client = OpenMeteoHttpClient()
     esito = 0
     async with lifespan_pool():
@@ -218,6 +276,8 @@ async def run() -> int:
         for aoi_id in aoi_ids:
             if aoi_id in clima["aoi"] and aoi_id in clima["api"]:
                 log.info("clima_pioggia.skip", aoi_id=aoi_id)
+                if nel_db:
+                    await _scrivi_db(aoi_id, clima, ore=ore)
                 continue
             aoi = await get_aoi(aoi_id)
             if aoi is None:
@@ -250,6 +310,8 @@ async def run() -> int:
                 mediana_mm=round(float(np.median(noti)), 1) if noti else None,
                 file=str(path),
             )
+            if nel_db:
+                await _scrivi_db(aoi_id, clima, ore=ore)
     await SharedHttpClient.aclose()
     return esito
 
@@ -261,5 +323,6 @@ __all__ = [
     "quantile_cumulata",
     "riferimenti_aoi",
     "riferimenti_api",
+    "riferimento_per_cella",
     "run",
 ]

@@ -355,6 +355,16 @@ def test_flood_forecast_absent_keeps_h_static() -> None:
 _CON_RIFERIMENTO = StaticFactors(cell_id="c-test", pioggia_riferimento_mm=40.0)
 
 
+def _caine_solo(tmp_path: Path) -> MultiFactorScoringEngine:
+    """Il motore fino alla v1: innesco Caine, nessun cancello."""
+    cfg = yaml.safe_load(DEFAULT_THRESHOLDS_PATH.read_text(encoding="utf-8"))
+    cfg.pop("cumulata", None)
+    cfg.pop("cancello_innesco", None)
+    out = tmp_path / "caine.yaml"
+    out.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    return MultiFactorScoringEngine(load_regional_thresholds(out))
+
+
 def _con_cumulata(tmp_path: Path, modo: str) -> MultiFactorScoringEngine:
     cfg = yaml.safe_load(DEFAULT_THRESHOLDS_PATH.read_text(encoding="utf-8"))
     cfg["cumulata"] = {"window_hours": 24, "saturazione": 1.0, "modo": modo}
@@ -363,8 +373,8 @@ def _con_cumulata(tmp_path: Path, modo: str) -> MultiFactorScoringEngine:
     return MultiFactorScoringEngine(load_regional_thresholds(out))
 
 
-def test_senza_blocco_cumulata_il_riferimento_non_conta() -> None:
-    engine = MultiFactorScoringEngine()
+def test_senza_blocco_cumulata_il_riferimento_non_conta(tmp_path: Path) -> None:
+    engine = _caine_solo(tmp_path)
     pioggia = [2.0] * 30
     con = engine.score(_bundle(static=_CON_RIFERIMENTO, rainfall_hourly=pioggia, soil=0.4))
     senza = engine.score(_bundle(rainfall_hourly=pioggia, soil=0.4))
@@ -395,7 +405,7 @@ def test_sostituisce_satura_al_riferimento(tmp_path: Path) -> None:
 
 def test_massimo_non_scende_sotto_caine(tmp_path: Path) -> None:
     pioggia = [0.0] * 20 + [8.0] * 4
-    caine = MultiFactorScoringEngine().score(
+    caine = _caine_solo(tmp_path).score(
         _bundle(static=_CON_RIFERIMENTO, rainfall_hourly=pioggia, soil=0.4)
     )
     massimo = _con_cumulata(tmp_path, "massimo").score(
@@ -425,6 +435,8 @@ def _con_cancello(
 ) -> MultiFactorScoringEngine:
     cfg = yaml.safe_load(DEFAULT_THRESHOLDS_PATH.read_text(encoding="utf-8"))
     cfg["cancello_innesco"] = {"soglia": soglia, "tetto": tetto}
+    # Il cancello su Caine: la meccanica è la stessa con la cumulata.
+    cfg.pop("cumulata", None)
     out = tmp_path / "cancello.yaml"
     out.write_text(yaml.safe_dump(cfg), encoding="utf-8")
     return MultiFactorScoringEngine(load_regional_thresholds(out))
@@ -439,8 +451,33 @@ _PREDISPOSTA = StaticFactors(
 )
 
 
-def test_senza_cancello_il_punteggio_e_quello_di_prima() -> None:
-    assert load_regional_thresholds().cancello_innesco is None
+def test_in_produzione_innesco_relativo_e_cancello() -> None:
+    t = load_regional_thresholds()
+    assert t.cumulata is not None and t.cumulata.modo == "sostituisce"
+    assert t.cancello_innesco is not None
+    assert t.model_version == "limen-deterministic-v1.1"
+
+
+def test_il_cancello_si_chiude_sulla_cumulata_sotto_soglia() -> None:
+    t = load_regional_thresholds()
+    assert t.cumulata is not None and t.cancello_innesco is not None
+    rif = 100.0
+    con = _PREDISPOSTA.model_copy(update={"pioggia_riferimento_mm": rif})
+    asciutta = _bundle(static=con, api_30_mm=400.0, soil=0.9)
+    assert score(asciutta).score <= t.cancello_innesco.tetto
+    # Nelle ultime 24 ore più della soglia, in quota del riferimento: aperto.
+    mm = (t.cancello_innesco.soglia + 0.1) * rif * t.cumulata.saturazione
+    bagnata = _bundle(static=con, rainfall_hourly=[mm / 6] * 6, api_30_mm=400.0, soil=0.9)
+    assert score(bagnata).breakdown.meteo_terms.cumulata_norm > t.cancello_innesco.soglia
+    assert score(bagnata).score > t.cancello_innesco.tetto
+
+
+def test_una_cella_senza_riferimento_non_e_chiusa_dal_cancello(tmp_path: Path) -> None:
+    # Il riferimento manca (nodo in mare, clima-pioggia non ancora girato): la
+    # cella torna su Caine e il cancello, misurato sulla cumulata, resta aperto.
+    b = _bundle(static=_PREDISPOSTA, api_30_mm=400.0, soil=0.9)
+    assert score(b).score == pytest.approx(_caine_solo(tmp_path).score(b).score)
+    assert score(b).score > load_regional_thresholds().cancello_innesco.tetto  # type: ignore[union-attr]
 
 
 def test_il_cancello_tiene_sotto_moderato_un_versante_bagnato_senza_innesco(

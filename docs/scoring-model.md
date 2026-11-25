@@ -180,9 +180,20 @@ I sotto-pesi di default sono `(0.45, 0.30, 0.25)`.
   `saturazione` volte la pioggia di riferimento del nodo
   (`pioggia_riferimento_mm`, da `limen clima-pioggia`). Con `modo:
   sostituisce` prende il posto di Caine, con `massimo` vale il più alto dei
-  due; una cella senza riferimento resta su Caine. **Oggi il blocco non è in
-  `landslide.yaml`**: il motore di produzione usa solo Caine, e la cumulata
-  si prova nel backtest.
+  due; una cella senza riferimento resta su Caine. **Dalla
+  `limen-deterministic-v1.1` è l'innesco di produzione** (`sostituisce`, 24 h,
+  q999 del nodo ERA5 1995-2007, scritto in
+  `cell_static_factors.pioggia_riferimento_mm`, #676): con il 10 % dei
+  comuni-giorno in allerta coglie il 75 % dei comuni con una frana, Caine il
+  51 % (dodici finestre della #122).
+
+* **Cancello d'innesco (`cancello_innesco`, #656)** — senza innesco sopra
+  `soglia`, il punteggio non supera `tetto` (0,34, sotto Moderato): S e
+  umidità antecedente da sole non bastano più a dare Moderato, che prima
+  copriva il 77 % dei comuni-giorno e col cancello circa il 10 %. Lo aprono
+  anche il sisma (E > 0) e un sensore cinematico che misura. Una cella senza
+  riferimento della cumulata non è chiusa: è ricaduta su Caine, e il
+  cancello è misurato sulla cumulata.
 
 ### E — componente sismica
 

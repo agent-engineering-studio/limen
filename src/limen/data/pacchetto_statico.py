@@ -146,6 +146,7 @@ ESCLUSE: dict[str, str] = {
     "dist_faults_m": "carta geolitologica MASE: licenza ambigua, si ricalcola in locale",
     "s_static": "mescola licenze diverse: la ricalcola limen calibrate",
     "exposure_norm": "mescola licenze diverse: la ricalcola limen calibrate",
+    "pioggia_riferimento_mm": "dall'archivio ERA5 di Open-Meteo: la ricalcola limen clima-pioggia",
     "extras": "metadati locali",
     "updated_at": "si scrive all'import",
 }
