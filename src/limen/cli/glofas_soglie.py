@@ -1,7 +1,7 @@
 """``limen glofas-soglie`` — le soglie GloFAS dei periodi di ritorno per nodo (#522).
 
 Scarica una volta i tre file ufficiali (piena da 2, 5 e 20 anni, ~500 MB in
-tutto, pubblici) in ``$LIMEN_DATA_ROOT/archivio/glofas-soglie`` e scrive in
+tutto, pubblici) in ``$DATA_ROOT/archivio/glofas-soglie`` e scrive in
 ``glofas_soglie`` la soglia della cella GloFAS di ogni nodo con un fiume (quelli
 con una portata ordinaria in ``glofas_riferimento``). Rilanciabile: un file già
 scaricato non si riscarica, e si leggono solo i nodi che non le hanno ancora:

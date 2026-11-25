@@ -22,7 +22,7 @@ servono soglie proprie.
 
 Env: ``LIMEN_IDROMETRI_INIZIO`` / ``_FINE`` (date ISO, default maggio 2023),
 ``LIMEN_IDROMETRI_RAGGIO_KM``. I mesi Arpae restano su disco in
-``$LIMEN_DATA_ROOT/archivio/arpae``. Il report va in ``LIMEN_REPORTS_DIR``.
+``$DATA_ROOT/archivio/arpae``. Il report va in ``LIMEN_REPORTS_DIR``.
 """
 
 from __future__ import annotations

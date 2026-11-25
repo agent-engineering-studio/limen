@@ -1,7 +1,7 @@
 """`limen worldcover-sync` — ESA WorldCover sull'Italia, per ``firms_client.trust`` (#714).
 
 Scarica le tile intere che coprono ``FIRMS__BBOX`` (~1,3 GB la prima volta) in
-``<LIMEN_DATA_DIR>/landcover/worldcover``; un giro ripetuto non riscarica
+``$DATA_ROOT/datasets/landcover/worldcover``; un giro ripetuto non riscarica
 niente (chiede solo le tile di mare, che rispondono 404).
 Esce con 1 se una tile non è arrivata: le altre restano, il prossimo giro
 riprova solo quelle.

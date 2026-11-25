@@ -322,7 +322,7 @@ All of these are **free**. None is needed to start.
 
 | Variable | Default | What it does |
 |---|---|---|
-| `LIMEN_DATA_ROOT` | the repo's `data/` | **One folder for all the data** of a deployment: datasets, reports, models, GeoServer data, OSM, radar. Moving Limen = copying this folder and changing this line. Must be absolute when set. |
+| `DATA_ROOT` | the repo's `data/` | **One folder for all the data** of a deployment: datasets, reports, models, GeoServer data, OSM, radar. Moving Limen = copying this folder and changing this line. Must be absolute when set. |
 | `DB__CONNECTION_STRING` | `postgresql://limen:limen@localhost:5432/limen` | PostgreSQL 16 + PostGIS. Add `?sslmode=require` for Neon. |
 | `OBJECT_STORE__BACKEND` | `filesystem` | `filesystem` or `s3` (any S3-compatible store: MinIO, R2, B2, via `OBJECT_STORE__ENDPOINT_URL`). |
 | `SCHEDULER__ENABLED` | `true` | Periodic jobs run in the `limen worker` process; set `false` in the API container. |
@@ -646,7 +646,7 @@ same table names GeoServer used, and `geoserver-sync`, `bootstrap-static` and
 `seed-comuni` read them from there. `make static-data` does both; by hand:
 
 ```bash
-uv run limen geodati-sync     # download the base data into $LIMEN_DATA_ROOT/geoserver
+uv run limen geodati-sync     # download the base data into $DATA_ROOT/geoserver
 uv run limen carica-vettori   # load the vectors into Limen's database (skips unchanged ones)
 make geoserver-sync           # copy IFFI, PAI and hydraulic hazard into the operational tables
 make geoserver-up             # optional: GeoServer :8081, web UI :8000, MCP :9000
@@ -827,13 +827,13 @@ the data without stopping at the browser:
 
 ```sh
 git clone https://github.com/agent-engineering-studio/limen.git && cd limen
-cp .env.example .env                   # at least LIMEN_DATA_ROOT (absolute)
+cp .env.example .env                   # at least DATA_ROOT (absolute)
 ./scripts/nuovo_host.sh --controlla    # check prerequisites only, changes nothing
 ./scripts/nuovo_host.sh --ripristina   # restore from the nightly backup (needs BACKUP__*)
 ./scripts/nuovo_host.sh --da-zero      # a fresh stack: seed, events, calibration, FWI
 ```
 
-`--controlla` checks Docker and Compose, free space under `LIMEN_DATA_ROOT`
+`--controlla` checks Docker and Compose, free space under `DATA_ROOT`
 (`NUOVO_HOST_DISCO_GB`, 50) and the **fsync latency** of the Docker disk
 (`NUOVO_HOST_FSYNC_MS_MAX`, 20 ms): on a disk at ~1 s per fsync, `initdb`
 times out. The other two modes are re-runnable and end with

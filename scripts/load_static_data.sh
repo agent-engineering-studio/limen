@@ -44,7 +44,7 @@ fi
 # Una sola radice per i dati (#302): una sorgente non impostata si cerca lì,
 # al nome che le producono `make dtm-vrt`, `make osm-data` e
 # `make imperviousness-data` e `make water-wetness-data`. Una variabile impostata vince sempre.
-RADICE="${LIMEN_DATA_ROOT:-$(pwd)/data}"
+RADICE="${DATA_ROOT:-${LIMEN_DATA_ROOT:-$(pwd)/data}}"
 # I dati di GeoServer stanno dove li monta il compose.
 GEOSERVER_DATI="${GEOSERVER_SHAPEFILE_DIR:-$RADICE/geoserver}"
 predefinito() {  # predefinito VARIABILE percorso

@@ -21,7 +21,7 @@
 #   geoserver-mcp      -> 9000   (streamable-HTTP /mcp)
 #
 # Data bootstrap: the geoserver-init one-shot loads EVERY shapefile under
-# ${GEOSERVER_SHAPEFILE_DIR} (default: ${LIMEN_DATA_ROOT}/geoserver, #302)
+# ${GEOSERVER_SHAPEFILE_DIR} (default: ${DATA_ROOT}/geoserver, #302)
 # into PostGIS and publishes each as a GeoServer layer. Idempotent.
 # Point GEOSERVER_SHAPEFILE_DIR at a subset (e.g. Puglia+Basilicata only)
 # for a faster first test.
@@ -111,7 +111,7 @@ services:
       # I raster (DTM, CORINE) sono store esterni: geoserver-init passa il
       # percorso che vede lui, `/data/...`, e GeoServer lo apre dal proprio
       # filesystem. Senza questo mount rispondeva 500 «no protocol».
-      - ${GEOSERVER_SHAPEFILE_DIR:-${LIMEN_DATA_ROOT:-../../data}/geoserver}:/data:ro
+      - ${GEOSERVER_SHAPEFILE_DIR:-${DATA_ROOT:-${LIMEN_DATA_ROOT:-../../data}}/geoserver}:/data:ro
     healthcheck:
       # -m sotto il timeout: curl si chiude da solo invece di essere ucciso
       # da Docker a metà risposta.
@@ -165,7 +165,7 @@ services:
       GEO_INIT_STYLES: ${GEO_INIT_STYLES:-true}
       GEO_STYLES_CONFIG: ${GEO_STYLES_CONFIG:-/data/styles.yml}
     volumes:
-      - ${GEOSERVER_SHAPEFILE_DIR:-${LIMEN_DATA_ROOT:-../../data}/geoserver}:/data:ro
+      - ${GEOSERVER_SHAPEFILE_DIR:-${DATA_ROOT:-${LIMEN_DATA_ROOT:-../../data}}/geoserver}:/data:ro
 
   # Chat + map web UI (FastAPI + Leaflet) — also proxies WMS same-origin.
   geoserver-webui:
@@ -216,7 +216,7 @@ services:
     ports:
       - "${LIMEN_GEOSERVER_WEBUI_BIND:-127.0.0.1}:8000:8000"
     volumes:
-      - ${GEOSERVER_SHAPEFILE_DIR:-${LIMEN_DATA_ROOT:-../../data}/geoserver}:/data:ro
+      - ${GEOSERVER_SHAPEFILE_DIR:-${DATA_ROOT:-${LIMEN_DATA_ROOT:-../../data}}/geoserver}:/data:ro
 
   # Intelligent MCP server: GeoServer agent over streamable-HTTP at :9000/mcp.
   geoserver-mcp:
@@ -282,7 +282,7 @@ services:
     ports:
       - "${LIMEN_GEOSERVER_MCP_BIND:-127.0.0.1}:9000:9000"
     volumes:
-      - ${GEOSERVER_SHAPEFILE_DIR:-${LIMEN_DATA_ROOT:-../../data}/geoserver}:/data:ro
+      - ${GEOSERVER_SHAPEFILE_DIR:-${DATA_ROOT:-${LIMEN_DATA_ROOT:-../../data}}/geoserver}:/data:ro
     healthcheck:
       test: ["CMD", "python", "-c",
              "import socket; socket.create_connection(('127.0.0.1', 9000), timeout=3)"]

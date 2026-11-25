@@ -35,7 +35,6 @@ quindi l'upsert resta idempotente e i due prodotti convivono.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -43,6 +42,7 @@ import firms_client as firms
 import httpx
 from tenacity import RetryError
 
+from limen.config.percorsi import cartella_dataset
 from limen.core.logging import get_logger
 from limen.data.repos.fire_repo import FireHotspot
 from limen.integrations._http import SharedHttpClient, fetch_with_retry
@@ -88,7 +88,7 @@ DEFAULT_COUNTRY = "Italy"
 
 def cartella_cache() -> Path:
     """La cartella della cache. Layout theme-first: `data/fires/firms/`."""
-    return Path(os.getenv("LIMEN_DATA_DIR", "./data")).expanduser() / "fires" / "firms"
+    return cartella_dataset() / "fires" / "firms"
 
 
 def _cache_path(*, product: ArchiveProduct, year: int, country: str) -> Path:

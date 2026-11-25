@@ -16,13 +16,13 @@ FIRMS lo pubblica, la ricostruisce. Degrada a ``None`` (righe NRT senza
 
 from __future__ import annotations
 
-import os
 from datetime import date
 from itertools import chain
 from pathlib import Path
 
 import firms_client as firms
 
+from limen.config.percorsi import cartella_dataset
 from limen.core.logging import get_logger
 from limen.integrations.firms.archive import (
     ARCHIVE_PRODUCTS,
@@ -40,7 +40,7 @@ _PRODUCT: ArchiveProduct = next(p for p in ARCHIVE_PRODUCTS if p.product == firm
 
 
 def _mask_path(*, country: str, first: int, last: int) -> Path:
-    root = Path(os.getenv("LIMEN_DATA_DIR", "./data")).expanduser()
+    root = cartella_dataset()
     name = f"static-mask_{_PRODUCT.slug}_{country}_{first}-{last}.json"
     return root / "fires" / "firms" / name
 

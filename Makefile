@@ -13,10 +13,10 @@ export POSTGIS_BASE
 # Una sola radice per i dati del deployment (#302): dataset, report, modelli,
 # mlruns, sorgenti statiche, sensori. Dal .env, o la cartella `data/` del repo
 # (la stessa che i compose risolvono come `../../data`). Se la imposti, assoluta.
-LIMEN_DATA_ROOT ?= $(or $(shell grep -s '^LIMEN_DATA_ROOT=' .env | cut -d= -f2-),$(CURDIR)/data)
+DATA_ROOT ?= $(or $(shell grep -s '^DATA_ROOT=' .env | cut -d= -f2-),$(shell grep -s '^LIMEN_DATA_ROOT=' .env | cut -d= -f2-),$(CURDIR)/data)
 # I dati condivisi con GeoServer (DTM, CORINE, geolitologia): dove li monta
 # il compose, cioè GEOSERVER_SHAPEFILE_DIR o la radice.
-GEOSERVER_SHAPEFILE_DIR ?= $(or $(shell grep -s '^GEOSERVER_SHAPEFILE_DIR=' .env | cut -d= -f2-),$(LIMEN_DATA_ROOT)/geoserver)
+GEOSERVER_SHAPEFILE_DIR ?= $(or $(shell grep -s '^GEOSERVER_SHAPEFILE_DIR=' .env | cut -d= -f2-),$(DATA_ROOT)/geoserver)
 
 COMPOSE_DEV  := infra/docker/docker-compose.dev.yml
 COMPOSE_DEMO := infra/docker/docker-compose.demo.yml
@@ -375,17 +375,17 @@ flood-data:
 # ImageServer aperto, quindi qui non serve nessuna credenziale.
 # Idempotente: con il file già presente non scarica niente.
 # Le sorgenti statiche che si scaricano senza account (#305), sotto
-# LIMEN_DATA_ROOT, con static-manifest.json: un file che non è più quello
+# DATA_ROOT, con static-manifest.json: un file che non è più quello
 # scaricato ferma il comando. Con uv sull'host gira lì, altrimenti nel worker
 # con la radice montata allo stesso percorso (come make static-data).
 fetch-static:
 	@if [ "$${LIMEN_STATICI:-}" != docker ] && command -v $(UV) >/dev/null 2>&1; then \
 	  $(UV) run limen fetch-static; \
 	else \
-	  r=$$(realpath -m "$(LIMEN_DATA_ROOT)"); mkdir -p "$$r"; \
+	  r=$$(realpath -m "$(DATA_ROOT)"); mkdir -p "$$r"; \
 	  u=$${LIMEN_OSM_PBF_URL:-$$(grep -s '^LIMEN_OSM_PBF_URL=' .env | cut -d= -f2-)}; \
 	  env -i PATH="$$PATH" HOME="$$HOME" docker compose $(COMPOSE_ALL) run --rm --no-deps -T \
-	    --user "$$(id -u):$$(id -g)" -v "$$r:$$r" -e LIMEN_DATA_ROOT="$$r" \
+	    --user "$$(id -u):$$(id -g)" -v "$$r:$$r" -e DATA_ROOT="$$r" \
 	    $${u:+-e LIMEN_OSM_PBF_URL="$$u"} worker limen fetch-static; \
 	fi
 
@@ -393,14 +393,14 @@ imperviousness-data:
 	$(UV) run limen imperviousness-fetch
 	@echo
 	@echo "  Ora punta la variabile al file e riempi le celle:"
-	@echo "    LIMEN_IMPERVIOUSNESS_RASTER=$(LIMEN_DATA_ROOT)/sealing/clms_imd_2018/imd_2018_100m.tif"
+	@echo "    LIMEN_IMPERVIOUSNESS_RASTER=$(DATA_ROOT)/sealing/clms_imd_2018/imd_2018_100m.tif"
 	@echo "    make bootstrap-static"
 
 water-wetness-data:
 	$(UV) run limen water-wetness-fetch
 	@echo
 	@echo "  Ora punta la variabile al file e riempi le celle:"
-	@echo "    LIMEN_WATER_WETNESS_RASTER=$(LIMEN_DATA_ROOT)/water_wetness/hrl_ww_2018/ww_2018_50m.tif"
+	@echo "    LIMEN_WATER_WETNESS_RASTER=$(DATA_ROOT)/water_wetness/hrl_ww_2018/ww_2018_50m.tif"
 	@echo "    make bootstrap-static"
 
 # Storia del fuoco: archivio FIRMS per paese, 2000-2024. Nessuna credenziale
@@ -628,13 +628,13 @@ dtm-vrt:                       # build a virtual mosaic over the 5 m DTM tiles (
 
 # OSM road/rail network for the alert-exposure factor (© OpenStreetMap, ODbL).
 # Country-agnostic: override OSM_PBF_URL with another Geofabrik extract.
-OSM_DIR     ?= $(LIMEN_DATA_ROOT)/osm
+OSM_DIR     ?= $(DATA_ROOT)/osm
 OSM_PBF_URL ?= https://download.geofabrik.de/europe/italy-latest.osm.pbf
 OSM_PBF      = $(OSM_DIR)/$(notdir $(OSM_PBF_URL))
 
 radar-data:                    # IT-DPC-SRI 2010-2025 (~51 GB) dall'object store ECMWF, riprendibile; solo per il backtest
-	$(UV) run python scripts/mirror_it_dpc_sri.py $(LIMEN_DATA_ROOT)/radar/it_dpc_sri/italian-radar-dpc-sri.zarr 32 179087
-	$(UV) run python scripts/mirror_it_dpc_sri.py $(LIMEN_DATA_ROOT)/radar/it_dpc_sri/italian-radar-dpc-sri.zarr 32 0 179087
+	$(UV) run python scripts/mirror_it_dpc_sri.py $(DATA_ROOT)/radar/it_dpc_sri/italian-radar-dpc-sri.zarr 32 179087
+	$(UV) run python scripts/mirror_it_dpc_sri.py $(DATA_ROOT)/radar/it_dpc_sri/italian-radar-dpc-sri.zarr 32 0 179087
 
 osm-data:                      # download the Geofabrik PBF + extract road/rail GPKGs (needs host GDAL)
 	mkdir -p $(OSM_DIR)

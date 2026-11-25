@@ -41,6 +41,7 @@ from zoneinfo import ZoneInfo
 
 from shapely.geometry import Point
 
+from limen.config.percorsi import cartella_dataset
 from limen.core.logging import get_logger
 from limen.data.repos import dataset_versions_repo
 from limen.data.repos.landslide_events_repo import (
@@ -99,7 +100,7 @@ async def risolvi_file() -> Path | None:
             log.error("franeitalia.file_mancante", path=str(path))
             return None
         return path
-    dest = Path(os.getenv("LIMEN_DATA_DIR", "./data")).expanduser() / FILE
+    dest = cartella_dataset() / FILE
     if dest.is_file() and dest.stat().st_size > 0:
         return dest
     log.info("franeitalia.download", url=URL, dest=str(dest))

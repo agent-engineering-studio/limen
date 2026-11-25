@@ -8,11 +8,11 @@
 #   ./scripts/nuovo_host.sh --solo-stack   stack e seed; i dati dal browser (lo usa installa.sh)
 #
 # Prima: Docker, il repository, e un .env (cp .env.example .env, poi almeno
-# LIMEN_DATA_ROOT; per --ripristina anche le BACKUP__*). I comandi `limen`
+# DATA_ROOT; per --ripristina anche le BACKUP__*). I comandi `limen`
 # girano nel container del worker: sull'host serve solo Docker.
 #
 # Variabili:
-#   NUOVO_HOST_DISCO_GB      spazio libero minimo sotto LIMEN_DATA_ROOT (50)
+#   NUOVO_HOST_DISCO_GB      spazio libero minimo sotto DATA_ROOT (50)
 #   NUOVO_HOST_FSYNC_MS_MAX  latenza massima di una scrittura sincrona (20)
 #   NUOVO_HOST_URL_PUBBLICO  l'URL pubblico (PUBBLICO__URL) senza chiederlo
 set -euo pipefail
@@ -40,10 +40,10 @@ ok "Docker $(docker version --format '{{.Server.Version}}')"
 docker compose version >/dev/null 2>&1 || stop "manca il plugin compose v2 (docker compose)"
 ok "Compose $(docker compose version --short)"
 
-[ -f .env ] || stop "manca .env: cp .env.example .env, poi almeno LIMEN_DATA_ROOT"
+[ -f .env ] || stop "manca .env: cp .env.example .env, poi almeno DATA_ROOT"
 # Le variabili che servono qui si chiedono a compose, già risolte come lui le
 # risolverà per i bind mount: virgolette, riferimenti (${HOME}/limen,
-# ${LIMEN_DATA_ROOT}/datasets) e precedenza dell'ambiente sul file. Un lettore
+# ${DATA_ROOT}/datasets) e precedenza dell'ambiente sul file. Un lettore
 # a mano sbagliava un caso dopo l'altro (Codex, #314), e con `. ./.env` la
 # shell rovinava i valori JSON. Niente si esporta: compose e `limen` il .env
 # lo leggono da soli.
@@ -54,14 +54,14 @@ dotenv() {  # dotenv NOME: il valore che compose userà
   # grep a vuoto fermerebbe lo script (Codex, #335).
   printf '%s' "$AMBIENTE" | { grep -E "^$1=" || true; } | tail -n 1 | cut -d= -f2-
 }
-for nome in LIMEN_DATA_ROOT LIMEN_DATASETS_DIR LIMEN_REPORTS_HOST_DIR LIMEN_MLRUNS_DIR \
+for nome in DATA_ROOT LIMEN_DATA_ROOT LIMEN_DATASETS_DIR LIMEN_REPORTS_HOST_DIR LIMEN_MLRUNS_DIR \
   LIMEN_EGMS_DIR LIMEN_SENSORI_DIR BACKUP__BUCKET BACKUP__ROOT SCHEDULER__NIGHTLY_HOUR_UTC POSTGIS_BASE; do
   printf -v "$nome" '%s' "$(dotenv "$nome")"
 done
-RADICE="${LIMEN_DATA_ROOT:-$(pwd)/data}"
+RADICE="${DATA_ROOT:-${LIMEN_DATA_ROOT:-$(pwd)/data}}"
 case "$RADICE" in
-  /*) ok "LIMEN_DATA_ROOT=$RADICE" ;;
-  *) stop "LIMEN_DATA_ROOT deve essere assoluta (compose e Makefile la risolvono da cartelle diverse)" ;;
+  /*) ok "DATA_ROOT=$RADICE" ;;
+  *) stop "DATA_ROOT deve essere assoluta (compose e Makefile la risolvono da cartelle diverse)" ;;
 esac
 # Un segreto nel .env: se la riga manca o è vuota lo genera, se ha un valore
 # lo lascia com'è — anche non esadecimale (virgolette, base64 scelto a mano):

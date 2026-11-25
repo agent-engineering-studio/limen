@@ -335,7 +335,7 @@ def messaggio(exc: BaseException, fonte: str) -> str:
             "dall'utente del worker."
         )
     if isinstance(exc, OSError) and exc.errno == errno.ENOSPC:
-        return "Spazio su disco esaurito: libera spazio sotto LIMEN_DATA_ROOT e riprova."
+        return "Spazio su disco esaurito: libera spazio sotto DATA_ROOT e riprova."
     if isinstance(exc, RuntimeError):
         # I downloader di Limen scrivono già i loro errori in italiano.
         return str(exc)[:300]

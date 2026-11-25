@@ -312,7 +312,7 @@ services:
       # l'API all'avvio se manca (anche su un cluster ripristinato, #327).
       # sqlite resta il default solo per lo sviluppo locale.
       SCORING__MLFLOW_TRACKING_URI: ${SCORING__MLFLOW_TRACKING_URI:-postgresql://limen:limen@postgres:5432/mlflow}
-      # Gli artefatti degli esperimenti nuovi, nel volume ${LIMEN_DATA_ROOT}/mlruns
+      # Gli artefatti degli esperimenti nuovi, nel volume ${DATA_ROOT}/mlruns
       # montato qui sotto (#302): prima il percorso del Mac dell'autore.
       SCORING__MLFLOW_ARTIFACT_ROOT: ${SCORING__MLFLOW_ARTIFACT_ROOT:-file:///var/lib/limen/mlruns}
       LLM__OLLAMA_API_KEY: ${LLM__OLLAMA_API_KEY:-}
@@ -334,21 +334,21 @@ services:
       # backtest. Senza questi due l'immagine non ha dove scrivere: la
       # directory di lavoro e' di root, il processo gira come `limen`, e i
       # comandi morivano su "Permission denied" dopo aver lavorato per minuti.
-      - ${LIMEN_DATASETS_DIR:-${LIMEN_DATA_ROOT:-../../data}/datasets}:/var/lib/limen/datasets
-      - ${LIMEN_EGMS_DIR:-${LIMEN_DATA_ROOT:-../../data}/egms}:/var/lib/limen/egms
+      - ${LIMEN_DATASETS_DIR:-${DATA_ROOT:-${LIMEN_DATA_ROOT:-../../data}}/datasets}:/var/lib/limen/datasets
+      - ${LIMEN_EGMS_DIR:-${DATA_ROOT:-${LIMEN_DATA_ROOT:-../../data}}/egms}:/var/lib/limen/egms
       # La chiave CLMS come file, se data così; altrimenti /dev/null, perché un
       # percorso che non esiste Docker lo creerebbe come cartella.
       - ${EGMS__SERVICE_KEY_FILE:-/dev/null}:/run/secrets/clms_service_key:ro
-      - ${LIMEN_REPORTS_HOST_DIR:-${LIMEN_DATA_ROOT:-../../data}/reports}:/var/lib/limen/reports
+      - ${LIMEN_REPORTS_HOST_DIR:-${DATA_ROOT:-${LIMEN_DATA_ROOT:-../../data}}/reports}:/var/lib/limen/reports
       # DTM / shared vector data (read-only). Same folder GeoServer serves.
-      - ${GEOSERVER_SHAPEFILE_DIR:-${LIMEN_DATA_ROOT:-../../data}/geoserver}:/data:ro
+      - ${GEOSERVER_SHAPEFILE_DIR:-${DATA_ROOT:-${LIMEN_DATA_ROOT:-../../data}}/geoserver}:/data:ro
       # Gli **artefatti** del challenger. Il registry sta su Postgres (#78) e
       # salva URI assoluti al momento del log: gli esperimenti nuovi scrivono
       # in /var/lib/limen/mlruns (SCORING__MLFLOW_ARTIFACT_ROOT), uguale su ogni
       # host (#302; prima era il percorso del Mac dell'autore). rw perché il
       # caricamento del modello scrive registered_model_meta nella cartella
       # dell'artefatto. File mancanti ⇒ il challenger degrada a None.
-      - ${LIMEN_MLRUNS_DIR:-${LIMEN_DATA_ROOT:-../../data}/mlruns}:/var/lib/limen/mlruns
+      - ${LIMEN_MLRUNS_DIR:-${DATA_ROOT:-${LIMEN_DATA_ROOT:-../../data}}/mlruns}:/var/lib/limen/mlruns
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/ready', timeout=3).status==200 else 1)\""]
       interval: 15s
@@ -413,7 +413,7 @@ services:
       # cartella di GeoServer resta /data, anche quando GEOSERVER_SHAPEFILE_DIR
       # la porta fuori dalla radice. Le variabili dei raster (LIMEN_DEM_RASTER,
       # …) NON arrivano qui: il worker scarica, non calcola i fattori.
-      LIMEN_DATA_ROOT: ${LIMEN_DATA_ROOT:-/var/lib/limen/dati}
+      DATA_ROOT: ${DATA_ROOT:-${LIMEN_DATA_ROOT:-/var/lib/limen/dati}}
       GEOSERVER_SHAPEFILE_DIR: /data
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -423,18 +423,18 @@ services:
       # backtest. Senza questi due l'immagine non ha dove scrivere: la
       # directory di lavoro e' di root, il processo gira come `limen`, e i
       # comandi morivano su "Permission denied" dopo aver lavorato per minuti.
-      - ${LIMEN_DATASETS_DIR:-${LIMEN_DATA_ROOT:-../../data}/datasets}:/var/lib/limen/datasets
-      - ${LIMEN_EGMS_DIR:-${LIMEN_DATA_ROOT:-../../data}/egms}:/var/lib/limen/egms
+      - ${LIMEN_DATASETS_DIR:-${DATA_ROOT:-${LIMEN_DATA_ROOT:-../../data}}/datasets}:/var/lib/limen/datasets
+      - ${LIMEN_EGMS_DIR:-${DATA_ROOT:-${LIMEN_DATA_ROOT:-../../data}}/egms}:/var/lib/limen/egms
       # La chiave CLMS come file, se data così; altrimenti /dev/null, perché un
       # percorso che non esiste Docker lo creerebbe come cartella.
       - ${EGMS__SERVICE_KEY_FILE:-/dev/null}:/run/secrets/clms_service_key:ro
-      - ${LIMEN_REPORTS_HOST_DIR:-${LIMEN_DATA_ROOT:-../../data}/reports}:/var/lib/limen/reports
+      - ${LIMEN_REPORTS_HOST_DIR:-${DATA_ROOT:-${LIMEN_DATA_ROOT:-../../data}}/reports}:/var/lib/limen/reports
       # In scrittura: il worker ci scarica IFFI, mosaici, DTM, CORINE (#402).
-      - ${GEOSERVER_SHAPEFILE_DIR:-${LIMEN_DATA_ROOT:-../../data}/geoserver}:/data
-      - ${LIMEN_DATA_ROOT:-../../data}:${LIMEN_DATA_ROOT:-/var/lib/limen/dati}
+      - ${GEOSERVER_SHAPEFILE_DIR:-${DATA_ROOT:-${LIMEN_DATA_ROOT:-../../data}}/geoserver}:/data
+      - ${DATA_ROOT:-${LIMEN_DATA_ROOT:-../../data}}:${DATA_ROOT:-${LIMEN_DATA_ROOT:-/var/lib/limen/dati}}
       # Il registry sta su Postgres (#78): niente più mlflow.db montato. Gli
       # **artefatti** stanno qui, in /var/lib/limen/mlruns su ogni host (#302).
-      - ${LIMEN_MLRUNS_DIR:-${LIMEN_DATA_ROOT:-../../data}/mlruns}:/var/lib/limen/mlruns
+      - ${LIMEN_MLRUNS_DIR:-${DATA_ROOT:-${LIMEN_DATA_ROOT:-../../data}}/mlruns}:/var/lib/limen/mlruns
     secrets:
       - cdse
     # Nessuna `ports:`: il worker non serve niente.
@@ -659,7 +659,7 @@ services:
     volumes:
       # Le tile del rilievo (#318) che `make init` scrive con `limen dem-tiles`:
       # la SPA le cerca su /rilievo/ e accende la vista «Rilievo» se ci sono.
-      - ${LIMEN_DEM_TILES_DIR:-${LIMEN_DATA_ROOT:-../../data}/tiles}:/usr/share/nginx/html/rilievo:ro
+      - ${LIMEN_DEM_TILES_DIR:-${DATA_ROOT:-${LIMEN_DATA_ROOT:-../../data}}/tiles}:/usr/share/nginx/html/rilievo:ro
     depends_on:
       api:
         condition: service_healthy

@@ -92,7 +92,9 @@ imposta() {  # imposta NOME valore
 # Una chiave assente non è un errore: con pipefail il grep a vuoto fermerebbe lo script.
 valore() { { grep -s "^$1=" .env || true; } | tail -n 1 | cut -d= -f2-; }
 
-imposta LIMEN_DATA_ROOT "$HOME/limen-data"
+# Un .env di prima del 2026-11-25 ha LIMEN_DATA_ROOT: la radice resta quella.
+vecchia="$(valore LIMEN_DATA_ROOT)"
+imposta DATA_ROOT "${vecchia:-$HOME/limen-data}"
 
 if [ -z "$DOMINIO" ] && [ -z "$(valore LIMEN_DOMINIO)" ] && [ -t 0 ]; then
   printf '  Dominio pubblico del server (Invio per usarlo solo da questa macchina): '
@@ -198,9 +200,9 @@ if [ -n "$vuote" ]; then
   printf '%s\n' "$vuote" >&2
   stop "queste variabili del .env sono vuote: dai loro un valore o togli la riga, poi rilancia"
 fi
-case "$(valore LIMEN_DATA_ROOT)" in
+case "$(valore DATA_ROOT)" in
   /*) ;;
-  *) stop "LIMEN_DATA_ROOT nel .env deve essere un percorso assoluto" ;;
+  *) stop "DATA_ROOT nel .env deve essere un percorso assoluto" ;;
 esac
 ok "tutte le variabili hanno un valore"
 

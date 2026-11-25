@@ -53,7 +53,7 @@ class _Api:
 def api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> _Api:
     from limen.integrations.openmeteo import flood
 
-    monkeypatch.setenv("LIMEN_DATA_ROOT", str(tmp_path))
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
     finta = _Api()
     monkeypatch.setattr(flood, "OpenMeteoFloodClient", lambda: finta)
     return finta

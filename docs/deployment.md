@@ -9,7 +9,7 @@
 
 `./scripts/nuovo_host.sh --controlla | --ripristina | --da-zero` (#306): sull'host
 solo Docker, il repository e il `.env`. Prerequisiti (Docker, spazio, latenza
-di fsync del disco dei volumi), cartelle sotto `LIMEN_DATA_ROOT`, poi il
+di fsync del disco dei volumi), cartelle sotto `DATA_ROOT`, poi il
 ripristino dal backup notturno o uno stack nuovo. Dettagli nel README,
 «Installing on a new server» e «Backup and restore».
 

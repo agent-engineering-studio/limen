@@ -12,9 +12,9 @@ from limen.integrations.imperviousness.fetch import DEFAULT_DEST, _resolve_dest
 
 def test_imperviousness_sotto_la_radice(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("LIMEN_IMPERVIOUSNESS_DEST", raising=False)
-    monkeypatch.delenv("LIMEN_DATA_ROOT", raising=False)
+    monkeypatch.delenv("DATA_ROOT", raising=False)
     assert _resolve_dest(None) == DEFAULT_DEST  # data/ del repo, come prima
-    monkeypatch.setenv("LIMEN_DATA_ROOT", "/opt/limen")
+    monkeypatch.setenv("DATA_ROOT", "/opt/limen")
     assert _resolve_dest(None) == Path("/opt/limen/sealing/clms_imd_2018/imd_2018_100m.tif")
     # La variabile specifica vince sempre sulla radice.
     monkeypatch.setenv("LIMEN_IMPERVIOUSNESS_DEST", "/altrove/imd.tif")
@@ -55,9 +55,9 @@ def test_esperimento_mlflow_con_radice_artefatti(
 def test_radice_dati(monkeypatch: pytest.MonkeyPatch) -> None:
     from limen.config.percorsi import radice_dati
 
-    monkeypatch.delenv("LIMEN_DATA_ROOT", raising=False)
+    monkeypatch.delenv("DATA_ROOT", raising=False)
     assert radice_dati() == Path("data")
-    monkeypatch.setenv("LIMEN_DATA_ROOT", "")
+    monkeypatch.setenv("DATA_ROOT", "")
     assert radice_dati() == Path("data")
-    monkeypatch.setenv("LIMEN_DATA_ROOT", "/opt/limen")
+    monkeypatch.setenv("DATA_ROOT", "/opt/limen")
     assert radice_dati() == Path("/opt/limen")

@@ -44,7 +44,7 @@ Env:
   dello sweep e del riempimento notturno dei riferimenti) | ``ewds`` (l'EWDS di
   Copernicus, una griglia sull'Italia al mese, nessuna quota Open-Meteo; serve
   ``COPERNICUS__EWDS_KEY`` e il gruppo ``copernicus``; i mesi in
-  ``LIMEN_EWDS_DIR``, default ``$LIMEN_DATA_ROOT/archivio/ewds``).
+  ``LIMEN_EWDS_DIR``, default ``$DATA_ROOT/archivio/ewds``).
 * ``LIMEN_BACKTEST_FLOOD_IDROMETRI`` — ``arpae`` aggiunge al ramo fluviale gli
   idrometri dell'Emilia-Romagna (#501): su ogni nodo con una stazione il
   rapporto di portata diventa ``max(GloFAS, idrometro)``, con il livello del
