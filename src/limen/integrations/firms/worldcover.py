@@ -16,19 +16,23 @@ default della libreria, che senza tile locali leggerebbero il bucket via GDAL,
 fuori da ``_http`` e con un retry loro. Un file già presente non si
 riscarica (WorldCover 2021 non cambia); le tile di solo mare, che non
 esistono, si richiedono a ogni giro: due risposte 404 e nient'altro.
-Il download è uno stream di file grandi, quindi passa da ``call_with_retry``
-sul client condiviso, come i mosaici ISPRA.
+Il download è quello della libreria (``download_worldcover_tile``: uno stream
+in un ``.part`` rinominato a fine file, 404 = mare) un file alla volta, senza
+il suo retry, dentro ``call_with_retry`` sul client condiviso, come i mosaici
+ISPRA. La libreria mette le tile in ``<cartella>/worldcover/<percorso del
+bucket>``: qui la cartella è il genitore di :func:`cartella_worldcover`.
 """
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 
 import httpx
-from firms_client import WorldCover
-from firms_client.landcover import WORLDCOVER_URL as WORLDCOVER_URL
+from firms_client import WorldCover, download_worldcover_tile, worldcover_tiles
+from firms_client.init import worldcover_path
+from firms_client.landcover import WORLDCOVER_DIR
 from tenacity import RetryError
 
 from limen.config.percorsi import cartella_dataset
@@ -38,25 +42,10 @@ from limen.integrations._http import SharedHttpClient, call_with_retry
 
 log = get_logger(__name__)
 
-_PEZZO = 1 << 20
-#: Il lato di una tile WorldCover, in gradi.
-_LATO = 3
-
 
 def cartella_worldcover() -> Path:
     """Dove stanno le tile: accanto agli archivi FIRMS, sotto ``$DATA_ROOT/datasets``."""
     return cartella_dataset() / "landcover" / "worldcover"
-
-
-def tile_per_riquadro(bbox: tuple[float, float, float, float]) -> list[str]:
-    """Gli URL delle tile WorldCover che toccano ``bbox`` (ovest, sud, est, nord)."""
-    ovest, sud, est, nord = bbox
-    mappa = WorldCover()
-    return [
-        mappa.tile(lat + _LATO / 2, lon + _LATO / 2)
-        for lat in range(math.floor(sud / _LATO) * _LATO, math.ceil(nord / _LATO) * _LATO, _LATO)
-        for lon in range(math.floor(ovest / _LATO) * _LATO, math.ceil(est / _LATO) * _LATO, _LATO)
-    ]
 
 
 @dataclass(slots=True)
@@ -67,52 +56,37 @@ class Esito:
     fallite: list[str] = field(default_factory=list)
 
 
-async def _scarica(client: httpx.AsyncClient, url: str, destinazione: Path) -> bool:
-    """Una tile in ``destinazione``; ``False`` se non esiste (mare)."""
-    parziale = destinazione.with_name(destinazione.name + ".part")
-
-    async def tentativo() -> bool:
-        async with client.stream("GET", url) as risposta:
-            if risposta.status_code == 404:  # una tile di solo mare non esiste
-                return False
-            risposta.raise_for_status()
-            destinazione.parent.mkdir(parents=True, exist_ok=True)
-            with parziale.open("wb") as out:
-                async for pezzo in risposta.aiter_bytes(_PEZZO):
-                    out.write(pezzo)
-        return True
-
-    try:
-        if not await call_with_retry(tentativo):
-            return False
-        parziale.rename(destinazione)
-    finally:
-        parziale.unlink(missing_ok=True)
-    return True
-
-
 async def scarica_worldcover(
     cartella: Path | None = None, *, client: httpx.AsyncClient | None = None
 ) -> Esito:
-    """Le tile che coprono ``FIRMS__BBOX`` in ``cartella``; quelle già presenti si saltano."""
+    """Le tile che coprono ``FIRMS__BBOX`` in ``cartella``; quelle già presenti si saltano.
+
+    ``cartella`` si chiama ``worldcover``: è lì che la libreria le cerca.
+    """
     cartella = cartella or cartella_worldcover()
+    if cartella.name != WORLDCOVER_DIR:
+        raise ValueError(f"la cartella delle tile si chiama {WORLDCOVER_DIR!r}: {cartella}")
     http = client or await SharedHttpClient.get()
     esito = Esito()
-    for url in tile_per_riquadro(get_settings().firms.bbox):
-        destinazione = cartella / url.removeprefix(WORLDCOVER_URL + "/")
+    for url in worldcover_tiles(get_settings().firms.bbox):
+        destinazione = worldcover_path(url, cartella.parent)
         nome = destinazione.name
         if destinazione.exists():
             esito.presenti.append(nome)
             continue
         try:
-            if await _scarica(http, url, destinazione):
-                esito.scaricate.append(nome)
-                log.info("worldcover.scaricata", tile=nome, byte=destinazione.stat().st_size)
-            else:
-                esito.assenti.append(nome)
+            scaricata = await call_with_retry(
+                partial(download_worldcover_tile, http, url, cartella.parent)
+            )
         except (httpx.HTTPError, RetryError, OSError) as errore:
             esito.fallite.append(nome)
             log.error("worldcover.fallita", tile=nome, errore=str(errore))
+            continue
+        if scaricata is None:
+            esito.assenti.append(nome)
+        else:
+            esito.scaricate.append(nome)
+            log.info("worldcover.scaricata", tile=nome, byte=scaricata.stat().st_size)
     return esito
 
 

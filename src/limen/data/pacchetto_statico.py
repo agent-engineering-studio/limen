@@ -127,12 +127,16 @@ RISORSE: tuple[Risorsa, ...] = (
             "imperviousness_norm",
             "water_wetness_temp",
             "fire_density",
+            "crop_burning_share",
         ),
         tabelle=("public.fire_events",),
         citazioni=(
             "Storico degli incendi (fire_events, fire_density): NASA FIRMS, CC0. "
             "We acknowledge the use of data from NASA LANCE FIRMS "
             "(https://earthdata.nasa.gov/firms), part of NASA ESDIS.",
+            "Coltivi sotto il fuoco (crop_burning_share): NASA FIRMS e "
+            "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel "
+            "data (2021) processed by ESA WorldCover consortium, CC BY 4.0.",
         ),
     ),
 )

@@ -701,6 +701,21 @@ async def bootstrap_static_for_aoi(aoi_id: str, *, force: bool = False) -> Boots
             )
         await gate.done("geological", rows_written=geo_written, **geo_fp.details)
 
+    # Quota di coltivi sotto il fuoco (#714), da `firms_client.cell_stats`.
+    # Ultimo: nessun motore la legge, e un errore di lettura delle tile non
+    # deve fermare i passi che servono al punteggio. Skip pulito senza le
+    # tile WorldCover dell'init (`limen worldcover-sync`).
+    from limen.integrations.firms import celle
+
+    crop_fp = await celle.impronta(aoi_id)
+    if await gate.needs("crop_burning", crop_fp):
+        try:
+            await celle.aggiorna_quota_coltivi(aoi_id)
+        except (OSError, ValueError, celle.GrigliaDiversaError) as errore:
+            log.error("static_bootstrap.crop_burning_fallito", aoi_id=aoi_id, errore=str(errore))
+        else:
+            await gate.done("crop_burning", **crop_fp.details)
+
     total = await count_factors()
     log.info(
         "static_bootstrap.done",

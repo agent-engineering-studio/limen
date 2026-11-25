@@ -57,6 +57,7 @@ STEP_VERSION: dict[str, int] = {
     "pai": 1,
     "flood_hazard": 1,
     "fire_density": 1,
+    "crop_burning": 1,
     "fire_perimeters": 1,
     "osm_distance": 1,
     "dem": 1,
