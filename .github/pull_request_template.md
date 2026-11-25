@@ -2,6 +2,15 @@
 
 Explain what this PR changes and why.
 
+## Epic
+
+Every change belongs to one branch of the work. Keep one line, and write the issue it advances if there is one.
+
+Part of #712 (landslide)
+Part of #713 (flood)
+Part of #714 (wildfire)
+Part of #618 (platform: hosting, accounts and contributions, operations, community)
+
 ## Type of change
 
 - [ ] Documentation
