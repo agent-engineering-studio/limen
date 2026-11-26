@@ -52,10 +52,12 @@ sposta datasets/landcover/worldcover firms-client/worldcover
 # copernicus-ems: le immagini Sentinel-1 e i layer delle attivazioni finiscono
 # nella stessa cartella (EMSR…/), quindi si uniscono file per file. Limen
 # salvava i layer come <nome>.json; la libreria li legge come <nome>.geojson.
+# Ogni layer versionato (PRODUCT e MONITnn) direttamente sotto EMSR…/; non
+# detail.json né i _pair.json di sentinel-1/.
 unisci datasets/copernicus-ems copernicus-ems
 unisci flood_events copernicus-ems
 if [ -d "$RADICE/copernicus-ems" ]; then
-  find "$RADICE/copernicus-ems" -path '*/EMSR*' -name '*_PRODUCT_*.json' | while IFS= read -r f; do
+  find "$RADICE/copernicus-ems" -mindepth 2 -maxdepth 2 -path '*/EMSR*/EMSR*' -name 'EMSR*_v[0-9]*.json' | while IFS= read -r f; do
     [ -e "${f%.json}.geojson" ] || mv "$f" "${f%.json}.geojson"
   done
 fi
