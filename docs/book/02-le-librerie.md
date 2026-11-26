@@ -225,6 +225,18 @@ resta nel database e nessun motore la legge. Il limite: EFFIS mappa gli
 incendi da circa 30 ettari, e dei piccoli abbruciamenti la misura non dice
 niente.
 
+Dove si perde il Nord, allora? Il backtest ora dice, per ogni cella bruciata
+senza allerta, perché. Sulle otto regioni, fra il 2024 e il 2026, a
+«moderato» Limen prende 323 celle bruciate su 815. Delle 492 mancate, 303 lo
+sono per il meteo: nelle 72 ore prima l'FWI non ha superato 11,5 (mediana
+4,7), e due su tre sono boschi. Nessun peso del terreno le recupera; serve
+un segnale che l'FWI del modello non ha. Le altre 177 lo sono per il terreno:
+il meteo bastava (FWI mediano 18,8), ma il combustibile ha tenuto il
+punteggio sotto la soglia. Qui stanno i campi: i boschi bruciati li prende
+uno su due, le celle agricole una su quattro, e metà delle agricole mancate
+cade proprio così. È il peso dei coltivi nella tabella del combustibile, non
+la storia dei roghi; cambiarlo accende tutta la pianura, e va misurato prima.
+
 **Risposte che un'AI non può gonfiare.** Dalla versione 0.8 la libreria
 risponde anche come *dati*: quanti fuochi in un riquadro e in quali giorni,
 quanto fidarsi di un punto, i fatti di un incendio per un bollettino, quanto
