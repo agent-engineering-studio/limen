@@ -237,6 +237,15 @@ uno su due, le celle agricole una su quattro, e metà delle agricole mancate
 cade proprio così. È il peso dei coltivi nella tabella del combustibile, non
 la storia dei roghi; cambiarlo accende tutta la pianura, e va misurato prima.
 
+L'abbiamo misurato in un altro modo, con il «tetto per nodo»: l'FWI pieno di
+ogni nodo preso dalla sua climatologia 2014-2023 invece che 50 ovunque, così
+al Nord bastano valori più bassi. Le celle bruciate prese salgono da 323 a
+440 su 815. Ma le allerte su celle che poi non bruciano quasi raddoppiano, e
+la discriminazione spaziale scende in sei regioni su otto (in Lombardia da 6,7
+a 4,4 volte il carico). Il tetto compra incendi accendendo più territorio:
+resta spento. Il Nord non si recupera abbassando la soglia; serve un segnale
+che oggi l'FWI non porta.
+
 **Risposte che un'AI non può gonfiare.** Dalla versione 0.8 la libreria
 risponde anche come *dati*: quanti fuochi in un riquadro e in quali giorni,
 quanto fidarsi di un punto, i fatti di un incendio per un bollettino, quanto
