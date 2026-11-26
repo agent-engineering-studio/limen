@@ -103,7 +103,7 @@ def test_essenziali_esclude_consigliati_e_altri_pericoli() -> None:
 
 
 def test_gli_indicatori_pir_hanno_licenza_e_citazione() -> None:
-    """#666: gli indicatori di rischio ISPRA sono CC BY 4.0, IFFI e mosaici CC BY-SA."""
+    """#666: indicatori ISPRA e PAI 2024 sono CC BY 4.0, IFFI e idraulica CC BY-SA."""
     catalogo = carica_catalogo()
     pir = catalogo.voce("pir_comuni")
     assert pir.licenza == "CC BY 4.0"
@@ -111,15 +111,16 @@ def test_gli_indicatori_pir_hanno_licenza_e_citazione() -> None:
     assert pir.attribuzione.startswith("ISPRA (2024) Pericolosità e indicatori di rischio frane")
     assert "ISPRA (2020) Pericolosità e indicatori di rischio alluvioni" in pir.attribuzione
     assert pir.misura.tabella == "esposizione_comuni"
-    for voce in ("iffi", "pai_frana", "idraulica"):
+    for voce in ("iffi", "idraulica"):
         assert catalogo.voce(voce).licenza == "CC BY-SA 4.0"
+    assert catalogo.voce("pai_frana").licenza == "CC BY 4.0"
 
 
 def test_la_voce_pai_segue_il_mosaico_scelto(monkeypatch: pytest.MonkeyPatch) -> None:
     """#670: la v. 5.0 è CC BY 4.0 e ha un'altra citazione; il resto del catalogo non cambia."""
     v4 = catalogo_per("pai_frane")
     v5 = catalogo_per("pai_frane_2024")
-    assert carica_catalogo() == v4
+    assert carica_catalogo() == v5
     assert "(v. 4.0 \u2013 2020-2021)" in (v4.voce("pai_frana").attribuzione or "")
 
     pai = v5.voce("pai_frana")

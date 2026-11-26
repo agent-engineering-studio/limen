@@ -72,7 +72,7 @@ def test_i_file_sono_quelli_che_legge_geoserver_source() -> None:
 
 def test_il_mosaico_pai_scaricato_e_quello_scelto() -> None:
     """#670: con la v. 5.0 scelta la v. 4.0 (1,2 GB) non si scarica più."""
-    assert GeodatiSettings().mosaico_pai == "pai_frane"
+    assert GeodatiSettings().mosaico_pai == "pai_frane_2024"
     nomi = [d.filename for d in geodati.dataset("pai_frane_2024")]
     assert len(nomi) == 5 * 21 + 2
     assert "Mosaicatura_ISPRA_2024_pericolosita_frana_PAI.zip" in nomi

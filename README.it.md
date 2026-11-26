@@ -1032,7 +1032,8 @@ qualsiasi cosa ne derivi:
 * **Mosaici di pericolosità ISPRA** — CC BY-SA 4.0, come dice il PDF dentro
   ogni download: i dati derivati si distribuiscono con la stessa licenza.
   Citazioni: «ISPRA - Mosaicatura nazionale delle aree a pericolosità da frana
-  PAI (v. 4.0 – 2020-2021), https://idrogeo.isprambiente.it» e «ISPRA -
+  PAI (v. 5.0 – 2024) – Piattaforma IdroGEO» (CC BY 4.0; la v. 4.0
+  2020-2021, ancora sceglibile, è CC BY-SA) e «ISPRA -
   Mosaicatura delle aree a pericolosità idraulica (v. 5.0 – 2020),
   https://idrogeo.isprambiente.it». Sono elaborati tecnico-scientifici: hanno
   valore legale le carte delle Autorità di bacino distrettuali.

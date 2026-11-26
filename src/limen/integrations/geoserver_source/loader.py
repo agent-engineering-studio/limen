@@ -35,7 +35,7 @@ from typing import Any
 
 import asyncpg
 
-from limen.config.catalogo_dati import carica_catalogo
+from limen.config.catalogo_dati import carica_catalogo, catalogo_per
 from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.data.db import acquire, register_postgis
@@ -115,9 +115,13 @@ def citazione_iffi(area: str) -> str:
     )
 
 
-def _citazione(voce: str) -> str:
-    """L'attribuzione della voce del catalogo (``pai_frana``, ``idraulica``)."""
-    return carica_catalogo().voce(voce).attribuzione or carica_catalogo().voce(voce).fonte
+def _citazione(voce: str, mosaico_pai: str | None = None) -> str:
+    """L'attribuzione della voce del catalogo (``pai_frana``, ``idraulica``).
+
+    Per la PAI quella del mosaico letto, non di quello configurato (#670).
+    """
+    catalogo = carica_catalogo() if mosaico_pai is None else catalogo_per(mosaico_pai)
+    return catalogo.voce(voce).attribuzione or catalogo.voce(voce).fonte
 
 
 # National PAI landslide-hazard mosaic (single table, ~900k polygons), per
@@ -271,7 +275,7 @@ async def _load_pai(
         bbox[3],
     )
     items: list[PAIHazard] = []
-    citazione = _citazione("pai_frana")
+    citazione = _citazione("pai_frana", mosaico)
     for r in rows:
         token = _pai_class_token(r["cls"])
         geom = r["geom"]
@@ -427,6 +431,12 @@ async def _mosaico_dell_ultimo_sync(nome: str) -> str | None:
     return str(ultima.metadata.get("mosaico", "pai_frane"))
 
 
+#: Il primo giro dopo #666 aggiunge la citazione a tutte le righe IFFI di una
+#: regione (66.000 in Umbria): oltre i 30 s del pool, e il bootstrap si fermava
+#: subito dopo aver scritto la PAI (#670). Dal secondo giro non tocca niente.
+_ATTRIBUTI_TIMEOUT_S = 1800.0
+
+
 async def _completa_attributi(tabella: str, items: Iterable[Any]) -> int:
     """Dataset e citazione alle righe scritte prima di #666; quante ne tocca.
 
@@ -451,6 +461,7 @@ async def _completa_attributi(tabella: str, items: Iterable[Any]) -> int:
                 "WHERE id = ANY($1::text[]) AND NOT (attributes ? 'dataset')",
                 ids,
                 json.dumps(extra[chiave], ensure_ascii=False),
+                timeout=_ATTRIBUTI_TIMEOUT_S,
             )
             toccate += int(str(esito).rsplit(" ", 1)[-1] or 0)
     return toccate
