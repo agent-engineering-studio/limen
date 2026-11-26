@@ -40,6 +40,12 @@ from limen.core.logging import get_logger
 from limen.data.db import acquire
 from limen.data.repos import dataset_versions_repo
 
+#: Il conteggio di una tabella nel riquadro dell'AOI legge l'intero indice
+#: spaziale: IFFI in Emilia-Romagna sono 306.500 righe e 1,5 GB, 48 s a cache
+#: fredda contro i 30 s del pool, e `make static-data` si fermava lì (#670).
+#: Lo stesso tetto delle istruzioni del bootstrap.
+_CONTEGGIO_TIMEOUT_S = 900.0
+
 log = get_logger(__name__)
 
 #: Il `source` sotto cui il bootstrap registra le proprie versioni. Separato
@@ -166,13 +172,17 @@ async def of_tables(
             )
             ultimo = "max(t.created_at)" if has_created else "NULL"
             if aoi_id is None:
-                riga = await conn.fetchrow(f"SELECT count(*) AS n, {ultimo} AS last FROM {table} t")
+                riga = await conn.fetchrow(
+                    f"SELECT count(*) AS n, {ultimo} AS last FROM {table} t",
+                    timeout=_CONTEGGIO_TIMEOUT_S,
+                )
             else:
                 riga = await conn.fetchrow(
                     f"SELECT count(*) AS n, {ultimo} AS last FROM {table} t "
                     "JOIN aoi a ON a.id = $1 AND t.geom && ST_Expand(a.bbox, $2)",
                     aoi_id,
                     margine_gradi,
+                    timeout=_CONTEGGIO_TIMEOUT_S,
                 )
             n = int(riga["n"] or 0)
             last = riga["last"]
