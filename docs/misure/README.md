@@ -6,6 +6,7 @@ riscrive questo indice: non modificarlo a mano.
 
 | generato | report | versioni | commit | comando |
 |---|---|---|---|---|
+| 2026-11-26 | [misura_coltivi_2023_2024-2026.md](misura_coltivi_2023_2024-2026.md) | `limen-deterministic-v1.1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `ac507899c1b7` | `limen misura-coltivi` |
 | 2026-11-25 | [backtest_it-sicilia_2009-01-01_2009-01-31_pai2024.md](backtest_it-sicilia_2009-01-01_2009-01-31_pai2024.md) | `limen-deterministic-v1.1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `2d5fa9324975` | `limen backtest` |
 | 2026-11-25 | [backtest_it-piemonte_2009-04-01_2009-04-30_pai2024.md](backtest_it-piemonte_2009-04-01_2009-04-30_pai2024.md) | `limen-deterministic-v1.1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `2d5fa9324975` | `limen backtest` |
 | 2026-11-25 | [backtest_it-lombardia_2014-11-01_2014-11-30_pai2024.md](backtest_it-lombardia_2014-11-01_2014-11-30_pai2024.md) | `limen-deterministic-v1.1`, `flood-v1.4.0`, `wildfire-v1.1.1` | `2d5fa9324975` | `limen backtest` |
