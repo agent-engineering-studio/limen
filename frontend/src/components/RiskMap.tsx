@@ -595,7 +595,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         type: "raster",
         tiles: [wmsTileUrl(config.geoserverWmsUrl, WMS_PAI_LAYER)],
         tileSize: 256,
-        attribution: "ISPRA PAI (CC BY-SA 4.0)",
+        attribution: "ISPRA PAI (CC BY 4.0)",
       },
       "wms-iffi": {
         type: "raster",
@@ -1030,7 +1030,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       sources[PAI_SOURCE_ID] = {
         type: "vector",
         url: `pmtiles://${config.paiPmtilesUrl}`,
-        attribution: "ISPRA IdroGEO — PAI mosaic (CC BY-SA 4.0)",
+        attribution: "ISPRA IdroGEO — PAI mosaic (CC BY 4.0)",
       };
       layers.push({
         id: PAI_LAYER_ID,

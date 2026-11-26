@@ -273,7 +273,9 @@ async def test_le_righe_di_prima_ricevono_la_citazione_una_volta(
     eseguite: list[tuple[str, list[str], str]] = []
 
     class Conn:
-        async def execute(self, sql: str, ids: list[str], extra: str) -> str:
+        async def execute(self, sql: str, ids: list[str], extra: str, *, timeout: float) -> str:
+            # Oltre i 30 s del pool, o il primo giro dopo #666 si ferma (#670).
+            assert timeout > 30
             eseguite.append((sql, ids, extra))
             return f"UPDATE {len(ids)}"
 

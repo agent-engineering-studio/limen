@@ -90,19 +90,29 @@ def test_fonti_ts_ripete_licenza_e_titolare_del_catalogo(voce_catalogo: str) -> 
 
 
 def test_gli_strati_ispra_della_mappa_dichiarano_la_licenza_del_catalogo() -> None:
+    # La PAI 2024 è CC BY 4.0 (#670), IFFI e idraulica restano CC BY-SA 4.0:
+    # ogni strato dichiara la licenza della sua voce.
     catalogo = _catalogo()
-    attesa = {_normalizza(catalogo[i].licenza) for i in ("iffi", "pai_frana", "idraulica")}
-    assert len(attesa) == 1
+    pai = _normalizza(catalogo["pai_frana"].licenza)
+    altri = {_normalizza(catalogo[i].licenza) for i in ("iffi", "idraulica")}
+    assert len(altri) == 1
 
-    trovate: list[tuple[str, str]] = []
+    trovate: list[tuple[str, str, str]] = []
     for file in _SPA.rglob("*.ts*"):
         if "__tests__" in file.parts or "content" in file.parts:
             continue
         testo = file.read_text(encoding="utf-8")
-        trovate += [(file.name, m) for m in re.findall(r"ISPRA[^\"\n(]*\((CC[^)]*)\)", testo)]
+        trovate += [
+            (file.name, nome, lic)
+            for nome, lic in re.findall(r"(ISPRA[^\"\n(]*)\((CC[^)]*)\)", testo)
+        ]
 
     assert trovate, "nessuna attribuzione ISPRA trovata: il controllo non vede più la SPA"
-    sbagliate = [(f, lic) for f, lic in trovate if {_normalizza(lic)} != attesa]
+    sbagliate = [
+        (f, nome, lic)
+        for f, nome, lic in trovate
+        if {_normalizza(lic)} != ({pai} if "PAI" in nome else altri)
+    ]
     assert not sbagliate, sbagliate
 
 

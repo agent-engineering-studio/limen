@@ -121,7 +121,7 @@ services:
       OPENMETEO__MODELS: ${OPENMETEO__MODELS:-}
       # Quale mosaicatura PAI frane (#670). Con il default e non vuota: è un
       # valore fra due, e una stringa vuota fermerebbe l'avvio.
-      GEODATI__MOSAICO_PAI: ${GEODATI__MOSAICO_PAI:-pai_frane}
+      GEODATI__MOSAICO_PAI: ${GEODATI__MOSAICO_PAI:-pai_frane_2024}
       # Previsione GloFAS dall'EWDS di Copernicus. Vuota ⇒ resta Open-Meteo.
       COPERNICUS__EWDS_KEY: ${COPERNICUS__EWDS_KEY:-}
       # Chiave di servizio CLMS (JSON su una riga): il passo notturno sa

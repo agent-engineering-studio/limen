@@ -305,10 +305,10 @@ export const FONTI: readonly Fonte[] = [
       "La classe più alta che tocca la cella: aree di attenzione 0,20, P1 0,40, P2 0,60, P3 0,80, P4 1,00. Peso nella suscettibilità S: 0,225.",
       "The highest class touching the cell: attention areas 0.20, P1 0.40, P2 0.60, P3 0.80, P4 1.00. Weight in susceptibility S: 0.225.",
     ),
-    licenza: "CC BY-SA 4.0",
+    licenza: "CC BY 4.0",
     attribuzione: t(
-      "ISPRA - Mosaicatura nazionale delle aree a pericolosità da frana PAI (v. 4.0 – 2020-2021), https://idrogeo.isprambiente.it",
-      "ISPRA - Mosaicatura nazionale delle aree a pericolosità da frana PAI (v. 4.0 – 2020-2021), https://idrogeo.isprambiente.it",
+      "ISPRA - Mosaicatura nazionale delle aree a pericolosità da frana PAI (v. 5.0 – 2024) – Piattaforma IdroGEO",
+      "ISPRA - Mosaicatura nazionale delle aree a pericolosità da frana PAI (v. 5.0 – 2024) – Piattaforma IdroGEO",
     ),
     url: "https://idrogeo.isprambiente.it",
   },

@@ -134,7 +134,7 @@ serve ciascuno e cosa succede se manca.
 | Dato | Chi lo produce | Dettaglio | Licenza | Serve a |
 |---|---|---|---|---|
 | Frane già censite (inventario IFFI) | ISPRA con Regioni e Province autonome | 721.365 frane | CC BY-SA 4.0 | frana |
-| Aree a pericolo di frana dei Piani di bacino | ISPRA (mosaico nazionale 2020-21) | poligoni in 4-5 classi | CC BY-SA 4.0 | frana |
+| Aree a pericolo di frana dei Piani di bacino | ISPRA (mosaico nazionale 2024, v. 5.0) | poligoni in 4-5 classi | CC BY 4.0 | frana |
 | Aree allagabili | ISPRA (mosaico nazionale 2020) | alta, media, bassa probabilità | CC BY-SA 4.0 | alluvione |
 | Pendenza del terreno | CNR-IRPI, modello del terreno a 5 m | un punto ogni 5 m | CC BY 4.0 | frana, incendio |
 | Bosco, campi, città (CORINE 2018) | Copernicus, distribuito da ISPRA | pixel da 100 m | dati Copernicus, liberi con citazione | incendio |
@@ -173,8 +173,8 @@ dei Fenomeni Franosi in Italia (IFFI), idrogeo.isprambiente.it».
 
 **Cosa misurano.** Le Autorità di bacino distrettuale disegnano nei loro Piani
 (i Piani di Assetto Idrogeologico, PAI) le aree a pericolo di frana e quelle
-allagabili. ISPRA le riunisce in due mosaici nazionali: frane (versione 4.0,
-2020-21) e alluvioni (versione 5.0, 2020). Le aree allagabili sono divise per
+allagabili. ISPRA le riunisce in due mosaici nazionali: frane (versione 5.0,
+2024) e alluvioni (versione 5.0, 2020). Le aree allagabili sono divise per
 probabilità: **alta** (un'alluvione ogni 20-50 anni circa), **media** (ogni
 100-200 anni) e **bassa** (eventi rari ed estremi).
 

@@ -1107,7 +1107,8 @@ anything derived from them:
 * **ISPRA hazard mosaics** — CC BY-SA 4.0, as stated by the licence PDF in each
   download: data derived from them must be distributed under the same licence.
   Citations: «ISPRA - Mosaicatura nazionale delle aree a pericolosità da frana
-  PAI (v. 4.0 – 2020-2021), https://idrogeo.isprambiente.it» and «ISPRA -
+  PAI (v. 5.0 – 2024) – Piattaforma IdroGEO» (CC BY 4.0; v. 4.0
+  2020-2021, still selectable, is CC BY-SA) and «ISPRA -
   Mosaicatura delle aree a pericolosità idraulica (v. 5.0 – 2020),
   https://idrogeo.isprambiente.it». They are technical and scientific works:
   the maps with legal value are those of the basin district authorities.
