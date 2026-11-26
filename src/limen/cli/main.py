@@ -20,6 +20,7 @@ Usage:
     limen anticipo           Quanto prima Limen ha visto un evento, in JSON.
     limen sensore            Registro dei sensori dei cittadini: approva, revoca (#253).
     limen misura             AUC e osservate/attese di una feature per cella (#480).
+    limen misura-coltivi     I roghi agricoli anticipano gli incendi? Sola lettura (#714).
     limen archivia-report    Un report di misura e la sua provenienza in docs/misure (#481).
     limen dati               Download dei dati statici, eseguiti dal worker: stato | scarica (#402).
     limen backup             Backup dello stato fuori dal server; `elenco` li elenca (#304).
@@ -114,6 +115,8 @@ from limen.cli.mcp_serve import run as _run_mcp_serve
 from limen.cli.migrate import run as _run_migrate
 from limen.cli.misura import build_subparser as _build_misura_subparser
 from limen.cli.misura import run as _run_misura
+from limen.cli.misura_coltivi import build_subparser as _build_misura_coltivi_subparser
+from limen.cli.misura_coltivi import run as _run_misura_coltivi
 from limen.cli.misura_innesco import run as _run_misura_innesco
 from limen.cli.misura_radar import run as _run_misura_radar
 from limen.cli.misura_soglia_radar import run as _run_misura_soglia_radar
@@ -533,6 +536,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _build_sensore_subparser(sub)
     _build_misura_subparser(sub)
+    _build_misura_coltivi_subparser(sub)
     _build_archivia_subparser(sub)
     _build_dati_subparser(sub)
     _build_backup_subparser(sub)
@@ -647,6 +651,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "misura":
         try:
             return asyncio.run(_run_misura(args))
+        except KeyboardInterrupt:  # pragma: no cover
+            return 130
+    if args.command == "misura-coltivi":
+        try:
+            return asyncio.run(_run_misura_coltivi(args))
         except KeyboardInterrupt:  # pragma: no cover
             return 130
     if args.command == "sensore":

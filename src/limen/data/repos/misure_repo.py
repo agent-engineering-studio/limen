@@ -107,3 +107,49 @@ async def celle(
         )
         for r in rows
     ]
+
+
+@dataclass(frozen=True, slots=True)
+class Luogo:
+    lon: float
+    lat: float
+    quota: float | None
+
+
+async def luoghi(aoi_id: str) -> dict[str, Luogo]:
+    """Centroide e quota di ogni cella di ``aoi_id``, per gli strati della misura."""
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT g.id, ST_X(g.centroid) AS lon, ST_Y(g.centroid) AS lat, f.elevation_m AS quota
+              FROM grid_cells g LEFT JOIN cell_static_factors f ON f.cell_id = g.id
+             WHERE g.aoi_id = $1
+            """,
+            aoi_id,
+            timeout=_TIMEOUT_S,
+        )
+    return {
+        str(r["id"]): Luogo(
+            float(r["lon"]), float(r["lat"]), None if r["quota"] is None else float(r["quota"])
+        )
+        for r in rows
+    }
+
+
+async def bruciate(aoi_id: str, *, dal: date, al: date, copertura: float) -> set[str]:
+    """Le celle di ``aoi_id`` coperte per almeno ``copertura`` da perimetri EFFIS del periodo."""
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            SELECT g.id FROM grid_cells g
+             WHERE g.aoi_id = $3
+               AND LEAST(1.0, {_VERITA[HazardType.WILDFIRE]}
+                         / ST_Area(ST_Transform(g.geom, 3035))) >= $4
+            """,
+            dal,
+            al,
+            aoi_id,
+            copertura,
+            timeout=_TIMEOUT_S,
+        )
+    return {str(r["id"]) for r in rows}

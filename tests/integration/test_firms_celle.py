@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime as dt
 import random
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -137,3 +138,42 @@ async def test_a_grid_that_does_not_match_is_refused(reset_db: None, pg_pool: ob
         await conn.execute("UPDATE grid_cells SET col_idx = 100 - col_idx WHERE aoi_id = $1", AOI)
     with pytest.raises(celle.GrigliaDiversaError):
         await celle.griglia(AOI)
+
+
+async def test_misura_coltivi_reads_only_and_stops_at_the_estimation_period(
+    reset_db: None, pg_pool: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """La quota conta solo i fuochi fino alla stima; la verità è EFFIS dopo; niente si scrive."""
+    from limen.cli import misura_coltivi
+
+    await _seed()
+    # Prima della fine della stima solo nel bosco (ovest), dopo solo nei coltivi (est).
+    prima = [replace(h, longitude=16.0 + (h.longitude - 16.0) / 3) for h in _hotspots(40)]
+    dopo = [replace(h, acq_date=dt.date(2025, 7, 2), longitude=16.055) for h in _hotspots(5)]
+    await upsert_hotspots(prima + dopo)
+    async with acquire() as conn:
+        await conn.execute(
+            "INSERT INTO fire_perimeters (id, fire_date, geom) VALUES ('p', '2025-07-02',"
+            "ST_Multi(ST_MakeEnvelope(15.9, 40.8, 16.2, 41.0, 4326)))"
+        )
+    terra: Any = _Terra()
+
+    regione = await misura_coltivi.leggi_regione(
+        AOI,
+        terra,
+        stima_fino=dt.date(2024, 12, 31),
+        verifica=(dt.date(2025, 1, 1), dt.date(2025, 12, 31)),
+        copertura=0.25,
+    )
+
+    assert regione.bruciate == regione.celle > 0  # il perimetro copre tutta l'AOI
+    assert 0 < len(regione.con_fuoco) < regione.celle
+    assert all(c.bruciata for c in regione.con_fuoco)
+    assert {c.coltivo for c in regione.con_fuoco} == {0.0}  # i fuochi del 2025 non contano
+    async with acquire() as conn:
+        scritte = await conn.fetchval(
+            "SELECT count(*) FROM cell_static_factors c JOIN grid_cells g ON g.id = c.cell_id "
+            "WHERE g.aoi_id = $1 AND c.crop_burning_share IS NOT NULL",
+            AOI,
+        )
+    assert scritte == 0

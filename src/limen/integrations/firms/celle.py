@@ -4,8 +4,9 @@ La #714 chiede un segnale oltre l'FWI per il Nord, dove l'incendio a
 «moderato» prende in Lombardia un incendio su cinque: i roghi agricoli sono
 la prima ipotesi. Qui, per ogni cella di una AOI, la quota media di coltivi ESA
 WorldCover sotto le rilevazioni VIIRS di vegetazione dei suoi giorni-incendio,
-in ``cell_static_factors.crop_burning_share``. La misura è ``limen misura
---feature crop_burning_share``; nessun motore la legge ancora.
+in ``cell_static_factors.crop_burning_share``. La misura è ``limen
+misura-coltivi``, che la ricalcola in memoria fino alla fine del periodo di
+stima; nessun motore la legge.
 
 La griglia è quella di Limen, passata alla libreria: ``LaeaGrid`` in
 EPSG:3035 con l'origine ricavata dalle celle salvate (``<aoi>|<riga>|<colonna>``
@@ -23,8 +24,9 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date
+from typing import Any
 
-from firms_client import Hotspot, LaeaGrid, cell_stats, worldcover_tiles
+from firms_client import CellStats, Hotspot, LaeaGrid, cell_stats, worldcover_tiles
 from firms_client.init import worldcover_path
 
 from limen.core.logging import get_logger
@@ -170,39 +172,52 @@ async def impronta(aoi_id: str) -> fingerprint.Fingerprint:
     )
 
 
-async def aggiorna_quota_coltivi(aoi_id: str, *, al: date | None = None) -> int:
-    """Riscrive ``crop_burning_share`` per ``aoi_id``; ritorna le celle misurate.
+async def statistiche(
+    aoi_id: str, terra: Any, *, al: date | None = None
+) -> dict[str, CellStats[tuple[int, int]]]:
+    """``cell_stats`` delle celle di ``aoi_id``, fuochi VIIRS fino ad ``al`` (oggi); non scrive.
 
-    Il bootstrap conta fino a oggi. **Per ``limen misura`` non basta**: una
-    cella bruciata nel periodo di verifica ha la quota proprio per
-    quell'incendio, e la misura girerebbe in tondo. Per misurare si chiama
-    con ``al`` alla fine del periodo di stima.
+    Le chiavi sono gli id di ``grid_cells``; solo le celle con fuoco, e solo
+    quelle salvate.
     """
-    terra = worldcover_locale()
-    if terra is None:  # il gate del bootstrap salta prima; qui per chi la chiama da sé
-        return 0
     grid = await griglia(aoi_id)
     righe = await rilevazioni(aoi_id, al=al)
     async with acquire() as conn:
         celle = {r["id"] for r in await conn.fetch(_CELLE_SQL, aoi_id)}
 
-    def conta() -> dict[str, float]:
+    def conta() -> dict[str, CellStats[tuple[int, int]]]:
         # Le tile si aprono e si chiudono nello stesso thread: GDAL tiene
         # l'ambiente per thread.
         with terra:
             stats = cell_stats(righe, grid, land=terra)
-        return {
-            id_cella(aoi_id, c): s.cropland
-            for c, s in stats.items()
-            if s.cropland is not None and id_cella(aoi_id, c) in celle
-        }
+        return {id_cella(aoi_id, c): s for c, s in stats.items() if id_cella(aoi_id, c) in celle}
 
-    quote = await asyncio.to_thread(conta)
+    out = await asyncio.to_thread(conta)
+    log.info("firms.celle", aoi_id=aoi_id, rilevazioni=len(righe), celle=len(out))
+    return out
+
+
+async def aggiorna_quota_coltivi(aoi_id: str) -> int:
+    """Riscrive ``crop_burning_share`` di ``aoi_id`` (fuochi fino a oggi); le celle misurate.
+
+    Per misurare quanto la quota anticipa gli incendi non si usa questa
+    colonna: una cella bruciata nel periodo di verifica ha la quota proprio
+    per quell'incendio. ``limen misura-coltivi`` la ricalcola in memoria fino
+    alla fine del periodo di stima.
+    """
+    terra = worldcover_locale()
+    if terra is None:  # il gate del bootstrap salta prima; qui per chi la chiama da sé
+        return 0
+    quote = {
+        k: s.cropland
+        for k, s in (await statistiche(aoi_id, terra)).items()
+        if s.cropland is not None
+    }
     async with acquire() as conn:
         await conn.execute(
             _SCRIVI_SQL, aoi_id, list(quote), list(quote.values()), timeout=_TIMEOUT_S
         )
-    log.info("firms.crop_burning_share", aoi_id=aoi_id, rilevazioni=len(righe), celle=len(quote))
+    log.info("firms.crop_burning_share", aoi_id=aoi_id, celle=len(quote))
     return len(quote)
 
 
@@ -213,4 +228,5 @@ __all__ = [
     "id_cella",
     "impronta",
     "rilevazioni",
+    "statistiche",
 ]
