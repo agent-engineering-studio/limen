@@ -146,6 +146,7 @@ from limen.config.percorsi import radice_dati
 from limen.core.logging import get_logger
 from limen.core.models.risk import (
     CellFeatureBundle,
+    ComponentBreakdown,
     DynamicInputs,
     RainfallSample,
     RainfallSeries,
@@ -157,6 +158,7 @@ from limen.core.scoring.base import ScoringEngine
 from limen.core.scoring.engine import MultiFactorScoringEngine
 from limen.core.scoring.regional_thresholds import (
     CancelloInnescoBlock,
+    CumulataBlock,
     MetricaComuni,
     RegionalThresholds,
     SeismicBlock,
@@ -472,6 +474,51 @@ class PerComune:
     soglia_carico: float
     colti_carico: int
     carico_effettivo: float
+    mancati: tuple[Mancato, ...] = ()
+
+
+@dataclass(slots=True)
+class DiagnosiComune:
+    """Perché un comune è (o non è) salito, ora per ora (#712).
+
+    ``innesco`` è il massimo fra le celle del comune del termine d'innesco che
+    entra in M (la cumulata relativa o Caine); ``s`` e ``m`` sono quelli della
+    cella col punteggio più alto in quell'ora. ``senza_riferimento``: nessuna
+    cella del comune ha il riferimento di pioggia, quindi niente cancello.
+    """
+
+    innesco: list[float]
+    s: list[float]
+    m: list[float]
+    senza_riferimento: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class Mancato:
+    """Un comune con una frana sotto Moderato in tutta la finestra, e perché."""
+
+    comune: str
+    evento: datetime
+    punteggio: float
+    s: float
+    m: float
+    innesco: float
+    causa: str
+
+
+#: Sotto questo innesco la finestra è asciutta: la frana è arrivata senza la
+#: pioggia che il motore legge (neve, frana lenta, pioggia mancata dal modello).
+_INNESCO_ASCIUTTO = 0.05
+
+
+def causa_mancato(innesco: float, *, senza_riferimento: bool, cancello_soglia: float | None) -> str:
+    if innesco < _INNESCO_ASCIUTTO:
+        return "pioggia assente"
+    if senza_riferimento or cancello_soglia is None:
+        return "punteggio basso (senza cancello)"
+    if innesco <= cancello_soglia:
+        return "cancello chiuso"
+    return "cancello aperto, punteggio basso"
 
 
 def per_comune(
@@ -483,6 +530,8 @@ def per_comune(
     finestra_ore: float,
     carico: float,
     tolleranza: Mapping[str, float] | None = None,
+    diagnosi: Mapping[str, DiagnosiComune] | None = None,
+    cancello_soglia: float | None = None,
 ) -> PerComune:
     """Eventi colti e carico per comune.
 
@@ -502,17 +551,44 @@ def per_comune(
     def quota(soglia: float) -> float:
         return sum(x >= soglia for x in massimi) / len(massimi) if massimi else 0.0
 
+    def prima(c: str, evento: datetime) -> list[int]:
+        return [
+            h
+            for h, t in enumerate(ore)
+            if -tol.get(c, 0.0)
+            < (evento - t).total_seconds() / 3600.0
+            <= finestra_ore + tol.get(c, 0.0)
+        ]
+
     def colti(soglia: float) -> int:
         return sum(
-            any(
-                orario[c][h] >= soglia
-                and -tol.get(c, 0.0)
-                < (evento - t).total_seconds() / 3600.0
-                <= finestra_ore + tol.get(c, 0.0)
-                for h, t in enumerate(ore)
-            )
+            any(orario[c][h] >= soglia for h in prima(c, evento))
             for c, evento in verita.items()
             if c in orario
+        )
+
+    mancati: list[Mancato] = []
+    for c, evento in sorted(verita.items(), key=lambda kv: (kv[1], kv[0])):
+        d = (diagnosi or {}).get(c)
+        idx = prima(c, evento) if c in orario else []
+        if d is None or not idx or max(orario[c][h] for h in idx) >= soglia_classe:
+            continue
+        h_max = max(idx, key=lambda h: orario[c][h])
+        innesco = max(d.innesco[h] for h in idx)
+        mancati.append(
+            Mancato(
+                comune=c,
+                evento=evento,
+                punteggio=orario[c][h_max],
+                s=d.s[h_max],
+                m=d.m[h_max],
+                innesco=innesco,
+                causa=causa_mancato(
+                    innesco,
+                    senza_riferimento=d.senza_riferimento,
+                    cancello_soglia=cancello_soglia,
+                ),
+            )
         )
 
     soglia, effettivo = _soglia_a_carico(massimi, carico)
@@ -523,6 +599,7 @@ def per_comune(
         soglia_carico=soglia,
         colti_carico=colti(soglia),
         carico_effettivo=effettivo,
+        mancati=tuple(mancati),
     )
 
 
@@ -549,6 +626,16 @@ def colte_a_carico(
     sopra = {c: [t for t, x in serie if x >= soglia] for c, serie in punteggi_verita.items()}
     hits, _, _ = _match_truth(sopra, truth, lead_max_hours=lead_max_hours, tolleranza=tolleranza)
     return soglia, effettivo, hits
+
+
+def _innesco(bd: ComponentBreakdown, cumulata: CumulataBlock | None) -> float:
+    """Il termine d'innesco che entra in M, come lo sceglie il motore."""
+    mt = bd.meteo_terms
+    if mt.cumulata_norm is None or cumulata is None:
+        return mt.caine_norm
+    if cumulata.modo == "sostituisce":
+        return mt.cumulata_norm
+    return max(mt.caine_norm, mt.cumulata_norm)
 
 
 def _evaluate(
@@ -604,6 +691,15 @@ def _evaluate(
     orario: dict[str, list[float]] = (
         {c: [0.0] * len(hours) for cc in comune_di for c in cc} if metro_comuni else {}
     )
+    diagnosi = {
+        c: DiagnosiComune([0.0] * len(hours), [0.0] * len(hours), [0.0] * len(hours))
+        for c in orario
+    }
+    for i, cc in enumerate(comune_di):
+        if cells[i][0].pioggia_riferimento_mm is not None:
+            for c in cc:
+                diagnosi[c].senza_riferimento = False
+    cumulata = thresholds.cumulata
     for h, t in enumerate(hours):
         # Slice each node's antecedent series once, then reuse across the
         # (many) cells that map to that node.
@@ -641,6 +737,12 @@ def _evaluate(
             punteggi_max[i] = max(punteggi_max[i], scored.score)
             for comune in comune_di[i] if orario else ():
                 serie = orario[comune]
+                d = diagnosi[comune]
+                bd = scored.breakdown
+                if isinstance(bd, ComponentBreakdown):
+                    d.innesco[h] = max(d.innesco[h], _innesco(bd, cumulata))
+                    if scored.score >= serie[h]:
+                        d.s[h], d.m[h] = bd.s, bd.m
                 serie[h] = max(serie[h], scored.score)
             if sf.cell_id in punteggi_verita:
                 punteggi_verita[sf.cell_id].append((t, scored.score))
@@ -700,6 +802,11 @@ def _evaluate(
             finestra_ore=metro_comuni.finestra_ore,
             carico=metro_comuni.carico_massimo,
             tolleranza=tolleranza_comuni,
+            # Lo sfidante ML non ha i termini del V1: niente diagnosi.
+            diagnosi=diagnosi if isinstance(engine, MultiFactorScoringEngine) else None,
+            cancello_soglia=(
+                thresholds.cancello_innesco.soglia if thresholds.cancello_innesco else None
+            ),
         )
 
     report = _write_report(
@@ -869,6 +976,34 @@ def _righe_comuni(c: PerComune, metro: MetricaComuni) -> list[str]:
         f"{quota(c.colti_carico):.2%} ({c.colti_carico}), punteggio ≥ {c.soglia_carico:.4f}, "
         f"carico effettivo {c.carico_effettivo:.2%} "
         f"(target ≥ {metro.obiettivo:.0%}) — **{esito}**",
+        "",
+        *_righe_mancati(c.mancati, finestra),
+    ]
+
+
+def _righe_mancati(mancati: tuple[Mancato, ...], finestra: str) -> list[str]:
+    """I comuni sotto Moderato in tutta la finestra, con la causa (#712)."""
+    if not mancati:
+        return []
+    cause: dict[str, int] = {}
+    for x in mancati:
+        cause[x.causa] = cause.get(x.causa, 0) + 1
+    return [
+        f"### Comuni mancati ≥ Moderato entro {finestra}: {len(mancati)}",
+        "",
+        "Innesco: il massimo nella finestra del termine che entra in M (cumulata",
+        "relativa al riferimento o Caine), fra le celle del comune. Punteggio, S e M",
+        "nell'ora del punteggio più alto.",
+        "",
+        *(f"- {causa}: **{n}**" for causa, n in sorted(cause.items(), key=lambda kv: -kv[1])),
+        "",
+        "| Comune | Evento (UTC) | Punteggio | S | M | Innesco | Causa |",
+        "|---|---|---|---|---|---|---|",
+        *(
+            f"| {x.comune} | {x.evento:%Y-%m-%d %H:%M} | {x.punteggio:.3f} | {x.s:.3f} "
+            f"| {x.m:.3f} | {x.innesco:.2f} | {x.causa} |"
+            for x in mancati
+        ),
         "",
     ]
 
