@@ -215,6 +215,19 @@ descrivere) per rispondere a una domanda aperta: al Nord, dove l'indice di
 pericolo meteo a «moderato» prende in Lombardia un incendio su cinque, i roghi
 agricoli sono il segnale che manca? La risposta verrà dalla misura, prima di toccare il modello.
 
+**Risposte che un'AI non può gonfiare.** Dalla versione 0.8 la libreria
+risponde anche come *dati*: quanti fuochi in un riquadro e in quali giorni,
+quanto fidarsi di un punto, i fatti di un incendio per un bollettino, quanto
+spesso FIRMS vede un incendio di una certa grandezza. Ogni numero viaggia con
+il periodo, il satellite, le sorgenti, la licenza e le note, e ciò che non è
+stato letto esce «non misurato», mai zero. Un modello linguistico riceve
+questi dati e scrive il testo; poi `check_text` elenca i numeri del testo,
+in italiano o in inglese, che nei dati non ci sono. Su nove domande di prova
+il controllo trova da solo 13 errori su 21: gli altri sono numeri veri detti
+della cosa sbagliata (318 «incendi» quando 318 sono le rilevazioni), e quelli
+vanno riletti. È la stessa regola di Limen, il modello riformula e non conta,
+portata dentro la libreria.
+
 ### imageserver-export: le mappe europee del suolo
 
 *Documentazione: [agentengineering.it/imageserver-export](https://agentengineering.it/imageserver-export/) · codice su [GitHub](https://github.com/agent-engineering-studio/imageserver-export).*
