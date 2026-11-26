@@ -105,6 +105,56 @@ def test_il_report_per_comune_dice_il_traguardo() -> None:
     assert righe[-2].endswith("**FAIL**")
 
 
+def test_i_comuni_mancati_dicono_perche() -> None:
+    """#712: per ogni comune sotto Moderato in tutta la finestra, la causa."""
+    from datetime import UTC, datetime, timedelta
+
+    from limen.cli.backtest import DiagnosiComune, _righe_mancati, per_comune
+
+    ore = [datetime(2019, 11, 1, tzinfo=UTC) + timedelta(hours=h) for h in range(48)]
+    frana = ore[40]
+
+    def diag(innesco: float, *, senza_riferimento: bool = False) -> DiagnosiComune:
+        return DiagnosiComune(
+            [innesco] * 48, [0.6] * 48, [0.2] * 48, senza_riferimento=senza_riferimento
+        )
+
+    orario = {c: [0.30] * 48 for c in ("asciutto", "chiuso", "aperto", "senzarif", "colto")}
+    orario["colto"][30] = 0.5
+    diagnosi = {
+        "asciutto": diag(0.0),
+        "chiuso": diag(0.4),
+        "aperto": diag(0.9),
+        "senzarif": diag(0.9, senza_riferimento=True),
+        "colto": diag(0.9),
+    }
+    c = per_comune(
+        orario,
+        ore,
+        dict.fromkeys(orario, frana),
+        soglia_classe=0.35,
+        finestra_ore=72,
+        carico=0.10,
+        diagnosi=diagnosi,
+        cancello_soglia=0.6,
+    )
+    assert {m.comune: m.causa for m in c.mancati} == {
+        "asciutto": "pioggia assente",
+        "chiuso": "cancello chiuso",
+        "aperto": "cancello aperto, punteggio basso",
+        "senzarif": "punteggio basso (senza cancello)",
+    }
+    assert all((m.punteggio, m.s, m.m) == (0.30, 0.6, 0.2) for m in c.mancati)
+    righe = _righe_mancati(c.mancati, "72 h")
+    assert righe[0] == "### Comuni mancati ≥ Moderato entro 72 h: 4"
+    assert "| chiuso | 2019-11-02 16:00 | 0.300 | 0.600 | 0.200 | 0.40 | cancello chiuso |" in righe
+    # Senza diagnosi (lo sfidante ML) nessuna tabella.
+    senza = per_comune(
+        orario, ore, {"chiuso": frana}, soglia_classe=0.35, finestra_ore=72, carico=0.1
+    )
+    assert senza.mancati == ()
+
+
 def test_la_precisione_di_data_ha_la_sua_scala() -> None:
     from limen.cli.backtest import PRECISIONI_DATA
 

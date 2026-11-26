@@ -155,3 +155,32 @@ def test_il_pari_merito_non_sfora_la_quota() -> None:
 
 def test_quota_zero_non_accende_niente() -> None:
     assert bt._soglia_quota([array("f", [0.9, 0.1])], 0.0) == math.inf
+
+
+def test_il_report_dice_perche_un_comune_e_mancato(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#712: col V1 vero e una finestra asciutta il comune della frana è
+    mancato, e il report dice «pioggia assente»."""
+    monkeypatch.setattr(bt, "REPORTS_DIR", tmp_path)
+    celle = [(StaticFactors(cell_id=f"c{i}"), 16.0 + i * 0.01, 40.0) for i in range(4)]
+    pioggia = [
+        RainfallSample(timestamp=INIZIO + timedelta(hours=h), precipitation_mm=0.0)
+        for h in range(73)
+    ]
+    m = bt._evaluate(
+        aoi_id="it-prova",
+        cells=celle,
+        nodes=[(16.0, 40.0)],
+        node_rainfall=[pioggia],
+        truth={"c1": EVENTO},
+        start=INIZIO,
+        end=FINE,
+        alert_level=RiskLevel.Moderate,
+        lead_max_hours=48.0,
+        cella_comune={f"c{i}": (f"07100{i}",) for i in range(4)},
+    )
+    testo = m.report_path.read_text(encoding="utf-8")
+    assert "### Comuni mancati ≥ Moderato entro 72 h: 1" in testo
+    assert "| 071001 |" in testo
+    assert "- pioggia assente: **1**" in testo
