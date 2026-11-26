@@ -213,7 +213,7 @@ async def test_observed_floods_come_from_the_geojson_layer(tmp_path: Path) -> No
     again = await ems.fetch_activation_truth(_ACTIVATION, cache_dir=tmp_path)
     assert [f.id for f in again.floods] == [f.id for f in out]
     assert layer.call_count == 1
-    cached = tmp_path / "EMSR762" / _LAYER_URL.rsplit("/", 1)[-1]
+    cached = tmp_path / "EMSR762" / "EMSR762_AOI01_DEL_PRODUCT_observedEventA_v1.geojson"
     assert json.loads(cached.read_text()) == json.loads(json.dumps(_LAYER))
 
 
@@ -263,7 +263,7 @@ async def test_an_unreadable_layer_gives_neither_polygons_nor_mask(tmp_path: Pat
 async def test_a_corrupt_cache_is_downloaded_again(tmp_path: Path) -> None:
     _detail()
     layer = respx.get(_LAYER_URL).mock(return_value=httpx.Response(200, json=_LAYER))
-    cached = tmp_path / "EMSR762" / _LAYER_URL.rsplit("/", 1)[-1]
+    cached = tmp_path / "EMSR762" / "EMSR762_AOI01_DEL_PRODUCT_observedEventA_v1.geojson"
     cached.parent.mkdir()
     cached.write_text("{troncato")
     truth = await ems.fetch_activation_truth(_ACTIVATION, cache_dir=tmp_path)
