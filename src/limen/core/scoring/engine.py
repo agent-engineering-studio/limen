@@ -227,9 +227,19 @@ class MultiFactorScoringEngine(ScoringEngine[ComponentBreakdown]):
             # degradato), non una pioggia nulla: contarla zero chiuderebbe il
             # cancello su tutta l'Italia e la mappa direbbe «Basso».
             if ore:
-                cumulata_norm = _clamp01(
-                    sum(ore) / (cum.saturazione * riferimento * (1.0 - riduzione))
-                )
+                metro = cum.saturazione * (1.0 - riduzione)
+                cumulata_norm = _clamp01(sum(ore) / (metro * riferimento))
+                for durata in cum.durate_lunghe:
+                    rif = bundle.static.pioggia_riferimento_lunghe_mm.get(durata)
+                    if rif is None:
+                        continue
+                    da = fine - timedelta(hours=durata)
+                    mm = sum(
+                        s.precipitation_mm
+                        for s in bundle.dynamic.rainfall.samples
+                        if da < s.timestamp <= fine
+                    )
+                    cumulata_norm = max(cumulata_norm, _clamp01(mm / (metro * rif)))
                 innesco = (
                     cumulata_norm if cum.modo == "sostituisce" else max(caine_norm, cumulata_norm)
                 )

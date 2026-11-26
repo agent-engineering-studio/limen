@@ -5,8 +5,15 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from limen.cli.backtest import con_riferimento
-from limen.cli.clima_pioggia import clima_api, quantile_cumulata, riferimenti_aoi, riferimenti_api
+from limen.cli.backtest import con_riferimento, con_riferimento_lungo
+from limen.cli.clima_pioggia import (
+    clima_api,
+    durate_da_env,
+    quantile_cumulata,
+    riferimenti_aoi,
+    riferimenti_api,
+    riferimenti_durata,
+)
 from limen.core.models.risk import StaticFactors
 
 
@@ -115,3 +122,55 @@ def test_nel_db_ogni_cella_prende_il_nodo_piu_vicino() -> None:
     assert riferimento_per_cella(celle, riferimenti) == [("a", 30.0), ("b", None), ("c", 50.0)]
     assert riferimento_per_cella([], riferimenti) == []
     assert riferimento_per_cella(celle, []) == []
+
+
+def test_le_durate_lunghe_si_leggono_per_durata_e_aoi() -> None:
+    clima = {"ore": 24, "durate": {"72": {"it-x": [[16.0, 40.0, 90.0]]}}}
+    assert riferimenti_durata(clima, "it-x", ore=72) == [(16.0, 40.0, 90.0)]
+    assert riferimenti_durata(clima, "it-x", ore=48) is None
+    assert riferimenti_durata({"ore": 24}, "it-x", ore=72) is None
+    assert durate_da_env("48, 72") == (48, 72)
+    assert durate_da_env("") == ()
+
+
+def test_ogni_cella_prende_il_riferimento_lungo_del_nodo_piu_vicino() -> None:
+    celle = [(StaticFactors(cell_id="a"), 16.01, 40.0), (StaticFactors(cell_id="b"), 16.09, 40.0)]
+    out = con_riferimento_lungo(celle, 72, [(16.0, 40.0, 90.0), (16.1, 40.0, None)])
+    assert [sf.pioggia_riferimento_lunghe_mm for sf, _, _ in out] == [{72: 90.0}, {}]
+
+
+def test_le_durate_lunghe_escono_dallo_stesso_download() -> None:
+    import asyncio
+    from datetime import timedelta
+
+    from limen.cli.clima_pioggia import clima_aoi
+    from limen.core.models.risk import RainfallSample
+
+    class _Client:
+        async def get_rainfall_grid(self, *, nodes, window_start, window_end, batch_size, model):  # type: ignore[no-untyped-def]
+            return [
+                [
+                    RainfallSample(
+                        timestamp=window_start + timedelta(hours=h), precipitation_mm=1.0
+                    )
+                    for h in range(24 * 10)
+                ]
+                for _ in nodes
+            ]
+
+    out = asyncio.run(
+        clima_aoi(
+            aoi_id="x",
+            bbox=(10.0, 44.0, 10.05, 44.05),
+            anni=range(2000, 2001),
+            ore=24,
+            quantile=1.0,
+            giorni_api=1,
+            client=_Client(),  # type: ignore[arg-type]
+            durate=(72,),
+        )
+    )
+    assert out is not None
+    nodi, _, lunghe = out
+    assert [mm for _, _, mm in nodi] == [pytest.approx(24.0)] * len(nodi)
+    assert [mm for _, _, mm in lunghe[72]] == [pytest.approx(72.0)] * len(nodi)

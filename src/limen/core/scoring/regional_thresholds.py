@@ -329,6 +329,18 @@ class CumulataBlock(_StrictModel):
     window_hours: int = Field(..., gt=0, le=48)
     saturazione: float = Field(..., gt=0.0)
     modo: Literal["sostituisce", "massimo"]
+    #: Durate più lunghe, ciascuna divisa per il quantile della stessa durata
+    #: al nodo (#712): l'innesco è il massimo. Una pioggia di tre giorni senza
+    #: un giorno eccezionale apre il cancello solo così. Vuoto ⇒ solo
+    #: ``window_hours``, come prima.
+    durate_lunghe: list[int] = Field(default_factory=list)
+
+    @field_validator("durate_lunghe")
+    @classmethod
+    def _durate_lunghe(cls, v: list[int]) -> list[int]:
+        if any(d <= 0 or d > 168 for d in v) or len(set(v)) != len(v):
+            raise ValueError("durate_lunghe: ore distinte fra 1 e 168")
+        return v
 
 
 class CancelloInnescoBlock(_StrictModel):
