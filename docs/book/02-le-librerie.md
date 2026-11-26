@@ -228,6 +228,16 @@ della cosa sbagliata (318 «incendi» quando 318 sono le rilevazioni), e quelli
 vanno riletti. È la stessa regola di Limen, il modello riformula e non conta,
 portata dentro la libreria.
 
+**Una pagina per il Comune.** Dalla versione 0.9 la libreria si installa
+anche da sola, con Docker: una pagina in italiano e in inglese, con il kit
+grafico della Pubblica Amministrazione, che un Comune può mettere nel proprio
+sito. Mostra gli incendi più grandi di ogni stagione nella sua area, la terra
+sotto di essi e quanto fidarsi di una rilevazione in un punto; con la chiave
+gratuita della NASA aggiunge gli ultimi sette giorni, senza li dice «non
+misurati». Scrive sempre che non è un'allerta. Non è un'alternativa a Limen:
+guarda solo il fuoco visto dal satellite, mentre il quadro dei pericoli, con
+il meteo e il terreno, resta qui.
+
 ### imageserver-export: le mappe europee del suolo
 
 *Documentazione: [agentengineering.it/imageserver-export](https://agentengineering.it/imageserver-export/) · codice su [GitHub](https://github.com/agent-engineering-studio/imageserver-export).*
