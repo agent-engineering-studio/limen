@@ -213,7 +213,17 @@ praticamente zero. Limen la scrive per ogni cella (`crop_burning_share`; vuota
 dove non è mai bruciato, perché lì non c'è terra *sotto un fuoco* da
 descrivere) per rispondere a una domanda aperta: al Nord, dove l'indice di
 pericolo meteo a «moderato» prende in Lombardia un incendio su cinque, i roghi
-agricoli sono il segnale che manca? La risposta verrà dalla misura, prima di toccare il modello.
+agricoli sono il segnale che manca? La misura (`limen misura-coltivi`) dice
+di no. La quota si ricalcola con i soli fuochi fino al 2023 e si confronta con
+le aree che EFFIS dà bruciate nel 2024-2026, sulle otto regioni del Nord. Delle
+470 celle bruciate, solo 135 avevano già avuto un fuoco, cioè una quota: le
+altre tre su quattro nessun dato sui fuochi passati le può vedere. E fra le
+celle già bruciate ribruciano i boschi, non i campi: la quota mediana è 0,011
+dove l'incendio torna, 0,092 dove non torna (AUC 0,39, sotto il caso). Quante
+volte una cella è già bruciata, invece, conta (AUC 0,73). Per questo la quota
+resta nel database e nessun motore la legge. Il limite: EFFIS mappa gli
+incendi da circa 30 ettari, e dei piccoli abbruciamenti la misura non dice
+niente.
 
 **Risposte che un'AI non può gonfiare.** Dalla versione 0.8 la libreria
 risponde anche come *dati*: quanti fuochi in un riquadro e in quali giorni,

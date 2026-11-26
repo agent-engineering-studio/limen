@@ -1,0 +1,22 @@
+{
+  "report": "misura_coltivi_2023_2024-2026.md",
+  "generato": "2026-11-26T12:47:00+00:00",
+  "limen": "0.1.0",
+  "commit": "ac507899c1b710d9ae9e0aa5fea3ca3c2319d147",
+  "versioni": {
+    "landslide": "limen-deterministic-v1.1",
+    "flood": "flood-v1.4.0",
+    "wildfire": "wildfire-v1.1.1"
+  },
+  "comando": "limen misura-coltivi",
+  "ambiente": {
+    "LIMEN_BACKUP_DIR": "<percorso locale>",
+    "LIMEN_DATA_ROOT": "<percorso locale>",
+    "LIMEN_DOMINIO": "localhost",
+    "LIMEN_IMAGE_PREFIX": "ghcr.io/agent-engineering-studio/limen-",
+    "LIMEN_IMAGE_TAG": "sha-eda9890",
+    "LIMEN_IMPERVIOUSNESS_RASTER": "<percorso locale>",
+    "LIMEN_PROXY_BIND": "127.0.0.1",
+    "LIMEN_REPORTS_DIR": "<percorso locale>"
+  }
+}
