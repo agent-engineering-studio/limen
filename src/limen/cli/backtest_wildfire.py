@@ -205,6 +205,56 @@ _LEVEL_ORDER = (
 )
 
 
+#: Perché una cella bruciata è rimasta sotto la soglia nelle ore di preavviso.
+#: Il punteggio è ``fwi_norm * terreno``: o il meteo non arrivava alla soglia
+#: neanche col terreno pieno, o ci arrivava e il terreno l'ha tenuto sotto, o
+#: il livello c'era e il cancello degli avvisi l'ha fermato.
+CAUSA_SENZA_METEO = "nessun dato meteo"
+CAUSA_METEO = "meteo sotto la soglia"
+CAUSA_TERRENO = "terreno sotto la soglia"
+CAUSA_CANCELLO = "cancello degli avvisi"
+CAUSE = (CAUSA_METEO, CAUSA_TERRENO, CAUSA_CANCELLO, CAUSA_SENZA_METEO)
+
+#: Il primo livello di CORINE: che terra era bruciata.
+_TERRE_CORINE = {
+    "1": "artificiale",
+    "2": "agricola",
+    "3": "bosco e seminaturale",
+    "4": "zone umide",
+    "5": "acque",
+}
+
+
+def terra_corine(codice: str | None) -> str:
+    return _TERRE_CORINE.get((codice or "")[:1], "non nota")
+
+
+@dataclass(frozen=True, slots=True)
+class Mancato:
+    """Una cella bruciata senza allerta, e il punto più alto che ha toccato nella finestra."""
+
+    cell_id: str
+    fire_date: date
+    landuse_code: str | None
+    #: Il massimo nelle ore di preavviso; ``None`` senza giorni con il meteo.
+    fwi: float | None
+    fwi_norm: float | None
+    terreno: float | None
+    punteggio: float | None
+    causa: str
+
+
+def causa(*, fwi_norm: float | None, punteggio: float | None, soglia: float) -> str:
+    """La causa di un mancato dai massimi della finestra (vedi :data:`CAUSE`)."""
+    if fwi_norm is None or punteggio is None:
+        return CAUSA_SENZA_METEO
+    if punteggio >= soglia:
+        return CAUSA_CANCELLO
+    if fwi_norm < soglia:
+        return CAUSA_METEO
+    return CAUSA_TERRENO
+
+
 @dataclass(frozen=True, slots=True)
 class WildfireBacktestMetrics:
     aoi_id: str
@@ -235,6 +285,10 @@ class WildfireBacktestMetrics:
     #: Vero quando il FAR viene dal carico per cella (#479): giornate-cella in
     #: allerta su celle che non hanno bruciato entro l'orizzonte.
     far_misurato: bool = False
+    #: Le celle bruciate senza allerta, con la causa (#714).
+    mancati: tuple[Mancato, ...] = ()
+    #: Il punteggio del livello di allerta, per leggere i mancati.
+    soglia: float = 0.0
 
 
 def _at_least(level: RiskLevel, threshold: RiskLevel) -> bool:
@@ -431,6 +485,8 @@ def evaluate(
     misses = 0
     warned_cells = 0
     leads: list[float] = []
+    mancati: list[Mancato] = []
+    soglia = _soglia(alert_level, thresholds)
     for cell_id, (fire_date, lon, lat) in truth.items():
         nodo = nearest_node(lon, lat, nodes)
         chain = chains[nodo]
@@ -469,6 +525,9 @@ def evaluate(
                 break
         if earliest is None:
             misses += 1
+            mancati.append(
+                _mancato(engine, aoi_id, cell_id, sf, fire_date, window, chain, tetto, soglia)
+            )
             continue
         warned_cells += 1
         hits += 1
@@ -494,7 +553,106 @@ def evaluate(
         mean_lead_hours=mean_lead,
         base_rate=base_alerted / base_days if base_days else 0.0,
         report_path=None,
+        mancati=tuple(sorted(mancati, key=lambda m: (m.fire_date, m.cell_id))),
+        soglia=soglia,
     )
+
+
+def _mancato(
+    engine: WildfireScoringEngine,
+    aoi_id: str,
+    cell_id: str,
+    sf: StaticFactors,
+    fire_date: date,
+    window: list[date],
+    chain: dict[date, FireWeatherState],
+    tetto: float | None,
+    soglia: float,
+) -> Mancato:
+    """I massimi della finestra di preavviso di una cella mancata, e la causa."""
+    valutati = [
+        (
+            fw,
+            engine.score(
+                CellFeatureBundle(
+                    aoi_id=aoi_id,
+                    cell_id=cell_id,
+                    static=sf,
+                    dynamic=DynamicInputs(
+                        valuation_time=datetime.combine(day, time(12), UTC),
+                        fire_weather=fw,
+                        fwi_normalisation_max=tetto,
+                    ),
+                )
+            ),
+        )
+        for day in window
+        if (fw := chain.get(day)) is not None
+    ]
+    if not valutati:
+        return Mancato(
+            cell_id,
+            fire_date,
+            sf.landuse_code,
+            None,
+            None,
+            None,
+            None,
+            causa(fwi_norm=None, punteggio=None, soglia=soglia),
+        )
+    _, top = max(valutati, key=lambda v: v[1].score)
+    fwi_norm = max(v[1].breakdown.fwi_norm for v in valutati)
+    b = top.breakdown
+    terreno = top.score / b.fwi_norm if b.fwi_norm else None
+    return Mancato(
+        cell_id=cell_id,
+        fire_date=fire_date,
+        landuse_code=sf.landuse_code,
+        fwi=max(v[0].fwi for v in valutati),
+        fwi_norm=fwi_norm,
+        terreno=terreno,
+        punteggio=top.score,
+        causa=causa(fwi_norm=fwi_norm, punteggio=top.score, soglia=soglia),
+    )
+
+
+def mancati_report(mancati: Sequence[Mancato], *, soglia: float) -> list[str]:
+    """La sezione dei mancati: conteggi per causa, per terra e per mese, poi la tabella."""
+    if not mancati:
+        return []
+    per_causa = {c: sum(m.causa == c for m in mancati) for c in CAUSE}
+    per_terra: dict[str, int] = defaultdict(int)
+    per_mese: dict[int, int] = defaultdict(int)
+    for m in mancati:
+        per_terra[terra_corine(m.landuse_code)] += 1
+        per_mese[m.fire_date.month] += 1
+
+    def f(x: float | None, cifre: int = 2) -> str:
+        return "—" if x is None else f"{x:.{cifre}f}"
+
+    return [
+        "## Mancati, con la causa",
+        "",
+        f"Soglia del livello: punteggio {soglia:.2f}. Il punteggio è FWI normalizzato per terreno: "
+        "**meteo sotto la soglia** se l'FWI non ci arrivava neanche col terreno pieno, "
+        "**terreno sotto la soglia** se ci arrivava e combustibile e pendenza l'hanno tenuto "
+        "sotto, **cancello degli avvisi** se il livello c'era e la predisposizione no.",
+        "",
+        "- Per causa: " + ", ".join(f"{c} {n}" for c, n in per_causa.items() if n) + ".",
+        "- Per terra (CORINE): "
+        + ", ".join(f"{t} {n}" for t, n in sorted(per_terra.items(), key=lambda x: -x[1]))
+        + ".",
+        "- Per mese: " + ", ".join(f"{m:02d}: {n}" for m, n in sorted(per_mese.items())) + ".",
+        "",
+        "| Cella | Incendio | CORINE | FWI max | FWI norm. max | Terreno | Punteggio max | Causa |",
+        "|---|---|---|---:|---:|---:|---:|---|",
+        *(
+            f"| {m.cell_id} | {m.fire_date} | {m.landuse_code or '—'} | {f(m.fwi, 1)} | "
+            f"{f(m.fwi_norm)} | {f(m.terreno)} | {f(m.punteggio)} | {m.causa} |"
+            for m in mancati
+        ),
+        "",
+    ]
 
 
 def carico_meteo(
@@ -752,6 +910,7 @@ def write_report(
         "> quante allerte arrivano per ogni incendio vero, e si confronta fra",
         "> varianti, non con lo zero.",
         "",
+        *mancati_report(metrics.mancati, soglia=metrics.soglia),
     ]
     if metrics.truth_fires == 0:
         lines.insert(
