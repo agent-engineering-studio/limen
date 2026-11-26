@@ -188,7 +188,7 @@ gs-volumes:
 	@docker volume create limen-idrogeo-cache >/dev/null
 	@mkdir -p "$(DATA_ROOT)/ispra-idrogeo"   # i dati di idrogeo-mcp, sotto la radice comune
 	@docker volume create limen-copernicus-ems-cache >/dev/null
-	@docker volume create limen-copernicus-ems-data >/dev/null
+	@mkdir -p "$(DATA_ROOT)/copernicus-ems"   # i dati di copernicus-ems-mcp, sotto la radice comune
 
 up: up-stack
 	@echo ""

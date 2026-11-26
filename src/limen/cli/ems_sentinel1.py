@@ -4,8 +4,9 @@ Per ogni prodotto alluvionale delle attivazioni già in ``flood_events``, la
 libreria ``copernicus-ems`` sceglie il passaggio Sentinel-1 più vicino
 all'osservazione, chiede al Copernicus Data Space il backscatter tagliato
 sulla **stessa griglia** del raster di etichette, e scrive immagine, etichette
-e ``_pair.json`` in ``COPERNICUS_EMS_DATA_DIR``. Con il riferimento (default)
-anche il passaggio pre-evento della stessa orbita, per il change detection.
+e ``_pair.json`` nella cartella della libreria, ``$DATA_ROOT/copernicus-ems``.
+Con il riferimento (default) anche il passaggio pre-evento della stessa
+orbita, per il change detection.
 
 **Non entra nel punteggio, né nella mappa, né negli alert.** Sulle etichette
 indipendenti, lasciando fuori un'attivazione alla volta, il miglior rivelatore

@@ -262,7 +262,7 @@ async def sincronizza_alluvioni(*, forzato: bool = False) -> dict[str, Any]:
     attivazioni di cui non si è letto il dettaglio, danno ``status: warn``.
     """
     dove = os.getenv("LIMEN_FLOOD_EVENTS_CACHE")
-    cache = Path(dove).expanduser() if dove else radice_dati() / "flood_events"
+    cache = Path(dove).expanduser() if dove else radice_dati() / "copernicus-ems"
     country = os.getenv("LIMEN_FLOOD_EVENTS_COUNTRY", "Italy")
 
     activations = await fetch_activations(country=country, categories=_flood_categories())

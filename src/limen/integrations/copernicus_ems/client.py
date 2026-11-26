@@ -49,6 +49,7 @@ from copernicus_ems import (
     Product,
     activations_url,
     detail_url,
+    layer_path,
     parse_activations,
     parse_detail,
     parse_layer,
@@ -196,11 +197,15 @@ def _mask(product: Product) -> ObservationMask | None:
 
 
 async def _layer(product: Product, *, cache_dir: Path) -> dict[str, Any] | None:
-    """Il GeoJSON ``observedEventA`` del prodotto, dalla cache o dalla rete."""
+    """Il GeoJSON ``observedEventA`` del prodotto, dalla cache o dalla rete.
+
+    Al percorso di ``copernicus_ems.layer_path``: un layer scaricato da
+    ``copernicus-ems init`` non si riscarica, e viceversa.
+    """
     layer = product.layers.get(OBSERVED_EVENT)
     if layer is None:
         return None
-    path = cache_dir / product.activation_code / layer.url.rsplit("/", 1)[-1]
+    path = layer_path(product, layer, cache_dir)
     if path.exists():
         try:
             return parse_layer(path.read_bytes())

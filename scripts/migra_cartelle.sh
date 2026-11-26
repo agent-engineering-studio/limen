@@ -28,8 +28,34 @@ sposta() {  # sposta VECCHIA NUOVA
   echo "  [migra] $1 → $2"
 }
 
+unisci() {  # unisci VECCHIA NUOVA: file per file, senza sovrascrivere
+  local vecchia="$RADICE/$1" nuova="$RADICE/$2" f
+  [ -d "$vecchia" ] || return 0
+  ( cd "$vecchia" && find . -type f ) | while IFS= read -r f; do
+    [ -e "$nuova/$f" ] && continue
+    mkdir -p "$(dirname "$nuova/$f")"
+    mv "$vecchia/$f" "$nuova/$f"
+  done
+  find "$vecchia" -depth -type d -empty -delete
+  if [ -e "$vecchia" ]; then
+    echo "  [migra] $vecchia: restano file già presenti in $nuova, li togli tu" >&2
+  else
+    echo "  [migra] $1 → $2"
+  fi
+}
+
 sposta egms egms-client
 sposta radar/it_dpc_sri/italian-radar-dpc-sri.zarr dpc-radar/it_dpc_sri
 sposta datasets/idrogeo ispra-idrogeo
 sposta datasets/fires/firms firms-client
 sposta datasets/landcover/worldcover firms-client/worldcover
+# copernicus-ems: le immagini Sentinel-1 e i layer delle attivazioni finiscono
+# nella stessa cartella (EMSR…/), quindi si uniscono file per file. Limen
+# salvava i layer come <nome>.json; la libreria li legge come <nome>.geojson.
+unisci datasets/copernicus-ems copernicus-ems
+unisci flood_events copernicus-ems
+if [ -d "$RADICE/copernicus-ems" ]; then
+  find "$RADICE/copernicus-ems" -path '*/EMSR*' -name '*_PRODUCT_*.json' | while IFS= read -r f; do
+    [ -e "${f%.json}.geojson" ] || mv "$f" "${f%.json}.geojson"
+  done
+fi

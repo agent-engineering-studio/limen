@@ -341,17 +341,18 @@ services:
     container_name: limen-copernicus-ems-mcp
     restart: unless-stopped
     profiles: ["geoserver"]
-    command: ["uvx", "--from", "copernicus-ems[mcp]~=0.7.0", "copernicus-ems-mcp"]
+    command: ["uvx", "--from", "copernicus-ems[mcp]~=0.8.0", "copernicus-ems-mcp"]
     environment:
       COPERNICUS_EMS_MCP_TRANSPORT: streamable-http
       COPERNICUS_EMS_MCP_HOST: 0.0.0.0
       COPERNICUS_EMS_MCP_PORT: "8768"
       COPERNICUS_EMS_MCP_ALLOWED_HOSTS: "copernicus-ems-mcp:*,localhost:*,127.0.0.1:*"
-      COPERNICUS_EMS_DATA_DIR: /data/copernicus-ems
+      # La cartella di copernicus-ems sotto la radice comune: $DATA_ROOT/copernicus-ems.
+      DATA_ROOT: /data
       UV_CACHE_DIR: /cache/uv
     volumes:
       - limen-copernicus-ems-cache:/cache/uv
-      - limen-copernicus-ems-data:/data/copernicus-ems
+      - ${DATA_ROOT:-${LIMEN_DATA_ROOT:-../../data}}/copernicus-ems:/data/copernicus-ems
     ports:
       - "${LIMEN_COPERNICUS_EMS_MCP_BIND:-127.0.0.1}:8768:8768"
     healthcheck:
@@ -379,7 +380,4 @@ volumes:
     external: true
   limen-copernicus-ems-cache:
     name: limen-copernicus-ems-cache
-    external: true
-  limen-copernicus-ems-data:
-    name: limen-copernicus-ems-data
     external: true
