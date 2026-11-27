@@ -45,3 +45,16 @@ def test_gli_antecedenti_come_li_legge_lo_sweep() -> None:
     # Prima che la serie cominci non si inventa niente.
     assert a.api(t0 - timedelta(days=60)) is None
     assert a.suolo(t0 - timedelta(days=60)) is None
+
+
+def test_un_archivio_radar_senza_ore_misurate_non_e_una_misura() -> None:
+    # Il mirror SRI sul disco parte dal 2017: una finestra del 2010 legge
+    # zero fotogrammi, ogni ora resta del modello e il report direbbe «radar».
+    from datetime import UTC, datetime
+
+    from limen.cli.backtest import radar_ha_misurato
+
+    t = datetime(2010, 5, 1, tzinfo=UTC)
+    assert not radar_ha_misurato({})
+    assert not radar_ha_misurato({t: [None, None]})
+    assert radar_ha_misurato({t: [None, 0.0]})

@@ -344,6 +344,11 @@ def api_per_cella(
     return [riferimenti[nearest_node(lon, lat, nodi)][2] for _, lon, lat in cells]
 
 
+def radar_ha_misurato(ore: dict[datetime, list[float | None]]) -> bool:
+    """Vero se l'archivio radar ha misurato almeno un'ora in almeno un nodo."""
+    return any(mm is not None for valori in ore.values() for mm in valori)
+
+
 def _level_at_least(level: RiskLevel, threshold: RiskLevel) -> bool:
     return _ALERT_LEVELS_ORDERED.index(level) >= _ALERT_LEVELS_ORDERED.index(threshold)
 
@@ -1545,10 +1550,13 @@ async def run() -> int:
                     if archivio is not None:
                         from limen.integrations.dpc.merging_archive import pioggia_dal_radar
 
-                        grezzo = pioggia_dal_radar(
-                            grezzo,
-                            archivio.oraria(nodes, start - timedelta(days=31), end),
-                        )
+                        misurata = archivio.oraria(nodes, start - timedelta(days=31), end)
+                        if not radar_ha_misurato(misurata):
+                            # Senza un'ora misurata ogni ora resta del modello:
+                            # il report direbbe «radar» misurando ERA5 (#712).
+                            log.error("backtest.radar_vuoto", aoi_id=aoi_id, pioggia=pioggia)
+                            return 1
+                        grezzo = pioggia_dal_radar(grezzo, misurata)
                     elif pioggia == "pluviometri":
                         from limen.integrations.arpa_lombardia import pluviometri
                         from limen.integrations.dpc.merging_archive import pioggia_dal_radar
