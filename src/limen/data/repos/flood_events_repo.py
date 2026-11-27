@@ -16,6 +16,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 
+from shapely.geometry.base import BaseGeometry
+
 from limen.core.logging import get_logger
 from limen.data.db import acquire
 from limen.integrations.copernicus_ems.client import ObservationMask, ObservedFlood
@@ -331,13 +333,114 @@ async def activations_summary() -> list[ActivationSummary]:
     ]
 
 
+@dataclass(frozen=True, slots=True)
+class PoligonoOsservato:
+    """Un poligono di ``flood_events`` in EPSG:3035, per misurare aree."""
+
+    id: str
+    geom: BaseGeometry
+    event_time: datetime
+    observed_time: datetime | None
+
+
+async def acqua_osservata(activation_code: str) -> list[PoligonoOsservato]:
+    """I poligoni di un'attivazione, tutti i prodotti, in EPSG:3035.
+
+    Quali prodotti tenere lo decide il chiamante (:func:`limen.core.ems_pai.di_monitoraggio`),
+    e anche la validità: ``ST_MakeValid`` qui quintuplicava il tempo della query
+    (20 s contro 4 su EMSR664), ``shapely.make_valid`` costa una frazione.
+    """
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, ST_Transform(geom, 3035) AS geom,
+                   event_time, observed_time
+            FROM flood_events
+            WHERE activation_code = $1
+            ORDER BY id
+            """,
+            activation_code,
+        )
+    return [
+        PoligonoOsservato(
+            id=str(r["id"]),
+            geom=r["geom"],
+            event_time=r["event_time"],
+            observed_time=r["observed_time"],
+        )
+        for r in rows
+    ]
+
+
+async def riquadro(activation_code: str) -> tuple[float, float, float, float] | None:
+    """Il riquadro EPSG:4326 dell'acqua di un'attivazione, ``None`` se non c'è."""
+    async with acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT ST_XMin(b) AS x0, ST_YMin(b) AS y0, ST_XMax(b) AS x1, ST_YMax(b) AS y1
+            FROM (SELECT ST_Extent(geom)::geometry AS b
+                  FROM flood_events WHERE activation_code = $1) t
+            WHERE b IS NOT NULL
+            """,
+            activation_code,
+        )
+    if row is None:
+        return None
+    return (float(row["x0"]), float(row["y0"]), float(row["x1"]), float(row["y1"]))
+
+
+@dataclass(frozen=True, slots=True)
+class ComuneGeom:
+    istat_code: str
+    nome: str
+    aoi_id: str
+    geom: BaseGeometry
+
+
+async def comuni_nel_riquadro(activation_code: str) -> list[ComuneGeom]:
+    """I comuni ISTAT il cui riquadro tocca l'acqua dell'attivazione, in EPSG:3035.
+
+    Solo il filtro sull'indice: l'intersezione vera la fa il chiamante, che
+    ha già l'acqua in memoria. Un ``ST_Intersects`` fra ogni poligono e i
+    confini comunali costava quasi due minuti su EMSR664.
+    """
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            WITH r AS (
+                SELECT ST_Extent(geom)::geometry AS b
+                FROM flood_events WHERE activation_code = $1
+            )
+            SELECT c.istat_code, c.name, c.aoi_id,
+                   ST_Transform(c.geom, 3035) AS geom
+            FROM comuni c, r
+            WHERE r.b IS NOT NULL AND c.geom && r.b
+            """,
+            activation_code,
+        )
+    return [
+        ComuneGeom(
+            istat_code=str(r["istat_code"]),
+            nome=str(r["name"]),
+            aoi_id=str(r["aoi_id"]),
+            geom=r["geom"],
+        )
+        for r in rows
+    ]
+
+
 __all__ = [
     "ActivationSummary",
+    "ComuneGeom",
+    "PoligonoOsservato",
+    "acqua_osservata",
     "activations_summary",
     "catalogue_window",
+    "comuni_nel_riquadro",
     "count_events",
     "observation_times",
     "observation_times_per_maschera",
+    "riquadro",
     "truth_cells",
     "truth_cells_per_prodotto",
     "upsert_many",

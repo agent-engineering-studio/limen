@@ -11,6 +11,7 @@ Usage:
     limen ingest-events      Dated event catalogue: --hazard landslide|flood.
     limen ems-sentinel1      Sentinel-1 / EMS label pairs for flood ML (CDSE, PU budget).
     limen ems-verdetti       Radar verdicts on EMS maps (copernicus-ems reports) → DB.
+    limen ems-confronto-pai  Acqua osservata EMS per classe idraulica ISPRA, sola lettura (#713).
     limen registra-verifica  Fact check: un evento verificato entra nel registro (074).
     limen resoconto-radar    Il radar DPC di un evento verificato, in quattro file (#643).
     limen verifiche-report   Eventi verificati contro le previsioni, col tasso di base.
@@ -87,6 +88,8 @@ from limen.cli.dati import build_subparser as _build_dati_subparser
 from limen.cli.dati import run as _run_dati
 from limen.cli.dpc_bollettini import run as _run_dpc_bollettini
 from limen.cli.effis_sync import run as _run_effis_sync
+from limen.cli.ems_confronto_pai import build_subparser as _build_ems_pai_subparser
+from limen.cli.ems_confronto_pai import run as _run_ems_pai
 from limen.cli.ems_verdetti import run as _run_ems_verdetti
 from limen.cli.esposizione_sync import run as _run_esposizione_sync
 from limen.cli.fedelta_racconti import run as _run_fedelta_racconti
@@ -546,6 +549,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _build_sensore_subparser(sub)
     _build_misura_subparser(sub)
     _build_misura_coltivi_subparser(sub)
+    _build_ems_pai_subparser(sub)
     _build_archivia_subparser(sub)
     _build_dati_subparser(sub)
     _build_backup_subparser(sub)
@@ -661,6 +665,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "misura":
         try:
             return asyncio.run(_run_misura(args))
+        except KeyboardInterrupt:  # pragma: no cover
+            return 130
+    if args.command == "ems-confronto-pai":
+        try:
+            return asyncio.run(_run_ems_pai(args))
         except KeyboardInterrupt:  # pragma: no cover
             return 130
     if args.command == "misura-coltivi":

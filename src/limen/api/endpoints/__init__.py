@@ -14,6 +14,7 @@ from limen.api.endpoints import (
     aoi,
     comuni,
     contributi,
+    ems,
     health,
     installazione,
     pluviometri,
@@ -44,6 +45,7 @@ def all_routers() -> Iterable[APIRouter]:
         standard.router,
         radar.router,
         pluviometri.router,
+        ems.router,
     )
 
 
