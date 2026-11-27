@@ -30,10 +30,12 @@ import json
 import re
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Iterable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 import asyncpg
+from shapely.geometry.base import BaseGeometry
 
 from limen.config.catalogo_dati import carica_catalogo, catalogo_per
 from limen.config.settings import get_settings
@@ -373,6 +375,55 @@ async def _load_idraulica(
                 )
             )
     return items
+
+
+@dataclass(frozen=True, slots=True)
+class ZoneIdrauliche:
+    """I pezzi del mosaico idraulico dentro un riquadro, in EPSG:3035."""
+
+    tabelle: dict[str, str]
+    pezzi: list[tuple[str, BaseGeometry]]
+
+
+async def zone_idrauliche(bbox: tuple[float, float, float, float]) -> ZoneIdrauliche | None:
+    """Le aree P3/P2/P1 del mosaico idraulico ISPRA nel riquadro EPSG:4326.
+
+    Tagliate al riquadro e poi a pezzi da 256 vertici **prima** di uscire dal
+    database: il mosaico ha poligoni da 3,5 milioni di vertici, e intersecarli
+    interi con l'acqua osservata non finiva in dieci minuti. Sola lettura;
+    ``None`` se la sorgente non risponde o il mosaico non è caricato.
+    """
+    settings = get_settings()
+    dsn, schema = settings.geoserver_source.sorgente(settings.db)
+    try:
+        conn = await asyncpg.connect(dsn)
+    except (OSError, asyncpg.PostgresError) as exc:
+        log.warning("integration.degraded", source="geoserver_source", op="connect", error=str(exc))
+        return None
+    try:
+        await register_postgis(conn)
+        tabelle = await _idraulica_tables(conn, schema)
+        pezzi: list[tuple[str, BaseGeometry]] = []
+        for table, cls in tabelle.items():
+            rows = await conn.fetch(
+                f"""
+                WITH r AS (SELECT ST_MakeEnvelope($1, $2, $3, $4, 4326) AS b)
+                SELECT ST_Transform(ST_MakeValid(s), 3035) AS geom
+                FROM "{schema}"."{table}" z, r,
+                     LATERAL ST_Subdivide(ST_ClipByBox2D(z.geom, r.b), 256) s
+                WHERE z.geom && r.b
+                """,
+                *bbox,
+            )
+            pezzi.extend((cls, r["geom"]) for r in rows if r["geom"] is not None)
+    except (OSError, asyncpg.PostgresError) as exc:
+        log.warning("integration.degraded", source="geoserver_source", op="zone", error=str(exc))
+        return None
+    finally:
+        await conn.close()
+    if not tabelle:
+        return None
+    return ZoneIdrauliche(tabelle={cls: t for t, cls in tabelle.items()}, pezzi=pezzi)
 
 
 async def _se_cambiato(
