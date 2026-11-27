@@ -170,6 +170,59 @@ async def observation_times(aoi_id: str) -> dict[str, list[datetime]]:
     return out
 
 
+async def observation_times_per_maschera(aoi_id: str) -> dict[str, list[tuple[str, datetime]]]:
+    """``{cell_id: [(id maschera, istante)]}``: come :func:`observation_times`,
+    con la maschera che ha guardato, per poter togliere un prodotto (#713)."""
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT g.id AS cell_id, m.id AS mask_id, m.observed_time
+            FROM flood_observation_masks m
+            JOIN grid_cells g ON ST_Intersects(g.geom, m.geom)
+            WHERE g.aoi_id = $1
+            ORDER BY g.id, m.observed_time
+            """,
+            aoi_id,
+        )
+    out: dict[str, list[tuple[str, datetime]]] = {}
+    for r in rows:
+        out.setdefault(str(r["cell_id"]), []).append((str(r["mask_id"]), r["observed_time"]))
+    return out
+
+
+async def truth_cells_per_prodotto(
+    aoi_id: str, *, start: datetime, end: datetime
+) -> dict[str, dict[str, datetime]]:
+    """``{cell_id: {id maschera del prodotto: primo event_time}}``.
+
+    :func:`truth_cells` tenendo distinto il prodotto che ha mappato l'acqua,
+    così il backtest può togliere una mappa e vedere quali celle restano
+    allagate per un'altra (#713). Il prodotto è il prefisso dell'id del
+    poligono, ``<maschera>-<posizione>-<parte>``.
+    """
+    async with acquire() as conn:
+        rows = await conn.fetch(
+            r"""
+            SELECT g.id AS cell_id,
+                   regexp_replace(e.id, '-\d+-\d+$', '') AS mask_id,
+                   min(e.event_time) AS first_event
+            FROM flood_events e
+            JOIN grid_cells g ON ST_Intersects(g.geom, e.geom)
+            WHERE g.aoi_id = $1
+              AND e.event_time >= $2
+              AND e.event_time <= $3
+            GROUP BY 1, 2
+            """,
+            aoi_id,
+            start,
+            end,
+        )
+    out: dict[str, dict[str, datetime]] = {}
+    for r in rows:
+        out.setdefault(str(r["cell_id"]), {})[str(r["mask_id"])] = r["first_event"]
+    return out
+
+
 async def count_events() -> int:
     async with acquire() as conn:
         row = await conn.fetchrow("SELECT count(*)::bigint AS n FROM flood_events")
@@ -228,18 +281,42 @@ class ActivationSummary:
 
 
 async def activations_summary() -> list[ActivationSummary]:
-    """Una riga per attivazione: data, poligoni, area. Provenienza leggibile."""
+    """Una riga per attivazione: data, poligoni, area. Provenienza leggibile.
+
+    L'area è, per AOI, quella del **prodotto più esteso**, poi sommata sulle
+    AOI: ``DEL``, ``DEL_MONIT01``, ``GRA`` mostrano lo stesso posto in giorni
+    diversi, e sommarli contava due o tre volte la stessa acqua (#713).
+    """
     async with acquire() as conn:
         rows = await conn.fetch(
-            """
-            SELECT activation_code,
-                   min(event_time) AS event_time,
-                   count(*)        AS polygons,
-                   sum(area_km2)   AS area_km2,
-                   min(attributes->>'activation_name') AS name
-            FROM flood_events
-            GROUP BY activation_code
-            ORDER BY min(event_time)
+            r"""
+            WITH per_prodotto AS (
+                SELECT activation_code, aoi_label,
+                       COALESCE(substring(id FROM '^(.*)-[0-9]+-[0-9]+$'), aoi_label)
+                           AS prodotto,
+                       sum(area_km2) AS area_km2
+                FROM flood_events
+                GROUP BY 1, 2, 3
+            ),
+            per_aoi AS (
+                SELECT activation_code, aoi_label, max(area_km2) AS area_km2
+                FROM per_prodotto
+                GROUP BY 1, 2
+            ),
+            per_attivazione AS (
+                SELECT activation_code, sum(area_km2) AS area_km2
+                FROM per_aoi
+                GROUP BY 1
+            )
+            SELECT e.activation_code,
+                   min(e.event_time) AS event_time,
+                   count(*)          AS polygons,
+                   min(a.area_km2)   AS area_km2,
+                   min(e.attributes->>'activation_name') AS name
+            FROM flood_events e
+            JOIN per_attivazione a USING (activation_code)
+            GROUP BY e.activation_code
+            ORDER BY min(e.event_time)
             """
         )
     return [
@@ -260,7 +337,9 @@ __all__ = [
     "catalogue_window",
     "count_events",
     "observation_times",
+    "observation_times_per_maschera",
     "truth_cells",
+    "truth_cells_per_prodotto",
     "upsert_many",
     "upsert_masks",
 ]

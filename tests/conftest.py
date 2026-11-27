@@ -216,6 +216,10 @@ async def reset_db(pg_pool: asyncpg.Pool) -> AsyncIterator[None]:
         # Soglie dei periodi di ritorno per nodo (092): un test che carica
         # solo i nodi nuovi troverebbe quelli del test prima.
         "glofas_soglie",
+        # Vaglio radar delle mappe EMS (102): chiave per prodotto.
+        "ems_verdetti",
+        "ems_acqua_confermata",
+        "ems_acqua_possibile",
     ]
     async with acquire() as conn:
         with contextlib.suppress(Exception):
