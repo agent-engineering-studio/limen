@@ -299,6 +299,34 @@ async def run_forecast_history(
     return {"cells_persisted": total, "aoi_ids": aoi_ids, "hazard": hz.value}
 
 
+async def ems_attivazioni() -> dict[str, Any]:
+    """Le attivazioni alluvionali Copernicus EMS nel catalogo di Limen (#713).
+
+    Acqua **osservata dopo** l'evento da satellite: un limite inferiore, non
+    un'allerta né una previsione. Cita l'`attribuzione` di ogni attivazione.
+    """
+    from limen.core import ems_registro
+
+    return {"avvertenza": ems_registro.AVVERTENZA, "attivazioni": await ems_registro.attivazioni()}
+
+
+async def ems_registro_comuni(codice: str) -> dict[str, Any]:
+    """I comuni ISTAT toccati dall'acqua osservata di un'attivazione EMS (#713).
+
+    Per comune: km² d'acqua (unione dei prodotti non di monitoraggio), inizio
+    dell'evento, date osservate e prodotti. La prima richiesta su
+    un'attivazione grande può costare un minuto. Cita l'`attribuzione` e
+    l'`avvertenza`: acqua vista dal satellite, non un'allerta.
+    """
+    from limen.core import ems_registro
+
+    codice = codice.strip().upper()
+    righe = await ems_registro.registro(codice)
+    if righe is None:
+        return {"attivazione": codice, "error": "attivazione non in catalogo"}
+    return ems_registro.registro_json(codice, righe)
+
+
 async def comune_risk(istat_code: str) -> dict[str, Any]:
     """Rollup di un comune su **tutti** i pericoli, per un codice ISTAT.
 

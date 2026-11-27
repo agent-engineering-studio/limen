@@ -21,6 +21,8 @@ from limen.mcp.tools import (
     build_static_report,
     cell_breakdown,
     comune_risk,
+    ems_attivazioni,
+    ems_registro_comuni,
     hazards,
     landslide_zone_rain,
     multi_hazard_summary,
@@ -82,6 +84,10 @@ Read tools (open):
   su tutti i pericoli (migrazione 051).
   **Landslide only**: the rollup view is pinned to it, so passing another
   hazard returns an error rather than mislabelled numbers.
+* ems_attivazioni() e ems_registro_comuni(codice) → le attivazioni alluvionali
+  Copernicus EMS e, per una, i comuni toccati con i km² d'acqua osservata.
+  Acqua vista dal satellite dopo l'evento (un limite inferiore), mai
+  un'allerta: cita `attribuzione` e `avvertenza`.
 
 Admin tools (MCP_ADMIN_TOKEN, fail-closed):
 * run_monitor(aoi_id, admin_token, cell_limit?, hazard?) → run the full
@@ -244,6 +250,16 @@ def _build_server() -> Any:
     async def tool_top_comuni(limit: int = 10, aoi_id: str | None = None) -> list[dict[str, Any]]:
         """Comuni ordinati dal peggiore fra tutti i pericoli."""
         return await top_comuni(limit=limit, aoi_id=aoi_id)
+
+    @mcp.tool()
+    async def tool_ems_attivazioni() -> dict[str, Any]:
+        """Attivazioni alluvionali Copernicus EMS in catalogo (acqua osservata, non allerte)."""
+        return await ems_attivazioni()
+
+    @mcp.tool()
+    async def tool_ems_registro_comuni(codice: str) -> dict[str, Any]:
+        """Comuni toccati dall'acqua osservata di un'attivazione EMS, km² per comune."""
+        return await ems_registro_comuni(codice)
 
     @mcp.tool()
     async def tool_run_monitor(
