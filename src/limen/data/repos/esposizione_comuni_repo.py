@@ -6,6 +6,8 @@ import json
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
+from ispra_idrogeo.predisposition import SHARES, Kind, rule, step_of
+
 from limen.config.catalogo_dati import carica_catalogo
 from limen.data.db import acquire
 
@@ -60,12 +62,36 @@ async def sostituisci(righe: Sequence[EsposizioneComune], *, version_id: int) ->
     return len(righe)
 
 
+#: Il nome di Limen per i due tipi della libreria.
+_TIPI: dict[str, Kind] = {"frana": "landslide", "alluvione": "flood"}
+
+
+def predisposizione(indicatori: dict[str, Any]) -> dict[str, Any] | None:
+    """Le due classi ufficiali di predisposizione del comune (#672), da ``indicatori``.
+
+    Quota del territorio in pericolosità frana P3+P4 (mosaico 2024) e in
+    scenario idraulico P2, in cinque passi a soglie fisse. Non usa la pioggia:
+    non è un'allerta, e non entra nel punteggio.
+    """
+    out: dict[str, Any] = {}
+    for nome, tipo in _TIPI.items():
+        valore = indicatori.get(SHARES[tipo][0])
+        quota = float(valore) if isinstance(valore, int | float) and valore >= 0 else None
+        out[nome] = {"classe": step_of(quota), "quota_pct": quota}
+    if all(v["classe"] is None for v in out.values()):
+        return None
+    return {**out, "regola": rule()}
+
+
 async def per_comuni(conn: Any, istat_codes: Sequence[str]) -> dict[str, dict[str, Any]]:
     """I campi pubblici dei comuni chiesti; un comune senza riga non c'è."""
     if not istat_codes:
         return {}
     rows = await conn.fetch(
-        f"SELECT istat_code, {', '.join(CAMPI_PUBBLICI)}, aggiornato "
+        f"SELECT istat_code, {', '.join(CAMPI_PUBBLICI)}, aggiornato, "
+        "jsonb_build_object("
+        + ", ".join(f"'{SHARES[t][0]}', indicatori->'{SHARES[t][0]}'" for t in _TIPI.values())
+        + ") AS quote "
         "FROM esposizione_comuni WHERE istat_code = ANY($1::text[])",
         list(istat_codes),
     )
@@ -74,6 +100,7 @@ async def per_comuni(conn: Any, istat_codes: Sequence[str]) -> dict[str, dict[st
         str(r["istat_code"]): {
             **{c: r[c] for c in CAMPI_PUBBLICI},
             "aggiornato": r["aggiornato"].isoformat(),
+            "predisposizione": predisposizione(_json(r["quote"])),
             # La citazione che la CC BY 4.0 chiede, dalla voce del catalogo (#666).
             "dataset": voce.id,
             "licenza": voce.licenza,
@@ -83,4 +110,9 @@ async def per_comuni(conn: Any, istat_codes: Sequence[str]) -> dict[str, dict[st
     }
 
 
-__all__ = ["CAMPI_PUBBLICI", "per_comuni", "sostituisci"]
+def _json(valore: Any) -> dict[str, Any]:
+    letto = json.loads(valore) if isinstance(valore, str) else valore
+    return letto if isinstance(letto, dict) else {}
+
+
+__all__ = ["CAMPI_PUBBLICI", "per_comuni", "predisposizione", "sostituisci"]

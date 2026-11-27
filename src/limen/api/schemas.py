@@ -278,6 +278,25 @@ class AllertaGiorno(BaseModel):
     temporali: int
 
 
+class ClassePredisposizione(BaseModel):
+    #: none | low | medium | high | very high; ``None``: quota non disponibile.
+    classe: str | None = None
+    quota_pct: float | None = None
+
+
+class PredisposizioneIspra(BaseModel):
+    """Le classi ufficiali di predisposizione del comune (ispra-idrogeo, #672).
+
+    Quota del territorio in pericolosità frana P3+P4 (mosaico PAI 2024) e in
+    scenario idraulico P2 (100-200 anni), in cinque passi a soglie fisse. Non
+    usa la pioggia: non è un'allerta e non entra nel punteggio.
+    """
+
+    frana: ClassePredisposizione
+    alluvione: ClassePredisposizione
+    regola: str
+
+
 class EsposizioneIspra(BaseModel):
     """Chi vive dove la mappa di pericolosità ISPRA dice frana o alluvione.
 
@@ -295,6 +314,7 @@ class EsposizioneIspra(BaseModel):
     edifici: int | None = None
     imprese: int | None = None
     aggiornato: str
+    predisposizione: PredisposizioneIspra | None = None
     #: La voce di ``config/dati.yaml`` e la citazione che la licenza chiede (#666).
     dataset: str | None = None
     licenza: str | None = None
