@@ -6,7 +6,7 @@ import json
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from ispra_idrogeo.predisposition import SHARES, rule, step_of
+from ispra_idrogeo.predisposition import SHARES, Kind, rule, step_of
 
 from limen.config.catalogo_dati import carica_catalogo
 from limen.data.db import acquire
@@ -63,7 +63,7 @@ async def sostituisci(righe: Sequence[EsposizioneComune], *, version_id: int) ->
 
 
 #: Il nome di Limen per i due tipi della libreria.
-_TIPI = {"frana": "landslide", "alluvione": "flood"}
+_TIPI: dict[str, Kind] = {"frana": "landslide", "alluvione": "flood"}
 
 
 def predisposizione(indicatori: dict[str, Any]) -> dict[str, Any] | None:
