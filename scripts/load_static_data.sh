@@ -343,7 +343,7 @@ else
   echo "  saltato: ${gs_host}:${gs_port} non risponde (vedi il passo 1/7)"
 fi
 
-say "5/7  Perimetri EFFIS, catasti regionali, storico FIRMS e pluviometri regionali"
+say "5/7  Perimetri EFFIS, catasti regionali, storico FIRMS, pluviometri regionali e mappe EMS"
 # Comando a se' e non un passo del bootstrap: e' un dataset di verita', non un
 # fattore per cella, e il bootstrap per cella non fa chiamate HTTP. Sta pero'
 # in questa sequenza, che e' cio' che la #101 chiedeva.
@@ -366,6 +366,14 @@ if [ "$SCARICA" = 1 ]; then
   # `pluviometri` un blocco di mesi per notte (LIMEN_PLUVIOMETRI_TUTTI=1 per
   # farlo qui in una volta, ore di download).
   limen pluviometri-sync || echo "  (pluviometri regionali non raggiungibili: si prosegue)"
+  # Il truth set dell'alluvione (#713): le mappe Copernicus EMS delle
+  # attivazioni italiane, in $DATA_ROOT/copernicus-ems; un catalogo non
+  # cambiato salta le scritture. Poi i verdetti radar sulle mappe (quality e
+  # agreement di copernicus-ems), letti dai report già su disco: senza report
+  # non scrive niente. Produrli costa unità CDSE, quindi resta a mano:
+  # `limen ems-sentinel1`, poi `copernicus-ems quality` e `radar`.
+  limen ingest-events --hazard flood || echo "  (Copernicus EMS non raggiungibile: si prosegue)"
+  limen ems-verdetti || echo "  (verdetti EMS non letti: si prosegue)"
 fi
 
 say "6/7  Velocità del terreno EGMS (feature InSAR del modello ML)"
