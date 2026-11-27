@@ -174,16 +174,24 @@ _DURATA_S = 6 * 3600.0
 _memoria: dict[str, tuple[float, list[ComuneColpito]]] = {}
 
 
+#: Un calcolo per attivazione alla volta: dieci richieste insieme sul
+#: registro di EMSR664 sarebbero dieci minuti di CPU sul processo della mappa.
+_in_corso: dict[str, asyncio.Lock] = {}
+
+
 async def registro(codice: str) -> list[ComuneColpito] | None:
     """I comuni toccati da ``codice``; ``None`` se l'attivazione non c'è."""
-    tenuto = _memoria.get(codice)
-    if tenuto is not None and time.monotonic() - tenuto[0] < _DURATA_S:
-        return tenuto[1]
-    righe_comuni = await _calcola(codice)
-    # Solo le attivazioni che ci sono: un codice inventato non occupa memoria.
-    if righe_comuni is not None:
-        _memoria[codice] = (time.monotonic(), righe_comuni)
-    return righe_comuni
+    async with _in_corso.setdefault(codice, asyncio.Lock()):
+        tenuto = _memoria.get(codice)
+        if tenuto is not None and time.monotonic() - tenuto[0] < _DURATA_S:
+            return tenuto[1]
+        righe_comuni = await _calcola(codice)
+        # Solo le attivazioni che ci sono: un codice inventato non occupa memoria.
+        if righe_comuni is not None:
+            _memoria[codice] = (time.monotonic(), righe_comuni)
+        else:
+            _in_corso.pop(codice, None)
+        return righe_comuni
 
 
 async def _calcola(codice: str) -> list[ComuneColpito] | None:

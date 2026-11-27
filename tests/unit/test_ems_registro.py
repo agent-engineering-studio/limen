@@ -129,3 +129,21 @@ def test_registro_in_memoria(client: TestClient, monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(flood_events_repo, "acqua_osservata", _rotto)
     assert client.get("/api/ems/attivazioni/EMSR664/comuni").status_code == 200
     assert "EMSR000" not in ems_registro._memoria
+
+
+async def test_richieste_insieme_un_solo_calcolo(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    monkeypatch.setattr(ems_registro, "_memoria", {})
+    monkeypatch.setattr(ems_registro, "_in_corso", {})
+    calcoli = 0
+
+    async def _calcola(codice: str) -> list[ems_registro.ComuneColpito]:
+        nonlocal calcoli
+        calcoli += 1
+        await asyncio.sleep(0.01)
+        return []
+
+    monkeypatch.setattr(ems_registro, "_calcola", _calcola)
+    await asyncio.gather(*(ems_registro.registro("EMSR664") for _ in range(5)))
+    assert calcoli == 1
