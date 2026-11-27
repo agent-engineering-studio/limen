@@ -44,6 +44,7 @@ from ispra_idrogeo import (
     PROVINCES,
     REGIONS,
     Dataset,
+    FileState,
     IdroGEO,
     Mosaic,
     extract,
@@ -169,4 +170,66 @@ async def sync_geodati(s: GeodatiSettings) -> Esito:
     return esito
 
 
-__all__ = ["AREE", "Esito", "aree_iffi", "dataset", "iffi", "scarica_idrogeo", "sync_geodati"]
+def cambiato(locale: Path, remoto: FileState, *, giorni: int) -> bool:
+    """Il file su IdroGEO non è quello caricato, e conta: dimensione diversa.
+
+    Non l'ETag: per nginx è data+dimensione, e ISPRA rigenera ogni notte i
+    file IFFI anche a contenuto identico. Un file IFFI conta solo se la copia
+    ha passato ``giorni``: il contenuto cambia quasi ogni giorno (87 file su
+    107 in 24 giorni, misurato il 27/11/2026) e ``geodati-sync`` lo riprende da
+    sé a quella scadenza; oltre, l'aggiornamento non sta girando. Un mosaico
+    cambia ogni qualche anno e conta subito.
+    """
+    try:
+        if remoto.size is None or locale.stat().st_size == remoto.size:
+            return False
+    except OSError:
+        return False
+    return remoto.filename.startswith("Mosaicatura") or not _recente(locale, giorni)
+
+
+async def cambiati_su_ispra(s: GeodatiSettings) -> list[str] | None:
+    """I file ISPRA caricati che su IdroGEO sono cambiati, senza scaricarli (#672).
+
+    Una richiesta ``HEAD`` per file, solo per quelli che sono nella cartella:
+    un'installazione senza dati ISPRA non chiede niente. ``None`` se IdroGEO
+    non ha risposto a nessuna: non sapere non è «niente di cambiato».
+    """
+    dove = cartella_geoserver()
+    presenti = [ds for ds in dataset(s.mosaico_pai) if (dove / ds.filename).is_file()]
+    if not presenti:
+        return []
+    idrogeo = IdroGEO(await SharedHttpClient.get(), retries=0)
+    cancello = asyncio.Semaphore(s.concorrenza)
+
+    async def _uno(ds: Dataset) -> FileState | None:
+        async with cancello:
+            try:
+                return await call_with_retry(lambda: idrogeo.head(ds))
+            except Exception as exc:
+                log.warning("geodati.head_fallita", file=ds.filename, error=str(exc)[:300])
+                return None
+
+    stati = await asyncio.gather(*(_uno(ds) for ds in presenti))
+    letti = [st for st in stati if st is not None]
+    if not letti:
+        log.warning("integration.degraded", source="idrogeo", op="freschezza")
+        return None
+    return sorted(
+        st.filename
+        for st in letti
+        if cambiato(dove / st.filename, st, giorni=s.rivalida_dopo_giorni)
+    )
+
+
+__all__ = [
+    "AREE",
+    "Esito",
+    "aree_iffi",
+    "cambiati_su_ispra",
+    "cambiato",
+    "dataset",
+    "iffi",
+    "scarica_idrogeo",
+    "sync_geodati",
+]

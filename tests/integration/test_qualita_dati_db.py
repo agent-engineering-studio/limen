@@ -36,6 +36,8 @@ async def test_fatti_e_report(
     reset_db: None, pg_pool: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("LIMEN_REPORTS_DIR", str(tmp_path))
+    # Nessun file ISPRA nella cartella: nessuna richiesta a IdroGEO.
+    monkeypatch.setenv("GEOSERVER_SHAPEFILE_DIR", str(tmp_path / "geoserver"))
     async with acquire() as conn:
         await conn.execute("DELETE FROM job_runs")
     # Orario, fermo da 5 ore.

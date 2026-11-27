@@ -2,7 +2,8 @@
 
 Lo stesso lavoro del passo ``qualita_dati`` della pipeline notturna: job
 fermi rispetto alla loro cadenza, job falliti nelle ultime 24 ore, pericoli
-con metà delle celle non misurate. Scrive ``qualita_dati_<data>.md`` in
+con metà delle celle non misurate, file ISPRA cambiati rispetto alla copia
+caricata (una ``HEAD`` per file, niente download). Scrive ``qualita_dati_<data>.md`` in
 ``LIMEN_REPORTS_DIR`` e non tocca il database. Se c'è qualcosa da dire, il
 modello dei riepiloghi (ruolo ``Briefing``, sotto il tetto mensile di spesa)
 ne fa un paragrafo in testa; senza modello, o con un paragrafo che porta un
@@ -12,16 +13,19 @@ numero non suo, il report ha le sole righe.
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from limen.agents.chat_agents.qualita_dati import riformula
 from limen.agents.llm_factory.base import ChatClient, LlmFactoryError
+from limen.config.settings import get_settings
 from limen.core.logging import get_logger
 from limen.core.qualita_dati import righe, testo
 from limen.data.db import lifespan_pool
 from limen.data.repos import qualita_dati_repo
+from limen.integrations.idrogeo.geodati import cambiati_su_ispra
 
 log = get_logger(__name__)
 
@@ -31,7 +35,10 @@ async def riepilogo(
 ) -> dict[str, Any]:
     """Raccoglie, scrive il report, e ritorna le metriche per ``job_runs``."""
     quando = adesso or datetime.now(UTC)
-    fatti = await qualita_dati_repo.raccogli(quando)
+    fatti = replace(
+        await qualita_dati_repo.raccogli(quando),
+        ispra_cambiati=await cambiati_su_ispra(get_settings().geodati),
+    )
     prima = await qualita_dati_repo.settimana_prima(quando)
     problemi = righe(fatti, prima)
     sintesi = await riformula(client, problemi) if client is not None and problemi else None
