@@ -89,6 +89,41 @@ def test_i_numeri_non_trovati_nei_fatti() -> None:
     assert numeri_non_trovati("Caddero 40 mm.", {"frane": 9}, "pioggia 40 mm") == []
 
 
+def test_un_numero_vero_detto_della_cosa_sbagliata() -> None:
+    # #672: 4.038 c'è nei fatti, ma sono le frane datate al giorno.
+    from limen.core.grounding_idrogeo import numeri_attribuiti_male, numeri_non_trovati
+
+    fatti = {"frane": 12000, "frane_al_giorno": 4038}
+    testo = "In Puglia IFFI censisce 4.038 frane."
+    assert numeri_non_trovati(testo, fatti) == []
+    [m] = numeri_attribuiti_male(testo, fatti)
+    assert (m.said, m.key, m.fact) == ("4.038", "frane", 12000.0)
+    assert numeri_attribuiti_male("In Puglia IFFI censisce 12.000 frane.", fatti) == []
+    assert numeri_attribuiti_male("Ne sono datate al giorno 4.038 frane.", fatti) == []
+
+
+def test_la_lettura_iffi_non_ha_numeri_attribuiti_male() -> None:
+    # Il testo che Limen stesso scrive dai fatti non deve dare falsi allarmi.
+    from limen.agents.chat_agents.briefing import affidabilita_regione
+    from limen.core.grounding_idrogeo import numeri_attribuiti_male
+
+    for regione in ("it-puglia", "it-liguria", "it-sicilia"):
+        a = affidabilita_regione(_valutazione(regione, HazardType.LANDSLIDE))
+        assert a is not None
+        assert numeri_attribuiti_male(a.lettura, a.model_dump()) == []
+        assert numeri_attribuiti_male(a.lettura_en, a.model_dump()) == []
+        # E non è vuota per costruzione: con le cifre spostate le prende tutte e due.
+        spostati = {
+            **a.model_dump(),
+            "frane": a.frane + 7,
+            "frane_al_giorno": a.frane_al_giorno + 3,
+        }
+        assert {m.key for m in numeri_attribuiti_male(a.lettura, spostati)} == {
+            "frane",
+            "frane_al_giorno",
+        }
+
+
 def test_il_briefing_frane_cita_il_source_iffi_e_controlla_i_numeri(
     caplog: object,
 ) -> None:

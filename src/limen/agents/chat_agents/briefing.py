@@ -30,7 +30,7 @@ from limen.agents.grounding.format import format_citations, senza_citazioni
 from limen.agents.grounding.service import GroundingService
 from limen.agents.llm_factory.base import ChatClient, ChatMessage
 from limen.core.affidabilita_iffi import AffidabilitaIffi
-from limen.core.grounding_idrogeo import numeri_non_trovati
+from limen.core.grounding_idrogeo import numeri_attribuiti_male, numeri_non_trovati
 from limen.core.logging import get_logger
 from limen.core.models.context import AggregateAssessment, CellRiskRecord
 from limen.core.models.hazard import DEFAULT_HAZARD, HazardType
@@ -265,8 +265,9 @@ def con_fonte_idrogeo(testo: str, affidabilita: AffidabilitaIffi | None, messagg
     citazione è il ``source`` di ispra-idrogeo, non una fonte generica, e va
     nel blocco «Fonti» (che i controlli dei numeri tolgono). I numeri del
     racconto si controllano con ``ispra_idrogeo.grounding.check_text`` contro
-    l'affidabilità e il messaggio: uno non trovato finisce in un warning, il
-    testo non cambia (decide una persona, come per il revisore).
+    l'affidabilità e il messaggio, e con ``check_claims`` contro la cifra di
+    cui sono detti (#672): uno non trovato o attribuito male finisce in un
+    warning, il testo non cambia (decide una persona, come per il revisore).
     """
     if affidabilita is None:
         return testo
@@ -274,6 +275,12 @@ def con_fonte_idrogeo(testo: str, affidabilita: AffidabilitaIffi | None, messagg
     non_trovati = numeri_non_trovati(racconto, affidabilita.model_dump(), messaggio)
     if non_trovati:
         log.warning("briefing.idrogeo.numeri_non_trovati", numeri=non_trovati[:10])
+    scambiati = numeri_attribuiti_male(racconto, affidabilita.model_dump())
+    if scambiati:
+        log.warning(
+            "briefing.idrogeo.numeri_attribuiti_male",
+            numeri=[{"detto": m.said, "di": m.key, "nei_fatti": m.fact} for m in scambiati[:10]],
+        )
     riga = f"- {affidabilita.fonte}"
     if riga in testo:
         return testo
