@@ -86,6 +86,9 @@ class Fatti:
     #: AOI → tabelle IFFI/PAI/idraulica attese e non trovate all'ultimo
     #: ``geoserver-sync`` (#665); solo le AOI con almeno una.
     tabelle_mancanti: Mapping[str, Sequence[str]] = field(default_factory=dict)
+    #: File ISPRA caricati che su IdroGEO sono cambiati (#672); ``None``:
+    #: IdroGEO non ha risposto.
+    ispra_cambiati: Sequence[str] | None = ()
 
     def ritardi(self) -> list[Ritardo]:
         out: list[Ritardo] = []
@@ -111,6 +114,7 @@ class Fatti:
             "in_ritardo": [_nome(r.job_id, r.scope) for r in self.ritardi()],
             "non_misurate": {h: round(q, 4) for h, q in self.quote_non_misurate().items()},
             "tabelle_mancanti": {a: len(t) for a, t in self.tabelle_mancanti.items()},
+            "ispra_cambiati": None if self.ispra_cambiati is None else len(self.ispra_cambiati),
         }
 
 
@@ -197,7 +201,26 @@ def righe(fatti: Fatti, settimana_prima: Mapping[str, object] | None) -> list[st
             f"**{aoi}**: {quante} all'ultimo geoserver-sync ({elenco}): "
             "le celle perdono quel termine, non sono senza frane o senza pericolo."
         )
+    if fatti.ispra_cambiati is None:
+        out.append("**IdroGEO** non ha risposto: non si sa se i file ISPRA sono cambiati.")
+    elif fatti.ispra_cambiati:
+        out.append(_riga_ispra(fatti.ispra_cambiati))
     return out
+
+
+def _riga_ispra(cambiati: Sequence[str]) -> str:
+    mosaici = [f.removesuffix(".zip") for f in cambiati if f.startswith("Mosaicatura")]
+    iffi = len(cambiati) - len(mosaici)
+    parti = []
+    if iffi:
+        parti.append("un file IFFI" if iffi == 1 else f"{iffi} file IFFI")
+    parti += [f"il mosaico {m}" for m in mosaici]
+    cosa = " e ".join([", ".join(parti[:-1]), parti[-1]] if len(parti) > 1 else parti)
+    verbo = "è cambiato" if len(cambiati) == 1 else "sono cambiati"
+    return (
+        f"**IdroGEO**: {cosa} {verbo} rispetto alla copia caricata: "
+        "`make static-data` li riscarica e li ricarica."
+    )
 
 
 def testo(
@@ -212,7 +235,7 @@ def testo(
                 *testa,
                 "Niente da segnalare: nessun job fermo o fallito, "
                 "nessun pericolo con metà delle celle non misurate, "
-                "nessuna tabella IFFI o PAI mancante.",
+                "nessuna tabella IFFI o PAI mancante, nessun file ISPRA cambiato.",
             ]
         )
     if sintesi:

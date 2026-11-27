@@ -86,6 +86,7 @@ def test_metriche_per_la_settimana_dopo() -> None:
         "in_ritardo": [],
         "non_misurate": {"flood": 0.25},
         "tabelle_mancanti": {},
+        "ispra_cambiati": 0,
     }
 
 
@@ -147,3 +148,34 @@ def test_una_tabella_iffi_mancante_si_dice_per_regione() -> None:
         "non sono senza frane o senza pericolo.",
     ]
     assert f.metriche()["tabelle_mancanti"] == {"it-molise": 1, "it-puglia": 4}
+
+
+def test_file_ispra_cambiati_in_una_riga() -> None:
+    f = Fatti(
+        ORA,
+        (),
+        (),
+        {},
+        ispra_cambiati=[
+            "Mosaicatura_ISPRA_2024_pericolosita_frana_PAI.zip",
+            "frane_piff_puglia_opendata.zip",
+            "frane_poly_puglia_opendata.zip",
+        ],
+    )
+    assert righe(f, None) == [
+        "**IdroGEO**: 2 file IFFI e il mosaico Mosaicatura_ISPRA_2024_pericolosita_frana_PAI "
+        "sono cambiati rispetto alla copia caricata: `make static-data` li riscarica e li ricarica."
+    ]
+    assert f.metriche()["ispra_cambiati"] == 3
+
+
+def test_idrogeo_muto_non_e_niente_di_cambiato() -> None:
+    f = Fatti(ORA, (), (), {}, ispra_cambiati=None)
+    assert righe(f, None) == [
+        "**IdroGEO** non ha risposto: non si sa se i file ISPRA sono cambiati."
+    ]
+    assert f.metriche()["ispra_cambiati"] is None
+
+
+def test_nessun_file_ispra_cambiato_nessuna_riga() -> None:
+    assert righe(_fatti(), None) == []

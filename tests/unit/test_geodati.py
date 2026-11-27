@@ -166,3 +166,77 @@ async def test_un_file_recente_non_si_chiede_e_uno_rotto_si_riscarica(
     assert "if-none-match" not in intestazioni[-1]
     assert secondo.cambiati == ["dgpv_poly_puglia_opendata.zip"]
     assert secondo.invariati == 106 and not secondo.falliti
+
+
+def test_cambiato_guarda_la_dimensione_non_l_etag(tmp_path: Path) -> None:
+    from ispra_idrogeo import FileState
+
+    from limen.integrations.idrogeo.geodati import cambiato
+
+    locale = tmp_path / "frane_piff_puglia_opendata.zip"
+    locale.write_bytes(b"x" * 10)
+
+    def remoto(size: int | None, etag: str) -> FileState:
+        return FileState(filename=locale.name, url="u", etag=etag, last_modified=None, size=size)
+
+    assert not cambiato(locale, remoto(10, '"nuovo"'), giorni=0)
+    assert cambiato(locale, remoto(11, '"nuovo"'), giorni=0)
+    assert not cambiato(locale, remoto(None, '"nuovo"'), giorni=0)
+    assert not cambiato(tmp_path / "assente.zip", remoto(11, '"x"'), giorni=0)
+
+
+def test_un_file_iffi_conta_solo_oltre_la_rivalidazione(tmp_path: Path) -> None:
+    from ispra_idrogeo import FileState
+
+    from limen.integrations.idrogeo.geodati import cambiato
+
+    for nome in ("frane_piff_puglia_opendata.zip", "Mosaicatura_ISPRA_2024_x.zip"):
+        (tmp_path / nome).write_bytes(b"x" * 10)
+    iffi = FileState("frane_piff_puglia_opendata.zip", "u", None, None, 11)
+    mosaico = FileState("Mosaicatura_ISPRA_2024_x.zip", "u", None, None, 11)
+    assert not cambiato(tmp_path / iffi.filename, iffi, giorni=30)
+    assert cambiato(tmp_path / mosaico.filename, mosaico, giorni=30)
+    assert cambiato(tmp_path / iffi.filename, iffi, giorni=0)
+
+
+async def test_senza_file_ispra_non_si_chiede_niente(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+
+    monkeypatch.setenv("GEOSERVER_SHAPEFILE_DIR", str(tmp_path))
+
+    async def _mai() -> None:
+        raise AssertionError("nessuna richiesta senza file")
+
+    monkeypatch.setattr(geodati.SharedHttpClient, "get", _mai)
+    assert await geodati.cambiati_su_ispra(GeodatiSettings()) == []
+
+
+async def test_cambiati_e_idrogeo_muto(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from ispra_idrogeo import Dataset, FileState
+
+    monkeypatch.setenv("GEOSERVER_SHAPEFILE_DIR", str(tmp_path))
+    s = GeodatiSettings(rivalida_dopo_giorni=0)
+    primi = geodati.dataset(s.mosaico_pai)[:2]
+    for ds in primi:
+        (tmp_path / ds.filename).write_bytes(b"x" * 10)
+
+    async def _client() -> object:
+        return object()
+
+    monkeypatch.setattr(geodati.SharedHttpClient, "get", _client)
+
+    async def _head(self: object, ds: Dataset) -> FileState:
+        size = 11 if ds.filename == primi[0].filename else 10
+        return FileState(filename=ds.filename, url=ds.url, etag=None, last_modified=None, size=size)
+
+    monkeypatch.setattr(geodati.IdroGEO, "head", _head)
+    assert await geodati.cambiati_su_ispra(s) == [primi[0].filename]
+
+    async def _giu(self: object, ds: Dataset) -> FileState:
+        raise httpx.HTTPStatusError(
+            "404", request=httpx.Request("HEAD", ds.url), response=httpx.Response(404)
+        )
+
+    monkeypatch.setattr(geodati.IdroGEO, "head", _giu)
+    assert await geodati.cambiati_su_ispra(s) is None
