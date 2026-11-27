@@ -42,6 +42,10 @@ Env knobs:
 * ``LIMEN_CLIMA_DA`` / ``_A`` — primo e ultimo anno (default 1995-2007).
 * ``LIMEN_CLIMA_ORE``      — la finestra della cumulata (default 24).
 * ``LIMEN_CLIMA_QUANTILE`` — il quantile (default 0,999).
+* ``LIMEN_CLIMA_DURATE``   — durate più lunghe, in ore separate da virgole
+  (``48,72``): lo stesso quantile per ognuna, dallo stesso download, sotto
+  ``durate`` nel file (#712). Il riferimento di ``LIMEN_CLIMA_ORE`` non cambia,
+  e un'AOI già fatta si riscarica solo se le manca una durata.
 """
 
 from __future__ import annotations
@@ -162,6 +166,21 @@ def riferimento_per_cella(
     return out
 
 
+def riferimenti_durata(
+    clima: dict[str, Any], aoi_id: str, *, ore: int
+) -> list[tuple[float, float, float | None]] | None:
+    """I riferimenti di un'AOI per una durata lunga, se il file li ha."""
+    nodi = clima.get("durate", {}).get(str(ore), {}).get(aoi_id)
+    if nodi is None:
+        return None
+    return [(float(lon), float(lat), mm) for lon, lat, mm in nodi]
+
+
+def durate_da_env(raw: str) -> tuple[int, ...]:
+    """``48,72`` ⇒ ``(48, 72)``; vuoto ⇒ nessuna. ``ValueError`` se malformato."""
+    return tuple(int(x) for x in raw.split(",") if x.strip())
+
+
 def riferimenti_api(
     clima: dict[str, Any], aoi_id: str, *, giorni: int
 ) -> list[tuple[float, float, Mensile]] | None:
@@ -183,9 +202,17 @@ async def clima_aoi(
     quantile: float,
     giorni_api: int,
     client: OpenMeteoHttpClient,
-) -> tuple[list[tuple[float, float, float | None]], list[tuple[float, float, Mensile]]] | None:
-    """I riferimenti dei nodi (cumulata e pioggia antecedente), o ``None`` se
-    l'archivio non ha dato ogni anno.
+    durate: tuple[int, ...] = (),
+) -> (
+    tuple[
+        list[tuple[float, float, float | None]],
+        list[tuple[float, float, Mensile]],
+        dict[int, list[tuple[float, float, float | None]]],
+    ]
+    | None
+):
+    """I riferimenti dei nodi (cumulata, pioggia antecedente e durate lunghe),
+    o ``None`` se l'archivio non ha dato ogni anno.
 
     Una serie vuota è una richiesta fallita (l'archivio ERA5 copre anche il
     mare): accettarla calcolerebbe il quantile su meno anni, e l'AOI salvata
@@ -194,6 +221,7 @@ async def clima_aoi(
     nodes = build_rain_nodes(bbox, spacing=_PASSO_NODI)
     out: list[tuple[float, float, float | None]] = []
     api: list[tuple[float, float, Mensile]] = []
+    lunghe: dict[int, list[tuple[float, float, float | None]]] = {d: [] for d in durate}
     # A gruppi di nodi, e i quantili di un gruppo prima del successivo: un
     # anno orario è ~9.000 campioni per nodo, e la Lombardia intera (800 nodi)
     # tenuta in memoria per un anno ha superato 6 GB ed è stata uccisa.
@@ -224,8 +252,13 @@ async def clima_aoi(
             (lon, lat, clima_api(o, primo_anno=anni.start, giorni=giorni_api))
             for (lon, lat), o in zip(gruppo, orarie, strict=True)
         )
+        for d in durate:
+            lunghe[d].extend(
+                (lon, lat, quantile_cumulata(o, ore=d, quantile=quantile))
+                for (lon, lat), o in zip(gruppo, orarie, strict=True)
+            )
         log.info("clima_pioggia.gruppo", aoi_id=aoi_id, fatti=len(out), nodi=len(nodes))
-    return out, api
+    return out, api, lunghe
 
 
 async def _scrivi_db(aoi_id: str, clima: dict[str, Any], *, ore: int) -> None:
@@ -251,6 +284,7 @@ async def run() -> int:
     ore = int(os.getenv("LIMEN_CLIMA_ORE", "24"))
     quantile = float(os.getenv("LIMEN_CLIMA_QUANTILE", "0.999"))
     giorni_api = load_regional_thresholds().api.horizon_days
+    durate = durate_da_env(os.getenv("LIMEN_CLIMA_DURATE", ""))
     parametri = {
         "ore": ore,
         "quantile": quantile,
@@ -262,6 +296,7 @@ async def run() -> int:
     if {k: clima.get(k) for k in parametri} != parametri:
         # Parametri diversi: i riferimenti vecchi non si mescolano ai nuovi.
         clima = {**parametri, "aoi": {}, "api": {}}
+    clima.setdefault("durate", {})
 
     cumulata = load_regional_thresholds().cumulata
     nel_db = True
@@ -283,7 +318,11 @@ async def run() -> int:
         one = os.getenv("LIMEN_CLIMA_AOI")
         aoi_ids = [one] if one else await list_aoi_ids()
         for aoi_id in aoi_ids:
-            if aoi_id in clima["aoi"] and aoi_id in clima["api"]:
+            if (
+                aoi_id in clima["aoi"]
+                and aoi_id in clima["api"]
+                and all(aoi_id in clima["durate"].get(str(d), {}) for d in durate)
+            ):
                 log.info("clima_pioggia.skip", aoi_id=aoi_id)
                 if nel_db:
                     await _scrivi_db(aoi_id, clima, ore=ore)
@@ -303,13 +342,18 @@ async def run() -> int:
                 quantile=quantile,
                 giorni_api=giorni_api,
                 client=client,
+                durate=durate,
             )
             if calcolati is None:
                 esito = 1
                 continue
-            nodi, api = calcolati
+            nodi, api, lunghe = calcolati
             clima["aoi"][aoi_id] = [[lon, lat, mm] for lon, lat, mm in nodi]
             clima["api"][aoi_id] = [[lon, lat, list(mesi)] for lon, lat, mesi in api]
+            for d, righe in lunghe.items():
+                clima["durate"].setdefault(str(d), {})[aoi_id] = [
+                    [lon, lat, mm] for lon, lat, mm in righe
+                ]
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(clima), encoding="utf-8")
             noti = [mm for _, _, mm in nodi if mm is not None]
@@ -331,9 +375,11 @@ __all__ = [
     "CLIMA_DEFAULT",
     "CLIMA_ENV",
     "clima_api",
+    "durate_da_env",
     "quantile_cumulata",
     "riferimenti_aoi",
     "riferimenti_api",
+    "riferimenti_durata",
     "riferimento_per_cella",
     "run",
 ]

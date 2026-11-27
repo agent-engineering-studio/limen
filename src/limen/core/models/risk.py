@@ -89,6 +89,9 @@ class StaticFactors(_Frozen):
     # cella (`limen clima-pioggia`): il metro dell'innesco `cumulata`. NULL =
     # nessun riferimento, e l'innesco resta su Caine.
     pioggia_riferimento_mm: float | None = Field(default=None, gt=0.0)
+    # #712 — lo stesso quantile per le durate lunghe di `cumulata.durate_lunghe`
+    # (ore → mm). Una durata assente non apre né chiude il cancello.
+    pioggia_riferimento_lunghe_mm: dict[int, float] = Field(default_factory=dict)
     # Dal `cell_insar_features` (EGMS), non da `cell_static_factors`: il motore
     # V1 non le legge, lo sfidante ML sì, e finché il bundle non le portava le
     # imparava sui valori veri e le riceveva a zero (#568). NULL = nessun

@@ -427,6 +427,43 @@ def test_senza_riferimento_resta_caine(tmp_path: Path) -> None:
     assert cumulata.score == caine.score
 
 
+def _con_durate(tmp_path: Path, durate: list[int]) -> MultiFactorScoringEngine:
+    cfg = yaml.safe_load(DEFAULT_THRESHOLDS_PATH.read_text(encoding="utf-8"))
+    cfg["cumulata"] = {**cfg["cumulata"], "durate_lunghe": durate}
+    out = tmp_path / "durate.yaml"
+    out.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    return MultiFactorScoringEngine(load_regional_thresholds(out))
+
+
+def test_una_pioggia_lunga_apre_il_cancello_sulla_sua_durata(tmp_path: Path) -> None:
+    # 1 mm/h per tre giorni: 24 mm in 24 h, sotto la soglia del riferimento di
+    # 24 h (100 mm); 72 mm in 72 h, sopra quella del riferimento di 72 h (80 mm).
+    t = load_regional_thresholds()
+    assert t.cumulata is not None and t.cancello_innesco is not None
+    con = _PREDISPOSTA.model_copy(
+        update={"pioggia_riferimento_mm": 100.0, "pioggia_riferimento_lunghe_mm": {72: 80.0}}
+    )
+    b = _bundle(static=con, rainfall_hourly=[1.0] * 72, api_30_mm=400.0, soil=0.9)
+    assert score(b).score <= t.cancello_innesco.tetto
+    lunga = _con_durate(tmp_path, [48, 72]).score(b)
+    # L'ultima ora di `_bundle` è un'ora prima della valutazione: 71 nelle 72.
+    assert lunga.breakdown.meteo_terms.cumulata_norm == pytest.approx(
+        71.0 / (80.0 * t.cumulata.saturazione)
+    )
+    assert lunga.score > t.cancello_innesco.tetto
+
+
+def test_una_durata_senza_riferimento_non_conta(tmp_path: Path) -> None:
+    con = _PREDISPOSTA.model_copy(update={"pioggia_riferimento_mm": 100.0})
+    b = _bundle(static=con, rainfall_hourly=[1.0] * 72, api_30_mm=400.0, soil=0.9)
+    assert _con_durate(tmp_path, [72]).score(b).score == score(b).score
+
+
+def test_durate_lunghe_fuori_scala_rifiutate(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="durate_lunghe"):
+        _con_durate(tmp_path, [72, 72])
+
+
 # ---------------------------------------------------------------------------
 # Cancello d'innesco (#656)
 # ---------------------------------------------------------------------------

@@ -109,6 +109,12 @@ Configuration knobs (env vars, kept off the dispatcher for parity with
   suo nodo, e l'innesco diventa la cumulata relativa (#243). Senza il file, o
   senza l'AOI nel file, le celle hanno il riferimento del database
   (``pioggia_riferimento_mm``, come lo sweep), e senza quello restano su Caine.
+* ``LIMEN_BACKTEST_DURATE``      — durate più lunghe dell'innesco cumulata,
+  in ore separate da virgole (``48,72``), al posto di ``cumulata.durate_lunghe``
+  del YAML (#712): ognuna divisa per il riferimento della stessa durata al nodo,
+  dal file di ``LIMEN_BACKTEST_CLIMA`` (``limen clima-pioggia`` con
+  ``LIMEN_CLIMA_DURATE``), e l'innesco è il massimo. Una durata che il file non
+  ha per l'AOI non conta (warning ``backtest.clima_durata_mancante``).
 * ``LIMEN_BACKTEST_API_RIFERIMENTO`` — ``nazionale`` (default, come lo
   sweep) o ``nodo``: la pioggia antecedente si legge contro media e deviazione del
   nodo della cella nel mese, dal file di ``LIMEN_BACKTEST_CLIMA`` (#357).
@@ -140,7 +146,13 @@ from zoneinfo import ZoneInfo
 from pydantic import ValidationError
 
 from limen.cli import provenienza
-from limen.cli.clima_pioggia import Mensile, riferimenti_aoi, riferimenti_api
+from limen.cli.clima_pioggia import (
+    Mensile,
+    durate_da_env,
+    riferimenti_aoi,
+    riferimenti_api,
+    riferimenti_durata,
+)
 from limen.cli.clima_pioggia import leggi as leggi_clima
 from limen.config.percorsi import radice_dati
 from limen.core.logging import get_logger
@@ -347,6 +359,23 @@ def api_per_cella(
 def radar_ha_misurato(ore: dict[datetime, list[float | None]]) -> bool:
     """Vero se l'archivio radar ha misurato almeno un'ora in almeno un nodo."""
     return any(mm is not None for valori in ore.values() for mm in valori)
+
+
+def con_riferimento_lungo(
+    cells: list[tuple[StaticFactors, float, float]],
+    durata: int,
+    riferimenti: list[tuple[float, float, float | None]],
+) -> list[tuple[StaticFactors, float, float]]:
+    """Ogni cella con il riferimento di ``durata`` ore del nodo più vicino."""
+    nodi = [(lon, lat) for lon, lat, _ in riferimenti]
+    out: list[tuple[StaticFactors, float, float]] = []
+    for sf, lon, lat in cells:
+        mm = riferimenti[nearest_node(lon, lat, nodi)][2]
+        lunghe = dict(sf.pioggia_riferimento_lunghe_mm)
+        if mm is not None:
+            lunghe[durata] = mm
+        out.append((sf.model_copy(update={"pioggia_riferimento_lunghe_mm": lunghe}), lon, lat))
+    return out
 
 
 def _level_at_least(level: RiskLevel, threshold: RiskLevel) -> bool:
@@ -705,11 +734,13 @@ def _evaluate(
             for c in cc:
                 diagnosi[c].senza_riferimento = False
     cumulata = thresholds.cumulata
+    ore_pioggia = max((48, *(cumulata.durate_lunghe if cumulata else ())))
     for h, t in enumerate(hours):
         # Slice each node's antecedent series once, then reuse across the
         # (many) cells that map to that node.
         node_slice = [
-            _synthesise_rainfall(samples=node_rainfall[n], as_of=t) for n in range(len(nodes))
+            _synthesise_rainfall(samples=node_rainfall[n], as_of=t, window_hours=ore_pioggia)
+            for n in range(len(nodes))
         ]
         stato = [
             (a.api(t), a.suolo(t)) if a is not None else (None, None) for a in antecedenti or []
@@ -1414,7 +1445,23 @@ async def run() -> int:
             log.error("backtest.merging_non_configurato", hint="RADAR_ARCHIVE__CARTELLA")
             return 1
         archivio = MergingArchive(Path(cfg.cartella))
-    cumulata = load_regional_thresholds().cumulata
+    try:
+        durate = durate_da_env(os.getenv("LIMEN_BACKTEST_DURATE", ""))
+    except ValueError as exc:
+        log.error("backtest.bad_durate", error=str(exc))
+        return 1
+    if durate and soglie.cumulata is None:
+        log.error("backtest.durate_senza_cumulata")
+        return 1
+    if durate and soglie.cumulata is not None:
+        soglie = soglie.model_copy(
+            update={
+                "cumulata": soglie.cumulata.model_validate(
+                    {**soglie.cumulata.model_dump(), "durate_lunghe": list(durate)}
+                )
+            }
+        )
+    cumulata = soglie.cumulata
     # Il riferimento della pioggia antecedente (#357): `nazionale` come lo
     # sweep di oggi, o la media e deviazione del nodo nel mese, dal file di
     # `limen clima-pioggia`.
@@ -1458,6 +1505,9 @@ async def run() -> int:
             f"; innesco cumulata {cumulata.window_hours} h / {metro} del nodo "
             f"({cumulata.modo}, saturazione {cumulata.saturazione})"
         )
+        if cumulata.durate_lunghe:
+            configurazione += "; e a " + ", ".join(f"{d} h" for d in cumulata.durate_lunghe)
+            configurazione += " ciascuna sul riferimento della sua durata (il massimo)"
 
     from limen.integrations.ingv.shakemap_client import IngvNonDisponibileError
 
@@ -1515,6 +1565,12 @@ async def run() -> int:
                         log.warning("backtest.clima_mancante", aoi_id=aoi_id)
                     else:
                         cells = con_riferimento(cells, riferimenti)
+                    for durata in cumulata.durate_lunghe:
+                        lunghi = riferimenti_durata(clima, aoi_id, ore=durata)
+                        if lunghi is None:
+                            log.warning("backtest.clima_durata_mancante", aoi_id=aoi_id, ore=durata)
+                        else:
+                            cells = con_riferimento_lungo(cells, durata, lunghi)
                 truth, senza_ora = await _fetch_truth_events(
                     aoi_id,
                     start=start,
