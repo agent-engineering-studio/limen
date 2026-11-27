@@ -739,8 +739,12 @@ configs:
     content: |
       ${LIMEN_DOMINIO:-localhost} {
         encode zstd gzip
+        # HSTS solo su un nome vero: su localhost il browser lo applica a
+        # ogni porta dell'host, e Safari poi forza https anche sui servizi
+        # locali che non lo hanno (la demo di copernicus-ems su :3000).
+        @dominio not host localhost 127.0.0.1
+        header @dominio Strict-Transport-Security "max-age=31536000"
         header {
-          Strict-Transport-Security "max-age=31536000"
           X-Content-Type-Options nosniff
           X-Frame-Options SAMEORIGIN
           Referrer-Policy strict-origin-when-cross-origin
