@@ -71,6 +71,8 @@ export interface ComuneRisk {
   forecast: Record<string, ComuneForecast>;
   /** Il bollettino DPC per la zona del comune, se importato. */
   allerta_ufficiale?: AllertaUfficiale | null;
+  /** Gli indicatori ISPRA del comune; qui serve solo la predisposizione. */
+  esposizione_ispra?: { predisposizione?: PredisposizioneIspra | null } | null;
   /** L'attenzione sul futuro, con la stessa regola: più alta ⇒ sta salendo. */
   forecast_attention: number | null;
 }
@@ -315,6 +317,16 @@ export interface DatoDiBase {
   url: string | null;
   /** Solo IFFI (#669): quanto fidarsi dell'inventario nel comune della cella. */
   affidabilita?: AffidabilitaIffi | null;
+}
+
+/** Le classi ufficiali di predisposizione del comune (ispra-idrogeo, #672):
+ *  quota di territorio in pericolosità frana P3+P4 e in scenario idraulico P2.
+ *  Non usano la pioggia: non sono un'allerta e non entrano nel punteggio. */
+export type ClassePredisposizione = "none" | "low" | "medium" | "high" | "very high";
+export interface PredisposizioneIspra {
+  frana: { classe: ClassePredisposizione | null; quota_pct: number | null };
+  alluvione: { classe: ClassePredisposizione | null; quota_pct: number | null };
+  regola: string;
 }
 
 /** Quanto fidarsi di IFFI in un'area, dalla tabella di ispra-idrogeo (#669). */

@@ -39,6 +39,8 @@ import type {
   ComuneRisk,
   HazardType,
   RiskLevel,
+  ClassePredisposizione,
+  PredisposizioneIspra,
 } from "../types";
 
 // Il comune è l'unità di lettura, la cella è il dettaglio.
@@ -200,6 +202,17 @@ const T = testi(
     soloLimen:
       "Incendio alto: il bollettino idrogeologico non copre gli incendi, questo segnale è solo di Limen.",
     allertaUfficiale: "Allerta ufficiale",
+    predisposizione: "Predisposizione ISPRA",
+    classiPredisposizione: {
+      none: "nessuna",
+      low: "bassa",
+      medium: "media",
+      high: "alta",
+      "very high": "molto alta",
+    } as Record<ClassePredisposizione, string>,
+    franaP3P4: (classe: string, quota: string) => `frana ${classe} (${quota} del territorio in P3+P4)`,
+    alluvioneP2: (classe: string, quota: string) => `alluvione ${classe} (${quota} in scenario P2)`,
+    nonAllerta: "Dalle mappe ufficiali, senza pioggia: non è un'allerta.",
     oggiDomani: (oggi: string, domani: string) => `: oggi ${oggi} · domani ${domani}`,
     fra72: (parola: string) => `Fra 72 ore: ${parola}`,
     sezione: "Rischio per comune",
@@ -346,6 +359,17 @@ const T = testi(
     soloLimen:
       "High wildfire hazard: the hydrogeological bulletin does not cover wildfires, this signal comes from Limen alone.",
     allertaUfficiale: "Official warning",
+    predisposizione: "ISPRA predisposition",
+    classiPredisposizione: {
+      none: "none",
+      low: "low",
+      medium: "medium",
+      high: "high",
+      "very high": "very high",
+    } as Record<ClassePredisposizione, string>,
+    franaP3P4: (classe: string, quota: string) => `landslide ${classe} (${quota} of the land in P3+P4)`,
+    alluvioneP2: (classe: string, quota: string) => `flood ${classe} (${quota} in scenario P2)`,
+    nonAllerta: "From the official maps, without rain: not a warning.",
     oggiDomani: (oggi: string, domani: string) => `: today ${oggi} · tomorrow ${domani}`,
     fra72: (parola: string) => `In 72 hours: ${parola}`,
     sezione: "Risk by municipality",
@@ -1074,6 +1098,38 @@ export function RigaAllerta({
   );
 }
 
+export function RigaPredisposizione({
+  predisposizione,
+}: {
+  predisposizione: PredisposizioneIspra | null | undefined;
+}): JSX.Element | null {
+  const t = useTesti(T);
+  const { lingua } = useLingua();
+  if (!predisposizione) return null;
+  const quota = (q: number | null) =>
+    q === null ? "—" : `${q.toLocaleString(lingua === "en" ? "en-GB" : "it-IT", { maximumFractionDigits: 1 })} %`;
+  const parti = [
+    predisposizione.frana.classe
+      ? t.franaP3P4(t.classiPredisposizione[predisposizione.frana.classe], quota(predisposizione.frana.quota_pct))
+      : null,
+    predisposizione.alluvione.classe
+      ? t.alluvioneP2(
+          t.classiPredisposizione[predisposizione.alluvione.classe],
+          quota(predisposizione.alluvione.quota_pct),
+        )
+      : null,
+  ].filter((p): p is string => p !== null);
+  if (parti.length === 0) return null;
+  return (
+    <Text size="xs" className="cb-predisposizione" title={predisposizione.regola}>
+      <strong>{t.predisposizione}</strong>: {parti.join(" · ")}.{" "}
+      <Text span size="xs" c="dimmed">
+        {t.nonAllerta}
+      </Text>
+    </Text>
+  );
+}
+
 /** «it-emilia-romagna» → «Emilia-Romagna». La provincia non arriva dal
  *  servizio: la regione basta a distinguere i comuni omonimi. */
 function regione(aoi: string): string {
@@ -1340,6 +1396,9 @@ export function ComuniBoard({
                   <Box pl="xs" pb="xs">
                     {apertoQui ? (
                       <Stack gap={10}>
+                        <RigaPredisposizione
+                          predisposizione={c.esposizione_ispra?.predisposizione}
+                        />
                         <ComuneTrend istatCode={c.istat_code} hazard={pericolo} />
                         <DettaglioCelle istatCode={c.istat_code} onCella={onCella} />
                       </Stack>
