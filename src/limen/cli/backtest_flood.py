@@ -53,14 +53,21 @@ Env:
 * ``LIMEN_BACKTEST_FLOOD_IDROMETRI_SOGLIE`` — ``piede,saturazione`` della rampa
   sul rapporto dell'idrometro (default ``2,5``), riportate sulla scala GloFAS
   di `flood.yaml`.
+
+**Vaglio radar delle mappe (#713).** Se ``limen ems-verdetti`` ha scritto i
+verdetti di ``copernicus-ems``, il report dà i punteggi due volte — su tutte le
+mappe e senza quelle «to check» — più l'hit rate sulle sole celle d'acqua
+confermata dal radar su mappe indipendenti. Senza verdetti le metriche sono
+quelle di prima; l'area allagata per attivazione nella tabella del truth set
+non somma più i prodotti di monitoraggio della stessa AOI (#713).
 """
 
 from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from collections.abc import Collection, Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Literal
@@ -86,11 +93,13 @@ from limen.core.scoring.regional_thresholds import (
 )
 from limen.data.db import acquire, lifespan_pool
 from limen.data.migrate import run_migrations
-from limen.data.repos import flood_events_repo, pioggia_climatologia_repo
+from limen.data.repos import ems_verdetti_repo, flood_events_repo, pioggia_climatologia_repo
+from limen.data.repos.ems_verdetti_repo import VerdettoBacktest
 from limen.data.repos.flood_events_repo import ActivationSummary
 from limen.integrations._http import SharedHttpClient
 from limen.integrations.arpae import idrometri
 from limen.integrations.copernicus_ems.client import catalogue_provenance
+from limen.integrations.copernicus_ems.verdetti import DA_RIGUARDARE
 from limen.integrations.openmeteo import archivio_portate
 from limen.integrations.openmeteo.flood import MIN_REFERENCE_DAYS, percentile_of
 
@@ -821,6 +830,10 @@ class _Tally:
     fluvial_driven: int = 0
     #: Giornate-cella sopra il livello ma fermate dal cancello sotto «Alto».
     gated: int = 0
+    #: ``truth_cell_days`` e ``truth_alert_days`` per cella: servono a
+    #: ricalcolare il tasso di base su un sottoinsieme della verità (#713).
+    truth_days_by_cell: dict[str, int] = field(default_factory=dict)
+    truth_alert_by_cell: dict[str, int] = field(default_factory=dict)
 
     @classmethod
     def empty(cls) -> _Tally:
@@ -837,6 +850,10 @@ class _Tally:
         self.pluvial_driven += other.pluvial_driven
         self.fluvial_driven += other.fluvial_driven
         self.gated += other.gated
+        for cell_id, n in other.truth_days_by_cell.items():
+            self.truth_days_by_cell[cell_id] = self.truth_days_by_cell.get(cell_id, 0) + n
+        for cell_id, n in other.truth_alert_by_cell.items():
+            self.truth_alert_by_cell[cell_id] = self.truth_alert_by_cell.get(cell_id, 0) + n
 
 
 def _replay(
@@ -887,6 +904,9 @@ def _replay(
             is_truth = static.cell_id in truth
             if is_truth:
                 tally.truth_cell_days += 1
+                tally.truth_days_by_cell[static.cell_id] = (
+                    tally.truth_days_by_cell.get(static.cell_id, 0) + 1
+                )
             hot = active.get(cell_node[position])
             if hot is None:
                 continue
@@ -927,7 +947,33 @@ def _replay(
                 tally.fluvial_driven += 1
             if is_truth:
                 tally.truth_alert_days += 1
+                tally.truth_alert_by_cell[static.cell_id] = (
+                    tally.truth_alert_by_cell.get(static.cell_id, 0) + 1
+                )
     return tally
+
+
+def conta_hit(
+    truth: Mapping[str, datetime],
+    alert_days: Mapping[str, Sequence[date]],
+    *,
+    lead_max_hours: float,
+) -> tuple[int, list[float]]:
+    """Hit e preavvisi: la prima allerta dentro l'orizzonte prima dell'evento."""
+    hits = 0
+    leads: list[float] = []
+    for cell_id, event_time in truth.items():
+        earliest: datetime | None = None
+        for day in alert_days.get(cell_id, []):
+            moment = datetime.combine(day, time(0, 0), tzinfo=UTC)
+            lead = (event_time - moment).total_seconds() / 3600.0
+            if 0 < lead <= lead_max_hours:
+                earliest = moment if earliest is None else min(earliest, moment)
+        if earliest is None:
+            continue
+        hits += 1
+        leads.append((event_time - earliest).total_seconds() / 3600.0)
+    return hits, leads
 
 
 def _metrics(
@@ -941,21 +987,7 @@ def _metrics(
     thresholds: FloodThresholds,
 ) -> FloodBacktestMetrics:
     lead_max_hours = float(thresholds.pluvial.window_hours)
-
-    # Hit: la prima allerta dentro l'orizzonte di preavviso prima dell'evento.
-    hits = 0
-    leads: list[float] = []
-    for cell_id, event_time in tally.truth.items():
-        earliest: datetime | None = None
-        for day in tally.alert_days.get(cell_id, []):
-            moment = datetime.combine(day, time(0, 0), tzinfo=UTC)
-            lead = (event_time - moment).total_seconds() / 3600.0
-            if 0 < lead <= lead_max_hours:
-                earliest = moment if earliest is None else min(earliest, moment)
-        if earliest is None:
-            continue
-        hits += 1
-        leads.append((event_time - earliest).total_seconds() / 3600.0)
+    hits, leads = conta_hit(tally.truth, tally.alert_days, lead_max_hours=lead_max_hours)
 
     # FAR per **cella-giorno di allerta**, e non per episodio.
     #
@@ -1041,6 +1073,179 @@ def _metrics(
 
 
 # ---------------------------------------------------------------------------
+# Vaglio radar delle mappe (#713)
+# ---------------------------------------------------------------------------
+def prodotti_da_riguardare(verdetti: Sequence[VerdettoBacktest]) -> dict[str, VerdettoBacktest]:
+    """``{id maschera: verdetto}`` delle mappe «to check».
+
+    Solo quelle: «not assessable» vuol dire che il confronto non direbbe niente
+    (mappa tracciata su Sentinel-1, niente pre-evento, ...), non che la mappa
+    sia sospetta, e toglierla butterebbe verità per assenza di prove.
+    """
+    return {v.mask_id: v for v in verdetti if v.verdict == DA_RIGUARDARE}
+
+
+def verita_senza(
+    per_prodotto: Mapping[str, Mapping[str, datetime]], esclusi: Collection[str]
+) -> dict[str, datetime]:
+    """``{cell_id: primo event_time}`` dai soli prodotti non esclusi.
+
+    Una cella allagata anche per un'altra mappa resta verità; senza esclusi è
+    esattamente ``truth_cells``.
+    """
+    out: dict[str, datetime] = {}
+    for cell_id, prodotti in per_prodotto.items():
+        tempi = [t for mask_id, t in prodotti.items() if mask_id not in esclusi]
+        if tempi:
+            out[cell_id] = min(tempi)
+    return out
+
+
+def passaggi_senza(
+    per_maschera: Mapping[str, Sequence[tuple[str, datetime]]], esclusi: Collection[str]
+) -> dict[str, list[datetime]]:
+    """``{cell_id: [istanti osservati]}`` dalle sole maschere non escluse.
+
+    Senza esclusi è esattamente ``observation_times``.
+    """
+    out: dict[str, list[datetime]] = {}
+    for cell_id, passaggi in per_maschera.items():
+        tempi = [t for mask_id, t in passaggi if mask_id not in esclusi]
+        if tempi:
+            out[cell_id] = tempi
+    return out
+
+
+def restringi(tally: _Tally, truth: Mapping[str, datetime]) -> _Tally:
+    """Lo stesso rigioco con una verità ridotta: niente da rivalutare.
+
+    Le allerte non dipendono dalla verità, solo il tasso di base sì, e lo si
+    ricompone dai conti per cella. ``truth`` è un sottoinsieme di quella con
+    cui ``tally`` è stato fatto, sulla stessa finestra.
+    """
+    giorni = {c: tally.truth_days_by_cell.get(c, 0) for c in truth}
+    allerte = {
+        c: tally.truth_alert_by_cell.get(c, 0) for c in truth if c in tally.truth_alert_by_cell
+    }
+    return replace(
+        tally,
+        alert_days={c: list(d) for c, d in tally.alert_days.items()},
+        truth=dict(truth),
+        truth_cell_days=sum(giorni.values()),
+        truth_alert_days=sum(allerte.values()),
+        truth_days_by_cell=giorni,
+        truth_alert_by_cell=allerte,
+    )
+
+
+def verita_confermata(
+    truth: Mapping[str, datetime],
+    celle_confermate: Mapping[str, Collection[str]],
+    prodotti_verita: Mapping[str, Collection[str]],
+) -> dict[str, datetime]:
+    """La verità ristretta alle celle d'acqua confermata dal radar.
+
+    Una cella conta solo se il radar ha confermato l'acqua di **uno dei
+    prodotti che l'hanno messa nella verità**: un fiume confermato nel 2023 non
+    fa «solida» l'alluvione del 2024 sulla stessa cella. ``celle_confermate``
+    (``{cella: maschere}``) viene solo da ``ems_acqua_confermata`` con
+    ``independent``; l'acqua possibile (``candidate``) non c'entra: non è mai
+    verità, quindi qui non può diventarlo.
+    """
+    return {
+        c: t
+        for c, t in truth.items()
+        if set(celle_confermate.get(c, ())) & set(prodotti_verita.get(c, ()))
+    }
+
+
+@dataclass(frozen=True, slots=True)
+class Vaglio:
+    """Ciò che il report dice del vaglio radar, per un'AOI."""
+
+    #: Tutti i verdetti «to check», con i codici dei flag.
+    esclusi: Mapping[str, VerdettoBacktest]
+    #: Quelli che toccano questa AOI (poligoni o maschera).
+    esclusi_qui: frozenset[str]
+    #: Le stesse repliche senza le mappe «to check».
+    senza: Sequence[FloodBacktestMetrics]
+    #: Per replica: (hit, celle) sulle sole celle confermate.
+    confermate: Mapping[str, tuple[int, int]]
+    verdetti: int
+    #: Prodotti EMS di Limen senza alcun rapporto: restano in entrambe le righe.
+    senza_rapporto: int
+
+
+def righe_vaglio(tutte: Sequence[FloodBacktestMetrics], vaglio: Vaglio) -> list[str]:
+    """La sezione del report. Ogni mappa tolta è nominata, con i suoi flag."""
+    lines = [
+        "## Vaglio radar delle mappe",
+        "",
+        f"{vaglio.verdetti} mappe hanno un verdetto di `copernicus-ems` (Sentinel-1 "
+        f"sulla mappa EMS), {vaglio.senza_rapporto} non ne hanno e restano in "
+        "entrambe le righe. Il verdetto è uno **screening, non un giudizio**: «to "
+        "check» vuol dire che qualcuno dovrebbe riguardare la mappa, non che sia "
+        "sbagliata. Per questo i punteggi sono dati due volte, e nessuna mappa "
+        "sparisce dalla prima riga.",
+        "",
+        "Togliere una mappa vuol dire togliere **sia i suoi poligoni allagati sia la "
+        "sua maschera di osservazione**. Togliendo solo i poligoni la maschera "
+        "resterebbe a dire «osservato, asciutto» proprio dove quella mappa vedeva "
+        "acqua, e le allerte giuste su quell'acqua diventerebbero falsi allarmi. "
+        "Una cella allagata o osservata anche da un'altra mappa resta com'è.",
+        "",
+    ]
+    if vaglio.esclusi:
+        lines += [
+            "| Mappa tolta | Attivazione | In questa AOI | Flag |",
+            "|---|---|---|---|",
+        ]
+        for mask_id, v in sorted(vaglio.esclusi.items()):
+            qui = "sì" if mask_id in vaglio.esclusi_qui else "no"
+            flag = ", ".join(f"`{c}`" for c in v.flag_codes) or (
+                "nessuno" if v.quality_file else "non letti (manca `_quality.json`)"
+            )
+            lines.append(f"| `{v.product}` | `{v.activation_code}` | {qui} | {flag} |")
+        lines.append("")
+    else:
+        lines += ["Nessuna mappa «to check»: le due righe coincidono.", ""]
+    lines += [
+        "| Replica | Mappe | Celle di verità | Hit rate | Tasso di base | FAR | CSI |",
+        "|---|---|---:|---:|---:|---:|---:|",
+    ]
+    for etichetta, runs in (("tutte", tutte), ("senza «to check»", vaglio.senza)):
+        for run in runs:
+            if not run.measurable:
+                lines.append(f"| `{run.mode}` | {etichetta} | - | non misurabile | - | - | - |")
+                continue
+            verifiable = run.true_days + run.false_days
+            far = f"{run.far:.0%}" if verifiable else "-"
+            lines.append(
+                f"| `{run.mode}` | {etichetta} | {run.truth_cells} | {run.hit_rate:.0%} "
+                f"| {run.base_rate:.0%} | {far} | {_ratio_cell(run.celle.csi)} |"
+            )
+    lines.append("")
+    for mode, (hits, n) in sorted(vaglio.confermate.items()):
+        quota = f"{hits / n:.0%}" if n else "-"
+        lines.append(
+            f"- `{mode}`: hit rate sulle sole celle d'**acqua confermata** dal radar, "
+            f"solo mappe indipendenti: **{quota}** ({hits} su {n})."
+        )
+    lines += [
+        "",
+        "L'acqua confermata è quella che mappa e radar vedono entrambi: la verità "
+        "più solida, ma solo dove la mappa non è stata tracciata sullo stesso "
+        "Sentinel-1 (`independent`), altrimenti l'accordo non prova niente. "
+        "L'acqua che il radar vede fuori dalla mappa (`candidate`) **non entra** "
+        "in nessuna misura: può essere acqua non mappata come terreno bagnato, e "
+        "contarla come allagamento mancato inventerebbe mancati. Una mappa "
+        "satellitare resta un limite inferiore.",
+        "",
+    ]
+    return lines
+
+
+# ---------------------------------------------------------------------------
 # Report
 # ---------------------------------------------------------------------------
 def _ratio_cell(value: float, *, percent: bool = True) -> str:
@@ -1082,6 +1287,7 @@ def _write_report(
     thresholds: FloodThresholds,
     nodi_con_portata: tuple[int, int],
     idrometri_nodi: tuple[int, tuple[float, float]] | None = None,
+    vaglio: Vaglio | None = None,
 ) -> Path:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     variante = "_idrometri" if idrometri_nodi is not None else ""
@@ -1215,6 +1421,8 @@ def _write_report(
         "nel gate §2.5.",
         "",
     ]
+    if vaglio is not None:
+        lines += righe_vaglio(runs, vaglio)
     gate = thresholds.calibration.backtest if thresholds.calibration else None
     if gate is not None:
         lines += ["### Gate §2.5", ""]
@@ -1325,6 +1533,20 @@ async def run() -> int:
                 return 0
 
             activations = await flood_events_repo.activations_summary()
+            # Senza verdetti nel database ogni ramo qui sotto resta spento e il
+            # backtest è quello di prima.
+            verdetti = await ems_verdetti_repo.per_backtest()
+            esclusi = prodotti_da_riguardare(verdetti)
+            senza_rapporto = (
+                len(await ems_verdetti_repo.prodotti_ems() - {v.mask_id for v in verdetti})
+                if verdetti
+                else 0
+            )
+            if esclusi:
+                log.info(
+                    "backtest_flood.mappe_da_riguardare",
+                    prodotti={m: list(v.flag_codes) for m, v in esclusi.items()},
+                )
             for aoi_id in aois:
                 windows = await _event_windows(aoi_id)
                 forced_start = _parse_dt(_START_ENV)
@@ -1336,6 +1558,14 @@ async def run() -> int:
                     continue
 
                 observed = await flood_events_repo.observation_times(aoi_id)
+                observed_senza: dict[str, list[datetime]] = {}
+                confermate: dict[str, set[str]] = {}
+                toccati: set[str] = set()
+                if verdetti:
+                    per_maschera = await flood_events_repo.observation_times_per_maschera(aoi_id)
+                    observed_senza = passaggi_senza(per_maschera, esclusi)
+                    toccati.update(m for passaggi in per_maschera.values() for m, _t in passaggi)
+                    confermate = await ems_verdetti_repo.celle_confermate(aoi_id)
                 span_truth = await flood_events_repo.truth_cells(
                     aoi_id,
                     start=min(w[0] for w in windows),
@@ -1408,8 +1638,14 @@ async def run() -> int:
                 # massima è ciò che si vuole.
                 clip_all = len(modes) > 1
                 runs: list[FloodBacktestMetrics] = []
+                runs_senza: list[FloodBacktestMetrics] = []
+                # Quali prodotti hanno messo la cella nella verità, con la
+                # stessa regola di `tally.truth`: l'ultima finestra vince.
+                prodotti_verita: dict[str, set[str]] = {}
+                confermate_per_replica: dict[str, tuple[int, int]] = {}
                 for mode in modes:
                     tally = _Tally.empty()
+                    tally_senza = _Tally.empty()
                     effective_start: date | None = None
                     for lo, hi in windows:
                         # `issued` si misura solo dove l'archivio delle
@@ -1431,33 +1667,65 @@ async def run() -> int:
                             if effective_start is None
                             else min(effective_start, window_lo.date())
                         )
-                        window_truth = await flood_events_repo.truth_cells(
-                            aoi_id, start=window_lo, end=hi
-                        )
+                        truth_senza: dict[str, datetime] = {}
+                        if verdetti:
+                            per_prodotto = await flood_events_repo.truth_cells_per_prodotto(
+                                aoi_id, start=window_lo, end=hi
+                            )
+                            window_truth = verita_senza(per_prodotto, ())
+                            truth_senza = verita_senza(per_prodotto, esclusi)
+                            toccati.update(m for p in per_prodotto.values() for m in p)
+                            prodotti_verita.update({c: set(p) for c, p in per_prodotto.items()})
+                        else:
+                            window_truth = await flood_events_repo.truth_cells(
+                                aoi_id, start=window_lo, end=hi
+                            )
                         series = await _fetch_node_series(
                             nodes, start=window_lo.date(), end=hi.date()
                         )
                         if idro:
                             series = con_idrometri(series, idro)
-                        tally.merge(
-                            _replay(
-                                aoi_id=aoi_id,
-                                mode=mode,
-                                cells=cells,
-                                cell_node=cell_node,
-                                series=series,
-                                truth=window_truth,
-                                start=window_lo,
-                                end=hi,
-                                alert_level=alert_level,
-                                thresholds=thresholds,
-                                engine=engine,
-                                quantili_nodo=quantili_nodo,
-                            )
+                        finestra = _replay(
+                            aoi_id=aoi_id,
+                            mode=mode,
+                            cells=cells,
+                            cell_node=cell_node,
+                            series=series,
+                            truth=window_truth,
+                            start=window_lo,
+                            end=hi,
+                            alert_level=alert_level,
+                            thresholds=thresholds,
+                            engine=engine,
+                            quantili_nodo=quantili_nodo,
                         )
+                        tally.merge(finestra)
+                        if verdetti:
+                            tally_senza.merge(restringi(finestra, truth_senza))
                     if not tally.measurable:
                         runs.append(_unmeasurable(aoi_id, mode, days=tally.days))
+                        if verdetti:
+                            runs_senza.append(_unmeasurable(aoi_id, mode, days=tally.days))
                         continue
+                    if verdetti:
+                        runs_senza.append(
+                            _metrics(
+                                aoi_id=aoi_id,
+                                mode=mode,
+                                tally=tally_senza,
+                                observed=observed_senza,
+                                cells_scored=len(cells),
+                                window_start=effective_start,
+                                thresholds=thresholds,
+                            )
+                        )
+                        solide = verita_confermata(tally.truth, confermate, prodotti_verita)
+                        hit_solide, _ = conta_hit(
+                            solide,
+                            tally.alert_days,
+                            lead_max_hours=float(thresholds.pluvial.window_hours),
+                        )
+                        confermate_per_replica[mode] = (hit_solide, len(solide))
                     runs.append(
                         _metrics(
                             aoi_id=aoi_id,
@@ -1479,6 +1747,16 @@ async def run() -> int:
                     thresholds=thresholds,
                     nodi_con_portata=(con_portata, len(nodes)),
                     idrometri_nodi=(len(idro), soglie_idrometri) if con_arpae else None,
+                    vaglio=Vaglio(
+                        esclusi=esclusi,
+                        esclusi_qui=frozenset(m for m in esclusi if m in toccati),
+                        senza=runs_senza,
+                        confermate=confermate_per_replica,
+                        verdetti=len(verdetti),
+                        senza_rapporto=senza_rapporto,
+                    )
+                    if verdetti
+                    else None,
                 )
                 for metrics in runs:
                     log.info(

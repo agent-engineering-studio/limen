@@ -10,6 +10,7 @@ Usage:
     limen backtest-cosismico ShakeMap shaking vs earthquake-triggered landslides.
     limen ingest-events      Dated event catalogue: --hazard landslide|flood.
     limen ems-sentinel1      Sentinel-1 / EMS label pairs for flood ML (CDSE, PU budget).
+    limen ems-verdetti       Radar verdicts on EMS maps (copernicus-ems reports) → DB.
     limen registra-verifica  Fact check: un evento verificato entra nel registro (074).
     limen resoconto-radar    Il radar DPC di un evento verificato, in quattro file (#643).
     limen verifiche-report   Eventi verificati contro le previsioni, col tasso di base.
@@ -86,6 +87,7 @@ from limen.cli.dati import build_subparser as _build_dati_subparser
 from limen.cli.dati import run as _run_dati
 from limen.cli.dpc_bollettini import run as _run_dpc_bollettini
 from limen.cli.effis_sync import run as _run_effis_sync
+from limen.cli.ems_verdetti import run as _run_ems_verdetti
 from limen.cli.esposizione_sync import run as _run_esposizione_sync
 from limen.cli.fedelta_racconti import run as _run_fedelta_racconti
 from limen.cli.fetch_static import run as _run_fetch_static
@@ -464,6 +466,13 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="attivazioni separate da virgola (default: LIMEN_EMS_S1_CODICI, o tutte)",
     )
+    sub.add_parser(
+        "ems-verdetti",
+        help=(
+            "verdetti radar di copernicus-ems sulle mappe EMS ($DATA_ROOT/copernicus-ems/"
+            "*/sentinel-1) → ems_verdetti; il backtest alluvione li riporta a parte"
+        ),
+    )
     dem_tiles = sub.add_parser(
         "dem-tiles",
         help="tile del rilievo (terrain-RGB in PMTiles) dal DTM, per la vista «Rilievo»",
@@ -588,6 +597,7 @@ def main(argv: list[str] | None = None) -> int:
         "seed-comuni": _run_seed_comuni,
         "bootstrap-static": _run_bootstrap_static,
         "effis-sync": _run_effis_sync,
+        "ems-verdetti": _run_ems_verdetti,
         "pluviometri-sync": _run_pluviometri_sync,
         "catasti-incendi": _run_catasti_incendi,
         "worldcover-sync": _run_worldcover_sync,
