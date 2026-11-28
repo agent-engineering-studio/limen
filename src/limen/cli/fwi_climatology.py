@@ -30,11 +30,10 @@ from __future__ import annotations
 import os
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
-from itertools import pairwise
 
-from fwi_chain import FwiParams, FwiState, advance
+from fwi_chain import FwiParams, FwiState, accumulate_monthly, coverage_is_valid
 
-from limen.cli.fwi_backfill import _aoi_bbox, _int_env, _observations, params_from
+from limen.cli.fwi_backfill import _aoi_bbox, _int_env, _observations, noon, params_from
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
 from limen.core.scoring.regional_thresholds import WildfireThresholds, load_hazard_thresholds
@@ -66,29 +65,18 @@ def accumula(
 ) -> tuple[FwiState, int]:
     """Fa avanzare la catena su ``giorni`` e mette l'FWI di ogni giorno nel suo mese.
 
-    Un giorno senza osservazione si salta, non si azzera: inventare una
-    lettura inietterebbe un giorno di essiccazione finto che la ricorsione si
-    porterebbe dietro per settimane. I primi ``_AVVIAMENTO`` giorni contano per
-    la catena ma non per la distribuzione.
+    ``fwi_chain.accumulate_monthly``: un giorno senza osservazione si salta, i
+    primi ``_AVVIAMENTO`` giorni contano per la catena ma non per la distribuzione.
     """
-    for giorno in giorni:
-        obs = osservazioni.get(giorno)
-        if obs is None:
-            continue
-        uscita = advance(
-            stato,
-            month=giorno.month,
-            temperature_c=obs.temperature_c,
-            relative_humidity_pct=obs.relative_humidity_pct,
-            wind_speed_kmh=obs.wind_speed_kmh,
-            rain_24h_mm=obs.rain_24h_mm,
-            params=params,
-        )
-        stato = uscita.state
-        avviati += 1
-        if avviati > _AVVIAMENTO:
-            per_mese[giorno.month].append(uscita.fwi)
-    return stato, avviati
+    return accumulate_monthly(
+        {d: noon(o) for d, o in osservazioni.items()},
+        giorni,
+        per_mese,
+        state=stato,
+        days_walked=avviati,
+        params=params,
+        spinup_days=_AVVIAMENTO,
+    )
 
 
 def esito(da_fare: int, nodi_scritti: int) -> int:
@@ -104,16 +92,10 @@ def esito(da_fare: int, nodi_scritti: int) -> int:
 def copertura_valida(osservati: list[date], giorni: list[date], max_buco: int) -> bool:
     """Un anno di un nodo è usabile se quasi ogni giorno ha il suo dato.
 
-    Una richiesta all'archivio che degrada restituisce una serie vuota: la
-    catena attraverserebbe il buco come se i giorni fossero consecutivi, e i
-    quantili di quel nodo resterebbero salvati come definitivi. Si chiede il
-    95 % dei giorni e nessun buco più lungo di quello che la catena operativa
-    sopporta (``max_gap_days``).
+    ``fwi_chain.coverage_is_valid``: il 95 % dei giorni e nessun buco più
+    lungo di ``max_buco``, quello che la catena operativa sopporta.
     """
-    if len(osservati) < 0.95 * len(giorni):
-        return False
-    date_viste = [giorni[0] - timedelta(days=1), *sorted(osservati), giorni[-1] + timedelta(days=1)]
-    return all((b - a).days - 1 <= max_buco for a, b in pairwise(date_viste))
+    return coverage_is_valid(osservati, giorni, max_gap_days=max_buco)
 
 
 async def _lotto(

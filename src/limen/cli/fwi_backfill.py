@@ -32,7 +32,7 @@ import os
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
-from fwi_chain import FwiParams, FwiState, advance
+from fwi_chain import ChainPoint, FwiParams, NoonObservation, walk_chain
 
 from limen.core.logging import get_logger
 from limen.core.models.hazard import HazardType
@@ -137,39 +137,34 @@ async def advance_node(
             max_gap_days=max_gap_days,
         )
         stored = None
-    state: FwiState = stored.state if stored else params.initial_state
-    chain_days = stored.chain_days if stored else 0
+    walked = walk_chain(
+        {d: noon(o) for d, o in observations.items()},
+        days,
+        start=None if stored is None else ChainPoint(stored.day, stored.state, stored.chain_days),
+        params=params,
+        max_gap_days=max_gap_days,
+    )
+    return [
+        NodeDay(
+            lon=lon,
+            lat=lat,
+            day=w.day,
+            outputs=w.outputs,
+            chain_days=w.chain_days,
+            temperature_c=w.observation.temperature_c,
+            relative_humidity_pct=w.observation.relative_humidity_pct,
+            wind_speed_kmh=w.observation.wind_speed_kmh,
+            rain_24h_mm=w.observation.rain_24h_mm,
+        )
+        for w in walked
+    ]
 
-    out: list[NodeDay] = []
-    for day in days:
-        obs = observations.get(day)
-        if obs is None:
-            continue
-        outputs = advance(
-            state,
-            month=day.month,
-            temperature_c=obs.temperature_c,
-            relative_humidity_pct=obs.relative_humidity_pct,
-            wind_speed_kmh=obs.wind_speed_kmh,
-            rain_24h_mm=obs.rain_24h_mm,
-            params=params,
-        )
-        chain_days += 1
-        out.append(
-            NodeDay(
-                lon=lon,
-                lat=lat,
-                day=day,
-                outputs=outputs,
-                chain_days=chain_days,
-                temperature_c=obs.temperature_c,
-                relative_humidity_pct=obs.relative_humidity_pct,
-                wind_speed_kmh=obs.wind_speed_kmh,
-                rain_24h_mm=obs.rain_24h_mm,
-            )
-        )
-        state = outputs.state
-    return out
+
+def noon(obs: FireWeatherObservation) -> NoonObservation:
+    """Una lettura di mezzogiorno di Open-Meteo come la prende fwi-chain."""
+    return NoonObservation(
+        obs.temperature_c, obs.relative_humidity_pct, obs.wind_speed_kmh, obs.rain_24h_mm
+    )
 
 
 async def backfill_aoi(
