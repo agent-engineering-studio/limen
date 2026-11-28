@@ -47,7 +47,7 @@ dependencies = [
     "aiosmtplib>=3.0",
     "cbor2>=6.1",
     "pmtiles>=3.4",
-    "fwi-chain~=1.2.0",
+    "fwi-chain~=1.3.0",
     "effis-client[raster]~=0.3.0",
     "rainfall-thresholds~=0.5.0",
     "egms-client[raster]~=0.11.0",
@@ -59,7 +59,7 @@ dependencies = [
     "dpc-radar[bulletins,nowcast,storms]~=0.6.0",
     "glofas-ewds~=0.3.0",
     # I motori di punteggio e le unioni fra fonti. Non è ancora su PyPI: dal tag.
-    "limen-core @ git+https://github.com/agent-engineering-studio/limen-core@v0.2.0",
+    "limen-core @ git+https://github.com/agent-engineering-studio/limen-core@v0.3.0",
 ]
 
 [project.scripts]
