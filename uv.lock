@@ -2546,7 +2546,7 @@ requires-dist = [
     { name = "imageserver-export", specifier = "~=0.2.0" },
     { name = "ingv-shakemap", specifier = "~=0.4.0" },
     { name = "ispra-idrogeo", specifier = "~=0.16.0" },
-    { name = "limen-core", git = "https://github.com/agent-engineering-studio/limen-core?rev=v0.3.0" },
+    { name = "limen-core", git = "https://github.com/agent-engineering-studio/limen-core?rev=v0.4.0" },
     { name = "opentelemetry-api", specifier = ">=1.27" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.27" },
     { name = "opentelemetry-instrumentation-asyncpg", specifier = ">=0.48b0" },
@@ -2612,8 +2612,8 @@ storage = [{ name = "boto3", specifier = ">=1.35" }]
 
 [[package]]
 name = "limen-core"
-version = "0.3.0"
-source = { git = "https://github.com/agent-engineering-studio/limen-core?rev=v0.3.0#73de6ac1bf0ace9eee4f000d6f7fe3812677793a" }
+version = "0.4.0"
+source = { git = "https://github.com/agent-engineering-studio/limen-core?rev=v0.4.0#c3d7b1c33ecf55d8119aebb72491edf324fe180d" }
 dependencies = [
     { name = "fwi-chain" },
     { name = "pydantic" },
