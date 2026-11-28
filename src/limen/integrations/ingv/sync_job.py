@@ -25,6 +25,7 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+from ingv_shakemap import version_key
 from shapely.geometry import Point, box
 
 from limen.core.logging import get_logger
@@ -78,9 +79,17 @@ async def _pga_per_cella(event_id: str, grid_bytes: bytes, pga_min_g: float) -> 
     return salvate
 
 
-def _shakemap_key(event_id: str) -> str:
-    """Deterministic ObjectStore key for the ShakeMap of a given event."""
-    return f"shakemap/{event_id}/grid.xml"
+def _shakemap_key(event_id: str, versione: int | None = None) -> str:
+    """La chiave della ShakeMap di un evento nell'object store.
+
+    Con la versione di ``info.json``, una chiave per versione
+    (``ingv_shakemap.version_key``: ``shakemap/47606532/v005/grid.xml``), così
+    una mappa rivista non sovrascrive quella su cui sono state calcolate le
+    righe per cella. Senza versione, la chiave di prima.
+    """
+    if versione is None:
+        return f"shakemap/{event_id}/grid.xml"
+    return f"shakemap/{version_key(event_id, versione, 'grid.xml')}"
 
 
 def evento_limen(ev: Event, *, attributi: dict[str, Any] | None = None) -> SeismicEvent:
@@ -176,7 +185,7 @@ async def run_ingv_sync(
             attributi=_attributi_mappa(info) if grid_bytes else _attributi_salvati(precedente),
         )
         if grid_bytes:
-            key = _shakemap_key(ev.id)
+            key = _shakemap_key(ev.id, None if info is None else info.version)
             location = await store.put(key, grid_bytes, content_type="application/xml")
             ref_id = await upsert_raster_ref(
                 kind="shakemap_grid",
