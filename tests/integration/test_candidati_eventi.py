@@ -24,6 +24,29 @@ _BASE = Candidato(
 )
 
 
+async def _innesco(id_: int) -> str:
+    async with acquire() as conn:
+        return str(await conn.fetchval("SELECT innesco FROM candidati_eventi WHERE id = $1", id_))
+
+
+async def test_l_innesco_si_prende_quando_un_titolo_lo_dice(
+    reset_db: None, pg_pool: object
+) -> None:
+    primo = await fondi(_BASE)
+    assert await _innesco(primo.id) == "ignoto"
+    detto = replace(
+        _BASE, innesco="pioggia", fonti=({"testata": "Il Mattino", "titolo": "t", "url": "u2"},)
+    )
+    assert (await fondi(detto)).id == primo.id
+    assert await _innesco(primo.id) == "pioggia"
+    # Un innesco già detto non lo cambia un titolo che dice altro, né uno che tace.
+    for innesco in ("sisma", "ignoto"):
+        await fondi(replace(detto, innesco=innesco))
+        assert await _innesco(primo.id) == "pioggia"
+    nuovo = await fondi(replace(_BASE, nomi_comuni=("Bisaccia",), innesco="lavori"))
+    assert await _innesco(nuovo.id) == "lavori"
+
+
 async def test_il_giorno_dopo_una_seconda_testata_si_unisce(
     reset_db: None, pg_pool: object
 ) -> None:

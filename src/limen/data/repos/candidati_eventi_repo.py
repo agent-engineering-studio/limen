@@ -22,6 +22,7 @@ class Candidato:
     regione: str | None
     nomi_comuni: tuple[str, ...]
     fonti: tuple[dict[str, Any], ...]
+    innesco: str = "ignoto"
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,8 +176,9 @@ async def fondi(c: Candidato) -> Salvato:
             salvato = await conn.fetchrow(
                 """
                 INSERT INTO candidati_eventi
-                    (hazard_type, giorno, parte, luogo, regione, nomi_comuni, fonti, testate, stato)
-                VALUES ($1::hazard_type, $2, $3, $4, $5, $6, $7::jsonb, $8, 'una_testata')
+                    (hazard_type, giorno, parte, luogo, regione, nomi_comuni, fonti, testate,
+                     stato, innesco)
+                VALUES ($1::hazard_type, $2, $3, $4, $5, $6, $7::jsonb, $8, 'una_testata', $9)
                 RETURNING id, slug, stato, giorno, parte, luogo, regione, nomi_comuni
                 """,
                 c.hazard.value,
@@ -187,6 +189,7 @@ async def fondi(c: Candidato) -> Salvato:
                 list(c.nomi_comuni),
                 json.dumps(fonti),
                 testate,
+                c.innesco,
             )
         else:
             salvato = await conn.fetchrow(
@@ -198,7 +201,9 @@ async def fondi(c: Candidato) -> Salvato:
                     -- La parte del giorno si prende solo se mancava.
                     parte = CASE WHEN parte = 'ignota' AND giorno = $4 THEN $5 ELSE parte END,
                     -- Una regione arrivata dopo scioglie un omonimo rimasto in sospeso.
-                    regione = COALESCE(regione, $6)
+                    regione = COALESCE(regione, $6),
+                    -- Il primo titolo che dice l'innesco lo fissa.
+                    innesco = CASE WHEN innesco = 'ignoto' THEN $7 ELSE innesco END
                 WHERE id = $1
                 RETURNING id, slug, stato, giorno, parte, luogo, regione, nomi_comuni
                 """,
@@ -208,6 +213,7 @@ async def fondi(c: Candidato) -> Salvato:
                 c.giorno,
                 c.parte,
                 c.regione,
+                c.innesco,
             )
     assert salvato is not None
     return Salvato(
