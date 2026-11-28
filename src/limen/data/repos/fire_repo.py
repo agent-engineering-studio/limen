@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any
 
+from effis_client import MODIS_LAYER
 from shapely.geometry import MultiPolygon, Polygon
 from shapely.geometry.base import BaseGeometry
 
@@ -15,6 +16,10 @@ from limen.core.logging import get_logger
 from limen.data.db import acquire
 
 log = get_logger(__name__)
+
+#: Il layer EFFIS che Limen legge, lo stesso della vista `v_fire_perimeters`
+#: (migrazione 104): un test controlla che i due non divergano.
+PERIMETER_LAYER = MODIS_LAYER
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,10 +30,19 @@ class FirePerimeter:
     country: str | None
     province: str | None
     geom: MultiPolygon
+    #: Il layer EFFIS da cui viene (`ms:modis.ba.poly` o `nrt.ba.poly`): i due
+    #: non contano gli stessi incendi e non si mescolano (migrazione 104).
+    layer: str = PERIMETER_LAYER
     dnbr_path: str | None = None
     raster_ref_id: int | None = None
     dataset_version_id: int | None = None
     attributes: dict[str, Any] | None = None
+    #: Quello che solo `ms:modis.ba.poly` dice; `None` sull'altro layer.
+    municipality: str | None = None
+    final_date: date | None = None
+    last_update: date | None = None
+    land_cover_pct: dict[str, float] | None = None
+    natura2000_pct: float | None = None
 
 
 def _as_multipolygon(geom: BaseGeometry) -> MultiPolygon:
@@ -40,20 +54,24 @@ def _as_multipolygon(geom: BaseGeometry) -> MultiPolygon:
 
 
 async def upsert_perimeter(perimeter: FirePerimeter) -> None:
-    """Insert-or-update a burnt-area perimeter by EFFIS feature id."""
+    """Insert-or-update a burnt-area perimeter by (layer, EFFIS feature id)."""
     attrs_json = json.dumps(perimeter.attributes or {}, default=str)
+    cover_json = None if perimeter.land_cover_pct is None else json.dumps(perimeter.land_cover_pct)
     multi = _as_multipolygon(perimeter.geom)
     async with acquire() as conn:
         await conn.execute(
             """
             INSERT INTO fire_perimeters (
                 id, fire_date, area_ha, country, province, geom,
-                dnbr_path, raster_ref_id, dataset_version_id, attributes
+                dnbr_path, raster_ref_id, dataset_version_id, attributes,
+                layer, municipality, final_date, last_update, land_cover_pct,
+                natura2000_pct
             ) VALUES (
                 $1, $2, $3, $4, $5, ST_SetSRID($6::geometry, 4326),
-                $7, $8, $9, $10::jsonb
+                $7, $8, $9, $10::jsonb,
+                $11, $12, $13, $14, $15::jsonb, $16
             )
-            ON CONFLICT (id) DO UPDATE
+            ON CONFLICT (layer, id) DO UPDATE
             SET fire_date     = EXCLUDED.fire_date,
                 area_ha       = EXCLUDED.area_ha,
                 country       = EXCLUDED.country,
@@ -66,6 +84,11 @@ async def upsert_perimeter(perimeter: FirePerimeter) -> None:
                 dataset_version_id = COALESCE(EXCLUDED.dataset_version_id,
                                               fire_perimeters.dataset_version_id),
                 attributes    = EXCLUDED.attributes,
+                municipality  = EXCLUDED.municipality,
+                final_date    = EXCLUDED.final_date,
+                last_update   = EXCLUDED.last_update,
+                land_cover_pct = EXCLUDED.land_cover_pct,
+                natura2000_pct = EXCLUDED.natura2000_pct,
                 updated_at    = now()
             """,
             perimeter.id,
@@ -78,23 +101,35 @@ async def upsert_perimeter(perimeter: FirePerimeter) -> None:
             perimeter.raster_ref_id,
             perimeter.dataset_version_id,
             attrs_json,
+            perimeter.layer,
+            perimeter.municipality,
+            perimeter.final_date,
+            perimeter.last_update,
+            cover_json,
+            perimeter.natura2000_pct,
         )
 
 
-async def count_perimeters() -> int:
+async def count_perimeters(*, layer: str = PERIMETER_LAYER) -> int:
+    """The perimeters of one EFFIS layer: Limen's, unless told otherwise."""
     async with acquire() as conn:
-        row = await conn.fetchrow("SELECT COUNT(*)::bigint AS n FROM fire_perimeters")
+        row = await conn.fetchrow(
+            "SELECT COUNT(*)::bigint AS n FROM fire_perimeters WHERE layer = $1", layer
+        )
     return int(row["n"]) if row else 0
 
 
-async def get_perimeter(perimeter_id: str) -> FirePerimeter | None:
+async def get_perimeter(perimeter_id: str, *, layer: str = PERIMETER_LAYER) -> FirePerimeter | None:
     async with acquire() as conn:
         row = await conn.fetchrow(
             """
             SELECT id, fire_date, area_ha, country, province, geom,
-                   dnbr_path, raster_ref_id, dataset_version_id, attributes
-            FROM fire_perimeters WHERE id = $1
+                   dnbr_path, raster_ref_id, dataset_version_id, attributes,
+                   layer, municipality, final_date, last_update, land_cover_pct,
+                   natura2000_pct
+            FROM fire_perimeters WHERE layer = $1 AND id = $2
             """,
+            layer,
             perimeter_id,
         )
     if row is None:
@@ -102,6 +137,9 @@ async def get_perimeter(perimeter_id: str) -> FirePerimeter | None:
     attrs = row["attributes"]
     if isinstance(attrs, str):
         attrs = json.loads(attrs)
+    cover = row["land_cover_pct"]
+    if isinstance(cover, str):
+        cover = json.loads(cover)
     return FirePerimeter(
         id=str(row["id"]),
         fire_date=row["fire_date"],
@@ -113,6 +151,12 @@ async def get_perimeter(perimeter_id: str) -> FirePerimeter | None:
         raster_ref_id=row["raster_ref_id"],
         dataset_version_id=row["dataset_version_id"],
         attributes=attrs or {},
+        layer=row["layer"],
+        municipality=row["municipality"],
+        final_date=row["final_date"],
+        last_update=row["last_update"],
+        land_cover_pct=cover,
+        natura2000_pct=row["natura2000_pct"],
     )
 
 

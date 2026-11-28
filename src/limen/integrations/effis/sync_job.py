@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from effis_client import perimeter_attributes
 from shapely.geometry import MultiPolygon, Polygon, shape
 from shapely.geometry.base import BaseGeometry
 from shapely.validation import make_valid
 
 from limen.core.logging import get_logger
 from limen.data.object_store import ObjectStore, build_object_store
-from limen.data.repos.fire_repo import FirePerimeter, count_perimeters, upsert_perimeter
+from limen.data.repos.fire_repo import (
+    PERIMETER_LAYER,
+    FirePerimeter,
+    count_perimeters,
+    upsert_perimeter,
+)
 from limen.data.repos.raster_refs_repo import (
     sha256_hex,
 )
@@ -39,12 +46,18 @@ def _coerce_multipolygon(geom: BaseGeometry) -> MultiPolygon | None:
     return None
 
 
-def _parse_feature(feat: dict[str, Any]) -> FirePerimeter | None:
-    props = dict(feat.get("properties") or {})
-    feat_id = feat.get("id") or props.get("id") or props.get("OBJECTID")
-    if feat_id is None:
+def _parse_feature(feat: dict[str, Any], *, layer: str = PERIMETER_LAYER) -> FirePerimeter | None:
+    """Un perimetro EFFIS come riga di `fire_perimeters`, con il suo layer.
+
+    Id, giorno, ettari, Comune, uso del suolo e revisione li legge
+    `effis_client.perimeter_attributes`, da qualunque campo il layer usi.
+    Qui resta la geometria, che Limen salva come MultiPolygon valido.
+    """
+    attributes = perimeter_attributes(feat)
+    if attributes.id is None:
         log.warning("effis.feature.skip", reason="no id")
         return None
+    feat_id = attributes.id
 
     geom_field = feat.get("geometry")
     if geom_field is None:
@@ -61,41 +74,23 @@ def _parse_feature(feat: dict[str, Any]) -> FirePerimeter | None:
         log.warning("effis.feature.skip", reason="non-polygon geometry", feat_id=feat_id)
         return None
 
-    # `initialdate` è il campo del layer `nrt.ba.poly`; gli altri restano per
-    # il fallback bulk, che è un altro dataset con un'altra intestazione.
-    fire_date_str = (
-        props.get("initialdate")
-        or props.get("firedate")
-        or props.get("FIREDATE")
-        or props.get("fire_date")
-    )
-    fire_date: date | None = None
-    if fire_date_str:
-        try:
-            fire_date = date.fromisoformat(str(fire_date_str)[:10])
-        except ValueError:
-            log.warning("effis.feature.bad_date", value=fire_date_str, feat_id=feat_id)
-
-    # `area` sul WFS, già in ettari; `area_ha` sui file bulk. Arriva come
-    # stringa, quindi la conversione è esplicita e tollera un valore illeggibile.
-    area_raw = (
-        props.get("area") or props.get("area_ha") or props.get("AREA_HA") or props.get("AREA")
-    )
-    area_ha: float | None = None
-    if area_raw is not None:
-        try:
-            area_ha = float(area_raw)
-        except (TypeError, ValueError):
-            log.warning("effis.feature.bad_area", value=area_raw, feat_id=feat_id)
+    if attributes.fire_date is None:
+        log.warning("effis.feature.no_date", feat_id=feat_id)
 
     return FirePerimeter(
-        id=str(feat_id),
-        fire_date=fire_date,
-        area_ha=area_ha,
-        country=props.get("country") or props.get("COUNTRY"),
-        province=props.get("province") or props.get("PROVINCE"),
+        id=feat_id,
+        fire_date=attributes.fire_date,
+        area_ha=attributes.area_ha,
+        country=attributes.country,
+        province=attributes.province,
         geom=multi,
-        attributes=props,
+        layer=layer,
+        attributes=dict(feat.get("properties") or {}),
+        municipality=attributes.municipality,
+        final_date=attributes.final_date,
+        last_update=attributes.last_update,
+        land_cover_pct=attributes.land_cover or None,
+        natura2000_pct=attributes.natura2000_pct,
     )
 
 
@@ -147,18 +142,7 @@ async def run_effis_sync(
                         "object_store_location": location,
                     },
                 )
-                perim = FirePerimeter(
-                    id=perim.id,
-                    fire_date=perim.fire_date,
-                    area_ha=perim.area_ha,
-                    country=perim.country,
-                    province=perim.province,
-                    geom=perim.geom,
-                    dnbr_path=key,
-                    raster_ref_id=ref_id,
-                    dataset_version_id=perim.dataset_version_id,
-                    attributes=perim.attributes,
-                )
+                perim = replace(perim, dnbr_path=key, raster_ref_id=ref_id)
                 dnbr_stored += 1
                 log.info("effis.dnbr.stored", perimeter_id=perim.id, key=key, ref_id=ref_id)
 

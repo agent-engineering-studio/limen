@@ -45,7 +45,8 @@ async def _perimeter(
 ) -> None:
     async with acquire() as conn:
         await conn.execute(
-            "INSERT INTO fire_perimeters (id, fire_date, area_ha, geom) VALUES ($1,$2,$3,"
+            "INSERT INTO fire_perimeters (layer, id, fire_date, area_ha, geom) "
+            "VALUES ('ms:modis.ba.poly',$1,$2,$3,"
             "ST_Multi(ST_MakeEnvelope($4,41.0,$5,41.05,4326)))",
             perimeter_id,
             day,

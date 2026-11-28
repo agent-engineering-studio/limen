@@ -61,7 +61,7 @@ async def sincronizza(*, forzato: bool, giorni: int = DEFAULT_LOOKBACK_DAYS) -> 
         if aoi is None or aoi.geom is None:
             continue
         gate = await fingerprint.StepGate.create(aoi_id, force=forzato)
-        fp = await fingerprint.of_tables("fire_perimeters", require_rows=False)
+        fp = await fingerprint.of_tables("v_fire_perimeters", require_rows=False)
         if not await gate.needs(_STEP, fp):
             continue
         # `.bounds` e non il campo `bbox`: quello e' una geometria, e

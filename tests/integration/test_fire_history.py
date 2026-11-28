@@ -230,12 +230,14 @@ async def test_effis_agreement_matches_a_perimeter_with_a_nearby_hotspot(
     await _seed_grid()
     async with acquire() as conn:
         await conn.execute(
-            "INSERT INTO fire_perimeters (id, fire_date, geom) VALUES ('p1',$1,"
+            "INSERT INTO fire_perimeters (layer, id, fire_date, geom) "
+            "VALUES ('ms:modis.ba.poly','p1',$1,"
             "ST_Multi(ST_MakeEnvelope(16.04,41.01,16.07,41.03,4326)))",
             DAY,
         )
         await conn.execute(
-            "INSERT INTO fire_perimeters (id, fire_date, geom) VALUES ('p2',$1,"
+            "INSERT INTO fire_perimeters (layer, id, fire_date, geom) "
+            "VALUES ('ms:modis.ba.poly','p2',$1,"
             "ST_Multi(ST_MakeEnvelope(16.24,41.01,16.27,41.03,4326)))",
             DAY,
         )

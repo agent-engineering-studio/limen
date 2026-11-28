@@ -82,7 +82,7 @@ WITH perimetri AS (
     -- severità: quella del **suo** incendio, non dell'ultimo della regione.
     SELECT DISTINCT ON (g.id)
            g.id AS cell_id, fp.fire_date AS data, fp.frp_density_mw_per_ha AS densita
-    FROM fire_perimeters fp
+    FROM v_fire_perimeters fp
     JOIN grid_cells g ON g.aoi_id = $1 AND ST_Intersects(g.geom, fp.geom)
     WHERE fp.fire_date >= $3 AND fp.fire_date <= $4
     ORDER BY g.id, fp.fire_date DESC

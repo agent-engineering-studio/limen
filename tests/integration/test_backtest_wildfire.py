@@ -55,7 +55,8 @@ async def _seed(fire_dates: dict[str, dt.date]) -> None:
                 x + 0.01,
             )
             await conn.execute(
-                "INSERT INTO fire_perimeters (id, fire_date, geom) VALUES ($1,$2,"
+                "INSERT INTO fire_perimeters (layer, id, fire_date, geom) "
+                "VALUES ('ms:modis.ba.poly',$1,$2,"
                 "ST_Multi(ST_MakeEnvelope($3,40.99,$4,41.02,4326)))",
                 f"perim-{i}",
                 fire_date,
@@ -86,7 +87,8 @@ async def test_a_cell_that_burned_twice_counts_once(reset_db: None, pg_pool: obj
     await _seed({cell: dt.date(2026, 8, 10)})
     async with acquire() as conn:
         await conn.execute(
-            "INSERT INTO fire_perimeters (id, fire_date, geom) VALUES ('perim-again',"
+            "INSERT INTO fire_perimeters (layer, id, fire_date, geom) "
+            "VALUES ('ms:modis.ba.poly','perim-again',"
             "$1, ST_Multi(ST_MakeEnvelope(16.095,40.99,16.115,41.02,4326)))",
             dt.date(2026, 9, 1),
         )

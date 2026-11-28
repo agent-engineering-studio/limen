@@ -574,7 +574,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
       "ovl-bruciate": {
         type: "vector",
         tiles: [
-          `${tileserv}/public.fire_perimeters/{z}/{x}/{y}.pbf?properties=fire_date,area_ha`,
+          `${tileserv}/public.v_fire_perimeters/{z}/{x}/{y}.pbf?properties=fire_date,area_ha`,
         ],
         minzoom: 6,
         attribution: "EFFIS",
@@ -863,7 +863,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         id: "ovl-bruciate-fill",
         type: "fill",
         source: "ovl-bruciate",
-        "source-layer": "public.fire_perimeters",
+        "source-layer": "public.v_fire_perimeters",
         paint: { "fill-color": "#ff9ad5", "fill-opacity": 0.2 },
         layout: { visibility: visibile("ovl-bruciate-fill") },
       },
@@ -905,7 +905,7 @@ export function RiskMap(props: RiskMapProps): JSX.Element {
         id: "ovl-bruciate-line",
         type: "line",
         source: "ovl-bruciate",
-        "source-layer": "public.fire_perimeters",
+        "source-layer": "public.v_fire_perimeters",
         paint: { "line-color": "#ff9ad5", "line-width": 1.2 },
         layout: { visibility: visibile("ovl-bruciate-line") },
       },

@@ -153,7 +153,8 @@ async def test_misura_coltivi_reads_only_and_stops_at_the_estimation_period(
     await upsert_hotspots(prima + dopo)
     async with acquire() as conn:
         await conn.execute(
-            "INSERT INTO fire_perimeters (id, fire_date, geom) VALUES ('p', '2025-07-02',"
+            "INSERT INTO fire_perimeters (layer, id, fire_date, geom) "
+            "VALUES ('ms:modis.ba.poly','p', '2025-07-02',"
             "ST_Multi(ST_MakeEnvelope(15.9, 40.8, 16.2, 41.0, 4326)))"
         )
     terra: Any = _Terra()

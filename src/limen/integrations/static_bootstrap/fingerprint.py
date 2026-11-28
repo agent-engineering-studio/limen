@@ -64,7 +64,8 @@ STEP_VERSION: dict[str, int] = {
     "flood_hazard": 1,
     "fire_density": 1,
     "crop_burning": 1,
-    "fire_perimeters": 1,
+    # 2: il layer EFFIS è ms:modis.ba.poly e non più nrt.ba.poly (migrazione 104).
+    "fire_perimeters": 2,
     "osm_distance": 1,
     "dem": 1,
     "corine": 1,
