@@ -27,10 +27,11 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from rainfall_thresholds import RainfallEvent, latest_event, reconstruct_events
+from limen_core.scoring.caine import _threshold as soglia_caine
+from rainfall_thresholds import cumulate as _cumulate
+from rainfall_thresholds import event_against_threshold
 
 from limen.core.istante_frana import istante_frana
-from limen.core.scoring.caine import threshold_intensity_mm_h
 from limen.core.scoring.regional_thresholds import RegionalThresholds, load_regional_thresholds
 from limen.data.repos import pluviometri_repo, zone_franose_repo
 from limen.data.repos.pluviometri_repo import Vicino
@@ -53,18 +54,18 @@ FONTI = {
 
 def cumulate(ore: dict[datetime, float | None], fine: datetime) -> dict[str, dict[str, Any]]:
     """Per ogni finestra di :data:`CUMULATE` che entra nella serie: mm, o ``None``
-    con le ore che mancano se anche una sola non è misurata."""
-    out: dict[str, dict[str, Any]] = {}
-    for h in CUMULATE:
-        if fine - timedelta(hours=h - 1) < min(ore, default=fine):
-            continue
-        finestra = [ore.get(fine - timedelta(hours=k)) for k in range(h)]
-        mancanti = sum(v is None for v in finestra)
-        out[f"{h}h"] = {
-            "mm": None if mancanti else round(sum(v for v in finestra if v is not None), 1),
-            "ore_non_misurate": mancanti,
+    con le ore che mancano se anche una sola non è misurata.
+
+    ``rainfall_thresholds.cumulate``, nelle chiavi italiane e arrotondato al
+    decimo come l'API, l'MCP e la pagina si aspettano.
+    """
+    return {
+        f"{h}h": {
+            "mm": None if t.total_mm is None else round(t.total_mm, 1),
+            "ore_non_misurate": t.unmeasured_hours,
         }
-    return out
+        for h, t in _cumulate(ore, fine, windows_hours=CUMULATE).items()
+    }
 
 
 def evento_contro_soglia(
@@ -75,49 +76,35 @@ def evento_contro_soglia(
 ) -> dict[str, Any] | None:
     """L'evento di pioggia della serie, con la soglia d'innesco alla sua durata.
 
-    Lo stesso evento che il motore sceglie (``scelta_evento`` del YAML): il
-    più recente, o quello più alto rispetto alla curva.
+    ``rainfall_thresholds.event_against_threshold`` con lo stesso evento che il
+    motore sceglie (``scelta_evento`` del YAML): il più recente, o quello più
+    alto rispetto alla curva. Le chiavi e gli arrotondamenti sono quelli che
+    l'API e l'MCP leggono.
     """
     caine = soglie.caine
-    pausa = caine.event_reconstruction.no_rain_break_hours
-    eventi = reconstruct_events(
-        sorted(ore.items()),
-        no_rain_break_hours=pausa,
+    trovato = event_against_threshold(
+        ore,
+        soglia_caine(caine, macroregione),
+        no_rain_break_hours=caine.event_reconstruction.no_rain_break_hours,
         min_event_mm=caine.event_reconstruction.min_event_mm,
+        choice="strongest" if caine.event_reconstruction.scelta_evento == "piu_forte" else "latest",
         source="pluviometro",
     )
-
-    def rapporto(e: RainfallEvent) -> float:
-        soglia = threshold_intensity_mm_h(e.duration_hours, caine=caine, macroregion=macroregione)
-        return e.intensity_mm_h / soglia
-
-    if caine.event_reconstruction.scelta_evento == "piu_forte":
-        evento = max(eventi, key=rapporto, default=None)
-    else:
-        evento = latest_event(eventi)
-    if evento is None:
+    if trovato is None:
         return None
-    # Le ore non misurate appena fuori dall'evento, o la serie che finisce prima
-    # che la pausa lo chiuda: l'evento può essere cominciato prima o non finito.
-    bordi = [evento.start - timedelta(hours=k) for k in range(1, pausa + 1)] + [
-        evento.end + timedelta(hours=k) for k in range(1, pausa + 1)
-    ]
-    aperto = any(ore.get(t) is None for t in bordi)
-    soglia_mm_h = threshold_intensity_mm_h(
-        evento.duration_hours, caine=caine, macroregion=macroregione
-    )
+    evento = trovato.event
     return {
         "inizio": evento.start,
         "fine": evento.end,
         "durata_h": evento.duration_hours,
         "cumulata_mm": round(evento.total_mm, 1),
         "intensita_mm_h": round(evento.intensity_mm_h, 2),
-        "soglia_mm_h": round(soglia_mm_h, 2),
-        "soglia_mm": round(soglia_mm_h * evento.duration_hours, 1),
-        "rapporto_soglia": round(evento.intensity_mm_h / soglia_mm_h, 2),
+        "soglia_mm_h": round(trovato.threshold_mm_h, 2),
+        "soglia_mm": round(trovato.threshold_mm, 1),
+        "rapporto_soglia": round(trovato.ratio, 2),
         "ore_non_misurate": evento.unmeasured_hours,
-        "confina_con_ore_non_misurate": aperto,
-        "almeno": evento.unmeasured_hours > 0 or aperto,
+        "confina_con_ore_non_misurate": trovato.borders_unmeasured,
+        "almeno": trovato.at_least,
     }
 
 
