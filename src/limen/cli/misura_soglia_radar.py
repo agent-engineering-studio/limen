@@ -45,8 +45,8 @@ import numpy as np
 from dpc_radar import reliability
 from dpc_radar.bias import radar_factor
 from dpc_radar.reliability import RELIABLE_FROM
-from ispra_idrogeo import IdroGEO
-from ispra_idrogeo.dated import dated_landslides
+from ispra_idrogeo import REGION_NAMES, IdroGEO
+from ispra_idrogeo.dated import dated_landslides, instant_utc
 from numpy.typing import NDArray
 from rainfall_thresholds import (
     ITALICA_T5,
@@ -62,6 +62,7 @@ from rainfall_thresholds import (
 from limen.cli import provenienza
 from limen.cli.ingest_events import _resolve_csv
 from limen.config.percorsi import radice_dati
+from limen.core.istante_frana import istante_frana
 from limen.core.logging import get_logger
 from limen.core.scoring.regional_thresholds import load_regional_thresholds
 from limen.integrations._http import SharedHttpClient
@@ -86,29 +87,6 @@ _CARICHI = (0.02, 0.05)
 #: Nessun evento di pioggia nella finestra: sotto ogni curva, ma misurato.
 SENZA_EVENTO = -99.0
 _MACRO = {regione: macro for macro, regioni in MACROREGIONS.items() for regione in regioni}
-#: I codici ISTAT delle regioni con il nome che usano e-ITALICA e ``MACROREGIONS``.
-_NOMI = {
-    1: "Piemonte",
-    2: "Valle d'Aosta",
-    3: "Lombardia",
-    4: "Trentino-Alto Adige",
-    5: "Veneto",
-    6: "Friuli-Venezia Giulia",
-    7: "Liguria",
-    8: "Emilia-Romagna",
-    9: "Toscana",
-    10: "Umbria",
-    11: "Marche",
-    12: "Lazio",
-    13: "Abruzzo",
-    14: "Molise",
-    15: "Campania",
-    16: "Puglia",
-    17: "Basilicata",
-    18: "Calabria",
-    19: "Sicilia",
-    20: "Sardegna",
-}
 _CAMPI = (
     "id",
     "insieme",
@@ -172,8 +150,8 @@ def _numero(testo: str | None) -> float | None:
 def frane_italica(percorso: Path, dal: int = STRUMENTO_DI_OGGI.year) -> list[Frana]:
     """Le frane di e-ITALICA da ``dal``, con la pioggia al pluviometro dove c'è.
 
-    Una data senza ora (``T3``) è messa alla mezzanotte locale: la frana può
-    essere caduta fino alla fine di quel giorno, e lì va l'istante.
+    Una data senza ora (``T3``) vale alla fine del suo giorno, ora di Roma
+    (``istante_frana``): la frana può essere caduta fino a quel momento.
     """
     frane = []
     with percorso.open(encoding="utf-8-sig") as f:
@@ -181,8 +159,7 @@ def frane_italica(percorso: Path, dal: int = STRUMENTO_DI_OGGI.year) -> list[Fra
             if not r["year"] or int(r["year"]) < dal:
                 continue
             istante = datetime.strptime(r["utc_date"], "%d/%m/%Y %H:%M").replace(tzinfo=UTC)
-            if r["temporal_accuracy"] == "T3":
-                istante += timedelta(hours=24)
+            istante = istante_frana(istante, r["temporal_accuracy"] != "T3")
             frane.append(
                 Frana(
                     insieme="italica",
@@ -217,19 +194,15 @@ async def frane_idrogeo(fino_a: date, cartella: Path) -> list[Frana]:
     for x in datate:
         if x.lon is None or x.lat is None:
             continue
-        giorno = datetime(x.start.year, x.start.month, x.start.day, tzinfo=UTC)
-        # Senza ora la frana vale fino alla fine del suo giorno.
-        istante = giorno + timedelta(hours=24)
-        if x.precision == "hour" and x.time:
-            ore, minuti = (int(parte) for parte in x.time.split(":")[:2])
-            istante = giorno.replace(hour=ore, minute=minuti, tzinfo=_ROMA).astimezone(UTC)
+        # La regola di tutte le librerie: l'ora a Roma, o la fine del giorno a Roma.
+        istante = instant_utc(x)
         frane.append(
             Frana(
                 insieme="idrogeo",
                 id=f"{x.source}:{x.id}",
                 lon=x.lon,
                 lat=x.lat,
-                regione=_NOMI.get(x.region or 0, str(x.region)),
+                regione=REGION_NAMES.get(x.region or 0, str(x.region)),
                 istante=istante,
                 precisione_data=x.precision,
             )

@@ -138,7 +138,8 @@ async def test_pioggia_prima_delle_frane(reset_db: None, pg_pool: object) -> Non
         raggio_km=5.0,
     )
     [frana] = r["frane"]
-    # Datata al giorno: la finestra arriva alla fine di quel giorno.
-    assert frana["finestra"]["fine"] == datetime(2014, 11, 6, 0, tzinfo=UTC)
+    # Datata al giorno: la finestra arriva alla fine di quel giorno, ora di Roma
+    # (la mezzanotte del 6 a Roma sono le 23 UTC del 5; prima era «+24 ore»).
+    assert frana["finestra"]["fine"] == datetime(2014, 11, 5, 23, tzinfo=UTC)
     assert frana["pluviometro"]["nome"] == "Trento"
     assert frana["evento"]["cumulata_mm"] == 60.0

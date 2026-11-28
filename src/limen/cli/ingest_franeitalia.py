@@ -118,7 +118,12 @@ def _giorno(raw: str | None) -> date | None:
 
 
 def istante(giorno: date, ora: str | None, certa: bool) -> tuple[datetime, str]:
-    """L'istante dell'evento in UTC e la sua classe ITALICA (T1/T2/T3)."""
+    """L'istante dell'evento in UTC e la sua classe ITALICA (T1/T2/T3).
+
+    Senza ora si salva il mezzogiorno di Roma: dice solo il giorno. L'istante da
+    usare in una misura è ``limen.core.istante_frana`` (la fine del giorno a
+    Roma); cambiare ciò che si salva vuole una migrazione delle righe vecchie.
+    """
     testo = (ora or "").strip().lower()
     quando: time | None = None
     classe = "T3"

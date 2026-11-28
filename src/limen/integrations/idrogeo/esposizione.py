@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from ispra_idrogeo import IdroGEO
+from ispra_idrogeo.exposure import from_indicators
 
 from limen.config.percorsi import radice_dati
 from limen.core.logging import get_logger
@@ -61,30 +62,27 @@ def cartella() -> Path:
     return radice_dati() / "ispra-idrogeo"
 
 
-def _intero(valore: Any) -> int | None:
-    return int(valore) if isinstance(valore, int | float) else None
-
-
-def _reale(valore: Any) -> float | None:
-    return float(valore) if isinstance(valore, int | float) else None
-
-
 def da_indicatori(dati: dict[str, Any]) -> EsposizioneComune | None:
-    """La riga di un comune; ``None`` se manca il codice."""
-    codice = dati.get("uid")
-    if not isinstance(codice, int):
+    """La riga di un comune; ``None`` se manca il codice.
+
+    La lettura è ``ispra_idrogeo.exposure.from_indicators`` (0.14); qui i nomi
+    di Limen.
+    """
+    e = from_indicators(dati)
+    if e is None:
         return None
     return EsposizioneComune(
         # ISPRA usa il PRO_COM numerico, `comuni` quello a sei cifre.
-        istat_code=f"{codice:06d}",
-        nome=str(dati.get("nome") or ""),
-        pop_residenti=_intero(dati.get("pop_res021")),
-        pop_frana_p3p4=_intero(dati.get("popfr_p3p4")),
-        pop_frana_p3p4_pct=_reale(dati.get("popfrp3p4p")),
-        pop_idraulica_p2=_intero(dati.get("pop_idr_p2")),
-        pop_idraulica_p2_pct=_reale(dati.get("popidp2_p")),
-        edifici=_intero(dati.get("ed_tot")),
-        imprese=_intero(dati.get("im_tot")),
+        istat_code=e.code,
+        nome=e.name,
+        pop_residenti=e.residents,
+        pop_frana_p3p4=e.residents_landslide_p3p4,
+        pop_frana_p3p4_pct=e.residents_landslide_p3p4_pct,
+        pop_idraulica_p2=e.residents_flood_p2,
+        pop_idraulica_p2_pct=e.residents_flood_p2_pct,
+        edifici=e.buildings,
+        imprese=e.businesses,
+        # la risposta stessa, non la copia della libreria: si salva com'è
         indicatori=dati,
     )
 
