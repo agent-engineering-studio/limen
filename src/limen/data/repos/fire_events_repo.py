@@ -8,8 +8,11 @@ della stessa GROUP BY.
 
 from __future__ import annotations
 
+import json
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
+from typing import Any
 
 from limen.core.logging import get_logger
 from limen.data.db import acquire
@@ -134,18 +137,10 @@ async def refresh_density(
 #: durata tipica senza raccogliere l'incendio successivo.
 FRP_WINDOW_DAYS = 5
 
-#: Somma di FRP e sua densità per perimetro, in una passata.
-#:
-#: Solo hotspot di vegetazione (`detection_type = 0`): un'acciaieria dentro il
-#: perimetro sommerebbe potenza radiativa che non viene da quel rogo.
-#:
-#: `NULLIF(area_ha, 0)`: un perimetro con area nulla o assente lascia la
-#: densità a NULL invece di dividere per zero — e NULL qui significa "non
-#: misurabile", che è la cosa giusta da propagare al motore.
-#:
-#: Sulla vista `v_fire_perimeters`, che è aggiornabile: solo i perimetri del
-#: layer di Limen. Le righe dell'altro layer tengono i valori che avevano.
-_REFRESH_FRP_SQL = """
+#: L'SQL che faceva lo stesso calcolo prima di limen-core (#714). Non lo usa
+#: più nessuno: resta come riferimento del test di parità, che lo esegue
+#: accanto a `refresh_perimeter_frp` sulle stesse righe.
+_REFRESH_FRP_SQL_LEGACY = """
 WITH agg AS (
     SELECT fp.id,
            sum(h.frp_mw)  AS frp_sum,
@@ -168,21 +163,123 @@ FROM agg
 WHERE fp.id = agg.id
 """
 
+_PERIMETERS_SQL = """
+SELECT id, layer, fire_date, area_ha, ST_AsGeoJSON(geom) AS geometry
+FROM v_fire_perimeters
+WHERE fire_date IS NOT NULL
+"""
+
+#: Solo gli hotspot che possono contare, nei giorni e nel riquadro dei
+#: perimetri di un anno: la regola vera la applica `seen_inside_all`.
+_HOTSPOTS_SQL = """
+SELECT longitude, latitude, acq_date, frp_mw, detection_type
+FROM fire_hotspots
+WHERE detection_type = 0
+  AND frp_mw IS NOT NULL
+  AND acq_date BETWEEN $1 AND $2
+  AND geom && ST_MakeEnvelope($3, $4, $5, $6, 4326)
+"""
+
+#: Scrive solo dove il valore cambia: `updated_at` resta quello vero.
+_WRITE_FRP_SQL = """
+UPDATE v_fire_perimeters
+SET frp_sum_mw            = $2,
+    frp_hotspots          = $3,
+    frp_density_mw_per_ha = $4,
+    updated_at            = now()
+WHERE id = $1
+  AND (frp_sum_mw, frp_hotspots, frp_density_mw_per_ha) IS DISTINCT FROM ($2, $3, $4)
+"""
+
 
 async def refresh_perimeter_frp(
     *, window_days: int = FRP_WINDOW_DAYS, timeout: float | None = None
 ) -> int:
-    """Ricalcola FRP e densità su tutti i perimetri. Idempotente.
+    """Ricalcola FRP e densità su tutti i perimetri del layer di Limen. Idempotente.
 
     Va chiamata quando arriva *uno dei due* dataset: un perimetro nuovo o
     hotspot nuovi cambiano la stessa risposta, quindi sia il sync EFFIS sia
     l'ingest della storia del fuoco la invocano.
+
+    Il conto è `limen_core.wildfire.seen_inside_all`, la stessa regola dell'SQL
+    di prima (#714): hotspot di vegetazione con una potenza, entro
+    ``window_days`` giorni dalla data del rogo, dentro il perimetro o sul suo
+    bordo. Qui restano la lettura e la scrittura. Un perimetro in cui nessun
+    hotspot conta ha somma, conteggio e densità NULL: non misurato, non zero.
+    Un anno di perimetri alla volta, per non portare in memoria tutti gli
+    hotspot d'Italia.
+
+    Restituisce quanti perimetri hanno almeno un hotspot che conta.
     """
+    from limen_core.wildfire import Detection, Perimeter, seen_inside_all
+
     async with acquire() as conn:
-        status = await conn.execute(_REFRESH_FRP_SQL, window_days, timeout=timeout)
-    written = int(status.split()[-1]) if status else 0
-    log.info("fire_perimeters.frp_refreshed", perimeters=written, window_days=window_days)
-    return written
+        rows = await conn.fetch(_PERIMETERS_SQL, timeout=timeout)
+        by_year: dict[int, list[Perimeter]] = {}
+        for r in rows:
+            perimeter = Perimeter(
+                id=str(r["id"]),
+                geometry=json.loads(r["geometry"]),
+                fire_date=r["fire_date"],
+                area_ha=None if r["area_ha"] is None else float(r["area_ha"]),
+                layer=str(r["layer"]),
+            )
+            by_year.setdefault(r["fire_date"].year, []).append(perimeter)
+
+        measured = 0
+        span = timedelta(days=window_days)
+        for perimeters in by_year.values():
+            west, south, east, north = _extent(p.geometry for p in perimeters)
+            first = min(p.fire_date for p in perimeters if p.fire_date) - span
+            last = max(p.fire_date for p in perimeters if p.fire_date) + span
+            hotspots = await conn.fetch(
+                _HOTSPOTS_SQL, first, last, west, south, east, north, timeout=timeout
+            )
+            detections = [
+                Detection(
+                    lon=float(h["longitude"]),
+                    lat=float(h["latitude"]),
+                    day=h["acq_date"],
+                    frp_mw=float(h["frp_mw"]),
+                    detection_type=int(h["detection_type"]),
+                )
+                for h in hotspots
+            ]
+            seen = seen_inside_all(perimeters, detections, window_days=window_days)
+            measured += sum(1 for f in seen if f.detections)
+            await conn.executemany(
+                _WRITE_FRP_SQL,
+                [
+                    (
+                        f.perimeter,
+                        f.frp_total_mw,
+                        f.detections or None,
+                        f.frp_density_mw_per_ha,
+                    )
+                    for f in seen
+                ],
+                timeout=timeout,
+            )
+    log.info("fire_perimeters.frp_refreshed", perimeters=measured, window_days=window_days)
+    return measured
+
+
+def _extent(geometries: Iterable[Mapping[str, Any]]) -> tuple[float, float, float, float]:
+    """Il riquadro che contiene tutte le geometrie GeoJSON date."""
+    lons: list[float] = []
+    lats: list[float] = []
+
+    def walk(coordinates: Any) -> None:
+        if coordinates and isinstance(coordinates[0], int | float):
+            lons.append(float(coordinates[0]))
+            lats.append(float(coordinates[1]))
+            return
+        for part in coordinates:
+            walk(part)
+
+    for geometry in geometries:
+        walk(geometry["coordinates"])
+    return min(lons), min(lats), max(lons), max(lats)
 
 
 async def perimeter_severity_at(aoi_id: str, *, on_or_before: date) -> float | None:
