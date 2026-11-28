@@ -57,7 +57,7 @@ dependencies = [
     "imageserver-export~=0.2.0",
     "ingv-shakemap~=0.4.0",
     "dpc-radar[bulletins,nowcast,storms]~=0.6.0",
-    "glofas-ewds~=0.3.0",
+    "glofas-ewds~=0.4.0",
     # I motori di punteggio e le unioni fra fonti. Non è ancora su PyPI: dal tag.
     "limen-core @ git+https://github.com/agent-engineering-studio/limen-core@v0.4.0",
 ]

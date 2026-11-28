@@ -1672,14 +1672,14 @@ wheels = [
 
 [[package]]
 name = "glofas-ewds"
-version = "0.3.0"
+version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c2/a0/6a93243e60f7c90e297a7726e692b2e98c68d4293a5a729e6a5d9014da87/glofas_ewds-0.3.0.tar.gz", hash = "sha256:6f6fb07c54f40f5eb32e5d45f90a2908ea4696de1f2a3270783665e6f4bb8ff9", size = 34194, upload-time = "2026-11-28T14:17:46.08Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/23/86/c6c394273575b4444f4c783d077fcf6459fee54ad07c6441ad17e40a9691/glofas_ewds-0.4.0.tar.gz", hash = "sha256:1ebdafce7747d8279a6a777dad5217667648f2e38271eae1c4be23c2aee71f3f", size = 69657, upload-time = "2026-11-28T17:40:56.196Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/34/49/1398a5554384708a8d3faeaef11914657a8b8cf7e95b1be35864f4bd43cb/glofas_ewds-0.3.0-py3-none-any.whl", hash = "sha256:a5fbdb90abd57edfcf679c90764f80bc7017cf379c6c8958575527ddf0d5b89e", size = 34262, upload-time = "2026-11-28T14:17:45.131Z" },
+    { url = "https://files.pythonhosted.org/packages/f8/92/3388c14b205eddc11b1dc9b817eeb1a97511fe0bfb4f3bd9edf25a082909/glofas_ewds-0.4.0-py3-none-any.whl", hash = "sha256:da1714861302970f14bd4f6a9cbe8229d14755059b7c1d282318a26a98ce4ea2", size = 69224, upload-time = "2026-11-28T17:40:54.899Z" },
 ]
 
 [[package]]
@@ -2541,7 +2541,7 @@ requires-dist = [
     { name = "fwi-chain", specifier = "~=1.3.0" },
     { name = "geoalchemy2", specifier = ">=0.15" },
     { name = "geopandas", specifier = ">=1.0" },
-    { name = "glofas-ewds", specifier = "~=0.3.0" },
+    { name = "glofas-ewds", specifier = "~=0.4.0" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "imageserver-export", specifier = "~=0.2.0" },
     { name = "ingv-shakemap", specifier = "~=0.4.0" },
