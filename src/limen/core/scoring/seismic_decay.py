@@ -1,120 +1,12 @@
-"""Local PGA with exponential time decay (§2.4).
+"""Spostato in limen-core: `limen_core.scoring.seismic_decay`.
 
-For every seismic event ``i`` in the lookback window with
-``M ≥ min_magnitude``:
-
-    pga_decayed_i = PGA_event_i · exp(−Δt_i / τ)
-
-``pga_local`` is then the max over all events. The seismic E-component
-is the sigmoid:
-
-    E = sigmoid((pga_local − pga_threshold) / pga_scale)
-
-falling to 0 when no event exceeds the lookback window or magnitude
-threshold. Units of g (gravitational acceleration) throughout.
-
-Local PGA estimation per event is *out of scope* for this prompt — it
-comes from INGV ShakeMap when available (Phase 2) or, in a future
-prompt, from a GMPE attenuation model. The bundle assembler hands the
-engine the per-event PGA, the engine only does the decay + sigmoid.
+Questo nome resta per il codice che lo importa. È lo stesso modulo, non una
+copia: chi lo sostituisce nei test sostituisce quello vero.
 """
 
-from __future__ import annotations
+import sys
 
-import math
-from collections.abc import Iterable
-from datetime import datetime
+from limen_core.scoring import seismic_decay as _spostato
+from limen_core.scoring.seismic_decay import *  # noqa: F403
 
-from limen.core.models.risk import SeismicHistoryEvent
-from limen.core.scoring.regional_thresholds import SeismicBlock
-
-
-def _sigmoid(z: float) -> float:
-    if z >= 0:
-        return 1.0 / (1.0 + math.exp(-z))
-    ez = math.exp(z)
-    return ez / (1.0 + ez)
-
-
-def pga_local(
-    events: Iterable[SeismicHistoryEvent],
-    *,
-    as_of: datetime,
-    seismic: SeismicBlock,
-) -> float:
-    """Return the decayed local PGA in g (0 if no qualifying event)."""
-    tau_days = seismic.tau_days
-    if tau_days <= 0:
-        raise ValueError(f"tau_days must be > 0, got {tau_days}")
-
-    max_pga = 0.0
-    for ev in events:
-        if ev.magnitude < seismic.min_magnitude:
-            continue
-        dt_days = (as_of - ev.origin_time).total_seconds() / 86_400.0
-        if dt_days < 0 or dt_days > seismic.lookback_days:
-            continue
-        decayed = ev.pga_g * math.exp(-dt_days / tau_days)
-        if decayed > max_pga:
-            max_pga = decayed
-    return max_pga
-
-
-def seismic_factor(
-    pga: float,
-    *,
-    seismic: SeismicBlock,
-) -> float:
-    """Sigmoid-transform a local PGA (in g) into a 0..1 factor.
-
-    Zero sotto ``pga_min_g`` e da lì sale con continuità (#284): la sigmoide
-    nuda valeva già 0,27 per una PGA infinitesima, e ogni cella sfiorata da
-    un terremoto prendeva un gradino di punteggio per tutta la settimana. Si
-    toglie il valore della sigmoide al bordo e si riscala, così il fattore
-    parte da 0 su ``pga_min_g`` e arriva a 1 come prima.
-    """
-    if pga < seismic.pga_min_g:
-        return 0.0
-    z = (pga - seismic.pga_threshold_g) / seismic.pga_scale_g
-    z_min = (seismic.pga_min_g - seismic.pga_threshold_g) / seismic.pga_scale_g
-    base = _sigmoid(z_min)
-    return max(0.0, (_sigmoid(z) - base) / (1.0 - base))
-
-
-def riduzione_soglia_pioggia(
-    events: Iterable[SeismicHistoryEvent],
-    *,
-    as_of: datetime,
-    seismic: SeismicBlock,
-) -> float:
-    """Di quanto scende la soglia di pioggia della cella, in ``[0, riduzione_max]`` (#441).
-
-    Conta lo scuotimento di ogni evento, non quello decaduto con ``tau_days``:
-    il versante resta indebolito per mesi, non per due giorni. Il recupero è
-    ``exp(−Δt / memoria_giorni)``. 0 senza blocco ``soglia_pioggia``.
-    """
-    soglia = seismic.soglia_pioggia
-    if soglia is None:
-        return 0.0
-    massimo = 0.0
-    for ev in events:
-        if ev.magnitude < seismic.min_magnitude:
-            continue
-        dt_days = (as_of - ev.origin_time).total_seconds() / 86_400.0
-        if dt_days < 0 or dt_days > soglia.lookback_giorni:
-            continue
-        recupero = math.exp(-dt_days / soglia.memoria_giorni)
-        peso = seismic_factor(ev.pga_g, seismic=seismic) * recupero
-        massimo = max(massimo, peso)
-    return soglia.riduzione_max * massimo
-
-
-def compute_seismic(
-    events: Iterable[SeismicHistoryEvent],
-    *,
-    as_of: datetime,
-    seismic: SeismicBlock,
-) -> tuple[float, float]:
-    """Convenience: returns ``(pga_local_g, seismic_factor)``."""
-    pga = pga_local(events, as_of=as_of, seismic=seismic)
-    return pga, seismic_factor(pga, seismic=seismic)
+sys.modules[__name__] = _spostato
