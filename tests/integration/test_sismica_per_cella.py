@@ -24,7 +24,8 @@ from limen.integrations.ingv.sync_job import run_ingv_sync
 pytestmark = pytest.mark.integration
 
 _AOI = "aoi-sisma"
-_EVENTO = "ev-sisma-001"
+# Un id come quelli di INGV: numerico (la chiave per versione lo richiede).
+_EVENTO = "47606532"
 _INFO_URL = shakemap_grid_url(_EVENTO).replace("grid.xml", "info.json")
 
 
@@ -170,6 +171,9 @@ async def test_si_riscarica_quando_cambia_la_versione(reset_db: None, tmp_path: 
     # La versione 4, tre giorni dopo il terremoto: si riscarica.
     assert await giro(v(4)) == 1
     assert await giro(v(4)) == 0
+    # Una mappa rivista non sovrascrive quella di prima: una chiave per versione.
+    assert (tmp_path / "shakemap" / _EVENTO / "v003" / "grid.xml").exists()
+    assert (tmp_path / "shakemap" / _EVENTO / "v004" / "grid.xml").exists()
     evento = await get_event(_EVENTO)
     assert evento is not None and evento.attributes is not None
     assert evento.attributes["shakemap_version"] == 4

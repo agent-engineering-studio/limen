@@ -157,10 +157,9 @@ def valuta(
     pga_min_g: float = 0.02,
 ) -> EsitoEvento:
     """Lo scuotimento dei punti franati contro quello di tutta la terra in mappa."""
-    nlat, nlon = griglia.nlat, griglia.nlon
-    cols, rows = np.meshgrid(np.arange(nlon), np.arange(nlat))
-    lons = np.asarray(griglia.lon_min + cols.ravel() * griglia.lon_step, dtype=np.float64)
-    lats = np.asarray(griglia.lat_max - rows.ravel() * griglia.lat_step, dtype=np.float64)
+    nlon = griglia.nlon
+    # I punti della griglia e il punto più vicino di ogni frana: ingv-shakemap.
+    lons, lats = (np.asarray(a, dtype=np.float64).ravel() for a in griglia.points())
     su_terra = shapely.contains_xy(terra, lons, lats)
 
     caso = np.zeros(lons.size, dtype=bool)
@@ -168,9 +167,7 @@ def valuta(
     if frane:
         f_lon = np.array([f[0] for f in frane], dtype=float)
         f_lat = np.array([f[1] for f in frane], dtype=float)
-        c = np.rint((f_lon - griglia.lon_min) / griglia.lon_step)
-        r = np.rint((griglia.lat_max - f_lat) / griglia.lat_step)
-        dentro = (c >= 0) & (c < nlon) & (r >= 0) & (r < nlat)
+        r, c, dentro = griglia.index_of(f_lon, f_lat)
         indici = (r[dentro] * nlon + c[dentro]).astype(int)
         indici = indici[su_terra[indici]]
         in_mappa = int(indici.size)
