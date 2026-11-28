@@ -59,7 +59,7 @@ dependencies = [
     "dpc-radar[bulletins,nowcast,storms]~=0.6.0",
     "glofas-ewds~=0.4.0",
     # I motori di punteggio e le unioni fra fonti.
-    "limen-core~=0.4.1",
+    "limen-core~=0.5.0",
 ]
 
 [project.scripts]
