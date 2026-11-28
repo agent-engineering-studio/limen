@@ -15,10 +15,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from glofas_ewds import PEAK_TOLERANCE, flood_label
+
 #: Quanto il picco salvato della corsa può scostarsi da quello ricavato dal
-#: punteggio perché il giorno valga per lui: oltre, il punteggio viene da
-#: un'altra corsa o da Open-Meteo, e il giorno sarebbe di un'altra previsione.
-TOLLERANZA_PICCO = 0.01
+#: punteggio perché il giorno valga per lui: quello di glofas-ewds.
+TOLLERANZA_PICCO = PEAK_TOLERANCE
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,25 +39,16 @@ def piena(
     soglie: dict[int, float | None],
     previsto: tuple[float, date | None] | None = None,
 ) -> Piena | None:
-    """L'etichetta, o ``None`` se manca un pezzo: senza q90 o senza la soglia
-    da 2 anni non si può dire, e «non lo so» non è «sotto la piena»."""
-    if rapporto is None or q90 is None or q90 <= 0:
+    """L'etichetta, o ``None`` se manca un pezzo: ``glofas_ewds.flood_label``.
+
+    Senza q90 o senza la soglia da 2 anni non si può dire, e «non lo so» non è
+    «sotto la piena».
+    """
+    found = flood_label(rapporto, q90, soglie, previsto, tolerance=TOLLERANZA_PICCO)
+    if found is None:
         return None
-    note = {anni: s for anni, s in soglie.items() if s is not None and s > 0}
-    if 2 not in note:
-        return None
-    picco = rapporto * q90
-    superati = [anni for anni, s in note.items() if picco >= s]
-    giorno = None
-    if previsto is not None and previsto[1] is not None:
-        salvato = previsto[0]
-        if abs(salvato - picco) <= TOLLERANZA_PICCO * max(salvato, picco, 1.0):
-            giorno = previsto[1]
     return Piena(
-        anni=max(superati) if superati else None,
-        picco_m3s=picco,
-        soglie_m3s=note,
-        giorno=giorno,
+        anni=found.years, picco_m3s=found.peak, soglie_m3s=found.thresholds, giorno=found.day
     )
 
 

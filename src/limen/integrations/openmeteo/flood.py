@@ -23,6 +23,8 @@ from hashlib import sha256
 from typing import Any, Protocol
 
 import httpx
+from glofas_ewds import MIN_REFERENCE_DAYS as _MIN_REFERENCE_DAYS
+from glofas_ewds import percentile as _percentile
 from tenacity import RetryError
 
 from limen.config.settings import get_settings
@@ -225,8 +227,10 @@ async def _entra_in_pausa(label: str) -> None:
 
 
 #: Giorni minimi perché il percentile di riferimento di un nodo sia un numero
-#: e non un artefatto della stagione in cui è stato calcolato.
-MIN_REFERENCE_DAYS = 365
+#: e non un artefatto della stagione in cui è stato calcolato: quello di
+#: glofas-ewds, e ``percentile_of`` è il suo ``percentile``.
+MIN_REFERENCE_DAYS = _MIN_REFERENCE_DAYS
+percentile_of = _percentile
 
 #: Come si misura la piena ordinaria di un nodo. I valori operativi stanno in
 #: `config/hazards/flood.yaml` e il workflow li passa da lì; questi sono per i
@@ -279,17 +283,6 @@ def _espandi(n: int, indici: list[int], valori: list[float | None]) -> list[floa
     for i, v in zip(indici, valori, strict=True):
         out[i] = v
     return out
-
-
-def percentile_of(values: list[float], p: float) -> float | None:
-    """Percentile per interpolazione lineare. ``None`` su serie vuota."""
-    if not values:
-        return None
-    ordered = sorted(values)
-    pos = p * (len(ordered) - 1)
-    low = int(pos)
-    high = min(low + 1, len(ordered) - 1)
-    return ordered[low] + (ordered[high] - ordered[low]) * (pos - low)
 
 
 class OpenMeteoFloodClient:

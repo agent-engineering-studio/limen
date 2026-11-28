@@ -18,18 +18,17 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
+from glofas_ewds import peak_ratios, reference_before
 
 from limen.cli.backtest_flood import (
     FloodBacktestMetrics,
     _accumulate_72h,
     _accumulate_observed,
     _daily_sums,
-    _discharge_ratios,
     _metrics,
     _midnight_values,
     _modes,
     _node_key,
-    _node_reference,
     _nodes_from_cells,
     _NodeSeries,
     _parse_dt,
@@ -104,26 +103,26 @@ def test_discharge_ratio_is_peak_ahead_over_the_node_own_high_flow() -> None:
     daily = {D0 + timedelta(days=k): 10.0 for k in range(0, 7)}
     daily[D0 + timedelta(days=3)] = 40.0
 
-    assert _discharge_ratios(daily, 20.0)[D0] == 2.0
+    assert peak_ratios(daily, 20.0)[D0] == 2.0
 
 
 def test_without_a_reference_there_is_no_ratio() -> None:
     """Riferimento assente vuol dire "non so quanto è grande questo corso
     d'acqua", e un rapporto calcolato su zero sarebbe un'invenzione."""
     daily = {D0: 10.0, D0 + timedelta(days=1): 40.0}
-    assert _discharge_ratios(daily, 0.0) == {}
+    assert peak_ratios(daily, 0.0) == {}
 
 
 def test_the_reference_is_a_percentile_of_the_node_own_series() -> None:
     """Il q90 e non il massimo: rapportarsi al massimo del biennio direbbe
     "tutto normale" fino alla ripetizione della peggiore piena."""
     daily = {D0 + timedelta(days=k): float(k) for k in range(0, 400)}
-    assert _node_reference(daily, percentile=0.90, min_days=365) == 359.1
+    assert reference_before(daily, max(daily) + timedelta(days=1), p=0.90, min_days=365) == 359.1
 
 
 def test_a_node_without_enough_history_has_no_reference() -> None:
     daily = {D0 + timedelta(days=k): 5.0 for k in range(0, 100)}
-    assert _node_reference(daily, percentile=0.90, min_days=365) is None
+    assert reference_before(daily, max(daily) + timedelta(days=1), p=0.90, min_days=365) is None
 
 
 # ---------------------------------------------------------------------------

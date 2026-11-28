@@ -23,11 +23,10 @@ niente: lo sweep legge le tabelle.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 from glofas_ewds import (
     GLOFAS_VERSION,
     HISTORY_LATENCY_DAYS,
@@ -39,6 +38,7 @@ from glofas_ewds import (
     download_history,
     ensemble_members,
     forecast_peaks,
+    peak_day,
     references,
 )
 
@@ -110,21 +110,9 @@ def picchi_per_nodo(path: Path, nodi: list[Nodo]) -> dict[Nodo, float]:
     return forecast_peaks(path, nodi)
 
 
-def giorno_del_picco(valori: Any, corsa: date) -> date | None:
-    """Il giorno del massimo di una serie ``(membro, anticipo)`` della corsa ``corsa``.
-
-    L'anticipo k-esimo (``leadtime_hour`` 24·(k+1)) è la media del giorno
-    ``corsa + k``: il ``valid_time`` GloFAS è la fine del giorno. Verificato il
-    10 novembre 2026 sul Serchio: la corsa del 10 dà 187,8 m³/s al quinto
-    anticipo, e Open-Meteo, che serve la stessa corsa, data 187,8 il 14.
-    """
-    serie = np.asarray(valori, dtype=float)
-    if serie.ndim == 1:
-        serie = serie[None]
-    per_giorno = np.nanmax(np.where(np.isfinite(serie), serie, -np.inf), axis=0)
-    if not np.isfinite(per_giorno).any():
-        return None
-    return corsa + timedelta(days=int(np.argmax(per_giorno)))
+#: Il giorno del massimo di una serie ``(membro, anticipo)`` della corsa:
+#: ``glofas_ewds.peak_day``. Verificato il 10 novembre 2026 sul Serchio.
+giorno_del_picco = peak_day
 
 
 def giorni_dei_picchi(path: Path, nodi: list[Nodo], corsa: date) -> dict[Nodo, date | None]:
