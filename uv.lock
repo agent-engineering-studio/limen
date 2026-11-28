@@ -1609,11 +1609,11 @@ wheels = [
 
 [[package]]
 name = "fwi-chain"
-version = "1.1.0"
+version = "1.2.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ab/2a/a4b0df1f8270a07b21590a4ed151e77209275e94a7f4d7b5dbbfb4c5f5e9/fwi_chain-1.1.0.tar.gz", hash = "sha256:57532d8d70e117807f83b713f12453d9b04f7f69572122d7fe269bcf36f5b0c6", size = 22714, upload-time = "2026-11-28T14:16:53.504Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9a/3f/472312936a9ebec847201941eed52d5e91edd5b00341af308619ef6d1bd4/fwi_chain-1.2.0.tar.gz", hash = "sha256:23a68d70f47469d9308bd388665cdbe17e9a8d403e0434df4fac45b43d5ab66c", size = 35558, upload-time = "2026-11-28T15:23:38.954Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/66/db/5673e4540965aff28035b64e857d8eadc1371af10bf96211df7dd24366da/fwi_chain-1.1.0-py3-none-any.whl", hash = "sha256:41a3d7e0b004c2ff045725d355a135f96cf819a1da4b7cbde04c180f1cb9f16e", size = 20593, upload-time = "2026-11-28T14:16:52.537Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/27/2dd4d9e58cefabada604dc6986c7e0eb06c5d4940ad15510763570109764/fwi_chain-1.2.0-py3-none-any.whl", hash = "sha256:36582cc1ed2cbe69a7378f961a115cadf2e099c0496ed0ea11ef58c7399f1da5", size = 34749, upload-time = "2026-11-28T15:23:37.742Z" },
 ]
 
 [[package]]
@@ -2537,7 +2537,7 @@ requires-dist = [
     { name = "egms-client", extras = ["raster"], specifier = "~=0.10.0" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "firms-client", specifier = "~=0.10.0" },
-    { name = "fwi-chain", specifier = "~=1.1.0" },
+    { name = "fwi-chain", specifier = "~=1.2.0" },
     { name = "geoalchemy2", specifier = ">=0.15" },
     { name = "geopandas", specifier = ">=1.0" },
     { name = "glofas-ewds", specifier = "~=0.3.0" },
