@@ -341,7 +341,7 @@ services:
     container_name: limen-copernicus-ems-mcp
     restart: unless-stopped
     profiles: ["geoserver"]
-    command: ["uvx", "--from", "copernicus-ems[mcp]~=0.8.0", "copernicus-ems-mcp"]
+    command: ["uvx", "--from", "copernicus-ems[mcp]~=0.11.0", "copernicus-ems-mcp"]
     environment:
       COPERNICUS_EMS_MCP_TRANSPORT: streamable-http
       COPERNICUS_EMS_MCP_HOST: 0.0.0.0
