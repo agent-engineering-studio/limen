@@ -1986,15 +1986,15 @@ wheels = [
 
 [[package]]
 name = "ingv-shakemap"
-version = "0.3.0"
+version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "numpy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c0/03/f40b5ddee6c858230d7eb194f69d5ce3cb1a2fff8f599983b8c82f6137da/ingv_shakemap-0.3.0.tar.gz", hash = "sha256:ec03dfce0cadf5f2c8e8f5c3b42566c48ff8af3019f3bc145241e4ca532856ea", size = 27040, upload-time = "2026-11-28T14:27:18.169Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/91/7f/9e44b38fad6ead7a95d29ffde3ddb8645f47eec39907d4bb154014b9d97a/ingv_shakemap-0.4.0.tar.gz", hash = "sha256:7a8d7bc930f9eb615da7922dea45c3250e368931edbcbe85ebfe3a067e59cfb1", size = 209461, upload-time = "2026-11-28T15:28:19.391Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/10/5f/d340cd7272f47a831b418cbb9f5cf560ea74fbd41f5a496e472899d4c34a/ingv_shakemap-0.3.0-py3-none-any.whl", hash = "sha256:4e6010e1a20319a6a53fd645dde93dd04d3dc604b2e88e9b0eb1bf5a86072874", size = 25521, upload-time = "2026-11-28T14:27:16.808Z" },
+    { url = "https://files.pythonhosted.org/packages/54/05/ae588e15ffcacc5e8016b2903b302001c7626af073befea8270afa39d3ad/ingv_shakemap-0.4.0-py3-none-any.whl", hash = "sha256:64375ae110e0436e449828edeedd21af7bcf3a1bf9fa3d257ed56bdfb970bdfb", size = 203105, upload-time = "2026-11-28T15:28:17.868Z" },
 ]
 
 [[package]]
@@ -2543,7 +2543,7 @@ requires-dist = [
     { name = "glofas-ewds", specifier = "~=0.3.0" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "imageserver-export", specifier = "~=0.2.0" },
-    { name = "ingv-shakemap", specifier = "~=0.3.0" },
+    { name = "ingv-shakemap", specifier = "~=0.4.0" },
     { name = "ispra-idrogeo", specifier = "~=0.15.0" },
     { name = "opentelemetry-api", specifier = ">=1.27" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.27" },
