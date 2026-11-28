@@ -1280,15 +1280,15 @@ raster = [
 
 [[package]]
 name = "egms-client"
-version = "0.10.0"
+version = "0.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
     { name = "httpx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/28/83/34e18606ac809ffce3a75a2abe31315c6cbac99b64f40075c6ddfaa9c27c/egms_client-0.10.0.tar.gz", hash = "sha256:d3bb3a633a437c489307ac6eb53e06a3b2552ecdfa4372431f203e0c85a47514", size = 110118, upload-time = "2026-11-28T14:29:41.532Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/93/74/0efd9a73076230cc5fac8a91263ef83914f087313fb5f16cf573fa32ec83/egms_client-0.11.0.tar.gz", hash = "sha256:9576357a01c9be89c81d07288f0c88bd74d94969e96f9f8da8a16f9b2e034d49", size = 113321, upload-time = "2026-11-28T15:24:32.372Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/40/07/f79f912b85af5c0e72b0a96faae8f36fb97f6a02d0b8ad8b83be19de89c7/egms_client-0.10.0-py3-none-any.whl", hash = "sha256:bb2eb178364c9ec016af923d7e54216734e2467750adf6ebb20b13a7ec60cfcf", size = 99478, upload-time = "2026-11-28T14:29:40.349Z" },
+    { url = "https://files.pythonhosted.org/packages/16/5a/9ece485e55727d85cd5c03b7abcd0af703a526b07e842d8df831d8216abd/egms_client-0.11.0-py3-none-any.whl", hash = "sha256:a6d5dee67f0ed72b2fcb8218484a5c8c8164cafc1cfea218d6bbe29e063e9c4c", size = 103518, upload-time = "2026-11-28T15:24:31.099Z" },
 ]
 
 [package.optional-dependencies]
@@ -2534,7 +2534,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=43" },
     { name = "dpc-radar", extras = ["bulletins", "nowcast", "storms"], specifier = "~=0.6.0" },
     { name = "effis-client", extras = ["raster"], specifier = "~=0.2.0" },
-    { name = "egms-client", extras = ["raster"], specifier = "~=0.10.0" },
+    { name = "egms-client", extras = ["raster"], specifier = "~=0.11.0" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "firms-client", specifier = "~=0.10.0" },
     { name = "fwi-chain", specifier = "~=1.2.0" },
