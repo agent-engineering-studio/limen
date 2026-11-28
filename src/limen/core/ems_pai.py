@@ -1,6 +1,8 @@
 """Acqua osservata da Copernicus EMS contro le classi idrauliche del PAI (#713).
 
-Puro: geometrie già in un CRS metrico (EPSG:3035), nessun database. Le
+Puro: geometrie già in un CRS metrico (EPSG:3035), nessun database. Il conto è
+di ``copernicus-ems`` (``overlay.split_by_zones``, ``ids``); qui restano i nomi
+italiani e le classi del PAI. Le
 query stanno in :mod:`limen.data.repos.flood_events_repo` e nel loader dei
 vettori ISPRA, il report in ``limen ems-confronto-pai``.
 
@@ -20,45 +22,31 @@ valgono da 3 a 10 volte il resto. Filtrata, conta solo l'acqua oltre
 
 from __future__ import annotations
 
-import math
-import re
-from collections.abc import Iterator, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 
-import shapely
-from shapely.geometry import box
+from copernicus_ems.ids import is_monitoring, polygon_product_id
+from copernicus_ems.overlay import MIN_PATCH_M2, TILE_M, TOLERANCE_M, split_by_zones
 from shapely.geometry.base import BaseGeometry
 
 #: Le classi idrauliche, dalla più alta: l'ordine è quello in cui vincono.
 CLASSI = ("P3", "P2", "P1")
-
-#: Default della misura: quelli con cui la libreria ha preso i numeri di
-#: riferimento, così un confronto con lei è a parità di filtro.
-TOLLERANZA_M = 50.0
-PATCH_MINIMA_M2 = 50_000.0
-
-#: Lato delle tessere in cui si taglia l'acqua. Un'attivazione come EMSR664
-#: è un'unica macchia di centinaia di km² con centinaia di migliaia di
-#: vertici, e intersecarla intera con ogni pezzo di zona costa minuti.
-LATO_TESSERA_M = 2_000.0
-
-_PRODOTTO = re.compile(r"-\d+-\d+$")
-_TIPO = re.compile(r"(?P<tipo>[A-Z]+)(?P<numero>\d+)$")
+#: Default della misura: quelli di copernicus-ems, così un confronto con lei è
+#: a parità di filtro.
+TOLLERANZA_M = TOLERANCE_M
+PATCH_MINIMA_M2 = MIN_PATCH_M2
+#: Lato delle tessere in cui si taglia l'acqua.
+LATO_TESSERA_M = TILE_M
 
 
 def prodotto(id_poligono: str) -> str:
     """Il prodotto di un poligono di ``flood_events``: ``EMSR664-aoi01-DEL1``."""
-    return _PRODOTTO.sub("", id_poligono)
+    return polygon_product_id(id_poligono)
 
 
 def di_monitoraggio(id_prodotto: str) -> bool:
-    """``DEL1``, ``DEL2``… sì; ``DEL0``, ``GRA0``, ``FEP0`` no.
-
-    Un codice che non si legge conta come monitoraggio: meglio perdere un
-    prodotto dalla misura che sommare due volte la stessa acqua.
-    """
-    m = _TIPO.search(id_prodotto)
-    return m is None or int(m["numero"]) > 0
+    """``DEL1``, ``DEL2``… sì; ``DEL0``, ``GRA0``, ``FEP0`` no; un codice illeggibile sì."""
+    return is_monitoring(id_prodotto)
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,29 +63,6 @@ class Ripartizione:
         return m2 / self.acqua_m2 if self.acqua_m2 > 0 else None
 
 
-def _tessere(parti: Sequence[BaseGeometry], lato: float) -> Iterator[BaseGeometry]:
-    albero = shapely.STRtree(parti)
-    minx, miny, maxx, maxy = shapely.total_bounds(parti)
-    x = math.floor(minx / lato) * lato
-    while x < maxx:
-        y = math.floor(miny / lato) * lato
-        while y < maxy:
-            riquadro = box(x, y, x + lato, y + lato)
-            dentro = [parti[i] for i in albero.query(riquadro, predicate="intersects")]
-            if dentro:
-                pezzo = shapely.intersection(shapely.union_all(dentro), riquadro)
-                if not pezzo.is_empty and pezzo.area > 0:
-                    yield pezzo
-            y += lato
-        x += lato
-
-
-def _area_dentro(acqua: BaseGeometry, zone: list[BaseGeometry]) -> float:
-    if not zone:
-        return 0.0
-    return float(shapely.intersection(acqua, shapely.union_all(zone)).area)
-
-
 def ripartisci(
     acqua: Sequence[BaseGeometry],
     zone: Sequence[tuple[str, BaseGeometry]],
@@ -108,52 +73,22 @@ def ripartisci(
 ) -> Ripartizione:
     """L'acqua (unione di ``acqua``) divisa fra le classi di ``zone`` e il fuori.
 
-    ``zone`` sono coppie (classe, poligono) già tagliate a pezzi piccoli: il
-    mosaico ISPRA ha poligoni da milioni di vertici.
+    ``copernicus_ems.overlay.split_by_zones`` con le classi del PAI.
     """
-    parti = [
-        g
-        for g in shapely.get_parts(shapely.make_valid(list(acqua)))
-        if g.geom_type in ("Polygon", "MultiPolygon") and g.area > 0
-    ]
-    vuota = Ripartizione(0.0, dict.fromkeys(CLASSI, 0.0), 0.0, 0.0, 0)
-    if not parti:
-        return vuota
-    classi = [c for c, _ in zone]
-    geometrie = [g for _, g in zone]
-    albero = shapely.STRtree(geometrie)
-    totale = 0.0
-    cumulate = dict.fromkeys(CLASSI, 0.0)
-    resti: list[BaseGeometry] = []
-    for pezzo in _tessere(parti, lato_tessera_m):
-        totale += pezzo.area
-        vicine = albero.query(pezzo, predicate="dwithin", distance=tolleranza_m)
-        for k, classe in enumerate(CLASSI):
-            ammesse = CLASSI[: k + 1]
-            cumulate[classe] += _area_dentro(
-                pezzo, [geometrie[i] for i in vicine if classi[i] in ammesse]
-            )
-        if len(vicine):
-            vicino = shapely.union_all([geometrie[i] for i in vicine])
-            pezzo = shapely.difference(pezzo, shapely.buffer(vicino, tolleranza_m))
-        if not pezzo.is_empty:
-            resti.append(pezzo)
-    per_classe: dict[str, float] = {}
-    precedente = 0.0
-    for classe in CLASSI:
-        per_classe[classe] = max(cumulate[classe] - precedente, 0.0)
-        precedente = cumulate[classe]
-    macchie = [
-        m
-        for m in shapely.get_parts(shapely.union_all(resti) if resti else shapely.Polygon())
-        if m.area >= patch_minima_m2
-    ]
+    found = split_by_zones(
+        acqua,
+        zone,
+        classes=CLASSI,
+        tolerance_m=tolleranza_m,
+        min_patch_m2=patch_minima_m2,
+        tile_m=lato_tessera_m,
+    )
     return Ripartizione(
-        acqua_m2=totale,
-        per_classe_m2=per_classe,
-        fuori_m2=max(totale - precedente, 0.0),
-        fuori_filtrato_m2=sum(m.area for m in macchie),
-        macchie_fuori=len(macchie),
+        acqua_m2=found.water_m2,
+        per_classe_m2=dict(found.by_class_m2),
+        fuori_m2=found.outside_m2,
+        fuori_filtrato_m2=found.outside_filtered_m2,
+        macchie_fuori=found.outside_patches,
     )
 
 

@@ -25,7 +25,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-import shapely
+from copernicus_ems import attribution
+from copernicus_ems.overlay import WaterPolygon, places_hit
 from shapely.geometry.base import BaseGeometry
 
 from limen.core.ems_pai import di_monitoraggio, prodotto
@@ -51,8 +52,8 @@ COLONNE = (
 
 
 def attribuzione(anno: int) -> str:
-    """La formula della licenza CEMS, con l'anno del dato."""
-    return f"Contains modified Copernicus Emergency Management Service information, {anno}"
+    """La formula della licenza CEMS, con l'anno del dato: ``copernicus_ems.attribution``."""
+    return attribution(anno)
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,39 +87,30 @@ class ComuneColpito:
 
 
 def comuni_colpiti(acqua: Sequence[Poligono], comuni: Sequence[Comune]) -> list[ComuneColpito]:
-    """Un record per comune toccato dall'acqua, dal più allagato.
+    """Un record per comune toccato dall'acqua, dal più allagato: ``copernicus_ems.places_hit``.
 
-    Per comune si fa l'**unione** dei pezzi d'acqua, non la somma: due
-    prodotti di AOI diverse possono ridisegnare lo stesso campo.
+    Per comune si fa l'**unione** dei pezzi d'acqua, non la somma; un comune
+    toccato solo sul confine non conta.
     """
     if not acqua or not comuni:
         return []
-    geom_acqua = shapely.make_valid([p.geom for p in acqua])
-    albero = shapely.STRtree(geom_acqua)
-    out: list[ComuneColpito] = []
-    for c in comuni:
-        confine = shapely.make_valid(c.geom)
-        idx = albero.query(confine, predicate="intersects")
-        if not len(idx):
-            continue
-        toccati = [acqua[i] for i in idx]
-        pezzi = shapely.intersection(confine, shapely.union_all(geom_acqua[idx]))
-        if pezzi.area <= 0:
-            # Toccato solo sul confine: acqua del comune accanto.
-            continue
-        osservati = [p.osservato for p in toccati if p.osservato is not None]
-        out.append(
-            ComuneColpito(
-                istat_code=c.istat_code,
-                nome=c.nome,
-                aoi_id=c.aoi_id,
-                acqua_km2=float(pezzi.area) / 1e6,
-                inizio=min(p.inizio for p in toccati),
-                osservato_dal=min(osservati, default=None),
-                osservato_al=max(osservati, default=None),
-                prodotti=tuple(sorted({p.prodotto for p in toccati})),
-            )
+    colpiti = places_hit(
+        [WaterPolygon(p.prodotto, p.geom, p.inizio, p.osservato) for p in acqua],
+        [(str(i), c.geom) for i, c in enumerate(comuni)],
+    )
+    out = [
+        ComuneColpito(
+            istat_code=comuni[int(h.key)].istat_code,
+            nome=comuni[int(h.key)].nome,
+            aoi_id=comuni[int(h.key)].aoi_id,
+            acqua_km2=h.water_km2,
+            inizio=h.start,
+            osservato_dal=h.observed_from,
+            osservato_al=h.observed_to,
+            prodotti=h.products,
         )
+        for h in colpiti
+    ]
     return sorted(out, key=lambda r: (-r.acqua_km2, r.istat_code))
 
 
