@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import numpy as np
+import pytest
 from rainfall_thresholds import ITALICA_T5
 
 from limen.cli.misura_soglia_radar import (
@@ -106,3 +108,50 @@ def test_una_data_senza_ora_di_italica_vale_fino_alla_fine_del_giorno(tmp_path: 
 
 def test_senza_abbastanza_unita_il_blocco_non_si_scrive() -> None:
     assert blocco("vuoto", [], []) == []
+
+
+async def test_le_frane_di_idrogeo_senza_i_doppioni(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Una frana in IFFI e negli eventi conta una volta: si chiede ``drop_twins``.
+    from datetime import date
+
+    from ispra_idrogeo.dated import DatedLandslide
+
+    from limen.cli import misura_soglia_radar as modulo
+
+    chiesto: dict[str, object] = {}
+    evento = DatedLandslide(
+        source="eventi",
+        id="42",
+        lon=7.5,
+        lat=44.1,
+        start=date(2020, 10, 3),
+        end=date(2020, 10, 3),
+        time="14:30",
+        precision="hour",
+        interval_days=1,
+        position_m=1000,
+        movement=None,
+        region=1,
+        province=4,
+        municipality=4110,
+        main_event=None,
+        citation="ISPRA",
+    )
+
+    async def finte(_client: object, **argomenti: object) -> list[DatedLandslide]:
+        chiesto.update(argomenti)
+        return [evento, dataclasses.replace(evento, id="43", lon=None, lat=None)]
+
+    async def nessun_client() -> None:
+        return None
+
+    monkeypatch.setattr(modulo, "dated_landslides", finte)
+    monkeypatch.setattr(modulo.SharedHttpClient, "get", nessun_client)
+    [frana] = await modulo.frane_idrogeo(date(2025, 12, 31), tmp_path)
+    assert chiesto["drop_twins"] is True
+    assert chiesto["max_interval_days"] == 1
+    assert (frana.insieme, frana.id, frana.regione) == ("idrogeo", "eventi:42", "Piemonte")
+    # Le 14:30 di Roma del 3 ottobre (ora legale) sono le 12:30 UTC.
+    assert frana.istante == datetime(2020, 10, 3, 12, 30, tzinfo=UTC)

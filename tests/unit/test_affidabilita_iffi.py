@@ -25,6 +25,43 @@ def test_un_comune_senza_date_lo_dice_con_i_limiti() -> None:
     assert len(a.non_misurato) == 4
 
 
+def test_dove_l_inventario_e_scarso_la_frase_lo_dice() -> None:
+    # Sardegna (20): 0,9 frane per km² in pericolo contro 25 in Italia.
+    a = affidabilita_iffi("regioni", 20)
+    assert a is not None
+    assert a.inventario_scarso
+    assert a.rispetto_italia is not None and a.rispetto_italia < 0.2
+    assert a.frane_per_km2_pericolo is not None
+    cifra = f"{a.frane_per_km2_pericolo:g}".replace(".", ",")
+    assert f"Poche frane censite per il pericolo mappato in questa regione: {cifra} per km²" in (
+        a.lettura
+    )
+    assert "può voler dire che si è rilevato poco" in a.lettura
+    assert a.lettura.endswith("non sono misurate.")
+    assert "Few IFFI landslides for the hazard mapped in this region" in a.lettura_en
+    # Toscana (9) è vicina all'Italia: nessuna frase in più.
+    b = affidabilita_iffi("regioni", 9)
+    assert b is not None and not b.inventario_scarso
+    assert "Poche frane" not in b.lettura and "Few IFFI" not in b.lettura_en
+
+
+def test_un_comune_si_giudica_dalla_sua_provincia() -> None:
+    # Cagliari (092009): il comune sta sopra l'Italia, la provincia a un ottavo.
+    a = affidabilita_iffi("comuni", "092009")
+    assert a is not None
+    assert a.rispetto_italia is not None and a.rispetto_italia > 1
+    assert a.provincia_rispetto_italia is not None and a.provincia_rispetto_italia < 0.2
+    assert a.inventario_scarso
+    assert "per il pericolo mappato in questa provincia" in a.lettura
+    assert "mapped in this province" in a.lettura_en
+    # Sarno (065135): poche frane per il pericolo del comune, ma la provincia no.
+    b = affidabilita_iffi("comuni", "065135")
+    assert b is not None
+    assert b.rispetto_italia is not None and b.rispetto_italia < 0.2
+    assert not b.inventario_scarso
+    assert "Poche frane" not in b.lettura
+
+
 def test_codici_sconosciuti_o_assenti_non_rispondono() -> None:
     assert affidabilita_iffi("comuni", "999999") is None
     assert affidabilita_iffi("comuni", None) is None
@@ -107,7 +144,8 @@ def test_la_lettura_iffi_non_ha_numeri_attribuiti_male() -> None:
     from limen.agents.chat_agents.briefing import affidabilita_regione
     from limen.core.grounding_idrogeo import numeri_attribuiti_male
 
-    for regione in ("it-puglia", "it-liguria", "it-sicilia"):
+    # Puglia e Sardegna hanno anche la frase sull'inventario scarso.
+    for regione in ("it-puglia", "it-liguria", "it-sicilia", "it-sardegna"):
         a = affidabilita_regione(_valutazione(regione, HazardType.LANDSLIDE))
         assert a is not None
         assert numeri_attribuiti_male(a.lettura, a.model_dump()) == []

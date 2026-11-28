@@ -8,6 +8,8 @@ con il radar storico (IT-DPC-SRI, dal 2018: prima lo strumento è un altro).
 * **Frane**: e-ITALICA dal 2018 al 2021, che per ogni frana dà la pioggia
   d'innesco al pluviometro (durata e cumulata), e le frane datate al giorno
   di IdroGEO (``ispra_idrogeo.dated``) dal 2018 alla fine dell'archivio.
+  Una frana che sta sia in IFFI sia negli eventi (stesso giorno, entro 1 km)
+  conta una volta: resta l'evento (``drop_twins``, ispra-idrogeo 0.13).
 * **Unità**: un punto di frana e un istante. Si guardano gli eventi di pioggia
   che toccano le ``_FINESTRA_ORE`` prima, ricostruiti come fa il motore
   (``caine.event_reconstruction``); il punteggio è l'eccesso più alto sulla
@@ -198,7 +200,10 @@ def frane_italica(percorso: Path, dal: int = STRUMENTO_DI_OGGI.year) -> list[Fra
 
 
 async def frane_idrogeo(fino_a: date, cartella: Path) -> list[Frana]:
-    """Le frane di IdroGEO datate al giorno o meglio, dal 2018 a ``fino_a``."""
+    """Le frane di IdroGEO datate al giorno o meglio, dal 2018 a ``fino_a``.
+
+    Senza i doppioni tra IFFI ed eventi: di ogni coppia resta l'evento.
+    """
     idrogeo = IdroGEO(await SharedHttpClient.get(), retries=0)
     datate = await dated_landslides(
         idrogeo,
@@ -206,6 +211,7 @@ async def frane_idrogeo(fino_a: date, cartella: Path) -> list[Frana]:
         until=fino_a,
         max_interval_days=1,
         directory=cartella,
+        drop_twins=True,
     )
     frane = []
     for x in datate:
@@ -600,7 +606,8 @@ def scrivi(
         f"{len({f.punto for f in frane})} punti di frana; {non_misurate:.1%} delle ore-punto "
         "non misurato.",
         f"- Frane: {conta['italica']} di e-ITALICA v4 (CC BY 4.0, doi:10.5281/zenodo.14204473), "
-        f"{conta['idrogeo']} di IdroGEO datate al giorno (ISPRA, IFFI ed eventi, CC BY-SA 4.0).",
+        f"{conta['idrogeo']} di IdroGEO datate al giorno (ISPRA, IFFI ed eventi, CC BY-SA 4.0; "
+        "una frana presente in tutti e due conta una volta).",
         f"- Momenti ordinari: {len(ordinarie)} (gli stessi punti, ogni "
         f"{_PASSO_ORDINARIE_GIORNI} giorni con un inizio diverso per punto, ad almeno "
         f"{_DISTANZA_GIORNI} da una frana lì).",
