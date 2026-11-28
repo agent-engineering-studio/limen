@@ -18,13 +18,10 @@ ENV PYTHONUNBUFFERED=1 \
     UV_NO_PROGRESS=1
 
 # System deps required by GeoPandas / Shapely / Rasterio / asyncpg build.
-# git: limen-core viene dal suo repository finché non è su PyPI; poi si toglie.
-# Sta solo in questo stadio, l'immagine finale non lo porta.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
         gcc \
-        git \
         libgdal-dev \
         gdal-bin \
         libgeos-dev \

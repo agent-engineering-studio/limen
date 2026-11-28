@@ -42,6 +42,7 @@ updates:
           - "ingv-shakemap"
           - "dpc-radar"
           - "glofas-ewds"
+          - "limen-core"
       python-minor-e-patch:
         update-types: ["minor", "patch"]
 
