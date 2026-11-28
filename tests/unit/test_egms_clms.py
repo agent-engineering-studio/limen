@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-import numpy as np
 import pytest
+from egms_client.tables import read_csv
 from pydantic import SecretStr
 
 from limen.config.settings import EgmsSettings, Settings
@@ -247,26 +247,27 @@ async def test_gli_attributi_vengono_dallo_stesso_zip(archivio: _Archivio, tmp_p
     assert vecchia is not None and not clms.attributi_di(vecchia).exists()
     tiff = await clms.scarica_tile(a, (47, 19), "U", "2020_2024", tmp_path, attributi=True)
     assert tiff == vecchia
-    with np.load(clms.attributi_di(tiff)) as attr:
-        assert attr["acceleration"].tolist() == [0.5, -0.2]
-        assert attr["seasonality"].tolist() == [3.0, 1.5]
-        assert attr["easting"].tolist() == [4700050, 4700150]
+    attr = read_csv(clms.attributi_di(tiff), series=False)
+    assert attr["acceleration"].tolist() == [0.5, -0.2]
+    assert attr["seasonality"].tolist() == [3.0, 1.5]
+    assert attr["easting"].tolist() == [4700050, 4700150]
     # Ora c'è tutto: nessun altro download.
     assert await clms.scarica_tile(a, (47, 19), "U", "2020_2024", tmp_path, attributi=True) == tiff
     assert archivio.scaricati() == 2
-    assert not list(tmp_path.glob("*.csv")) and not list(tmp_path.glob("*.part"))
+    # Il CSV da ~250 MB non resta: solo i suoi attributi.
+    assert [p.name for p in tmp_path.glob("*.csv")] == [clms.attributi_di(tiff).name]
+    assert not list(tmp_path.glob("*.part"))
 
 
 async def test_un_csv_senza_colonne_lascia_attributi_vuoti(
     archivio: _Archivio, tmp_path: Path
 ) -> None:
-    archivio.csv = b"pid,easting,northing,mean_velocity\na,1,2,3\n"
+    archivio.csv = b"pid,easting,northing,mean_velocity,20200101\na,1,2,3,0.0\n"
     a = await clms.archivio(_impostazioni())
     assert a is not None
     tiff = await clms.scarica_tile(a, (47, 19), "U", "2020_2024", tmp_path, attributi=True)
     assert tiff is not None
-    with np.load(clms.attributi_di(tiff)) as attr:
-        assert attr["acceleration"].size == 0
+    assert "acceleration" not in read_csv(clms.attributi_di(tiff), series=False).columns
     assert await clms.scarica_tile(a, (47, 19), "U", "2020_2024", tmp_path, attributi=True) == tiff
     assert archivio.scaricati() == 1
 

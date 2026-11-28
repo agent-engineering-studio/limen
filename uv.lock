@@ -1297,6 +1297,11 @@ raster = [
     { name = "pyproj" },
     { name = "rasterio" },
 ]
+tables = [
+    { name = "pandas" },
+    { name = "pyarrow" },
+    { name = "pyproj" },
+]
 
 [[package]]
 name = "email-validator"
@@ -2437,7 +2442,7 @@ dependencies = [
     { name = "cryptography" },
     { name = "dpc-radar", extra = ["bulletins", "nowcast", "storms"] },
     { name = "effis-client", extra = ["raster"] },
-    { name = "egms-client", extra = ["raster"] },
+    { name = "egms-client", extra = ["raster", "tables"] },
     { name = "fastapi" },
     { name = "firms-client" },
     { name = "fwi-chain" },
@@ -2535,7 +2540,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=43" },
     { name = "dpc-radar", extras = ["bulletins", "nowcast", "storms"], specifier = "~=0.6.0" },
     { name = "effis-client", extras = ["raster"], specifier = "~=0.3.0" },
-    { name = "egms-client", extras = ["raster"], specifier = "~=0.11.0" },
+    { name = "egms-client", extras = ["raster", "tables"], specifier = "~=0.11.0" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "firms-client", specifier = "~=0.10.0" },
     { name = "fwi-chain", specifier = "~=1.4.0" },
