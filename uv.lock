@@ -900,14 +900,14 @@ wheels = [
 
 [[package]]
 name = "copernicus-ems"
-version = "0.11.0"
+version = "0.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/63/1d/7413374ad20b22fe3ad345cfb37688fff0d2ef6df1f911d1d53afaf0be20/copernicus_ems-0.11.0.tar.gz", hash = "sha256:3b8ea7ea3c3e7af4be0fa1863564e85343914df39c22988a4b0dc74cadceedf1", size = 114980, upload-time = "2026-11-28T14:19:20.705Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fd/ec/ca7c8a291c5546ca232bcce92fd597bce830c06aa7352deea3b75bec4291/copernicus_ems-0.12.0.tar.gz", hash = "sha256:444439de30a31fe4f6851abb087a2db0117bb87f195a2c8d3b17e4012b894e8e", size = 119075, upload-time = "2026-11-28T15:23:23.941Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/16/49/fa3ac02b683a8d0cfd8adfb2ff9d77986af713f38e6340e6f9e11c0cc475/copernicus_ems-0.11.0-py3-none-any.whl", hash = "sha256:ce3c1624452e2dd84379d3a4addc051a0017fd39063097c30ff1080ddbe472fb", size = 116923, upload-time = "2026-11-28T14:19:19.293Z" },
+    { url = "https://files.pythonhosted.org/packages/19/52/301b9d4f3ca3e9585a1d147e589528d9376cc7b56e91d3eac9920959d330/copernicus_ems-0.12.0-py3-none-any.whl", hash = "sha256:7c6b81bf9dacbfbebd172b7ef99ad858776928b12bee87bed12f04dd14ce991d", size = 121873, upload-time = "2026-11-28T15:23:22.531Z" },
 ]
 
 [package.optional-dependencies]
@@ -2530,7 +2530,7 @@ requires-dist = [
     { name = "apscheduler", specifier = ">=4.0.0a5" },
     { name = "asyncpg", specifier = ">=0.30,!=0.32.*" },
     { name = "cbor2", specifier = ">=6.1" },
-    { name = "copernicus-ems", extras = ["cdse"], specifier = "~=0.11.0" },
+    { name = "copernicus-ems", extras = ["cdse"], specifier = "~=0.12.0" },
     { name = "cryptography", specifier = ">=43" },
     { name = "dpc-radar", extras = ["bulletins", "nowcast", "storms"], specifier = "~=0.6.0" },
     { name = "effis-client", extras = ["raster"], specifier = "~=0.2.0" },

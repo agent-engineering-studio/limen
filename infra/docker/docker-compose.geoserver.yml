@@ -272,7 +272,7 @@ services:
       # Remote MCP tools for geoserver-agent (and GEO_MCP_MODE=agent), prefixed
       # with the name (idrogeo_area_risk, ...). geo_resolve_request and the web
       # UI chat do not see them. An unreachable server is logged and skipped.
-      GEO_EXTRA_MCP_SERVERS: ${GEO_EXTRA_MCP_SERVERS:-idrogeo=http://idrogeo-mcp:8767/mcp,copernicus-ems=http://copernicus-ems-mcp:8768/mcp}
+      GEO_EXTRA_MCP_SERVERS: ${GEO_EXTRA_MCP_SERVERS:-idrogeo=http://idrogeo-mcp:8767/mcp,copernicus-ems=http://copernicus-ems-mcp:8769/mcp}
       GEO_EXTRA_MCP_TIMEOUT: ${GEO_EXTRA_MCP_TIMEOUT:-10}
       GEO_EXTRA_MCP_INSTRUCTIONS: ${GEO_EXTRA_MCP_INSTRUCTIONS:-Usa gli strumenti idrogeo_* per frane, popolazione esposta e monitoraggio, e copernicus-ems_* per le alluvioni e le frane mappate da satellite nelle emergenze Copernicus EMS.}
       GEO_ALLOW_DESTRUCTIVE: ${GEO_ALLOW_DESTRUCTIVE:-false}
@@ -341,11 +341,11 @@ services:
     container_name: limen-copernicus-ems-mcp
     restart: unless-stopped
     profiles: ["geoserver"]
-    command: ["uvx", "--from", "copernicus-ems[mcp]~=0.11.0", "copernicus-ems-mcp"]
+    command: ["uvx", "--from", "copernicus-ems[mcp]~=0.12.0", "copernicus-ems-mcp"]
     environment:
       COPERNICUS_EMS_MCP_TRANSPORT: streamable-http
       COPERNICUS_EMS_MCP_HOST: 0.0.0.0
-      COPERNICUS_EMS_MCP_PORT: "8768"
+      COPERNICUS_EMS_MCP_PORT: "8769"
       COPERNICUS_EMS_MCP_ALLOWED_HOSTS: "copernicus-ems-mcp:*,localhost:*,127.0.0.1:*"
       # La cartella di copernicus-ems sotto la radice comune: $DATA_ROOT/copernicus-ems.
       DATA_ROOT: /data
@@ -354,10 +354,10 @@ services:
       - limen-copernicus-ems-cache:/cache/uv
       - ${DATA_ROOT:-${LIMEN_DATA_ROOT:-../../data}}/copernicus-ems:/data/copernicus-ems
     ports:
-      - "${LIMEN_COPERNICUS_EMS_MCP_BIND:-127.0.0.1}:8768:8768"
+      - "${LIMEN_COPERNICUS_EMS_MCP_BIND:-127.0.0.1}:8769:8769"
     healthcheck:
       test: ["CMD", "python", "-c",
-             "import urllib.request; urllib.request.urlopen('http://localhost:8768/health', timeout=3)"]
+             "import urllib.request; urllib.request.urlopen('http://localhost:8769/health', timeout=3)"]
       interval: 30s
       timeout: 5s
       # Il primo avvio scarica il pacchetto e le sue dipendenze.
