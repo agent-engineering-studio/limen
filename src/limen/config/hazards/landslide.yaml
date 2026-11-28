@@ -323,10 +323,12 @@ post_fire:
   # trascorso. Il dNBR sarebbe la misura giusta ma il suo endpoint richiede
   # una richiesta manuale, quindi `fetch_dnbr` è rimasto uno stub.
   #
-  # **Si usa la densità di FRP, non la somma.** Misurato su 2.419 perimetri
-  # EFFIS italiani 2012-2024 con hotspot dentro:
+  # **Si usa la densità di FRP, non la somma.** Misurato su 4.831 perimetri
+  # EFFIS del layer `ms:modis.ba.poly` con hotspot dentro, incendi dal
+  # 22 maggio 2016 al 28 dicembre 2025 (FIRMS MODIS e VIIRS S-NPP, archivio
+  # Italia), il 2026-11-28:
   #
-  #     correlazione con area_ha:   somma FRP 0,63   densità FRP 0,26
+  #     correlazione con area_ha:   somma FRP 0,78   densità FRP 0,03
   #
   # La somma di FRP è in gran parte un indicatore di *dimensione* del rogo, e
   # usarla come severità direbbe che un incendio grande è per definizione
@@ -334,16 +336,17 @@ post_fire:
   # dNBR misura.
   #
   # Rampa ancorata alla distribuzione misurata della densità:
-  #     p10 0,076   p25 0,146   p50 0,273   p75 0,489   p90 0,881   max 13,6
+  #     p10 0,059   p25 0,147   p50 0,356   p75 0,819   p90 1,613   max 26,1
   # `frp_floor` = p10 e `frp_saturation` = p90: sotto il decile più debole la
   # severità è 0, dal decile più intenso in su è 1. Nessun parametro libero.
   #
-  # **DA RIMISURARE** (#714, migrazione 104). I 2.419 perimetri erano del layer
-  # EFFIS `nrt.ba.poly`, che conta anche calore non di vegetazione (la lava
-  # dell'Etna); da qui Limen legge `ms:modis.ba.poly`, che parte dal 2016 e
-  # arriva a incendi di un ettaro. I due valori restano questi finché non si
-  # rimisurano sul nuovo layer, dopo `limen effis-sync` con lo storico e il
-  # ricalcolo FRP:
+  # Prima (fino al 2026-11-28) le due ancore erano 0,08 e 0,88, misurate su
+  # 2.419 perimetri del layer `nrt.ba.poly` 2012-2024, che conta anche calore
+  # non di vegetazione (#714). Il nuovo layer arriva a incendi più piccoli, e
+  # la saturazione quasi raddoppia: un incendio prima «severo al massimo» da
+  # 0,88 MW/ha ora pesa (0,88 - 0,06) / (1,61 - 0,06) = 0,53.
+  #
+  # Per rimisurare, dopo `limen effis-sync` con lo storico e il ricalcolo FRP:
   #
   #     SELECT count(*),
   #            percentile_cont(ARRAY[0.10, 0.25, 0.50, 0.75, 0.90])
@@ -352,11 +355,9 @@ post_fire:
   #     FROM v_fire_perimeters
   #     WHERE frp_density_mw_per_ha IS NOT NULL;
   #
-  # e le correlazioni con l'area da `fire_events_repo.frp_size_correlation()`.
-  # La query originale non è nel repository: questa la ricostruisce dalla
-  # definizione (p10 e p90 della densità sui perimetri con hotspot dentro).
-  frp_floor_mw_per_ha:      0.08
-  frp_saturation_mw_per_ha: 0.88
+  # e le correlazioni da `fire_events_repo.frp_size_correlation()`.
+  frp_floor_mw_per_ha:      0.06
+  frp_saturation_mw_per_ha: 1.61
 
   # Quanto la severità può attenuare la campana:
   #     F *= severity_floor + (1 - severity_floor) * severity

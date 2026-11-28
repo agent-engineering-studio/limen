@@ -198,13 +198,14 @@ def test_ramp_with_inverted_ends_is_a_configuration_error() -> None:
 
 def test_the_shipped_ramp_matches_the_measured_distribution() -> None:
     """I default non sono numeri tondi scelti a naso: sono il p10 e il p90
-    della densità misurata su 2.419 perimetri EFFIS italiani."""
+    della densità misurata su 4.831 perimetri EFFIS di `ms:modis.ba.poly`
+    (2016-2025, misura del 2026-11-28; prima 2.419 di `nrt.ba.poly`, #714)."""
     block = load_regional_thresholds().post_fire
 
-    assert block.frp_floor_mw_per_ha == pytest.approx(0.08)
-    assert block.frp_saturation_mw_per_ha == pytest.approx(0.88)
-    # La mediana misurata (0,273) cade nel terzo inferiore della rampa.
-    median_severity = frp_severity(0.273, post_fire=block)
+    assert block.frp_floor_mw_per_ha == pytest.approx(0.06)
+    assert block.frp_saturation_mw_per_ha == pytest.approx(1.61)
+    # La mediana misurata (0,356) cade nel terzo inferiore della rampa.
+    median_severity = frp_severity(0.356, post_fire=block)
     assert median_severity is not None
     assert 0.15 < median_severity < 0.35
 

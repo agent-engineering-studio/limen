@@ -246,8 +246,9 @@ non quando.
 
 `sev` viene dalla **densità** di potenza radiativa FIRMS dentro il perimetro
 (`frp_sum_mw / area_ha`), normalizzata dalla rampa `post_fire.frp_*`. Non
-dalla somma: misurato su 2.419 perimetri EFFIS italiani 2012–2024, la somma
-correla con l'area a **0,63** e la densità a **0,26**, quindi la somma è in
+dalla somma: misurato su 4.831 perimetri EFFIS del layer `ms:modis.ba.poly`
+2016–2025, la somma correla con l'area a **0,78** e la densità a **0,03**
+(sul vecchio layer `nrt.ba.poly`, 2.419 perimetri: 0,63 e 0,26), quindi la somma è in
 gran parte un indicatore di *dimensione* del rogo — usarla come severità
 direbbe che un incendio grande è per definizione severo. Il dNBR resta la
 misura di riferimento, ma il suo endpoint Copernicus richiede una richiesta
