@@ -1262,14 +1262,14 @@ wheels = [
 
 [[package]]
 name = "effis-client"
-version = "0.2.0"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4b/57/2ae3225dab29deb114f88f55a2078b80433e33d29e75155017a7577ffb9d/effis_client-0.2.0.tar.gz", hash = "sha256:27841d204eec76e7007030ca8cdbf57bdcbb082c3471806443dc64c363c5644e", size = 33604, upload-time = "2026-11-28T14:16:47.93Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/38/9f/d84f2e9212b642aca1710769d538d68ec2a1eea9471fb105a11f3c71d7b9/effis_client-0.3.0.tar.gz", hash = "sha256:a978a72a830b5010eff2266c3073e8e59a7da990eed192a317b38e8426d02664", size = 60253, upload-time = "2026-11-28T15:34:30.605Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3c/7c/bab8f085582d265880a29d7846d249a03c41cdcc8be1be9538d5fc2d2dce/effis_client-0.2.0-py3-none-any.whl", hash = "sha256:55e5c12dc54c4a7f193586d1cf2b3ff4b2457cd636c05258eeaedd6e7047d4fe", size = 25958, upload-time = "2026-11-28T14:16:46.907Z" },
+    { url = "https://files.pythonhosted.org/packages/04/79/dc0685fbfd6016e0d4faf6d4710cf99594b23ba40273f909dbd675e69f4d/effis_client-0.3.0-py3-none-any.whl", hash = "sha256:e756fba21e0961c7f884bafe226a9ef011f8bf66add89f4173c24b8cf7053403", size = 51630, upload-time = "2026-11-28T15:34:29.36Z" },
 ]
 
 [package.optional-dependencies]
@@ -2533,7 +2533,7 @@ requires-dist = [
     { name = "copernicus-ems", extras = ["cdse"], specifier = "~=0.12.0" },
     { name = "cryptography", specifier = ">=43" },
     { name = "dpc-radar", extras = ["bulletins", "nowcast", "storms"], specifier = "~=0.6.0" },
-    { name = "effis-client", extras = ["raster"], specifier = "~=0.2.0" },
+    { name = "effis-client", extras = ["raster"], specifier = "~=0.3.0" },
     { name = "egms-client", extras = ["raster"], specifier = "~=0.11.0" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "firms-client", specifier = "~=0.10.0" },
