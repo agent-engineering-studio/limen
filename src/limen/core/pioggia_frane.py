@@ -29,6 +29,7 @@ from typing import Any
 
 from rainfall_thresholds import RainfallEvent, latest_event, reconstruct_events
 
+from limen.core.istante_frana import istante_frana
 from limen.core.scoring.caine import threshold_intensity_mm_h
 from limen.core.scoring.regional_thresholds import RegionalThresholds, load_regional_thresholds
 from limen.data.repos import pluviometri_repo, zone_franose_repo
@@ -289,11 +290,10 @@ async def pioggia_prima_delle_frane(
         cell_id, istat_code, dal.astimezone(UTC), fine, _FRANE_MAX
     ):
         quando: datetime = f["event_time"].astimezone(UTC)
-        # Una frana datata al giorno può essere di qualunque ora di quel giorno.
+        # Una frana datata al giorno può essere di qualunque ora di quel giorno:
+        # la finestra arriva alla fine del giorno, ora di Roma (``istante_frana``).
         oraria = f["temporal_accuracy"] == "T1"
-        fine_finestra = (quando if oraria else quando + timedelta(hours=24)).replace(
-            minute=0, second=0, microsecond=0
-        )
+        fine_finestra = istante_frana(quando, oraria).replace(minute=0, second=0, microsecond=0)
         inizio_finestra = fine_finestra - timedelta(hours=ore_prima)
         voce: dict[str, Any] = {
             "quando": quando,

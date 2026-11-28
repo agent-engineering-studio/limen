@@ -58,6 +58,7 @@ from rainfall_thresholds import (
 from limen.cli import provenienza
 from limen.cli.backtest import _SENZA_ORA
 from limen.cli.clima_pioggia import CLIMA_DEFAULT, CLIMA_ENV, leggi, riferimenti_aoi
+from limen.core.istante_frana import istante_frana
 from limen.core.logging import get_logger
 from limen.core.scoring.regional_thresholds import RegionalThresholds, load_regional_thresholds
 from limen.data.db import acquire, lifespan_pool
@@ -212,10 +213,13 @@ def istanti(base: datetime, n_ore: int, dal: datetime, al: datetime) -> list[int
 
 
 def fine_finestra_frana(frana: Frana) -> datetime:
-    """Fino a quando cercare la pioggia di una frana: l'ora, o la fine del giorno se non c'è."""
-    if frana.precisione_data in _SENZA_ORA:
-        return frana.istante + timedelta(hours=23)
-    return frana.istante
+    """Fino a quando cercare la pioggia di una frana: l'ora, o la fine del giorno se non c'è.
+
+    La fine del giorno è la mezzanotte di Roma dopo il giorno della frana
+    (``istante_frana``), non l'istante salvato più 23 ore: per le righe salvate
+    a mezzogiorno quella regola arrivava alle 11 del giorno dopo.
+    """
+    return istante_frana(frana.istante, frana.precisione_data not in _SENZA_ORA)
 
 
 async def _frane(f: Finestra, sorgenti: list[str]) -> list[Frana]:

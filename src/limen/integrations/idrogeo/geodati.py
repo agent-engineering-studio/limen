@@ -48,6 +48,7 @@ from ispra_idrogeo import (
     IdroGEO,
     Mosaic,
     extract,
+    iffi_areas,
     mosaic,
     opendata,
 )
@@ -115,19 +116,9 @@ async def _uno(idrogeo: IdroGEO, ds: Dataset, dove: Path, esito: Esito, *, giorn
         esito.invariati += 1
 
 
-#: Il Trentino-Alto Adige (ISTAT 4) ha i file delle due province, non uno suo.
-_TRENTINO_ALTO_ADIGE = 4
-
-
-def aree_iffi(cod_reg: Iterable[int]) -> tuple[str, ...]:
-    """Le aree IFFI delle regioni con questi codici ISTAT (#407)."""
-    aree: list[str] = []
-    for c in cod_reg:
-        if c == _TRENTINO_ALTO_ADIGE:
-            aree += [PROVINCES[21], PROVINCES[22]]
-        elif c in REGIONS:
-            aree.append(REGIONS[c])
-    return tuple(aree)
+#: Le aree IFFI delle regioni con questi codici ISTAT (#407): il Trentino-Alto
+#: Adige (4) dà Bolzano e Trento. È ``ispra_idrogeo.iffi_areas`` (0.14).
+aree_iffi = iffi_areas
 
 
 def iffi(aree: Iterable[str] = AREE) -> list[Dataset]:

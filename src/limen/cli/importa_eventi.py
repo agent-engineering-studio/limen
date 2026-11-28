@@ -129,6 +129,8 @@ class RigaEnte(BaseModel):
 
     @property
     def quando(self) -> tuple[datetime, str]:
+        # Senza ora si salva il mezzogiorno di Roma, che dice solo il giorno: l'istante
+        # di una misura è ``limen.core.istante_frana`` (la fine del giorno a Roma).
         precisione = self.precisione_ora or ("T1" if self.ora is not None else "T3")
         return datetime.combine(self.data, self.ora or _MEZZOGIORNO, tzinfo=_ROMA), precisione
 
