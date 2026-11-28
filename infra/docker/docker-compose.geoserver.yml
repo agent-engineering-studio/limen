@@ -304,7 +304,7 @@ services:
     container_name: limen-idrogeo-mcp
     restart: unless-stopped
     profiles: ["geoserver"]
-    command: ["uvx", "--from", "ispra-idrogeo[mcp]~=0.14.0", "idrogeo-mcp"]
+    command: ["uvx", "--from", "ispra-idrogeo[mcp]~=0.15.0", "idrogeo-mcp"]
     environment:
       IDROGEO_MCP_TRANSPORT: streamable-http
       IDROGEO_MCP_HOST: 0.0.0.0
