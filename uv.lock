@@ -2546,7 +2546,7 @@ requires-dist = [
     { name = "imageserver-export", specifier = "~=0.2.0" },
     { name = "ingv-shakemap", specifier = "~=0.4.0" },
     { name = "ispra-idrogeo", specifier = "~=0.16.0" },
-    { name = "limen-core", specifier = "~=0.4.1" },
+    { name = "limen-core", specifier = "~=0.5.0" },
     { name = "opentelemetry-api", specifier = ">=1.27" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.27" },
     { name = "opentelemetry-instrumentation-asyncpg", specifier = ">=0.48b0" },
@@ -2612,7 +2612,7 @@ storage = [{ name = "boto3", specifier = ">=1.35" }]
 
 [[package]]
 name = "limen-core"
-version = "0.4.1"
+version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fwi-chain" },
@@ -2620,9 +2620,9 @@ dependencies = [
     { name = "pyyaml" },
     { name = "rainfall-thresholds" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c4/ae/691c2dc800a154e618a132fb14588108086a4ba363172c0b64ad51a701b8/limen_core-0.4.1.tar.gz", hash = "sha256:575bbd1f06c590d7fa71285116d84d72eac32771c1fe88fcbcd310839d40387b", size = 91918, upload-time = "2026-11-28T18:47:17.64Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fc/30/22fdfe0008c8eff4b25053433131707e95828b39195643cc191ffc1143b4/limen_core-0.5.0.tar.gz", hash = "sha256:a3631334907afe22c04b18d2528f25a089e9d58873a42fac9d7816f7f0223728", size = 93180, upload-time = "2026-11-28T19:22:43.41Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fb/e1/8cdb697eeb3fbb244e4d8d209c0e33e40d5a215eb823472be8be36d65bf7/limen_core-0.4.1-py3-none-any.whl", hash = "sha256:f7316329ed7597e869ab341e75123f589ffbc3d90f9acd5648c2eeabf5cd6fe8", size = 103866, upload-time = "2026-11-28T18:47:16.183Z" },
+    { url = "https://files.pythonhosted.org/packages/bf/7f/bb4d297487a401aeefc2949da2d6bdc413feec4f852b2581417e0d05f42b/limen_core-0.5.0-py3-none-any.whl", hash = "sha256:7cd3d6d6211bd31e618de2e0b9b47d2bdb2ee7a25096946aa312a88579f3ec85", size = 105110, upload-time = "2026-11-28T19:22:42.172Z" },
 ]
 
 [[package]]

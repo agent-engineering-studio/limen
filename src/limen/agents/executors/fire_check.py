@@ -33,11 +33,18 @@ perché "non misurato" e "bruciato debolmente" sono fatti diversi.
 
 The engine is untouched — ``post_fire_factor`` stays pure; only the
 bundle assembly changes.
+
+Dalla #714 qui restano le letture, con il join spaziale che vuole l'indice;
+la decisione per cella è `limen_core.wildfire.latest_fire`, la stessa regola.
+Una differenza voluta: di due perimetri dello stesso giorno più recente si
+legge il più denso, dove la `DISTINCT ON` ne prendeva uno qualunque.
 """
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
+
+from limen_core.wildfire import latest_fire
 
 from limen.agents.workflow_runtime.executor import Executor, handler
 from limen.config.settings import get_settings
@@ -76,7 +83,41 @@ log = get_logger(__name__)
 #: `post_fire.window_months_max` il fattore F e' neutralizzato dieci righe piu'
 #: sotto: si smette di leggere cio' che si sarebbe buttato via. Misurato su
 #: it-abruzzo: da 3.195 blocchi letti a 115.
-_QUERY_SQL = """
+#: Le tre letture: qui resta solo il join spaziale, che vuole l'indice. La
+#: decisione (quale incendio è il più recente, quali giorni sono confermati,
+#: la severità) è `limen_core.wildfire.latest_fire` (#714).
+#:
+#: I perimetri EFFIS che toccano ogni cella, nella finestra.
+_PERIMETERS_SQL = """
+SELECT g.id AS cell_id, fp.fire_date AS data, fp.frp_density_mw_per_ha AS densita
+FROM v_fire_perimeters fp
+JOIN grid_cells g ON g.aoi_id = $1 AND ST_Intersects(g.geom, fp.geom)
+WHERE fp.fire_date >= $2 AND fp.fire_date <= $3
+"""
+
+#: Le rilevazioni di vegetazione nella regione, per giorno: un giorno è
+#: confermato con almeno `min_hotspots`, un punto solo può essere un riflesso.
+_DAYS_SQL = """
+SELECT fh.acq_date AS giorno, COUNT(*) AS n
+FROM fire_hotspots fh
+JOIN aoi a ON ST_Intersects(a.geom, fh.geom)
+WHERE a.id = $1 AND fh.acq_date >= $2 AND fh.acq_date <= $3 AND fh.detection_type = 0
+GROUP BY fh.acq_date
+"""
+
+#: Le celle in cui sono cadute le rilevazioni dei giorni dati. Solo i giorni
+#: già confermati, per non incrociare con le celle punti che si butterebbero:
+#: è il costo che il limite temporale qui sotto tiene basso.
+_CELL_DAYS_SQL = """
+SELECT DISTINCT g.id AS cell_id, fh.acq_date AS giorno
+FROM fire_hotspots fh
+JOIN grid_cells g ON g.aoi_id = $1 AND ST_Intersects(g.geom, fh.geom)
+WHERE fh.detection_type = 0 AND fh.acq_date = ANY($2::date[])
+"""
+
+#: La query di prima della #714: la decisione stava in SQL. Resta per il test
+#: di parità, che la esegue accanto alle tre letture sulle stesse righe.
+_LEGACY_QUERY_SQL = """
 WITH perimetri AS (
     -- Il perimetro EFFIS più recente che interseca la cella, con la sua
     -- severità: quella del **suo** incendio, non dell'ultimo della regione.
@@ -133,23 +174,30 @@ class FireCheckExecutor(Executor):
         # con cui i mesi si ricavano subito dopo.
         oldest = oggi - timedelta(days=post_fire.window_months_max * 30.44)
         async with acquire() as conn:
-            rows = await conn.fetch(_QUERY_SQL, ctx.aoi_id, self._min_hotspots, oldest, oggi)
-
-        per_cella: dict[str, tuple[float, float | None]] = {}
-        for r in rows:
-            date_note = [d for d in (r["data_perimetro"], r["data_punti"]) if d is not None]
-            ultima = max(date_note)
-            mesi = max(0.0, (oggi - ultima).days / 30.0)
-            if mesi > post_fire.window_months_max:
-                continue
-            # La severità esiste solo per il perimetro, e solo se è lui
-            # l'incendio più recente della cella: un fuoco FIRMS più nuovo su
-            # un vecchio perimetro non ha un'area su cui dividere.
-            densita = r["densita"] if r["data_perimetro"] == ultima else None
-            per_cella[r["cell_id"]] = (
-                mesi,
-                frp_severity(densita, post_fire=post_fire) if densita is not None else None,
+            perimetri = await conn.fetch(_PERIMETERS_SQL, ctx.aoi_id, oldest, oggi)
+            giorni = await conn.fetch(_DAYS_SQL, ctx.aoi_id, oldest, oggi)
+            per_giorno = {r["giorno"]: int(r["n"]) for r in giorni}
+            confermati = [d for d, n in per_giorno.items() if n >= self._min_hotspots]
+            celle_giorni = (
+                await conn.fetch(_CELL_DAYS_SQL, ctx.aoi_id, confermati) if confermati else []
             )
+
+        perimetri_per_cella: dict[str, list[tuple[date, float | None]]] = {}
+        for r in perimetri:
+            perimetri_per_cella.setdefault(r["cell_id"], []).append((r["data"], r["densita"]))
+        giorni_per_cella: dict[str, list[date]] = {}
+        for r in celle_giorni:
+            giorni_per_cella.setdefault(r["cell_id"], []).append(r["giorno"])
+
+        per_cella = latest_fire(
+            perimetri_per_cella,
+            giorni_per_cella,
+            per_giorno,
+            min_hotspots=self._min_hotspots,
+            as_of=oggi,
+            window_months_max=post_fire.window_months_max,
+            severity=lambda densita: frp_severity(densita, post_fire=post_fire),
+        )
 
         if not per_cella:
             log.info("executor.fire_check", aoi_id=ctx.aoi_id, months_since_fire=None, cells=0)
