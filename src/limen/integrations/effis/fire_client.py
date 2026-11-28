@@ -31,8 +31,8 @@ from typing import TYPE_CHECKING, Any
 import httpx
 from effis_client import (
     DEFAULT_MAX_FEATURES,
-    LAYER,
-    WFS_URL,
+    EFFIS_WFS_URL,
+    MODIS_LAYER,
     EffisError,
     parse_perimeters,
     perimeters_params,
@@ -52,8 +52,12 @@ log = get_logger(__name__)
 # documents each quirk. What stays here is Limen's policy around it — the
 # shared retry and the neutral degradation.
 
-DEFAULT_WFS_URL = WFS_URL
-DEFAULT_TYPENAME = LAYER
+# Il layer è `ms:modis.ba.poly` su /effis, non `nrt.ba.poly` su /gwis (#714,
+# decisione del 2026-11-28): il secondo conta anche calore che non è
+# vegetazione bruciata, 255 «aree bruciate» sulla cima dell'Etna. Lo stesso
+# layer della vista `v_fire_perimeters` (migrazione 104).
+DEFAULT_WFS_URL = EFFIS_WFS_URL
+DEFAULT_TYPENAME = MODIS_LAYER
 
 _DEGRADATION_EXC: tuple[type[BaseException], ...] = (
     httpx.HTTPError,

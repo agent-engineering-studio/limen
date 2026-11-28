@@ -191,15 +191,22 @@ def test_the_client_speaks_mapserver_not_geoserver() -> None:
 
     Questo test blocca le tre cose insieme, perché sbagliarne una sola
     riporta al silenzio da cui si era partiti.
+
+    Dal 2026-11-28 il layer è `ms:modis.ba.poly` su /effis e non più
+    `nrt.ba.poly` su /gwis (#714): il secondo conta anche la lava dell'Etna.
+    Il layer del client e quello della vista `v_fire_perimeters` sono lo stesso.
     """
+    from limen.data.repos.fire_repo import PERIMETER_LAYER
     from limen.integrations.effis.fire_client import (
         DEFAULT_TYPENAME,
         DEFAULT_WFS_URL,
     )
 
-    assert DEFAULT_WFS_URL.endswith("/gwis")
+    assert DEFAULT_WFS_URL.endswith("/effis")
     assert not DEFAULT_WFS_URL.endswith("/ows")
-    assert DEFAULT_TYPENAME == "nrt.ba.poly"
+    assert DEFAULT_TYPENAME == "ms:modis.ba.poly" == PERIMETER_LAYER
+    migration = Path(__file__).parents[2] / "src/limen/data/migrations/104_effis_layer.sql"
+    assert f"WHERE layer = '{PERIMETER_LAYER}'" in migration.read_text()
 
 
 @pytest.mark.asyncio
@@ -227,7 +234,7 @@ async def test_the_request_carries_no_geoserver_vendor_parameters() -> None:
         )
 
     assert "CQL_FILTER" not in seen
-    assert seen["typename"] == "nrt.ba.poly"
+    assert seen["typename"] == "ms:modis.ba.poly"
     # bbox e filter sono mutuamente esclusivi in WFS, e insieme qui chiudono
     # la connessione: il bbox va sulla rete, le date si applicano in locale.
     assert "filter" not in seen

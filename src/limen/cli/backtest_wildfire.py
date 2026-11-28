@@ -125,9 +125,10 @@ _CANCELLO_ENV = "LIMEN_BACKTEST_WILDFIRE_CANCELLO"
 _TETTO_ENV = "LIMEN_BACKTEST_WILDFIRE_TETTO"
 
 _TABELLE_VERITA = {
-    "effis": ("fire_perimeters",),
+    # La vista e non la tabella: solo il layer EFFIS di Limen (migrazione 104).
+    "effis": ("v_fire_perimeters",),
     "catasti": ("catasti_incendi",),
-    "tutte": ("fire_perimeters", "catasti_incendi"),
+    "tutte": ("v_fire_perimeters", "catasti_incendi"),
 }
 _NOMI_VERITA = {
     "effis": "perimetri EFFIS",

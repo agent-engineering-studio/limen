@@ -142,12 +142,15 @@ FRP_WINDOW_DAYS = 5
 #: `NULLIF(area_ha, 0)`: un perimetro con area nulla o assente lascia la
 #: densità a NULL invece di dividere per zero — e NULL qui significa "non
 #: misurabile", che è la cosa giusta da propagare al motore.
+#:
+#: Sulla vista `v_fire_perimeters`, che è aggiornabile: solo i perimetri del
+#: layer di Limen. Le righe dell'altro layer tengono i valori che avevano.
 _REFRESH_FRP_SQL = """
 WITH agg AS (
     SELECT fp.id,
            sum(h.frp_mw)  AS frp_sum,
            count(h.frp_mw) AS hotspots
-    FROM fire_perimeters fp
+    FROM v_fire_perimeters fp
     JOIN fire_hotspots h
       ON h.detection_type = 0
      AND h.frp_mw IS NOT NULL
@@ -156,7 +159,7 @@ WITH agg AS (
     WHERE fp.fire_date IS NOT NULL
     GROUP BY fp.id
 )
-UPDATE fire_perimeters fp
+UPDATE v_fire_perimeters fp
 SET frp_sum_mw            = agg.frp_sum,
     frp_hotspots          = agg.hotspots,
     frp_density_mw_per_ha = agg.frp_sum / NULLIF(fp.area_ha, 0),
@@ -193,7 +196,7 @@ async def perimeter_severity_at(aoi_id: str, *, on_or_before: date) -> float | N
         row = await conn.fetchrow(
             """
             SELECT fp.frp_density_mw_per_ha AS density
-            FROM fire_perimeters fp
+            FROM v_fire_perimeters fp
             JOIN aoi a ON ST_Intersects(a.geom, fp.geom)
             WHERE a.id = $1
               AND fp.fire_date IS NOT NULL
@@ -225,7 +228,7 @@ async def frp_size_correlation() -> dict[str, float | int]:
                    corr(frp_sum_mw, area_ha)                    AS corr_sum_area,
                    corr(frp_density_mw_per_ha, area_ha)         AS corr_density_area,
                    corr(ln(frp_sum_mw), ln(area_ha))            AS corr_log_sum_area
-            FROM fire_perimeters
+            FROM v_fire_perimeters
             WHERE frp_sum_mw > 0 AND area_ha > 0
               AND frp_density_mw_per_ha IS NOT NULL
             """
@@ -287,7 +290,7 @@ async def effis_firms_agreement(
             """
             WITH perim AS (
                 SELECT id, fire_date, geom
-                FROM fire_perimeters
+                FROM v_fire_perimeters
                 WHERE fire_date >= $1 AND fire_date <= $2
             )
             SELECT count(*)::int AS perimeters,

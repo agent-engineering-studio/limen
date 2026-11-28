@@ -95,6 +95,18 @@ EFFIS burnt-area polygons (date, area_ha, geom, optional dNBR raster
 ref). The post-fire scoring component derives `months_since_fire`
 from the most-recent perimeter intersecting the AOI.
 
+
+Dalla migrazione 104 ogni riga porta il suo **layer EFFIS** (`layer`):
+`nrt.ba.poly` o `ms:modis.ba.poly`. I due layer non contano gli stessi
+incendi (effis-client 0.3.0): il primo conta anche calore che non è
+vegetazione bruciata, 255 «aree bruciate» sulla cima dell'Etna. Limen legge il
+secondo. La chiave è `(layer, id)`; le righe già presenti restano, marcate
+`nrt.ba.poly`. Le colonne `municipality`, `final_date`, `last_update`,
+`land_cover_pct` e `natura2000_pct` vengono solo da `ms:modis.ba.poly`.
+
+**Chi legge legge `v_fire_perimeters`**, la vista del layer di Limen: backtest
+incendio, severità post-incendio, controllo con FIRMS, misure e mappa (le
+tile pubblicano la vista, non la tabella).
 ### `risk_assessments` (Phase 4 writes here)
 
 One row per scored cell per workflow run.

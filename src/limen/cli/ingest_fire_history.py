@@ -290,7 +290,7 @@ async def _agreement_seasons() -> list[int]:
             """
             SELECT y FROM (
                 SELECT DISTINCT extract(year FROM fire_date)::int AS y
-                FROM fire_perimeters WHERE fire_date IS NOT NULL
+                FROM v_fire_perimeters WHERE fire_date IS NOT NULL
             ) effis
             WHERE EXISTS (
                 SELECT 1 FROM fire_hotspots h

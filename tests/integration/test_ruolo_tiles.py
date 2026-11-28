@@ -26,7 +26,8 @@ PUBBLICATI = {
     "public.v_multi_hazard",
     "public.v_dpc_allerte_oggi",
     "public.v_shadow_divergence_tiles",
-    "public.fire_perimeters",
+    # La vista e non la tabella: solo il layer EFFIS di Limen (migrazione 104).
+    "public.v_fire_perimeters",
     "public.flood_events",
     "public.flood_hazard_subdiv",
     "public.risk_at",

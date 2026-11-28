@@ -272,7 +272,7 @@ voci:
       quanto bene Limen aveva previsto gli incendi. Non entra nel punteggio.
     pericoli: [wildfire]
     livello: avanzato
-    misura: {tabella: fire_perimeters}
+    misura: {tabella: v_fire_perimeters}
     procura_con: make static-data
     fonte: EFFIS — European Forest Fire Information System (JRC)
     url: https://effis.jrc.ec.europa.eu

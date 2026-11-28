@@ -548,8 +548,8 @@ export const FONTI: readonly Fonte[] = [
     pericoli: ["landslide", "flood", "wildfire"],
     cosa: t("Dove è bruciato e quando.", "Where it burnt and when."),
     accesso: t(
-      "Servizio WFS (MapServer) di EFFIS, pubblico e senza credenziali, ogni notte con 90 giorni di ritorno (tabella fire_perimeters).",
-      "EFFIS WFS (MapServer) service, public and without credentials, every night with a 90-day look-back (fire_perimeters table).",
+      "Servizio WFS (MapServer) di EFFIS, pubblico e senza credenziali, ogni notte con 90 giorni di ritorno (layer ms:modis.ba.poly, tabella fire_perimeters, vista v_fire_perimeters).",
+      "EFFIS WFS (MapServer) service, public and without credentials, every night with a 90-day look-back (layer ms:modis.ba.poly, fire_perimeters table, v_fire_perimeters view).",
     ),
     interpretazione: t(
       "Frana, componente F (peso 0,07): un versante bruciato è più fragile, con un picco verso il sesto mese e per due anni, più forte se l'incendio è stato severo. Alluvione: per 18 mesi la pioggia su un bruciato vale fino a 1,6 volte. Incendio: la verità del backtest (alta allerta nelle 72 ore prima?).",

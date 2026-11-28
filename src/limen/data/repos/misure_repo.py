@@ -27,7 +27,7 @@ _VERITA = {
     HazardType.WILDFIRE: """
         COALESCE((
             SELECT sum(ST_Area(ST_Transform(ST_Intersection(g.geom, p.geom), 3035)))
-              FROM fire_perimeters p
+              FROM v_fire_perimeters p
              WHERE p.geom && g.geom AND ST_Intersects(p.geom, g.geom)
                AND p.fire_date BETWEEN $1 AND $2
         ), 0)

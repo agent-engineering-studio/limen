@@ -337,6 +337,24 @@ post_fire:
   #     p10 0,076   p25 0,146   p50 0,273   p75 0,489   p90 0,881   max 13,6
   # `frp_floor` = p10 e `frp_saturation` = p90: sotto il decile più debole la
   # severità è 0, dal decile più intenso in su è 1. Nessun parametro libero.
+  #
+  # **DA RIMISURARE** (#714, migrazione 104). I 2.419 perimetri erano del layer
+  # EFFIS `nrt.ba.poly`, che conta anche calore non di vegetazione (la lava
+  # dell'Etna); da qui Limen legge `ms:modis.ba.poly`, che parte dal 2016 e
+  # arriva a incendi di un ettaro. I due valori restano questi finché non si
+  # rimisurano sul nuovo layer, dopo `limen effis-sync` con lo storico e il
+  # ricalcolo FRP:
+  #
+  #     SELECT count(*),
+  #            percentile_cont(ARRAY[0.10, 0.25, 0.50, 0.75, 0.90])
+  #                WITHIN GROUP (ORDER BY frp_density_mw_per_ha),
+  #            max(frp_density_mw_per_ha)
+  #     FROM v_fire_perimeters
+  #     WHERE frp_density_mw_per_ha IS NOT NULL;
+  #
+  # e le correlazioni con l'area da `fire_events_repo.frp_size_correlation()`.
+  # La query originale non è nel repository: questa la ricostruisce dalla
+  # definizione (p10 e p90 della densità sui perimetri con hotspot dentro).
   frp_floor_mw_per_ha:      0.08
   frp_saturation_mw_per_ha: 0.88
 
