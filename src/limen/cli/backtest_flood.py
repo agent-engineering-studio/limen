@@ -73,6 +73,7 @@ from pathlib import Path
 from typing import Literal
 
 from copernicus_ems.ml import Scores
+from glofas_ewds import peak_ratios, reference_before
 
 from limen.cli import provenienza
 from limen.config.percorsi import radice_dati
@@ -101,7 +102,7 @@ from limen.integrations.arpae import idrometri
 from limen.integrations.copernicus_ems.client import catalogue_provenance
 from limen.integrations.copernicus_ems.verdetti import DA_RIGUARDARE
 from limen.integrations.openmeteo import archivio_portate
-from limen.integrations.openmeteo.flood import MIN_REFERENCE_DAYS, percentile_of
+from limen.integrations.openmeteo.flood import MIN_REFERENCE_DAYS
 
 log = get_logger(__name__)
 
@@ -424,27 +425,6 @@ def _accumulate_observed(daily: dict[date, float]) -> dict[date, float]:
     return out
 
 
-def _discharge_ratios(daily: dict[date, float], reference: float) -> dict[date, float]:
-    """Rapporto per giorno: picco dei 7 giorni dopo / piena ordinaria del nodo.
-
-    La stessa definizione dell'operativo (`_fluvial_by_node` in
-    openmeteo/flood.py), che lì usa ``forecast_days`` perché guarda "adesso";
-    qui la finestra va fatta scorrere a mano, altrimenti il replay
-    chiederebbe a GloFAS lo stato di oggi per un giorno del 2024.
-    """
-    if reference <= 0.0:
-        return {}
-    out: dict[date, float] = {}
-    for day in daily:
-        future = [
-            daily[day + timedelta(days=k)] for k in range(0, 7) if day + timedelta(days=k) in daily
-        ]
-        if not future:
-            continue
-        out[day] = max(future) / reference
-    return out
-
-
 def _fluvial_config() -> FluvialBlock:
     """Il blocco fluviale della configurazione alluvione.
 
@@ -455,19 +435,6 @@ def _fluvial_config() -> FluvialBlock:
     if not isinstance(loaded, FloodThresholds):  # pragma: no cover - schema garantito
         raise TypeError(f"flood.yaml non è una configurazione alluvione: {type(loaded).__name__}")
     return loaded.fluvial
-
-
-def _node_reference(daily: dict[date, float], *, percentile: float, min_days: int) -> float | None:
-    """La piena ordinaria del nodo, dal suo stesso storico (#108).
-
-    Calcolata **prima** della finestra di replay e non su tutta la serie: un
-    riferimento che contiene i giorni che si stanno giudicando saprebbe già
-    dell'evento, e il backtest misurerebbe un sistema che non esiste.
-    """
-    values = [daily[day] for day in sorted(daily)]
-    if len(values) < min_days:
-        return None
-    return percentile_of(values, percentile)
 
 
 #: Serie gia' scaricate in questa esecuzione, per (nodi, inizio, fine).
@@ -633,10 +600,10 @@ async def _fetch_node_series(
         soil = _midnight_values(stamps, hourly.get("soil_moisture_0_to_7cm") or [])
 
         discharge = discharges[index]
-        reference = _node_reference(
-            {day: flow for day, flow in discharge.items() if day < start},
-            percentile=fluvial.reference_percentile,
-            min_days=MIN_REFERENCE_DAYS,
+        # La piena ordinaria dai soli giorni prima della finestra (#108): un
+        # riferimento che contiene i giorni giudicati saprebbe già dell'evento.
+        reference = reference_before(
+            discharge, start, p=fluvial.reference_percentile, min_days=MIN_REFERENCE_DAYS
         )
         if reference is None:
             # Nessuna piena ordinaria misurabile qui: `None`, che il trigger
@@ -644,7 +611,7 @@ async def _fetch_node_series(
             ratios: dict[date, float] = {}
             dropped += 1
         else:
-            ratios = _discharge_ratios(discharge, reference)
+            ratios = peak_ratios(discharge, reference)
 
         out.append(
             _NodeSeries(
