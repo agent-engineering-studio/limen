@@ -23,7 +23,10 @@ entrambe le componenti della velocità:
   della componente verticale.
 
 Accelerazione e stagionalità vengono dal CSV della tile verticale, non dal
-GeoTIFF: :func:`su_griglia` li riporta sulla griglia del mosaico.
+GeoTIFF: ``egms-client`` ne tiene gli attributi accanto alla tile
+(``<tile>.attributes.csv``, ``fetch_tile(keep=("tiff", "attributes"))``) e
+:func:`su_griglia` li riporta sulla griglia del mosaico con
+``egms_client.cells.on_grid``. Qui non si calcola niente: si legge e si passa.
 """
 
 from __future__ import annotations
@@ -51,48 +54,31 @@ class Cella:
     maxy: float
 
 
-def mosaico(tiff: list[Path], *, minx: float, miny: float, maxx: float, maxy: float) -> Mosaic:
-    """Le tile di una componente incollate sul rettangolo, NaN dove mancano.
-
-    Dal pacchetto ``egms-client``: i limiti si allargano ai multipli di 100 m,
-    ogni tile si copia al suo posto senza ricampionare, e una tile che dichiara
-    ``IGNF:ETRS89LAEA`` (quattro nella release 2020-2025) è EPSG:3035 lo stesso.
-    """
-    from egms_client.mosaic import mosaic
-
-    return mosaic(tiff, minx=minx, miny=miny, maxx=maxx, maxy=maxy)
-
-
-#: Le colonne del CSV L3 che servono, oltre alla posizione del pixel.
+#: Le colonne degli attributi che servono, oltre alla posizione del pixel.
 COLONNE_ATTRIBUTI = ("acceleration", "seasonality")
 
 
-def leggi_attributi(csv: Any) -> dict[str, Any]:
-    """Posizione, accelerazione e stagionalità di ogni pixel del CSV di una tile.
+def su_griglia(attributi: list[Path], colonna: str, come: Mosaic) -> Any:
+    """Una colonna degli attributi delle tile sulla griglia di un mosaico; NaN dove manca.
 
-    Solo quattro colonne su ~300: la serie storica resta nello ZIP.
+    ``attributi`` sono i file ``<tile>.attributes.csv`` di ``egms-client``.
+    Un file senza quelle colonne (un CSV vecchio dell'archivio) non entra: le
+    celle avranno accelerazione e stagionalità NULL, non zero.
     """
     import pandas as pd
+    from egms_client.cells import on_grid
+    from egms_client.tables import read_csv
 
-    tabella = pd.read_csv(csv, usecols=["easting", "northing", *COLONNE_ATTRIBUTI])
-    return {c: tabella[c].to_numpy(dtype="float64") for c in tabella.columns}
-
-
-def su_griglia(attributi: list[Path], colonna: str, come: Mosaic) -> Any:
-    """Una colonna dei CSV (salvati come ``.npz``) sulla griglia di un mosaico.
-
-    ``easting``/``northing`` sono il centro del pixel in EPSG:3035, quindi la
-    cella della griglia è esatta, senza ricampionare. NaN dove manca.
-    """
-    righe, colonne = come.values.shape
-    out = np.full((righe, colonne), np.nan, dtype="float32")
+    colonne = ["easting", "northing", *COLONNE_ATTRIBUTI]
+    tabelle = []
     for path in attributi:
-        with np.load(path) as a:
-            col = np.floor((a["easting"] - come.left) / come.pixel).astype(np.int64)
-            riga = np.floor((come.top - a["northing"]) / come.pixel).astype(np.int64)
-            dentro = (riga >= 0) & (riga < righe) & (col >= 0) & (col < colonne)
-            out[riga[dentro], col[dentro]] = a[colonna][dentro]
-    return out
+        try:
+            tabelle.append(read_csv(path, series=False, columns=colonne))
+        except ValueError:
+            continue
+    if not tabelle:
+        return np.full(come.values.shape, np.nan, dtype="float32")
+    return on_grid(pd.concat(tabelle, ignore_index=True), colonna, come)
 
 
 def per_cella(
@@ -135,11 +121,4 @@ def per_cella(
     ]
 
 
-__all__ = [
-    "COLONNE_ATTRIBUTI",
-    "Cella",
-    "leggi_attributi",
-    "mosaico",
-    "per_cella",
-    "su_griglia",
-]
+__all__ = ["COLONNE_ATTRIBUTI", "Cella", "per_cella", "su_griglia"]

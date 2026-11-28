@@ -22,6 +22,7 @@ from egms_client import (
     tile_prefix,
     tiles_for_bounds,
 )
+from egms_client.mosaic import mosaic
 from egms_client.releases import window
 
 from limen.config.settings import Settings, get_settings
@@ -29,7 +30,7 @@ from limen.core.logging import get_logger
 from limen.data.db import acquire
 from limen.data.repos import cell_insar_features_repo, dataset_versions_repo
 from limen.integrations.egms import clms
-from limen.integrations.egms.aggregate import Cella, mosaico, per_cella, su_griglia
+from limen.integrations.egms.aggregate import Cella, per_cella, su_griglia
 
 log = get_logger(__name__)
 
@@ -123,6 +124,7 @@ async def sync_egms(*, aoi_id: str, settings: Settings | None = None) -> int:
     cartella = Path(s.cartella)
     cartella.mkdir(parents=True, exist_ok=True)
     migra_segnaposto(cartella)
+    await asyncio.to_thread(clms.migra_attributi, cartella)
     richieste = [(c, t) for c in COMPONENTS for t in tiles_for_bounds(minx, miny, maxx, maxy)]
     cancello = asyncio.Semaphore(s.concorrenza)
     fallite: list[str] = []
@@ -165,8 +167,8 @@ async def sync_egms(*, aoi_id: str, settings: Settings | None = None) -> int:
         return 0
 
     limiti = {"minx": minx, "miny": miny, "maxx": maxx, "maxy": maxy}
-    verticale = await asyncio.to_thread(mosaico, tiff["U"], **limiti)
-    est = await asyncio.to_thread(mosaico, tiff["E"], **limiti)
+    verticale = await asyncio.to_thread(mosaic, tiff["U"], **limiti)
+    est = await asyncio.to_thread(mosaic, tiff["E"], **limiti)
     attributi = [clms.attributi_di(p) for p in tiff["U"]]
     righe = await asyncio.to_thread(
         per_cella,

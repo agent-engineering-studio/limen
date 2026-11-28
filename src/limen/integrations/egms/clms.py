@@ -3,55 +3,61 @@
 Token, ricerche, download, cache e segnaposto del mare sono di
 ``egms_client.EgmsArchive`` (estratto da Limen, Apache-2.0). Limen gli dà il
 client condiviso e ``retries=0``: ogni chiamata gira dentro
-``call_with_retry``, la policy di ogni chiamata esterna. Qui restano come
-Limen trova la chiave (``EGMS_SERVICE_KEY`` o ``EGMS_SERVICE_KEY_FILE``) e
-gli attributi che ricava dal CSV di ogni tile.
+``call_with_retry``, la policy di ogni chiamata esterna. Anche gli attributi
+di una tile (accelerazione, stagionalità) sono della libreria:
+``fetch_tile(keep=("tiff", "attributes"))``. Qui resta come Limen trova la
+chiave (``EGMS_SERVICE_KEY`` o ``EGMS_SERVICE_KEY_FILE``).
 """
 
 from __future__ import annotations
 
-import asyncio
+import csv
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
-from egms_client import Component, EgmsArchive, EgmsError, ServiceKey, Tile, tile_prefix
+from egms_client import Component, EgmsArchive, EgmsError, ServiceKey, Tile
 
 from limen.config.settings import EgmsSettings
 from limen.core.logging import get_logger
 from limen.integrations._http import SharedHttpClient, call_with_retry
-from limen.integrations.egms.aggregate import COLONNE_ATTRIBUTI, leggi_attributi
+from limen.integrations.egms.aggregate import COLONNE_ATTRIBUTI
 
 log = get_logger(__name__)
 
 
 def attributi_di(tiff: Path) -> Path:
-    """Dove sta, accanto al GeoTIFF, ciò che serve del CSV della stessa tile."""
-    return tiff.with_name(f"{tiff.stem}.attributi.npz")
+    """Dove ``egms-client`` tiene, accanto al GeoTIFF, gli attributi della stessa tile."""
+    return tiff.with_suffix(".attributes.csv")
 
 
-def _salva_attributi(csv: Path, path: Path) -> None:
-    """Accelerazione e stagionalità per pixel, dal CSV della tile (#380).
+def migra_attributi(cartella: Path) -> int:
+    """Gli attributi salvati da Limen (``.attributi.npz``) riscritti come li cerca la libreria.
 
-    ~170.000 righe per quattro colonne: qualche MB, contro i ~250 MB del CSV
-    con la serie storica, che non serve e si cancella. Un CSV senza le colonne
-    lascia un file vuoto, così il sync seguente non riscarica la tile per
-    niente: la cella avrà accelerazione e stagionalità NULL, non zero.
+    Senza, al primo sync ogni tile verticale si riscaricherebbe (~250 MB
+    l'una) per avere il suo ``.attributes.csv``. Gli stessi numeri, colonna
+    per colonna: il CSV si legge in float64 come l'``.npz``. Un ``.npz``
+    vuoto (un CSV senza quelle colonne) dà un file con la sola intestazione.
+    Restituisce quanti ne ha migrati.
     """
-    try:
-        colonne = leggi_attributi(csv)
-    except ValueError as exc:
-        log.warning("egms.attributi_assenti", tile=csv.stem, error=str(exc))
-        colonne = {c: np.empty(0) for c in ("easting", "northing", *COLONNE_ATTRIBUTI)}
-    parziale = path.with_name(f"{path.name}.part")
-    with parziale.open("wb") as f:
-        np.savez(f, **colonne)
-    parziale.rename(path)
-    csv.unlink()
-
-
-def _sotto_release(nome: str) -> int:
-    coda = nome.rsplit("_", 1)[-1]
-    return int(coda) if coda.isdigit() else 0
+    migrati = 0
+    for vecchio in sorted(cartella.glob("*.attributi.npz")):
+        nuovo = cartella / f"{vecchio.name.removesuffix('.attributi.npz')}.attributes.csv"
+        if not nuovo.exists():
+            colonne = ["easting", "northing", *COLONNE_ATTRIBUTI]
+            with np.load(vecchio) as a:
+                valori = [a[c] for c in colonne]
+            parziale = nuovo.with_name(f"{nuovo.name}.part")
+            with parziale.open("w", newline="") as f:
+                scrivi = csv.writer(f, lineterminator="\n")
+                scrivi.writerow(colonne)
+                scrivi.writerows(zip(*(v.tolist() for v in valori), strict=True))
+            parziale.rename(nuovo)
+        vecchio.unlink()
+        migrati += 1
+    if migrati:
+        log.info("egms.attributi_migrati", n=migrati)
+    return migrati
 
 
 def _occupato(exc: BaseException) -> bool:
@@ -78,26 +84,18 @@ async def scarica_tile(
 
     ``None`` se la tile non esiste (mare). Tutti e due gli esiti restano in
     ``cartella`` (il GeoTIFF o il segnaposto ``…absent`` della libreria),
-    quindi il secondo sync non chiede niente. Con ``attributi`` salva anche
-    :func:`attributi_di` dal CSV dello stesso ZIP; una tile scaricata prima,
-    che ha il GeoTIFF e non gli attributi, si riscarica una volta.
+    quindi il secondo sync non chiede niente. Con ``attributi`` la libreria
+    tiene anche :func:`attributi_di`, dal CSV dello stesso ZIP; una tile
+    scaricata prima, che ha il GeoTIFF e non gli attributi, si riscarica una
+    volta.
     """
-    if attributi:
-        # Gli attributi sono un file di Limen: per la libreria, che cerca il
-        # CSV, la tile mancherebbe a ogni sync.
-        prefisso = tile_prefix(tile, componente, release)
-        in_cache = sorted(cartella.glob(f"{prefisso}*.tiff"), key=lambda p: _sotto_release(p.stem))
-        if in_cache and attributi_di(in_cache[-1]).exists():
-            return in_cache[-1]
-    tiff = await call_with_retry(
-        lambda: a.fetch_tile(
-            tile, componente, release, cartella, keep=("tiff", "csv") if attributi else ("tiff",)
-        ),
+    keep: tuple[Literal["tiff", "attributes"], ...] = (
+        ("tiff", "attributes") if attributi else ("tiff",)
+    )
+    return await call_with_retry(
+        lambda: a.fetch_tile(tile, componente, release, cartella, keep=keep),
         anche=_occupato,
     )
-    if tiff is not None and attributi:
-        await asyncio.to_thread(_salva_attributi, tiff.with_suffix(".csv"), attributi_di(tiff))
-    return tiff
 
 
 def leggi_chiave(testo: str) -> ServiceKey | None:
@@ -147,6 +145,7 @@ __all__ = [
     "attributi_di",
     "chiave",
     "leggi_chiave",
+    "migra_attributi",
     "perche_no",
     "releases",
     "scarica_tile",

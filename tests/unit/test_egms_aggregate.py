@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
 from egms_client import tiles_for_bounds
 from egms_client.mosaic import Mosaic
+from egms_client.mosaic import mosaic as mosaico
 
-from limen.integrations.egms.aggregate import Cella, mosaico, per_cella, su_griglia
+from limen.integrations.egms.aggregate import Cella, per_cella, su_griglia
 
 
 def test_le_tile_sono_le_centinaia_di_km_dell_angolo() -> None:
@@ -146,13 +148,11 @@ def test_accelerazione_con_segno_sugli_stessi_pixel_della_velocita(tmp_path: Pat
     nan = float("nan")
     # I centri dei pixel: (150, 250) è la riga 1, colonna 1 di una griglia con
     # l'angolo in (0, 400); un punto fuori dalla griglia si ignora.
-    u = tmp_path / "u.attributi.npz"
-    np.savez(
-        u,
-        easting=np.array([150.0, 250.0, 150.0, 250.0, 9050.0]),
-        northing=np.array([250.0, 250.0, 150.0, 150.0, 50.0]),
-        acceleration=np.array([-3.0, 1.0, nan, 50.0, 7.0]),
-        seasonality=np.array([2.0, 4.0, 6.0, 90.0, 7.0]),
+    u = tmp_path / "u.attributes.csv"
+    u.write_text(
+        "pid,easting,northing,acceleration,seasonality\n"
+        "a,150,250,-3.0,2.0\nb,250,250,1.0,4.0\nc,150,150,,6.0\n"
+        "d,250,150,50.0,90.0\ne,9050,50,7.0,7.0\n"
     )
     uno = [[1.0] * 4 for _ in range(4)]
     verticale, est = _griglia(uno, uno)
@@ -181,3 +181,80 @@ def test_senza_csv_accelerazione_e_stagionalita_restano_nulle() -> None:
     (r,) = per_cella([Cella("c", 0.0, 200.0, 200.0, 400.0)], *_griglia(v, v))
     assert r.scatterer_count == 4
     assert r.accelerazione_verticale_mmy2 is None and r.stagionalita_verticale_mm is None
+
+
+def _su_griglia_di_prima(attributi: list[Path], colonna: str, come: Any) -> Any:
+    """``su_griglia`` com'era fino a egms-client 0.11 (gli ``.npz`` di Limen): per la parità."""
+    righe, colonne = come.values.shape
+    out = np.full((righe, colonne), np.nan, dtype="float32")
+    for path in attributi:
+        with np.load(path) as a:
+            col = np.floor((a["easting"] - come.left) / come.pixel).astype(np.int64)
+            riga = np.floor((come.top - a["northing"]) / come.pixel).astype(np.int64)
+            dentro = (riga >= 0) & (riga < righe) & (col >= 0) & (col < colonne)
+            out[riga[dentro], col[dentro]] = a[colonna][dentro]
+    return out
+
+
+def test_gli_attributi_migrati_danno_le_stesse_celle(tmp_path: Path) -> None:
+    """Gli ``.npz`` di prima, migrati in ``.attributes.csv``: stesse griglie, stesse celle."""
+    from limen.integrations.egms.clms import migra_attributi
+
+    rng = np.random.default_rng(380)
+    verticale, est = _griglia(
+        rng.normal(-2, 3, (20, 20)).tolist(), rng.normal(0, 1, (20, 20)).tolist()
+    )
+    # Due tile: punti sparsi, uno fuori dalla griglia, valori con molte cifre e NaN.
+    npz = []
+    for i, n in enumerate((150, 90)):
+        path = tmp_path / f"EGMS_L3_E4{i}N20_100km_U_2020_2025_1.attributi.npz"
+        acc = rng.normal(0, 1, n)
+        acc[::7] = np.nan
+        np.savez(
+            path,
+            easting=np.floor(rng.uniform(0, 2100, n) / 100) * 100 + 50,
+            northing=np.floor(rng.uniform(-100, 2000, n) / 100) * 100 + 50,
+            acceleration=acc,
+            seasonality=rng.uniform(0, 9, n),
+        )
+        npz.append(path)
+    # Un CSV senza le colonne lasciava un .npz vuoto.
+    vuoto = tmp_path / "EGMS_L3_E42N20_100km_U_2020_2025_1.attributi.npz"
+    np.savez(
+        vuoto, **{c: np.empty(0) for c in ("easting", "northing", "acceleration", "seasonality")}
+    )
+    npz.append(vuoto)
+    prima = {c: _su_griglia_di_prima(npz, c, verticale) for c in ("acceleration", "seasonality")}
+
+    assert migra_attributi(tmp_path) == 3
+    assert not list(tmp_path.glob("*.npz"))
+    csv = sorted(tmp_path.glob("*.attributes.csv"))
+    assert len(csv) == 3
+    for c in ("acceleration", "seasonality"):
+        np.testing.assert_array_equal(su_griglia(csv, c, verticale), prima[c])
+    celle = [Cella(f"c{i}", x, 0.0, x + 1000.0, 1000.0) for i, x in enumerate((0.0, 1000.0))]
+    di_prima = per_cella(
+        celle,
+        verticale,
+        est,
+        accelerazione=prima["acceleration"],
+        stagionalita=prima["seasonality"],
+    )
+    ora = per_cella(
+        celle,
+        verticale,
+        est,
+        accelerazione=su_griglia(csv, "acceleration", verticale),
+        stagionalita=su_griglia(csv, "seasonality", verticale),
+    )
+    assert ora == di_prima
+    # Una seconda volta non c'è niente da migrare.
+    assert migra_attributi(tmp_path) == 0
+
+
+def test_un_file_senza_colonne_non_entra(tmp_path: Path) -> None:
+    v = [[1.0, 1.0], [1.0, 1.0]]
+    verticale, _ = _griglia(v, v)
+    vecchio = tmp_path / "x.attributes.csv"
+    vecchio.write_text("pid,easting,northing,mean_velocity\na,50,350,3\n")
+    assert np.isnan(su_griglia([vecchio], "acceleration", verticale)).all()
