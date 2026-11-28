@@ -48,11 +48,17 @@ def _prompt(nome: str) -> str:
     return resources.files(PROMPT_PACKAGE).joinpath(nome).read_text(encoding="utf-8")
 
 
+Innesco = Literal["pioggia", "sisma", "lavori", "altro", "ignoto"]
+
+
 class EventoEstratto(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     giorno: date
     parte: Literal["mattina", "pomeriggio", "sera", "notte", "ignota"]
+    #: Che cosa ha mosso la frana, solo se un titolo lo dice: una soglia di
+    #: pioggia si verifica sulle frane da pioggia, non su quelle di un cantiere.
+    innesco: Innesco = "ignoto"
     luogo: str
     comuni: list[str]
     regione: str
@@ -256,6 +262,10 @@ _SCHEMA: dict[str, Any] = {
                         "type": "string",
                         "enum": ["mattina", "pomeriggio", "sera", "notte", "ignota"],
                     },
+                    "innesco": {
+                        "type": "string",
+                        "enum": ["pioggia", "sisma", "lavori", "altro", "ignoto"],
+                    },
                     "luogo": {"type": "string"},
                     "comuni": {"type": "array", "items": {"type": "string"}},
                     # I nomi delle AOI regionali: `risolvi_comuni` ci trova
@@ -263,7 +273,15 @@ _SCHEMA: dict[str, Any] = {
                     "regione": {"type": "string", "enum": list(REGIONI)},
                     "titoli": {"type": "array", "items": {"type": "integer"}},
                 },
-                "required": ["giorno", "parte", "luogo", "comuni", "regione", "titoli"],
+                "required": [
+                    "giorno",
+                    "parte",
+                    "innesco",
+                    "luogo",
+                    "comuni",
+                    "regione",
+                    "titoli",
+                ],
                 "additionalProperties": False,
             },
         }

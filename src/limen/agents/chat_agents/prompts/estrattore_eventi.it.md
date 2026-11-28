@@ -21,6 +21,7 @@ Per ogni evento:
 
 - `giorno`: la data in cui è successo (`AAAA-MM-GG`), dal titolo o, se il titolo non la dice, dalla data di pubblicazione più vecchia fra i suoi titoli; «ieri» si conta dalla data di pubblicazione;
 - `parte`: `mattina`, `pomeriggio`, `sera`, `notte` se un titolo lo dice, altrimenti `ignota`;
+- `innesco`: solo per la **frana**, che cosa l'ha mossa, se un titolo lo dice: `pioggia` (maltempo, nubifragio, piogge, temporale, neve che si scioglie), `sisma` (terremoto, scossa), `lavori` (cantiere, scavo, sbancamento, rottura di una condotta), `altro` (una causa detta che non è fra queste); se nessun titolo la dice, o il pericolo è alluvione o incendio, `ignoto`. Non dedurla dalla stagione o dal luogo;
 - `luogo`: la località come la scrivono i titoli («SS106 a Melito di Porto Salvo»);
 - `comuni`: i nomi dei comuni italiani coinvolti, come nell'elenco ufficiale dei comuni (il comune, non la frazione: «San Lorenzo», non «San Lorenzo Marina»); se il titolo nomina solo una frazione e sai con certezza di quale comune è, usa il comune, altrimenti lascia fuori l'evento;
 - `regione`: la regione italiana del comune, con uno dei nomi dell'elenco ammesso;

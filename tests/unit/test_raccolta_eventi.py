@@ -242,6 +242,63 @@ def test_un_titolo_inventato_non_e_una_fonte() -> None:
     assert _testo(_risposta(raw, stop="max_tokens")) is None  # type: ignore[arg-type]
 
 
+def test_l_innesco_viene_dai_titoli_o_resta_ignoto() -> None:
+    from limen.agents.chat_agents.estrattore_eventi import _SCHEMA
+
+    def raw(extra: str) -> str:
+        return (
+            '{"eventi": [{"giorno": "2026-10-28", "parte": "ignota", "luogo": "A",'
+            f' "comuni": ["A"], "regione": "Lazio", "titoli": [0]{extra}}}]}}'
+        )
+
+    detto = _eventi(raw(', "innesco": "pioggia"'), n_titoli=1)
+    assert detto is not None and detto[0].innesco == "pioggia"
+    # Una risposta di prima della colonna non dice l'innesco: resta ignoto.
+    taciuto = _eventi(raw(""), n_titoli=1)
+    assert taciuto is not None and taciuto[0].innesco == "ignoto"
+    assert _eventi(raw(', "innesco": "vento"'), n_titoli=1) is None
+    evento = _SCHEMA["properties"]["eventi"]["items"]
+    assert evento["properties"]["innesco"]["enum"] == [
+        "pioggia",
+        "sisma",
+        "lavori",
+        "altro",
+        "ignoto",
+    ]
+    assert "innesco" in evento["required"]
+
+
+async def test_l_innesco_arriva_al_candidato(monkeypatch: pytest.MonkeyPatch) -> None:
+    from limen.api.jobs import raccolta_eventi as job
+    from limen.data.repos.candidati_eventi_repo import Candidato, Salvato
+
+    visti: list[Candidato] = []
+
+    async def fondi(c: Candidato) -> Salvato:
+        visti.append(c)
+        return Salvato(
+            id=1,
+            fonti=({"testata": "A"},),
+            testate=1,
+            slug=None,
+            stato="una_testata",
+            giorno=c.giorno,
+            parte=c.parte,
+            luogo=c.luogo,
+            regione=c.regione,
+            nomi_comuni=c.nomi_comuni,
+        )
+
+    async def segna(*a: object, **k: object) -> None:
+        return None
+
+    monkeypatch.setattr(job.candidati_eventi_repo, "fondi", fondi)
+    monkeypatch.setattr(job.candidati_eventi_repo, "segna", segna)
+    evento = _evento().model_copy(update={"innesco": "sisma"})
+    await job._registra(HazardType.LANDSLIDE, evento, [], Counter())
+    assert visti[0].innesco == "sisma"
+
+
 async def test_senza_modello_o_chiave_la_raccolta_non_parte(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

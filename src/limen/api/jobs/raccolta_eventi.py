@@ -227,6 +227,7 @@ async def _registra(
             regione=e.regione or None,
             nomi_comuni=tuple(e.comuni),
             fonti=fonti,
+            innesco=e.innesco,
         )
     )
     await _verifica(hazard, salvato, esiti)
